@@ -4,9 +4,9 @@
 
 ## Status
 
-- **Gates passed:** 6 of 14. **Tasks done:** 12 of 24.
+- **Gates passed:** 6 of 14. **Tasks done:** 13 of 24.
 - **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 16.
-- **Now:** T6b The elevator voice. An Opus agent is writing the announcer's first lines, recording three takes of each with ElevenLabs inside the character cap, and building an audition page so you can pick the voice by ear.
+- **Now:** nothing in progress
 - **Last CI result seen:** passed on 10c7a42
 - **Answers applied up to:** 2026-11-16T04:20:00Z
 
@@ -48,8 +48,9 @@
 - [x] **T6** `done` The elevator (G6)
   - Why: The only safe place. Calling it, waiting out its loud arrival, then bank or ride down.
   - Evidence: A whole run is playable alone. You start in the elevator, step out, and it leaves. You earn, come back, and call it: an indicator counts its floors down for 25 to 55 seconds while the lights blink and the Orderly closes in. You board and stand on BANK or DOWN. DOWN rides to a larger floor where readings pay 35% more; BANK ends the run with a summary and a lifetime total that survives a restart. The scripted two-floor run banked 307. All 33 browser tests and 93 rule tests pass on Fable's own run, and letting players see during a blink fails the run test. Unheard: every elevator sound. Untested: the phone's call and hold buttons. Weak spots the agent found: 20 seconds in the car with nothing to do, and a warning too short to do more than brace.
-- [ ] **T6b** `doing` The elevator voice (G13)
+- [x] **T6b** `done` The elevator voice (G13)
   - Why: The relentlessly cheerful announcer, recorded with ElevenLabs, with an audition page for you.
+  - Evidence: The elevator has a voice. 19 lines were written and recorded with ElevenLabs on its newest model, three takes each, and play at the right moments of a run through a tinny elevator-speaker effect that gets worse with depth, with subtitles. Three voices were auditioned: Bella is in the game now, Sarah and Brian are alternatives. NOBODY HAS HEARD ANY OF IT: the agent and Fable cannot hear, so the Audition page and the first question on the Questions page are yours. Spend: 7,833 characters of the 50,000 cap; the account's own counter moved from 65,040 to 67,938 of 145,556. Fable searched the project and the agent's transcript for the key and for private paths and found none. All 35 browser tests pass, and hiding the voice files fails the voice test. Not checked: whether each take says its script word for word.
 - [ ] **T7** `todo` Playing together (G7)
   - Why: Four players in one building over a peer-to-peer connection, with one player hosting.
 - [ ] **T7b** `todo` Bot crewmates and the test panel (G14)
@@ -99,6 +100,7 @@
 
 ## Activity (newest first)
 
+- 2026-11-16 09:55Z Finished T6b: The elevator voice.
 - 2026-11-16 09:54Z Gate G13 (The elevator speaks) is passed.
 - 2026-11-16 09:26Z Voice T6b: 19 announcer lines recorded in ElevenLabs eleven_v4 (default voice Bella; Sarah and Brian auditioned). 7,833 characters counted, tags included (API billed header summed 3,444); game ledger 7,833 of 50,000.
 - 2026-11-16 09:26Z New pictures for T6b: The elevator voice.
@@ -138,4 +140,3 @@
 - 2026-11-16 06:31Z Started T4: The Orderly comes alive. The rule is proven in logic. An Opus agent is now wiring it to the screen and to sound: it hunts you on the floor, freezes when you look, and squeaks when it moves.
 - 2026-11-16 06:31Z The Orderly's rule is proven in logic: across 500 simulated runs an independent checker looked at 48,226 moments when a player could see it, and it had not moved in any of them. It moved in 498 runs and caught someone in 150, so the test is not empty. In 104 layouts its squeak could be heard at least 2.5 seconds before it could be seen. Fable broke the rule two ways on purpose (a too-narrow idea of 'seen', and no grace period) and the checker caught both.
 - 2026-11-16 06:09Z Started T4: The Orderly comes alive. An Opus agent is building the Orderly's behaviour: it walks the floor, squeaks before you see it, and never moves while anyone is looking.
-- 2026-11-16 06:08Z Correction: the first version of the picture test let a deliberate wall tint through, and for a few minutes this page said it had been caught. The test was tightened twice until it really does catch it.

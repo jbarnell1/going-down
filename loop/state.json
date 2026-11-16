@@ -4,8 +4,8 @@
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
   "iteration": 16,
-  "now": "T6b",
-  "nowText": "An Opus agent is writing the announcer's first lines, recording three takes of each with ElevenLabs inside the character cap, and building an audition page so you can pick the voice by ear.",
+  "now": null,
+  "nowText": "",
   "ci": {
     "status": "passed",
     "commit": "10c7a42",
@@ -630,7 +630,7 @@
       "id": "T6b",
       "title": "The elevator voice",
       "why": "The relentlessly cheerful announcer, recorded with ElevenLabs, with an audition page for you.",
-      "status": "doing",
+      "status": "done",
       "gates": [
         "G13"
       ],
@@ -653,8 +653,29 @@
           "caption": "The once-a-run slip, meant flat and quiet (unheard by its maker: please listen)",
           "kind": "audio",
           "at": "2026-11-16T09:26:03.311Z"
+        },
+        {
+          "src": "T6b/20261116T095536-board_1.mp3",
+          "caption": "The announcer as a run begins (unheard: please listen)",
+          "kind": "audio",
+          "at": "2026-11-16T09:55:36.512Z"
+        },
+        {
+          "src": "T6b/20261116T095536-called_1.mp3",
+          "caption": "On calling the elevator",
+          "kind": "audio",
+          "at": "2026-11-16T09:55:36.513Z"
+        },
+        {
+          "src": "T6b/20261116T095536-slip_1.mp3",
+          "caption": "The slip: the one line with no cheer in it",
+          "kind": "audio",
+          "at": "2026-11-16T09:55:36.514Z"
         }
-      ]
+      ],
+      "finishedAt": "2026-11-16T09:55:36.510Z",
+      "summary": "The elevator has a voice. 19 lines were written and recorded with ElevenLabs on its newest model, three takes each, and play at the right moments of a run through a tinny elevator-speaker effect that gets worse with depth, with subtitles. Three voices were auditioned: Bella is in the game now, Sarah and Brian are alternatives. NOBODY HAS HEARD ANY OF IT: the agent and Fable cannot hear, so the Audition page and the first question on the Questions page are yours. Spend: 7,833 characters of the 50,000 cap; the account's own counter moved from 65,040 to 67,938 of 145,556. Fable searched the project and the agent's transcript for the key and for private paths and found none. All 35 browser tests pass, and hiding the voice files fails the voice test. Not checked: whether each take says its script word for word.",
+      "todo": []
     },
     {
       "id": "T7",
@@ -867,6 +888,11 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T09:55:36.514Z",
+      "text": "Finished T6b: The elevator voice.",
+      "kind": "done"
+    },
     {
       "at": "2026-11-16T09:54:24.468Z",
       "text": "Gate G13 (The elevator speaks) is passed.",
