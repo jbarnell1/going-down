@@ -252,6 +252,36 @@ export function posIndex(plan: FloorPlan, pos: Pos): number {
   return pos.level * plan.width * plan.height + pos.y * plan.width + pos.x;
 }
 
+/**
+ * neighbours() for every position, packed (CSR: the neighbours of i are list[start[i]..start[i+1]),
+ * in the same order neighbours() returns them, so searches over it visit cells in the same order.
+ * Built once per plan: path searches run many times a second for entities and bots.
+ */
+interface Adjacency {
+  start: Int32Array;
+  list: Int32Array;
+}
+
+const adjacencyCache = new WeakMap<FloorPlan, Adjacency>();
+
+function adjacencyOf(plan: FloorPlan): Adjacency {
+  const cached = adjacencyCache.get(plan);
+  if (cached) return cached;
+  const total = plan.width * plan.height * 2;
+  const start = new Int32Array(total + 1);
+  const list: number[] = [];
+  for (let i = 0; i < total; i++) {
+    start[i] = list.length;
+    const p = posFromIndex(plan, i);
+    if (!isWalkable(plan, p.level, p.x, p.y)) continue;
+    for (const q of neighbours(plan, p)) list.push(posIndex(plan, q));
+  }
+  start[total] = list.length;
+  const adj: Adjacency = { start, list: Int32Array.from(list) };
+  adjacencyCache.set(plan, adj);
+  return adj;
+}
+
 export function posFromIndex(plan: FloorPlan, index: number): Pos {
   const n = plan.width * plan.height;
   const level: Level = index >= n ? 1 : 0;
@@ -261,18 +291,24 @@ export function posFromIndex(plan: FloorPlan, index: number): Pos {
 
 /** Path-step distance from `from` to every position (indexed by posIndex), -1 if unreachable. */
 export function distancesFrom(plan: FloorPlan, from: Pos): Int32Array {
-  const dist = new Int32Array(plan.width * plan.height * 2).fill(-1);
+  const total = plan.width * plan.height * 2;
+  const dist = new Int32Array(total).fill(-1);
   if (!isWalkable(plan, from.level, from.x, from.y)) return dist;
-  const queue: Pos[] = [from];
-  dist[posIndex(plan, from)] = 0;
-  for (let head = 0; head < queue.length; head++) {
-    const p = queue[head] as Pos;
-    const d = dist[posIndex(plan, p)] ?? 0;
-    for (const q of neighbours(plan, p)) {
-      const qi = posIndex(plan, q);
+  const { start, list } = adjacencyOf(plan);
+  const queue = new Int32Array(total);
+  let tail = 0;
+  const first = posIndex(plan, from);
+  queue[tail++] = first;
+  dist[first] = 0;
+  for (let head = 0; head < tail; head++) {
+    const pi = queue[head] ?? 0;
+    const d = dist[pi] ?? 0;
+    const end = start[pi + 1] ?? 0;
+    for (let k = start[pi] ?? 0; k < end; k++) {
+      const qi = list[k] ?? 0;
       if (dist[qi] !== -1) continue;
       dist[qi] = d + 1;
-      queue.push(q);
+      queue[tail++] = qi;
     }
   }
   return dist;
@@ -282,18 +318,22 @@ export function distancesFrom(plan: FloorPlan, from: Pos): Int32Array {
 export function findPath(plan: FloorPlan, from: Pos, to: Pos): Pos[] | null {
   if (!isWalkable(plan, from.level, from.x, from.y) || !isWalkable(plan, to.level, to.x, to.y)) return null;
   const goal = posIndex(plan, to);
-  const prev = new Int32Array(plan.width * plan.height * 2).fill(-2);
-  const start = posIndex(plan, from);
-  prev[start] = -1;
-  const queue: Pos[] = [from];
-  for (let head = 0; head < queue.length && prev[goal] === -2; head++) {
-    const p = queue[head] as Pos;
-    const pi = posIndex(plan, p);
-    for (const q of neighbours(plan, p)) {
-      const qi = posIndex(plan, q);
+  const total = plan.width * plan.height * 2;
+  const prev = new Int32Array(total).fill(-2);
+  const { start, list } = adjacencyOf(plan);
+  const first = posIndex(plan, from);
+  prev[first] = -1;
+  const queue = new Int32Array(total);
+  let tail = 0;
+  queue[tail++] = first;
+  for (let head = 0; head < tail && prev[goal] === -2; head++) {
+    const pi = queue[head] ?? 0;
+    const end = start[pi + 1] ?? 0;
+    for (let k = start[pi] ?? 0; k < end; k++) {
+      const qi = list[k] ?? 0;
       if (prev[qi] !== -2) continue;
       prev[qi] = pi;
-      queue.push(q);
+      queue[tail++] = qi;
     }
   }
   if (prev[goal] === -2) return null;

@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
-  "iteration": 7,
-  "now": null,
-  "nowText": "",
+  "iteration": 8,
+  "now": "T4",
+  "nowText": "The rule is proven in logic. An Opus agent is now wiring it to the screen and to sound: it hunts you on the floor, freezes when you look, and squeaks when it moves.",
   "ci": {
     "status": "passed",
-    "commit": "d562ef5",
-    "at": "2026-11-16T05:58:45.485Z"
+    "commit": "e613912",
+    "at": "2026-11-16T06:31:27.053Z"
   },
   "answersAppliedTo": "2026-11-16T04:20:00Z",
   "tasks": [
@@ -356,14 +356,15 @@
       "id": "T4",
       "title": "The Orderly comes alive",
       "why": "It walks the floor, is heard before it is seen, and never moves while anyone is watching it.",
-      "status": "todo",
+      "status": "doing",
       "gates": [
         "G3",
         "G5"
       ],
       "todo": [
         "Staging, from the player judge: the first sighting should be partly hidden (a peek round a door frame, a tilted head), and it should be nearer each time you look back. The doorway peek pose is the best scare so far."
-      ]
+      ],
+      "startedAt": "2026-11-16T06:09:17.789Z"
     },
     {
       "id": "T3b",
@@ -585,6 +586,21 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T06:31:27.131Z",
+      "text": "Started T4: The Orderly comes alive. The rule is proven in logic. An Opus agent is now wiring it to the screen and to sound: it hunts you on the floor, freezes when you look, and squeaks when it moves.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T06:31:26.979Z",
+      "text": "The Orderly's rule is proven in logic: across 500 simulated runs an independent checker looked at 48,226 moments when a player could see it, and it had not moved in any of them. It moved in 498 runs and caught someone in 150, so the test is not empty. In 104 layouts its squeak could be heard at least 2.5 seconds before it could be seen. Fable broke the rule two ways on purpose (a too-narrow idea of 'seen', and no grace period) and the checker caught both.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T06:09:17.790Z",
+      "text": "Started T4: The Orderly comes alive. An Opus agent is building the Orderly's behaviour: it walks the floor, squeaks before you see it, and never moves while anyone is looking.",
+      "kind": "start"
+    },
     {
       "at": "2026-11-16T06:08:52.525Z",
       "text": "Correction: the first version of the picture test let a deliberate wall tint through, and for a few minutes this page said it had been caught. The test was tightened twice until it really does catch it.",
