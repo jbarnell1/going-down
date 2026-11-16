@@ -4,10 +4,10 @@
 
 ## Status
 
-- **Gates passed:** 2 of 14. **Tasks done:** 7 of 22.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 6.
-- **Now:** T2b The tape-playback look and the debug overlay. An Opus agent is building the tape-playback look as a screen filter, plus a debug overlay with a minimap.
-- **Last CI result seen:** passed on 99a17b0
+- **Gates passed:** 2 of 14. **Tasks done:** 8 of 22.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 7.
+- **Now:** nothing in progress
+- **Last CI result seen:** passed on d562ef5
 - **Answers applied up to:** 2026-11-16T04:20:00Z
 
 ## Tasks
@@ -33,8 +33,9 @@
 - [x] **T3** `done` The Orderly, second pass (G4)
   - Why: The first entity. The first pass reads as a mannequin; this pass has to make it frightening in bright light.
   - Evidence: The Orderly was rebuilt after tutorial study and three judged rounds. It is a rigged 2.6 m figure with five animations (idle, walk, reach, a duck under door frames, frozen), it stands in the game with a real shadow, and all checks pass. It is now its own character: pale waxy skin, lids sewn shut, a paper cap, hands folded like staff waiting to help. Honest result: five blind judges scored it 3 to 6 out of 10 for fear and the scores did not rise across rounds. A question about what to do next is waiting for you.
-- [ ] **T2b** `doing` The tape-playback look and the debug overlay (G10)
+- [x] **T2b** `done` The tape-playback look and the debug overlay (G10)
   - Why: The degraded recovered-footage look that hides rough art, plus tools for testing.
+  - Evidence: The game now looks like worn videotape: smeared colour, grain, glaring ceiling lights, a slight wobble, rare tracking rolls, and a PLAY display with a running counter. ?fx=0 turns it off and ?fx=2 makes it heavy. ?debug=1 adds a minimap. Frame time stays at the screen's refresh rate at all three levels, including a phone-sized view and the 8-bit path older phones use. Fable switched the effect off on purpose and confirmed the test fails. Judged from stills only: how the wobble feels in motion over a long session is unverified.
 - [ ] **T2v** `todo` Stronger checks
   - Why: So a regression is caught by a machine, not by luck: reference screenshots that fail the test when the picture changes, a frame-time limit inside the browser test, a smoke test for the hub, and a deliberate-break check on every gate already passed.
 - [ ] **T4** `todo` The Orderly comes alive (G3, G5)
@@ -91,6 +92,10 @@
 
 ## Activity (newest first)
 
+- 2026-11-16 05:58Z Finished T2b: The tape-playback look and the debug overlay.
+- 2026-11-16 05:51Z New pictures for T2b: The tape-playback look and the debug overlay.
+- 2026-11-16 05:51Z New pictures for T2b: The tape-playback look and the debug overlay.
+- 2026-11-16 05:48Z New pictures for T2b: The tape-playback look and the debug overlay.
 - 2026-11-16 05:37Z Started T2b: The tape-playback look and the debug overlay. An Opus agent is building the tape-playback look as a screen filter, plus a debug overlay with a minimap.
 - 2026-11-16 05:37Z Took a default: The Orderly: kept as it is for now and moved on, relying on behaviour, sound and the tape look for fear (question "orderly-next").
 - 2026-11-16 05:37Z Added task T3b: The Orderly, third pass.
@@ -127,7 +132,3 @@
 - 2026-11-16 04:30Z Added task T2v: Stronger checks.
 - 2026-11-16 04:30Z You asked for the Orderly's second pass to start with tutorial study and end with two judged revision rounds. It now comes right after the public play link.
 - 2026-11-16 04:19Z The Progress page was rebuilt: a roadmap of steps that fill with their own pictures, an overall bar, and a strip of the newest output.
-- 2026-11-16 04:19Z Your answers are in: the setting (a civilisation that kept building upward, with convicts sent down to buy their freedom), the name stays Going Down, all five places, six candidate mechanics including the fake-disconnect and fake-restart, 50,000 voice characters, AGPL, and a public play link.
-- 2026-11-16 04:19Z Added task T0c: AGPL-3.0 licence.
-- 2026-11-16 04:19Z Added task T0b: A public play link on GitHub Pages.
-- 2026-11-16 04:19Z Applied the owner's new answers.

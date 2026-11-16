@@ -1,9 +1,12 @@
 import * as THREE from 'three';
 import { AutoWalk } from './game/autoWalk';
+import { Minimap } from './game/minimap';
 import { FrameStats } from './game/frameStats';
 import { Input } from './game/input';
 import { EYE_HEIGHT, Player, yawForDir, yawToward } from './game/player';
 import { EntityPreview } from './render/entityPreview';
+import { Osd } from './render/osd';
+import { setLightGain, Tape, type FxLevel } from './render/tape';
 import { buildWorld } from './render/world';
 import { generateClinic } from './sim/clinic';
 import type { Level } from './sim/floor';
@@ -19,6 +22,9 @@ const depth = Math.max(1, Math.floor(Number(params.get('depth') ?? '1')) || 1);
 const debug = params.get('debug') === '1';
 // ?preview=orderly[&anim=walk|idle|reach|duck|still] stands an entity model in the level.
 const previewName = params.get('preview');
+// ?fx=0 clean render, 1 the tape look (default), 2 heavy interference.
+const fxParam = Number(params.get('fx') ?? '1');
+const fxLevel: FxLevel = fxParam >= 2 ? 2 : fxParam === 0 ? 0 : 1;
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const hud = document.getElementById('hud') as HTMLDivElement;
@@ -50,11 +56,18 @@ if (previewName === 'orderly') {
 }
 const stats = new FrameStats(120);
 
-// Low internal resolution, scaled up with hard pixels. The full tape look comes in a later task.
+// The scene is drawn at a low internal resolution, then put on screen through the tape pass.
 const INTERNAL_HEIGHT = 270;
+// ?hdr=0 forces the 8-bit render path that older phones fall back to.
+const tape = new Tape(renderer, fxLevel, INTERNAL_HEIGHT, params.get('hdr') === '0');
+const osd = new Osd(document.body, seed);
+osd.visible = fxLevel > 0;
+/** Lights glare through the tape; the clean render keeps them as built. */
+const LIGHT_GAIN = 3;
+setLightGain(scene, fxLevel > 0 ? LIGHT_GAIN : 1);
 function resize(): void {
   const aspect = window.innerWidth / Math.max(1, window.innerHeight);
-  renderer.setSize(Math.round(INTERNAL_HEIGHT * aspect), INTERNAL_HEIGHT, false);
+  tape.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = aspect;
   camera.updateProjectionMatrix();
 }
@@ -67,15 +80,21 @@ function gpuName(): string {
   return ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : 'unknown';
 }
 
-/** For tests: draw a frame and count distinct colours on a coarse grid, read straight from the GPU. */
-function probeColours(): number {
+/** Draws a full frame (scene and tape pass) and reads the screen back, straight from the GPU. */
+function readScreen(): { w: number; h: number; px: Uint8Array } {
   player.toCamera(camera);
-  renderer.render(scene, camera);
+  tape.render(scene, camera);
   const gl = renderer.getContext();
   const w = gl.drawingBufferWidth;
   const h = gl.drawingBufferHeight;
   const px = new Uint8Array(w * h * 4);
   gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  return { w, h, px };
+}
+
+/** For tests: draw a frame and count distinct colours on a coarse grid of the screen. */
+function probeColours(): number {
+  const { w, h, px } = readScreen();
   const seen = new Set<number>();
   for (let y = 0; y < h; y += 6) {
     for (let x = 0; x < w; x += 6) {
@@ -84,6 +103,36 @@ function probeColours(): number {
     }
   }
   return seen.size;
+}
+
+/**
+ * For tests: an n x n grid of screen pixels (top row first) as [r, g, b] triples, from one fresh
+ * frame. Each probe averages a 5x5 patch so grain does not decide the answer alone.
+ */
+function probePixels(n = 8): number[][] {
+  const { w, h, px } = readScreen();
+  const out: number[][] = [];
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const cx = Math.floor(((i + 0.5) / n) * w);
+      const cy = h - 1 - Math.floor(((j + 0.5) / n) * h);
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let k = 0;
+      for (let y = Math.max(0, cy - 2); y <= Math.min(h - 1, cy + 2); y++) {
+        for (let x = Math.max(0, cx - 2); x <= Math.min(w - 1, cx + 2); x++) {
+          const o = (y * w + x) * 4;
+          r += px[o] ?? 0;
+          g += px[o + 1] ?? 0;
+          b += px[o + 2] ?? 0;
+          k++;
+        }
+      }
+      out.push([r / k, g / k, b / k]);
+    }
+  }
+  return out;
 }
 
 const DEG = Math.PI / 180;
@@ -97,6 +146,7 @@ const state = {
   depth,
   gpu: gpuName(),
   probeColours,
+  probePixels,
   plan,
   player: () => {
     const c = cellOf(plan, player.body);
@@ -112,6 +162,16 @@ const state = {
   },
   walkTo: (level: Level, cx: number, cy: number) => autoWalk.start(plan, player, { level, x: cx, y: cy }),
   frameMs: () => stats.median(),
+  /** Tape strength: 0 clean, 1 default, 2 heavy. */
+  fx: () => tape.fx,
+  setFx: (level: number) => {
+    const l = tape.setFx(level);
+    osd.visible = l > 0;
+    setLightGain(scene, l > 0 ? LIGHT_GAIN : 1);
+    return l;
+  },
+  /** A burst of tape interference, `ms` long, `strength` 0..1. */
+  glitch: (ms: number, strength = 1) => tape.glitch(ms, strength),
   /** The previewed entity (?preview=orderly), or null. Positions in world metres, yaw in degrees. */
   entity: preview && {
     loaded: () => preview?.loaded ?? false,
@@ -131,6 +191,13 @@ const state = {
 (window as unknown as { __gd: typeof state }).__gd = state;
 hud.textContent = `Going Down  build ${__BUILD__}  seed ${seed}  depth ${depth}`;
 debugBox.hidden = !debug;
+const debugText = document.createElement('div');
+let minimap: Minimap | null = null;
+if (debug) {
+  debugBox.append(debugText);
+  minimap = new Minimap(plan);
+  debugBox.append(minimap.canvas);
+}
 
 let last = performance.now();
 renderer.setAnimationLoop(() => {
@@ -144,7 +211,8 @@ renderer.setAnimationLoop(() => {
   if (autoWalk.active) autoWalk.tick(plan, player);
   else player.control(plan, input, dt);
   player.toCamera(camera);
-  renderer.render(scene, camera);
+  tape.render(scene, camera);
+  osd.update(!tape.motion || Math.floor(now / 700) % 2 === 0);
   state.frames++;
   state.ready = true;
 
@@ -152,9 +220,11 @@ renderer.setAnimationLoop(() => {
     const b = player.body;
     const c = cellOf(plan, b);
     const fm = stats.median();
-    debugBox.textContent =
-      `fps ${fm > 0 ? (1000 / fm).toFixed(0) : '-'}  ${fm.toFixed(1)} ms\n` +
+    debugText.textContent =
+      `fps ${fm > 0 ? (1000 / fm).toFixed(0) : '-'}  median ${fm.toFixed(1)} ms\n` +
+      `tape fx${tape.fx}${tape.motion ? '' : ' (reduced motion)'}\n` +
       `pos ${b.x.toFixed(2)} ${b.y.toFixed(2)} ${b.z.toFixed(2)}\n` +
       `cell L${c.level} (${c.x},${c.y})  yaw ${(player.yaw / DEG).toFixed(0)}`;
+    minimap?.update(c.level, b.x, b.z, player.yaw);
   }
 });

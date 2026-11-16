@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
-  "iteration": 6,
-  "now": "T2b",
-  "nowText": "An Opus agent is building the tape-playback look as a screen filter, plus a debug overlay with a minimap.",
+  "iteration": 7,
+  "now": null,
+  "nowText": "",
   "ci": {
     "status": "passed",
-    "commit": "99a17b0",
-    "at": "2026-11-16T05:37:04.890Z"
+    "commit": "d562ef5",
+    "at": "2026-11-16T05:58:45.485Z"
   },
   "answersAppliedTo": "2026-11-16T04:20:00Z",
   "tasks": [
@@ -288,11 +288,58 @@
       "id": "T2b",
       "title": "The tape-playback look and the debug overlay",
       "why": "The degraded recovered-footage look that hides rough art, plus tools for testing.",
-      "status": "doing",
+      "status": "done",
       "gates": [
         "G10"
       ],
-      "startedAt": "2026-11-16T05:37:04.973Z"
+      "startedAt": "2026-11-16T05:37:04.973Z",
+      "media": [
+        {
+          "src": "T2b/20261116T054804-40-tape-corridor.png",
+          "caption": "Tape look, round 2: the corridor as worn videotape: softer picture, grain, colour smear, deeper midtones and ceiling lights that glare and bloom",
+          "kind": "image",
+          "at": "2026-11-16T05:48:04.285Z"
+        },
+        {
+          "src": "T2b/20261116T055123-43-tape-orderly.png",
+          "caption": "Tape look, round 4: the Orderly at 4 m. Blues now drain to grey like a cheap camcorder, and sharp edges leave a faint ghost echo, so the figure reads as something caught on tape rather than a pastel toy",
+          "kind": "image",
+          "at": "2026-11-16T05:51:23.335Z"
+        },
+        {
+          "src": "T2b/20261116T055123-40-tape-corridor.png",
+          "caption": "Tape look, round 4: the long corridor. Whites are overexposed and institutional, lights glare, picture stays readable to the far doorway",
+          "kind": "image",
+          "at": "2026-11-16T05:51:23.419Z"
+        },
+        {
+          "src": "T2b/20261116T055845-43-tape-orderly.png",
+          "caption": "The Orderly through the tape look: less toy, more caught on camera",
+          "kind": "image",
+          "at": "2026-11-16T05:58:45.407Z"
+        },
+        {
+          "src": "T2b/20261116T055845-40-tape-corridor.png",
+          "caption": "A corridor through the tape look",
+          "kind": "image",
+          "at": "2026-11-16T05:58:45.408Z"
+        },
+        {
+          "src": "T2b/20261116T055845-46-glitch.png",
+          "caption": "A burst of interference the game can trigger",
+          "kind": "image",
+          "at": "2026-11-16T05:58:45.410Z"
+        },
+        {
+          "src": "T2b/20261116T055845-45-debug-minimap.png",
+          "caption": "The debug overlay with its minimap",
+          "kind": "image",
+          "at": "2026-11-16T05:58:45.411Z"
+        }
+      ],
+      "finishedAt": "2026-11-16T05:58:45.404Z",
+      "summary": "The game now looks like worn videotape: smeared colour, grain, glaring ceiling lights, a slight wobble, rare tracking rolls, and a PLAY display with a running counter. ?fx=0 turns it off and ?fx=2 makes it heavy. ?debug=1 adds a minimap. Frame time stays at the screen's refresh rate at all three levels, including a phone-sized view and the 8-bit path older phones use. Fable switched the effect off on purpose and confirmed the test fails. Judged from stills only: how the wobble feels in motion over a long session is unverified.",
+      "todo": []
     },
     {
       "id": "T2v",
@@ -534,6 +581,26 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T05:58:45.411Z",
+      "text": "Finished T2b: The tape-playback look and the debug overlay.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T05:51:23.419Z",
+      "text": "New pictures for T2b: The tape-playback look and the debug overlay.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T05:51:23.335Z",
+      "text": "New pictures for T2b: The tape-playback look and the debug overlay.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T05:48:04.285Z",
+      "text": "New pictures for T2b: The tape-playback look and the debug overlay.",
+      "kind": "media"
+    },
     {
       "at": "2026-11-16T05:37:04.974Z",
       "text": "Started T2b: The tape-playback look and the debug overlay. An Opus agent is building the tape-playback look as a screen filter, plus a debug overlay with a minimap.",

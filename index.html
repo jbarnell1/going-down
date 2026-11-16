@@ -17,6 +17,11 @@
       #debug { position: fixed; left: 12px; top: 10px; color: #f2f5f3; background: rgba(0, 0, 0, 0.55); padding: 4px 8px; font: 12px ui-monospace, Consolas, monospace; white-space: pre; pointer-events: none; }
       #start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 16, 14, 0.55); color: #eef3f0; font: 600 20px ui-monospace, Consolas, monospace; letter-spacing: 0.08em; cursor: pointer; user-select: none; }
       #start small { display: block; margin-top: 10px; font-weight: 400; font-size: 13px; opacity: 0.75; letter-spacing: 0; }
+      #debug #minimap { display: block; margin-top: 4px; width: 168px; max-width: 24vw; height: auto; image-rendering: pixelated; }
+      /* The camcorder display: inside the picture's safe area, never near the centre. */
+      #osd canvas { position: fixed; image-rendering: pixelated; opacity: 0.82; pointer-events: none; }
+      #osd .osd-top { top: max(5vh, 10px); right: max(5vw, 14px); }
+      #osd .osd-bottom { bottom: max(6vh, 12px); right: max(5vw, 14px); }
       [hidden] { display: none !important; }
     </style>
   </head>
