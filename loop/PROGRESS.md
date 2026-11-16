@@ -2,6 +2,7 @@
 
 ## Status (read this first)
 
+- **Needs the owner (once):** the hub runs on this PC's localhost but is not on the tailnet yet, because changing Tailscale serve needs an administrator. The exact command is in `.local/MACHINE.md`. Until it is run, the live link only opens on this PC itself.
 - **Started:** not started. The first iteration writes the start time here.
 - **Iterations so far:** 0
 - **Now working on:** nothing yet
@@ -50,6 +51,8 @@ G1 [ ]  G2 [ ]  G3 [ ]  G4 [ ]  G5 [ ]  G6 [ ]  G7 [ ]  G8 [ ]  G9 [ ]  G10 [ ] 
 (nothing)
 
 ## Log
+
+- 2026-11-15: public repository created and first commit pushed. Hub built and smoke-tested (pages load, answers save, path-escape attempts return 404), started on localhost, and registered to start at logon. Adding it to Tailscale serve failed: it needs an administrator, so that step is left to the owner. Secret scan runs before every commit and gitleaks runs on every push.
 
 - 2026-11-15: Orderly first pass by one Opus agent (about 14 minutes, 73 tool calls, about 170k tokens). Fable read the `.glb` directly: 1 mesh, 2,546 triangles, 24 joints, 1 texture, animations idle 3.5 s, walk 1.0 s, reach 1.5 s, still. Fable looked at four renders: a real rigged figure, pipeline proven, not yet scary. Blender 5.3 API notes for the next script: engine id is `BLENDER_EEVEE`; `Action.fcurves` is gone, use `action.layers[].strips[].channelbags[].fcurves`; export with `export_animation_mode='ACTIONS'`; constant interpolation exports as glTF STEP; imports add a stray "Icosphere" object.
 
