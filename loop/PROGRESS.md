@@ -5,9 +5,9 @@
 ## Status
 
 - **Gates passed:** 6 of 14. **Tasks done:** 13 of 24.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 16.
-- **Now:** nothing in progress
-- **Last CI result seen:** passed on 10c7a42
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 18.
+- **Now:** T7 Playing together. An Opus agent is building the multiplayer layer as tested logic first: one player's browser hosts the run, the others send what they do and see, and the Orderly must never be seen to move on anyone's screen even with network delay.
+- **Last CI result seen:** passed on 1c1e84b
 - **Answers applied up to:** 2026-11-16T04:20:00Z
 
 ## Tasks
@@ -51,7 +51,7 @@
 - [x] **T6b** `done` The elevator voice (G13)
   - Why: The relentlessly cheerful announcer, recorded with ElevenLabs, with an audition page for you.
   - Evidence: The elevator has a voice. 19 lines were written and recorded with ElevenLabs on its newest model, three takes each, and play at the right moments of a run through a tinny elevator-speaker effect that gets worse with depth, with subtitles. Three voices were auditioned: Bella is in the game now, Sarah and Brian are alternatives. NOBODY HAS HEARD ANY OF IT: the agent and Fable cannot hear, so the Audition page and the first question on the Questions page are yours. Spend: 7,833 characters of the 50,000 cap; the account's own counter moved from 65,040 to 67,938 of 145,556. Fable searched the project and the agent's transcript for the key and for private paths and found none. All 35 browser tests pass, and hiding the voice files fails the voice test. Not checked: whether each take says its script word for word.
-- [ ] **T7** `todo` Playing together (G7)
+- [ ] **T7** `doing` Playing together (G7)
   - Why: Four players in one building over a peer-to-peer connection, with one player hosting.
 - [ ] **T7b** `todo` Bot crewmates and the test panel (G14)
   - Why: So you can test a full crew alone on the live link.
@@ -100,6 +100,9 @@
 
 ## Activity (newest first)
 
+- 2026-11-16 10:55Z You chose Brian and Bella as your top two voices. Recording Brian's full set now, about 5,150 characters, and adding a settings switch between them.
+- 2026-11-16 10:55Z Multiplayer is proven in logic. Over 200 simulated sessions with delays up to 250 ms, lost and reordered messages, every frame of every player's screen was checked: 76,782 moments when a player could see the Orderly in two frames running, and it was never drawn in two different places. When delay let the host move it after a player had already seen it, the host put it back where that player saw it (1,532 times, 2 metres at most). No catch ever landed on a player whose own screen showed it. Blinks are dark on every screen for the whole time the host lets it move. Fable's deliberate break: turning screens back on 0.2 seconds early left 21,367 lit frames and failed the blink test.
+- 2026-11-16 09:56Z Started T7: Playing together. An Opus agent is building the multiplayer layer as tested logic first: one player's browser hosts the run, the others send what they do and see, and the Orderly must never be seen to move on anyone's screen even with network delay.
 - 2026-11-16 09:55Z Finished T6b: The elevator voice.
 - 2026-11-16 09:54Z Gate G13 (The elevator speaks) is passed.
 - 2026-11-16 09:26Z Voice T6b: 19 announcer lines recorded in ElevenLabs eleven_v4 (default voice Bella; Sarah and Brian auditioned). 7,833 characters counted, tags included (API billed header summed 3,444); game ledger 7,833 of 50,000.
@@ -137,6 +140,3 @@
 - 2026-11-16 06:50Z New pictures for T4: The Orderly comes alive.
 - 2026-11-16 06:50Z New pictures for T4: The Orderly comes alive.
 - 2026-11-16 06:50Z New pictures for T4: The Orderly comes alive.
-- 2026-11-16 06:31Z Started T4: The Orderly comes alive. The rule is proven in logic. An Opus agent is now wiring it to the screen and to sound: it hunts you on the floor, freezes when you look, and squeaks when it moves.
-- 2026-11-16 06:31Z The Orderly's rule is proven in logic: across 500 simulated runs an independent checker looked at 48,226 moments when a player could see it, and it had not moved in any of them. It moved in 498 runs and caught someone in 150, so the test is not empty. In 104 layouts its squeak could be heard at least 2.5 seconds before it could be seen. Fable broke the rule two ways on purpose (a too-narrow idea of 'seen', and no grace period) and the checker caught both.
-- 2026-11-16 06:09Z Started T4: The Orderly comes alive. An Opus agent is building the Orderly's behaviour: it walks the floor, squeaks before you see it, and never moves while anyone is looking.

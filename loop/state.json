@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
-  "iteration": 16,
-  "now": null,
-  "nowText": "",
+  "iteration": 18,
+  "now": "T7",
+  "nowText": "An Opus agent is building the multiplayer layer as tested logic first: one player's browser hosts the run, the others send what they do and see, and the Orderly must never be seen to move on anyone's screen even with network delay.",
   "ci": {
     "status": "passed",
-    "commit": "10c7a42",
-    "at": "2026-11-16T09:54:24.539Z"
+    "commit": "1c1e84b",
+    "at": "2026-11-16T10:55:22.515Z"
   },
   "answersAppliedTo": "2026-11-16T04:20:00Z",
   "tasks": [
@@ -681,10 +681,11 @@
       "id": "T7",
       "title": "Playing together",
       "why": "Four players in one building over a peer-to-peer connection, with one player hosting.",
-      "status": "todo",
+      "status": "doing",
       "gates": [
         "G7"
-      ]
+      ],
+      "startedAt": "2026-11-16T09:56:42.985Z"
     },
     {
       "id": "T7b",
@@ -888,6 +889,21 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T10:55:22.661Z",
+      "text": "You chose Brian and Bella as your top two voices. Recording Brian's full set now, about 5,150 characters, and adding a settings switch between them.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T10:55:22.588Z",
+      "text": "Multiplayer is proven in logic. Over 200 simulated sessions with delays up to 250 ms, lost and reordered messages, every frame of every player's screen was checked: 76,782 moments when a player could see the Orderly in two frames running, and it was never drawn in two different places. When delay let the host move it after a player had already seen it, the host put it back where that player saw it (1,532 times, 2 metres at most). No catch ever landed on a player whose own screen showed it. Blinks are dark on every screen for the whole time the host lets it move. Fable's deliberate break: turning screens back on 0.2 seconds early left 21,367 lit frames and failed the blink test.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T09:56:42.986Z",
+      "text": "Started T7: Playing together. An Opus agent is building the multiplayer layer as tested logic first: one player's browser hosts the run, the others send what they do and see, and the Orderly must never be seen to move on anyone's screen even with network delay.",
+      "kind": "start"
+    },
     {
       "at": "2026-11-16T09:55:36.514Z",
       "text": "Finished T6b: The elevator voice.",
