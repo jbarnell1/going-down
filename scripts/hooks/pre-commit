@@ -1,0 +1,5 @@
+#!/bin/sh
+# Runs before every commit. First refuse anything that looks like a secret, then refuse a broken build.
+# Enabled by: git config core.hooksPath scripts/hooks
+node hub/scan-secrets.mjs || exit 1
+npm run --silent check || { echo "Commit blocked: npm run check failed."; exit 1; }

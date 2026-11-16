@@ -1,0 +1,41 @@
+name: ci
+
+# The clean-machine check: install from the lockfile, typecheck, run the rule tests, build,
+# then drive the real game in a browser and keep the screenshots.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Typecheck, rule tests, build
+        run: npm run check
+      - name: Install the test browser
+        run: npx playwright install --with-deps chromium
+      - name: Drive the game in a browser
+        run: npm run e2e
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: test-results/shots
+          if-no-files-found: ignore
+          retention-days: 14

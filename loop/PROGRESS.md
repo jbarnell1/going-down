@@ -3,20 +3,22 @@
 ## Status (read this first)
 
 - **Needs the owner (once):** the hub runs on this PC's localhost but is not on the tailnet yet, because changing Tailscale serve needs an administrator. The exact command is in `.local/MACHINE.md`. Until it is run, the live link only opens on this PC itself.
-- **Started:** not started. The first iteration writes the start time here.
-- **Iterations so far:** 0
-- **Now working on:** nothing yet
-- **What you can play:** nothing yet
-- **Last fully green build:** none
-- **Unverified:** everything
-- **Answers applied up to:** none yet
-- **Last CI result seen:** none yet
+- **Started:** 2026-11-16T03:38Z (2026-11-15 21:38 Central). The 30-hour limit is 2026-11-17T09:38Z.
+- **Iterations so far:** 1
+- **Now working on:** T1, the Clinic floor generator
+- **What you can play:** nothing yet. The hub's Play link shows a placeholder corridor with some crates, which only proves the pipeline from seed to pixels.
+- **How to run it:** `npm ci`, then `npm run dev`. Checks: `npm run check` and `npm run e2e`.
+- **Last fully green build:** tag `good-1`
+- **Unverified:** CI's first full run (pushed, result not yet seen). Whether the hub is reachable from the tailnet.
+- **Answers applied up to:** none yet (no answers file existed at iteration 1)
+- **Last CI result seen:** gitleaks passed on the first two commits. The `ci` workflow first runs on the T0 commit.
 
 ## Tasks
 
 Status is one of `todo`, `doing`, `done`, `blocked`. A task is `done` only with evidence on the line below it.
 
-- [ ] T0 `todo` Project setup: git init, Vite + TypeScript + three.js + Vitest + Playwright, the folder shape in LOOP.md, `npm run check` and `npm run e2e` both run, one screenshot of an empty scene opened and looked at. A git pre-commit hook that runs `npm run check`, so a broken build cannot be committed. Find out whether the test browser can use the graphics card. Also in T0: install the pre-commit hook so it runs `node hub/scan-secrets.mjs` first; write `.github/workflows/ci.yml` (see LOOP.md); add `npm run deploy:live` (build, copy `dist/` to `.live/`, write `.live/version.json` with commit, time and a one-line note) and deploy the first build so the hub's Play link works.
+- [x] T0 `done` Project setup. Evidence: `npm run check` exit 0 (typecheck clean, 7 rule tests passed, build 523 kB); `npm run e2e` 1 passed, reporting `gpu=ANGLE (NVIDIA GeForce RTX 4070 SUPER, Direct3D11)`, so the test browser does use the graphics card and G10 can be measured here; screenshot `test-results/shots/00-boot.png` opened and looked at (low-resolution corridor with crates, hard pixels, no errors). Hooks live in `scripts/hooks` (secret scan, then `npm run check`). Vite is pinned to 6 and Vitest to 3 because this PC's Node 20.12 cannot run Vite 8. Original task text:
+  Project setup: git init, Vite + TypeScript + three.js + Vitest + Playwright, the folder shape in LOOP.md, `npm run check` and `npm run e2e` both run, one screenshot of an empty scene opened and looked at. A git pre-commit hook that runs `npm run check`, so a broken build cannot be committed. Find out whether the test browser can use the graphics card. Also in T0: install the pre-commit hook so it runs `node hub/scan-secrets.mjs` first; write `.github/workflows/ci.yml` (see LOOP.md); add `npm run deploy:live` (build, copy `dist/` to `.live/`, write `.live/version.json` with commit, time and a one-line note) and deploy the first build so the hub's Play link works.
 - [ ] T1 `todo` `src/sim`: seeded RNG and the Clinic floor generator (rooms, corridors, two levels, a stair, an atrium), with the G2 tests.
 - [ ] T2 `todo` First-person walking through a generated Clinic floor: bright lighting, collision, stairs, the tape-playback look, the URL test flags. Screenshot.
 - [ ] T3 `doing` The Orderly in Blender (Opus). First pass exists (see log): `assets_src/blender/orderly/build_orderly.py`, `public/assets/entities/orderly.glb`, renders in `assets_src/renders/orderly/`. Still to do: a second pass that fixes the list below, then a blind Opus critic and one more round of fixes. Check the user's own notes on it first, if any are recorded here.
@@ -46,11 +48,17 @@ G1 [ ]  G2 [ ]  G3 [ ]  G4 [ ]  G5 [ ]  G6 [ ]  G7 [ ]  G8 [ ]  G9 [ ]  G10 [ ] 
 
 (The loop adds a line here every time it would otherwise have had to ask you something.)
 
+- Tool versions: pinned Vite 6 and Vitest 3 to suit the Node already on this PC, not upgrading Node, because installing a new Node is outside the project folder.
+- Repository licence: none yet (question `license` on the hub).
+- North Star document: kept out of the public repository (question `publish-design-doc`).
+
 ## Blocked
 
 (nothing)
 
 ## Log
+
+- 2026-11-15 21:45 iteration 1: T0 done by Fable inline. One wrong test fixed, not weakened: the first colour check copied the WebGL canvas after the frame had been presented, which always reads blank; it now reads pixels from the GPU straight after a draw. Keep-awake is on while the session stays active.
 
 - 2026-11-15: public repository created and first commit pushed. Hub built and smoke-tested (pages load, answers save, path-escape attempts return 404), started on localhost, and registered to start at logon. Adding it to Tailscale serve failed: it needs an administrator, so that step is left to the owner. Secret scan runs before every commit and gitleaks runs on every push.
 
