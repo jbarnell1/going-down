@@ -8,7 +8,9 @@ The civilisation above never stopped building upward: hospitals on top of TV sta
 
 *The Orderly, first pass. It gets a second one.*
 
-> **Status: very early.** There is no playable build yet. This repository is being built in the open by an AI-assisted work loop, one verified step at a time. "Going Down" is a working title.
+**[Play the latest build](https://jbarnell1.github.io/going-down/)** in a desktop browser or on a phone. Every build that passes all checks is published there.
+
+> **Status: very early.** You can walk a generated floor; nothing lives on it yet. This repository is being built in the open by an AI-assisted work loop, one verified step at a time. "Going Down" is a working title.
 
 ## The idea
 
@@ -41,8 +43,6 @@ Entities follow rules they never break. Learning the rule is how you survive, an
 - `src/` : the game, once the first task lands.
 
 ## Running it
-
-Nothing to run yet. Once project setup lands:
 
 ```bash
 npm ci

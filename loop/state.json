@@ -4,12 +4,12 @@
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
   "iteration": 4,
-  "now": "T0b",
-  "nowText": "Adding a job that publishes every green build to GitHub Pages, then switching Pages on.",
+  "now": "T3",
+  "nowText": "An Opus agent is studying two Blender tutorials, then rebuilding the Orderly to your notes. Two judged revision rounds follow.",
   "ci": {
     "status": "passed",
-    "commit": "85ff12a",
-    "at": "2026-11-16T04:34:47.691Z"
+    "commit": "d1da0e1",
+    "at": "2026-11-16T04:46:34.830Z"
   },
   "answersAppliedTo": "2026-11-16T04:20:00Z",
   "tasks": [
@@ -95,12 +95,25 @@
       ]
     },
     {
+      "id": "T2p",
+      "title": "Playing on a phone",
+      "why": "So you can check in and play from your phone: thumbs instead of keys and mouse.",
+      "status": "done",
+      "gates": [],
+      "finishedAt": "2026-11-16T04:45:59.818Z",
+      "summary": "Left thumb is a walk stick (push gently to creep), right thumb drags to look, the first tap starts the game. A browser test sends real touch events and checks walking, creeping, turning, and both thumbs at once. Checked by emulated touch only; not yet tried on a real phone.",
+      "todo": []
+    },
+    {
       "id": "T0b",
       "title": "A public play link on GitHub Pages",
       "why": "You said yes: every green build also goes to a public link friends can open from anywhere.",
-      "status": "doing",
+      "status": "done",
       "gates": [],
-      "startedAt": "2026-11-16T04:34:47.762Z"
+      "startedAt": "2026-11-16T04:34:47.762Z",
+      "finishedAt": "2026-11-16T04:46:34.753Z",
+      "summary": "Every build of main that passes all checks is published to https://jbarnell1.github.io/going-down/ by a CI job. The link answered when requested. The phone-controls build is publishing now.",
+      "todo": []
     },
     {
       "id": "T0c",
@@ -116,7 +129,7 @@
       "id": "T3",
       "title": "The Orderly, second pass",
       "why": "The first entity. The first pass reads as a mannequin; this pass has to make it frightening in bright light.",
-      "status": "todo",
+      "status": "doing",
       "gates": [
         "G4"
       ],
@@ -146,7 +159,8 @@
         "Load it in the game on a Clinic floor and check the reach and the walk there.",
         "Revision round 1: blind judges (fresh Opus agents shown only the pictures) and Fable each say what they see and what looks cheap; the agent fixes the worst of it.",
         "Revision round 2: the same again on the fixed figure. Pictures from every round go on this page."
-      ]
+      ],
+      "startedAt": "2026-11-16T04:36:16.722Z"
     },
     {
       "id": "T2b",
@@ -374,6 +388,36 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T04:46:35.001Z",
+      "text": "Started T3: The Orderly, second pass. An Opus agent is studying two Blender tutorials, then rebuilding the Orderly to your notes. Two judged revision rounds follow.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T04:46:34.911Z",
+      "text": "You asked the loop to keep working through the night and will answer questions in the morning.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T04:46:34.754Z",
+      "text": "Finished T0b: A public play link on GitHub Pages.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T04:45:59.819Z",
+      "text": "Finished T2p: Playing on a phone.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T04:45:59.745Z",
+      "text": "Added task T2p: Playing on a phone.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T04:36:16.722Z",
+      "text": "Started T3: The Orderly, second pass. An Opus agent is studying two Blender tutorials, then rebuilding the Orderly to your notes. Pictures will appear here as it works; two judged revision rounds follow.",
+      "kind": "start"
+    },
     {
       "at": "2026-11-16T04:34:47.763Z",
       "text": "Started T0b: A public play link on GitHub Pages. Adding a job that publishes every green build to GitHub Pages, then switching Pages on.",

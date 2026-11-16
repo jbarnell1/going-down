@@ -4,10 +4,10 @@
 
 ## Status
 
-- **Gates passed:** 1 of 14. **Tasks done:** 4 of 20.
+- **Gates passed:** 1 of 14. **Tasks done:** 6 of 21.
 - **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 4.
-- **Now:** T0b A public play link on GitHub Pages. Adding a job that publishes every green build to GitHub Pages, then switching Pages on.
-- **Last CI result seen:** passed on 85ff12a
+- **Now:** T3 The Orderly, second pass. An Opus agent is studying two Blender tutorials, then rebuilding the Orderly to your notes. Two judged revision rounds follow.
+- **Last CI result seen:** passed on d1da0e1
 - **Answers applied up to:** 2026-11-16T04:20:00Z
 
 ## Tasks
@@ -21,12 +21,16 @@
 - [x] **T2a** `done` Walking through a floor
   - Why: The first time the game is a place you can move around in, in first person.
   - Evidence: You can walk a generated two-level Clinic floor in first person: corridors, rooms with door gaps, a stair, and a balcony over the atrium. 48 rule tests pass, including collision. A browser test walks from the elevator up the stair to the balcony, and a second one presses real keys: W walks, Shift creeps, a wall stops you. Fable re-ran everything and looked at the screenshots. Lighting is flat and the rooms are empty; mouse look is not tested.
-- [ ] **T0b** `doing` A public play link on GitHub Pages
+- [x] **T2p** `done` Playing on a phone
+  - Why: So you can check in and play from your phone: thumbs instead of keys and mouse.
+  - Evidence: Left thumb is a walk stick (push gently to creep), right thumb drags to look, the first tap starts the game. A browser test sends real touch events and checks walking, creeping, turning, and both thumbs at once. Checked by emulated touch only; not yet tried on a real phone.
+- [x] **T0b** `done` A public play link on GitHub Pages
   - Why: You said yes: every green build also goes to a public link friends can open from anywhere.
+  - Evidence: Every build of main that passes all checks is published to https://jbarnell1.github.io/going-down/ by a CI job. The link answered when requested. The phone-controls build is publishing now.
 - [x] **T0c** `done` AGPL-3.0 licence
   - Why: You chose it for the public repository.
   - Evidence: The AGPL-3.0 licence text is in the repository and the README says so.
-- [ ] **T3** `todo` The Orderly, second pass (G4)
+- [ ] **T3** `doing` The Orderly, second pass (G4)
   - Why: The first entity. The first pass reads as a mannequin; this pass has to make it frightening in bright light.
   - To do: First, study: the agent goes through two YouTube Blender tutorials on making horror characters or low-detail retro creatures (their transcripts plus frames sampled from the video), and writes what it learned to docs/ART-NOTES.md before touching the model.
   - To do: Apply it, with your answers: taller so it ducks under door frames; a body under the gown (ribs, spine, collarbones, real elbows and wrists); the printed smile much bigger and bolder; something wrong where the eyes should be; longer, more articulated hands; less funny, more frightening.
@@ -87,6 +91,12 @@
 
 ## Activity (newest first)
 
+- 2026-11-16 04:46Z Started T3: The Orderly, second pass. An Opus agent is studying two Blender tutorials, then rebuilding the Orderly to your notes. Two judged revision rounds follow.
+- 2026-11-16 04:46Z You asked the loop to keep working through the night and will answer questions in the morning.
+- 2026-11-16 04:46Z Finished T0b: A public play link on GitHub Pages.
+- 2026-11-16 04:45Z Finished T2p: Playing on a phone.
+- 2026-11-16 04:45Z Added task T2p: Playing on a phone.
+- 2026-11-16 04:36Z Started T3: The Orderly, second pass. An Opus agent is studying two Blender tutorials, then rebuilding the Orderly to your notes. Pictures will appear here as it works; two judged revision rounds follow.
 - 2026-11-16 04:34Z Started T0b: A public play link on GitHub Pages. Adding a job that publishes every green build to GitHub Pages, then switching Pages on.
 - 2026-11-16 04:34Z Finished T0c: AGPL-3.0 licence.
 - 2026-11-16 04:34Z Finished T2a: Walking through a floor.
