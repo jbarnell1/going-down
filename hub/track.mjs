@@ -7,7 +7,10 @@
 //   node hub/track.mjs done T2a --summary "what is now true and how it was checked" --media shot.png:"caption" --media map.txt
 //   node hub/track.mjs media T3 render.png:"second pass, front view"      attach pictures to a task at any time
 //   node hub/track.mjs gate G2 passed "evidence" [--media ...]           passed | unverified | open
-//   node hub/track.mjs add T1b "Title" --why "why a player cares" [--after T1]
+//   node hub/track.mjs add T1b "Title" --why "why a player cares" [--after T1] [--ns H1,B6 | --ns none --ns-why "..."]
+//   node hub/track.mjs link T8 B6,F3            tie a task to North Star mechanics (see hub/ns.mjs); or: link T2w none --why "tooling"
+//        start refuses a task with no link and prints the linked mechanics; done prints them again and
+//        needs --ns "<how the result matches them, or where it differs on purpose and who decided>"
 //   node hub/track.mjs todo T3 "one thing still to fix"                   and: todo-clear T3
 //   node hub/track.mjs blocked T3 "why" | unblock T3
 //   node hub/track.mjs decision "a default taken without asking"
@@ -16,6 +19,7 @@
 //   node hub/track.mjs note "one line for the activity feed"
 //   node hub/track.mjs show                                                print the short status the loop reads
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -63,6 +67,17 @@ function keep(spec, owner) {
 }
 
 const task = (s, id) => s.tasks.find((t) => t.id === id) ?? die(`no task ${id}`);
+
+// North Star links: mechanic ids checked against the design document when it is on this machine.
+function nsIds(spec, why) {
+  if (!spec) die('link needs mechanic ids (H1,B6) or "none" with --why');
+  if (spec.toLowerCase() === 'none') { if (!why) die('link none needs --why "<why nothing in the North Star covers this>"'); return []; }
+  const ids = spec.split(',').map((x) => x.trim()).filter(Boolean);
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'hub', 'ns.mjs'), 'ids'], { encoding: 'utf8' });
+  const known = (r.stdout ?? '').trim().split(/\s+/).filter(Boolean);
+  if (known.length) for (const id of ids) if (!known.includes(id)) die(`no North Star mechanic "${id}". Known: ${known.join(' ')}`);
+  return ids;
+}
 const gateOf = (s, id) => s.gates.find((g) => g.id === id) ?? die(`no gate ${id}`);
 const feed = (s, text, kind = 'note') => { s.feed.unshift({ at: now(), text, kind }); s.feed = s.feed.slice(0, 200); };
 
@@ -107,8 +122,18 @@ switch (cmd) {
   }
   case 'render': break;
   case 'iteration': s.iteration += 1; break;
+  case 'link': {
+    // Ties a task to the North Star mechanics it builds: `link T8 B6,F3`, or `link T2w none --why "tooling"`.
+    const t = task(s, pos[0]);
+    t.ns = nsIds(pos[1], flag('why'));
+    if (flag('why')) t.nsWhy = flag('why');
+    feed(s, `Linked ${t.id} to the North Star: ${t.ns.length ? t.ns.join(', ') : 'nothing in it (' + t.nsWhy + ')'}.`);
+    break;
+  }
   case 'start': {
     const t = task(s, pos[0]);
+    if (!t.ns) die(`${t.id} has no North Star link. Look first:  node hub/ns.mjs find <words>   then:  node hub/track.mjs link ${t.id} <ids>   (or: link ${t.id} none --why "...")`);
+    if (t.ns.length) spawnSync(process.execPath, [path.join(ROOT, 'hub', 'ns.mjs'), 'show', ...t.ns], { stdio: 'inherit' });
     t.status = 'doing'; t.startedAt ??= now(); delete t.blocked;
     s.now = t.id; s.nowText = pos[1] ?? '';
     feed(s, `Started ${t.id}: ${t.title}.${pos[1] ? ' ' + pos[1] : ''}`, 'start');
@@ -117,6 +142,12 @@ switch (cmd) {
   case 'done': {
     const t = task(s, pos[0]);
     if (!flag('summary')) die('done needs --summary: what is now true and how it was checked');
+    if (!t.ns) die(`${t.id} has no North Star link: node hub/track.mjs link ${t.id} <ids>  (or: link ${t.id} none --why "...")`);
+    if (t.ns.length && !flag('ns')) {
+      spawnSync(process.execPath, [path.join(ROOT, 'hub', 'ns.mjs'), 'show', ...t.ns], { stdio: 'inherit' });
+      die(`\ndone needs --ns "<how the result matches ${t.ns.join(', ')} above, or where it differs on purpose and who decided>"`);
+    }
+    if (flag('ns')) t.nsCheck = flag('ns');
     t.status = 'done'; t.finishedAt = now(); t.summary = flag('summary'); t.todo = [];
     for (const m of flags.media ?? []) (t.media ??= []).push(keep(m, t.id));
     if (s.now === t.id) { s.now = null; s.nowText = ''; }
@@ -141,6 +172,7 @@ switch (cmd) {
   case 'add': {
     if (s.tasks.some((t) => t.id === pos[0])) die(`task ${pos[0]} already exists`);
     const t = { id: pos[0], title: pos[1] ?? die('add needs a title'), why: flag('why') ?? '', status: 'todo', gates: (flag('gates') ?? '').split(',').filter(Boolean) };
+    if (flag('ns')) { t.ns = nsIds(flag('ns'), flag('ns-why')); if (flag('ns-why')) t.nsWhy = flag('ns-why'); }
     const after = flag('after') ? s.tasks.findIndex((x) => x.id === flag('after')) : -1;
     if (after === -1) s.tasks.push(t); else s.tasks.splice(after + 1, 0, t);
     feed(s, `Added task ${t.id}: ${t.title}.`);

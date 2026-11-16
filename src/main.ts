@@ -20,13 +20,13 @@ import { EndScreen, type EndLine } from './render/endScreen';
 import { EntityPreview } from './render/entityPreview';
 import { EntityView, type DrawnPose } from './render/entityView';
 import { InstrumentView } from './render/instrumentView';
-import { applyLighting } from './render/lighting';
+import { applyLighting, emergencyLevel } from './render/lighting';
 import { cleanName, Lobby } from './render/lobby';
 import { PickupPrompt } from './render/pickupPrompt';
 import { TapeDrops } from './render/tapeDrops';
 import { Osd } from './render/osd';
 import { Tape, type FxLevel } from './render/tape';
-import { buildWorld, FOG, replaceFloor } from './render/world';
+import { buildWorld, FOG, replaceFloor, setEmergency } from './render/world';
 import { BroadcastTransport } from './net/broadcastTransport';
 import type { Frame, LocalFrame, NetClient } from './net/client';
 import { CrewSession } from './net/crew';
@@ -38,7 +38,7 @@ import { isWalkable, type FloorPlan, type Level } from './sim/floor';
 import { LOUDNESS_MAX, LOUDNESS_MIN, LOUDNESS_REST, maxWalkSpeed, member, PICKUP_REACH, pickUpTape, setRaised, TICK_SCALE, tapeValue, type CrewEvent, type Instrument } from './sim/instrument';
 import { landingFacing } from './sim/landing';
 import { bodyAtCell, cellOf, LEVEL_HEIGHT, type Body } from './sim/move';
-import { BOARD_TIME, CALL_REACH, carBody, carLocal, depthMultiplier, inCar, RIDE_TIME, type RunEvent, type RunSummary, type Side } from './sim/run';
+import { BLACKOUT_WARNING, BOARD_TIME, CALL_REACH, carBody, carLocal, depthMultiplier, inCar, RIDE_TIME, type RunEvent, type RunSummary, type Side } from './sim/run';
 import { exertion, freshStamina } from './sim/stamina';
 
 declare const __BUILD__: string;
@@ -264,8 +264,8 @@ let catches = 0;
 /** The local player's screen shows the figure this frame (NetClient's own sight test). */
 let orderlyVisible = false;
 let squeak = { gain: 0, muffled: false };
-/** Per-frame record for tests: what was drawn against where the run has it. */
-const trace: { f: number; vis: boolean; dx: number; dz: number; lx: number; lz: number; t: number; anim: string; clip: number }[] = [];
+/** Per-frame records of the Orderly as drawn: held (seen), shown (the mesh visible), the screen dark, drawn and logic positions. */
+const trace: { f: number; vis: boolean; shown: boolean; dark: boolean; dx: number; dz: number; lx: number; lz: number; t: number; anim: string; clip: number }[] = [];
 
 // The scene is drawn at a low internal resolution, then put on screen through the tape pass.
 const INTERNAL_HEIGHT = 270;
@@ -337,6 +337,9 @@ document.addEventListener('pointerlockerror', () => {
   if (!input.touch && !panel.isOpen && !lobby.shown) overlay.hidden = false;
 });
 const coarsePointer = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+/** When the screen last went dark for a blink (performance.now ms; -1 while lit), and the emergency lighting's level. */
+let darkSince = -1;
+let emergency = 0;
 /** The light level last applied (1 all on); applied again only when it changes. */
 let appliedLight = { gain: -1, level: -1 };
 function setLights(level: number): void {
@@ -671,7 +674,7 @@ function showEnd(now: number): void {
   } else {
     endScreen.show([{ text: 'THE CAR WENT DOWN WITHOUT YOU', strong: true }, { text: '' }, again]);
   }
-  document.exitPointerLock?.();
+  input.unlock();
 }
 
 // A key or a tap on the end screen starts a new run (after a moment, so a held key does not skip it).
@@ -734,7 +737,9 @@ function present(events: readonly RunEvent[], now: number): void {
         audio.doors(e.open, true);
         break;
       case 'blinkSoon':
-        audio.blinkWarning();
+        // The blackout's warning is long and unmistakable: the tubes fail over seconds and the power winds down.
+        if (e.blackout) audio.blinkWarning(BLACKOUT_WARNING, true);
+        else audio.blinkWarning();
         break;
       case 'blinkStart':
         audio.blink(true);
@@ -1083,6 +1088,8 @@ function orderlyInfo() {
     distance: Math.hypot(b.x - (s ? s.body.x : o.x), b.z - (s ? s.body.z : o.z)),
     t: view.t,
     loaded: orderlyView.loaded,
+    /** The figure is drawn on this frame (never in the dark). */
+    shown: orderlyView.model.root.visible,
     drawn: d ? { x: d.x, y: d.y, z: d.z, yaw: d.yaw / DEG, anim: d.anim, animTime: d.animTime, frozen: orderlyView.isFrozen } : null,
   };
 }
@@ -1110,6 +1117,12 @@ function runInfo() {
     eta: c?.eta ?? null,
     blink: s ? blinkingView(s) : false,
     blinkSoon: s ? blinkWarningView(s) : false,
+    /** The dark stretch announced or on now: when (run time), how long, its warning, whether it is the blackout. */
+    darkNow: s?.blink ? { at: s.blink.at, len: s.blink.len, warn: s.blink.warn, blackout: s.blink.blackout, announced: s.blink.announced, on: s.blink.endsAt !== null } : null,
+    /** The whole wait's dark stretches in run time (host page only), the last the blackout. */
+    darks: c?.darks ?? null,
+    /** The emergency lighting's level this frame (0 off, 1 fully on). */
+    emergency,
     /** The screen is dark for a blink this frame (the network layer's window), or blind while taken. */
     dark: netFrame?.dark ?? false,
     /** This screen has committed to being taken (black until the catch lands or is called off). */
@@ -1353,9 +1366,10 @@ const state = {
     player.yaw = yawDegrees * DEG;
     player.pitch = pitchDegrees * DEG;
   },
-  walkTo: (level: Level, cx: number, cy: number) => {
+  /** Walks to a cell: fast, or at `pace` m/s in real time (a player's own pace) if given. */
+  walkTo: (level: Level, cx: number, cy: number, pace?: number) => {
     if (inCar(car, player.body)) return Promise.reject(new Error('in the elevator car: step out first (runCtl.walkCar)'));
-    return autoWalk.start(plan, player, { level, x: cx, y: cy });
+    return autoWalk.start(plan, player, { level, x: cx, y: cy }, pace ?? null);
   },
   frameMs: () => stats.median(),
   /** Tape strength: 0 clean, 1 default, 2 heavy. */
@@ -1381,6 +1395,8 @@ const state = {
     input.dismissOverlay();
     audio.unlock();
   },
+  /** The mouse lock: whether it is the test stand-in, whether the game holds it, and whether the browser's real lock is held. */
+  pointerLock: () => ({ standIn: input.lock.standIn, locked: input.locked, real: document.pointerLockElement !== null }),
   /** The live Orderly as this page has it, or null with ?entity=0. Positions in metres, yaw in degrees. */
   orderly: orderlyInfo,
   /** Everything the Orderly's logic has reported so far (as this page heard it). */
@@ -1416,7 +1432,7 @@ const state = {
   },
   audio: { state: () => audio.state() },
   /** The announcer: what is playing, waiting and said this run; say(id) asks for a line (false if it cannot). */
-  announcer: { state: () => announcer.state(), say: (id: string) => announcer.say(id) },
+  announcer: { state: () => announcer.state(), say: (id: string) => announcer.say(id), deal: (moment: string) => announcer.dealNext(moment) },
   /** The settings in force, and the panel (open, close, whether open, whether its gear button shows). */
   settings: {
     get: () => ({ ...settings.all }),
@@ -1583,7 +1599,7 @@ renderer.setAnimationLoop(() => {
   pending?.pump(realNow());
   if (crew.ended && !endScreen.shown && !lobby.shown) {
     lobby.showEnded('THE HOST LEFT. THE SESSION IS OVER.', 'START A NEW ONE');
-    document.exitPointerLock?.();
+    input.unlock();
   }
   if (client() !== runClient) resetForRun();
   const c = client();
@@ -1608,7 +1624,7 @@ renderer.setAnimationLoop(() => {
     stepCarWalk(dt);
     player.idle(dt, WALK_SPEED);
   } else if (autoWalk.active) {
-    autoWalk.tick(plan, player);
+    autoWalk.tick(plan, player, dt);
     player.idle(dt, WALK_SPEED);
   } else if (playing && netFrame?.taken !== true) player.control(plan, input, dt, raised ? maxWalkSpeed(true, WALK_SPEED) : Infinity, mover);
   else {
@@ -1634,7 +1650,7 @@ renderer.setAnimationLoop(() => {
   // The elevator's controls.
   const callable = canCall();
   const holdable = nearHoldButton();
-  liftPrompt.update((callable || holdable) && !ended, input.touch, callable ? '▼' : '<|>');
+  liftPrompt.update((callable || holdable) && !ended, input.touch, callable ? 'â–¼' : '<|>');
   const ePressed = input.takePress('KeyE');
   if (ePressed && callable) pendingCall = true;
   holdNow = forcedHold ?? (holdable && (input.down('KeyE') || liftPrompt.held));
@@ -1663,7 +1679,8 @@ renderer.setAnimationLoop(() => {
   orderlyVisible = f?.seeing ?? false;
   if (orderlyView) {
     const p = f?.orderly ?? null;
-    orderlyView.setVisible(p !== null);
+    // Never drawn in the dark (the network layer says so): heard, not seen.
+    orderlyView.setVisible(p !== null && f?.visible === true);
     if (p) {
       // Seen: held exactly as the network layer holds it. Unseen: as it draws it. Walking clips run
       // on the stride clock (the distance walked), so a creep is a slow stride.
@@ -1674,7 +1691,7 @@ renderer.setAnimationLoop(() => {
       const d = orderlyView.drawn;
       const lo = crew.host ? crew.host.state.orderly.body : s?.orderly;
       if (d && lo) {
-        trace.push({ f: state.frames + 1, vis: f?.held === true, dx: d.x, dz: d.z, lx: lo.x, lz: lo.z, t: s?.t ?? 0, anim: d.anim, clip: d.animTime });
+        trace.push({ f: state.frames + 1, vis: f?.held === true, shown: f?.visible === true, dark, dx: d.x, dz: d.z, lx: lo.x, lz: lo.z, t: s?.t ?? 0, anim: d.anim, clip: d.animTime });
         if (trace.length > 600) trace.shift();
       }
       // Sound: silent the instant it is seen, whatever the next tick says. Heard in the dark if it moves.
@@ -1708,8 +1725,23 @@ renderer.setAnimationLoop(() => {
   // The blink: a flicker through the warning, then a deep dark with tape noise, then the lights back.
   // Dark exactly while the network layer says so (its window covers the clock's uncertainty).
   const warn = s ? blinkWarningView(s) : false;
+  // The emergency lights: on a moment after the lights go out (not while taken: that screen is noise).
+  const outage = dark && f?.taken !== true;
+  if (!outage) darkSince = -1;
+  else if (darkSince < 0) darkSince = now;
+  emergency = outage ? emergencyLevel((now - darkSince) / 1000) : 0;
+  setEmergency(world.floor, emergency);
   let light = 1;
-  if (dark) light = 0.07;
+  // The dark: the last of the real light fades further as the emergency lights take over.
+  if (dark) light = 0.07 * (1 - 0.7 * emergency);
+  else if (warn && s?.blink?.blackout) {
+    // The blackout's warning: the tubes fail in stages over the whole warning, sagging lower and
+    // stuttering faster as it runs out, so nobody can mistake it for a blink.
+    const left = Math.max(0, s.blink.at - s.t);
+    const period = left > 2 ? 260 : left > 1 ? 150 : 70;
+    const sag = left > 2 ? 0.55 : left > 1 ? 0.4 : 0.28;
+    light = Math.floor(now / period) % 2 === 0 || Math.floor(now / 37) % 7 === 3 ? 0.1 : sag;
+  }
   // The warning: the tubes sag and stutter (never back to full), so a glance at any moment of it shows trouble.
   else if (warn) light = Math.floor(now / 55) % 4 === 1 || Math.floor(now / 140) % 3 === 2 ? 0.18 : 0.6;
   setLights(light);
@@ -1773,7 +1805,7 @@ renderer.setAnimationLoop(() => {
       `tape fx${tape.fx}${tape.motion ? '' : ' (reduced motion)'}\n` +
       `pos ${b.x.toFixed(2)} ${b.y.toFixed(2)} ${b.z.toFixed(2)}\n` +
       `cell L${cc.level} (${cc.x},${cc.y})  yaw ${(player.yaw / DEG).toFixed(0)}\n` +
-      `run ${s.phase}  depth ${s.depth}  car ${carState()}${e !== null ? `  eta ${e.toFixed(1)} s` : ''}${dark ? '  BLINK' : warn ? '  blink soon' : ''}\n` +
+      `run ${s.phase}  depth ${s.depth}  car ${carState()}${e !== null ? `  eta ${e.toFixed(1)} s` : ''}${dark ? (s.blink?.blackout ? '  BLACKOUT' : '  BLINK') : warn ? (s.blink?.blackout ? '  blackout soon' : '  blink soon') : ''}\n` +
       `vote ${me(s)?.side ?? '-'}${s.phase === 'boarding' ? `  bell ${s.bellLeft.toFixed(1)} s  hold ${s.holdLeft.toFixed(1)} s${s.held ? ' HELD' : ''}` : ''}`;
     let ent: { level: Level; x: number; z: number; seen: boolean } | null = null;
     if (orderlyView) {

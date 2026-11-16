@@ -21,6 +21,43 @@ export interface StructureGeometry {
   walls: GeoBuilder;
   ceilings: GeoBuilder;
   lights: GeoBuilder;
+  /** The emergency lighting: unlit glow, shown only while the lights are out (world.ts setEmergency). */
+  emergency: GeoBuilder;
+}
+
+/**
+ * The emergency lighting, drawn only in the dark: a low amber strip along the foot of every wall of
+ * the corridors, the lobby and the atrium (it breaks at every doorway, so openings read as gaps), a
+ * red glow over each doorway on the corridor side, and a larger one over the lift. Rooms get none.
+ */
+export const EMERGENCY = {
+  stripFrom: 0.06,
+  stripTo: 0.2,
+  /** Stood off the wall so it never fights the wall face. */
+  stand: 0.012,
+  strip: [1.0, 0.36, 0.05] as RGB,
+  sign: [0.95, 0.08, 0.03] as RGB,
+  /** The sign over a doorway: half width, bottom above the door, height. */
+  signHalf: 0.28,
+  signGap: 0.06,
+  signHeight: 0.16,
+  liftSignHalf: 0.5,
+  liftSignHeight: 0.22,
+};
+
+/** Areas that get emergency strips: the ways through, not the rooms off them. */
+function lit(area: string): boolean {
+  return area === 'corridor' || area === 'lobby' || area === 'atrium';
+}
+
+/** A glowing band on a wall face between `from` and `to` metres along the edge, heights y0..y1 above `base`. */
+function glowPiece(g: GeoBuilder, x0: number, z0: number, x1: number, z1: number, nx: number, nz: number, base: number, from: number, to: number, y0: number, y1: number, c: RGB): void {
+  const len = Math.hypot(x1 - x0, z1 - z0);
+  const ex = (x1 - x0) / len;
+  const ez = (z1 - z0) / len;
+  const ox = x0 + ex * from + nx * EMERGENCY.stand;
+  const oz = z0 + ez * from + nz * EMERGENCY.stand;
+  g.quadFacing([ox, base + y0, oz], [ex * (to - from), 0, ez * (to - from)], [0, y1 - y0, 0], [nx, 0, nz], c);
 }
 
 /** Holes in the upper floor: you see down through these, and no ceiling is hung beneath them. */
@@ -96,6 +133,7 @@ function wallFaces(
   sides: { cx: number; cy: number; nx: number; nz: number }[],
   /** The landing cell's elevator wall face: (level, cell, normal into it), or null. */
   lift: { level: Level; x: number; y: number; nx: number; nz: number } | null = null,
+  glow: GeoBuilder | null = null,
 ): void {
   const solid = kind === 'wall' || kind === 'door' || (kind === 'stairTop' && level === 0);
   if (!solid) return;
@@ -109,8 +147,12 @@ function wallFaces(
     if (k === 'void') continue;
     // A level-0 stair-top wall faces only the stair; the cell beyond is under the upper floor.
     if (kind === 'stairTop' && k !== 'stair') continue;
-    const tint = wallColour(areaAt(plan, level, s.cx, s.cy));
+    const area = areaAt(plan, level, s.cx, s.cy);
+    const tint = wallColour(area);
     const plain = level === 1 && k === 'atriumOpen';
+    const strip = (from: number, to: number): void => {
+      if (glow && lit(area) && to - from > 0.05) glowPiece(glow, x0, z0, x1, z1, s.nx, s.nz, base, from, to, EMERGENCY.stripFrom, EMERGENCY.stripTo, EMERGENCY.strip);
+    };
     if (lift && level === lift.level && s.cx === lift.x && s.cy === lift.y && s.nx === lift.nx && s.nz === lift.nz) {
       // The elevator's doorway: the car's sliding doors close it (elevator.ts).
       const a = len / 2 - LIFT_HALF_WIDTH;
@@ -118,12 +160,26 @@ function wallFaces(
       wallPiece(g, x0, z0, x1, z1, s.nx, s.nz, base, 0, a, 0, H, tint, plain);
       wallPiece(g, x0, z0, x1, z1, s.nx, s.nz, base, b, len, 0, H, tint, plain);
       wallPiece(g, x0, z0, x1, z1, s.nx, s.nz, base, a, b, LIFT_DOOR_HEIGHT, H, tint, plain);
+      strip(0, a);
+      strip(b, len);
+      if (glow) {
+        const y = LIFT_DOOR_HEIGHT + EMERGENCY.signGap;
+        glowPiece(glow, x0, z0, x1, z1, s.nx, s.nz, base, len / 2 - EMERGENCY.liftSignHalf, len / 2 + EMERGENCY.liftSignHalf, y, y + EMERGENCY.liftSignHeight, EMERGENCY.sign);
+      }
     } else if (kind === 'door') {
       wallPiece(g, x0, z0, x1, z1, s.nx, s.nz, base, 0, gap0, 0, H, tint, plain);
       wallPiece(g, x0, z0, x1, z1, s.nx, s.nz, base, gap1, len, 0, H, tint, plain);
       wallPiece(g, x0, z0, x1, z1, s.nx, s.nz, base, gap0, gap1, DOOR_HEIGHT, H, tint, plain);
+      strip(0, gap0);
+      strip(gap1, len);
+      if (glow && lit(area)) {
+        const y = DOOR_HEIGHT + EMERGENCY.signGap;
+        glowPiece(glow, x0, z0, x1, z1, s.nx, s.nz, base, len / 2 - EMERGENCY.signHalf, len / 2 + EMERGENCY.signHalf, y, y + EMERGENCY.signHeight, EMERGENCY.sign);
+      }
     } else {
       wallPiece(g, x0, z0, x1, z1, s.nx, s.nz, base, 0, len, 0, H, tint, plain);
+      // A level-0 stair-top wall faces only the stair, with the upper floor's walkway above: no strip there.
+      if (kind !== 'stairTop') strip(0, len);
     }
   }
 }
@@ -135,6 +191,7 @@ export function buildStructure(plan: FloorPlan): StructureGeometry {
   const walls = new GeoBuilder();
   const ceilings = new GeoBuilder();
   const lights = new GeoBuilder();
+  const emergency = new GeoBuilder();
   const white: RGB = [1, 1, 1];
   const ew = elevatorWall(plan);
   const lift = ew ? { level: plan.landing.level, x: plan.landing.x, y: plan.landing.y, nx: -DIR_VEC[ew].dx, nz: -DIR_VEC[ew].dy } : null;
@@ -172,12 +229,12 @@ export function buildStructure(plan: FloorPlan): StructureGeometry {
         wallFaces(walls, plan, level, west, x0, z0, x0, z0 + S, [
           { cx: x - 1, cy: y, nx: -1, nz: 0 },
           { cx: x, cy: y, nx: 1, nz: 0 },
-        ], lift);
+        ], lift, emergency);
         const north = northEdge(plan, level, x, y);
         wallFaces(walls, plan, level, north, x0, z0, x0 + S, z0, [
           { cx: x, cy: y - 1, nx: 0, nz: -1 },
           { cx: x, cy: y, nx: 0, nz: 1 },
-        ], lift);
+        ], lift, emergency);
       }
     }
     // Plans keep a void margin, so the far boundary edges never have anything on them; drawn anyway
@@ -191,5 +248,5 @@ export function buildStructure(plan: FloorPlan): StructureGeometry {
       wallFaces(walls, plan, level, northEdge(plan, level, x, y), x * S, y * S, (x + 1) * S, y * S, [{ cx: x, cy: y - 1, nx: 0, nz: -1 }]);
     }
   }
-  return { floors, walls, ceilings, lights };
+  return { floors, walls, ceilings, lights, emergency };
 }

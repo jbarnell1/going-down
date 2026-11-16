@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createBot, stepBot, BOT_EYE, BOT_HFOV_DEG, BOT_RADIUS, BOT_VFOV_DEG, type Bot } from '../../src/sim/bot';
+import { createBot, createWaitBot, stepBot, stepWaitBot, BOT_EYE, BOT_HFOV_DEG, BOT_RADIUS, BOT_VFOV_DEG, type Bot } from '../../src/sim/bot';
 import { createOrderly, ORDERLY_RADIUS, yawToward, type OrderlyState } from '../../src/sim/entity';
 import { canStep, cellAt, DIR_VEC, distancesFrom, findPath, hasDoor, isWalkable, posFromIndex, roomIdAt, type FloorPlan, type Pos } from '../../src/sim/floor';
 import { pathDone, stepPathWalk, type PathWalk } from '../../src/sim/follow';
@@ -8,9 +8,10 @@ import { elevatorWall } from '../../src/sim/landing';
 import { bodyAtCell, cellOf, type Body } from '../../src/sim/move';
 import { makeRng, type Rng } from '../../src/sim/rng';
 import {
-  BLINK_INTERVAL_MAX,
-  BLINK_INTERVAL_MIN,
-  BLINK_TIME,
+  BLACKOUT_WARNING,
+  BLINK_GAPS,
+  BLINK_WARNING,
+  blackedOut,
   BOARD_TIME,
   carBody,
   createRun,
@@ -242,6 +243,7 @@ describe('a run: scripted from the first floor to the bank', () => {
     const B: Actor = { id: 'B', body: st.players[1]?.body as Body, yaw: 0, pitch: 0 };
     const actors = [A, B];
     const readings: { value: number; raw: number; depth: number }[] = [];
+    const darkLog: string[] = [];
     let carBox = oracleCar(st.plan);
     const safety = (s: RunState): void => {
       expect(boxDistance(carBox, s.orderly.body.x, s.orderly.body.z)).toBeGreaterThanOrEqual(ORDERLY_RADIUS - 1e-3);
@@ -296,46 +298,61 @@ describe('a run: scripted from the first floor to the bank', () => {
       const onTape = member(st.crew, 'A')?.tape.readings.at(-1);
       expect(onTape?.value).toBeCloseTo(r?.value ?? -1, 9);
 
-      // Call, keep watching it; the indicator counts down floor by floor. The instrument goes down
-      // for the wait: left raised it would go on recording every time the lights blink (which is a
-      // real way to earn during the wait, but this script counts exactly one reading per floor).
+      // Call, and live through the wait as a crew that flees and comes back (sim/bot.ts 'flee'): watch
+      // it and keep a few metres from it while the lights are on, get moving when a dark stretch that
+      // would let it reach them is announced, run in the blackout, and come back to the car when the
+      // lights return, watching it all the way. The instrument goes down for the wait: left raised it
+      // would go on recording every time the lights go (a real way to earn during the wait, but this
+      // script counts exactly one reading per floor). The indicator counts down floor by floor.
       A.raised = false;
       A.call = true;
+      const crew = actors.map((a, k) => {
+        const b = createWaitBot(st, a.id, k, 'flee');
+        b.body = a.body;
+        b.seat = { u: 0.8 + 0.5 * k, v: bankAtEnd ? -0.5 : 0.5 };
+        return b;
+      });
       const indicator: number[] = [];
+      const darks: { len: number; blackout: boolean; start: number; end: number | null }[] = [];
+      let arrivedAt = -1;
+      let farthest = 0;
+      let bell: RunEvent | undefined;
+      let first = true;
       st = runUntil(st, actors, log, (ev) => {
-        for (const e of ev) if (e.type === 'indicator') indicator.push(e.floorsAway);
-        return has(ev, 'carArrived');
-      }, 80, (s) => {
-        // Staring alone is not safe: it gains ground in every blink. The counterplay is to keep it
-        // at a distance, so each player backs away from it whenever it is within five metres.
-        for (const a of actors) {
-          const o = s.orderly.body;
-          const dx = a.body.x - o.x;
-          const dz = a.body.z - o.z;
-          const d = Math.hypot(dx, dz);
-          if (d < 5 && d > 1e-6) walk(s, a, [{ ...a.body, x: a.body.x + (dx / d) * 2, z: a.body.z + (dz / d) * 2 }], 2.5);
-          lookAt(a, o);
+        for (const e of ev) {
+          if (e.type === 'indicator') indicator.push(e.floorsAway);
+          if (e.type === 'blinkStart') darks.push({ len: e.len, blackout: e.blackout, start: e.t, end: null });
+          const last = darks[darks.length - 1];
+          if (e.type === 'blinkEnd' && last) last.end = e.t;
+          if (e.type === 'carArrived') arrivedAt = e.t;
         }
+        bell = ev.find((e) => e.type === 'bell');
+        return bell !== undefined;
+      }, 80 + BOARD_TIME + HOLD_LIMIT, (s) => {
+        const waiting = crew.some((b) => !oracleInCar(carBox, b.body));
+        crew.forEach((b, k) => {
+          if (!first) stepWaitBot(s, b, DT);
+          const a = actors[k] as Actor;
+          a.body = b.body;
+          a.yaw = b.yaw;
+          a.pitch = b.pitch;
+          a.hold = b.mode === 'aboard' && waiting;
+          if (blackedOut(s)) farthest = Math.max(farthest, Math.hypot(b.body.x - s.car.doorX, b.body.z - s.car.doorZ));
+        });
+        first = false;
         safety(s);
       });
       expect(indicator.length).toBeGreaterThanOrEqual(7);
       indicator.forEach((f, k) => expect(f).toBe((indicator[0] ?? 0) - k));
       expect(indicator.at(-1)).toBe(0);
-      expect(doorsOpen(st)).toBe(true);
-
-      // Board onto one side, still watching it, and wait for the bell.
-      const inA = intoCar(st, 0.8, bankAtEnd ? -0.5 : 0.5);
-      const inB = intoCar(st, 1.3, bankAtEnd ? -0.5 : 0.5);
-      let bell: RunEvent | undefined;
-      st = runUntil(st, actors, log, (ev) => {
-        bell = ev.find((e) => e.type === 'bell');
-        return bell !== undefined;
-      }, BOARD_TIME + 2, (s) => {
-        walk(s, A, inA, 2.0);
-        walk(s, B, inB, 2.0);
-        for (const a of actors) lookAt(a, s.orderly.body);
-        safety(s);
-      });
+      // The lights: each dark stretch longer than the last; the last is the blackout, ending as the doors open.
+      expect(darks.length).toBeGreaterThanOrEqual(2);
+      for (let k = 1; k < darks.length; k++) expect(darks[k]?.len).toBeGreaterThan(darks[k - 1]?.len ?? 0);
+      expect(darks.map((d) => d.blackout)).toEqual(darks.map((_, k) => k === darks.length - 1));
+      expect(darks.at(-1)?.end).toBe(arrivedAt);
+      // The crew ran: well away from the car in the blackout, and all back aboard by the bell.
+      expect(farthest).toBeGreaterThan(12);
+      darkLog.push(`floor ${depth}: darks ${darks.map((d) => d.len.toFixed(1)).join(', ')} s, the crew got ${farthest.toFixed(1)} m from the car`);
       expect(bell && bell.type === 'bell' ? [bell.bank, bell.down, bell.outcome] : null).toEqual(bankAtEnd ? [2, 0, 'bank'] : [0, 2, 'ride']);
     };
 
@@ -372,7 +389,7 @@ describe('a run: scripted from the first floor to the bank', () => {
     expect(order).toEqual(['doorsOpened', 'carLeft', 'called', 'carArrived', 'doorsOpened', 'bell', 'carLeft', 'rodeDown', 'doorsOpened', 'carLeft', 'called', 'carArrived', 'doorsOpened', 'bell', 'banked']);
     console.log(
       `script: floor 1 reading ${readings[0]?.value.toFixed(1)} (raw ${readings[0]?.raw.toFixed(1)}), floor 2 reading ${readings[1]?.value.toFixed(1)} (raw ${readings[1]?.raw.toFixed(1)} x ${depthMultiplier(2)}), ` +
-        `banked ${banked.summary.total.toFixed(1)}, ${banked.summary.shares.A?.toFixed(1)} each, run time ${st.t.toFixed(0)} s`,
+        `banked ${banked.summary.total.toFixed(1)}, ${banked.summary.shares.A?.toFixed(1)} each, run time ${st.t.toFixed(0)} s; ${darkLog.join('; ')}`,
     );
   });
 });
@@ -388,8 +405,10 @@ interface StareResult {
   blinkAdvance: number;
   caught: boolean;
   blinks: number;
+  blackouts: number;
   telegraph: string[];
   waitedFor: number;
+  arrived: boolean;
 }
 
 function nearLandingCell(plan: FloorPlan, rng: Rng, from: Body): Pos {
@@ -418,11 +437,14 @@ function stareRun(i: number): StareResult {
   const orderly: OrderlyState = { ...createOrderly(plan), body: bodyAtCell(plan, start), mode: 'hunting' };
   let st: RunState = { ...st0, phase: 'away', players: st0.players.map((p, k): RunPlayer => ({ ...p, body: spots[k] as Body, aboard: false })), orderly };
   const actors: Actor[] = ids.map((id, k) => ({ id, body: spots[k] as Body, yaw: 0, pitch: 0, call: k === 0 }));
-  const res: StareResult = { label: `${seed} bots${n}`, violations: [], movedInBlink: 0, blinkAdvance: 0, caught: false, blinks: 0, telegraph: [], waitedFor: 0 };
+  const res: StareResult = { label: `${seed} bots${n}`, violations: [], movedInBlink: 0, blinkAdvance: 0, caught: false, blinks: 0, blackouts: 0, telegraph: [], waitedFor: 0, arrived: false };
   const out = new Set<string>();
   let blind = false;
-  let lastSoon: number | null = null;
+  let lastSoon: { t: number; len: number; blackout: boolean } | null = null;
   let lastStart: number | null = null;
+  let lastEnd: number | null = null;
+  let lastLen = 0;
+  let blackoutOn = false;
   const log: RunEvent[] = [];
   for (let k = 0; k < 90 / DT; k++) {
     for (const a of actors) lookAt(a, st.orderly.body);
@@ -436,23 +458,36 @@ function stareRun(i: number): StareResult {
     for (const e of r.ev) {
       if (e.type === 'blinkSoon') {
         if (lastSoon !== null) res.telegraph.push(`t=${e.t.toFixed(2)} second blinkSoon before a blinkStart`);
-        lastSoon = e.t;
+        lastSoon = { t: e.t, len: e.len, blackout: e.blackout };
       }
       if (e.type === 'blinkStart') {
         res.blinks++;
-        const lead = lastSoon === null ? -1 : e.t - lastSoon;
-        if (lead < 0.5 - 1e-9 || lead > 0.7 + 1e-9) res.telegraph.push(`t=${e.t.toFixed(2)} blinkStart with lead ${lead.toFixed(3)}`);
-        if (lastStart !== null) {
-          const gap = e.t - lastStart;
-          if (gap < BLINK_INTERVAL_MIN - DT - 1e-9 || gap > BLINK_INTERVAL_MAX + DT + 1e-9) res.telegraph.push(`blink gap ${gap.toFixed(2)}`);
-        }
+        if (e.blackout) res.blackouts++;
+        // Each warned ahead by its own warning (the blackout's long one), give or take a tick.
+        const warn = e.blackout ? BLACKOUT_WARNING : BLINK_WARNING;
+        const lead = lastSoon === null ? -1 : e.t - lastSoon.t;
+        if (Math.abs(lead - warn) > DT + 1e-9) res.telegraph.push(`t=${e.t.toFixed(2)} blinkStart with lead ${lead.toFixed(3)} (warning ${warn})`);
+        if (lastSoon && (lastSoon.len !== e.len || lastSoon.blackout !== e.blackout)) res.telegraph.push(`t=${e.t.toFixed(2)} blinkStart unlike its warning`);
+        // Each dark stretch longer than the last, with a lit gap before it of at least the shortest gap.
+        if (e.len <= lastLen) res.telegraph.push(`t=${e.t.toFixed(2)} dark of ${e.len.toFixed(2)} s after one of ${lastLen.toFixed(2)} s`);
+        const minGap = (BLINK_GAPS[0]?.[0] ?? 0) + warn;
+        if (lastEnd !== null && e.t - lastEnd < minGap - DT - 1e-9) res.telegraph.push(`lit for only ${(e.t - lastEnd).toFixed(2)} s before a dark`);
+        if (blackoutOn) res.telegraph.push(`t=${e.t.toFixed(2)} a dark after the blackout`);
+        blackoutOn = e.blackout;
+        lastLen = e.len;
         lastStart = e.t;
         lastSoon = null;
       }
       if (e.type === 'blinkEnd' && lastStart !== null) {
         const len = e.t - lastStart;
-        if (Math.abs(len - BLINK_TIME) > DT + 1e-9) res.telegraph.push(`blink length ${len.toFixed(3)}`);
+        if (e.blackout) {
+          // The blackout ends on the tick the car arrives, never before.
+          if (!types.includes('carArrived')) res.telegraph.push(`t=${e.t.toFixed(2)} the blackout ended without the car`);
+          if (len < 9 - DT - 1e-9) res.telegraph.push(`blackout of ${len.toFixed(2)} s`);
+        } else if (Math.abs(len - lastLen) > DT + 1e-9) res.telegraph.push(`blink length ${len.toFixed(3)} for ${lastLen.toFixed(3)}`);
+        lastEnd = e.t;
       }
+      if (e.type === 'carArrived' && !(blackoutOn && types.includes('blinkEnd'))) res.telegraph.push(`t=${e.t.toFixed(2)} the car came without ending a blackout`);
       if (e.type === 'caught') res.caught = true;
       if ('playerId' in e && e.playerId === LURE_ID) res.violations.push(`event about the call target: ${e.type}`);
     }
@@ -468,6 +503,7 @@ function stareRun(i: number): StareResult {
     }
     for (const e of r.ev) if (e.type === 'caught') out.add(e.playerId);
     if (types.includes('carArrived') || st.phase === 'ended') {
+      res.arrived = types.includes('carArrived');
       const called = log.find((e) => e.type === 'called');
       res.waitedFor = st.t - (called?.t ?? 0);
       break;
@@ -494,17 +530,21 @@ describe('the blink rule: staring at the landing while the car comes', () => {
     const adv = results.reduce((s, r) => s + r.blinkAdvance, 0);
     const advRuns = results.filter((r) => r.movedInBlink > 0);
     console.log(
-      `staring crews: ${N} calls, ${blinks} blinks (${(blinks / N).toFixed(1)} per wait); it moved during a blink in ${moved} (${((100 * moved) / N).toFixed(0)}%), ` +
+      `staring crews: ${N} calls, ${blinks} dark stretches (${(blinks / N).toFixed(1)} per wait, ${results.reduce((s, r) => s + r.blackouts, 0)} blackouts); it moved during a blink in ${moved} (${((100 * moved) / N).toFixed(0)}%), ` +
         `advancing ${(adv / Math.max(1, advRuns.length)).toFixed(2)} m per such wait (${(adv / Math.max(1, blinks)).toFixed(3)} m per blink); ` +
         `caught while waiting: ${caught}/${N} (${((100 * caught) / N).toFixed(1)}%)`,
     );
     expect(moved).toBeGreaterThan(N / 2);
   });
 
-  it('every blink is telegraphed 0.5 to 0.7 s ahead, lasts BLINK_TIME, and blinks come every 5 to 9 s', () => {
+  it('every dark is telegraphed (0.6 s, the blackout 3 s), each lasts longer than the last, and the last is the blackout, ending as the car arrives', () => {
     const bad = results.filter((r) => r.telegraph.length > 0);
     expect(bad.map((r) => `${r.label}: ${r.telegraph.slice(0, 3).join('; ')}`)).toEqual([]);
     expect(results.reduce((s, r) => s + r.blinks, 0)).toBeGreaterThan(N * 2);
+    // Every wait that reached the car had its blackout.
+    const arrived = results.filter((r) => r.arrived);
+    expect(arrived.length).toBeGreaterThan(N / 2);
+    expect(arrived.every((r) => r.blackouts === 1)).toBe(true);
   });
 });
 

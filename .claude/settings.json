@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/hub/ns-hook.mjs\"",
+            "shell": "bash",
+            "timeout": 15,
+            "statusMessage": "Checking the brief against the North Star"
+          }
+        ]
+      }
+    ]
+  }
+}

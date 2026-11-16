@@ -35,6 +35,12 @@ export interface SessionResult {
   blinkFramesChecked: number;
   /** Extra seconds of darkness per (client, blink) beyond the host's blind window. */
   extraDark: number[];
+  /** Blackouts (the wait's last, long dark), and the frames inside their blind windows checked. */
+  blackouts: number;
+  blackoutFramesChecked: number;
+  /** Dark frames on which a client would have drawn the Orderly (it must never be drawn in the dark). */
+  darkDrawn: string[];
+  darkFrames: number;
   maxReleaseJump: number;
   releases: number;
   bigReleases: number;
@@ -109,6 +115,10 @@ export function runRuleSession(i: number, net: NetConfig, seconds: number): Sess
     blinkViolations: [],
     blinkFramesChecked: 0,
     extraDark: [],
+    blackouts: 0,
+    blackoutFramesChecked: 0,
+    darkDrawn: [],
+    darkFrames: 0,
     maxReleaseJump: 0,
     releases: 0,
     bigReleases: 0,
@@ -145,6 +155,10 @@ export function runRuleSession(i: number, net: NetConfig, seconds: number): Sess
         tracks.set(m.id, t);
       }
       res.frames++;
+      if (rec.dark) {
+        res.darkFrames++;
+        if (rec.frame.visible) res.darkDrawn.push(`${res.label} ${m.id} drew the Orderly on a dark frame at t=${rec.g.toFixed(3)}`);
+      }
       const pose = rec.pose;
       const vis = !rec.dark && pose !== null && oracleSees(planFor(seed, rec.depth), rec.cam, pose);
       if (vis) res.visibleFrames++;
@@ -232,6 +246,7 @@ export function runRuleSession(i: number, net: NetConfig, seconds: number): Sess
     if (e.type === 'blinkStart') start = e.t;
     if (e.type !== 'blinkEnd' || start === null) continue;
     res.blinks++;
+    if (e.blackout) res.blackouts++;
     const lo = start - TICK;
     const hi = e.t - TICK;
     for (const [id, t] of tracks) {
@@ -240,6 +255,7 @@ export function runRuleSession(i: number, net: NetConfig, seconds: number): Sess
         const g = t.g[k] as number;
         if (g > lo && g <= hi) {
           res.blinkFramesChecked++;
+          if (e.blackout) res.blackoutFramesChecked++;
           if (!t.dark[k]) res.blinkViolations.push(`${res.label} ${id} lit at t=${g.toFixed(3)} in blink ${start.toFixed(2)}-${e.t.toFixed(2)}`);
         }
         if (g >= start - 3 && g <= e.t + 3 && t.dark[k]) dark++;

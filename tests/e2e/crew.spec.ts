@@ -352,6 +352,14 @@ test('a crew of four: a whole run, the blinks on every screen, the vote, two flo
     expect(outs, `page ${i} went dark for each blink`).toBe(blinks);
   }
   console.log(`blinks: ${blinks}, every page dark for each`);
+  // On to the blackout (skipped on the host): every screen goes dark and the emergency lights come up.
+  for (let i = 0; i < 8 && !(await a.evaluate(() => (window as any).__gd.run().darkNow?.blackout === true)); i++) {
+    expect(await a.evaluate(() => (window as any).__gd.runCtl.skipUntil('blinkSoon', 60))).toBe(true);
+  }
+  expect(await a.evaluate(() => (window as any).__gd.runCtl.skipUntil('blinkStart', 10))).toBe(true);
+  for (const p of c.pages) await p.waitForFunction(() => (window as any).__gd.run().emergency === 1, undefined, { timeout: 8000 });
+  await settle(b, 3);
+  await b.screenshot({ path: `${SHOTS}/123-blackout-crew.png` });
   // The rest of the wait, skipped on the host (the others follow its clock).
   expect(await a.evaluate(() => (window as any).__gd.runCtl.skipUntil('carArrived', 90))).toBe(true);
   for (const p of c.pages) await p.waitForFunction(() => (window as any).__gd.run().doors > 0.99, undefined, { timeout: 8000 });

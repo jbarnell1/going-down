@@ -13,7 +13,13 @@
 //     a nasal honk, soft distortion, a short metallic echo, crackle and dropouts. Depth makes the
 //     speaker worse (narrower band, more drive, crackle and dropouts); the performance never changes.
 //     Inside the car it is close and loud; out on the floor it comes from the speaker above the
-//     landing doors, panned to its direction and dulled and quietened with distance.
+//     landing doors, panned to its direction and dulled a little with distance, but never much
+//     quieter (at least VOICE.farMin of its near level): the recordings are all at -16 LUFS and a
+//     line should sound about as loud wherever you are. A compressor on each line's bus evens out
+//     the rest. The moments that matter to everyone (taken, wipe, banked, blackout, lights) are
+//     always heard at the in-car level, wherever the listener is.
+//   - Variety: each moment's lines are dealt from a shuffled deck, so a moment never repeats its
+//     last line and goes through all of its lines before any comes round again.
 //   - The slip: at most once per run, from floor 2 on, at a quiet moment (no blink coming or on, the
 //     instrument not recording, nothing else playing), delivered quietly; then a pause; then the
 //     cheerful resume line as if nothing happened.
@@ -52,6 +58,7 @@ export interface AnnouncerEvent {
   depth?: number;
   outcome?: string;
   playerId?: string | null;
+  blackout?: boolean;
 }
 
 interface LineInfo {
@@ -84,6 +91,9 @@ interface Playing {
   far: GainNode;
   farLp: BiquadFilterNode;
   pan: StereoPannerNode;
+  /** The gain the line is heard at now (the close or the far path) and the far path's low-pass (0 when close). */
+  level: number;
+  lowpass: number;
   startedAt: number;
   endsAt: number;
   done: boolean;
@@ -103,7 +113,11 @@ export interface AnnouncerState {
   /** When the slip is due (performance.now ms), once floor 2 is reached; null before or after. */
   slipAt: number | null;
   /** Every line started (this page), with real start and end times in ms; end is null while playing. */
-  history: { id: string; moment: string; voice: string; file: string; start: number; end: number | null; depth: number; mode: 'car' | 'landing' }[];
+  history: { id: string; moment: string; voice: string; file: string; start: number; end: number | null; depth: number; mode: 'car' | 'landing'; level: number; lowpass: number }[];
+  /** The line playing now: the gain it is heard at and the far path's low-pass (Hz, 0 when heard close); null when none. */
+  level: { gain: number; lowpass: number } | null;
+  /** The in-car level, for comparison. */
+  closeLevel: number;
   /** The voice asked for (setting) and the one in use (the manifest's default if that one is not shipped). */
   voice: string;
   voiceInUse: string;
@@ -125,13 +139,17 @@ export interface AnnouncerState {
 const VOICE = {
   /** Level of a line in the car (the recordings are at -16 LUFS; the call chime peaks near 0.42). */
   closeLevel: 0.6,
-  /** Level of a line from the landing speaker at `farRef` metres; it falls off as ref / (ref + d). */
+  /**
+   * Level of a line from the landing speaker at `farRef` metres; it falls off as ref / (ref + d), but
+   * never below `farMin` of this (behind your head included), so distance dulls a line a little and
+   * never loses it: a line heard far from the lift is still about as loud as one heard in the car.
+   */
   farLevel: 0.75,
   farRef: 3,
-  farMin: 0.08,
+  farMin: 0.55,
   /** The landing speaker's dulling with distance: low-pass Hz at the speaker and the floor it falls to. */
   farLpNear: 3200,
-  farLpMin: 650,
+  farLpMin: 1400,
   farLpPerMetre: 90,
   /** How far the landing speaker pans at most (-1..1). */
   panWidth: 0.8,
@@ -152,6 +170,12 @@ const VOICE = {
   /** At most this many lines wait. */
   queueMax: 3,
 };
+
+/** Moments everyone must hear the same, wherever they are: always at the in-car level. */
+const ALWAYS_CLOSE = new Set(['taken', 'wipe', 'banked', 'blackout', 'lights']);
+
+/** The voice bus's compressor: evens loud and quiet lines (and loud and quiet words) out. */
+const COMPRESS = { threshold: -22, knee: 10, ratio: 3, attack: 0.004, release: 0.2, makeup: 1.45 };
 
 /** The speaker at depth 1 (`k` 0) and at its worst (`k` 1, depth 1 + SPEAKER.worstAfter). */
 const SPEAKER = {
@@ -288,6 +312,10 @@ export class Announcer {
   private gapUntil = 0;
   private played: string[] = [];
   private lastOf = new Map<string, string>();
+  /** Per moment, the lines still to be dealt before the deck is shuffled again. */
+  private decks = new Map<string, string[]>();
+  /** Whether the wait now under way has had its blackout (the lights coming back replace the arrival line). */
+  private blackoutOn = false;
   private slipDone = false;
   private slipAt: number | null = null;
   private resumeAfterSlip = false;
@@ -374,6 +402,7 @@ export class Announcer {
       this.early = [];
       this.loading = null;
       this.played = [];
+      this.blackoutOn = false;
       this.slipDone = false;
       this.slipAt = null;
       this.resumeAfterSlip = false;
@@ -397,10 +426,22 @@ export class Announcer {
             else if (e.reason === 'ride') this.request('ride');
             break;
           case 'called':
-            this.request('called');
+            this.request('called', VOICE.expireLongMs); // the answer to a button press: worth saying even behind two long lines
+            break;
+          case 'blinkStart':
+            if (e.blackout === true) {
+              this.blackoutOn = true;
+              this.request('blackout');
+            }
             break;
           case 'carArrived':
-            this.request('arrived');
+            // A wait that ended in the blackout gets the lights line as they come back, in place of the
+            // arrival line; a blackout line still waiting to be said is stale by then.
+            if (this.blackoutOn) {
+              this.queue = this.queue.filter((q) => q.moment !== 'blackout');
+              this.request('lights', VOICE.expireLongMs);
+            } else this.request('arrived');
+            this.blackoutOn = false;
             break;
           case 'banked':
             this.request('banked', VOICE.expireLongMs);
@@ -421,6 +462,16 @@ export class Announcer {
   /** The doors will close soon (the bell's line plays ahead of the bell itself). */
   bellSoon(): void {
     this.safe(() => this.request('bell', 7000));
+  }
+
+  /** Test hook: deals the next line of a moment as a request would (null before the manifest or with none). */
+  dealNext(moment: string): string | null {
+    let id: string | null = null;
+    this.safe(() => {
+      id = this.deal(moment);
+      if (id) this.lastOf.set(moment, id);
+    });
+    return id;
   }
 
   /** Test hook: says a line by id (the slip only from floor 2 and once a run). False if it cannot. */
@@ -475,16 +526,34 @@ export class Announcer {
     this.requestMoment(moment, expireMs);
   }
 
-  /** One of the moment's lines, not the one said last time if there is a choice. */
+  /** The next of the moment's lines from its deck. */
   private requestMoment(moment: string, expireMs: number): void {
+    const pick = this.deal(moment);
+    if (pick) this.requestId(pick, expireMs);
+  }
+
+  /**
+   * Deals the next line of a moment: every line once, in a shuffled order, before any comes round
+   * again; a new deck never starts with the line said last. Lines with no file are left out.
+   */
+  private deal(moment: string): string | null {
     const m = this.manifest;
-    if (!m) return;
-    const options = m.lines.filter((l) => l.moment === moment && !this.missing.has(this.fileOf(l.id)));
-    if (options.length === 0) return;
-    const last = this.lastOf.get(moment);
-    const fresh = options.length > 1 ? options.filter((l) => l.id !== last) : options;
-    const pick = fresh[Math.floor(Math.random() * fresh.length)] ?? options[0];
-    if (pick) this.requestId(pick.id, expireMs);
+    if (!m) return null;
+    const options = m.lines.filter((l) => l.moment === moment && !this.missing.has(this.fileOf(l.id))).map((l) => l.id);
+    if (options.length === 0) return null;
+    let deck = (this.decks.get(moment) ?? []).filter((id) => options.includes(id));
+    if (deck.length === 0) {
+      deck = [...options];
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j] as string, deck[i] as string];
+      }
+      const last = this.lastOf.get(moment);
+      if (deck.length > 1 && deck[0] === last) deck.push(deck.shift() as string);
+    }
+    const pick = deck.shift() ?? null;
+    this.decks.set(moment, deck);
+    return pick;
   }
 
   private requestId(id: string, expireMs: number): boolean {
@@ -682,17 +751,27 @@ export class Announcer {
     }
     crack.connect(crackHp).connect(crackGate).connect(bus);
     // Out: close (in the car) or from the landing speaker (panned, dulled, quieter with distance).
+    // The voice bus's compressor (and its make-up gain), before the line is placed.
+    const comp = add(ctx.createDynamicsCompressor());
+    comp.threshold.value = COMPRESS.threshold;
+    comp.knee.value = COMPRESS.knee;
+    comp.ratio.value = COMPRESS.ratio;
+    comp.attack.value = COMPRESS.attack;
+    comp.release.value = COMPRESS.release;
+    const makeup = add(ctx.createGain());
+    makeup.gain.value = COMPRESS.makeup;
+    bus.connect(comp).connect(makeup);
     const close = add(ctx.createGain());
     const far = add(ctx.createGain());
     const farLp = add(ctx.createBiquadFilter());
     farLp.type = 'lowpass';
     const pan = add(ctx.createStereoPanner());
     const out = this.output() ?? ctx.destination;
-    bus.connect(close).connect(out);
-    bus.connect(farLp).connect(far).connect(pan).connect(out);
+    makeup.connect(close).connect(out);
+    makeup.connect(farLp).connect(far).connect(pan).connect(out);
 
     const now = performance.now();
-    const p: Playing = { item, plain: this.lineOf(item.id)?.plain ?? '', src, nodes, close, far, farLp, pan, startedAt: now, endsAt: now + dur * 1000 + 40, done: false };
+    const p: Playing = { item, plain: this.lineOf(item.id)?.plain ?? '', src, nodes, close, far, farLp, pan, level: 0, lowpass: 0, startedAt: now, endsAt: now + dur * 1000 + 40, done: false };
     this.current = p;
     this.place(true);
     src.onended = () => this.safe(() => this.finish(p));
@@ -703,7 +782,7 @@ export class Announcer {
     this.played.push(item.id);
     this.lastOf.set(item.moment, item.id);
     const file = this.fileOf(item.id);
-    this.history.push({ id: item.id, moment: item.moment, voice: file.split('/')[0] ?? '', file: `assets/voice/${file}.mp3`, start: now, end: null, depth: this.frame.depth, mode: this.frame.inCar ? 'car' : 'landing' });
+    this.history.push({ id: item.id, moment: item.moment, voice: file.split('/')[0] ?? '', file: `assets/voice/${file}.mp3`, start: now, end: null, depth: this.frame.depth, mode: this.frame.inCar ? 'car' : 'landing', level: p.level, lowpass: p.lowpass });
     if (this.history.length > 80) this.history.shift();
     this.subs?.show(p.plain);
   }
@@ -719,9 +798,11 @@ export class Announcer {
       if (snap) param.setValueAtTime(v, t);
       else param.setTargetAtTime(v, t, 0.08);
     };
-    if (f.inCar) {
+    if (f.inCar || ALWAYS_CLOSE.has(p.item.moment)) {
       set(p.close.gain, VOICE.closeLevel);
       set(p.far.gain, 0);
+      p.level = VOICE.closeLevel;
+      p.lowpass = 0;
       return;
     }
     const dx = f.speaker.x - f.ear.x;
@@ -734,11 +815,14 @@ export class Announcer {
     const rl = Math.hypot(rx, rz) || 1;
     const side = d > 0.01 ? (dx * rx + dz * rz) / (rl * d) : 0;
     const ahead = d > 0.01 ? (dx * f.forward.x + dz * f.forward.z) / d : 1;
-    const g = clamp(VOICE.farRef / (VOICE.farRef + d), VOICE.farMin, 1) * VOICE.farLevel * (ahead < 0 ? 0.8 : 1);
+    const g = clamp((VOICE.farRef / (VOICE.farRef + d)) * (ahead < 0 ? 0.8 : 1), VOICE.farMin, 1) * VOICE.farLevel;
+    const lp = Math.max(VOICE.farLpMin, (VOICE.farLpNear - d * VOICE.farLpPerMetre) * (ahead < 0 ? 0.75 : 1));
     set(p.close.gain, 0);
     set(p.far.gain, g);
     set(p.pan.pan, clamp(side * VOICE.panWidth, -1, 1));
-    set(p.farLp.frequency, Math.max(VOICE.farLpMin, VOICE.farLpNear - d * VOICE.farLpPerMetre) * (ahead < 0 ? 0.75 : 1));
+    set(p.farLp.frequency, lp);
+    p.level = g;
+    p.lowpass = lp;
   }
 
   private finish(p: Playing): void {
@@ -771,11 +855,10 @@ export class Announcer {
       this.resumeAfterSlip = false;
       this.queue = this.queue.filter((q) => q.moment !== 'resume');
       const m = this.manifest;
-      const resume = m?.lines.filter((l) => l.moment === 'resume') ?? [];
-      const pick = resume[Math.floor(Math.random() * resume.length)];
+      const pick = this.deal('resume');
       if (pick && m) {
         const at = performance.now();
-        this.queue.unshift({ id: pick.id, moment: 'resume', priority: m.moments['resume']?.priority ?? 1, queuedAt: at, expires: at + VOICE.slipPauseMs + VOICE.expireMs });
+        this.queue.unshift({ id: pick, moment: 'resume', priority: m.moments['resume']?.priority ?? 1, queuedAt: at, expires: at + VOICE.slipPauseMs + VOICE.expireMs });
       }
     }
   }
@@ -827,6 +910,8 @@ export class Announcer {
       subsOn: this.subs !== null,
       speaker: this.speakerInfo,
       mode: this.frame.inCar ? 'car' : 'landing',
+      level: this.current && !this.current.done ? { gain: this.current.level, lowpass: this.current.lowpass } : null,
+      closeLevel: VOICE.closeLevel,
       voice: this.voice,
       voiceInUse: this.voiceInUse(),
       cached: [...this.decoded.keys()],

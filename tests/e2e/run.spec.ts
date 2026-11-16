@@ -1,10 +1,14 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { generateClinic } from '../../src/sim/clinic';
+import { cellAt, distancesFrom, posFromIndex } from '../../src/sim/floor';
 
 // A whole run for one player, in the real game with the tape look on: out of the car, earn, call
-// the elevator, live through a blink, ride DOWN, earn again (paid more for depth), call, ride BANK,
+// the elevator, live through a blink, run from the landing when the blackout is announced and back
+// when the lights return with the car, ride DOWN, earn again (paid more for depth), call, ride BANK,
 // the summary, a new run. Waits for the car are skipped with runCtl.skip, which still steps the run
-// tick by tick through stepRun. The run's rules are proven in tests/sim/run.test.ts.
+// tick by tick through stepRun; the blackout itself runs in real time. The run's rules are proven
+// in tests/sim/run.test.ts, the blackout's chase in tests/sim/blackout.test.ts and blackout.spec.ts.
 test.skip(!!process.env.CI, 'needs a real graphics card and real time');
 
 const SHOTS = 'test-results/shots';
@@ -143,6 +147,17 @@ async function earn(page: Page): Promise<{ value: number; maxRaw: number }> {
   return out;
 }
 
+/** A corridor cell `steps` cells' walk from the landing, on its storey: somewhere to run to. */
+function runTo(seed: string, depth: number, steps: number): { level: 0 | 1; x: number; y: number } {
+  const plan = generateClinic(seed, depth);
+  const dist = distancesFrom(plan, plan.landing);
+  for (let i = 0; i < dist.length; i++) {
+    const p = posFromIndex(plan, i);
+    if (dist[i] === steps && p.level === plan.landing.level && cellAt(plan, p.level, p.x, p.y) === 'corridor') return p;
+  }
+  throw new Error('nowhere to run');
+}
+
 /** Back to the landing on foot (the Orderly put to rest first), facing the doors. */
 async function toLanding(page: Page): Promise<void> {
   await page.evaluate(() => (window as any).__gd.entityCtl.rest(600));
@@ -234,15 +249,49 @@ test('a whole run: out, earn, call, a blink, ride down, earn more, ride to the b
   expect(warnLight).toBeLessThan(1);
   expect(darkLight).toBeLessThan(0.1);
 
-  // 6. The car arrives. Board, stand on DOWN, the bell, the ride, floor two.
+  // 6. The blackout: when it is announced, run from the landing; when the lights come back with the
+  // car, back to it in time to board. (The Orderly rests here; the chase is in blackout.spec.ts.)
   await page.evaluate(() => (window as any).__gd.entityCtl.rest(600));
-  await skipUntil(page, 'carArrived', 80);
+  for (let i = 0; i < 8 && !(await page.evaluate(() => (window as any).__gd.run().darkNow?.blackout === true)); i++) await skipUntil(page, 'blinkSoon', 60);
+  expect((await run(page)).blinkSoon).toBe(true);
+  const away = runTo('alpha', 1, 9);
+  await page.evaluate((c) => { (window as any).__gd.walkTo(c.level, c.x, c.y, 3).catch(() => undefined); }, away);
+  const fled = await page.evaluate(() => new Promise<{ farthest: number; darkFor: number }>((resolve) => {
+    const g = (window as any).__gd;
+    let farthest = 0;
+    let darkFrom = -1;
+    let darkTo = -1;
+    const loop = (): void => {
+      const r = g.run();
+      const p = g.player();
+      if (r.dark) {
+        if (darkFrom < 0) darkFrom = r.t;
+        darkTo = r.t;
+        farthest = Math.max(farthest, Math.hypot(p.x - r.car3.doorX, p.z - r.car3.doorZ));
+      }
+      if (darkFrom >= 0 && !r.dark && r.car === 'open') {
+        resolve({ farthest, darkFor: darkTo - darkFrom });
+        return;
+      }
+      requestAnimationFrame(loop);
+    };
+    loop();
+  }));
+  console.log(`blackout: ran ${fled.farthest.toFixed(1)} m from the car; dark for ${fled.darkFor.toFixed(1)} s`);
+  expect(fled.farthest).toBeGreaterThan(10);
+  expect(fled.darkFor).toBeGreaterThan(8);
+  // The lights are back and the doors open: the dash back.
+  const backFrom = (await run(page)).bellLeft;
+  await page.evaluate(() => { const g = (window as any).__gd; const l = g.plan.landing; return g.walkTo(l.level, l.x, l.y, 3); });
   await page.waitForFunction(() => (window as any).__gd.run().doors > 0.99, undefined, { timeout: 4000 });
   await page.evaluate((y) => (window as any).__gd.look(y, 4), yawIn(r0));
   await settle(page, 3);
   await shot(page, '76-doors-open');
   await walkCar(page, 0.8, 0.5);
   await page.waitForFunction(() => (window as any).__gd.run().vote === 'down', undefined, { timeout: 4000 });
+  const boardedWith = (await run(page)).bellLeft;
+  console.log(`back aboard with ${boardedWith.toFixed(1)} s of the ${backFrom.toFixed(1)} s boarding window left`);
+  expect(boardedWith).toBeGreaterThan(2);
   await page.evaluate((y) => (window as any).__gd.look(y, -52), yawIn(r0));
   await settle(page, 6);
   await shot(page, '77-vote-down');
@@ -326,7 +375,8 @@ test('staring through the blinks: it gains ground only while the lights are out'
   await page.waitForFunction(() => (window as any).__gd.run().car === 'away', undefined, { timeout: 5000 });
   const d0 = await orderlyInView(page);
   expect(await page.evaluate(() => (window as any).__gd.runCtl.call())).toBe(true);
-  // Stand still and watch it, frame by frame, through three blinks (logic at 1.5x real time).
+  // Stand still and watch it, frame by frame, through the first two blinks (logic at 1.5x real time).
+  // Two, not more: they grow, and the third (2.5 s) would let it reach someone standing this close.
   await page.evaluate(() => (window as any).__gd.runCtl.setTimeScale(1.5));
   const samples = await page.evaluate(() => new Promise<{ t: number; blink: boolean; x: number; z: number; d: number }[]>((resolve) => {
     const g = (window as any).__gd;
@@ -337,7 +387,7 @@ test('staring through the blinks: it gains ground only while the lights are out'
       const o = g.orderly();
       out.push({ t: r.t, blink: r.blink, x: o.x, z: o.z, d: o.distance });
       const ends = g.runEvents().filter((e: any) => e.type === 'blinkEnd').length;
-      if (ends >= 3 || performance.now() - t0 > 40_000 || g.catches() > 0) {
+      if (ends >= 2 || performance.now() - t0 > 40_000 || g.catches() > 0) {
         resolve(out);
         return;
       }
@@ -348,21 +398,29 @@ test('staring through the blinks: it gains ground only while the lights are out'
   let gainedLit = 0;
   let gainedDark = 0;
   const perBlink: string[] = [];
+  const lengths: number[] = [];
+  let from = -1;
   for (let i = 1; i < samples.length; i++) {
     const a = samples[i - 1]!;
     const b = samples[i]!;
     const moved = Math.hypot(b.x - a.x, b.z - a.z);
     if (!a.blink && !b.blink) gainedLit += moved;
     else gainedDark += a.d - b.d;
-    if (a.blink && !b.blink) perBlink.push(b.d.toFixed(2));
+    if (!a.blink && b.blink) from = b.t;
+    if (a.blink && !b.blink) {
+      perBlink.push(b.d.toFixed(2));
+      lengths.push(b.t - from);
+    }
   }
-  console.log(`staring: start ${d0.toFixed(2)} m; after each blink ${perBlink.join(', ')} m; moved with lights on ${gainedLit.toFixed(3)} m, gained in the dark ${gainedDark.toFixed(2)} m; ${samples.length} frames`);
+  console.log(`staring: start ${d0.toFixed(2)} m; after each blink ${perBlink.join(', ')} m (dark for ${lengths.map((l) => l.toFixed(2)).join(', ')} s); moved with lights on ${gainedLit.toFixed(3)} m, gained in the dark ${gainedDark.toFixed(2)} m; ${samples.length} frames`);
   // ?debug=1 shows the run's phase, the car, the wait and the vote.
   await settle(page, 12);
   const dbg = await page.locator('#debug').innerText();
   expect(dbg).toMatch(/run coming\s+depth 1\s+car coming\s+eta \d+\.\d s/);
   expect(dbg).toMatch(/vote -/);
-  expect(perBlink.length).toBe(3);
+  expect(perBlink.length).toBe(2);
+  // The second blink is longer than the first.
+  expect(lengths[1]!).toBeGreaterThan(lengths[0]! + 0.25);
   expect(gainedLit).toBe(0);
   expect(gainedDark).toBeGreaterThan(1);
   expect(await page.evaluate(() => (window as any).__gd.catches())).toBe(0);

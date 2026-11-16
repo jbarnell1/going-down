@@ -38,7 +38,7 @@
 // the local copy by the difference, so the two agree without waiting out the round trip.
 
 import type { Body } from '../sim/move';
-import { BLINK_TIME, BLINK_WARNING, type RunEvent } from '../sim/run';
+import type { RunEvent } from '../sim/run';
 import { WINDED_UNTIL, type Gait, type Stamina } from '../sim/stamina';
 import {
   decode,
@@ -84,8 +84,13 @@ export interface DrawnPlayer {
 export interface Frame {
   /** Screen dark for a blink. */
   dark: boolean;
-  /** The Orderly to draw (the same object for as long as it is held), or null. */
+  /** Where the Orderly is on this screen's timeline (the same object for as long as it is held), or null. */
   orderly: Pose | null;
+  /**
+   * Whether to draw it. Never on a dark frame: in the dark it is heard (its sound still comes from
+   * `orderly`), not seen, so the moves the dark allows are never on screen, emergency lights or not.
+   */
+  visible: boolean;
   /** The drawing is frozen (seen, or held until a jump can happen out of view). */
   held: boolean;
   /** The local player sees the drawn Orderly on this frame. */
@@ -126,6 +131,9 @@ type Shown = WorldSnap & { ackSeen?: number };
 
 interface KnownBlink {
   at: number;
+  /** How long it lasts and how long its warning is (seconds). */
+  len: number;
+  warn: number;
   announced: boolean;
 }
 
@@ -258,7 +266,7 @@ export class NetClient {
   blinkWindows(): { start: number; end: number }[] {
     const guard = this.clock.errorBound + 0.01;
     const off = this.clock.offset;
-    return this.knownBlinks().map((at) => ({ start: at - TICK - guard - off, end: at + BLINK_TIME + TICK + guard - off }));
+    return [...this.blinks.values()].sort((a, b) => a.at - b.at).map((k) => ({ start: k.at - TICK - guard - off, end: k.at + k.len + TICK + guard - off }));
   }
 
   // -------------------------------------------------------------------------------------------
@@ -333,13 +341,13 @@ export class NetClient {
   private learnBlink(w: WorldSnap): void {
     if (w.blink) {
       const k = this.blinks.get(w.blink.at);
-      this.blinks.set(w.blink.at, { at: w.blink.at, announced: w.blink.announced || (k?.announced ?? false) });
+      this.blinks.set(w.blink.at, { at: w.blink.at, len: w.blink.len, warn: w.blink.warn, announced: w.blink.announced || (k?.announced ?? false) });
     }
     // Only the newest state may say a scheduled blink was dropped (the car came first).
     if (this.latest !== w) return;
     for (const b of [...this.blinks.values()]) {
-      if (b.at + BLINK_TIME + 10 < w.ht) this.blinks.delete(b.at);
-      else if (!b.announced && w.ht >= b.at - BLINK_WARNING + TICK && w.blink?.at !== b.at) this.blinks.delete(b.at);
+      if (b.at + b.len + 10 < w.ht) this.blinks.delete(b.at);
+      else if (!b.announced && w.ht >= b.at - b.warn + TICK && w.blink?.at !== b.at) this.blinks.delete(b.at);
     }
   }
 
@@ -392,7 +400,7 @@ export class NetClient {
     let real = false;
     for (const k of this.blinks.values()) {
       const lo = k.at - TICK;
-      const hi = k.at + BLINK_TIME + TICK;
+      const hi = k.at + k.len + TICK;
       if (hostNow >= lo - guard && hostNow <= hi + guard) dark = true;
       if (hostNow >= lo && hostNow <= hi) real = true;
       if (show && show.a.ht <= hi && show.b.ht >= lo) dark = true;
@@ -409,7 +417,7 @@ export class NetClient {
     if (local.call) this.calls++;
     if (local.pickUp) this.pickUps++;
     this.latchReleased = false;
-    const empty = (placed: Body | null = null): Frame => ({ dark: false, orderly: null, held: false, seeing: false, taken: false, depth: this.localDepth, players: [], renderTime: -1, placed });
+    const empty = (placed: Body | null = null): Frame => ({ dark: false, orderly: null, visible: false, held: false, seeing: false, taken: false, depth: this.localDepth, players: [], renderTime: -1, placed });
     if (this.id === null || this.seed === null) {
       if (now - this.lastJoin >= 0.5) this.sendJoin(now);
       return empty();
@@ -509,7 +517,8 @@ export class NetClient {
 
     // The input: every INPUT_INTERVAL, and at once on a new sighting.
     if (report || latchedNow || now - this.lastSend >= this.inputInterval - 1e-9) this.send(now, cam, local, rt);
-    return { dark: blind, orderly: taken ? null : orderly, held: this.frozen, seeing: seeingNow, taken, depth: show?.a.depth ?? this.localDepth, players, renderTime: rt, placed };
+    const shown = taken ? null : orderly;
+    return { dark: blind, orderly: shown, visible: shown !== null && !blind, held: this.frozen, seeing: seeingNow, taken, depth: show?.a.depth ?? this.localDepth, players, renderTime: rt, placed };
   }
 
   private endLatch(): void {

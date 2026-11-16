@@ -456,6 +456,42 @@
       ]
     },
     {
+      "id": "server-door",
+      "title": "How should friends reach the game server?",
+      "context": "You said a server on your PC or the lab box is fine. I will build a small game server that keeps everyone in sync (no drawing; it runs the rules only). Your friends are outside your tailnet, so the server needs one public door. The game page itself stays on the public GitHub link; only the live game traffic goes through this door. Pick one; free text welcome.",
+      "type": "single",
+      "options": [
+        {
+          "id": "funnel",
+          "label": "Tailscale Funnel on one port, for the game server only",
+          "note": "Free, no new account, gives a proper https address. You run one admin command that I give you. Only the game server is exposed, never the hub or anything else."
+        },
+        {
+          "id": "cloudflare",
+          "label": "A Cloudflare Tunnel",
+          "note": "Free, needs a Cloudflare account and a small program on the lab box. Hides your home address."
+        },
+        {
+          "id": "port-forward",
+          "label": "Open a port on my router",
+          "note": "No account, but exposes your home address and needs a certificate for https; I would not pick this."
+        },
+        {
+          "id": "tailnet-friends",
+          "label": "Friends join my tailnet",
+          "note": "Nothing public at all, but every friend installs Tailscale and accepts an invite."
+        },
+        {
+          "id": "no-server",
+          "label": "No server: keep players connecting to each other",
+          "note": "What the game does today. Some routers will block a friend, and the host must keep the tab in front."
+        }
+      ],
+      "default": [
+        "funnel"
+      ]
+    },
+    {
       "id": "anything",
       "title": "Anything else for the loop?",
       "context": "Notes, ideas, things that felt wrong when you played. Update this as often as you like.",

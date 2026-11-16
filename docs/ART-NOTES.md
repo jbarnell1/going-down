@@ -195,3 +195,145 @@ Rules learned:
     shadow colour so the cloth still reads as torn if it does not.
 18. **Judge through the tape.** `tape_look.mjs` brings every render down to 480 px, desaturates it
     toward green-grey and adds blur and grain; judge the `tape_*.png` files, not the clean renders.
+
+## The Convict (crewmate figure): two more tutorials (2026-11-16)
+
+Captions read in full and about twenty frames sampled from each (contact sheets), then the downloads
+were deleted.
+
+### 3. "Blender Low Poly Character: PS1 Style Modeling for Beginners", Grant Abbitt (Gabbitt)
+
+https://www.youtube.com/watch?v=uIHuqFLa_X0 (about 19 minutes, Blender 4.5)
+
+A whole PS1-style man boxed out of cubes against a front and side reference.
+
+- **Half a cube and a mirror.** Every part starts as a cube cut down the middle, one half deleted and a
+  mirror modifier with clipping on, so the centre line can never open up. *Script: yes.* The Convict
+  is generated for one side and mirrored by negating x, so the mirror test is exact (0.000 mm).
+- **Shape from front view, then side view, then add a loop only where a curve is needed.** He keeps
+  cutting a loop and sliding it (GG) to round a corner rather than adding subdivision. *Script: yes.*
+  Each ring is a small table row; a 2.2 to 2.4 superellipse rounds the corners of every ring.
+- **Faces carry the features.** The nose is one face extruded and scaled, the ear one inset and
+  extrusion. *Script: yes.* The nose is the middle front face between the "under the nose" and "eyes"
+  rings extruded into a wedge; eyes and mouth are paint.
+- **Mitten hand from a flattened cube; the thumb extruded from its side.** *Script: yes, used as is.*
+- **Overlapping separate pieces** (head, chest, trunk, upper and lower arms, legs, feet as separate
+  blocks pushed into each other) is how many PS1 models were built and why his rig "looks joined".
+  *Not used here.* Mixamo's auto-rigger wants one outer surface, so this figure grows every limb out of
+  the torso instead (the next tutorial says the same from the other side).
+
+### 4. "Avoid Upload Errors! Importing from Blender to Mixamo", Neb Motion
+
+https://www.youtube.com/watch?v=SPteht55oUc (about 12 minutes)
+
+Why Mixamo refuses or mis-rigs Blender characters, and the export that worked for him.
+
+- **Only Base Color.** Upload failures came from materials with textures wired into other Principled
+  inputs. *Applied:* each material is one image into Base Color, nothing else.
+- **Opaque materials.** He sets every blend mode to opaque because alpha confuses Mixamo. *Applied:*
+  no alpha anywhere.
+- **No hidden body under the clothes.** Delete the body inside a suit, or it pokes through when the rig
+  bends. *Applied:* there is no inner body; the jumpsuit is the surface.
+- **Clear an old rig with "keep transforms"** so the scale does not jump. *Applied as:* no rig, no
+  modifiers, no object transform at all; the axis change is baked into the vertices.
+- **Export: Path Mode Copy + embed textures, selected objects only.** *Applied.*
+- **Bipeds of human proportion only.** Stylised extremes mis-rig. *Applied:* ordinary 1.75 m adult.
+
+### What changed in the approach
+
+- One manifold surface built by "box modelling by numbers": a torso of 14-vertex rings (the outline of
+  a 5 x 2 grid); each arm grows from a 2 x 2 patch of the side wall, each leg from a 2 x 2 patch of
+  the bottom, the neck from the middle 3 x 2 of the top. The bottom's middle column stays as a 5 cm
+  crotch strip, so the legs never share faces. Result: 0 non-manifold edges, 1,404 triangles.
+- Three loops at each elbow and knee, three at each wrist and ankle, three at the shoulder root,
+  collar and neck. Rolled cuffs and the collar are a ring that flares out and a ring that steps back
+  in (sharp edges above 58 degrees), not separate pieces.
+- Textures are painted by rasterising each triangle in UV space and colouring each texel from its 3D
+  position and normal (folds, zip, waist gather, grime from the floor, painted crevice shadow), then
+  bled into the margins. The suit is light grey so a multiplied tint reads as the colour; the number
+  patch is its own material with 0..1 UVs.
+- FBX: written in centimetres (UnitScaleFactor 1, vertices 176 units tall, Y up, no object
+  transform), checked by reading the file itself, not only by re-importing into Blender (which
+  hides unit mistakes by converting on the way in).
+- A throwaway rig with automatic weights proves the loops (elbow 90, knee 90, arm overhead) and poses
+  the figure arms-down for the line-up and player-view renders. Heat weighting succeeding on every
+  bone is a fair proxy for Mixamo's auto-rigger seeing one clean surface.
+
+### What the harsh look at the player view caught
+
+- Long, thin, pale mitten hands read as sticks hanging past the hips: hands shortened 4 cm and made
+  thicker.
+- Stubble, staple-shaped brows and a dark band under the nose read as a mask, a beard or a moustache:
+  brows made straight and softer, stubble a flat light shadow, the under-nose shadow lightened.
+- Boot laces as light bars made a busy face-like blotch on each foot: laces darkened, toe scuff halved.
+
+Rule learned:
+
+19. **Read the FBX file, not Blender's re-import.** Blender converts units and axes on import, so a
+    1.75 cm or 175 m person can come back as 1.75 m. Check UnitScaleFactor, the raw vertex extent and
+    every Lcl transform in the file.
+
+### What the judges caught on the Convict, and what changed
+
+Round one of blind judging (two judges shown only the renders, plus the coordinator):
+
+- **The painted face was the worst thing.** It was "smeared", "eyes are mush", "a printed mask", "a
+  spike of a nose". At 128 px for face, hands and boots, a face cannot be painted well. The owner then
+  settled it the game's way: every convict wears an issue **screen mask**, a boxy monitor strapped over
+  the face. The screen (`face_screen`, flat, 0..1 UVs) shows the face the player drew before the run.
+  The mask is grown out of the head surface (the front of the face is extruded into a flat box, inset
+  for a chunky bezel, and recessed for the screen), with two straps round the back, one over the top and
+  a ribbed cable down to the collar. It still makes one manifold mesh.
+- **Pale paddle hands read as toys.** They are now dark grey work gloves with a knitted cuff, a
+  separate thumb, a slightly curled finger block and painted creases. They are shorter and thicker,
+  and still need no finger bones.
+- **Four identical figures read as a threat, not a crew.** Variation now comes from parts the game
+  swaps without re-rigging: four skin tones on the same UVs, three headwear files on the head joint
+  (knit cap, short hair, none), each player's drawn face, and the suit colour. Posing the line-up
+  differently (weight on one leg, a slump, arms not matching) mattered as much as the parts.
+- **"A smooth tube with seams drawn on."** Cloth needs geometry, not only paint: a belt band with
+  cloth bloused over it, raised chest and thigh pockets, trouser hems over the boot tops, bunching rings
+  at elbows and knees, and a small mirror-symmetric unevenness in the sleeve and trouser rings. The
+  painted folds and wear are stronger, with neutral grey dirt so every tint stays clean.
+- **Knees folded into sharp tents and a raised arm stretched into a column.** Elbows and knees now
+  have five loops. The knee has a kneecap ring and a ring behind it that hold their volume at 90
+  degrees. There is a deltoid cap ring and an extra torso row at the armpit. The raised arm still
+  stretches some under automatic weights; Mixamo's own weights will decide the rest.
+
+Rules learned:
+
+20. **A face the game draws beats a face the model paints.** If players supply identity, give it a
+    flat 0..1 screen and model the frame around it.
+21. **Extruding a region leaves its inner vertices behind.** Delete loose vertices before export,
+    and compare vertex counts between the FBX, the OBJ and the welded glb.
+
+### Round two on the Convict: what the judges caught, and why
+
+Two fresh judges agreed that the glowing drawn face is right: it is the first thing the eye goes to,
+it carries identity, and the crew read as allies ("goofy-creepy"). What they caught:
+
+- **The mask looked like a slab on a peg.** The cause was in the topology, not the numbers. The box was
+  grown from only the three front columns of a 10-sided head ring, about 13 cm across, out to a 21 cm
+  front. Its walls flared outward into fins, the profile was a thin plate on a narrow neck, and the
+  cable hung like a stalk. Now the head rings have 12 sides, with columns at ±18° and ±162° just in
+  front of the ears. The front four columns are extruded three times: out by an 8 mm gasket, out to a
+  rim whose sides reach back to just in front of the ears, then forward to a flat front 12.6 cm ahead
+  (tapered 6%, so it is deeper at the back like a CRT). Nothing is wider than the head plus 1.5 cm.
+  A rigid harness (a band round the back of the skull and one ear to ear over the crown) meets
+  bolt bosses on the housing's sides. The cable runs short and flat from the underside to the collar.
+  The head is 7.5% bigger.
+- **A screen tilted in a pose looks crooked.** Line-up poses now only turn the head about the
+  vertical, and a slump is levelled again at the neck.
+- **Mittens with no wrist.** The gloves have a flared gauntlet wider than the sleeve end, then
+  12-sided hand rings whose 60° and 120° vertices are pulled in. That cuts two grooves top and
+  bottom, so the block reads as three fingers, with the thumb separate. The hands are bigger.
+- **Painted zigzag wrinkles and sticker patches.** Folds are now a few broad, soft gradients. The
+  number patches are raised 3 mm, with a dark edge and a stitched border painted on the suit.
+- **Raised arm and raised leg.** A bigger deltoid cap, a ring high on the upper arm, a ring at the top
+  of each thigh, a wider crotch strip lowered into a gusset; the bend test now includes a step-up.
+
+Rule learned:
+
+22. **Look at a projection's side view before trusting its numbers.** A box that is 21 cm wide is
+    still a slab if it grows from a 13 cm patch: the base must be as wide as the box, so grow it from
+    columns that reach the sides of the head.

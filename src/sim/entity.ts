@@ -147,6 +147,14 @@ export type OrderlyEvent =
   | { type: 'windUpCancelled'; t: number; playerId: string }
   | { type: 'caught'; t: number; playerId: string };
 
+/** How it hunts this tick (the run's blackout changes it; see run.ts). */
+export interface HuntOptions {
+  /** Hunting speed in m/s (default HUNT_SPEED). */
+  speed?: number;
+  /** Whether it creeps up on slow prey (default true). */
+  creep?: boolean;
+}
+
 export interface StepResult {
   state: OrderlyState;
   events: OrderlyEvent[];
@@ -272,7 +280,7 @@ export function seenBy(plan: FloorPlan, body: Body, players: readonly PlayerView
 }
 
 /** Advances the Orderly by dt seconds. Never mutates `prev`. */
-export function stepEntity(plan: FloorPlan, prev: OrderlyState, players: readonly PlayerView[], dt: number): StepResult {
+export function stepEntity(plan: FloorPlan, prev: OrderlyState, players: readonly PlayerView[], dt: number, opts: HuntOptions = {}): StepResult {
   const t = prev.t + dt;
   const s: OrderlyState = { ...prev, t, moving: false, speed: 0 };
   const events: OrderlyEvent[] = [];
@@ -385,12 +393,12 @@ export function stepEntity(plan: FloorPlan, prev: OrderlyState, players: readonl
     return { state: s, events };
   }
 
-  hunt(plan, s, players, dt);
+  hunt(plan, s, players, dt, opts);
   return { state: s, events };
 }
 
 /** One tick of walking toward the nearest player. Mutates the (already copied) state. */
-function hunt(plan: FloorPlan, s: OrderlyState, players: readonly PlayerView[], dt: number): void {
+function hunt(plan: FloorPlan, s: OrderlyState, players: readonly PlayerView[], dt: number, opts: HuntOptions): void {
   s.replanIn -= dt;
   if (s.replanIn <= EPS || s.path === null) {
     s.replanIn = REPLAN_INTERVAL;
@@ -420,8 +428,8 @@ function hunt(plan: FloorPlan, s: OrderlyState, players: readonly PlayerView[], 
   s.preyX = target.body.x;
   s.preyZ = target.body.z;
   const gap = Math.hypot(target.body.x - before.x, target.body.z - before.z);
-  const creeping = target.body.level === before.level && gap < CREEP_DISTANCE && s.preySpeed < CREEP_PREY_SPEED;
-  const pace = creeping ? CREEP_SPEED : HUNT_SPEED;
+  const creeping = opts.creep !== false && target.body.level === before.level && gap < CREEP_DISTANCE && s.preySpeed < CREEP_PREY_SPEED;
+  const pace = creeping ? CREEP_SPEED : (opts.speed ?? HUNT_SPEED);
 
   const here = cellOf(plan, before);
   if (sameCell(here, cellOf(plan, target.body))) {

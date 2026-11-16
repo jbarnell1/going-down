@@ -211,6 +211,12 @@ export interface FloorTapeSnap extends TapeSnap {
 export interface BlinkSnap {
   /** Host time the blink starts. */
   at: number;
+  /** Seconds it lasts (the blackout's ends when the car arrives, on this time). */
+  len: number;
+  /** Seconds of warning before `at`. */
+  warn: number;
+  /** The wait's last, long dark. */
+  blackout: boolean;
   announced: boolean;
   endsAt: number | null;
 }
@@ -352,7 +358,7 @@ function encWorld(w: WorldSnap): Wire {
     q2(w.bellLeft),
     q2(w.holdLeft),
     w.held ? 1 : 0,
-    w.blink ? [w.blink.at, w.blink.announced ? 1 : 0, w.blink.endsAt] : 0,
+    w.blink ? [w.blink.at, w.blink.announced ? 1 : 0, w.blink.endsAt, w.blink.len, w.blink.warn, w.blink.blackout ? 1 : 0] : 0,
     [...encPose(o), o.speed, o.frozen ? 1 : 0, idx(MODES, o.mode), ...(o.windUp ? [o.windUp.target, o.windUp.left] : [])],
     w.players.map((p) => [
       p.id,
@@ -381,7 +387,9 @@ function decWorld(a: unknown[]): WorldSnap {
     bellLeft: Number(a[6]),
     holdLeft: Number(a[7]),
     held: a[8] === 1,
-    blink: blink ? { at: Number(blink[0]), announced: blink[1] === 1, endsAt: blink[2] === null ? null : Number(blink[2]) } : null,
+    blink: blink
+      ? { at: Number(blink[0]), announced: blink[1] === 1, endsAt: blink[2] === null ? null : Number(blink[2]), len: Number(blink[3]), warn: Number(blink[4]), blackout: blink[5] === 1 }
+      : null,
     orderly: { ...pose, speed: Number(o[7]), frozen: o[8] === 1, mode: at(MODES, o[9]), ...(o.length > 11 ? { windUp: { target: String(o[10]), left: Number(o[11]) } } : {}) },
     players: (a[11] as unknown[][]).map((p) => {
       const f = Number(p[7]);

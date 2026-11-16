@@ -203,6 +203,9 @@ const LIFT = {
   stutterSeconds: 0.5,
   stutterLevel: 0.2,
   crackleLevel: 0.1,
+  /** The blackout's warning: the power winding down, a low hum falling between these (Hz), at this level. */
+  powerDownHz: [150, 28] as const,
+  powerDownLevel: 0.14,
   /** The dark: a relay clunk (Hz, level); the room tone falls to `roomDark` of its level. */
   clunkHz: 90,
   clunkLevel: 0.45,
@@ -1095,11 +1098,33 @@ export class GameAudio {
     });
   }
 
-  /** The blink is coming: the chime stutters and the ballasts crackle. */
-  blinkWarning(): void {
+  /**
+   * The blink is coming: the chime stutters and the ballasts crackle. For the blackout (`seconds`
+   * long, `powerDown`) the stutter and crackle stretch over the whole warning and under them the
+   * building's power winds down: a low hum falling away to nothing as the dark arrives.
+   */
+  blinkWarning(seconds: number = LIFT.stutterSeconds, powerDown = false): void {
     this.play((ctx, t) => {
-      const frag = LIFT.stutterSeconds / LIFT.stutters;
-      for (let i = 0; i < LIFT.stutters; i++) {
+      const stutters = Math.max(LIFT.stutters, Math.round((LIFT.stutters * seconds) / LIFT.stutterSeconds / 3));
+      const frag = seconds / stutters;
+      if (powerDown) {
+        const o = ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(LIFT.powerDownHz[0], t);
+        o.frequency.exponentialRampToValueAtTime(LIFT.powerDownHz[1], t + seconds);
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 700;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(LIFT.powerDownLevel, t + 0.15);
+        g.gain.setValueAtTime(LIFT.powerDownLevel, t + seconds * 0.6);
+        g.gain.exponentialRampToValueAtTime(0.001, t + seconds);
+        o.connect(lp).connect(g).connect(this.out);
+        o.start(t);
+        o.stop(t + seconds + 0.05);
+      }
+      for (let i = 0; i < stutters; i++) {
         const at = t + i * frag;
         // Each fragment a clipped, slightly lower restart of the chime's first note.
         const env = ctx.createGain();
@@ -1123,11 +1148,13 @@ export class GameAudio {
         const chop = ctx.createGain();
         chop.gain.value = 0;
         // Crackle: random on/off gates over the warning.
-        for (let k = 0; k < 14; k++) chop.gain.setValueAtTime(Math.random() < 0.5 ? LIFT.crackleLevel : 0, t + (k * LIFT.stutterSeconds) / 14);
-        chop.gain.setValueAtTime(0, t + LIFT.stutterSeconds + 0.05);
+        const gates = Math.round((14 * seconds) / LIFT.stutterSeconds);
+        for (let k = 0; k < gates; k++) chop.gain.setValueAtTime(Math.random() < 0.5 ? LIFT.crackleLevel : 0, t + (k * seconds) / gates);
+        chop.gain.setValueAtTime(0, t + seconds + 0.05);
+        src.loop = true;
         src.connect(hp).connect(chop).connect(this.out);
         src.start(t, Math.random());
-        src.stop(t + LIFT.stutterSeconds + 0.1);
+        src.stop(t + seconds + 0.1);
       }
       this.counts.blinkWarnings++;
     });

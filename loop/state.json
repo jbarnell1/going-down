@@ -3,15 +3,15 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
-  "iteration": 24,
-  "now": null,
-  "nowText": "",
+  "iteration": 28,
+  "now": "X1",
+  "nowText": "An agent is building one Clinic floor in the Godot engine, in its own folder, to compare lighting, browser play and testing with what we have",
   "ci": {
     "status": "passed",
-    "commit": "a117efd",
-    "at": "2026-11-16T13:39:13.943Z"
+    "commit": "c9e549d",
+    "at": "2026-11-16T16:29:12.593Z"
   },
-  "answersAppliedTo": "2026-11-16T12:10:00Z",
+  "answersAppliedTo": "2026-11-16T15:51:27.242Z",
   "tasks": [
     {
       "id": "T0",
@@ -29,7 +29,9 @@
           "kind": "image",
           "at": "2026-11-16T04:16:44.095Z"
         }
-      ]
+      ],
+      "ns": [],
+      "nsWhy": "Tooling, hosting or validation; the North Star has no mechanic for it"
     },
     {
       "id": "T1",
@@ -49,6 +51,9 @@
           "kind": "text",
           "at": "2026-11-16T04:16:44.173Z"
         }
+      ],
+      "ns": [
+        "A2"
       ]
     },
     {
@@ -92,6 +97,9 @@
           "kind": "image",
           "at": "2026-11-16T04:34:47.545Z"
         }
+      ],
+      "ns": [
+        "A2"
       ]
     },
     {
@@ -102,7 +110,9 @@
       "gates": [],
       "finishedAt": "2026-11-16T04:45:59.818Z",
       "summary": "Left thumb is a walk stick (push gently to creep), right thumb drags to look, the first tap starts the game. A browser test sends real touch events and checks walking, creeping, turning, and both thumbs at once. Checked by emulated touch only; not yet tried on a real phone.",
-      "todo": []
+      "todo": [],
+      "ns": [],
+      "nsWhy": "Phone play was the owner's request on 2026-11-15; the North Star does not cover devices"
     },
     {
       "id": "T0b",
@@ -113,7 +123,9 @@
       "startedAt": "2026-11-16T04:34:47.762Z",
       "finishedAt": "2026-11-16T04:46:34.753Z",
       "summary": "Every build of main that passes all checks is published to https://jbarnell1.github.io/going-down/ by a CI job. The link answered when requested. The phone-controls build is publishing now.",
-      "todo": []
+      "todo": [],
+      "ns": [],
+      "nsWhy": "Tooling, hosting or validation; the North Star has no mechanic for it"
     },
     {
       "id": "T0c",
@@ -123,7 +135,9 @@
       "gates": [],
       "finishedAt": "2026-11-16T04:34:47.619Z",
       "summary": "The AGPL-3.0 licence text is in the repository and the README says so.",
-      "todo": []
+      "todo": [],
+      "ns": [],
+      "nsWhy": "Tooling, hosting or validation; the North Star has no mechanic for it"
     },
     {
       "id": "T3",
@@ -282,7 +296,10 @@
       "todo": [],
       "startedAt": "2026-11-16T04:36:16.722Z",
       "finishedAt": "2026-11-16T05:37:04.584Z",
-      "summary": "The Orderly was rebuilt after tutorial study and three judged rounds. It is a rigged 2.6 m figure with five animations (idle, walk, reach, a duck under door frames, frozen), it stands in the game with a real shadow, and all checks pass. It is now its own character: pale waxy skin, lids sewn shut, a paper cap, hands folded like staff waiting to help. Honest result: five blind judges scored it 3 to 6 out of 10 for fear and the scores did not rise across rounds. A question about what to do next is waiting for you."
+      "summary": "The Orderly was rebuilt after tutorial study and three judged rounds. It is a rigged 2.6 m figure with five animations (idle, walk, reach, a duck under door frames, frozen), it stands in the game with a real shadow, and all checks pass. It is now its own character: pale waxy skin, lids sewn shut, a paper cap, hands folded like staff waiting to help. Honest result: five blind judges scored it 3 to 6 out of 10 for fear and the scores did not rise across rounds. A question about what to do next is waiting for you.",
+      "ns": [
+        "B8"
+      ]
     },
     {
       "id": "T2b",
@@ -339,7 +356,9 @@
       ],
       "finishedAt": "2026-11-16T05:58:45.404Z",
       "summary": "The game now looks like worn videotape: smeared colour, grain, glaring ceiling lights, a slight wobble, rare tracking rolls, and a PLAY display with a running counter. ?fx=0 turns it off and ?fx=2 makes it heavy. ?debug=1 adds a minimap. Frame time stays at the screen's refresh rate at all three levels, including a phone-sized view and the 8-bit path older phones use. Fable switched the effect off on purpose and confirmed the test fails. Judged from stills only: how the wobble feels in motion over a long session is unverified.",
-      "todo": []
+      "todo": [],
+      "ns": [],
+      "nsWhy": "The tape look comes from the North Star's Look and sound section, which is not a numbered mechanic"
     },
     {
       "id": "T2v",
@@ -350,7 +369,9 @@
       "startedAt": "2026-11-16T05:59:34.661Z",
       "finishedAt": "2026-11-16T06:08:52.454Z",
       "summary": "Four new safety nets. Reference pictures of three views fail the test if the scenery changes: after tightening, a 4% pink tint on the corridor walls and doors 10 cm taller are both caught, and unchanged scenery passes three runs in a row. A frame-time limit of 20 ms is enforced in three situations, including the Orderly on screen and the heavy tape level at 1080p. A hub smoke test checks its pages answer and ten path-escape attempts are refused, on every commit. The floor generator's tests were proven able to fail by removing its stairs. Reference pictures and the frame limit run on this PC only; CI draws in software and skips them.",
-      "todo": []
+      "todo": [],
+      "ns": [],
+      "nsWhy": "Tooling, hosting or validation; the North Star has no mechanic for it"
     },
     {
       "id": "T4",
@@ -420,7 +441,12 @@
         }
       ],
       "finishedAt": "2026-11-16T06:58:33.127Z",
-      "summary": "The Orderly now hunts you in the game. It walks the floor while nobody is looking, stops the instant you look (checked on every drawn frame, so a quick glance counts), and its trolley squeak plays in 3D while it moves and cuts out within a tenth of a second when it freezes. Being caught is a placeholder: interference, then you are back at the elevator. A browser test plays the staring contest: 3 seconds watched with no movement and no sound, turn away and it closes in, turn back and it is frozen nearer, mid-step. Fable also made it count as its full drawn size for being seen, arms and cap included; a first attempt at that broke the rule and the independent checker caught it. Nobody has heard the squeak yet: neither the agent nor Fable can hear."
+      "summary": "The Orderly now hunts you in the game. It walks the floor while nobody is looking, stops the instant you look (checked on every drawn frame, so a quick glance counts), and its trolley squeak plays in 3D while it moves and cuts out within a tenth of a second when it freezes. Being caught is a placeholder: interference, then you are back at the elevator. A browser test plays the staring contest: 3 seconds watched with no movement and no sound, turn away and it closes in, turn back and it is frozen nearer, mid-step. Fable also made it count as its full drawn size for being seen, arms and cap included; a first attempt at that broke the rule and the independent checker caught it. Nobody has heard the squeak yet: neither the agent nor Fable can hear.",
+      "ns": [
+        "B1",
+        "B8",
+        "A6"
+      ]
     },
     {
       "id": "T5",
@@ -507,7 +533,13 @@
       ],
       "finishedAt": "2026-11-16T07:51:24.986Z",
       "summary": "The earning loop is playable. Raise the instrument (hold right mouse or F, or the round button on a phone), turn your back on the Orderly, and the needle climbs and the ticking races as it creeps up behind you; turn round and it freezes. In the browser test, turning at 2.5 metres earned 131 and turning at 1.3 metres earned 246. Staring at it earns nothing. Being taken drops your tape where you fell, and you can walk back and pick it up. The first time it records, the instrument prints a slip: the only words on screen. All 29 browser tests and 76 rule tests pass on Fable's own run, and shrinking the instrument's range on purpose fails three of them. Nobody has heard the ticking or the squeak. One weakness: nothing yet teaches a new player to raise it and turn their back; the training floor is meant to.",
-      "todo": []
+      "todo": [],
+      "ns": [
+        "C1",
+        "C2",
+        "C3",
+        "C4"
+      ]
     },
     {
       "id": "T6",
@@ -624,7 +656,12 @@
       ],
       "finishedAt": "2026-11-16T09:15:15.339Z",
       "summary": "A whole run is playable alone. You start in the elevator, step out, and it leaves. You earn, come back, and call it: an indicator counts its floors down for 25 to 55 seconds while the lights blink and the Orderly closes in. You board and stand on BANK or DOWN. DOWN rides to a larger floor where readings pay 35% more; BANK ends the run with a summary and a lifetime total that survives a restart. The scripted two-floor run banked 307. All 33 browser tests and 93 rule tests pass on Fable's own run, and letting players see during a blink fails the run test. Unheard: every elevator sound. Untested: the phone's call and hold buttons. Weak spots the agent found: 20 seconds in the car with nothing to do, and a warning too short to do more than brace.",
-      "todo": []
+      "todo": [],
+      "ns": [
+        "A1",
+        "C5",
+        "C6"
+      ]
     },
     {
       "id": "T6b",
@@ -693,7 +730,10 @@
       ],
       "finishedAt": "2026-11-16T09:55:36.510Z",
       "summary": "The elevator has a voice. 19 lines were written and recorded with ElevenLabs on its newest model, three takes each, and play at the right moments of a run through a tinny elevator-speaker effect that gets worse with depth, with subtitles. Three voices were auditioned: Bella is in the game now, Sarah and Brian are alternatives. NOBODY HAS HEARD ANY OF IT: the agent and Fable cannot hear, so the Audition page and the first question on the Questions page are yours. Spend: 7,833 characters of the 50,000 cap; the account's own counter moved from 65,040 to 67,938 of 145,556. Fable searched the project and the agent's transcript for the key and for private paths and found none. All 35 browser tests pass, and hiding the voice files fails the voice test. Not checked: whether each take says its script word for word.",
-      "todo": []
+      "todo": [],
+      "ns": [
+        "H5"
+      ]
     },
     {
       "id": "T7",
@@ -768,7 +808,9 @@
       ],
       "finishedAt": "2026-11-16T13:00:14.643Z",
       "summary": "Up to four people can now play one run together in their browsers: a lobby with a room code and link, crewmates drawn as convicts in coloured jumpsuits, everyone's readings, blinks, votes and the bank on every screen. I re-ran everything myself: 130 logic tests and 46 of 46 browser tests pass, including a real peer-to-peer connection on this PC (1.6 s to connect). Not yet tried: two different home networks, phones in a crew, more than four players.",
-      "todo": []
+      "todo": [],
+      "ns": [],
+      "nsWhy": "Networking is in the North Star's Foundations and fairness contract, not a numbered mechanic"
     },
     {
       "id": "T7c",
@@ -799,39 +841,55 @@
           "kind": "image",
           "at": "2026-11-16T15:47:53.780Z"
         }
-      ]
+      ],
+      "ns": [],
+      "nsWhy": "Sprint, creep and stamina were the owner's request on 2026-11-16, after playing"
     },
     {
       "id": "T2w",
       "title": "Browser tests must not grab the owner's mouse",
       "why": "While the tests ran, the real mouse was confined to a small corner of the left monitor",
-      "status": "todo",
+      "status": "done",
       "gates": [],
-      "todo": [
-        "Cause: the headless test browsers take pointer lock, and Chrome on Windows then confines the real cursor to the test window's rectangle (seen: 312 x 675 at the top-left). Fix so it cannot happen: in the Playwright setup replace requestPointerLock with a stand-in for tests (or give the game a test switch), keep one deliberate pointer-lock test out of the default run. Until then a watcher frees the cursor during test runs."
-      ]
+      "todo": [],
+      "ns": [],
+      "nsWhy": "Tooling, hosting or validation; the North Star has no mechanic for it",
+      "finishedAt": "2026-11-16T17:52:58.413Z",
+      "summary": "The game's tests can no longer confine your mouse: under test automation the game uses a stand-in for mouse capture, and a test asserts the real capture is never requested. During my own full run of 52 browser tests a watcher logged zero grabs."
     },
     {
       "id": "T6e",
       "title": "Blinks that grow into a blackout",
       "why": "The owner wants the wait for the car to build: each blink longer than the last, ending in a long dark stretch that drives the crew away from the lift, then a mad dash back with the Orderly after them",
-      "status": "todo",
+      "status": "done",
       "gates": [],
-      "todo": [
-        "Owner's words (2026-11-16): 'The blinks should get longer and longer as the players wait for the elevator, like 15 seconds for a chase to get them away from the elevator and then the players have to make a mad dash back to the elevator with the orderly chasing them.'",
-        "First numbers to try (tune by simulation, in src/sim/run.ts): blinks during a wait run 1, 1.5, 2.5, 4, 6 s with shorter gaps each time; the last one before the car is the blackout, 12 to 15 s, timed to end as the car arrives. Today: every 5 to 9 s, always 1 s, wait 25 to 55 s.",
-        "Needs with it: (1) emergency floor strips so the crew can find their way in the long dark, while the Orderly stays unseen (heard, not shown: a watched Orderly never moves, so the dark must really hide it); (2) the announcer warns before the blackout so it is never a surprise death; (3) the car waits long enough for a dash back (boarding is 20 s plus holding the door 15 s; check it fits a 40 m run); (4) simulate hundreds of crews: a careful crew that runs, then looks back once the lights return, usually survives; a crew that stands by the lift through the blackout is usually caught; report both rates; (5) fair on every screen in a crew, like the short blinks."
-      ]
-    },
-    {
-      "id": "T6d",
-      "title": "Even voice loudness and thirty more announcer lines",
-      "why": "The owner found the voice much quieter after being caught than in the car, and the same lines get tiring",
-      "status": "todo",
-      "gates": [],
-      "todo": [
-        "Cause found: recordings are all at the same loudness (-16 LUFS); the game plays the landing speaker at as little as a tenth of the in-car level when you are far from it (VOICE.farMin 0.08 x farLevel 0.75 vs closeLevel 0.6 in src/game/announcer.ts). Fix: floor the far level near 0.55, soften the far low-pass floor to about 1400 Hz, put a compressor on the voice bus, and play taken/wipe/banked lines at the close level wherever the listener is.",
-        "Thirty drafted lines wait in .local/voice-new-lines.json (3,086 characters per voice). Merge into assets_src/voice/lines.json with the usual settings, generate ONE take each for Bella and Brian if the script allows (else three takes: about 18,500 characters, total about 31,500 of the 50,000 cap), publish, check the announcer never repeats a line back to back."
+      "todo": [],
+      "startedAt": "2026-11-16T15:58:33.522Z",
+      "ns": [
+        "C5"
+      ],
+      "nsCheck": "C5 says a blink counts as not looking and staring at the landing is not safe; this builds the owner's amendment on top of it (blinks grow into a blackout with a chase and dash back, their words 2026-11-16). Differs on purpose: the arrival line is replaced by the lights-back line because every wait now ends in a blackout. The Tenant rattling the stairwell door (also in C5) is not built.",
+      "finishedAt": "2026-11-16T17:52:58.505Z",
+      "summary": "While you wait for the car the blinks now grow (1, 1.5, 2.5, 4, 6 seconds) and end in a blackout: 9 to 10 seconds on a run's first floor, 12 to 15 deeper, after a 3-second warning and the announcer's line. Amber strips along the floor and red glows over doors let you run; the Orderly is never drawn in the dark, only heard. The lights return as the car arrives. In 300 simulated waits per depth a crew that stays by the lift always loses someone, and a crew that runs and comes back loses someone 2 to 4 percent of the time and nearly always makes the car. I re-ran everything myself (143 logic tests, 52 browser tests) and broke it on purpose twice: drawing the Orderly in the dark and shrinking the blackout to one second both turned tests red.",
+      "media": [
+        {
+          "src": "T6e/20261116T175258-120-blackout-warning.png",
+          "caption": "The warning before the blackout",
+          "kind": "image",
+          "at": "2026-11-16T17:52:58.509Z"
+        },
+        {
+          "src": "T6e/20261116T175258-121-blackout-emergency-lights.png",
+          "caption": "Blackout: amber floor strips and red glows over the doors",
+          "kind": "image",
+          "at": "2026-11-16T17:52:58.511Z"
+        },
+        {
+          "src": "T6e/20261116T175258-122-lights-back-car-open.png",
+          "caption": "Lights back, and the car is there",
+          "kind": "image",
+          "at": "2026-11-16T17:52:58.513Z"
+        }
       ]
     },
     {
@@ -839,7 +897,44 @@
       "title": "Playing across two home networks",
       "why": "Friends at home need to join the host; some home routers block direct browser-to-browser links unless a relay helps",
       "status": "todo",
-      "gates": []
+      "gates": [],
+      "todo": [
+        "Owner's answer (2026-11-16): 'Every one in their own house'. So every player joins over the internet from a different home network, and friends use the PUBLIC play link, not the tailnet hub. This is now needed for game night.",
+        "Plan: (1) a connection test in the lobby that says plainly whether a direct link to the host works and what kind of router each side has, plus a short note the owner can send a friend to try it this week; (2) a relay (TURN) path for the pairs that cannot link directly. The public build is a static site in a public repo, so the relay's secret cannot live in it: use a provider that hands out short-lived credentials through a tiny free hosted function the owner deploys, or a free-tier static credential that is quota-limited. Research current free offerings first, then give the owner exact sign-up steps on the Questions page. (3) Also warn in the lobby that the host must keep the game tab in front (a background tab stalls the run).",
+        "Owner (2026-11-16): 'We can definitely run a server on either mo's pc or the homelab pc... server should just be responsible for handling client updates and keeping everyone in sync.' This changes the plan: the game's host logic already runs without a browser (it does in the tests), so a small always-on game server on the lab box can host every run. Friends then connect to it, nobody's router has to accept a direct link, no relay account is needed, and the host's tab going to the background no longer stalls the run. Open point: friends are outside the tailnet, so the server needs one public door; that choice is the owner's (question server-door)."
+      ],
+      "ns": [],
+      "nsWhy": "Foundations: how friends connect; the owner said everyone plays from their own house"
+    },
+    {
+      "id": "T14",
+      "title": "Dress the Clinic",
+      "why": "Beds, trolleys, curtains, signs and grime, so rooms stop being empty boxes. Props built in Blender, textures made with Gemini inside the art budget.",
+      "status": "todo",
+      "gates": [],
+      "todo": [
+        "Owner's rule: downsample every prop and texture before it goes in the game. Low triangle counts, small textures; the tape look hides detail.",
+        "Props are in tools/props/: kenney-furniture-kit/x (glb), quaternius-house-interior/FBX, polyhaven/<id> (1k gltf, heavy: decimate hard and shrink textures to 256 or less). Hashes and LICENCE.txt in each folder; add credits to CREDITS.md.",
+        "Props are built: public/assets/props/*.glb + manifest.json (name, size, mount floor/wall/ceiling, front faces +Z). Untested in three.js: vertex colours (COLOR_0 needs vertexColors on the material), linear samplers (set NearestFilter), double-sided materials, KHR_materials_specular. Wall lamp reads poorly; consider dropping it.",
+        "Owner (2026-11-16): 'When do we work on the dynamic lighting and textures for the map? I wonder if one side of the hospital is more normal and one side is more corrupted.' Plan: every room and corridor gets a corruption value from the seed, low near the lift and high toward where the Orderly starts. It drives which wall/floor textures and stains are used, how many props are overturned, and the lights: steady and bright on the clean side, dimmer, flickering and some dead on the corrupted side. It doubles as a way to know which way the lift is."
+      ],
+      "ns": [
+        "A2"
+      ]
+    },
+    {
+      "id": "T6d",
+      "title": "Even voice loudness and thirty more announcer lines",
+      "why": "The owner found the voice much quieter after being caught than in the car, and the same lines get tiring",
+      "status": "done",
+      "gates": [],
+      "todo": [],
+      "ns": [
+        "H5"
+      ],
+      "nsCheck": "H5: a cheerful synthetic announcer is the game's comedian; more lines and even loudness serve that, per the owner's notes of 2026-11-16. No difference from the design.",
+      "finishedAt": "2026-11-16T17:52:58.601Z",
+      "summary": "The announcer is now even: the landing speaker never drops below 55 percent of its near level, and the taken, wipe, banked, blackout and lights lines always play at full level wherever you are. 35 new lines for both voices (54 in all); each moment cycles through all its lines before repeating. One bug found in my re-run and fixed: the thank-you-for-calling line sometimes expired while queued behind two long lines. Checked by numbers and by putting the old level back to see the test fail; nobody has heard it yet."
     },
     {
       "id": "T7b",
@@ -848,7 +943,9 @@
       "status": "todo",
       "gates": [
         "G14"
-      ]
+      ],
+      "ns": [],
+      "nsWhy": "The owner tests alone, so bots stand in for a crew (loop rules), not a North Star mechanic"
     },
     {
       "id": "T8",
@@ -861,14 +958,105 @@
       ],
       "todo": [
         "Owner asked (2026-11-16): an animated being-caught sequence with noise. The Orderly's reach filling the view, the tape tearing, a loud burst; then the downed view. Later is fine, after more of the game is settled."
+      ],
+      "ns": [
+        "B6",
+        "B7",
+        "F3"
       ]
     },
     {
       "id": "T7e",
       "title": "Better-looking crewmates and readable name tags",
       "why": "Crewmates are plain boxes and their names cannot be read from a few metres",
+      "status": "doing",
+      "gates": [],
+      "startedAt": "2026-11-16T16:46:55.079Z",
+      "todo": [
+        "Owner asked what they must do for assets (2026-11-16). Answer given: nothing is required; the one useful thing is Mixamo clips for the crewmates (free Adobe account). Steps are in assets_src/inbox/README.md section 2. The upload file assets_src/inbox/convict-for-mixamo.fbx is being built; tell the owner when it is judged and ready. Then: import their clips, trim/loop, bake into public/assets/entities/convict.glb, replace the box figures in src/render/crewFigures.ts, keep per-player tint and number patches.",
+        "Owner (2026-11-16): 'Don't forget to reference the North star, though, we talked about drawing faces on. Maybe keep the models the way they are but every person wears a mask with a screen on it that covers the full face and has whatever face they drew on it.' North Star H1 (Your face is everywhere): each player draws a face before the run; it appears on their avatar, the elevator monitor, the standee left where they fall (B6), and posters. The crewmate figure now wears a full-face screen mask with its own flat face_screen surface.",
+        "Mesh is FINAL (2,216 triangles, one closed symmetric mesh, T-pose, 1.78 m) after two blind judging rounds and the owner's steer: 'we don't need a lot of those fixes because the filter makes everything so grainy we get a lot for free... Mittens are perfectly acceptable.' Upload file: assets_src/inbox/convict-for-mixamo.fbx (fallback .zip). Waiting on the owner's Mixamo clips in assets_src/inbox/mixamo/."
+      ],
+      "media": [
+        {
+          "src": "T7e/20261116T170609-lineup.png",
+          "caption": "The crewmate figure, first build: one model tinted per player, numbers on chest and back",
+          "kind": "image",
+          "at": "2026-11-16T17:06:09.766Z"
+        },
+        {
+          "src": "T7e/20261116T170609-player_view.png",
+          "caption": "First build at the game's resolution, at 3 m and 8 m",
+          "kind": "image",
+          "at": "2026-11-16T17:06:09.767Z"
+        },
+        {
+          "src": "T7e/20261116T172500-lineup.png",
+          "caption": "Second build: every crewmate wears a screen mask showing the face they drew; four different people",
+          "kind": "image",
+          "at": "2026-11-16T17:25:00.133Z"
+        },
+        {
+          "src": "T7e/20261116T172500-blackout_tape.png",
+          "caption": "A crew in a blackout: only their drawn faces glow",
+          "kind": "image",
+          "at": "2026-11-16T17:25:00.135Z"
+        },
+        {
+          "src": "T7e/20261116T172500-closeup_mask.png",
+          "caption": "The mask up close at the game's resolution",
+          "kind": "image",
+          "at": "2026-11-16T17:25:00.136Z"
+        },
+        {
+          "src": "T7e/20261116T173637-lineup.png",
+          "caption": "Final crewmate: a solid monitor-style mask sealed to the face, work gloves, worn suits; four different people",
+          "kind": "image",
+          "at": "2026-11-16T17:36:37.501Z"
+        },
+        {
+          "src": "T7e/20261116T173637-player_view_tape.png",
+          "caption": "Final crewmate through the tape look, at 3 m and 8 m",
+          "kind": "image",
+          "at": "2026-11-16T17:36:37.503Z"
+        },
+        {
+          "src": "T7e/20261116T173637-blackout_tape.png",
+          "caption": "A crew in a blackout: only the drawn faces glow",
+          "kind": "image",
+          "at": "2026-11-16T17:36:37.504Z"
+        }
+      ],
+      "ns": [
+        "H1",
+        "F4"
+      ]
+    },
+    {
+      "id": "T7f",
+      "title": "Draw your face",
+      "why": "North Star H1: each player doodles a face before the run and it shows on the screen mask their crewmate figure wears, glowing in the dark, and on the lift monitor",
       "status": "todo",
-      "gates": []
+      "gates": [],
+      "todo": [
+        "A small drawing pad in the lobby (about 48 x 48, one colour on dark, a few brush sizes, clear, and a random doodle for the lazy); sent to the crew as a few hundred bytes; shown on the mask screen (glowing), the crew list, the lift monitor, and later the standee where a player falls and the posters. Bots get generated doodles. Remembered in the browser between runs."
+      ],
+      "ns": [
+        "H1"
+      ]
+    },
+    {
+      "id": "X1",
+      "title": "Trial: one Clinic floor in Godot",
+      "why": "The owner asked whether a game engine would save work and give better lighting. A five-hour trial answers with evidence before any decision to switch",
+      "status": "doing",
+      "gates": [],
+      "startedAt": "2026-11-16T16:58:48.820Z",
+      "todo": [
+        "Owner (2026-11-16): 'let's give it 5 hours to work alongside the other work that's currently being done.' Nothing in the game changes; the trial lives in spikes/godot-trial (not in git yet)."
+      ],
+      "ns": [],
+      "nsWhy": "An engine trial the owner approved on 2026-11-16"
     },
     {
       "id": "T14a",
@@ -893,18 +1081,9 @@
           "kind": "image",
           "at": "2026-11-16T12:10:06.314Z"
         }
-      ]
-    },
-    {
-      "id": "T14",
-      "title": "Dress the Clinic",
-      "why": "Beds, trolleys, curtains, signs and grime, so rooms stop being empty boxes. Props built in Blender, textures made with Gemini inside the art budget.",
-      "status": "todo",
-      "gates": [],
-      "todo": [
-        "Owner's rule: downsample every prop and texture before it goes in the game. Low triangle counts, small textures; the tape look hides detail.",
-        "Props are in tools/props/: kenney-furniture-kit/x (glb), quaternius-house-interior/FBX, polyhaven/<id> (1k gltf, heavy: decimate hard and shrink textures to 256 or less). Hashes and LICENCE.txt in each folder; add credits to CREDITS.md.",
-        "Props are built: public/assets/props/*.glb + manifest.json (name, size, mount floor/wall/ceiling, front faces +Z). Untested in three.js: vertex colours (COLOR_0 needs vertexColors on the material), linear samplers (set NearestFilter), double-sided materials, KHR_materials_specular. Wall lamp reads poorly; consider dropping it."
+      ],
+      "ns": [
+        "A2"
       ]
     },
     {
@@ -912,7 +1091,11 @@
       "title": "Elevator polish",
       "why": "Let the doors close early once everyone is aboard, a bell warning the logic knows about, doors that take real time to close, and the phone's call and hold buttons tested.",
       "status": "todo",
-      "gates": []
+      "gates": [],
+      "ns": [
+        "C5",
+        "C6"
+      ]
     },
     {
       "id": "T9",
@@ -921,6 +1104,10 @@
       "status": "todo",
       "gates": [
         "G11"
+      ],
+      "ns": [
+        "B8",
+        "A6"
       ]
     },
     {
@@ -928,7 +1115,11 @@
       "title": "A second Orderly on deeper floors",
       "why": "The owner's idea: with two, nobody can watch both, so the crew has to split who looks where",
       "status": "todo",
-      "gates": []
+      "gates": [],
+      "ns": [
+        "B1",
+        "B11"
+      ]
     },
     {
       "id": "T3b",
@@ -1001,7 +1192,10 @@
       ],
       "startedAt": "2026-11-16T12:06:01.968Z",
       "finishedAt": "2026-11-16T13:00:14.815Z",
-      "summary": "The Orderly now wears a torn, stained gown: the hem hangs in strips that swing on their own bones, half a sleeve is gone, the eyelids are sewn. Seen in the running game in the watched and within-reach screenshots; all browser tests pass with it. Its own maker says the face is still a pale blob beyond about 3 m."
+      "summary": "The Orderly now wears a torn, stained gown: the hem hangs in strips that swing on their own bones, half a sleeve is gone, the eyelids are sewn. Seen in the running game in the watched and within-reach screenshots; all browser tests pass with it. Its own maker says the face is still a pale blob beyond about 3 m.",
+      "ns": [
+        "B8"
+      ]
     },
     {
       "id": "T10",
@@ -1010,7 +1204,9 @@
       "status": "todo",
       "gates": [
         "G10"
-      ]
+      ],
+      "ns": [],
+      "nsWhy": "Tooling, hosting or validation; the North Star has no mechanic for it"
     },
     {
       "id": "T11",
@@ -1020,28 +1216,39 @@
       "gates": [
         "G1",
         "G12"
-      ]
+      ],
+      "ns": [],
+      "nsWhy": "Tooling, hosting or validation; the North Star has no mechanic for it"
     },
     {
       "id": "T12",
       "title": "Orientation: the training floor",
       "why": "Floor one of every run, where nothing can hurt you and a cardboard statue on wheels teaches the instrument. Without it nothing shows a new player to raise the instrument and turn their back.",
       "status": "todo",
-      "gates": []
+      "gates": [],
+      "ns": [
+        "A3",
+        "H4"
+      ]
     },
     {
       "id": "T13",
       "title": "Phone picture crash on your Pixel",
       "why": "Parked at your request. The phone reported a PowerVR D-Series graphics chip. Its browser threw the picture away on the very first frame, restored it, then lost it again about six seconds later while the Orderly was on screen; the game then switched itself to the lighter level. Next step when picked up: three test links (no Orderly, no tape look, lightest level) to find which part that chip's driver cannot take. Computers are unaffected.",
       "status": "todo",
-      "gates": []
+      "gates": [],
+      "ns": [],
+      "nsWhy": "Tooling, hosting or validation; the North Star has no mechanic for it"
     },
     {
       "id": "T1b",
       "title": "More than one floor skeleton",
       "why": "Every Clinic floor shares one skeleton today, which will feel samey by the third floor.",
       "status": "todo",
-      "gates": []
+      "gates": [],
+      "ns": [
+        "A2"
+      ]
     },
     {
       "id": "T15",
@@ -1053,7 +1260,12 @@
         "Owner's words (2026-11-16): 'if the entity is aggro'ed enough, it kicks off a voice that tells players to hide. If they're found before timer goes off, they're killed. Otherwise, the entity follows it's normal rules. (only move when looking etc) The level goes dark, creepy music starts playing, and players have to find a place. You'll have to research how to make a good ai bot that explores rooms so that the challenge is actually challenging. Staying visible and just running away kills you. Once count is finished, moving faster than creep drains health maybe?'",
         "My reading, to confirm with the owner: (1) an anger level rises with noise (sprinting, calls, readings); (2) at the top, the announcer starts a count (about 20 s), lights go out, music starts; (3) when the count ends a search runs for a set time: the entity checks rooms and hiding places; anyone it finds is taken; moving faster than a creep costs health; (4) when the search time is up it goes back to its usual rule. Hiding places come from the props (lockers, under beds, cupboards, behind curtains).",
         "Research before building (one agent, written up in docs): how games make a searcher that feels smart and fair. Start from occupancy / probability maps (the searcher keeps a belief of where players could be and checks the likeliest spots), last-known-position search, a director that nudges it toward players without telling it exactly (Alien: Isolation's two-part design), and hiding-spot checks with tells so a hidden player can hold their breath. Must stay deterministic from the seed and simulate hundreds of rounds: good hiders usually live, runners die, nobody dies to pure luck.",
-        "Fits the existing rules: the entity is heard before seen; the instrument could pay most for a reading taken from a hiding place while it searches nearby; a found player goes down rather than out, with something to do within seconds."
+        "Fits the existing rules: the entity is heard before seen; the instrument could pay most for a reading taken from a hiding place while it searches nearby; a found player goes down rather than out, with something to do within seconds.",
+        "Owner (2026-11-16, later): 'Clicking the elevator should trigger a hiding sequence, so you have to survive one last time before making it to freedom.' So on this floor calling the car always starts one last count-and-search; the car arrives when the search ends. It is this floor's version of the Clinic's blackout while waiting."
+      ],
+      "ns": [
+        "A2",
+        "B1"
       ]
     },
     {
@@ -1064,6 +1276,13 @@
       "gates": [],
       "todo": [
         "Owner (2026-11-16): 'multiple different types of entities once we program other levels'. Each new place brings its own entity with its own rule."
+      ],
+      "ns": [
+        "A4",
+        "B1",
+        "B11",
+        "F4",
+        "A2"
       ]
     }
   ],
@@ -1188,9 +1407,302 @@
     {
       "at": "2026-11-16T13:07:51.085Z",
       "text": "Playing across home networks: until the owner answers the new question, the default is to build a connection test page first and no relay."
+    },
+    {
+      "at": "2026-11-16T16:29:42.094Z",
+      "text": "Everyone plays from their own house (owner, 2026-11-16), so playing across home networks moves up to right after the blackout work, ahead of room dressing."
+    },
+    {
+      "at": "2026-11-16T16:58:52.249Z",
+      "text": "Until the owner answers server-door: build the game server and test it on the tailnet only; open nothing to the internet."
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T17:52:58.602Z",
+      "text": "Finished T6d: Even voice loudness and thirty more announcer lines.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T17:52:58.514Z",
+      "text": "Finished T6e: Blinks that grow into a blackout.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T17:52:58.414Z",
+      "text": "Finished T2w: Browser tests must not grab the owner's mouse.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T17:36:37.663Z",
+      "text": "Godot trial finished in 35 minutes: the lighting is clearly better, but a first visit took 27 to 34 seconds before the first frame against under half a second for the current game, and the download is about 11 MB against 0.3 MB. The trial's own recommendation is to stay for the browser game. The trial build is on the hub at /godot/ for the owner to try.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:36:37.504Z",
+      "text": "New pictures for T7e: Better-looking crewmates and readable name tags.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T17:26:07.139Z",
+      "text": "Crewmate figure, judging round two: both blind judges said the glowing drawn face is what the eye goes to and that the crew read as allies they could tell apart. The worst thing left is how the mask is mounted (it looks like a thin slab stuck on a bald head), then the mitten hands. Sent back for a deep monitor-style housing sealed to the face, bigger gloves with a cuff, softer folds and better joints.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:25:00.136Z",
+      "text": "New pictures for T7e: Better-looking crewmates and readable name tags.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T17:18:15.427Z",
+      "text": "A launch guard is now active: no agent can be started unless its brief quotes the relevant part of the North Star, or says why the design has nothing on it. Tested both ways: an unmarked brief was refused, a marked one went through.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:15:32.267Z",
+      "text": "New guard against drifting from the design: every task must now be linked to the North Star mechanics it builds before it can start, and the tracker prints that part of the design at the start and again at the finish. A one-page index replaces re-reading the whole document.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:52.868Z",
+      "text": "Linked X1 to the North Star: nothing in it (An engine trial the owner approved on 2026-11-16).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:52.776Z",
+      "text": "Linked T7b to the North Star: nothing in it (The owner tests alone, so bots stand in for a crew (loop rules), not a North Star mechanic).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:52.691Z",
+      "text": "Linked T7d to the North Star: nothing in it (Foundations: how friends connect; the owner said everyone plays from their own house).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:52.604Z",
+      "text": "Linked T7c to the North Star: nothing in it (Sprint, creep and stamina were the owner's request on 2026-11-16, after playing).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:52.516Z",
+      "text": "Linked T7 to the North Star: nothing in it (Networking is in the North Star's Foundations and fairness contract, not a numbered mechanic).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:52.432Z",
+      "text": "Linked T2b to the North Star: nothing in it (The tape look comes from the North Star's Look and sound section, which is not a numbered mechanic).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:52.347Z",
+      "text": "Linked T2p to the North Star: nothing in it (Phone play was the owner's request on 2026-11-15; the North Star does not cover devices).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:52.259Z",
+      "text": "Linked T13 to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:52.169Z",
+      "text": "Linked T11 to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:52.083Z",
+      "text": "Linked T10 to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:51.991Z",
+      "text": "Linked T2w to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:51.907Z",
+      "text": "Linked T2v to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:51.818Z",
+      "text": "Linked T0c to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:51.732Z",
+      "text": "Linked T0b to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:51.640Z",
+      "text": "Linked T0 to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:51.548Z",
+      "text": "Linked S to the North Star: A4, B1, B11, F4, A2.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:51.376Z",
+      "text": "Linked T15 to the North Star: A2, B1.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:51.223Z",
+      "text": "Linked T9b to the North Star: B1, B11.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:51.064Z",
+      "text": "Linked T1b to the North Star: A2.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:50.910Z",
+      "text": "Linked T12 to the North Star: A3, H4.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:50.757Z",
+      "text": "Linked T9 to the North Star: B8, A6.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:50.606Z",
+      "text": "Linked T6c to the North Star: C5, C6.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:50.442Z",
+      "text": "Linked T7f to the North Star: H1.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:50.290Z",
+      "text": "Linked T7e to the North Star: H1, F4.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:50.132Z",
+      "text": "Linked T8 to the North Star: B6, B7, F3.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:49.959Z",
+      "text": "Linked T6d to the North Star: H5.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:49.794Z",
+      "text": "Linked T14 to the North Star: A2.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:49.655Z",
+      "text": "Linked T6e to the North Star: C5.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:49.510Z",
+      "text": "Linked T3b to the North Star: B8.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:49.363Z",
+      "text": "Linked T14a to the North Star: A2.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:49.218Z",
+      "text": "Linked T6b to the North Star: H5.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:49.069Z",
+      "text": "Linked T6 to the North Star: A1, C5, C6.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:48.923Z",
+      "text": "Linked T5 to the North Star: C1, C2, C3, C4.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:48.772Z",
+      "text": "Linked T4 to the North Star: B1, B8, A6.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:48.627Z",
+      "text": "Linked T3 to the North Star: B8.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:48.472Z",
+      "text": "Linked T2a to the North Star: A2.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:14:48.317Z",
+      "text": "Linked T1 to the North Star: A2.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:11:56.478Z",
+      "text": "Added task T7f: Draw your face.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:07:20.184Z",
+      "text": "Crewmate figure, judging round one: both blind judges ranked the face worst (smeared, mannequin-like), then the pale paddle hands, then identical stiff clones that read as a threat, plus knees and shoulders losing volume when bent. Sent back: a modelled face, work gloves, better proportions and worn cloth, volume at the joints, and four different people through swappable headwear and faces.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:06:09.767Z",
+      "text": "New pictures for T7e: Better-looking crewmates and readable name tags.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T16:58:52.250Z",
+      "text": "Took a default: Until the owner answers server-door: build the game server and test it on the tailnet only; open nothing to the internet.",
+      "kind": "decision"
+    },
+    {
+      "at": "2026-11-16T16:58:48.821Z",
+      "text": "Started X1: Trial: one Clinic floor in Godot. An agent is building one Clinic floor in the Godot engine, in its own folder, to compare lighting, browser play and testing with what we have",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T16:58:48.731Z",
+      "text": "Added task X1: Trial: one Clinic floor in Godot.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T16:46:55.080Z",
+      "text": "Started T7e: Better-looking crewmates and readable name tags. An agent is building the crewmate figure (a convict in a jumpsuit) so the owner can upload it to Mixamo for real movement",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T16:29:42.094Z",
+      "text": "Took a default: Everyone plays from their own house (owner, 2026-11-16), so playing across home networks moves up to right after the blackout work, ahead of room dressing.",
+      "kind": "decision"
+    },
+    {
+      "at": "2026-11-16T16:29:41.774Z",
+      "text": "Applied the owner's new answers.",
+      "kind": "answers"
+    },
+    {
+      "at": "2026-11-16T15:58:33.523Z",
+      "text": "Started T6e: Blinks that grow into a blackout. An agent is making the blinks grow into a long blackout with a chase and a dash back, fixing the uneven voice, and stopping the tests from grabbing the mouse",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T15:50:11.826Z",
+      "text": "Live build is now c9e549d (tag good-12): sprint, creep and stamina. Checked from the lab box: the play page loads and the status page reports c9e549d.",
+      "kind": "note"
+    },
     {
       "at": "2026-11-16T15:47:53.780Z",
       "text": "Finished T7c: Sprint, creep and stamina.",
@@ -1904,36 +2416,6 @@
     {
       "at": "2026-11-16T04:16:45.004Z",
       "text": "The hub is live on the tailnet and linked from the home dashboard.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T04:16:44.922Z",
-      "text": "CI's first full run failed (the browser test could not find the preview server on Linux). Fixed and green since.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T04:16:44.328Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T04:16:44.248Z",
-      "text": "Gate G2 (Floors are sound) is passed.",
-      "kind": "gate"
-    },
-    {
-      "at": "2026-11-16T04:16:44.173Z",
-      "text": "Finished T1: The Clinic floor generator.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T04:16:44.095Z",
-      "text": "Finished T0: Project setup.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T03:38:00Z",
-      "text": "The loop started. Public repository created; secret scanning on every commit and push.",
       "kind": "note"
     }
   ]

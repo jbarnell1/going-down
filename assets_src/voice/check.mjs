@@ -33,6 +33,8 @@ export function estimate(line) {
   let s = words / WORDS_PER_SECOND;
   for (const [tag, sec] of Object.entries(PAUSE)) s += (line.text.split(tag).length - 1) * sec;
   s += (line.text.match(/\.\.\./g) ?? []).length * 0.4;
+  // A colon mid-sentence is read as a beat (measured 0.32 to 0.53 s in called_3, both voices).
+  s += (line.plain.match(/:\s/g) ?? []).length * 0.35;
   return s;
 }
 

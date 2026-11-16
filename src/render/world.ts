@@ -22,6 +22,14 @@ export interface World {
 
 export const FOG = 0xdfe8e4;
 
+/**
+ * The emergency lighting's wash when fully on: a deep red-amber light, strongest on the floor and
+ * the lower walls (the strips are at the foot of the walls) and weakest on the ceiling, enough to
+ * read walls, doorways and corners at the tape's 270 lines, and nothing like the cold white of the
+ * real lights. `sky` lights faces turned up, `ground` faces turned down.
+ */
+export const EMERGENCY_WASH = { sky: 0x8a1c08, ground: 0x3a0804, intensity: 2.4 };
+
 /** The meshes and lights of one floor, in a group named 'floor'. */
 export function buildFloor(plan: FloorPlan): { group: THREE.Group; meshes: THREE.Mesh[] } {
   const group = new THREE.Group();
@@ -40,6 +48,8 @@ export function buildFloor(plan: FloorPlan): { group: THREE.Group; meshes: THREE
     [trim, new THREE.MeshLambertMaterial({ vertexColors: true }), 'trim'],
     // Light panels are pure emission: unlit, and fog still fades them with distance.
     [shell.lights, new THREE.MeshBasicMaterial({ color: 0xf6fbff }), 'lights'],
+    // The emergency strips and signs: pure glow, hidden while the lights are on (setEmergency).
+    [shell.emergency, new THREE.MeshBasicMaterial({ vertexColors: true }), 'emergency'],
   ];
   const meshes: THREE.Mesh[] = [];
   for (const [g, mat, name] of parts) {
@@ -50,6 +60,11 @@ export function buildFloor(plan: FloorPlan): { group: THREE.Group; meshes: THREE
     const mesh = new THREE.Mesh(g.build(), mat);
     mesh.name = name;
     mesh.matrixAutoUpdate = false;
+    if (name === 'emergency') {
+      // Not scaled by applyLighting, and not drawn at all with the lights on.
+      mesh.userData.ownLight = true;
+      mesh.visible = false;
+    }
     group.add(mesh);
     meshes.push(mesh);
   }
@@ -63,7 +78,27 @@ export function buildFloor(plan: FloorPlan): { group: THREE.Group; meshes: THREE
   const fill = new THREE.DirectionalLight(0xf2fff8, 0.35);
   fill.position.set(-0.3, 0.6, -0.9);
   group.add(fill);
+  // The emergency wash. Always in the scene at intensity 0 with the lights on (it then adds exactly
+  // nothing, and toggling a light's presence would recompile every material at the moment the lights go).
+  const wash = new THREE.HemisphereLight(EMERGENCY_WASH.sky, EMERGENCY_WASH.ground, 0);
+  wash.name = 'emergency-wash';
+  wash.userData.ownLight = true;
+  group.add(wash);
   return { group, meshes };
+}
+
+/** The emergency lighting, 0 (off: the reference look) to 1 (fully on, in the dark). */
+export function setEmergency(floor: THREE.Object3D, k: number): void {
+  const on = Math.max(0, Math.min(1, k));
+  for (const o of floor.children) {
+    if (o.name === 'emergency') {
+      const mesh = o as THREE.Mesh;
+      mesh.visible = on > 0;
+      (mesh.material as THREE.MeshBasicMaterial).color.setScalar(on);
+    } else if (o.name === 'emergency-wash') {
+      (o as THREE.HemisphereLight).intensity = EMERGENCY_WASH.intensity * on;
+    }
+  }
 }
 
 /** Frees everything a group's meshes hold on the GPU: geometry, materials and their textures. */

@@ -23,9 +23,15 @@
 //  - Caught players stay inactive until the car next RIDES DOWN (not when it leaves empty).
 //  - The depth multiplier compounds and is applied when a reading closes onto a tape.
 //  - Each floor's Orderly is a new subject (entity id `orderly-<depth>`), so repeat factors restart.
+//  - The lights while the car comes (darkSchedule): blinks that grow, then the blackout, ending on the
+//    tick the car arrives. A false stop (one floor above, in the last few seconds) always falls inside
+//    the blackout: it is heard in the dark, and the blackout still ends as the doors really open.
+//  - In the blackout the Orderly hunts at BLACKOUT_HUNT_SPEED and does not creep up on still prey (the
+//    creep is there so a recorder can time a turn; nobody can see to do that in the dark). In the
+//    short blinks it hunts exactly as before.
 //  - BANK is the left half of the car as you walk in, DOWN the right half.
 
-import { createOrderly, ORDERLY_RADIUS, seenBy, stepEntity, type OrderlyEvent, type OrderlyState, type PlayerView } from './entity';
+import { createOrderly, HUNT_SPEED, ORDERLY_RADIUS, seenBy, stepEntity, type OrderlyEvent, type OrderlyState, type PlayerView } from './entity';
 import { generateClinic } from './clinic';
 import { DIR_VEC, type Dir, type FloorPlan, type Level } from './floor';
 import {
@@ -81,13 +87,38 @@ export const FALSE_STOP_EXTRA_MAX = 5;
 export const FALSE_STOP_DOORS_OPEN_AT = 0.8;
 /** ...and heard closing this long before the car moves on (seconds). */
 export const FALSE_STOP_DOORS_CLOSE_BEFORE = 1.2;
-/** Seconds between light blinks while the car is coming (drawn per blink, uniform)... */
-export const BLINK_INTERVAL_MIN = 5;
-export const BLINK_INTERVAL_MAX = 9;
-/** ...how long a blink lasts (seconds): every player is blind for this long... */
-export const BLINK_TIME = 1.0;
-/** ...and how far ahead of it the game is told, so the screen and sound can telegraph it (seconds). */
+/**
+ * The lights while the car is coming (see darkSchedule): blinks that grow, then the blackout that ends
+ * as the doors open. Blink lengths in order (seconds); a short wait uses only the first few.
+ */
+export const BLINK_LADDER: readonly number[] = [1, 1.5, 2.5, 4, 6];
+/**
+ * The lit gap after each blink, before the next warning (seconds, drawn uniform per gap), nearest the
+ * blackout first: the gaps shrink as the blackout nears. Spare time in a long wait stretches them
+ * (each to at most BLINK_GAP_STRETCH_MAX).
+ */
+export const BLINK_GAPS: readonly (readonly [number, number])[] = [
+  [3, 4],
+  [3.5, 4.5],
+  [4, 5],
+  [4.5, 5.5],
+  [5, 6],
+];
+export const BLINK_GAP_STRETCH_MAX = 9;
+/** The first warning comes no sooner than this after the call (seconds). */
+export const BLINK_FIRST_AFTER = 2.5;
+/** How far ahead of a blink the game is told, so the screen and sound can telegraph it (seconds). */
 export const BLINK_WARNING = 0.6;
+/** The blackout: the last dark stretch of a wait, ending as the car's doors open (seconds, uniform)... */
+export const BLACKOUT_MIN = 12;
+export const BLACKOUT_MAX = 15;
+/** ...shorter on the first floor of a run... */
+export const BLACKOUT_FIRST_MIN = 9;
+export const BLACKOUT_FIRST_MAX = 10;
+/** ...and its warning, long and unmistakable (seconds). */
+export const BLACKOUT_WARNING = 3;
+/** The Orderly's hunting speed while the blackout is on (m/s; see entity.ts HUNT_SPEED). */
+export const BLACKOUT_HUNT_SPEED = HUNT_SPEED;
 /** The boarding window: seconds from the doors opening to the bell, not counting holds. */
 export const BOARD_TIME = 20;
 /** Total seconds the doors can be held per stop. */
@@ -243,21 +274,75 @@ export interface CallPlan {
   extra: number;
   /** Total seconds from the call to the car arriving. */
   wait: number;
+  /** The dark stretches of this wait, in order; the last is the blackout. */
+  darks: DarkStretch[];
 }
 
-/** The schedule of the `index`-th call of a run (0-based). Never starts from `prevFloors` floors away. */
-export function callPlan(seed: string, index: number, prevFloors: number | null): CallPlan {
+/** One dark stretch of a wait. Times in seconds after the call. */
+export interface DarkStretch {
+  /** When the lights go out. */
+  at: number;
+  /** How long they stay out (the blackout's ends as the car arrives: at + len === wait). */
+  len: number;
+  /** How long before `at` the warning starts. */
+  warn: number;
+  /** The last and longest: the blackout. */
+  blackout: boolean;
+}
+
+/** The schedule of the `index`-th call of a run (0-based) at `depth`. Never starts from `prevFloors` floors away. */
+export function callPlan(seed: string, index: number, prevFloors: number | null, depth = 1): CallPlan {
   const rng = makeRng(seed).fork(`call:${index}`);
   const delay = CALL_START_DELAY_MIN + rng.next() * (CALL_START_DELAY_MAX - CALL_START_DELAY_MIN);
   let floors = rng.int(CALL_FLOORS_MIN, CALL_FLOORS_MAX);
   if (floors === prevFloors) floors = floors === CALL_FLOORS_MAX ? CALL_FLOORS_MIN : floors + 1;
   const falseStop = rng.chance(FALSE_STOP_CHANCE);
   const extra = falseStop ? FALSE_STOP_EXTRA_MIN + rng.next() * (FALSE_STOP_EXTRA_MAX - FALSE_STOP_EXTRA_MIN) : 0;
-  return { delay, floors, falseStop, extra, wait: delay + floors * FLOOR_TIME + extra };
+  const wait = delay + floors * FLOOR_TIME + extra;
+  return { delay, floors, falseStop, extra, wait, darks: darkSchedule(seed, index, wait, depth) };
 }
 
-function blinkInterval(seed: string, callIndex: number, n: number): number {
-  return BLINK_INTERVAL_MIN + makeRng(seed).fork(`call:${callIndex}:blink:${n}`).next() * (BLINK_INTERVAL_MAX - BLINK_INTERVAL_MIN);
+/**
+ * The lights of one wait, laid out when the car is called, from the run's seed alone. The last dark
+ * stretch is the blackout: BLACKOUT_MIN..MAX seconds (less on the first floor), ending exactly when the
+ * car arrives, after a BLACKOUT_WARNING warning. Before it, blinks of BLINK_LADDER lengths, each longer
+ * than the last, with lit gaps that shrink toward the blackout. As many blinks as fit after
+ * BLINK_FIRST_AFTER (a short wait gets fewer, never no blackout); spare time stretches the gaps
+ * and delays the first blink.
+ * Every wait draws the same seven numbers, whatever fits.
+ */
+export function darkSchedule(seed: string, index: number, wait: number, depth: number): DarkStretch[] {
+  const rng = makeRng(seed).fork(`call:${index}:dark`);
+  const [lo, hi] = depth <= 1 ? [BLACKOUT_FIRST_MIN, BLACKOUT_FIRST_MAX] : [BLACKOUT_MIN, BLACKOUT_MAX];
+  const black = Math.min(lo + rng.next() * (hi - lo), Math.max(1, wait - BLACKOUT_WARNING));
+  const gaps = BLINK_GAPS.map(([a, b]) => a + rng.next() * (b - a));
+  // Of any spare time, this share (up to half) goes before the first blink, the rest into the gaps.
+  const lead = rng.next() * 0.5;
+  const blackAt = wait - black;
+  const room = blackAt - BLACKOUT_WARNING - BLINK_FIRST_AFTER;
+  const need = (n: number): number => {
+    let s = 0;
+    for (let k = 0; k < n; k++) s += (BLINK_LADDER[k] ?? 0) + BLINK_WARNING + (gaps[k] ?? 0);
+    return s;
+  };
+  let n = BLINK_LADDER.length;
+  while (n > 0 && need(n) > room + 1e-9) n--;
+  // Spare time stretches the gaps evenly (each capped), so a long wait keeps its blinks spread out.
+  const spare = room - need(n);
+  const used = gaps.slice(0, n);
+  const stretch = n > 0 ? (spare * (1 - lead)) / n : 0;
+  const gap = used.map((g) => Math.min(BLINK_GAP_STRETCH_MAX, g + stretch));
+  const out: DarkStretch[] = [{ at: blackAt, len: black, warn: BLACKOUT_WARNING, blackout: true }];
+  let cursor = blackAt - BLACKOUT_WARNING;
+  // Backwards from the blackout: the longest blink nearest it.
+  for (let k = n - 1; k >= 0; k--) {
+    const len = BLINK_LADDER[k] ?? 1;
+    const end = cursor - (gap[n - 1 - k] ?? 0);
+    const at = end - len;
+    out.unshift({ at, len, warn: BLINK_WARNING, blackout: false });
+    cursor = at - BLINK_WARNING;
+  }
+  return out;
 }
 
 /** Readings closed at this depth are worth this many times their recorded value. */
@@ -317,6 +402,12 @@ export interface BlinkState {
   n: number;
   /** Run time this blink starts. */
   at: number;
+  /** Seconds it lasts (the blackout's is nominal: it ends when the car arrives). */
+  len: number;
+  /** Seconds of warning before `at`. */
+  warn: number;
+  /** The wait's last dark stretch: the blackout. */
+  blackout: boolean;
   announced: boolean;
   /** Run time it ends once started, else null. */
   endsAt: number | null;
@@ -395,9 +486,9 @@ export type RunEvent =
   | { type: 'indicator'; t: number; floorsAway: number; floor: number }
   | { type: 'falseStop'; t: number; extra: number }
   | { type: 'falseStopDoors'; t: number; open: boolean }
-  | { type: 'blinkSoon'; t: number; at: number }
-  | { type: 'blinkStart'; t: number }
-  | { type: 'blinkEnd'; t: number }
+  | { type: 'blinkSoon'; t: number; at: number; len: number; blackout: boolean }
+  | { type: 'blinkStart'; t: number; len: number; blackout: boolean }
+  | { type: 'blinkEnd'; t: number; blackout: boolean }
   | { type: 'carArrived'; t: number; wait: number }
   | { type: 'holdChanged'; t: number; held: boolean; holdLeft: number }
   | { type: 'bell'; t: number; bank: number; down: number; outcome: 'bank' | 'ride' | 'empty' }
@@ -461,6 +552,18 @@ export function doorsOpen(state: RunState): boolean {
 /** Whether every player is blind this tick (a blink is on). */
 export function blinking(state: RunState): boolean {
   return state.blink !== null && state.blink.endsAt !== null;
+}
+
+/** Whether the blackout (the wait's last, long dark) is on this tick. */
+export function blackedOut(state: RunState): boolean {
+  return blinking(state) && state.blink?.blackout === true;
+}
+
+/** The `n`-th dark stretch of a call as run state (unannounced), or null past the last. */
+function blinkOf(call: CallState, n: number): BlinkState | null {
+  const d = call.plan.darks[n];
+  if (!d) return null;
+  return { callIndex: call.index, n, at: call.at + d.at, len: d.len, warn: d.warn, blackout: d.blackout, announced: false, endsAt: null };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -615,29 +718,30 @@ function stepOnce(prev: RunState, inputs: readonly PlayerInput[], dt: number): R
   // ---- 1. Run rules.
   const activeAboard = (): RunPlayer[] => players.filter((p) => isActive(p) && p.aboard);
 
-  // Blinks run on their own clock: once announced, a blink always happens, even after the car arrives.
+  // Blinks run on their own clock: once announced, a blink always happens, even after the car arrives
+  // (the schedule ends each one before the blackout, so that does not happen). The blackout ends when
+  // the car arrives, on the tick its doors open.
   const stepBlink = (): void => {
     const b = s.blink;
     if (!b) return;
-    if (!b.announced && t >= b.at - BLINK_WARNING - EPS) {
+    if (!b.announced && t >= b.at - b.warn - EPS) {
       // While the car is coming, or later if it was already scheduled to be announced before arrival.
       if (s.phase !== 'coming') {
         s.blink = null;
         return;
       }
       s.blink = { ...b, announced: true };
-      events.push({ type: 'blinkSoon', t, at: b.at });
+      events.push({ type: 'blinkSoon', t, at: b.at, len: b.len, blackout: b.blackout });
     }
     const c = s.blink;
     if (c && c.announced && c.endsAt === null && t >= c.at - EPS) {
-      s.blink = { ...c, endsAt: t + BLINK_TIME };
-      events.push({ type: 'blinkStart', t });
+      s.blink = { ...c, endsAt: t + c.len };
+      events.push({ type: 'blinkStart', t, len: c.len, blackout: c.blackout });
     }
     const d = s.blink;
-    if (d && d.endsAt !== null && t >= d.endsAt - EPS) {
-      events.push({ type: 'blinkEnd', t });
-      const n = d.n + 1;
-      s.blink = s.phase === 'coming' ? { callIndex: d.callIndex, n, at: d.at + blinkInterval(s.seed, d.callIndex, n), announced: false, endsAt: null } : null;
+    if (d && d.endsAt !== null && (d.blackout ? s.phase !== 'coming' : t >= d.endsAt - EPS)) {
+      events.push({ type: 'blinkEnd', t, blackout: d.blackout });
+      s.blink = s.phase === 'coming' && s.call ? blinkOf(s.call, d.n + 1) : null;
     }
   };
 
@@ -673,7 +777,7 @@ function stepOnce(prev: RunState, inputs: readonly PlayerInput[], dt: number): R
       const caller = players.find((p) => isActive(p) && !p.aboard && inp(p).call === true && Math.hypot(p.body.x - car.doorX, p.body.z - car.doorZ) <= CALL_REACH + EPS && p.body.level === car.level);
       if (caller) {
         const index = s.calls;
-        const plan = callPlan(s.seed, index, s.lastFloors);
+        const plan = callPlan(s.seed, index, s.lastFloors, s.depth);
         s.calls = index + 1;
         s.lastFloors = plan.floors;
         s.call = { index, at: t, plan, floorsAway: plan.floors, nextAt: t + plan.delay + FLOOR_TIME, stopUntil: null, stopDoorsOpened: false, stopDoorsClosed: false };
@@ -684,7 +788,7 @@ function stepOnce(prev: RunState, inputs: readonly PlayerInput[], dt: number): R
           s.orderly = { ...s.orderly, mode: 'hunting', replanIn: 0 };
           events.push({ type: 'startedHunting', t });
         }
-        s.blink ={ callIndex: index, n: 0, at: t + blinkInterval(s.seed, index, 0), announced: false, endsAt: null };
+        s.blink = blinkOf(s.call, 0);
         events.push({ type: 'called', t, playerId: caller.id, floorsAway: plan.floors, at: caller.body });
         events.push({ type: 'indicator', t, floorsAway: plan.floors, floor: s.depth - plan.floors });
       }
@@ -858,7 +962,9 @@ function stepOnce(prev: RunState, inputs: readonly PlayerInput[], dt: number): R
       views.push({ id: LURE_ID, body: { x: lx, z: lz, level: s.plan.landing.level, y: car.floorY }, eye: 1.6, yaw: 0, pitch: 0, hFovDeg: 1, vFovDeg: 1, active: true, blind: true });
     }
     const before = s.orderly;
-    const res = stepEntity(s.plan, before, views, dt);
+    // In the blackout it runs its prey down: no creeping up on the still (that is for recording it,
+    // and nobody can see to time a turn in the dark), at BLACKOUT_HUNT_SPEED.
+    const res = stepEntity(s.plan, before, views, dt, blackedOut(s) ? { speed: BLACKOUT_HUNT_SPEED, creep: false } : {});
     let next = res.state;
     // Belt and braces: it can never end a tick in (or overlapping) the car.
     if (rectDistance(car.rect, next.body.x, next.body.z) < ORDERLY_RADIUS - 1e-3 && next.body.level === car.level) next = { ...next, body: before.body, moving: false, speed: 0 };

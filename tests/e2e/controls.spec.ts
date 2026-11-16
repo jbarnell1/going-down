@@ -1,5 +1,65 @@
 import { expect, test } from '@playwright/test';
 
+// Under test automation the game never takes the browser's real pointer lock (on Windows that
+// confines the real cursor of whoever owns the machine). A stand-in lock behaves the same for the
+// game: clicking in locks it, the mouse turns the view, Esc lets go and opens the settings.
+test('the mouse lock is a stand-in under automation, and mouse-look still turns the view', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  // Count every call of the browser's real requestPointerLock: there must be none.
+  await page.addInitScript(() => {
+    const w = window as any;
+    w.__realLockCalls = 0;
+    const real = Element.prototype.requestPointerLock;
+    Element.prototype.requestPointerLock = function (this: Element, ...args: unknown[]) {
+      w.__realLockCalls++;
+      return (real as (...a: unknown[]) => unknown).apply(this, args);
+    } as typeof real;
+  });
+  await page.goto('/?seed=alpha&entity=0');
+  await page.waitForFunction(() => (window as any).__gd?.ready === true);
+  const lock = () => page.evaluate(() => (window as any).__gd.pointerLock() as { standIn: boolean; locked: boolean; real: boolean });
+  expect(await lock()).toEqual({ standIn: true, locked: false, real: false });
+  await page.click('#start');
+  await page.waitForFunction(() => (window as any).__gd.pointerLock().locked === true, undefined, { timeout: 3000 });
+  expect(await lock()).toEqual({ standIn: true, locked: true, real: false });
+  await expect(page.locator('#start')).toBeHidden();
+
+  const yaw = () => page.evaluate(() => (window as any).__gd.player().yaw as number);
+  const y0 = await yaw();
+  await page.mouse.move(640, 360);
+  await page.mouse.move(840, 360, { steps: 10 });
+  await page.waitForTimeout(150);
+  const y1 = await yaw();
+  expect(Math.abs(y1 - y0)).toBeGreaterThan(5);
+
+  // Esc lets go, as the real lock does, and the settings panel opens in place of the start screen.
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => (window as any).__gd.pointerLock().locked === false, undefined, { timeout: 3000 });
+  expect(await page.evaluate(() => (window as any).__gd.settings.isOpen())).toBe(true);
+  // Unlocked, the mouse no longer turns the view.
+  const y2 = await yaw();
+  await page.mouse.move(440, 360, { steps: 10 });
+  await page.waitForTimeout(150);
+  expect(await yaw()).toBeCloseTo(y2, 3);
+  expect((await lock()).real).toBe(false);
+  expect(await page.evaluate(() => (window as any).__realLockCalls)).toBe(0);
+  expect(errors).toEqual([]);
+});
+
+// The browser's real lock, on purpose. Never in the default run: on Windows it confines the real
+// cursor. Run it alone with GD_REALLOCK=1.
+test('the real pointer lock with ?reallock=1 (only with GD_REALLOCK=1)', async ({ page }) => {
+  test.skip(process.env.GD_REALLOCK !== '1', 'takes the real mouse; run deliberately with GD_REALLOCK=1');
+  await page.goto('/?seed=alpha&entity=0&reallock=1');
+  await page.waitForFunction(() => (window as any).__gd?.ready === true);
+  expect((await page.evaluate(() => (window as any).__gd.pointerLock())).standIn).toBe(false);
+  await page.click('#start');
+  await page.waitForFunction(() => (window as any).__gd.pointerLock().real === true, undefined, { timeout: 3000 });
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => (window as any).__gd.pointerLock().real === false, undefined, { timeout: 3000 });
+});
+
 // The walk test drives the game through auto-walk. This one presses real keys, because the
 // owner tests by hand on the live link and nothing else proves the controls are wired up.
 test('W walks forward, C creeps, and a wall stops you', async ({ page }) => {

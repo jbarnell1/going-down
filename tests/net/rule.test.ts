@@ -43,7 +43,9 @@ describe('the rule under delay: 200 sessions of 60 s, every frame of every clien
         `catch-hold ticks ${sum(lossy, (r) => r.catchHoldTicks)}, forced ${sum(lossy, (r) => r.catchesForced)}; ` +
         `taken latches ${sum(lossy, (r) => r.latches)} (false ${sum(lossy, (r) => r.falseLatches)}), catches latched first ${sum(lossy, (r) => r.latchedCatches)}, frames not blind after a latch ${sum(lossy, (r) => r.latchGaps.length)}`,
       `  4. blinks ${sum(lossy, (r) => r.blinks)}, blind frames checked ${sum(lossy, (r) => r.blinkFramesChecked)}, lit ${sum(lossy, (r) => r.blinkViolations.length)}, ` +
-        `extra darkness per blink per client ${mean(extra).toFixed(2)} s (max ${Math.max(...extra).toFixed(2)} s) on a 1.0 s blink`,
+        `extra darkness per blink per client ${mean(extra).toFixed(2)} s (max ${Math.max(...extra).toFixed(2)} s); ` +
+        `blackouts ${sum(lossy, (r) => r.blackouts)} in ${lossy.filter((r) => r.blackouts > 0).length} sessions, blind frames checked in them ${sum(lossy, (r) => r.blackoutFramesChecked)}; ` +
+        `dark frames ${sum(lossy, (r) => r.darkFrames)}, the Orderly drawn on any ${sum(lossy, (r) => r.darkDrawn.length)}`,
       `  6. drawn players checked ${sum(lossy, (r) => r.posChecks)}, largest error ${Math.max(...lossy.map((r) => r.maxPosErr)).toFixed(3)} m; 5. events checked ${sum(lossy, (r) => r.eventsChecked)}, disagreements ${sum(lossy, (r) => r.disagreements.length)}`,
     ].join('\n'),
   );
@@ -97,6 +99,15 @@ describe('the rule under delay: 200 sessions of 60 s, every frame of every clien
     expect(all(lossy, (r) => r.blinkViolations).slice(0, 10)).toEqual([]);
     expect(sum(lossy, (r) => r.blinks)).toBeGreaterThan(300);
     expect(mean(extra)).toBeLessThan(1.0);
+  });
+
+  it('4. the blackout: the long dark holds the same rule on every screen, and no dark frame draws the Orderly', () => {
+    // Every session's crew calls the car at once, so most waits end in their blackout inside the 60 s.
+    expect(lossy.filter((r) => r.blackouts > 0).length).toBeGreaterThan(SESSIONS * 0.6);
+    expect(sum(lossy, (r) => r.blackoutFramesChecked)).toBeGreaterThan(50_000);
+    expect(all(lossy, (r) => r.darkDrawn).slice(0, 10)).toEqual([]);
+    expect(all(zero, (r) => r.darkDrawn).slice(0, 10)).toEqual([]);
+    expect(sum(lossy, (r) => r.darkFrames)).toBeGreaterThan(50_000);
   });
 
   it('5 and 6. events exactly once and in order, and at the end every client agrees with the host', () => {

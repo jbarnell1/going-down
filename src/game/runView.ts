@@ -16,6 +16,8 @@ export interface CallView {
   falseStop: boolean;
   /** Seconds until it arrives (host only; null when not known). */
   eta: number | null;
+  /** The wait's dark stretches in run time, the last the blackout (host only; null when not known). */
+  darks: { at: number; len: number; warn: number; blackout: boolean }[] | null;
 }
 
 export interface RunView {
@@ -59,7 +61,15 @@ export function hostView(host: NetHost): RunView {
     ...pick(w),
     t: s.t,
     calls: s.calls,
-    call: c ? { floorsAway: c.floorsAway, floors: c.plan.floors, falseStop: c.stopUntil !== null, eta: s.phase === 'coming' ? Math.max(0, c.at + c.plan.wait - s.t) : null } : null,
+    call: c
+      ? {
+          floorsAway: c.floorsAway,
+          floors: c.plan.floors,
+          falseStop: c.stopUntil !== null,
+          eta: s.phase === 'coming' ? Math.max(0, c.at + c.plan.wait - s.t) : null,
+          darks: c.plan.darks.map((d) => ({ ...d, at: c.at + d.at })),
+        }
+      : null,
     orderly: { ...w.orderly, moving: s.orderly.moving },
   };
 }
@@ -97,7 +107,7 @@ export function clientView(client: NetClient, calls: CallTracker): RunView | nul
     ...pick(w),
     t: w.ht,
     calls: calls.calls,
-    call: w.floorsAway === null ? null : { floorsAway: w.floorsAway, floors: Math.max(calls.floors, w.floorsAway), falseStop: calls.falseStop(w.ht), eta: null },
+    call: w.floorsAway === null ? null : { floorsAway: w.floorsAway, floors: Math.max(calls.floors, w.floorsAway), falseStop: calls.falseStop(w.ht), eta: null, darks: null },
     orderly: { ...w.orderly, moving: w.orderly.speed > 0 && !w.orderly.frozen },
   };
 }

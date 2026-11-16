@@ -1,6 +1,8 @@
 // Keyboard, mouse and touch. Mouse look only while the pointer is locked; the click-to-start
 // overlay asks for the lock. On a phone there is no lock: the left thumb is a walk stick and the
 // right thumb drags to look. Nothing else in the game waits on the lock, so tests can drive it headless.
+// The lock itself goes through pointerLock.ts: under test automation a stand-in that never takes the
+// real cursor (Chrome on Windows would confine the machine owner's mouse to the hidden test window).
 //
 // The instrument is raised only while it is held: the right mouse button or F on a computer. On a
 // phone a round hold-button sits under the right thumb; a press on it raises the instrument AND
@@ -12,6 +14,8 @@
 // browser granted a keyboard lock (then the page gets Ctrl+W instead of the browser). On a phone the
 // walk stick sprints when pushed to its rim (the outer 15% of its travel), and a small toggle button
 // above the stick creeps.
+
+import { makePointerLock, type PointerLock } from './pointerLock';
 
 /** How the player wants to move this frame, in their own frame of reference. */
 export interface MoveIntent {
@@ -39,6 +43,8 @@ export class Input {
   private dx = 0;
   private dy = 0;
   locked = false;
+  /** The mouse lock: the browser's, or a stand-in under test automation (see pointerLock.ts). */
+  readonly lock: PointerLock = makePointerLock();
   /** True once a finger has been used. From then on the overlay never asks for a pointer lock. */
   touch = false;
 
@@ -91,7 +97,7 @@ export class Input {
     overlay.addEventListener('click', () => this.relock());
     document.addEventListener('pointerlockchange', () => {
       const was = this.locked;
-      this.locked = document.pointerLockElement === this.canvas;
+      this.locked = this.lock.element() === this.canvas;
       this.overlay.hidden = this.locked || (was && this.onUnlock?.() === true);
       if (!this.locked) this.keys.clear();
     });
@@ -257,11 +263,12 @@ export class Input {
   /** Asks for the mouse (desktop only; a refusal is not an error). */
   relock(): void {
     if (this.touch) return;
-    try {
-      // Some browsers return a promise that rejects when the lock is refused; that is not an error.
-      const req = this.canvas.requestPointerLock() as unknown;
-      if (req instanceof Promise) req.catch(() => undefined);
-    } catch { /* no pointer lock on this device */ }
+    this.lock.request(this.canvas);
+  }
+
+  /** Gives the mouse back. */
+  unlock(): void {
+    this.lock.exit();
   }
 
   /** Hides the overlay without a pointer lock (tests, and anyone who just wants to watch). */

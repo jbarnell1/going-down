@@ -16,13 +16,17 @@ export class AutoWalk {
   private resolve: (() => void) | null = null;
   private reject: ((e: Error) => void) | null = null;
   private stuck = 0;
+  /** Metres per second at the player's real pace, or null for the fast test walk. */
+  private pace: number | null = null;
 
   get active(): boolean {
     return this.walk !== null;
   }
 
-  start(plan: FloorPlan, player: Player, to: Pos): Promise<void> {
+  /** Walks to `to`: fast (several fixed steps a frame), or at `pace` m/s in real time if given. */
+  start(plan: FloorPlan, player: Player, to: Pos, pace: number | null = null): Promise<void> {
     this.cancel('replaced by a new walk');
+    this.pace = pace;
     const from = cellOf(plan, player.body);
     const path = findPath(plan, from, to);
     if (!path) return Promise.reject(new Error(`no path from L${from.level}(${from.x},${from.y}) to L${to.level}(${to.x},${to.y})`));
@@ -41,11 +45,13 @@ export class AutoWalk {
     this.reject = null;
   }
 
-  /** Advances the walk by one frame's worth of fixed steps. */
-  tick(plan: FloorPlan, player: Player): void {
+  /** Advances the walk by one frame: its fixed steps, or `dt` seconds at its real pace. */
+  tick(plan: FloorPlan, player: Player, dt = STEP_DT): void {
     const walk = this.walk;
     if (!walk) return;
-    for (let i = 0; i < STEPS_PER_FRAME; i++) {
+    const steps = this.pace === null ? STEPS_PER_FRAME : Math.max(1, Math.ceil(dt / STEP_DT));
+    const stepLen = this.pace === null ? WALK_SPEED * STEP_DT : (this.pace * dt) / steps;
+    for (let i = 0; i < steps; i++) {
       if (pathDone(plan, walk, player.body)) {
         const res = this.resolve;
         this.walk = null;
@@ -55,7 +61,7 @@ export class AutoWalk {
         return;
       }
       const before = player.body;
-      player.body = stepPathWalk(plan, walk, before, WALK_SPEED * STEP_DT, PLAYER_RADIUS);
+      player.body = stepPathWalk(plan, walk, before, stepLen, PLAYER_RADIUS);
       const mx = player.body.x - before.x;
       const mz = player.body.z - before.z;
       if (Math.hypot(mx, mz) > 1e-4) {

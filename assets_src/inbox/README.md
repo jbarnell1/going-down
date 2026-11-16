@@ -19,12 +19,27 @@ The figure in the game is built by script, which caps how organic it can look. A
 
 **Licence to check before generating:** on free plans these services usually publish what you make under a share-with-credit licence (Meshy's free plan has been CC BY 4.0), while paid plans let you keep it private. Either works for this project, which is public; a credit line is added if one is required. Write the service, the plan and the date in a file `orderly-sculpt.txt` beside the model.
 
-## 2. Motion-captured movement (Mixamo, free with an Adobe account)
+## 2. Motion-captured movement for the crewmates (Mixamo, free with an Adobe account)
 
-1. Sign in at mixamo.com and upload the character: use `public/assets/entities/orderly.glb` converted to FBX (the loop can make `assets_src/inbox/orderly-for-mixamo.fbx` on request), or the sculpt from step 1 once it exists. Place the markers when it asks; it rigs the figure itself.
-2. Search for and download a handful of clips. Useful searches: `zombie walk`, `injured walk`, `mutant walk`, `sneak` or `crouched walk`, `breathing idle`, `looking around`, `reaching`, `crawl`, `stand to crouch`. Pick slow, wrong-looking ones over athletic ones.
-3. Download settings: format FBX Binary; the FIRST clip "With Skin", all later clips "Without Skin"; 30 frames per second; no keyframe reduction; tick "In Place" for walks when the option appears.
-4. Save them as `assets_src/inbox/mixamo/<what-it-is>.fbx`, for example `mixamo/injured-walk.fbx`.
+This is the one that pays off most: players watch each other move all the time, and today crewmates are boxes. (The Orderly is only ever seen standing still, so its movement matters far less.)
+
+1. Create a free Adobe account and sign in at mixamo.com. No download or payment is needed.
+2. Click "Upload Character" and choose `assets_src/inbox/convict-for-mixamo.fbx` (the loop builds this file; if the upload is refused, use `convict-for-mixamo.zip`). Place the markers on chin, wrists, elbows, knees and groin when it asks. For "Skeleton LOD" choose **No Fingers**. It rigs the figure itself; check the preview walks without the arms or legs tearing.
+3. Search for and download these clips (names vary; pick the plainest, least athletic version of each):
+   - `idle` (a tired standing idle, "breathing idle")
+   - `walking`
+   - `running` (a jog or run, not a sprint start)
+   - `sneak walk` or `crouched walking`
+   - `crouch idle`
+   - `looking behind` or `look over shoulder`
+   - `button pushing` (calling the lift)
+   - `falling back death` or `being grabbed` (taken by the Orderly)
+   - `crawling` (a downed player)
+   - `terrified` or `cowering` (optional)
+4. Download settings: format **FBX Binary (.fbx)**; the FIRST clip **With Skin**, every later clip **Without Skin**; 30 frames per second; keyframe reduction **none**; tick **In Place** for walking, running, sneaking and crawling when the option appears.
+5. Save them as `assets_src/inbox/mixamo/<what-it-is>.fbx`, for example `mixamo/walking.fbx`, `mixamo/idle.fbx`. The loop picks them up, trims and loops them, and bakes them into the game's crewmate model.
+
+For the Orderly, one clip is worth getting later with the same account: a slow two-handed `reaching` or `zombie grab`, for the being-caught sequence. It needs an upload file of its own, which the loop will make when that sequence is built.
 
 **Licence:** Mixamo's clips may be used in a game, including a commercial one, but the raw files may not be handed on by themselves. That is why this folder stays out of git: only the finished game model with the movement baked in is published.
 

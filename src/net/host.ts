@@ -762,7 +762,7 @@ export class NetHost {
       bellLeft: s.bellLeft,
       holdLeft: s.holdLeft,
       held: s.held,
-      blink: s.blink ? { at: s.blink.at, announced: s.blink.announced, endsAt: s.blink.endsAt } : null,
+      blink: s.blink ? { at: s.blink.at, len: s.blink.len, warn: s.blink.warn, blackout: s.blink.blackout, announced: s.blink.announced, endsAt: s.blink.endsAt } : null,
       orderly: orderlySnap(s.orderly),
       players: s.players.map((rp) => {
         const p = this.players.get(rp.id);

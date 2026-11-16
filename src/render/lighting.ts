@@ -66,3 +66,17 @@ export function applyLighting(scene: THREE.Scene, gain: number, level: number, b
   if (scene.background instanceof THREE.Color) scene.background.copy(bg);
   if (scene.fog) scene.fog.color.copy(bg);
 }
+
+/**
+ * The emergency lighting's level (0..1) `seconds` after the lights went out: the battery lights take
+ * a moment, stutter, then hold. So a 1 s blink stays almost fully dark, and anything longer gets them.
+ */
+export const EMERGENCY_DELAY = 0.8;
+export const EMERGENCY_RISE = 0.8;
+export function emergencyLevel(seconds: number): number {
+  if (seconds < EMERGENCY_DELAY) return 0;
+  const k = Math.min(1, (seconds - EMERGENCY_DELAY) / EMERGENCY_RISE);
+  if (k >= 1) return 1;
+  // Two stutters on the way up.
+  return Math.floor(seconds * 12) % 3 === 0 ? k * 0.25 : k;
+}

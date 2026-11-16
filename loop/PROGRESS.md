@@ -4,11 +4,11 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 17 of 35.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 24.
-- **Now:** nothing in progress
-- **Last CI result seen:** passed on a117efd
-- **Answers applied up to:** 2026-11-16T12:10:00Z
+- **Gates passed:** 7 of 14. **Tasks done:** 20 of 37.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 28.
+- **Now:** X1 Trial: one Clinic floor in Godot. An agent is building one Clinic floor in the Godot engine, in its own folder, to compare lighting, browser play and testing with what we have
+- **Last CI result seen:** passed on c9e549d
+- **Answers applied up to:** 2026-11-16T15:51:27.242Z
 
 ## Tasks
 
@@ -57,35 +57,45 @@
 - [x] **T7c** `done` Sprint, creep and stamina
   - Why: Your request: Shift sprints, a creep key creeps, and the Orderly is faster than a walk. With limited stamina you can stay ahead by mixing running and walking, but not by much.
   - Evidence: Shift sprints, C creeps, and the Orderly now hunts a little faster than you walk (3.7 against 3.0; sprint is 5.0 for five seconds). No meter: you breathe harder and the edges of the view darken as you tire. A player mixing running and walking stays ahead by about 10 m a minute; a walker is caught up. On a phone the stick's outer edge sprints. The host owns everyone's stamina, so nobody's browser can cheat it. It also closed a fairness hole: a remote player's screen now cuts to black at the instant a grab is decided, so nobody is taken after seeing the Orderly. I re-ran everything myself (137 logic tests, 49 browser tests) and broke the black-cut and the host's stamina check on purpose; both turned their tests red.
-- [ ] **T2w** `todo` Browser tests must not grab the owner's mouse
+- [x] **T2w** `done` Browser tests must not grab the owner's mouse
   - Why: While the tests ran, the real mouse was confined to a small corner of the left monitor
-  - To do: Cause: the headless test browsers take pointer lock, and Chrome on Windows then confines the real cursor to the test window's rectangle (seen: 312 x 675 at the top-left). Fix so it cannot happen: in the Playwright setup replace requestPointerLock with a stand-in for tests (or give the game a test switch), keep one deliberate pointer-lock test out of the default run. Until then a watcher frees the cursor during test runs.
-- [ ] **T6e** `todo` Blinks that grow into a blackout
+  - Evidence: The game's tests can no longer confine your mouse: under test automation the game uses a stand-in for mouse capture, and a test asserts the real capture is never requested. During my own full run of 52 browser tests a watcher logged zero grabs.
+- [x] **T6e** `done` Blinks that grow into a blackout
   - Why: The owner wants the wait for the car to build: each blink longer than the last, ending in a long dark stretch that drives the crew away from the lift, then a mad dash back with the Orderly after them
-  - To do: Owner's words (2026-11-16): 'The blinks should get longer and longer as the players wait for the elevator, like 15 seconds for a chase to get them away from the elevator and then the players have to make a mad dash back to the elevator with the orderly chasing them.'
-  - To do: First numbers to try (tune by simulation, in src/sim/run.ts): blinks during a wait run 1, 1.5, 2.5, 4, 6 s with shorter gaps each time; the last one before the car is the blackout, 12 to 15 s, timed to end as the car arrives. Today: every 5 to 9 s, always 1 s, wait 25 to 55 s.
-  - To do: Needs with it: (1) emergency floor strips so the crew can find their way in the long dark, while the Orderly stays unseen (heard, not shown: a watched Orderly never moves, so the dark must really hide it); (2) the announcer warns before the blackout so it is never a surprise death; (3) the car waits long enough for a dash back (boarding is 20 s plus holding the door 15 s; check it fits a 40 m run); (4) simulate hundreds of crews: a careful crew that runs, then looks back once the lights return, usually survives; a crew that stands by the lift through the blackout is usually caught; report both rates; (5) fair on every screen in a crew, like the short blinks.
-- [ ] **T6d** `todo` Even voice loudness and thirty more announcer lines
-  - Why: The owner found the voice much quieter after being caught than in the car, and the same lines get tiring
-  - To do: Cause found: recordings are all at the same loudness (-16 LUFS); the game plays the landing speaker at as little as a tenth of the in-car level when you are far from it (VOICE.farMin 0.08 x farLevel 0.75 vs closeLevel 0.6 in src/game/announcer.ts). Fix: floor the far level near 0.55, soften the far low-pass floor to about 1400 Hz, put a compressor on the voice bus, and play taken/wipe/banked lines at the close level wherever the listener is.
-  - To do: Thirty drafted lines wait in .local/voice-new-lines.json (3,086 characters per voice). Merge into assets_src/voice/lines.json with the usual settings, generate ONE take each for Bella and Brian if the script allows (else three takes: about 18,500 characters, total about 31,500 of the 50,000 cap), publish, check the announcer never repeats a line back to back.
+  - Evidence: While you wait for the car the blinks now grow (1, 1.5, 2.5, 4, 6 seconds) and end in a blackout: 9 to 10 seconds on a run's first floor, 12 to 15 deeper, after a 3-second warning and the announcer's line. Amber strips along the floor and red glows over doors let you run; the Orderly is never drawn in the dark, only heard. The lights return as the car arrives. In 300 simulated waits per depth a crew that stays by the lift always loses someone, and a crew that runs and comes back loses someone 2 to 4 percent of the time and nearly always makes the car. I re-ran everything myself (143 logic tests, 52 browser tests) and broke it on purpose twice: drawing the Orderly in the dark and shrinking the blackout to one second both turned tests red.
 - [ ] **T7d** `todo` Playing across two home networks
   - Why: Friends at home need to join the host; some home routers block direct browser-to-browser links unless a relay helps
-- [ ] **T7b** `todo` Bot crewmates and the test panel (G14)
-  - Why: So you can test a full crew alone on the live link.
-- [ ] **T8** `todo` Going down, cameras and the wipe (G8, G9)
-  - Why: Being caught puts you on the cameras, and a full wipe ends the run.
-  - To do: Owner asked (2026-11-16): an animated being-caught sequence with noise. The Orderly's reach filling the view, the tape tearing, a loud burst; then the downed view. Later is fine, after more of the game is settled.
-- [ ] **T7e** `todo` Better-looking crewmates and readable name tags
-  - Why: Crewmates are plain boxes and their names cannot be read from a few metres
-- [x] **T14a** `done` Shrink the downloaded props for the game
-  - Why: Rooms need beds, chairs, trolleys and clutter to feel like a place and to hide behind; the pieces must be tiny so the game stays fast
-  - Evidence: 26 hospital props are ready for the game: bed, gurney, wheelchair, crutches, chairs, bench, desks, cabinets, shelves, sink, toilet, bins, lights, extinguisher, wet-floor sign, camera, duct and pipes. All 26 together are 0.7 MB and about 9,300 triangles, with flat colours or one tiny picture each. I checked the file sizes, the list against the files, and looked at the sheets. Not yet seen inside the running game; placing them in rooms is the room-dressing task.
+  - To do: Owner's answer (2026-11-16): 'Every one in their own house'. So every player joins over the internet from a different home network, and friends use the PUBLIC play link, not the tailnet hub. This is now needed for game night.
+  - To do: Plan: (1) a connection test in the lobby that says plainly whether a direct link to the host works and what kind of router each side has, plus a short note the owner can send a friend to try it this week; (2) a relay (TURN) path for the pairs that cannot link directly. The public build is a static site in a public repo, so the relay's secret cannot live in it: use a provider that hands out short-lived credentials through a tiny free hosted function the owner deploys, or a free-tier static credential that is quota-limited. Research current free offerings first, then give the owner exact sign-up steps on the Questions page. (3) Also warn in the lobby that the host must keep the game tab in front (a background tab stalls the run).
+  - To do: Owner (2026-11-16): 'We can definitely run a server on either mo's pc or the homelab pc... server should just be responsible for handling client updates and keeping everyone in sync.' This changes the plan: the game's host logic already runs without a browser (it does in the tests), so a small always-on game server on the lab box can host every run. Friends then connect to it, nobody's router has to accept a direct link, no relay account is needed, and the host's tab going to the background no longer stalls the run. Open point: friends are outside the tailnet, so the server needs one public door; that choice is the owner's (question server-door).
 - [ ] **T14** `todo` Dress the Clinic
   - Why: Beds, trolleys, curtains, signs and grime, so rooms stop being empty boxes. Props built in Blender, textures made with Gemini inside the art budget.
   - To do: Owner's rule: downsample every prop and texture before it goes in the game. Low triangle counts, small textures; the tape look hides detail.
   - To do: Props are in tools/props/: kenney-furniture-kit/x (glb), quaternius-house-interior/FBX, polyhaven/<id> (1k gltf, heavy: decimate hard and shrink textures to 256 or less). Hashes and LICENCE.txt in each folder; add credits to CREDITS.md.
   - To do: Props are built: public/assets/props/*.glb + manifest.json (name, size, mount floor/wall/ceiling, front faces +Z). Untested in three.js: vertex colours (COLOR_0 needs vertexColors on the material), linear samplers (set NearestFilter), double-sided materials, KHR_materials_specular. Wall lamp reads poorly; consider dropping it.
+  - To do: Owner (2026-11-16): 'When do we work on the dynamic lighting and textures for the map? I wonder if one side of the hospital is more normal and one side is more corrupted.' Plan: every room and corridor gets a corruption value from the seed, low near the lift and high toward where the Orderly starts. It drives which wall/floor textures and stains are used, how many props are overturned, and the lights: steady and bright on the clean side, dimmer, flickering and some dead on the corrupted side. It doubles as a way to know which way the lift is.
+- [x] **T6d** `done` Even voice loudness and thirty more announcer lines
+  - Why: The owner found the voice much quieter after being caught than in the car, and the same lines get tiring
+  - Evidence: The announcer is now even: the landing speaker never drops below 55 percent of its near level, and the taken, wipe, banked, blackout and lights lines always play at full level wherever you are. 35 new lines for both voices (54 in all); each moment cycles through all its lines before repeating. One bug found in my re-run and fixed: the thank-you-for-calling line sometimes expired while queued behind two long lines. Checked by numbers and by putting the old level back to see the test fail; nobody has heard it yet.
+- [ ] **T7b** `todo` Bot crewmates and the test panel (G14)
+  - Why: So you can test a full crew alone on the live link.
+- [ ] **T8** `todo` Going down, cameras and the wipe (G8, G9)
+  - Why: Being caught puts you on the cameras, and a full wipe ends the run.
+  - To do: Owner asked (2026-11-16): an animated being-caught sequence with noise. The Orderly's reach filling the view, the tape tearing, a loud burst; then the downed view. Later is fine, after more of the game is settled.
+- [ ] **T7e** `doing` Better-looking crewmates and readable name tags
+  - Why: Crewmates are plain boxes and their names cannot be read from a few metres
+  - To do: Owner asked what they must do for assets (2026-11-16). Answer given: nothing is required; the one useful thing is Mixamo clips for the crewmates (free Adobe account). Steps are in assets_src/inbox/README.md section 2. The upload file assets_src/inbox/convict-for-mixamo.fbx is being built; tell the owner when it is judged and ready. Then: import their clips, trim/loop, bake into public/assets/entities/convict.glb, replace the box figures in src/render/crewFigures.ts, keep per-player tint and number patches.
+  - To do: Owner (2026-11-16): 'Don't forget to reference the North star, though, we talked about drawing faces on. Maybe keep the models the way they are but every person wears a mask with a screen on it that covers the full face and has whatever face they drew on it.' North Star H1 (Your face is everywhere): each player draws a face before the run; it appears on their avatar, the elevator monitor, the standee left where they fall (B6), and posters. The crewmate figure now wears a full-face screen mask with its own flat face_screen surface.
+  - To do: Mesh is FINAL (2,216 triangles, one closed symmetric mesh, T-pose, 1.78 m) after two blind judging rounds and the owner's steer: 'we don't need a lot of those fixes because the filter makes everything so grainy we get a lot for free... Mittens are perfectly acceptable.' Upload file: assets_src/inbox/convict-for-mixamo.fbx (fallback .zip). Waiting on the owner's Mixamo clips in assets_src/inbox/mixamo/.
+- [ ] **T7f** `todo` Draw your face
+  - Why: North Star H1: each player doodles a face before the run and it shows on the screen mask their crewmate figure wears, glowing in the dark, and on the lift monitor
+  - To do: A small drawing pad in the lobby (about 48 x 48, one colour on dark, a few brush sizes, clear, and a random doodle for the lazy); sent to the crew as a few hundred bytes; shown on the mask screen (glowing), the crew list, the lift monitor, and later the standee where a player falls and the posters. Bots get generated doodles. Remembered in the browser between runs.
+- [ ] **X1** `doing` Trial: one Clinic floor in Godot
+  - Why: The owner asked whether a game engine would save work and give better lighting. A five-hour trial answers with evidence before any decision to switch
+  - To do: Owner (2026-11-16): 'let's give it 5 hours to work alongside the other work that's currently being done.' Nothing in the game changes; the trial lives in spikes/godot-trial (not in git yet).
+- [x] **T14a** `done` Shrink the downloaded props for the game
+  - Why: Rooms need beds, chairs, trolleys and clutter to feel like a place and to hide behind; the pieces must be tiny so the game stays fast
+  - Evidence: 26 hospital props are ready for the game: bed, gurney, wheelchair, crutches, chairs, bench, desks, cabinets, shelves, sink, toilet, bins, lights, extinguisher, wet-floor sign, camera, duct and pipes. All 26 together are 0.7 MB and about 9,300 triangles, with flat colours or one tiny picture each. I checked the file sizes, the list against the files, and looked at the sheets. Not yet seen inside the running game; placing them in rooms is the room-dressing task.
 - [ ] **T6c** `todo` Elevator polish
   - Why: Let the doors close early once everyone is aboard, a bell warning the logic knows about, doors that take real time to close, and the phone's call and hold buttons tested.
 - [ ] **T9** `todo` The shadow trigger (G11)
@@ -111,6 +121,7 @@
   - To do: My reading, to confirm with the owner: (1) an anger level rises with noise (sprinting, calls, readings); (2) at the top, the announcer starts a count (about 20 s), lights go out, music starts; (3) when the count ends a search runs for a set time: the entity checks rooms and hiding places; anyone it finds is taken; moving faster than a creep costs health; (4) when the search time is up it goes back to its usual rule. Hiding places come from the props (lockers, under beds, cupboards, behind curtains).
   - To do: Research before building (one agent, written up in docs): how games make a searcher that feels smart and fair. Start from occupancy / probability maps (the searcher keeps a belief of where players could be and checks the likeliest spots), last-known-position search, a director that nudges it toward players without telling it exactly (Alien: Isolation's two-part design), and hiding-spot checks with tells so a hidden player can hold their breath. Must stay deterministic from the seed and simulate hundreds of rounds: good hiders usually live, runners die, nobody dies to pure luck.
   - To do: Fits the existing rules: the entity is heard before seen; the instrument could pay most for a reading taken from a hiding place while it searches nearby; a found player goes down rather than out, with something to do within seconds.
+  - To do: Owner (2026-11-16, later): 'Clicking the elevator should trigger a hiding sequence, so you have to survive one last time before making it to freedom.' So on this floor calling the car always starts one last count-and-search; the car arrives when the search ends. It is this floor's version of the Clinic's blackout while waiting.
 - [ ] **S** `todo` Stretch: voice that fades with distance, a second trait, the Tenant, a second place
   - Why: Only if every gate is green with time left.
   - To do: Owner (2026-11-16): 'multiple different types of entities once we program other levels'. Each new place brings its own entity with its own rule.
@@ -139,46 +150,48 @@
 - 2026-11-16: The North Star design document stays out of the public repository (question "publish-design-doc").
 - 2026-11-16: The Orderly: kept as it is for now and moved on, relying on behaviour, sound and the tape look for fear (question "orderly-next").
 - 2026-11-16: Playing across home networks: until the owner answers the new question, the default is to build a connection test page first and no relay.
+- 2026-11-16: Everyone plays from their own house (owner, 2026-11-16), so playing across home networks moves up to right after the blackout work, ahead of room dressing.
+- 2026-11-16: Until the owner answers server-door: build the game server and test it on the tailnet only; open nothing to the internet.
 
 ## Activity (newest first)
 
-- 2026-11-16 15:47Z Finished T7c: Sprint, creep and stamina.
-- 2026-11-16 15:45Z Added task T15: A floor where you have to hide.
-- 2026-11-16 15:33Z Added task T2w: Browser tests must not grab the owner's mouse.
-- 2026-11-16 15:31Z Progress page: the roadmap now shows what is happening now first, then finished work newest first; steps still to come are folded into one line you can open.
-- 2026-11-16 15:17Z Usage at 09:17: week's allowance 33% used across all models and 38% on Fable (it was 26% and 33% at 05:45). At this morning's pace that leaves roughly 30 more hours of this kind of work before Sunday's reset.
-- 2026-11-16 14:52Z Added task T9b: A second Orderly on deeper floors.
-- 2026-11-16 14:52Z Added task T6e: Blinks that grow into a blackout.
-- 2026-11-16 14:46Z Sprint and stamina passed my re-run of the logic tests, but one browser test failed about 1 time in 7: the Orderly did not move during a blink. I sent it back for the root cause; it is not accepted.
-- 2026-11-16 14:03Z Added task T6d: Even voice loudness and thirty more announcer lines.
-- 2026-11-16 13:48Z Sprint, creep and stamina are built but not yet accepted. The faster Orderly exposed a real fairness hole in multiplayer: a remote player could turn, see the Orderly frozen mid-reach, and still be taken a moment later. The agent is fixing it properly (the victim's own screen cuts to black at the instant the grab is decided) and was told not to loosen the test that caught it.
-- 2026-11-16 13:08Z Started T7c: Sprint, creep and stamina. An agent is adding sprint (Shift), creep (C) and stamina, and making the Orderly a little faster than a walk
-- 2026-11-16 13:07Z Took a default: Playing across home networks: until the owner answers the new question, the default is to build a connection test page first and no relay.
-- 2026-11-16 13:07Z Live build is now a117efd (tag good-11): playing together, the torn-gown Orderly, props and textures. Checked from the lab box on the game's port: the play page, the new model (1.4 MB) and the prop list all load, and the status page reports a117efd.
-- 2026-11-16 13:00Z Added task T7e: Better-looking crewmates and readable name tags.
-- 2026-11-16 13:00Z Added task T7d: Playing across two home networks.
-- 2026-11-16 13:00Z Finished T3b: The Orderly, third pass.
-- 2026-11-16 13:00Z Gate G7 (Four players share one world) is passed.
-- 2026-11-16 13:00Z Finished T7: Playing together.
-- 2026-11-16 12:36Z New pictures for T7: Playing together.
-- 2026-11-16 12:10Z Finished T14a: Shrink the downloaded props for the game.
-- 2026-11-16 12:06Z Gemini texture pipeline: 18 images made for about 72 cents (cap 3 dollars); 14 kept (cloth, skin, mask, floor, wall, ceiling, four signs, two stains). Checked by me: no key-shaped string anywhere in the project or the agent's transcript; old bone names, the five animations and their lengths unchanged.
-- 2026-11-16 12:06Z New pictures for T3b: The Orderly, third pass.
-- 2026-11-16 12:06Z Started T3b: The Orderly, third pass. New model is built and checked by re-import; it still has to be seen in the running game, which waits for the multiplayer agent to leave the folder
-- 2026-11-16 12:03Z New pictures for T3b: The Orderly, third pass.
-- 2026-11-16 12:03Z New pictures for T3b: The Orderly, third pass.
-- 2026-11-16 12:03Z New pictures for T3b: The Orderly, third pass.
-- 2026-11-16 12:03Z New pictures for T3b: The Orderly, third pass.
-- 2026-11-16 12:03Z New pictures for T3b: The Orderly, third pass.
-- 2026-11-16 12:03Z New pictures for T3b: The Orderly, third pass.
-- 2026-11-16 11:55Z Started T14a: Shrink the downloaded props for the game. An agent is cutting about two dozen downloaded props down to low detail and small pictures
-- 2026-11-16 11:55Z Added task T14a: Shrink the downloaded props for the game.
-- 2026-11-16 11:55Z Prop kits downloaded to an untracked tools folder (52 MB, all public domain): Kenney Furniture Kit (140 models), Quaternius House Interior (123 models), ten Poly Haven hospital props (wheelchair, crutches, medical box, fire extinguisher, wet-floor sign, desk, bin, ducts, pipes, camera). Checked: only model, picture and text files, nothing runnable. They get cut down and retextured in the room-dressing step.
-- 2026-11-16 11:49Z You approved downloading the public-domain prop kits and asked that everything be downsampled before it goes in the game, since the tape look hides fine detail. A small agent is fetching them into an untracked folder; they get simplified and retextured in the room-dressing step.
-- 2026-11-16 11:42Z Usage check at 5:45 am: one night of work has used 26% of the week's allowance across all models and 33% of the week's Fable allowance. It resets Sunday at noon. This conversation is also 83% full, which makes every loop step expensive.
-- 2026-11-16 11:42Z You said to do all three kinds of better assets. A drop folder with instructions is ready (assets_src/inbox): what to ask an AI 3D service for to get a sculpted Orderly, and which Mixamo clips to download. A list of free public-domain prop kits with file names and sizes is being put together for you to approve before anything is downloaded.
-- 2026-11-16 11:38Z Two agents are now working side by side on parts that cannot collide: one on multiplayer in the game's code, one on art (a Gemini texture pipeline and the Orderly's tattered gown). Only the first may build or run browser tests.
-- 2026-11-16 11:36Z Added task T14: Dress the Clinic.
-- 2026-11-16 11:36Z Added task T7c: Sprint, creep and stamina.
-- 2026-11-16 11:36Z You played it. In your words: the sound is good and lessens around corners and with distance; the wait for the elevator has real tension; the Orderly is kind of scary already and the thrill rose a lot when it chased you through the blinks. Decisions from that: keep the Orderly and rely on timing; give it tattered clothes; add sprinting with stamina and make it faster than a walk.
-- 2026-11-16 11:36Z Applied the owner's new answers.
+- 2026-11-16 17:52Z Finished T6d: Even voice loudness and thirty more announcer lines.
+- 2026-11-16 17:52Z Finished T6e: Blinks that grow into a blackout.
+- 2026-11-16 17:52Z Finished T2w: Browser tests must not grab the owner's mouse.
+- 2026-11-16 17:36Z Godot trial finished in 35 minutes: the lighting is clearly better, but a first visit took 27 to 34 seconds before the first frame against under half a second for the current game, and the download is about 11 MB against 0.3 MB. The trial's own recommendation is to stay for the browser game. The trial build is on the hub at /godot/ for the owner to try.
+- 2026-11-16 17:36Z New pictures for T7e: Better-looking crewmates and readable name tags.
+- 2026-11-16 17:26Z Crewmate figure, judging round two: both blind judges said the glowing drawn face is what the eye goes to and that the crew read as allies they could tell apart. The worst thing left is how the mask is mounted (it looks like a thin slab stuck on a bald head), then the mitten hands. Sent back for a deep monitor-style housing sealed to the face, bigger gloves with a cuff, softer folds and better joints.
+- 2026-11-16 17:25Z New pictures for T7e: Better-looking crewmates and readable name tags.
+- 2026-11-16 17:18Z A launch guard is now active: no agent can be started unless its brief quotes the relevant part of the North Star, or says why the design has nothing on it. Tested both ways: an unmarked brief was refused, a marked one went through.
+- 2026-11-16 17:15Z New guard against drifting from the design: every task must now be linked to the North Star mechanics it builds before it can start, and the tracker prints that part of the design at the start and again at the finish. A one-page index replaces re-reading the whole document.
+- 2026-11-16 17:14Z Linked X1 to the North Star: nothing in it (An engine trial the owner approved on 2026-11-16).
+- 2026-11-16 17:14Z Linked T7b to the North Star: nothing in it (The owner tests alone, so bots stand in for a crew (loop rules), not a North Star mechanic).
+- 2026-11-16 17:14Z Linked T7d to the North Star: nothing in it (Foundations: how friends connect; the owner said everyone plays from their own house).
+- 2026-11-16 17:14Z Linked T7c to the North Star: nothing in it (Sprint, creep and stamina were the owner's request on 2026-11-16, after playing).
+- 2026-11-16 17:14Z Linked T7 to the North Star: nothing in it (Networking is in the North Star's Foundations and fairness contract, not a numbered mechanic).
+- 2026-11-16 17:14Z Linked T2b to the North Star: nothing in it (The tape look comes from the North Star's Look and sound section, which is not a numbered mechanic).
+- 2026-11-16 17:14Z Linked T2p to the North Star: nothing in it (Phone play was the owner's request on 2026-11-15; the North Star does not cover devices).
+- 2026-11-16 17:14Z Linked T13 to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).
+- 2026-11-16 17:14Z Linked T11 to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).
+- 2026-11-16 17:14Z Linked T10 to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).
+- 2026-11-16 17:14Z Linked T2w to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).
+- 2026-11-16 17:14Z Linked T2v to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).
+- 2026-11-16 17:14Z Linked T0c to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).
+- 2026-11-16 17:14Z Linked T0b to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).
+- 2026-11-16 17:14Z Linked T0 to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).
+- 2026-11-16 17:14Z Linked S to the North Star: A4, B1, B11, F4, A2.
+- 2026-11-16 17:14Z Linked T15 to the North Star: A2, B1.
+- 2026-11-16 17:14Z Linked T9b to the North Star: B1, B11.
+- 2026-11-16 17:14Z Linked T1b to the North Star: A2.
+- 2026-11-16 17:14Z Linked T12 to the North Star: A3, H4.
+- 2026-11-16 17:14Z Linked T9 to the North Star: B8, A6.
+- 2026-11-16 17:14Z Linked T6c to the North Star: C5, C6.
+- 2026-11-16 17:14Z Linked T7f to the North Star: H1.
+- 2026-11-16 17:14Z Linked T7e to the North Star: H1, F4.
+- 2026-11-16 17:14Z Linked T8 to the North Star: B6, B7, F3.
+- 2026-11-16 17:14Z Linked T6d to the North Star: H5.
+- 2026-11-16 17:14Z Linked T14 to the North Star: A2.
+- 2026-11-16 17:14Z Linked T6e to the North Star: C5.
+- 2026-11-16 17:14Z Linked T3b to the North Star: B8.
+- 2026-11-16 17:14Z Linked T14a to the North Star: A2.
+- 2026-11-16 17:14Z Linked T6b to the North Star: H5.

@@ -31,3 +31,9 @@ assets_src/inbox/*
 # paid-for source images and tiling checks: kept on this PC, too heavy for the repository
 assets_src/textures/raw/
 assets_src/textures/check/
+
+# engine trials: kept on this PC until the owner decides
+spikes/
+
+__pycache__/
+*.pyc

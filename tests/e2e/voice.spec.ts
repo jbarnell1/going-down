@@ -84,9 +84,11 @@ test('the announcer on a run: boarding, the call, the arrival, the bell, banking
   const called = await spoke(page, 'called');
   expect(called.mode).toBe('landing');
 
-  // The car comes; the arrival line; aboard on BANK; the bell's line and the banking line.
+  // The car comes after the wait's blackout: the blackout's line as the lights go, and the lights
+  // line (in place of the arrival line) as they come back with the doors; aboard on BANK; the bell's
+  // line and the banking line.
   await page.evaluate(() => (window as any).__gd.runCtl.skipUntil('carArrived', 90));
-  await spoke(page, 'arrived');
+  await spoke(page, 'lights');
   await page.waitForFunction(() => (window as any).__gd.run().doors > 0.99, undefined, { timeout: 5000 });
   await page.evaluate(() => (window as any).__gd.runCtl.walkCar(0.8, -0.5));
   await page.waitForFunction(() => (window as any).__gd.run().vote === 'bank', undefined, { timeout: 6000 });
@@ -99,7 +101,8 @@ test('the announcer on a run: boarding, the call, the arrival, the bell, banking
 
   const s = await ann(page);
   console.log(`announcer said: ${s.history.map((h) => `${h.id}(${h.mode}, ${((h.end! - h.start) / 1000).toFixed(1)} s)`).join(' ')}`);
-  for (const m of ['board', 'called', 'arrived', 'bell', 'banked']) expect(s.history.some((h) => h.moment === m), m).toBe(true);
+  for (const m of ['board', 'called', 'lights', 'bell', 'banked']) expect(s.history.some((h) => h.moment === m), m).toBe(true);
+  expect(s.history.some((h) => h.moment === 'arrived')).toBe(false);
   noOverlap(s.history);
   expect(s.missing).toEqual([]);
   // Every frame that had a line playing showed that line's words.
@@ -262,4 +265,63 @@ test('the settings panel on a phone: the gear opens and closes it, and a tap bac
   expect(await page.evaluate(() => (window as any).__gd.run().t as number)).toBeGreaterThan(t0);
   expect(errors).toEqual([]);
   await context.close();
+});
+
+test('even loudness: far from the lift a taken line is as loud as in the car, an ordinary line at least half; lines cycle', async ({ page }) => {
+  test.setTimeout(90_000);
+  const errors = watchErrors(page);
+  await boot(page, '/?seed=alpha&entity=0');
+  // In the car: the boarding line, at the in-car level.
+  const board = await spoke(page, 'board', 10_000);
+  const closeLevel = (await ann(page) as any).closeLevel as number;
+  expect(board.mode).toBe('car');
+  expect((board as any).level).toBeCloseTo(closeLevel, 6);
+  await page.waitForFunction(() => (window as any).__gd.announcer.state().playing === null, undefined, { timeout: 15_000 });
+
+  // Far from the lift: out of the car, then to the far end of the floor.
+  await page.evaluate(() => (window as any).__gd.runCtl.setTimeScale(1));
+  await page.waitForFunction(() => (window as any).__gd.run().doors > 0.99, undefined, { timeout: 8000 });
+  await page.evaluate(() => (window as any).__gd.runCtl.walkCar(-1.5, 0));
+  await page.waitForFunction(() => !(window as any).__gd.player().inCar, undefined, { timeout: 8000 });
+  await page.evaluate(() => {
+    // The corridor cell furthest from the doors, on the doors' storey.
+    const g = (window as any).__gd;
+    const plan = g.plan;
+    const r = g.run().car3;
+    let best = { x: 0, y: 0, d: -1 };
+    for (let y = 0; y < plan.height; y++) for (let x = 0; x < plan.width; x++) {
+      if (plan.cells[r.level][y * plan.width + x] !== 'corridor') continue;
+      const d = Math.hypot((x + 0.5) * plan.cellSize - r.doorX, (y + 0.5) * plan.cellSize - r.doorZ);
+      if (d > best.d) best = { x, y, d };
+    }
+    g.teleport(r.level, best.x, best.y);
+  });
+  await settle(page, 3);
+  const far = await page.evaluate(() => { const g = (window as any).__gd; const p = g.player(); const r = g.run(); return Math.hypot(p.x - r.car3.doorX, p.z - r.car3.doorZ); });
+  expect(far).toBeGreaterThan(20);
+  const levelOf = async (id: string): Promise<{ gain: number; lowpass: number; mode: string }> => {
+    expect(await page.evaluate((x) => (window as any).__gd.announcer.say(x), id)).toBe(true);
+    await page.waitForFunction((x) => (window as any).__gd.announcer.state().playing === x, id, { timeout: 10_000 });
+    await settle(page, 6);
+    const st = await ann(page) as any;
+    const out = { ...st.level, mode: st.mode };
+    await page.waitForFunction(() => (window as any).__gd.announcer.state().playing === null, undefined, { timeout: 15_000 });
+    return out;
+  };
+  const taken = await levelOf('taken_1');
+  const called = await levelOf('called_1');
+  console.log(`voice levels: in the car ${closeLevel}; ${far.toFixed(1)} m from the lift: taken ${taken.gain.toFixed(3)} (${taken.mode}), called ${called.gain.toFixed(3)} at low-pass ${called.lowpass.toFixed(0)} Hz`);
+  expect(taken.mode).toBe('landing');
+  expect(taken.gain).toBeCloseTo(closeLevel, 6);
+  expect(called.mode).toBe('landing');
+  expect(called.gain).toBeGreaterThanOrEqual(closeLevel / 2);
+  expect(called.lowpass).toBeGreaterThanOrEqual(1400);
+
+  // Each moment goes through all its lines before any comes round again, never the same twice running.
+  const dealt = await page.evaluate(() => Array.from({ length: 15 }, () => (window as any).__gd.announcer.deal('arrived') as string));
+  const n = new Set(dealt).size;
+  expect(n).toBe(5);
+  for (let i = 0; i + n <= dealt.length; i += n) expect(new Set(dealt.slice(i, i + n)).size).toBe(n);
+  for (let i = 1; i < dealt.length; i++) expect(dealt[i]).not.toBe(dealt[i - 1]);
+  expect(errors).toEqual([]);
 });

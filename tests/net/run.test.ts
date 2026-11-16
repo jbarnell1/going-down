@@ -2,17 +2,20 @@
 // player (B, 120 ms each way) each act only on what THEIR machine shows: the drawn Orderly, the
 // phase in their newest snapshot, their own events. Both earn on floor 1, A calls, both board on the
 // DOWN side and ride; on floor 2 both earn again, A calls, both board on the BANK side and bank.
+// Each wait ends in a blackout: both run from it when it is announced and come back when the doors open.
 
 import { describe, expect, it } from 'vitest';
-import { BOT_EYE, BOT_HFOV_DEG, BOT_VFOV_DEG } from '../../src/sim/bot';
-import { yawToward } from '../../src/sim/entity';
-import type { Body } from '../../src/sim/move';
+import { BOT_EYE, BOT_HFOV_DEG, BOT_VFOV_DEG, fleeGoal } from '../../src/sim/bot';
+import { HUNT_SPEED, yawToward } from '../../src/sim/entity';
+import { findPath } from '../../src/sim/floor';
+import { bodyAtCell, cellOf, type Body } from '../../src/sim/move';
 import { carBody } from '../../src/sim/run';
+import { freshStamina, gaitFor, speedFor, stepStamina, type Gait, type Stamina } from '../../src/sim/stamina';
 import type { LocalFrame } from '../../src/net/client';
 import { carFor, moveLocal, planFor } from '../../src/net/session';
 import { Session, type Machine } from './harness';
 
-type Stage = 'waitOpen' | 'out' | 'away' | 'watch' | 'call' | 'wait' | 'board' | 'done';
+type Stage = 'waitOpen' | 'out' | 'away' | 'watch' | 'call' | 'wait' | 'flee' | 'return' | 'board' | 'done';
 
 interface Actor {
   m: Machine;
@@ -28,9 +31,33 @@ interface Actor {
   floorEventsFrom: number;
   lastCall: number;
   t: number;
+  stamina: Stamina;
+  gait: Gait;
+  /** When to choose where to run again (flee). */
+  rethink: number;
+  /** Farthest from the car door in a blackout (m). */
+  farthest: number;
 }
 
 const near = (a: Body, b: { x: number; z: number }): number => Math.hypot(a.x - b.x, a.z - b.z);
+
+/** Waypoints through the centres of a path's cells. */
+function cellRoute(plan: ReturnType<typeof planFor>, from: Body, to: { level: 0 | 1; x: number; y: number }): Body[] {
+  const path = findPath(plan, cellOf(plan, from), to);
+  return path ? path.slice(1).map((p) => bodyAtCell(plan, p)) : [];
+}
+
+/** Into the car through the doorway: DOWN on the first floor, BANK on the second. */
+function intoCar(a: Actor, car: ReturnType<typeof carFor>): Body[] {
+  const v = a.depth === 1 ? 0.5 : -0.5;
+  return [carBody(car, -0.6, 0), carBody(car, 0.45, 0), carBody(car, a.caller ? 0.8 : 1.3, v)];
+}
+
+/** A dark stretch is announced that would let the Orderly (as drawn) reach this player: always the blackout. */
+function threatened(b: { announced: boolean; endsAt: number | null; blackout: boolean; len: number } | null | undefined, body: Body, o: { x: number; z: number } | null): boolean {
+  if (!b || !b.announced || b.endsAt !== null) return false;
+  return b.blackout || (o !== null && near(body, o) < HUNT_SPEED * b.len + 6);
+}
 
 function walk(a: Actor, body: Body, speed: number, dt: number): Body {
   const c = a.m.client;
@@ -78,6 +105,7 @@ function step(a: Actor, partner: () => Actor, dt: number): LocalFrame {
   let body: Body = a.m.body ?? (c.seed ? carBody(carFor(planFor(c.seed, c.localDepth)), 1, 0) : { x: 0, y: 0, z: 0, level: 0 });
   const o = a.m.last?.orderly ?? null;
   let call = false;
+  let hold = false;
   if (w && c.seed) {
     const car = carFor(planFor(c.seed, c.localDepth));
     switch (a.stage) {
@@ -119,7 +147,9 @@ function step(a: Actor, partner: () => Actor, dt: number): LocalFrame {
         if (w.phase === 'coming') a.stage = 'wait';
         break;
       case 'wait':
-        // Keep it in sight, and keep it at a distance: it gains ground in every blink.
+        // Keep it in sight and at a distance while the lights are on. When a dark stretch is announced
+        // that would let it reach them, and always for the blackout, run (sim/bot.ts fleeGoal, from what
+        // this screen shows and hears); come back when the lights do, and board when the doors open.
         a.raised = false;
         if (o) {
           const d = near(body, o);
@@ -130,15 +160,61 @@ function step(a: Actor, partner: () => Actor, dt: number): LocalFrame {
           }
           look(a, body, o, false);
         }
-        if (w.phase === 'boarding') {
-          const v = a.depth === 1 ? 0.5 : -0.5; // DOWN on the first floor, BANK on the second
-          a.waypoints = [carBody(car, -0.6, 0), carBody(car, 0.45, 0), carBody(car, a.caller ? 0.8 : 1.3, v)];
-          a.stage = 'board';
+        if (threatened(w.blink, body, o)) {
+          a.stage = 'flee';
+          a.rethink = 0;
+          a.waypoints = [];
+        }
+        if (w.phase === 'boarding') a.stage = 'board';
+        if (a.stage === 'board') a.waypoints = intoCar(a, car);
+        break;
+      case 'flee': {
+        const plan = planFor(c.seed, c.localDepth);
+        const dark = a.m.last?.dark === true;
+        if (!dark && !w.blink?.announced) {
+          a.stage = 'return';
+          a.waypoints = cellRoute(plan, body, plan.landing);
+          break;
+        }
+        a.rethink -= dt;
+        if (a.waypoints.length === 0 || a.rethink <= 0) {
+          const goal = fleeGoal(plan, body, o ? { ...o } : null, !dark);
+          if (goal) a.waypoints = cellRoute(plan, body, goal);
+          a.rethink = 1.5;
+        }
+        a.gait = gaitFor(a.stamina, { sprint: dark && o !== null && near(body, o) < 14, creep: false, moving: true, cap: Infinity });
+        const before = body;
+        body = walk(a, body, speedFor(a.gait), dt);
+        a.stamina = stepStamina(a.stamina, a.gait, near(body, before) / dt, dt);
+        if (o && !dark) look(a, body, o, false);
+        else if (near(body, before) > 1e-6) look(a, body, { x: 2 * body.x - before.x, y: body.y, z: 2 * body.z - before.z }, true);
+        if (dark && w.blink?.blackout) a.farthest = Math.max(a.farthest, Math.hypot(body.x - car.doorX, body.z - car.doorZ));
+        break;
+      }
+      case 'return': {
+        // Back to the landing, watching it all the way (hurrying while far), then into the car if it is there.
+        if (threatened(w.blink, body, o)) {
+          a.stage = 'flee';
+          a.rethink = 0;
+          a.waypoints = [];
+          break;
+        }
+        const before = body;
+        a.gait = gaitFor(a.stamina, { sprint: a.waypoints.length > 6, creep: false, moving: true, cap: Infinity });
+        body = walk(a, body, speedFor(a.gait), dt);
+        a.stamina = stepStamina(a.stamina, a.gait, near(body, before) / dt, dt);
+        if (o) look(a, body, o, false);
+        if (a.waypoints.length === 0) {
+          a.stage = w.phase === 'boarding' ? 'board' : 'wait';
+          if (a.stage === 'board') a.waypoints = intoCar(a, car);
         }
         break;
+      }
       case 'board':
         body = walk(a, body, 2.0, dt);
         if (o) look(a, body, o, false);
+        // Aboard, hold the doors while the other is still coming.
+        hold = a.waypoints.length === 0 && (partner().stage !== 'board' || partner().waypoints.length > 0) && partner().stage !== 'done';
         if (w.phase === 'riding' || w.phase === 'ended') {
           a.stage = 'done';
         }
@@ -152,14 +228,14 @@ function step(a: Actor, partner: () => Actor, dt: number): LocalFrame {
     }
   }
   a.m.body = body;
-  return { body, eye: BOT_EYE, yaw: a.yaw, pitch: a.pitch, hFovDeg: BOT_HFOV_DEG, vFovDeg: BOT_VFOV_DEG, raised: a.raised, call };
+  return { body, eye: BOT_EYE, yaw: a.yaw, pitch: a.pitch, hFovDeg: BOT_HFOV_DEG, vFovDeg: BOT_VFOV_DEG, raised: a.raised, call, holdDoors: hold, gait: a.gait, stamina: a.stamina };
 }
 
 describe('a whole run, two players, 120 ms apart', () => {
   it('both earn, one calls, both board, they vote DOWN then BANK, and both end with the same banked total and share', () => {
     const s = new Session({ seed: 'netrun-1', remotes: 1, net: { delayMin: 0.12, delayMax: 0.12, jitter: 0.01, loss: 0.02, reorder: 0, reorderDelay: 0, duplicate: 0 }, setup: 'run' });
     const [ma, mb] = s.machines as [Machine, Machine];
-    const mk = (m: Machine, caller: boolean): Actor => ({ m, caller, u: 0, stage: 'waitOpen', depth: 1, waypoints: [], yaw: 0, pitch: 0, raised: false, watchUntil: 0, floorEventsFrom: 0, lastCall: -9, t: 0 });
+    const mk = (m: Machine, caller: boolean): Actor => ({ m, caller, u: 0, stage: 'waitOpen', depth: 1, waypoints: [], yaw: 0, pitch: 0, raised: false, watchUntil: 0, floorEventsFrom: 0, lastCall: -9, t: 0, stamina: freshStamina(), gait: 'walk', rethink: 0, farthest: 0 });
     const A = mk(ma, true);
     const B = mk(mb, false);
     ma.script = (_m, _s, dt) => step(A, () => B, dt);
@@ -173,8 +249,12 @@ describe('a whole run, two players, 120 ms apart', () => {
     const sum = h.state.summary;
     console.log(
       `run over 120 ms: ended at t=${h.state.t.toFixed(0)} s, depth ${h.state.depth}, bells ${JSON.stringify(bells.map((b) => (b.type === 'bell' ? [b.down, b.bank, b.outcome] : null)))}, ` +
-        `banked ${sum?.total.toFixed(1)}, shares ${JSON.stringify(sum?.shares)}; put-backs ${h.stats.putBacks}, readings ${types.filter((x) => x === 'readingClosed').length}`,
+        `banked ${sum?.total.toFixed(1)}, shares ${JSON.stringify(sum?.shares)}; put-backs ${h.stats.putBacks}, readings ${types.filter((x) => x === 'readingClosed').length}; ` +
+        `blackouts ${h.log.filter((l) => l.e.type === 'blinkStart' && l.e.blackout).length}, fled ${A.farthest.toFixed(1)} m and ${B.farthest.toFixed(1)} m from the car`,
     );
+    // Both waits ended in a blackout; both players ran from it and came back.
+    expect(h.log.filter((l) => l.e.type === 'blinkStart' && l.e.blackout).length).toBe(2);
+    expect(Math.min(A.farthest, B.farthest)).toBeGreaterThan(8);
     expect(types).not.toContain('caught');
     expect(sum).not.toBeNull();
     expect(sum?.wiped).toBe(false);

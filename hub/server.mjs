@@ -191,6 +191,14 @@ const server = http.createServer(async (req, res) => {
       const file = ok ? inside(ROOT, rel) : null;
       return (file && (await serveFile(res, file))) || send(res, 404, 'Not found', 'text/plain');
     }
+    // An engine trial kept on this PC (not in git): the Godot browser export, when it exists.
+    if (p === '/godot') return send(res, 302, '', 'text/plain', { Location: '/godot/' });
+    if (p.startsWith('/godot/')) {
+      let rel = p.slice('/godot/'.length) || 'index.html';
+      if (rel.endsWith('/')) rel += 'index.html';
+      const file = inside(path.join(ROOT, 'spikes', 'godot-trial', 'export', 'web'), rel);
+      return (file && (await serveFile(res, file))) || send(res, 404, 'No Godot trial build on this machine', 'text/plain');
+    }
     if (p === '/play') return send(res, 302, '', 'text/plain', { Location: '/play/' });
     if (p.startsWith('/play/')) {
       let rel = p.slice('/play/'.length) || 'index.html';
