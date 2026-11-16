@@ -345,8 +345,12 @@
       "id": "T2v",
       "title": "Stronger checks",
       "why": "So a regression is caught by a machine, not by luck: reference screenshots that fail the test when the picture changes, a frame-time limit inside the browser test, a smoke test for the hub, and a deliberate-break check on every gate already passed.",
-      "status": "todo",
-      "gates": []
+      "status": "done",
+      "gates": [],
+      "startedAt": "2026-11-16T05:59:34.661Z",
+      "finishedAt": "2026-11-16T06:02:45.931Z",
+      "summary": "Four new safety nets. Reference pictures of three views fail the test if the scenery changes (a faint pink tint on the corridor walls was caught). A frame-time limit of 20 ms is enforced in three situations, including the Orderly on screen and the heavy tape level at 1080p. A hub smoke test checks its pages answer and ten path-escape attempts are refused, on every commit. And the floor generator's tests were proven able to fail by removing its stairs. Reference pictures and the frame limit run on this PC only; CI draws in software and skips them.",
+      "todo": []
     },
     {
       "id": "T4",
@@ -477,8 +481,8 @@
       "id": "G2",
       "title": "Floors are sound",
       "status": "passed",
-      "evidence": "800 floors checked by test; one printed map read by eye.",
-      "at": "2026-11-16T04:16:44.248Z"
+      "evidence": "800 floors checked by test; one printed map read by eye. Deliberate break used: with stairs removed from the generator, 2 of its 21 tests fail.",
+      "at": "2026-11-16T06:02:45.862Z"
     },
     {
       "id": "G3",
@@ -581,6 +585,21 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T06:02:45.932Z",
+      "text": "Finished T2v: Stronger checks.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T06:02:45.863Z",
+      "text": "Gate G2 (Floors are sound) is passed.",
+      "kind": "gate"
+    },
+    {
+      "at": "2026-11-16T05:59:34.662Z",
+      "text": "Started T2v: Stronger checks. Fable is adding reference screenshots, a frame-time limit in the browser tests, a hub smoke test, and a deliberate-break check on the floor generator.",
+      "kind": "start"
+    },
     {
       "at": "2026-11-16T05:58:45.411Z",
       "text": "Finished T2b: The tape-playback look and the debug overlay.",

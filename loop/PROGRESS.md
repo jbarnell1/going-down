@@ -4,7 +4,7 @@
 
 ## Status
 
-- **Gates passed:** 2 of 14. **Tasks done:** 8 of 22.
+- **Gates passed:** 2 of 14. **Tasks done:** 9 of 22.
 - **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 7.
 - **Now:** nothing in progress
 - **Last CI result seen:** passed on d562ef5
@@ -36,8 +36,9 @@
 - [x] **T2b** `done` The tape-playback look and the debug overlay (G10)
   - Why: The degraded recovered-footage look that hides rough art, plus tools for testing.
   - Evidence: The game now looks like worn videotape: smeared colour, grain, glaring ceiling lights, a slight wobble, rare tracking rolls, and a PLAY display with a running counter. ?fx=0 turns it off and ?fx=2 makes it heavy. ?debug=1 adds a minimap. Frame time stays at the screen's refresh rate at all three levels, including a phone-sized view and the 8-bit path older phones use. Fable switched the effect off on purpose and confirmed the test fails. Judged from stills only: how the wobble feels in motion over a long session is unverified.
-- [ ] **T2v** `todo` Stronger checks
+- [x] **T2v** `done` Stronger checks
   - Why: So a regression is caught by a machine, not by luck: reference screenshots that fail the test when the picture changes, a frame-time limit inside the browser test, a smoke test for the hub, and a deliberate-break check on every gate already passed.
+  - Evidence: Four new safety nets. Reference pictures of three views fail the test if the scenery changes (a faint pink tint on the corridor walls was caught). A frame-time limit of 20 ms is enforced in three situations, including the Orderly on screen and the heavy tape level at 1080p. A hub smoke test checks its pages answer and ten path-escape attempts are refused, on every commit. And the floor generator's tests were proven able to fail by removing its stairs. Reference pictures and the frame limit run on this PC only; CI draws in software and skips them.
 - [ ] **T4** `todo` The Orderly comes alive (G3, G5)
   - Why: It walks the floor, is heard before it is seen, and never moves while anyone is watching it.
   - To do: Staging, from the player judge: the first sighting should be partly hidden (a peek round a door frame, a tilted head), and it should be nearer each time you look back. The doorway peek pose is the best scare so far.
@@ -69,7 +70,7 @@
 ## Gates
 
 - [ ] **G1** Builds clean from a fresh clone: open
-- [x] **G2** Floors are sound: passed. 800 floors checked by test; one printed map read by eye.
+- [x] **G2** Floors are sound: passed. 800 floors checked by test; one printed map read by eye. Deliberate break used: with stairs removed from the generator, 2 of its 21 tests fail.
 - [ ] **G3** Rules hold over 500 simulated runs: open
 - [x] **G4** The Orderly is a real figure: passed. A re-runnable Blender script builds a rigged figure (7,380 triangles, 39 bones, 5 animations) that loads, animates and casts a shadow in the game; Fable looked at renders and in-game screenshots; five blind critics over three rounds, worst findings fixed each round. Deliberate break used: with the model file hidden, the Orderly browser test fails. Not claimed: that it is frightening. Blind fear scores stayed between 3 and 6 out of 10.
 - [ ] **G5** Heard before seen: open
@@ -92,6 +93,9 @@
 
 ## Activity (newest first)
 
+- 2026-11-16 06:02Z Finished T2v: Stronger checks.
+- 2026-11-16 06:02Z Gate G2 (Floors are sound) is passed.
+- 2026-11-16 05:59Z Started T2v: Stronger checks. Fable is adding reference screenshots, a frame-time limit in the browser tests, a hub smoke test, and a deliberate-break check on the floor generator.
 - 2026-11-16 05:58Z Finished T2b: The tape-playback look and the debug overlay.
 - 2026-11-16 05:51Z New pictures for T2b: The tape-playback look and the debug overlay.
 - 2026-11-16 05:51Z New pictures for T2b: The tape-playback look and the debug overlay.
@@ -129,6 +133,3 @@
 - 2026-11-16 04:34Z Finished T0c: AGPL-3.0 licence.
 - 2026-11-16 04:34Z Finished T2a: Walking through a floor.
 - 2026-11-16 04:30Z Added two standing rules: break a thing on purpose to prove its test can fail before ticking a gate, and check anything live from a second device.
-- 2026-11-16 04:30Z Added task T2v: Stronger checks.
-- 2026-11-16 04:30Z You asked for the Orderly's second pass to start with tutorial study and end with two judged revision rounds. It now comes right after the public play link.
-- 2026-11-16 04:19Z The Progress page was rebuilt: a roadmap of steps that fill with their own pictures, an overall bar, and a strip of the newest output.
