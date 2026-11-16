@@ -2,16 +2,16 @@
 
 ## Status (read this first)
 
-- **Hub:** runs on this PC. Not yet reachable from the owner's other devices: the first tailnet port chosen is outside the ports the tailnet's access rules allow, and the owner has been asked to move it to an allowed one (details in `.local/MACHINE.md`). My earlier "reachable" check was made from this PC and proved nothing about other devices.
+- **Hub:** live on the owner's tailnet (address in `.local/MACHINE.md`). The home page, Play and Questions all answered 200 when requested from a second tailnet device, and the owner's home dashboard links to it. To check reachability, always test from another device, never from this PC.
 - **Started:** 2026-11-16T03:38Z (2026-11-15 21:38 Central). The 30-hour limit is 2026-11-17T09:38Z.
-- **Iterations so far:** 1
-- **Now working on:** T1, the Clinic floor generator
+- **Iterations so far:** 3
+- **Now working on:** T2a, walking through a generated Clinic floor (an Opus agent is building it; Fable verifies when it reports)
 - **What you can play:** nothing yet. The hub's Play link shows a placeholder corridor with some crates, which only proves the pipeline from seed to pixels.
 - **How to run it:** `npm ci`, then `npm run dev`. Checks: `npm run check` and `npm run e2e`.
 - **Last fully green build:** tag `good-1`
 - **Unverified:** CI's first full run (pushed, result not yet seen).
 - **Answers applied up to:** none yet (no answers file existed at iteration 1)
-- **Last CI result seen:** gitleaks passed on the first two commits. The `ci` workflow first runs on the T0 commit.
+- **Last CI result seen:** `ci` and gitleaks both passed on 1cdff32. (`ci` had failed once on 3189f41: the browser test could not find the preview server on Linux; fixed by binding it to 127.0.0.1.)
 
 ## Tasks
 
@@ -19,8 +19,10 @@ Status is one of `todo`, `doing`, `done`, `blocked`. A task is `done` only with 
 
 - [x] T0 `done` Project setup. Evidence: `npm run check` exit 0 (typecheck clean, 7 rule tests passed, build 523 kB); `npm run e2e` 1 passed, reporting `gpu=ANGLE (NVIDIA GeForce RTX 4070 SUPER, Direct3D11)`, so the test browser does use the graphics card and G10 can be measured here; screenshot `test-results/shots/00-boot.png` opened and looked at (low-resolution corridor with crates, hard pixels, no errors). Hooks live in `scripts/hooks` (secret scan, then `npm run check`). Vite is pinned to 6 and Vitest to 3 because this PC's Node 20.12 cannot run Vite 8. Original task text:
   Project setup: git init, Vite + TypeScript + three.js + Vitest + Playwright, the folder shape in LOOP.md, `npm run check` and `npm run e2e` both run, one screenshot of an empty scene opened and looked at. A git pre-commit hook that runs `npm run check`, so a broken build cannot be committed. Find out whether the test browser can use the graphics card. Also in T0: install the pre-commit hook so it runs `node hub/scan-secrets.mjs` first; write `.github/workflows/ci.yml` (see LOOP.md); add `npm run deploy:live` (build, copy `dist/` to `.live/`, write `.live/version.json` with commit, time and a one-line note) and deploy the first build so the hub's Play link works.
-- [ ] T1 `todo` `src/sim`: seeded RNG and the Clinic floor generator (rooms, corridors, two levels, a stair, an atrium), with the G2 tests.
-- [ ] T2 `todo` First-person walking through a generated Clinic floor: bright lighting, collision, stairs, the tape-playback look, the URL test flags. Screenshot.
+- [x] T1 `done` `src/sim`: seeded RNG and the Clinic floor generator. Evidence: Fable re-ran `npm run check`: 29 tests passed, build ok, exit 0. The floor tests run over 200 seeds at each of depths 1 to 4 (800 floors) and cover every G2 point plus loops, sight lines and the entity start. `src/sim` has no Math.random, Date, DOM or three.js. Fable read the printed map `test-results/floors/alpha-d1.txt`: a 2-wide corridor ring with a cross hall, a lobby with the elevator, an atrium open to the upper gallery, wards, exam rooms and one stair; it reads as a building. Built by one Opus agent (about 19 minutes, about 206k tokens).
+- [ ] T1b `todo` (after the slice's gates, before a second place) More than one skeleton for the Clinic. Every floor is currently the same ring, cross hall, atrium and stair band with sizes, mirroring and room mix varied. That passes G2 but will feel samey by the third floor.
+- [ ] T2a `doing` First-person walking through a generated Clinic floor: continuous movement and collision as pure, tested logic in `src/sim`; the floor plan turned into meshes (floors, walls with door gaps, ceilings, stair, balcony rail); bright Clinic materials and light; pointer-lock controls; test hooks and URL flags; a Playwright walk from the elevator up the stair to the balcony with screenshots.
+- [ ] T2b `todo` The tape-playback look as a post-process on a low-resolution target, the `?debug=1` overlay with a minimap, and frame-time statistics exposed for tests.
 - [ ] T3 `doing` The Orderly in Blender (Opus). First pass exists (see log): `assets_src/blender/orderly/build_orderly.py`, `public/assets/entities/orderly.glb`, renders in `assets_src/renders/orderly/`. Still to do: a second pass that fixes the list below, then a blind Opus critic and one more round of fixes. Check the user's own notes on it first, if any are recorded here.
   - Reads as a shop mannequin from the front. Needs a body: elbows, wrists, collarbones, a ribcage under the gown, a visible spine curve.
   - Boxy shoulder-pad sleeves. Slope the shoulders and let the gown hang off one.
@@ -42,7 +44,7 @@ Status is one of `todo`, `doing`, `done`, `blocked`. A task is `done` only with 
 
 ## Gates
 
-G1 [ ]  G2 [ ]  G3 [ ]  G4 [ ]  G5 [ ]  G6 [ ]  G7 [ ]  G8 [ ]  G9 [ ]  G10 [ ]  G11 [ ]  G12 [ ]  G13 [ ]  G14 [ ]
+G1 [ ]  G2 [x] (T1 evidence)  G3 [ ]  G4 [ ]  G5 [ ]  G6 [ ]  G7 [ ]  G8 [ ]  G9 [ ]  G10 [ ]  G11 [ ]  G12 [ ]  G13 [ ]  G14 [ ]
 
 ## Decisions taken on defaults
 
@@ -57,6 +59,10 @@ G1 [ ]  G2 [ ]  G3 [ ]  G4 [ ]  G5 [ ]  G6 [ ]  G7 [ ]  G8 [ ]  G9 [ ]  G10 [ ] 
 (nothing)
 
 ## Log
+
+- 2026-11-15 22:20 iteration 3: T1 accepted after Fable's own run of the checks and a read of the printed map. G2 ticked. Noted the agent's own caveat as T1b: one skeleton for every floor. T2 split in two so the walk can be seen before the tape look goes on top. T2a handed to one Opus agent.
+
+- 2026-11-15 22:00 iteration 2: CI's first run had failed, so that came first: fixed and pushed (1cdff32). T1 handed to one Opus agent with a written interface for the floor plan. At the owner's request a tile for the hub was added to their home dashboard; it points at the tailnet port the hub will have once the owner moves it.
 
 - 2026-11-15 21:45 iteration 1: T0 done by Fable inline. One wrong test fixed, not weakened: the first colour check copied the WebGL canvas after the frame had been presented, which always reads blank; it now reads pixels from the GPU straight after a draw. Keep-awake is on while the session stays active.
 
