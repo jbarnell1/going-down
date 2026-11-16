@@ -15,6 +15,9 @@
   .chip.ok { color: var(--acc); border-color: var(--acc); }
   .chip.warn { color: var(--warn); border-color: var(--warn); }
   .now { border: 1px solid var(--acc); background: var(--panel); border-radius: 10px; padding: 14px 16px; margin: 16px 0; }
+  .nowlist { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+  .nowlist strong { font-weight: 600; }
+  .nowwhen { opacity: .7; white-space: nowrap; }
   .now h2 { margin: 0 0 4px; font-size: 18px; display: flex; gap: 10px; align-items: center; }
   .now p { margin: 4px 0 0; color: var(--dim); }
   .spin { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--acc); border-radius: 50%; animation: sp 1s linear infinite; flex: none; }
@@ -166,10 +169,17 @@ function render(d) {
   if (blocked) chips.push(el('span', { class: 'chip warn', text: `${blocked} step${blocked === 1 ? '' : 's'} blocked` }));
   $('chips').replaceChildren(...chips);
 
-  const cur = s.tasks.find((t) => t.id === s.now);
-  $('now').replaceChildren(cur
-    ? el('div', { class: 'now' }, el('h2', {}, el('span', { class: 'spin' }), el('span', { text: 'Right now: ' + cur.title })), el('p', { text: s.nowText || cur.why || '' }),
-        el('p', { text: cur.startedAt ? 'Started ' + ago(Date.parse(cur.startedAt)) : '' }))
+  // Several steps run at once (parallel agents): list every one, newest start first.
+  const doing = s.tasks.filter((t) => t.status === 'doing')
+    .sort((a, b) => (Date.parse(b.doingAt || b.startedAt || '') || 0) - (Date.parse(a.doingAt || a.startedAt || '') || 0));
+  $('now').replaceChildren(doing.length
+    ? el('div', { class: 'now' },
+        el('h2', {}, el('span', { class: 'spin' }), el('span', { text: doing.length === 1 ? 'Right now: ' + doing[0].title : `Right now: ${doing.length} things at once` })),
+        ...(doing.length === 1
+          ? [el('p', { text: doing[0].doingText || doing[0].why || '' }), el('p', { text: doing[0].startedAt ? 'Started ' + ago(Date.parse(doing[0].startedAt)) : '' })]
+          : [el('ul', { class: 'nowlist' }, ...doing.map((t) => el('li', {},
+              el('strong', { text: t.title }), document.createTextNode(' ' + (t.doingText || t.why || '')),
+              el('span', { class: 'nowwhen', text: (t.doingAt || t.startedAt) ? ' · ' + ago(Date.parse(t.doingAt || t.startedAt)) : '' }))))]))
     : el('div', { class: 'now' }, el('h2', { text: 'Between steps' }), el('p', { text: 'Nothing is in progress this minute. The loop picks the next step when it wakes.' })));
 
   // Pictures lead. Maps, models and audio are capped per kind so nine floor maps cannot push the pictures off screen.
@@ -193,7 +203,10 @@ function render(d) {
     const h = el('h3', {}, el('span', { text: t.title }), el('span', { class: 'id', text: t.id + (t.gates && t.gates.length ? ' · ' + t.gates.join(', ') : '') }));
     card.append(h);
     if (t.status === 'done' && t.summary) card.append(el('p', { class: 'sum', text: t.summary }));
-    else if (t.why) card.append(el('p', { text: t.why }));
+    else {
+      if (t.status === 'doing' && t.doingText) card.append(el('p', { class: 'sum', text: 'Now: ' + t.doingText }));
+      if (t.why) card.append(el('p', { text: t.why }));
+    }
     if (t.blocked) card.append(el('p', { class: 'sum', text: 'Blocked: ' + t.blocked }));
     if (t.todo && t.todo.length) card.append(el('ul', {}, ...t.todo.map((x) => el('li', { text: x }))));
     if (t.media && t.media.length) {

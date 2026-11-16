@@ -136,6 +136,8 @@ switch (cmd) {
     if (!t.ns) die(`${t.id} has no North Star link. Look first:  node hub/ns.mjs find <words>   then:  node hub/track.mjs link ${t.id} <ids>   (or: link ${t.id} none --why "...")`);
     if (t.ns.length) spawnSync(process.execPath, [path.join(ROOT, 'hub', 'ns.mjs'), 'show', ...t.ns], { stdio: 'inherit' });
     t.status = 'doing'; t.startedAt ??= now(); delete t.blocked;
+    // Several steps can be in progress at once (parallel agents): each keeps its own line.
+    if (pos[1]) { t.doingText = pos[1]; t.doingAt = now(); }
     s.now = t.id; s.nowText = pos[1] ?? '';
     feed(s, `Started ${t.id}: ${t.title}.${pos[1] ? ' ' + pos[1] : ''}`, 'start');
     break;

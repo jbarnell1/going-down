@@ -43,3 +43,5 @@ play/
 assets_src/renders/crewmate/clip_*
 assets_src/renders/crewmate/corridor_walk_08m.png
 assets_src/renders/crewmate/corridor_walk_15m.png
+# Floor designs, like the North Star: kept off the public repository.
+docs/floors/

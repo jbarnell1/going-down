@@ -19,7 +19,8 @@
     "godot:reference": "node godot/tools/godot.mjs reference",
     "godot:test": "node godot/tools/godot.mjs test",
     "godot:export": "node godot/tools/godot.mjs export",
-    "godot:promote": "node scripts/promote-godot.mjs"
+    "godot:promote": "node scripts/promote-godot.mjs",
+    "godot:package": "node scripts/package-godot.mjs"
   },
   "dependencies": {
     "three": "0.187.0",
