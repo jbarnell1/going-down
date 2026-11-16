@@ -10,6 +10,8 @@ config/name="Going Down"
 run/main_scene="res://main.tscn"
 ; The dedicated server build (export preset "Linux Server", feature "server") starts the server instead.
 run/main_scene.server="res://server/server.tscn"
+; The server prints each log line at once, so `docker logs` shows who joined as it happens.
+run/flush_stdout_on_print.server=true
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [audio]

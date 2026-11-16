@@ -71,3 +71,30 @@ Cost (measured on the development PC, 60 s of bots, `godot --headless --path god
 res://tests/net_bench.gd`): about 2.3 ms a tick with 4 players and 3.5 ms with 8 (20 ticks a second,
 so under 7% of one core), worst about 20 to 22 ms (the first tick builds the floor);
 snapshots about 10 KB/s per client with 4 players and 16 KB/s with 8, inputs about 2 KB/s per client.
+
+## The image built from nothing (what runs on the lab box)
+
+`Dockerfile` above starts from a Debian image, which has to be downloaded. `Dockerfile.scratch`
+starts from nothing instead: the image holds the server file and the six C library files it is
+linked against, copied from the machine that builds it. There is no shell and no other program
+inside, so there is nothing for an intruder to run. This is the one in use.
+
+On the Linux machine, in one folder: `GoingDownServer.x86_64` (from `npm run godot:export -- server`),
+`Dockerfile.scratch`, `build-on-host.sh`, `run-on-host.sh`.
+
+```sh
+sh build-on-host.sh        # builds the image "going-down-server"
+sh run-on-host.sh          # starts it as the container "going-down", reachable only at 127.0.0.1:4450
+docker logs -f going-down  # who joined, who was refused, a line of numbers every minute
+```
+
+`run-on-host.sh` reads the passphrase from `~/going-down.env` (one line, `GD_JOIN_SECRET=...`, a file
+only its owner can read) and runs the container with a read-only filesystem, no privileges, memory,
+process and CPU caps, and its own small network with no route out: the server answers players and
+cannot start a connection to the home network or the internet. To change the passphrase, edit that
+file and run `run-on-host.sh` again. It sets no restart policy: after a reboot, run it again.
+
+What is not closed: from inside that network the machine's own address is still reachable, so a
+service on the machine that listens on every address could be reached by someone who had first
+broken into the server. Closing that takes one firewall rule on the machine, which is its owner's
+to add.

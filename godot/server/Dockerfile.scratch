@@ -1,0 +1,14 @@
+# The Going Down server in an image built from nothing: the server file and the C library files it
+# needs, copied from the machine that builds it (build-on-host.sh gathers them). No base image is
+# downloaded, and there is no shell or any other program inside for an intruder to use.
+FROM scratch
+COPY --chmod=0555 GoingDownServer.x86_64 /srv/GoingDownServer.x86_64
+COPY lib/ /lib/x86_64-linux-gnu/
+COPY lib64/ /lib64/
+# The engine looks for a user data folder at start; /tmp is a small memory-only folder at run time.
+ENV XDG_DATA_HOME=/tmp XDG_CONFIG_HOME=/tmp XDG_CACHE_HOME=/tmp HOME=/tmp
+USER 10001:10001
+WORKDIR /srv
+EXPOSE 4450
+# The passphrase comes from the environment at run time (GD_JOIN_SECRET), never from the image.
+ENTRYPOINT ["/srv/GoingDownServer.x86_64", "--headless", "--", "server", "port=4450"]
