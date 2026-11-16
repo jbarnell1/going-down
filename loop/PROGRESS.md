@@ -4,10 +4,10 @@
 
 ## Status
 
-- **Gates passed:** 1 of 14. **Tasks done:** 6 of 21.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 4.
-- **Now:** T3 The Orderly, second pass. An Opus agent is studying two Blender tutorials, then rebuilding the Orderly to your notes. Two judged revision rounds follow.
-- **Last CI result seen:** passed on d1da0e1
+- **Gates passed:** 2 of 14. **Tasks done:** 7 of 22.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 6.
+- **Now:** T2b The tape-playback look and the debug overlay. An Opus agent is building the tape-playback look as a screen filter, plus a debug overlay with a minimap.
+- **Last CI result seen:** passed on 99a17b0
 - **Answers applied up to:** 2026-11-16T04:20:00Z
 
 ## Tasks
@@ -30,19 +30,18 @@
 - [x] **T0c** `done` AGPL-3.0 licence
   - Why: You chose it for the public repository.
   - Evidence: The AGPL-3.0 licence text is in the repository and the README says so.
-- [ ] **T3** `doing` The Orderly, second pass (G4)
+- [x] **T3** `done` The Orderly, second pass (G4)
   - Why: The first entity. The first pass reads as a mannequin; this pass has to make it frightening in bright light.
-  - To do: First, study: the agent goes through two YouTube Blender tutorials on making horror characters or low-detail retro creatures (their transcripts plus frames sampled from the video), and writes what it learned to docs/ART-NOTES.md before touching the model.
-  - To do: Apply it, with your answers: taller so it ducks under door frames; a body under the gown (ribs, spine, collarbones, real elbows and wrists); the printed smile much bigger and bolder; something wrong where the eyes should be; longer, more articulated hands; less funny, more frightening.
-  - To do: Load it in the game on a Clinic floor and check the reach and the walk there.
-  - To do: Revision round 1: blind judges (fresh Opus agents shown only the pictures) and Fable each say what they see and what looks cheap; the agent fixes the worst of it.
-  - To do: Revision round 2: the same again on the fixed figure. Pictures from every round go on this page.
-- [ ] **T2b** `todo` The tape-playback look and the debug overlay (G10)
+  - Evidence: The Orderly was rebuilt after tutorial study and three judged rounds. It is a rigged 2.6 m figure with five animations (idle, walk, reach, a duck under door frames, frozen), it stands in the game with a real shadow, and all checks pass. It is now its own character: pale waxy skin, lids sewn shut, a paper cap, hands folded like staff waiting to help. Honest result: five blind judges scored it 3 to 6 out of 10 for fear and the scores did not rise across rounds. A question about what to do next is waiting for you.
+- [ ] **T2b** `doing` The tape-playback look and the debug overlay (G10)
   - Why: The degraded recovered-footage look that hides rough art, plus tools for testing.
 - [ ] **T2v** `todo` Stronger checks
   - Why: So a regression is caught by a machine, not by luck: reference screenshots that fail the test when the picture changes, a frame-time limit inside the browser test, a smoke test for the hub, and a deliberate-break check on every gate already passed.
 - [ ] **T4** `todo` The Orderly comes alive (G3, G5)
   - Why: It walks the floor, is heard before it is seen, and never moves while anyone is watching it.
+  - To do: Staging, from the player judge: the first sighting should be partly hidden (a peek round a door frame, a tilted head), and it should be nearer each time you look back. The doorway peek pose is the best scare so far.
+- [ ] **T3b** `todo` The Orderly, third pass
+  - Why: After it moves and the tape look is on: real sewn lids instead of button-like discs, mottled skin, a stained gown that stands out from the walls, a narrower grin.
 - [ ] **T5** `todo` The instrument, the recording rule and tapes (G3)
   - Why: How the crew earns: readings only record the scary part, and the tape has to be carried out.
 - [ ] **T6** `todo` The elevator (G6)
@@ -71,7 +70,7 @@
 - [ ] **G1** Builds clean from a fresh clone: open
 - [x] **G2** Floors are sound: passed. 800 floors checked by test; one printed map read by eye.
 - [ ] **G3** Rules hold over 500 simulated runs: open
-- [ ] **G4** The Orderly is a real figure: open
+- [x] **G4** The Orderly is a real figure: passed. A re-runnable Blender script builds a rigged figure (7,380 triangles, 39 bones, 5 animations) that loads, animates and casts a shadow in the game; Fable looked at renders and in-game screenshots; five blind critics over three rounds, worst findings fixed each round. Deliberate break used: with the model file hidden, the Orderly browser test fails. Not claimed: that it is frightening. Blind fear scores stayed between 3 and 6 out of 10.
 - [ ] **G5** Heard before seen: open
 - [ ] **G6** One player can finish a run: open
 - [ ] **G7** Four players share one world: open
@@ -88,9 +87,33 @@
 - 2026-11-16: Pinned Vite 6 and Vitest 3 to suit the Node already on this PC, not upgrading Node.
 - 2026-11-16: Repository licence: none yet (question "license" on the hub).
 - 2026-11-16: The North Star design document stays out of the public repository (question "publish-design-doc").
+- 2026-11-16: The Orderly: kept as it is for now and moved on, relying on behaviour, sound and the tape look for fear (question "orderly-next").
 
 ## Activity (newest first)
 
+- 2026-11-16 05:37Z Started T2b: The tape-playback look and the debug overlay. An Opus agent is building the tape-playback look as a screen filter, plus a debug overlay with a minimap.
+- 2026-11-16 05:37Z Took a default: The Orderly: kept as it is for now and moved on, relying on behaviour, sound and the tape look for fear (question "orderly-next").
+- 2026-11-16 05:37Z Added task T3b: The Orderly, third pass.
+- 2026-11-16 05:37Z Gate G4 (The Orderly is a real figure) is passed.
+- 2026-11-16 05:37Z Finished T3: The Orderly, second pass.
+- 2026-11-16 05:36Z New pictures for T3: The Orderly, second pass.
+- 2026-11-16 05:33Z New pictures for T3: The Orderly, second pass.
+- 2026-11-16 05:33Z New pictures for T3: The Orderly, second pass.
+- 2026-11-16 05:33Z New pictures for T3: The Orderly, second pass.
+- 2026-11-16 05:23Z Orderly, revision round 2. Fresh blind judges scored it 3/10 and 5/10 for fear: the scores have not improved. Both said the black eye sockets read as sunglasses at game size, and the art director said the grey grinning stick figure echoes three existing characters. The last round goes after exactly that: pale waxy skin, stitched-shut lids, a puffy paper cap, and a smile that runs off the mask onto the cheeks.
+- 2026-11-16 05:21Z New pictures for T3: The Orderly, second pass.
+- 2026-11-16 05:21Z New pictures for T3: The Orderly, second pass.
+- 2026-11-16 05:21Z New pictures for T3: The Orderly, second pass.
+- 2026-11-16 05:21Z New pictures for T3: The Orderly, second pass.
+- 2026-11-16 05:07Z Orderly, revision round 1. A blind art-director judge scored it 4/10 frightening, 4/10 craft, 5/10 original. A blind player judge scored it 6/10 scary and 7/10 memorable, and said: "Why is he smiling? Why is he SMILING." Both said the smile reads as an emoji at game size, the legs are sticks, the gown reads as a dress, and it stands like a plank. Fixes are going back to the modeller.
+- 2026-11-16 05:06Z New pictures for T3: The Orderly, second pass.
+- 2026-11-16 05:04Z New pictures for T3: The Orderly, second pass.
+- 2026-11-16 05:04Z New pictures for T3: The Orderly, second pass.
+- 2026-11-16 05:04Z New pictures for T3: The Orderly, second pass.
+- 2026-11-16 04:56Z New pictures for T3: The Orderly, second pass.
+- 2026-11-16 04:56Z New pictures for T3: The Orderly, second pass.
+- 2026-11-16 04:56Z New pictures for T3: The Orderly, second pass.
+- 2026-11-16 04:56Z New pictures for T3: The Orderly, second pass.
 - 2026-11-16 04:46Z Started T3: The Orderly, second pass. An Opus agent is studying two Blender tutorials, then rebuilding the Orderly to your notes. Two judged revision rounds follow.
 - 2026-11-16 04:46Z You asked the loop to keep working through the night and will answer questions in the morning.
 - 2026-11-16 04:46Z Finished T0b: A public play link on GitHub Pages.
@@ -108,11 +131,3 @@
 - 2026-11-16 04:19Z Added task T0c: AGPL-3.0 licence.
 - 2026-11-16 04:19Z Added task T0b: A public play link on GitHub Pages.
 - 2026-11-16 04:19Z Applied the owner's new answers.
-- 2026-11-16 04:16Z Started T2a: Walking through a floor. An Opus agent is building it: collision as tested logic, the floor as real geometry, the bright Clinic look, and a browser test that walks from the elevator up the stair to the balcony.
-- 2026-11-16 04:16Z The hub is live on the tailnet and linked from the home dashboard.
-- 2026-11-16 04:16Z CI's first full run failed (the browser test could not find the preview server on Linux). Fixed and green since.
-- 2026-11-16 04:16Z New pictures for T3: The Orderly, second pass.
-- 2026-11-16 04:16Z Gate G2 (Floors are sound) is passed.
-- 2026-11-16 04:16Z Finished T1: The Clinic floor generator.
-- 2026-11-16 04:16Z Finished T0: Project setup.
-- 2026-11-16 03:38Z The loop started. Public repository created; secret scanning on every commit and push.

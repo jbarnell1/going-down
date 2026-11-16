@@ -1,12 +1,15 @@
-"""Build "the Orderly" from an empty scene and export a skinned, animated GLB.
+"""Build "the Orderly" (second pass) from an empty scene and export a skinned, animated GLB.
 
 Usage (headless):
   blender.exe --background --factory-startup --python build_orderly.py -- [--out PATH] [--blend PATH]
 
-Pattern for future characters: edit the PARAMETER block, the BONES table, the
-body-part builders and the POSE specs. Everything is deterministic (seeded RNG).
-Blender space: Z up, character faces -Y, X = character's left. glTF export turns
-this into +Y up, facing +Z.
+How to change it:
+  * proportions: HEIGHTS / SPINE / TORSO tables and the ARM / LEG / HAND dicts
+  * the face: HEAD, SOCKET, MASK, SMILE dicts (the print is drawn in make_atlas)
+  * colours: P["colors"]
+  * motion: the *_keys() functions at the bottom; poses are dicts of bone -> ops (see set_pose)
+Everything is deterministic. Blender space: Z up, the figure faces -Y, +X is its left.
+glTF export turns this into +Y up, facing +Z, origin on the floor between the feet.
 """
 import bpy, sys, os, math, argparse
 import numpy as np
@@ -18,86 +21,203 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 # =========================== PARAMETERS ===========================
 P = dict(
     name="Orderly",
-    height=2.30,        # all nominal dims below are authored for 2.30 m and scaled
-    stoop=1.0,          # multiplier on forward offset of chest/neck/head
-    arm_scale=1.08,     # multiplier on arm length below the shoulder
-    head_scale=1.0,     # head ellipsoid size multiplier
-    sides=dict(torso=16, gown=24, arm=10, leg=10, finger=5, sleeve=10),
-    fingers=3,
-    tex_size=256,
-    colors=dict(        # sRGB 0..1
-        skin=(0.55, 0.57, 0.56), skin_dark=(0.47, 0.45, 0.47),
-        gown=(0.63, 0.76, 0.69), gown_line=(0.52, 0.64, 0.58), stain=(0.56, 0.47, 0.28),
-        cap=(0.60, 0.73, 0.80), mask=(0.76, 0.86, 0.91), mask_line=(0.62, 0.72, 0.78),
-        ink=(0.04, 0.04, 0.06), cheek=(0.95, 0.52, 0.58), tie=(0.88, 0.88, 0.84),
+    scale=1.0,      # uniform scale on everything (set by HEIGHT below)
+    height=2.66,    # target standing height (top of cap, idle pose) in metres
+    tex_size=512,
+    colors=dict(  # sRGB 0..1
+        skin=(0.83, 0.79, 0.65), skin_lo=(0.72, 0.66, 0.60), skin_hi=(0.91, 0.89, 0.77),
+        bruise=(0.77, 0.68, 0.64), bruise_deep=(0.55, 0.44, 0.44), suture=(0.09, 0.06, 0.06),
+        vein=(0.60, 0.67, 0.80),
+        gown=(0.69, 0.78, 0.80), gown_line=(0.61, 0.70, 0.73), gown_print=(0.52, 0.62, 0.73),
+        band=(0.95, 0.95, 0.92), band_ink=(0.20, 0.30, 0.55),
+        stain=(0.50, 0.43, 0.30),
+        cap=(0.72, 0.82, 0.90), cap_band=(0.62, 0.72, 0.82),
+        mask=(0.68, 0.81, 0.90), mask_line=(0.52, 0.65, 0.76), ink=(0.06, 0.06, 0.08),
+        damp=(0.78, 0.76, 0.52), nose=(0.80, 0.82, 0.84),
+        tie=(0.86, 0.88, 0.84), nail=(0.58, 0.55, 0.48),
     ),
     fps=24,
-    step=3,             # frames per pose for stepped actions (24/3 = 8 poses/s)
+    step=3,  # frames per pose for stepped actions: 24 / 3 = 8 poses a second
 )
-S = P["height"] / 2.30
 
-# Atlas regions (u0, v0, u1, v1)
-REG = dict(mask=(0.0, 0.5, 0.5, 1.0), gown=(0.5, 0.5, 1.0, 1.0),
-           skin=(0.0, 0.0, 0.25, 0.25), skin_dark=(0.25, 0.0, 0.5, 0.25),
-           cap=(0.5, 0.0, 0.75, 0.25), tie=(0.75, 0.0, 1.0, 0.25))
+# Spine centre line: z -> y offset (negative y = forward). Lower back nearly straight, then a hunch.
+SPINE = [(1.05, 0.0), (1.34, 0.022), (1.56, 0.024), (1.70, -0.004), (1.84, -0.070), (1.95, -0.150),
+         (2.04, -0.225)]
+NECK_TOP = (0.0, -0.345, 2.140)      # where the neck meets the skull
+HEAD = dict(c=(0.0, -0.385, 2.262), r=(0.084, 0.100, 0.134), jaw=0.84)
+
+# Torso cross-section table: z, half-width, front depth, back depth (from the spine line)
+TORSO = [
+    (1.08, 0.115, 0.075, 0.085), (1.20, 0.130, 0.080, 0.092), (1.32, 0.122, 0.070, 0.085),
+    (1.42, 0.100, 0.046, 0.074), (1.50, 0.104, 0.050, 0.074), (1.57, 0.128, 0.090, 0.078),
+    (1.65, 0.140, 0.104, 0.084), (1.75, 0.146, 0.110, 0.090), (1.83, 0.150, 0.102, 0.096),
+    (1.89, 0.160, 0.090, 0.096), (1.95, 0.140, 0.078, 0.092), (2.00, 0.098, 0.062, 0.076),
+    (2.045, 0.054, 0.044, 0.050),
+]
+RIBS = dict(z0=1.585, z1=1.965, spacing=0.050, amp=0.011, slope=0.065, sternum=14.0)
+
+ARM = dict(  # left arm points; the right one is mirrored
+    shoulder=(0.190, -0.105, 1.900), elbow=(0.232, -0.085, 1.425), wrist=(0.246, -0.165, 0.965),
+    knuckle=(0.248, -0.180, 0.790), stretch=1.0,
+)
+HAND = dict(  # per finger: knuckle y offset, segment lengths, radius, splay (x out, y)
+    index=(-0.036, (0.098, 0.076, 0.060), 0.0108, (0.000, -0.012)),
+    middle=(-0.012, (0.108, 0.084, 0.066), 0.0112, (0.000, -0.003)),
+    ring=(0.012, (0.100, 0.078, 0.062), 0.0106, (0.000, 0.005)),
+    little=(0.034, (0.078, 0.062, 0.052), 0.0094, (0.000, 0.014)),
+    curl=(0.0, -0.008, -0.024),  # x offset toward the palm at each joint
+)
+LEG = dict(hip=(0.088, 0.0, 1.16), knee=(0.096, -0.022, 0.625), ankle=(0.100, 0.020, 0.090),
+           toe=(0.108, -0.225, 0.018))
+SOCKET = dict(lat=16.0, az=31.0, r=0.031, depth=0.009, rim=0.002, skip=0.033,
+              right_drop=0.006, right_scale=1.10, right_depth=2.0, stitch_angle=(9.0, -17.0))
+MASK = dict(a_half=96.0, lat0=-70.0, lat1=2.0, cols=16, rows=6, scale=1.11, proud=0.010, pleat=0.0075,
+            bulge=0.010, tilt=4.0)
+CAP = dict(front_lat=34.0, back_lat=-14.0, puff=0.40, lean=(0.035, 0.012, -0.006))
+GOWN = dict(top_front=1.875, top_side=2.07, top_left=1.880, hem=0.74, gap=0.022,
+            hang_front=1.0, hang_side=0.80, hang_back=0.96, flare=0.030, folds=7, fold_amp=0.014,
+            slit_top=64.0, slit_bottom=22.0, slit_to=1.28, sides=34, collar_sag=0.035)
 
 
-def V(x, y, z):
-    return Vector((x * S, y * S, z * S))
+def lerp(a, b, t):
+    return a + (b - a) * t
 
 
-# Spine curve (z -> forward offset); stoop bends the upper body forward
-SPINE = [(1.00, 0.0), (1.30, 0.0), (1.52, -0.02), (1.71, -0.07), (1.86, -0.15), (2.03, -0.29)]
+def table(z, tab, col):
+    if z <= tab[0][0]:
+        return tab[0][col]
+    for r0, r1 in zip(tab, tab[1:]):
+        if z <= r1[0]:
+            t = (z - r0[0]) / (r1[0] - r0[0])
+            t = t * t * (3 - 2 * t)
+            return lerp(r0[col], r1[col], t)
+    return tab[-1][col]
 
 
 def spine_y(z):
-    pts = SPINE
-    if z <= pts[0][0]:
-        return pts[0][1] * P["stoop"]
-    for (z0, y0), (z1, y1) in zip(pts, pts[1:]):
-        if z <= z1:
-            t = (z - z0) / (z1 - z0)
-            return (y0 + (y1 - y0) * t) * P["stoop"]
-    return pts[-1][1] * P["stoop"]
+    return table(z, SPINE, 1)
 
 
-HEAD_C = (0.0, -0.32 * P["stoop"], 2.14)
-HEAD_R = (0.082 * P["head_scale"], 0.095 * P["head_scale"], 0.11 * P["head_scale"])
+# ============================ BODY FIELD ============================
+def rib_bump(a_deg, z):
+    """Rib ridges on the ribcage; ribs slope down toward the front. a_deg: 0 = left, 90 = back, -90 = front."""
+    s = math.sin(math.radians(a_deg))
+    front = max(0.0, -s)
+    if abs(a_deg + 90) < RIBS["sternum"]:
+        return 0.0
+    back_spine = abs(a_deg - 90) < 9
+    if back_spine:
+        return 0.0
+    ze = z + RIBS["slope"] * front
+    if ze < RIBS["z0"] - 0.02 or ze > RIBS["z1"] + 0.03 or z > 1.975:
+        return 0.0
+    env = min(1.0, (ze - RIBS["z0"] + 0.02) / 0.05) * min(1.0, (RIBS["z1"] + 0.03 - ze) / 0.05)
+    ph = (ze - RIBS["z0"]) / RIBS["spacing"]
+    ridge = max(0.0, math.cos(2 * math.pi * ph)) ** 3
+    side_w = 0.55 + 0.45 * abs(math.cos(math.radians(a_deg)))  # strongest on the flanks
+    return RIBS["amp"] * env * ridge * side_w
 
 
-def arm_pts(side):
-    """Shoulder->fingertip chain points for side +1 (left) / -1 (right)."""
-    sx = side
-    sh = (0.16 * sx, spine_y(1.76) + 0.02, 1.76)  # slumped, narrow shoulders
-    rel = [(0.03, 0.02, -0.52), (0.03, -0.03, -0.51), (0.008, -0.01, -0.13), (0.002, -0.005, -0.12), (0.0, -0.005, -0.13)]
-    pts = [sh]
-    for dx, dy, dz in rel:
-        a = P["arm_scale"]
-        x, y, z = pts[-1]
-        pts.append((x + dx * sx * a, y + dy * a, z + dz * a))
-    return pts  # shoulder, elbow, wrist, knuckle, finger joint, tip
+def rib_valley(a_deg, z):
+    """0..1, how deep in a gap between ribs this point is (for painted shadow)."""
+    s = math.sin(math.radians(a_deg))
+    front = max(0.0, -s)
+    if abs(a_deg + 90) < RIBS["sternum"] or abs(a_deg - 90) < 9:
+        return 0.0
+    ze = z + RIBS["slope"] * front
+    if ze < RIBS["z0"] or ze > RIBS["z1"] or z > 1.97:
+        return 0.0
+    ph = (ze - RIBS["z0"]) / RIBS["spacing"]
+    return max(0.0, -math.cos(2 * math.pi * ph))
+
+
+def body_r(a_deg, z):
+    """Distance from the spine line to the skin in direction a (degrees) at height z."""
+    rx, rf, rb = table(z, TORSO, 1), table(z, TORSO, 2), table(z, TORSO, 3)
+    a = math.radians(a_deg)
+    c, s = math.cos(a), math.sin(a)
+    ry = rb if s > 0 else rf
+    r = 1.0 / math.sqrt((c / rx) ** 2 + (s / ry) ** 2)
+    r += rib_bump(a_deg, z)
+    if s < 0:  # collarbones: a ridge from the notch of the sternum out to each shoulder
+        off = abs(a_deg + 90)
+        if 9 < off < 72:
+            zc = 1.962 + 0.014 * (off - 9) / 63
+            r += 0.008 * math.exp(-((z - zc) / 0.011) ** 2) * min(1.0, (off - 9) / 8)
+    # spine groove and shoulder-blade ridge on the back
+    if s > 0:
+        r -= 0.006 * max(0.0, 1 - abs(a_deg - 90) / 12) * (1.0 if 1.35 < z < 1.98 else 0.0)
+    return r
+
+
+def body_point(a_deg, z, extra=0.0):
+    r = body_r(a_deg, z) + extra
+    a = math.radians(a_deg)
+    return Vector((r * math.cos(a), spine_y(z) + r * math.sin(a), z))
 
 
 # ============================ ARMATURE ============================
+def mirror_pt(p, side):
+    return (p[0] * side, p[1], p[2])
+
+
+def finger_points(side, name):
+    """knuckle, joint1, joint2, tip for one finger of one hand."""
+    yoff, segs, rad, (sx, sy) = HAND[name]
+    kn = Vector(mirror_pt(ARM["knuckle"], side)) + Vector((0, yoff, 0))
+    pts = [kn]
+    curl = HAND["curl"]
+    z = kn.z
+    for i, L in enumerate(segs):
+        z -= L
+        f = (i + 1) / len(segs)
+        pts.append(Vector((kn.x + side * (sx * f + curl[i]), kn.y + sy * f, z)))
+    return pts
+
+
+def thumb_points(side):
+    wr = Vector(mirror_pt(ARM["wrist"], side))
+    a = wr + Vector((-0.014 * side, -0.034, -0.036))
+    b = a + Vector((-0.012 * side, -0.026, -0.066))
+    c = b + Vector((-0.012 * side, -0.012, -0.056))
+    return [a, b, c]
+
+
 def bone_table():
+    """name -> (head, tail, parent). Order matters: parents first."""
     b = {}
-    b["hips"] = ((0, 0, 1.02), (0, 0, 1.30), None)
-    b["spine"] = ((0, 0, 1.30), (0, spine_y(1.52), 1.52), "hips")
-    b["spine1"] = ((0, spine_y(1.52), 1.52), (0, spine_y(1.71), 1.71), "spine")
-    b["spine2"] = ((0, spine_y(1.71), 1.71), (0, spine_y(1.86), 1.86), "spine1")
-    b["neck"] = ((0, spine_y(1.86), 1.86), (0, spine_y(2.05), 2.05), "spine2")
-    b["head"] = ((0, HEAD_C[1] + 0.01, 2.05), (0, HEAD_C[1] + 0.0, 2.05 + 0.22 * P["head_scale"]), "neck")
+    b["hips"] = ((0, 0, 1.12), (0, spine_y(1.34), 1.34), None)
+    b["spine"] = ((0, spine_y(1.34), 1.34), (0, spine_y(1.56), 1.56), "hips")
+    b["spine1"] = ((0, spine_y(1.56), 1.56), (0, spine_y(1.76), 1.76), "spine")
+    b["spine2"] = ((0, spine_y(1.76), 1.76), (0, spine_y(2.03), 2.03), "spine1")
+    nb = (0, spine_y(2.03), 2.03)
+    nm = tuple(lerp(nb[i], NECK_TOP[i], 0.5) for i in range(3))
+    b["neck"] = (nb, nm, "spine2")
+    b["neck1"] = (nm, NECK_TOP, "neck")
+    b["head"] = (NECK_TOP, (NECK_TOP[0], NECK_TOP[1], NECK_TOP[2] + 0.25), "neck1")
     for side, sfx in ((1, ".L"), (-1, ".R")):
-        a = arm_pts(side)
-        b["clavicle" + sfx] = ((0.03 * side, spine_y(1.82), 1.82), a[0], "spine2")
-        b["upperarm" + sfx] = (a[0], a[1], "clavicle" + sfx)
-        b["forearm" + sfx] = (a[1], a[2], "upperarm" + sfx)
-        b["hand" + sfx] = (a[2], a[3], "forearm" + sfx)
-        b["finger1" + sfx] = (a[3], a[4], "hand" + sfx)
-        b["finger2" + sfx] = (a[4], a[5], "finger1" + sfx)
-        b["thigh" + sfx] = ((0.095 * side, 0.0, 1.10), (0.10 * side, -0.025, 0.64), "hips")
-        b["shin" + sfx] = ((0.10 * side, -0.025, 0.64), (0.105 * side, 0.0, 0.09), "thigh" + sfx)
-        b["foot" + sfx] = ((0.105 * side, 0.0, 0.09), (0.11 * side, -0.19, 0.025), "shin" + sfx)
+        sh, el, wr, kn = (mirror_pt(ARM[k], side) for k in ("shoulder", "elbow", "wrist", "knuckle"))
+        b["clavicle" + sfx] = ((0.03 * side, spine_y(1.97), 1.97), sh, "spine2")
+        b["upperarm" + sfx] = (sh, el, "clavicle" + sfx)
+        b["forearm" + sfx] = (el, wr, "upperarm" + sfx)
+        b["hand" + sfx] = (wr, kn, "forearm" + sfx)
+        fi = finger_points(side, "index")
+        fm = finger_points(side, "middle")
+        fr = finger_points(side, "ring")
+        th = thumb_points(side)
+        b["index1" + sfx] = (tuple(fi[0]), tuple(fi[1]), "hand" + sfx)
+        b["index2" + sfx] = (tuple(fi[1]), tuple(fi[2]), "index1" + sfx)
+        b["index3" + sfx] = (tuple(fi[2]), tuple(fi[3]), "index2" + sfx)
+        b["middle1" + sfx] = (tuple(fm[0]), tuple(fm[1]), "hand" + sfx)
+        b["middle2" + sfx] = (tuple(fm[1]), tuple(fm[2]), "middle1" + sfx)
+        b["middle3" + sfx] = (tuple(fm[2]), tuple(fm[3]), "middle2" + sfx)
+        b["ring1" + sfx] = (tuple(fr[0]), tuple(fr[1]), "hand" + sfx)
+        b["ring2" + sfx] = (tuple(fr[1]), tuple(fr[3]), "ring1" + sfx)
+        b["thumb" + sfx] = (tuple(th[0]), tuple(th[2]), "hand" + sfx)
+        hip, knee, ankle, toe = (mirror_pt(LEG[k], side) for k in ("hip", "knee", "ankle", "toe"))
+        b["thigh" + sfx] = (hip, knee, "hips")
+        b["shin" + sfx] = (knee, ankle, "thigh" + sfx)
+        b["foot" + sfx] = (ankle, toe, "shin" + sfx)
     return b
 
 
@@ -109,7 +229,7 @@ def build_armature(bt):
     bpy.ops.object.mode_set(mode="EDIT")
     for name, (h, t, parent) in bt.items():
         eb = arm_data.edit_bones.new(name)
-        eb.head, eb.tail = V(*h), V(*t)
+        eb.head, eb.tail = Vector(h) * P["scale"], Vector(t) * P["scale"]
         eb.roll = 0.0
     for name, (h, t, parent) in bt.items():
         if parent:
@@ -119,219 +239,448 @@ def build_armature(bt):
 
 
 # ============================ MESH KIT ============================
+# Atlas regions (u0, v0, u1, v1) on the packed texture
+REG = dict(mask=(0.0, 0.5, 0.5, 1.0), gown=(0.5, 0.5, 1.0, 1.0), band=(0.0, 0.0, 0.25, 0.125),
+           ink=(0.25, 0.0, 0.375, 0.125), gown_top=(0.5, 0.78, 1.0, 1.0),
+           skin=(0.0, 0.25, 0.125, 0.375), skin_lo=(0.125, 0.25, 0.25, 0.375),
+           skin_hi=(0.0, 0.375, 0.125, 0.5), bruise=(0.125, 0.375, 0.25, 0.5),
+           socket=(0.25, 0.25, 0.5, 0.5),
+           cap=(0.5, 0.25, 0.75, 0.5), tie=(0.75, 0.25, 0.875, 0.375), nail=(0.875, 0.25, 1.0, 0.375),
+           gown_in=(0.75, 0.375, 1.0, 0.5))
+
+
 def ruv(reg, u, v):
-    m = 0.03
-    u = m + (1 - 2 * m) * u
-    v = m + (1 - 2 * m) * v
+    m = 0.04
+    u = m + (1 - 2 * m) * min(1.0, max(0.0, u))
+    v = m + (1 - 2 * m) * min(1.0, max(0.0, v))
     return (reg[0] + (reg[2] - reg[0]) * u, reg[1] + (reg[3] - reg[1]) * v)
 
 
 class MeshBuilder:
     def __init__(self):
         self.co, self.w, self.faces, self.uvs = [], [], [], []
+        self.smooth, self.sm = False, []
 
     def vert(self, co, w):
         self.co.append(Vector(co))
         self.w.append(dict(w))
         return len(self.co) - 1
 
-    def face(self, idx, uv, interior=None):
+    def face(self, idx, uv, interior=None, outward=None):
+        """Orient so the normal points away from `interior` (or along `outward`)."""
         idx, uv = list(idx), list(uv)
-        if interior is not None:
-            pts = [self.co[i] for i in idx]
-            n = Vector((0, 0, 0))
-            for a, b in zip(pts, pts[1:] + pts[:1]):
-                n += a.cross(b)
-            c = sum(pts, Vector()) / len(pts)
-            if n.dot(c - Vector(interior)) < 0:
-                idx.reverse(); uv.reverse()
+        pts = [self.co[i] for i in idx]
+        n = Vector((0, 0, 0))
+        for a, b in zip(pts, pts[1:] + pts[:1]):
+            n += a.cross(b)
+        c = sum(pts, Vector()) / len(pts)
+        ref = (c - Vector(interior)) if interior is not None else (Vector(outward) if outward is not None else None)
+        if ref is not None and n.dot(ref) < 0:
+            idx.reverse(); uv.reverse()
         self.faces.append(idx)
         self.uvs.append(uv)
+        self.sm.append(self.smooth)
 
 
-def frame_for(t):
-    x = Vector((1, 0, 0))
+def frame_for(t, ref=None):
+    x = Vector(ref) if ref is not None else Vector((1, 0, 0))
     if abs(t.dot(x)) > 0.9:
         x = Vector((0, 1, 0))
     xp = (x - t * x.dot(t)).normalized()
     return xp, t.cross(xp)
 
 
-def tube(mb, rings, sides, reg, cap0=True, cap1=True, angles=None):
-    """rings: list of (center Vector, rx, ry, weights). Returns ring vertex index lists."""
+def tube(mb, rings, sides, reg, cap0=True, cap1=True, ref=None, reg_fn=None, phase=0.0):
+    """rings: list of (center, radius, weights). radius is a number, (rx, ry) or a function of the
+    world-space unit direction d -> radius. weights is a dict or a function of position -> dict.
+    reg_fn(i, k, center) can pick the atlas region per face."""
     n = len(rings)
-    cs = [r[0] for r in rings]
-    if angles is None:
-        angles = [2 * math.pi * k / sides for k in range(sides)]
+    cs = [Vector(r[0]) for r in rings]
     idx = []
-    for i, (c, rx, ry, w) in enumerate(rings):
+    for i, (c, rad, w) in enumerate(rings):
+        c = Vector(c)
         t = (cs[min(i + 1, n - 1)] - cs[max(i - 1, 0)]).normalized()
-        xp, yp = frame_for(t)
-        idx.append([mb.vert(c + xp * (rx * math.cos(a)) + yp * (ry * math.sin(a)), w) for a in angles])
+        xp, yp = frame_for(t, ref)
+        row = []
+        for k in range(sides):
+            a = 2 * math.pi * (k + phase) / sides
+            d = xp * math.cos(a) + yp * math.sin(a)
+            if callable(rad):
+                p = c + d * rad(d)
+            elif isinstance(rad, tuple):
+                p = c + xp * (rad[0] * math.cos(a)) + yp * (rad[1] * math.sin(a))
+            else:
+                p = c + d * rad
+            row.append(mb.vert(p, w(p) if callable(w) else w))
+        idx.append(row)
     for i in range(n - 1):
         interior = (cs[i] + cs[i + 1]) / 2
         for k in range(sides):
             k2 = (k + 1) % sides
             q = [idx[i][k], idx[i][k2], idx[i + 1][k2], idx[i + 1][k]]
-            uv = [ruv(reg, k / sides, i / (n - 1)), ruv(reg, (k + 1) / sides, i / (n - 1)),
-                  ruv(reg, (k + 1) / sides, (i + 1) / (n - 1)), ruv(reg, k / sides, (i + 1) / (n - 1))]
+            fc = sum((mb.co[j] for j in q), Vector()) / 4
+            r = reg_fn(i, k, interior, fc) if reg_fn else reg
+            uv = [ruv(r, k / sides, i / (n - 1)), ruv(r, (k + 1) / sides, i / (n - 1)),
+                  ruv(r, (k + 1) / sides, (i + 1) / (n - 1)), ruv(r, k / sides, (i + 1) / (n - 1))]
             mb.face(q, uv, interior)
     for end, use in ((0, cap0), (n - 1, cap1)):
         if not use:
             continue
         nb = 1 if end == 0 else n - 2
-        c, rx, ry, w = rings[end]
+        c, rad, w = rings[end]
+        c = Vector(c)
         out = (c - cs[nb]).normalized()
-        tip = mb.vert(c + out * (0.35 * min(rx, ry)), w)
+        rr = rad if isinstance(rad, (int, float)) else (min(rad) if isinstance(rad, tuple) else 0.01)
+        tipp = c + out * (0.35 * rr)
+        tip = mb.vert(tipp, w(tipp) if callable(w) else w)
+        r = reg
         for k in range(sides):
             k2 = (k + 1) % sides
             mb.face([tip, idx[end][k], idx[end][k2]],
-                    [ruv(reg, 0.5, 0.5), ruv(reg, k / sides, 0.0), ruv(reg, (k + 1) / sides, 0.0)], cs[nb])
+                    [ruv(r, 0.5, 0.5), ruv(r, k / sides, 0.0), ruv(r, (k + 1) / sides, 0.0)], cs[nb])
     return idx
 
 
-def box(mb, c, size, w, reg):
-    c = Vector(c)
-    hx, hy, hz = size[0] / 2, size[1] / 2, size[2] / 2
-    vs = [mb.vert(c + Vector((sx * hx, sy * hy, sz * hz)), w)
-          for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]
-    quads = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
-    for q in quads:
-        mb.face([vs[i] for i in q], [ruv(reg, 0, 0), ruv(reg, 1, 0), ruv(reg, 1, 1), ruv(reg, 0, 1)], c)
-
-
-def lerp_w(z, table):
-    """table: list of (z, {bone: w}) sorted descending or ascending; linear blend."""
-    tb = sorted(table, key=lambda e: e[0])
+def lerp_w(z, tab):
+    tb = sorted(tab, key=lambda e: e[0])
     if z <= tb[0][0]:
         return dict(tb[0][1])
     for (z0, w0), (z1, w1) in zip(tb, tb[1:]):
         if z <= z1:
             t = (z - z0) / (z1 - z0)
-            out = {}
-            for k in set(w0) | set(w1):
-                out[k] = w0.get(k, 0) * (1 - t) + w1.get(k, 0) * t
-            return out
+            return {k: w0.get(k, 0) * (1 - t) + w1.get(k, 0) * t for k in set(w0) | set(w1)}
     return dict(tb[-1][1])
 
 
+SPINE_W = [(1.12, {"hips": 1}), (1.30, {"hips": .6, "spine": .4}), (1.42, {"spine": 1}),
+           (1.56, {"spine": .5, "spine1": .5}), (1.70, {"spine1": 1}), (1.80, {"spine1": .4, "spine2": .6}),
+           (1.92, {"spine2": 1}), (2.02, {"spine2": .7, "neck": .3}), (2.08, {"neck": 1})]
+
+
+def torso_weights(p):
+    w = lerp_w(p.z, SPINE_W)
+    # shoulders follow the clavicles
+    ax = abs(p.x)
+    if p.z > 1.80 and ax > 0.09:
+        t = min(1.0, (ax - 0.09) / 0.07) * min(1.0, (p.z - 1.80) / 0.08)
+        sfx = ".L" if p.x > 0 else ".R"
+        w = {k: v * (1 - t) for k, v in w.items()}
+        w["clavicle" + sfx] = w.get("clavicle" + sfx, 0) + t * 0.75
+        w["upperarm" + sfx] = w.get("upperarm" + sfx, 0) + t * 0.25 * min(1.0, (ax - 0.13) / 0.04 if ax > 0.13 else 0)
+    if p.z < 1.20:
+        t = min(1.0, (1.20 - p.z) / 0.12) * 0.6
+        sfx = ".L" if p.x > 0 else ".R"
+        w = {k: v * (1 - t) for k, v in w.items()}
+        w["thigh" + sfx] = t
+    return w
+
+
 # ============================ BODY PARTS ============================
+def torso_zs():
+    zs = [1.06, 1.14, 1.22, 1.30, 1.37, 1.43, 1.49, 1.545]
+    z = 1.575
+    while z < 1.975:
+        zs.append(round(z, 4))
+        z += RIBS["spacing"] / 4
+    zs += [1.985, 1.995, 2.01, 2.025, 2.045]
+    return zs
+
+
 def build_torso(mb):
-    spec = [  # z, rx, ry, weights
-        (1.00, 0.10, 0.075, {"hips": 1}), (1.12, 0.12, 0.085, {"hips": 1}),
-        (1.30, 0.10, 0.072, {"hips": .5, "spine": .5}), (1.45, 0.105, 0.072, {"spine": 1}),
-        (1.60, 0.125, 0.078, {"spine": .5, "spine1": .5}), (1.72, 0.14, 0.082, {"spine1": .5, "spine2": .5}),
-        (1.80, 0.15, 0.082, {"spine2": 1}), (1.86, 0.08, 0.06, {"spine2": .6, "neck": .4}),
-    ]
-    rings = [(V(0, spine_y(z), z), rx * S, ry * S, w) for z, rx, ry, w in spec]
-    tube(mb, rings, P["sides"]["torso"], REG["skin"], cap0=True, cap1=False)
-    neck = [(V(0, spine_y(1.84), 1.84), 0.056 * S, 0.05 * S, {"spine2": .5, "neck": .5}),
-            (V(0, spine_y(1.94), 1.94), 0.046 * S, 0.044 * S, {"neck": 1}),
-            (V(0, spine_y(2.05), 2.05), 0.042 * S, 0.042 * S, {"neck": .4, "head": .6})]
-    tube(mb, neck, 8, REG["skin"], cap0=False, cap1=True)
+    sides = 22
+    zs = torso_zs()
+    rings = []
+    for z in zs:
+        c = Vector((0, spine_y(z), z))
+
+        def rad(d, z=z, c=c):
+            a = math.degrees(math.atan2(d.y, d.x))
+            return body_r(a, z)
+        rings.append((c, rad, torso_weights))
+
+    def reg_fn(i, k, cen, fc=None):
+        a = 360.0 * (k + 0.5) / sides
+        a = a if a <= 180 else a - 360
+        z = cen.z
+        v = rib_valley(a, z)
+        # the tops of the shoulders sit just under the paper; where they show, they show as cloth
+        if z > 1.84 and not (-135 < a < -45) and abs(a - 90) > 58 and abs(a + 270) > 58:
+            return REG["gown_top"]
+        if v > 0.6 and z < 1.90:
+            return REG["skin_lo"]
+        # hollow above the collarbones and the belly under the ribcage
+        if -130 < a < -50 and 1.43 < z < 1.56:
+            return REG["skin_lo"]
+        return REG["skin"]
+    tube(mb, rings, sides, REG["skin"], cap0=True, cap1=False, ref=(1, 0, 0), reg_fn=reg_fn)
+
+
+def build_spine_knobs(mb):
+    """Vertebrae standing out along the curved back."""
+    z = 1.36
+    while z < 2.05:
+        p = body_point(90, z)
+        t = Vector((0, spine_y(z + 0.01) - spine_y(z - 0.01), 0.02)).normalized()
+        n = Vector((0, 1, 0))
+        n = (n - t * n.dot(t)).normalized()
+        size = 0.010 + 0.004 * (1 - abs(z - 1.85) / 0.5)
+        w = lerp_w(z, SPINE_W)
+        tube(mb, [(p - n * 0.006, size, w), (p + n * 0.006, size * 0.8, w)], 4, REG["skin_hi"],
+             cap0=False, cap1=True, ref=t)
+        z += 0.034
+
+
+def build_collarbones(mb):
+    for side, sfx in ((1, ".L"), (-1, ".R")):
+        sh = Vector(mirror_pt(ARM["shoulder"], side))
+        pts = []
+        for i in range(6):
+            t = i / 5
+            a = lerp(-90 + 9 * side * -1 * -1, -90 + 62 * side * -1 * -1, t)  # sweep from sternum to shoulder
+            a = -90 + side * lerp(10, 66, t)
+            z = lerp(1.962, 1.975, t) + 0.010 * math.sin(math.pi * t)
+            p = body_point(a, z, extra=0.001 + 0.002 * math.sin(math.pi * t))
+            pts.append(p)
+        C = "clavicle" + sfx
+
+        def w(p, C=C):
+            t = min(1.0, abs(p.x) / 0.15)
+            return {"spine2": 1 - t, C: t}
+        rings = [(p, 0.0075 if 0 < i < 5 else 0.006, w) for i, p in enumerate(pts)]
+        tube(mb, rings, 5, REG["skin_hi"], cap0=True, cap1=True)
+
+
+def build_scapulae(mb):
+    """Winged shoulder blades: a plate whose inner edge lifts off the back."""
+    for side, sfx in ((1, ".L"), (-1, ".R")):
+        C = "clavicle" + sfx
+        grid = []
+        for j, z in enumerate((1.93, 1.83, 1.72)):
+            row = []
+            for i, a in enumerate((90 - side * 18, 90 - side * 36, 90 - side * 56)):
+                lift = (0.010 if i == 0 else 0.005 if i == 1 else 0.0) * (1.0 if j < 2 else 0.7)
+                if j == 2 and i == 2:
+                    continue
+                p = body_point(a, z, extra=lift + 0.002)
+                row.append(mb.vert(p, {"spine2": 0.6, C: 0.4}))
+            grid.append(row)
+        c = Vector((0, spine_y(1.83), 1.83))
+        r = REG["skin"]
+        for j in range(2):
+            for i in range(2):
+                if j + 1 == 2 and i + 1 >= len(grid[2]):
+                    mb.face([grid[j][i], grid[j][i + 1], grid[j + 1][i]],
+                            [ruv(r, 0, 0), ruv(r, 1, 0), ruv(r, 0, 1)], c)
+                    continue
+                mb.face([grid[j][i], grid[j][i + 1], grid[j + 1][i + 1], grid[j + 1][i]],
+                        [ruv(r, 0, 0), ruv(r, 1, 0), ruv(r, 1, 1), ruv(r, 0, 1)], c)
+        # lip under the inner edge so it reads as lifted
+        for j in range(2):
+            a0, a1 = grid[j][0], grid[j + 1][0]
+            b0 = mb.vert(body_point(90 - side * 16, (1.93, 1.83, 1.72)[j], -0.004), {"spine2": 1})
+            b1 = mb.vert(body_point(90 - side * 16, (1.93, 1.83, 1.72)[j + 1], -0.004), {"spine2": 1})
+            mb.face([a0, a1, b1, b0], [ruv(REG["skin_lo"], 0, 0), ruv(REG["skin_lo"], 1, 0),
+                                       ruv(REG["skin_lo"], 1, 1), ruv(REG["skin_lo"], 0, 1)], c)
+
+
+def build_neck(mb):
+    nb = Vector((0, spine_y(2.02), 2.02))
+    top = Vector(NECK_TOP) + Vector((0, -0.004, 0.03))
+    rings = []
+    for i in range(6):
+        t = i / 5
+        c = nb.lerp(top, t)
+
+        def rad(d, t=t):
+            r = lerp(0.056, 0.037, min(1, t * 1.6))
+            # tendons at the front sides, an Adam's apple
+            r += 0.006 * max(0.0, -d.y) ** 6 * math.sin(math.pi * min(1, t * 1.3))
+            r += 0.004 * abs(d.x) ** 8
+            return r
+        w = {"spine2": 1} if i == 0 else {"neck": 1} if t < 0.45 else {"neck": 0.4, "neck1": 0.6} if t < 0.7 else {"neck1": 1} if t < 0.95 else {"neck1": .5, "head": .5}
+        rings.append((c, rad, w))
+    mb.smooth = True
+    tube(mb, rings, 12, REG["skin"], cap0=False, cap1=False)
+    mb.smooth = False
+
+
+def head_point(az_deg, lat_deg, s=1.0, extra=0.0):
+    """az 0 = straight forward (-Y), positive toward the figure's left (+X)."""
+    hc = Vector(HEAD["c"])
+    rx, ry, rz = HEAD["r"]
+    a, la = math.radians(az_deg), math.radians(lat_deg)
+    jaw = 1.0 if lat_deg > 0 else lerp(1.0, HEAD["jaw"], min(1.0, -lat_deg / 60))
+    back = 1.0 + 0.10 * max(0.0, -math.cos(a)) * max(0.0, math.cos(la)) * (1 if lat_deg > -20 else 0.4)
+    d = Vector((rx * jaw * math.cos(la) * math.sin(a), -ry * back * math.cos(la) * math.cos(a), rz * math.sin(la)))
+    # flatten the brow where the eyes should be
+    flat = max(0.0, math.cos(a)) ** 4 * math.exp(-((lat_deg - SOCKET["lat"]) / 18) ** 2)
+    d.y += 0.010 * flat
+    p = hc + d * s
+    if extra:
+        p += (p - hc).normalized() * extra
+    return p
+
+
+def socket_centres():
+    out = []
+    for side in (1, -1):
+        drop = SOCKET["right_drop"] if side < 0 else 0.0
+        lat = SOCKET["lat"] - math.degrees(drop / HEAD["r"][2])
+        c = head_point(side * SOCKET["az"], lat)
+        n = (head_point(side * SOCKET["az"], lat, extra=0.01) - c).normalized()
+        n = (n + Vector((0, -0.6, 0))).normalized()
+        sc = SOCKET["right_scale"] if side < 0 else 1.0
+        out.append((side, c, n, SOCKET["r"] * sc))
+    return out
 
 
 def build_head(mb):
-    hc = Vector(V(*HEAD_C))
-    rx, ry, rz = (r * S for r in HEAD_R)
-    segs = 12
-    lats = [-90, -70, -50, -30, -12, 6, 24, 42, 60, 76, 90]
-    dents = {(1, 24): 0.020, (11, 24): 0.020, (1, 6): 0.007, (11, 6): 0.007, (0, 24): 0.004}
+    hc = Vector(HEAD["c"])
+    segs = 18
+    lats = [-90, -72, -56, -42, -28, -14, -2, 8, 17, 26, 36, 48, 62, 76, 90]
+    socks = socket_centres()
     grid = {}
     W = {"head": 1}
-    for li, lat in enumerate(lats):
+    for lat in lats:
         if abs(lat) == 90:
-            grid[(0, lat)] = mb.vert(hc + Vector((0, 0, rz * (1 if lat > 0 else -1))), W)
+            grid[(0, lat)] = mb.vert(head_point(0, lat), W)
             continue
         for k in range(segs):
-            a = math.radians(-90 + 30 * k)
-            la = math.radians(lat)
-            d = Vector((rx * math.cos(la) * math.cos(a), ry * math.cos(la) * math.sin(a), rz * math.sin(la)))
-            dent = dents.get((k, lat), 0.0) * S
-            if dent:
-                d -= d.normalized() * dent
-            grid[(k, lat)] = mb.vert(hc + d, W)
-    dark = set(grid[k] for k in dents if k[1] == 24 and k[0] != 0)
-
-    def reg_for(ids):
-        return REG["skin_dark"] if any(i in dark for i in ids) else REG["skin"]
-
+            az = -180 + 360 * k / segs
+            grid[(k, lat)] = mb.vert(head_point(az, lat), W)
     for li in range(len(lats) - 1):
         l0, l1 = lats[li], lats[li + 1]
         for k in range(segs):
             k2 = (k + 1) % segs
-            uv0, uv1 = k / segs, (k + 1) / segs
-            v0, v1 = li / (len(lats) - 1), (li + 1) / (len(lats) - 1)
             if l0 == -90:
                 ids = [grid[(0, l0)], grid[(k2, l1)], grid[(k, l1)]]
-                uvs = [(0.5, v0), (uv1, v1), (uv0, v1)]
             elif l1 == 90:
                 ids = [grid[(k, l0)], grid[(k2, l0)], grid[(0, l1)]]
-                uvs = [(uv0, v0), (uv1, v0), (0.5, v1)]
             else:
                 ids = [grid[(k, l0)], grid[(k2, l0)], grid[(k2, l1)], grid[(k, l1)]]
-                uvs = [(uv0, v0), (uv1, v0), (uv1, v1), (uv0, v1)]
-            reg = reg_for(ids)
+            cen = sum((mb.co[i] for i in ids), Vector()) / len(ids)
+            if any((cen - c).length < SOCKET["skip"] * (r / SOCKET["r"]) for _, c, _, r in socks):
+                continue
+            u0, u1 = k / segs, (k + 1) / segs
+            v0, v1 = li / (len(lats) - 1), (li + 1) / (len(lats) - 1)
+            uvs = [(u0, v0), (u1, v0), (u1, v1), (u0, v1)][:len(ids)]
+            reg = REG["skin"]
+            # shadowed hollows round the sockets and under the cheekbones
+            near = min((cen - c).length for _, c, _, _ in socks)
+            if near < 0.0:
+                reg = REG["bruise"]
             mb.face(ids, [ruv(reg, u, v) for u, v in uvs], hc)
+    # sockets: concentric loops stepping into the skull, sealed with skin and sewn shut
+    for side, c, n, r in socks:
+        xp = Vector((1, 0, 0))
+        xp = (xp - n * xp.dot(n)).normalized()
+        yp = n.cross(xp)
+        if yp.z < 0:
+            yp = -yp
+        dep = SOCKET["depth"] * (SOCKET["right_depth"] if side < 0 else 1.0)
+        # a puffy, puckered rim, then the closed lid sunk below it and bulging a little
+        loops = [(1.45, -0.004), (1.15, SOCKET["rim"]), (0.95, -dep * 0.9),
+                 (0.66, -dep * 0.62), (0.36, -dep * 0.48), (0.0, -dep * 0.44)]
+        rot = math.radians(SOCKET["stitch_angle"][0 if side > 0 else 1])
+        sides = 10
+        rows = []
+        for (rs, dep) in loops[:-1]:
+            row = []
+            for k in range(sides):
+                a = 2 * math.pi * k / sides
+                lx, ly = rs * math.cos(a), rs * math.sin(a) * 0.78  # a little wider than tall
+                p = c + xp * (lx * r) + yp * (ly * r) + n * dep
+                row.append((mb.vert(p, W), (lx, ly)))
+            rows.append(row)
+        ctr = mb.vert(c + n * loops[-1][1], W)
+
+        def suv(l, rot=rot):
+            x = l[0] * math.cos(rot) - l[1] * math.sin(rot)
+            y = l[0] * math.sin(rot) + l[1] * math.cos(rot)
+            return ruv(REG["socket"], 0.5 + x / 3.0, 0.5 + y / 3.0)
+        inside = c - n * 0.2
+        for j in range(len(rows) - 1):
+            for k in range(sides):
+                k2 = (k + 1) % sides
+                q = [rows[j][k], rows[j][k2], rows[j + 1][k2], rows[j + 1][k]]
+                mb.face([v for v, _ in q], [suv(l) for _, l in q], inside)
+        for k in range(sides):
+            k2 = (k + 1) % sides
+            q = [rows[-1][k], rows[-1][k2]]
+            mb.face([q[0][0], q[1][0], ctr], [suv(q[0][1]), suv(q[1][1]), suv((0, 0))], inside)
 
 
 def build_cap(mb):
-    hc = Vector(V(*HEAD_C))
-    rx, ry, rz = (r * S for r in HEAD_R)
-    segs, rows = 12, 5
+    """A paper bouffant surgical cap: an elastic edge snug on the head, then puffed out wider than the
+    skull, crinkled, and slumped a little to one side."""
+    hc = Vector(HEAD["c"])
+    segs, rows = 20, 7
+    lean = Vector(CAP["lean"])
     ring_ids = []
     for j in range(rows):
-        t = j / rows
+        t = j / (rows - 1)
         ids = []
         for k in range(segs):
-            a = math.radians(-90 + 30 * k)
-            front = 0.5 + 0.5 * math.cos(math.radians(30 * k))  # 1 at front, 0 at back
-            lat_edge = -15 + 55 * front
-            lat = math.radians(lat_edge + (88 - lat_edge) * t)
-            puff = 1.10 + 0.10 * math.sin(math.pi * min(1, t * 1.3)) + 0.04 * (1 - front)
-            d = Vector((rx * puff * math.cos(lat) * math.cos(a), ry * puff * math.cos(lat) * math.sin(a),
-                        rz * (puff + 0.06) * math.sin(lat)))
-            ids.append(mb.vert(hc + d, {"head": 1}))
+            az = -180 + 360 * k / segs
+            front = 0.5 + 0.5 * math.cos(math.radians(az))
+            edge = lerp(CAP["back_lat"], CAP["front_lat"], front)
+            lat = lerp(edge, 80, t)
+            if j == 0:
+                p = head_point(az, lat, s=1.04)
+            else:
+                puff = 1.05 + CAP["puff"] * math.sin(math.pi * min(1.0, 0.18 + t * 0.95)) ** 0.7
+                crinkle = 0.045 * math.sin(math.radians(az) * 7 + j * 1.9) * math.sin(j * 2.3 + k)
+                p = head_point(az, lat, s=puff + crinkle)
+                p += lean * t
+                p.z -= 0.035 * t * t  # the crown sags, it is only paper
+            ids.append(mb.vert(p, {"head": 1}))
         ring_ids.append(ids)
-    top = mb.vert(hc + Vector((0, 0.01 * S, rz * 1.30)), {"head": 1})
+    last = ring_ids[-1]
+    topc = sum((mb.co[i] for i in last), Vector()) / len(last) + Vector((0, 0, 0.012))
+    top = mb.vert(topc, {"head": 1})
+    reg = REG["cap"]
     for j in range(rows - 1):
         for k in range(segs):
             k2 = (k + 1) % segs
             mb.face([ring_ids[j][k], ring_ids[j][k2], ring_ids[j + 1][k2], ring_ids[j + 1][k]],
-                    [ruv(REG["cap"], k / segs, j / rows), ruv(REG["cap"], (k + 1) / segs, j / rows),
-                     ruv(REG["cap"], (k + 1) / segs, (j + 1) / rows), ruv(REG["cap"], k / segs, (j + 1) / rows)], hc)
+                    [ruv(reg, k / segs, j / rows), ruv(reg, (k + 1) / segs, j / rows),
+                     ruv(reg, (k + 1) / segs, (j + 1) / rows), ruv(reg, k / segs, (j + 1) / rows)], hc)
     for k in range(segs):
         k2 = (k + 1) % segs
-        mb.face([ring_ids[-1][k], ring_ids[-1][k2], top],
-                [ruv(REG["cap"], k / segs, 0.8), ruv(REG["cap"], (k + 1) / segs, 0.8), ruv(REG["cap"], 0.5, 1.0)], hc)
-
-
-MASK = dict(a_half=100.0, lat0=-64.0, lat1=4.0, cols=10, rows=4, scale=1.08, proud=0.008)
+        mb.face([last[k], last[k2], top], [ruv(reg, k / segs, 0.9), ruv(reg, (k + 1) / segs, 0.9), ruv(reg, 0.5, 1.0)], hc)
 
 
 def mask_point(a_deg, lat_deg):
-    hc = Vector(V(*HEAD_C))
-    rx, ry, rz = (r * S for r in HEAD_R)
-    a, la = math.radians(-90 + a_deg), math.radians(lat_deg)
-    s = MASK["scale"]
-    d = Vector((rx * s * math.cos(la) * math.cos(a), ry * s * math.cos(la) * math.sin(a), rz * s * math.sin(la)))
-    # paper mask stands proud of the face at the centre
-    d.y -= MASK["proud"] * S * math.cos(math.radians(a_deg)) ** 2 * math.cos(la)
-    return hc + d
+    """a_deg: -a_half..a_half across the face (0 = front). The mask is worn a few degrees crooked
+    and bulges forward across almost its whole width, as if over a mouth far wider than a mouth."""
+    lat_deg = lat_deg + MASK["tilt"] * (a_deg / MASK["a_half"])
+    j = (lat_deg - MASK["lat0"]) / (MASK["lat1"] - MASK["lat0"])
+    ca = math.cos(math.radians(min(89.0, abs(a_deg) * 0.80)))
+    pleat = MASK["pleat"] * math.cos(j * 3 * 2 * math.pi) * ca
+    p = head_point(a_deg, lat_deg, s=MASK["scale"])
+    bul = MASK["bulge"] * ca ** 0.7 * math.exp(-((lat_deg + 30) / 24) ** 2)
+    p.y -= MASK["proud"] * ca ** 2 * math.cos(math.radians(lat_deg + 20)) + pleat + bul
+    side = math.sin(math.radians(a_deg))
+    p.x += 0.012 * side * math.exp(-((lat_deg + 30) / 24) ** 2)
+    if lat_deg < -52:
+        p.y += 0.008 * (-52 - lat_deg) / 18
+    return p
 
 
 def mask_size():
-    """Approximate physical width/height (m) of mask UV space, so the print stays round."""
-    w = sum((mask_point(-MASK["a_half"] + 2 * MASK["a_half"] * i / 40, -25) -
-             mask_point(-MASK["a_half"] + 2 * MASK["a_half"] * (i + 1) / 40, -25)).length for i in range(40))
-    h = sum((mask_point(0, MASK["lat0"] + (MASK["lat1"] - MASK["lat0"]) * i / 40) -
-             mask_point(0, MASK["lat0"] + (MASK["lat1"] - MASK["lat0"]) * (i + 1) / 40)).length for i in range(40))
+    """Approximate physical width/height (m) of the mask's UV space, so the print stays in proportion."""
+    n = 40
+    mid = (MASK["lat0"] + MASK["lat1"]) / 2
+    w = sum((mask_point(-MASK["a_half"] + 2 * MASK["a_half"] * i / n, mid) -
+             mask_point(-MASK["a_half"] + 2 * MASK["a_half"] * (i + 1) / n, mid)).length for i in range(n))
+    h = sum((mask_point(0, MASK["lat0"] + (MASK["lat1"] - MASK["lat0"]) * i / n) -
+             mask_point(0, MASK["lat0"] + (MASK["lat1"] - MASK["lat0"]) * (i + 1) / n)).length for i in range(n))
     return w, h
 
 
 def build_mask(mb):
     cols, rows = MASK["cols"], MASK["rows"]
-    hc = Vector(V(*HEAD_C))
+    hc = Vector(HEAD["c"])
     ids = [[mb.vert(mask_point(-MASK["a_half"] + 2 * MASK["a_half"] * i / cols,
                                MASK["lat0"] + (MASK["lat1"] - MASK["lat0"]) * j / rows), {"head": 1})
             for i in range(cols + 1)] for j in range(rows + 1)]
@@ -340,155 +689,357 @@ def build_mask(mb):
             mb.face([ids[j][i], ids[j][i + 1], ids[j + 1][i + 1], ids[j + 1][i]],
                     [ruv(REG["mask"], i / cols, j / rows), ruv(REG["mask"], (i + 1) / cols, j / rows),
                      ruv(REG["mask"], (i + 1) / cols, (j + 1) / rows), ruv(REG["mask"], i / cols, (j + 1) / rows)], hc)
-    # ear loops: thin strips from the mask's side edges round to the back of the head
-    for side in (0, cols):
-        for j in (1, rows - 1):
-            p0 = ids[j][side]
-            back = mask_point(180.0 if side else -180.0, MASK["lat0"] + (MASK["lat1"] - MASK["lat0"]) * j / rows)
-            back.y -= 0.0
-            a = mb.vert(back, {"head": 1})
-            b = mb.vert(back + Vector((0, 0, 0.008 * S)), {"head": 1})
-            c = mb.vert(mb.co[p0] + Vector((0, 0, 0.008 * S)), {"head": 1})
-            mb.face([p0, a, b, c], [ruv(REG["tie"], 0, 0), ruv(REG["tie"], 1, 0), ruv(REG["tie"], 1, 1), ruv(REG["tie"], 0, 1)])
+    # ear loops: elastic cords from the corners of the mask round behind the ears
+    for col in (0, cols):
+        sgn = -1 if col == 0 else 1
+        for j in (0, rows):
+            p0 = mb.co[ids[j][col]]
+            lat = MASK["lat0"] + (MASK["lat1"] - MASK["lat0"]) * j / rows
+            mid = head_point(sgn * 120, lat * 0.5 - 4, s=1.06)
+            back = head_point(sgn * 140, lat * 0.3 + 2, s=1.03)
+            tube(mb, [(p0, 0.003, {"head": 1}), (mid, 0.003, {"head": 1}), (back, 0.003, {"head": 1})],
+                 3, REG["tie"], cap0=False, cap1=False)
+    build_cheek_ink(mb)
+
+
+def build_cheek_ink(mb):
+    """The printed grin does not stop at the mask: someone carried it on in ink across the cheeks,
+    further and higher on one side than the other."""
+    S_ = SMILE
+    mw, mh = mask_size()
+    def curve(tx):
+        return S_["cy"] - S_["depth"] * (1 - tx * tx) + S_["lift"] * max(0.0, abs(tx) - 0.72) ** 2 / 0.08
+
+    # where the printed line leaves the mask: either its top edge or its side
+    tx_exit, top = 1.0, 0.5 * mh * 0.93
+    for i in range(101):
+        tx = i / 100
+        if curve(tx) >= top:
+            tx_exit = tx
+            break
+    py_exit = min(curve(tx_exit), top)
+    lat_exit = MASK["lat0"] + (0.5 + py_exit / mh) * (MASK["lat1"] - MASK["lat0"])
+    hc = Vector(HEAD["c"])
+    print(f"[build] cheek ink: mask {mw:.3f} x {mh:.3f} m, leaves the mask at tx {tx_exit:.2f}, lat {lat_exit:.1f}")
+    for sgn, (ext, rise) in ((1, S_["cheek"][0]), (-1, S_["cheek"][1])):
+        az0 = MASK["a_half"] * tx_exit
+        pts = [mask_point(sgn * az0, lat_exit)]
+        n = 7
+        for i in range(1, n + 1):
+            t = i / n
+            az = sgn * (az0 + ext * t)
+            lat = lat_exit + MASK["tilt"] * sgn * (az0 / MASK["a_half"]) + 2 + rise * t ** 1.3
+            pts.append(head_point(az, lat, extra=0.0030))
+        rows = []
+        for i, p in enumerate(pts):
+            tan = (pts[min(i + 1, n)] - pts[max(i - 1, 0)]).normalized()
+            nrm = (p - hc).normalized()
+            side = tan.cross(nrm).normalized()
+            hw = 0.0065 * (1.0 + 0.45 * math.sin(i * 2.7 + sgn)) * (0.6 if i == n else 1.0)
+            rows.append((mb.vert(p + side * hw, {"head": 1}), mb.vert(p - side * hw, {"head": 1})))
+        reg = REG["ink"]
+        for i in range(n):
+            a0, b0 = rows[i]
+            a1, b1 = rows[i + 1]
+            mb.face([a0, a1, b1, b0], [ruv(reg, 0, 0), ruv(reg, 1, 0), ruv(reg, 1, 1), ruv(reg, 0, 1)],
+                    interior=hc)
 
 
 def build_arm(mb, side, sfx):
-    a = arm_pts(side)
-    sh, el, wr, kn, fj, tip = (Vector(V(*p)) for p in a)
-    clav_in = Vector(V(0.11 * side, spine_y(1.78) + 0.02, 1.78))
-    U, F, H, C = "upperarm" + sfx, "forearm" + sfx, "hand" + sfx, "clavicle" + sfx
+    sh, el, wr, kn = (Vector(mirror_pt(ARM[k], side)) for k in ("shoulder", "elbow", "wrist", "knuckle"))
+    C, U, F, H = "clavicle" + sfx, "upperarm" + sfx, "forearm" + sfx, "hand" + sfx
+    inside = Vector((0.11 * side, spine_y(1.90) + 0.01, 1.90))
+    back = Vector((0, 1, 0))
+    outv = Vector((side, 0, 0))
 
     def along(p, q, t):
-        return p + (q - p) * t
+        return p.lerp(q, t)
 
-    up_len = (el - sh).length
-    e_up = along(el, sh, 0.05 / up_len * S)
-    e_dn = along(el, wr, 0.05 / (wr - el).length * S)
+    def r_upper(base, bicep=0.0):
+        return lambda d: base + bicep * max(0.0, -d.y) ** 2
+
+    def r_elbow(base, knob):
+        # bony point of the elbow sticks out backwards, a ridge to the outside
+        return lambda d: base + knob * max(0.0, d.dot(back)) ** 3 + 0.4 * knob * max(0.0, d.dot(outv)) ** 4
+
+    def r_wrist(base, knob):
+        # flat wrist, wider front to back, with the knob of the ulna on the outside-back
+        return lambda d: base * (0.75 + 0.35 * abs(d.y)) + knob * max(0.0, (d.dot(outv) * 0.6 + d.dot(back) * 0.8)) ** 4
+
+    e_up, e_dn = along(el, sh, 0.06), along(el, wr, 0.07)
     rings = [
-        (clav_in, 0.05 * S, 0.05 * S, {C: 1}),
-        (sh, 0.052 * S, 0.05 * S, {C: .4, U: .6}),
-        (along(sh, el, 0.3), 0.046 * S, 0.044 * S, {U: 1}),
-        (e_up, 0.037 * S, 0.037 * S, {U: .8, F: .2}),
-        (el, 0.04 * S, 0.038 * S, {U: .5, F: .5}),
-        (e_dn, 0.036 * S, 0.036 * S, {U: .2, F: .8}),
-        (along(el, wr, 0.45), 0.037 * S, 0.035 * S, {F: 1}),
-        (along(el, wr, 0.9), 0.026 * S, 0.024 * S, {F: .7, H: .3}),
-        (wr, 0.022 * S, 0.026 * S, {F: .4, H: .6}),
+        (inside, 0.040, {C: 1}),
+        (along(inside, sh, 0.6), 0.044, {C: 1}),
+        (sh, 0.046, {C: .6, U: .4}),
+        (along(sh, el, 0.25), r_upper(0.037, 0.004), {C: .15, U: .85}),
+        (along(sh, el, 0.55), r_upper(0.028, 0.006), {U: 1}),
+        (along(sh, el, 0.82), 0.022, {U: 1}),
+        (e_up, 0.030, {U: .85, F: .15}),
+        (el, r_elbow(0.036, 0.024), {U: .5, F: .5}),
+        (e_dn, r_elbow(0.031, 0.009), {U: .15, F: .85}),
+        (along(el, wr, 0.28), 0.030, {F: 1}),
+        (along(el, wr, 0.62), 0.020, {F: 1}),
+        (along(el, wr, 0.86), 0.0155, {F: .9, H: .1}),
+        (wr, r_wrist(0.025, 0.015), {F: .45, H: .55}),
     ]
-    tube(mb, rings, P["sides"]["arm"], REG["skin"], cap0=True, cap1=False)
-    # palm: thin in X, wide front-back (palm faces the body)
-    palm = [(wr, 0.016 * S, 0.03 * S, {F: .3, H: .7}), (along(wr, kn, 0.5), 0.017 * S, 0.045 * S, {H: 1}),
-            (kn, 0.014 * S, 0.044 * S, {H: 1})]
-    tube(mb, palm, 8, REG["skin"], cap0=False, cap1=True)
-    F1, F2 = "finger1" + sfx, "finger2" + sfx
-    nf = P["fingers"]
-    for i in range(nf):
-        off = (i - (nf - 1) / 2) * 0.030 * S
-        o = Vector((0.004 * side * S, off, 0))
-        splay = Vector((0.010 * side * S, off * 0.5, 0))
-        rings = [(kn + o, 0.010 * S, 0.011 * S, {H: .5, F1: .5}),
-                 (along(kn, fj, 0.5) + o + splay * 0.3, 0.0095 * S, 0.0095 * S, {F1: 1}),
-                 (fj + o + splay * 0.6, 0.0095 * S, 0.0095 * S, {F1: .5, F2: .5}),
-                 (along(fj, tip, 0.6) + o + splay * 0.85, 0.0085 * S, 0.0085 * S, {F2: 1}),
-                 (tip + o + splay + Vector((0, -0.01 * S, 0)), 0.006 * S, 0.006 * S, {F2: 1})]
-        tube(mb, rings, P["sides"]["finger"], REG["skin_dark"] if i == 1 else REG["skin"], cap0=False, cap1=True)
+    def arm_reg(i, k, c, f):
+        d = (f - c).normalized()
+        if i in (6, 7, 8) and d.y > 0.2:      # the bony point of the elbow, bruised
+            return REG["bruise"]
+        if i == 12:                           # knobbed, bruised wrist
+            return REG["bruise"] if d.dot(Vector((side * 0.6, 0.8, 0))) > 0.2 else REG["skin_lo"]
+        if i in (3, 4) and d.y < -0.5:
+            return REG["skin_hi"]
+        if i < 2:
+            return REG["gown_top"]  # the root of the arm, inside the sleeve
+        return REG["skin"]
+    tube(mb, rings, 10, REG["skin"], cap0=True, cap1=False, ref=(side, 0, 0), reg_fn=arm_reg)
+    if side > 0:  # hospital wristband, a little loose
+        wb = along(el, wr, 0.78)
+        tube(mb, [(wb + (wr - el).normalized() * -0.009, 0.0215, {F: 1}),
+                  (wb + (wr - el).normalized() * 0.009, 0.0220, {F: 1})], 10, REG["band"],
+             cap0=False, cap1=False, ref=(side, 0, 0))
+    # palm: thin across, long, wide front to back, with knuckle bumps
+    pv = (kn - wr)
+    palm = [(wr + pv * 0.05, (0.013, 0.024), {F: .3, H: .7}), (wr + pv * 0.45, (0.012, 0.036), {H: 1}),
+            (wr + pv * 0.85, (0.011, 0.042), {H: 1}), (kn + Vector((0, 0, -0.004)), (0.010, 0.040), {H: 1})]
+    tube(mb, palm, 8, REG["skin"], cap0=False, cap1=True, ref=(side, 0, 0))
+    # four long fingers with knobbed joints
+    names = {"index": ("index1", "index2", "index3"), "middle": ("middle1", "middle2", "middle3"),
+             "ring": ("ring1", "ring2", "ring2"), "little": ("ring1", "ring2", "ring2")}
+    for fname, bones in names.items():
+        pts = finger_points(side, fname)
+        rad = HAND[fname][2]
+        b1, b2, b3 = (b + sfx for b in bones)
+        rings = [(pts[0] + Vector((0, 0, 0.012)), rad * 1.05, {H: 1}),
+                 (pts[0], rad * 1.40, {H: .4, b1: .6}),
+                 (pts[0].lerp(pts[1], 0.5), rad * 0.74, {b1: 1}),
+                 (pts[1], rad * 1.30, {b1: .5, b2: .5}),
+                 (pts[1].lerp(pts[2], 0.5), rad * 0.70, {b2: 1}),
+                 (pts[2], rad * 1.15, {b2: .5, b3: .5}),
+                 (pts[2].lerp(pts[3], 0.55), rad * 0.68, {b3: 1}),
+                 (pts[3], rad * 0.55, {b3: 1})]
+        tube(mb, rings, 5, REG["skin"], cap0=False, cap1=True, ref=(side, 0, 0),
+             reg_fn=lambda i, k, c, f=None: REG["skin_lo"] if i in (1, 3, 5) else (REG["nail"] if i == 6 else REG["skin"]))
+    th = thumb_points(side)
+    T = "thumb" + sfx
+    rings = [(th[0] + Vector((0.004 * side, 0.012, 0.016)), 0.011, {H: 1}), (th[0], 0.011, {H: .5, T: .5}),
+             (th[1], 0.0105, {T: 1}), (th[1].lerp(th[2], 0.6), 0.008, {T: 1}), (th[2], 0.005, {T: 1})]
+    tube(mb, rings, 5, REG["skin"], cap0=True, cap1=True)
 
 
 def build_leg(mb, side, sfx):
+    """Thin legs with a kneecap, the ridge of the shin, a little calf, ankle bones and the Achilles
+    tendon; long bare feet with tendons on top and toes that are too long."""
     T, Sh, Ft = "thigh" + sfx, "shin" + sfx, "foot" + sfx
-    x = lambda z: (0.088 + 0.017 * (1.10 - z) / 1.0) * side
-    kz = 0.64
-    spec = [(1.14, 0.052, {T: .5, "hips": .5}), (0.95, 0.050, {T: 1}), (0.70, 0.047, {T: .8, Sh: .2}),
-            (0.64, 0.05, {T: .5, Sh: .5}), (0.58, 0.045, {T: .2, Sh: .8}), (0.46, 0.047, {Sh: 1}),
-            (0.25, 0.033, {Sh: 1}), (0.12, 0.029, {Sh: .6, Ft: .4}), (0.07, 0.034, {Sh: .2, Ft: .8})]
-    rings = []
-    for z, r, w in spec:
-        y = -0.025 * (1 - abs(z - kz) / 0.5) if abs(z - kz) < 0.5 else 0.0
-        rings.append((V(x(z), y, z), r * S, r * S, w))
-    tube(mb, rings, P["sides"]["leg"], REG["skin"], cap0=True, cap1=False)
-    # long bare foot, horizontal tube heel -> toe (ry is vertical for a -Y tube)
-    fx = 0.105 * side
-    fspec = [(0.045, 0.030, 0.030), (0.0, 0.040, 0.046), (-0.08, 0.044, 0.028), (-0.17, 0.046, 0.019), (-0.235, 0.032, 0.011)]
-    frings = [(V(fx + 0.004 * side * (-y / 0.2), y, rz), rx * S, rz * S, {Ft: 1}) for y, rx, rz in fspec]
-    tube(mb, frings, 8, REG["skin"], cap0=True, cap1=True)
+    hip, knee, ankle, toe = (Vector(mirror_pt(LEG[k], side)) for k in ("hip", "knee", "ankle", "toe"))
+    fwd, back, out = Vector((0, -1, 0)), Vector((0, 1, 0)), Vector((side, 0, 0))
+
+    def leg_r(base, front=0.0, front_p=3, sides_=0.0, calf=0.0, achilles=0.0, inner=0.0):
+        def r(d):
+            v = base + front * max(0.0, d.dot(fwd)) ** front_p
+            v += sides_ * abs(d.x) ** 6 + calf * max(0.0, d.dot(back)) ** 2
+            v += achilles * max(0.0, d.dot(back)) ** 10 + inner * max(0.0, -d.dot(out)) ** 4
+            return v
+        return r
+
+    kd = (hip - knee).normalized()
+    ad = (ankle - knee).normalized()
+    rings = [(hip + Vector((0, 0, 0.06)), 0.060, {T: .5, "hips": .5}),
+             (hip.lerp(knee, 0.25), leg_r(0.048, inner=0.004), {T: 1}),
+             (hip.lerp(knee, 0.62), leg_r(0.033, front=0.004), {T: 1}),
+             (knee + kd * 0.065, leg_r(0.025, front=0.006), {T: .9, Sh: .1}),
+             (knee + kd * 0.025, leg_r(0.034, front=0.022, sides_=0.013), {T: .65, Sh: .35}),
+             (knee, leg_r(0.036, front=0.024, front_p=4, sides_=0.013), {T: .5, Sh: .5}),
+             (knee + ad * 0.035, leg_r(0.029, front=0.010, sides_=0.005), {T: .2, Sh: .8}),
+             (knee + ad * 0.090, leg_r(0.027, front=0.007, front_p=8, calf=0.010), {Sh: 1}),
+             (knee.lerp(ankle, 0.38), leg_r(0.025, front=0.006, front_p=8, calf=0.006), {Sh: 1}),
+             (knee.lerp(ankle, 0.68), leg_r(0.020, front=0.005, front_p=8, achilles=0.004), {Sh: 1}),
+             (knee.lerp(ankle, 0.88), leg_r(0.017, front=0.003, achilles=0.008), {Sh: .9, Ft: .1}),
+             (ankle + Vector((0, 0, 0.012)), leg_r(0.020, sides_=0.011, achilles=0.009), {Sh: .5, Ft: .5}),
+             (ankle + Vector((0, 0, -0.022)), leg_r(0.024, sides_=0.006, achilles=0.012), {Sh: .2, Ft: .8})]
+
+    def leg_reg(i, k, c, f):
+        d = (f - c)
+        if i in (4, 5, 6) and d.y < -0.010:
+            return REG["skin_hi"]          # knobbed knees catch the light
+        if i in (11, 12) and abs(d.x) > 0.012:
+            return REG["skin_hi"]          # ankle bones
+        if i in (7, 8, 9) and d.y < -0.016:
+            return REG["skin_hi"]          # edge of the shin bone
+        return REG["skin"]
+    tube(mb, rings, 10, REG["skin"], cap0=True, cap1=False, ref=(side, 0, 0), reg_fn=leg_reg)
+
+    # foot: heel to the ball, a flat sole, tendons standing up on top
+    fspec = [(0.060, 0.022, 0.026, 0.035), (0.040, 0.030, 0.036, 0.045), (0.000, 0.034, 0.044, 0.050),
+             (-0.060, 0.038, 0.034, 0.040), (-0.120, 0.044, 0.024, 0.028), (-0.170, 0.050, 0.016, 0.020)]
+    frings = []
+    for y, rx, ztop, zc in fspec:
+        lift = 0.030 * max(0.0, min(1.0, (y + 0.12) / 0.16))
+        c = Vector((ankle.x + 0.008 * side * (-y / 0.2), ankle.y + y, zc * 0.5 + 0.003 + lift))
+
+        def rad(d, rx=rx, ztop=ztop, zc=zc, y=y, lift=lift):
+            if d.z < -0.3:
+                bottom = zc * 0.5 + 0.002 + lift
+                if -0.13 < y < 0.03 and d.x * side < 0:
+                    bottom *= 0.55  # the arch
+                return min(rx, bottom / max(0.05, -d.z))
+            base = math.hypot(rx * d.x, ztop * d.z) / max(1e-4, math.hypot(d.x, d.z))
+            if d.z > 0.2 and y < 0.01:  # tendons running down to the toes
+                a = math.atan2(d.z, d.x)
+                base += 0.004 * max(0.0, math.cos(a * 9)) ** 4 * d.z
+            return base
+        frings.append((c, rad, {Ft: 1}))
+    tube(mb, frings, 10, REG["skin"], cap0=True, cap1=True, ref=(1, 0, 0))
+    # five long toes, gripping the floor at the tips
+    ball = Vector((ankle.x + 0.008 * side * 0.85, ankle.y - 0.170, 0.012))
+    toes = [(-0.034, 0.110, 0.0125), (-0.016, 0.104, 0.0100), (0.002, 0.098, 0.0094),
+            (0.019, 0.088, 0.0088), (0.035, 0.074, 0.0082)]
+    for dx, L, r0 in toes:
+        b0 = ball + Vector((-dx * side, 0.004, 0.0))
+        spread = -dx * side * 0.25
+        pts = [b0, b0 + Vector((spread * 0.3, -L * 0.38, 0.010)), b0 + Vector((spread * 0.6, -L * 0.68, 0.016)),
+               b0 + Vector((spread * 0.8, -L * 0.90, 0.006)), b0 + Vector((spread, -L * 0.96, -0.006))]
+        rings = [(pts[0], r0 * 1.15, {Ft: 1}), (pts[1], r0 * 1.10, {Ft: 1}), (pts[2], r0 * 0.95, {Ft: 1}),
+                 (pts[3], r0 * 0.85, {Ft: 1}), (pts[4], r0 * 0.55, {Ft: 1})]
+        tube(mb, rings, 5, REG["skin"], cap0=False, cap1=True,
+             reg_fn=lambda i, k, c, f=None: REG["bruise"] if i in (1, 2) and (f - c).z > 0.003 else (REG["nail"] if i == 3 else REG["skin"]))
 
 
-GOWN = dict(  # z, rx, ry, extra forward offset
-    rings=[(1.92, 0.072, 0.062, 0.0), (1.88, 0.11, 0.088, 0.0), (1.82, 0.16, 0.098, 0.0), (1.73, 0.18, 0.105, 0.0),
-           (1.62, 0.15, 0.105, 0.0), (1.48, 0.125, 0.10, 0.0), (1.30, 0.13, 0.105, 0.0), (1.10, 0.15, 0.115, -0.01),
-           (0.90, 0.168, 0.13, -0.02), (0.70, 0.18, 0.14, -0.03), (0.55, 0.19, 0.148, -0.035),
-           (0.42, 0.198, 0.152, -0.04)],
-    hem_z=0.42, slit_down_to=0.80,
-)
+def gown_top(a_deg):
+    """Height of the gown's upper edge in direction a: a sagging scoop at the front, the back slit
+    handled separately, slid down off the left shoulder."""
+    s = math.sin(math.radians(a_deg))
+    c = math.cos(math.radians(a_deg))
+    if s < 0:  # front half: scoop
+        f = (-s) ** 4.0
+        top = lerp(GOWN["top_side"], GOWN["top_front"], f)
+    else:
+        top = GOWN["top_side"] + 0.07 * s  # ties high at the back of the neck
+    if c > 0:  # left side slipped down
+        top = lerp(top, min(top, GOWN["top_left"] - 0.02 * max(0, -s)), min(1.0, c * 1.6))
+    return top
+
+
+def slit_half(z):
+    """Half-angle of the open back at height z (degrees from the back centre)."""
+    if z < GOWN["slit_to"]:
+        return 0.0
+    t = (z - GOWN["slit_to"]) / (GOWN["top_side"] - GOWN["slit_to"])
+    return lerp(GOWN["slit_bottom"], GOWN["slit_top"], min(1.0, t) ** 1.3)
 
 
 def gown_weights(p):
-    z = p.z / S
-    w = lerp_w(z, [(1.10, {"hips": 1}), (1.30, {"hips": .5, "spine": .5}), (1.45, {"spine": 1}),
-                   (1.62, {"spine": .5, "spine1": .5}), (1.74, {"spine1": .3, "spine2": .7}), (1.84, {"spine2": 1})])
-    if z < 1.10:
-        t = min(1.0, (1.10 - z) / (1.10 - GOWN["hem_z"])) ** 0.7 * 0.75
-        sl = max(0.0, min(1.0, 0.5 + p.x / (0.12 * S)))
-        w = {"hips": 1 - t, "thigh.L": t * sl, "thigh.R": t * (1 - sl)}
-    return w
+    z = p.z
+    if z >= 1.16:
+        return torso_weights(p)
+    t = min(1.0, (1.16 - z) / (1.16 - GOWN["hem"])) ** 0.8 * 0.8
+    sl = max(0.0, min(1.0, 0.5 + p.x / 0.14))
+    return {"hips": 1 - t, "thigh.L": t * sl, "thigh.R": t * (1 - sl)}
 
 
 def build_gown(mb):
-    sides = P["sides"]["gown"]
-    step = 360.0 / sides
-    base = [step / 2 + step * k for k in range(sides)]  # column centred on +Y (back) between k_b and k_b+1
-    kb = int((90 - step / 2) // step)  # vertex just before back centre
-    rings = GOWN["rings"]
-    zs = [r[0] for r in rings]
-    ids = []
-    for (z, rx, ry, fy) in rings:
-        ang = list(base)
-        slit = z >= GOWN["slit_down_to"]
-        if slit:  # open back: pull the two edge columns apart
-            ang[kb], ang[kb + 1] = 90 - 15, 90 + 15
-        cy = spine_y(z) + fy
-        row = []
-        for a in ang:
-            p = V(rx * math.cos(math.radians(a)), cy + ry * math.sin(math.radians(a)), z)
-            row.append(mb.vert(p, gown_weights(p)))
-        ids.append(row)
-    n = len(rings)
-    for i in range(n - 1):
-        both_slit = zs[i] >= GOWN["slit_down_to"] and zs[i + 1] >= GOWN["slit_down_to"]
-        interior = V(0, spine_y((zs[i] + zs[i + 1]) / 2), (zs[i] + zs[i + 1]) / 2)
-        for k in range(sides):
-            if both_slit and k == kb:
-                continue
-            k2 = (k + 1) % sides
-            vv0 = (zs[i] - GOWN["hem_z"]) / (zs[0] - GOWN["hem_z"])
-            vv1 = (zs[i + 1] - GOWN["hem_z"]) / (zs[0] - GOWN["hem_z"])
-            mb.face([ids[i][k], ids[i][k2], ids[i + 1][k2], ids[i + 1][k]],
-                    [ruv(REG["gown"], k / sides, vv0), ruv(REG["gown"], (k + 1) / sides, vv0),
-                     ruv(REG["gown"], (k + 1) / sides, vv1), ruv(REG["gown"], k / sides, vv1)], interior)
-    # back ties across the slit
-    for z in (1.72, 1.20):
-        if z < GOWN["slit_down_to"]:
-            continue
-        y = spine_y(z) + 0.0
-        ry = dict((r[0], r[2]) for r in rings)
-        ryz = lerp_w(z, [(r[0], {"r": r[2]}) for r in rings])["r"]
-        p = V(0, y + ryz, z)
-        box(mb, p, (0.11 * S, 0.012 * S, 0.014 * S), gown_weights(p), REG["tie"])
-        for s in (-1, 1):  # dangling tie ends
-            q = p + Vector((0.012 * s * S, 0.004 * S, -0.04 * S))
-            box(mb, q, (0.012 * S, 0.006 * S, 0.07 * S), gown_weights(q), REG["tie"])
-    # short sleeves
+    """Each column hangs from the gown's top edge to the hem, so the neckline stays clean. The radius
+    is the larger of the body plus a gap and the widest body point above (paper hangs from what it
+    rests on), clinging more at the sides so the waist shows."""
+    sides = GOWN["sides"]
+    fr = [0, 0.015, 0.04, 0.075, 0.12, 0.17, 0.23, 0.30, 0.37, 0.44, 0.51, 0.58, 0.65, 0.72, 0.79, 0.86, 0.93, 1.0]
+    base_angles = [-90 + 360.0 * (k + 0.5) / sides for k in range(sides)]
+    kb = min(range(sides), key=lambda k: abs(base_angles[k] - 90 + 180 / sides))  # column just before the back centre
+    verts, zcol = [], []
+    mb.smooth = True
+    for k, a0 in enumerate(base_angles):
+        runmax = 0.0
+        col, zc = [], []
+        top = gown_top(a0)
+        for j, f in enumerate(fr):
+            z = lerp(top, GOWN["hem"], f)
+            a = a0
+            hw = slit_half(z)
+            if hw > 0 and k in (kb, (kb + 1) % sides):
+                a = 90 - hw if k == kb else 90 + hw
+            zb = max(z, 1.10)
+            br = body_r(a, zb) + GOWN["gap"]
+            runmax = max(runmax, br)
+            s_ = math.sin(math.radians(a))
+            hang_w = GOWN["hang_front"] if s_ < -0.5 else (GOWN["hang_back"] if s_ > 0.5 else GOWN["hang_side"])
+            r = max(br, runmax * hang_w)
+            low = max(0.0, min(1.0, (1.30 - z) / 0.75))
+            r += GOWN["flare"] * low ** 1.2 * (1.0 + 0.3 * max(0.0, s_))
+            r += GOWN["fold_amp"] * low * math.cos(math.radians(a) * GOWN["folds"] + 1.3)
+            # a collar that sags away from the chest and rolls over at the edge
+            front = max(0.0, -s_)
+            if j == 0:
+                r += 0.012 + GOWN["collar_sag"] * front ** 3
+            elif j == 1:
+                r += 0.004 + GOWN["collar_sag"] * 0.6 * front ** 3
+            elif j == 2:
+                r += GOWN["collar_sag"] * 0.25 * front ** 3
+            r += 0.006 * low * math.cos(math.radians(a) * 13 + 0.4)  # smaller creases
+            zz = z
+            if j == 0:
+                zz = z - 0.010
+            if j == len(fr) - 1:  # uneven, torn-looking hem, longer at the back, one corner dipped
+                rad = math.radians(a)
+                zz = (z + 0.040 * math.cos(rad * 3 + 0.7) + 0.022 * math.cos(rad * 7 + 2.1)
+                      - 0.05 * max(0.0, s_) - 0.07 * math.exp(-((a + 55) / 16) ** 2))
+            cy = spine_y(max(z, 1.05))
+            p = Vector((r * math.cos(math.radians(a)), cy + r * math.sin(math.radians(a)), zz))
+            col.append(mb.vert(p, gown_weights(p)))
+            zc.append(z)
+        verts.append(col)
+        zcol.append(zc)
+    n = len(fr)
+    for k in range(sides):
+        k2 = (k + 1) % sides
+        for j in range(n - 1):
+            if k == kb and max(zcol[k][j], zcol[k2][j]) > GOWN["slit_to"]:
+                continue  # the open back
+            zm = (zcol[k][j] + zcol[k][j + 1]) / 2
+            interior = Vector((0, spine_y(max(zm, 1.05)), zm))
+            reg = REG["gown"]
+            mb.face([verts[k][j], verts[k2][j], verts[k2][j + 1], verts[k][j + 1]],
+                    [ruv(reg, k / sides, 1 - fr[j]), ruv(reg, (k + 1) / sides, 1 - fr[j]),
+                     ruv(reg, (k + 1) / sides, 1 - fr[j + 1]), ruv(reg, k / sides, 1 - fr[j + 1])], interior)
+    # ties across the open back, hanging loose
+    for z in (1.86, 1.58):
+        hw = slit_half(z)
+        l = body_point(90 - hw, z, GOWN["gap"] + 0.004)
+        r = body_point(90 + hw, z, GOWN["gap"] + 0.004)
+        w = torso_weights((l + r) / 2)
+        for p0, p1, L in ((l, l.lerp(r, 0.40), 0.24), (r, r.lerp(l, 0.30), 0.17)):
+            d1 = p1 + Vector((0.01, 0.012, -L * 0.5))
+            d2 = p1 + Vector((-0.006, 0.020, -L))
+            rings = [(p0, 0.006, w), (p1, 0.006, w), (d1, 0.005, w), (d2, 0.004, w)]
+            tube(mb, rings, 3, REG["gown_in"], cap0=False, cap1=True)
+    # sleeves: raglan, following the slope of the shoulder; the left one has slid down the arm
     for side, sfx in ((1, ".L"), (-1, ".R")):
-        a = arm_pts(side)
-        sh, el = Vector(V(*a[0])), Vector(V(*a[1]))
+        sh, el = Vector(mirror_pt(ARM["shoulder"], side)), Vector(mirror_pt(ARM["elbow"], side))
         U, C = "upperarm" + sfx, "clavicle" + sfx
-        srings = [(sh + (sh - el).normalized() * 0.03 * S, 0.062 * S, 0.062 * S, {C: .6, U: .4}),
-                  (sh + (el - sh) * 0.18, 0.064 * S, 0.062 * S, {C: .2, U: .8}),
-                  (sh + (el - sh) * 0.40, 0.062 * S, 0.058 * S, {U: 1})]
-        tube(mb, srings, P["sides"]["sleeve"], REG["gown"], cap0=False, cap1=False)
+        ax = el - sh
+
+        def srad(base, droop):
+            # paper hangs: looser at the back and much looser underneath
+            return lambda d: base + droop * max(0.0, d.y) ** 2 + 2.2 * droop * max(0.0, -d.z) ** 2
+
+        if side < 0:
+            rings = [(sh + Vector((-0.055 * side, 0.004, 0.030)), srad(0.034, 0.0), {"spine2": .5, C: .5}),
+                     (sh + Vector((-0.012 * side, 0.002, 0.016)), srad(0.054, 0.004), {C: .6, U: .4}),
+                     (sh + ax * 0.16, srad(0.056, 0.008), {U: 1}),
+                     (sh + ax * 0.40 + Vector((0, 0.006, -0.030)), srad(0.060, 0.016), {U: 1})]
+        else:
+            rings = [(sh + ax * 0.10, srad(0.050, 0.004), {C: .3, U: .7}),
+                     (sh + ax * 0.32, srad(0.055, 0.008), {U: 1}),
+                     (sh + ax * 0.58 + Vector((0, 0.006, -0.030)), srad(0.062, 0.018), {U: 1})]
+        tube(mb, rings, 10, REG["gown_top"], cap0=False, cap1=False, ref=(side, 0, 0))
+    mb.smooth = False
 
 
 # ============================ TEXTURE ============================
+SMILE = dict(cy=0.098, depth=0.044, lift=0.010, half=0.50, width=0.0105,
+             cheek=((10.0, 27.0), (5.0, 17.0)))  # how far the ink runs on past the mask: (az, rise) left, right
+
+
 def make_atlas():
     n = P["tex_size"]
     C = {k: np.array(v, dtype=np.float32) for k, v in P["colors"].items()}
@@ -501,8 +1052,7 @@ def make_atlas():
     def fill(reg, col, noise=0.02, blotch=None):
         x0, y0, x1, y1 = region_px(reg)
         h, w = y1 - y0, x1 - x0
-        block = np.tile(col, (h, w, 1))
-        block += (rng.random((h, w, 1)) - 0.5) * 2 * noise
+        block = np.tile(col, (h, w, 1)) + (rng.random((h, w, 1)) - 0.5) * 2 * noise
         if blotch is not None:
             bcol, count, rad = blotch
             yy, xx = np.mgrid[0:h, 0:w]
@@ -512,57 +1062,114 @@ def make_atlas():
                 block = block * (1 - m) + bcol * m
         img[y0:y1, x0:x1, :3] = np.clip(block, 0, 1)
 
-    fill(REG["skin"], C["skin"], 0.025, (C["skin_dark"], 6, 6))
-    fill(REG["skin_dark"], C["skin_dark"], 0.02)
-    fill(REG["cap"], C["cap"], 0.02)
+    fill(REG["skin"], C["skin"], 0.006)
+    sx0, sy0, sx1, sy1 = region_px(REG["skin"])
+    for _ in range(5):  # faint blue veins under the waxy skin
+        x, y = float(rng.integers(sx0, sx1)), float(rng.integers(sy0, sy1))
+        a = rng.random() * 6.28
+        for _ in range(40):
+            a += (rng.random() - 0.5) * 0.7
+            x, y = x + math.cos(a), y + math.sin(a)
+            if sx0 <= x < sx1 and sy0 <= y < sy1:
+                img[int(y), int(x), :3] = img[int(y), int(x), :3] * 0.55 + C["vein"] * 0.45
+    fill(REG["ink"], C["ink"], 0.01)
+    fill(REG["skin_lo"], C["skin_lo"], 0.005)
+    fill(REG["skin_hi"], C["skin_hi"], 0.005)
+    fill(REG["bruise"], C["bruise"], 0.005)
+    # wristband: white, a printed name strip
+    fill(REG["band"], C["band"], 0.004)
+    bx0, by0, bx1, by1 = region_px(REG["band"])
+    img[by0 + 12:by0 + 20, bx0 + 20:bx0 + 60, :3] = C["band_ink"]
+    fill(REG["cap"], C["cap"], 0.008)
+    cx0, cy0, cx1, cy1 = region_px(REG["cap"])
+    for _ in range(70):  # crinkles in the paper
+        x, y = int(rng.integers(cx0, cx1 - 12)), int(rng.integers(cy0 + 10, cy1 - 3))
+        ln = int(rng.integers(4, 12))
+        img[y, x:x + ln, :3] = C["cap"] * 0.84
     fill(REG["tie"], C["tie"], 0.015)
-    # cap elastic band at the bottom edge
+    fill(REG["nail"], C["nail"], 0.02)
+    fill(REG["gown_in"], C["gown_line"], 0.02)
     x0, y0, x1, y1 = region_px(REG["cap"])
-    img[y0:y0 + 6, x0:x1, :3] = C["cap"] * 0.82
+    img[y0:y0 + 8, x0:x1, :3] = C["cap_band"]
 
-    # gown: vertical crease lines, stained hem (v = 0 is the hem)
+    # socket: a puckered bruised rim, a pale closed lid, a thick dark seam with uneven stitches
+    x0, y0, x1, y1 = region_px(REG["socket"])
+    h, w = y1 - y0, x1 - x0
+    yy, xx = np.mgrid[0:h, 0:w]
+    m = 0.04
+    lx = (((xx + 0.5) / w - m) / (1 - 2 * m) - 0.5) * 3.0
+    ly = (((yy + 0.5) / h - m) / (1 - 2 * m) - 0.5) * 3.0
+    rr = np.sqrt(lx ** 2 + (ly / 0.78) ** 2)
+    ang = np.arctan2(ly, lx)
+    lid = C["skin_hi"] * 0.85 + C["bruise"] * 0.15
+    sk = np.where((rr < 0.95)[..., None], lid, np.where((rr < 1.20)[..., None], C["skin"] * 0.6 + C["bruise"] * 0.4, C["skin"]))
+    crease = (rr > 0.93) & (rr < 1.02)
+    sk = np.where(crease[..., None], C["bruise_deep"], sk)
+    pucker = (rr > 0.60) & (rr < 0.95) & (np.cos(ang * 9) > 0.92)
+    sk = np.where(pucker[..., None], sk * 0.8 + C["bruise_deep"] * 0.2, sk)
+    seam = (np.abs(ly - 0.03 * lx * lx) < 0.075) & (np.abs(lx) < 0.88)
+    stitches = np.zeros_like(seam)
+    for sx, slant, ln in ((-0.55, 0.45, 0.30), (-0.05, -0.25, 0.36), (0.45, 0.30, 0.26)):
+        stitches |= (np.abs(lx - sx - ly * slant) < 0.075) & (np.abs(ly) < ln)
+    sk = np.where((seam | stitches)[..., None], C["suture"], sk)
+    img[y0:y1, x0:x1, :3] = np.clip(sk, 0, 1)
+
+    # gown: paper, a faint printed diamond pattern, creases, stained hem (v = 0 is the hem)
     x0, y0, x1, y1 = region_px(REG["gown"])
     h, w = y1 - y0, x1 - x0
-    g = np.tile(C["gown"], (h, w, 1)) + (rng.random((h, w, 1)) - 0.5) * 0.03
-    for cx in rng.integers(0, w, 9):
-        g[:, cx:cx + 1] = g[:, cx:cx + 1] * 0.5 + C["gown_line"] * 0.5
     yy, xx = np.mgrid[0:h, 0:w]
+    g = np.tile(C["gown"], (h, w, 1)) + (rng.random((h, w, 1)) - 0.5) * 0.008
+    # the small repeating hospital print: little crosses on a staggered grid
+    gx, gy = xx % 20, (yy + 10 * ((xx // 20) % 2)) % 20
+    patt = ((np.abs(gx - 10) <= 1) & (np.abs(gy - 10) <= 4)) | ((np.abs(gy - 10) <= 1) & (np.abs(gx - 10) <= 4))
+    g = np.where(patt[..., None], g * 0.6 + C["gown_print"] * 0.4, g)
+    for cx in rng.integers(0, w, 10):
+        g[:, cx:cx + 1] = g[:, cx:cx + 1] * 0.7 + C["gown_line"] * 0.3
     vfrac = yy / h
-    stain = np.clip(1 - vfrac / 0.16, 0, 1) ** 1.5 * 0.55
-    for _ in range(14):
-        cx, cy, r = rng.random() * w, rng.random() * h * 0.22, 3 + rng.random() * 9
-        stain = np.maximum(stain, np.clip(1 - ((xx - cx) ** 2 + (yy - cy) ** 2) / r ** 2, 0, 1) * 0.6)
+    stain = np.clip(1 - vfrac / 0.13, 0, 1) ** 1.6 * 0.55
+    for _ in range(16):
+        cx, cy, r = rng.random() * w, rng.random() * h * 0.18, 3 + rng.random() * 10
+        stain = np.maximum(stain, np.clip(1 - ((xx - cx) ** 2 + (yy - cy) ** 2) / r ** 2, 0, 1) * 0.55)
     stain = stain[..., None]
     g = g * (1 - stain) + C["stain"] * stain
     img[y0:y1, x0:x1, :3] = np.clip(g, 0, 1)
 
-    # mask with printed children's-ward face; draw in physical metres so it stays round
+    # the mask: a printed smile, huge and bold, drawn in metres so it stays round on the curved mask
     x0, y0, x1, y1 = region_px(REG["mask"])
     h, w = y1 - y0, x1 - x0
     mw, mh = mask_size()
     yy, xx = np.mgrid[0:h, 0:w]
-    m = 0.03
     u = ((xx + 0.5) / w - m) / (1 - 2 * m)
     v = ((yy + 0.5) / h - m) / (1 - 2 * m)
     px, py = (u - 0.5) * mw, (v - 0.5) * mh
-    mk = np.tile(C["mask"], (h, w, 1)) + (rng.random((h, w, 1)) - 0.5) * 0.02
-    for pl in (0.22, 0.80):  # faint pleats, kept clear of the printed face
-        band = (np.abs(v - pl) < 0.012)[..., None]
-        mk = np.where(band, mk * 0.5 + C["mask_line"] * 0.5, mk)
-    edge = ((v < 0.04) | (v > 0.96))[..., None]
+    mk = np.tile(C["mask"], (h, w, 1)) + (rng.random((h, w, 1)) - 0.5) * 0.006
+    for pl in (1 / 6, 0.5, 5 / 6):
+        band = (np.abs(v - pl) < 0.014)[..., None]
+        mk = np.where(band, mk * 0.35 + C["mask_line"] * 0.65, mk)
+    mk = np.where((v > 0.94)[..., None], C["nose"], mk)  # the wire across the top
+    edge = ((v < 0.035) | (v > 0.965))[..., None]
     mk = np.where(edge, C["mask_line"], mk)
-    sc = S * P["head_scale"]
-    cheek = ((px / (0.012 * sc)) ** 2 + ((py + 0.006 * sc) / (0.009 * sc)) ** 2)
-    for s in (-1, 1):
-        cm = (((px - s * 0.060 * sc) / (0.011 * sc)) ** 2 + ((py - 0.006 * sc) / (0.008 * sc)) ** 2 < 1)[..., None]
-        mk = np.where(cm, mk * 0.4 + C["cheek"] * 0.6, mk)
-    for s in (-1, 1):
-        eye = ((px - s * 0.027 * sc) ** 2 + (py - 0.024 * sc) ** 2 < (0.0150 * sc) ** 2)[..., None]
-        mk = np.where(eye, C["ink"], mk)
-    r = np.sqrt(px ** 2 + (py - 0.016 * sc) ** 2)
-    ang = np.arctan2(py - 0.016 * sc, px)
-    smile = ((np.abs(r - 0.046 * sc) < 0.0090 * sc) & (ang < -0.28) & (ang > -math.pi + 0.28))[..., None]
-    mk = np.where(smile, C["ink"], mk)
+    S_ = SMILE
+    # Printed on the flat mask before it was pleated, so every fold shifts the line a little.
+    jog = np.select([v < 1 / 6, v < 0.5, v < 5 / 6], [0.004, -0.003, 0.002], -0.004)
+    qx = px + jog
+    hw = S_["half"] * mw  # half-width: nearly the whole mask, round the sides of the face
+    tx = np.clip(qx / hw, -1.2, 1.2)
+    curve = S_["cy"] - S_["depth"] * (1 - tx ** 2) + S_["lift"] * np.clip(np.abs(tx) - 0.72, 0, None) ** 2 / 0.08
+    curve += 0.0007 * np.sin(qx * 140.0) + 0.0012 * np.sin(qx * 41.0 + 1.0)
+    slope = np.gradient(curve, axis=1) / max(1e-6, (mw / w))
+    dist = np.abs(py - curve) / np.sqrt(1 + slope ** 2)
+    width = S_["width"] * (1 + 0.25 * np.sin(qx * 33.0 + 0.5))
+    band = (dist < width / 2) & (np.abs(tx) <= 1.0)
+    # ends trail off where the ink ran out on the pleat
+    band &= ~((np.abs(tx) > 0.93) & (((yy // 2) % 3) == 0))
+    # a damp, yellowed patch over the mouth
+    dmp = ((px / 0.034) ** 2 + ((py - 0.030) / 0.020) ** 2) + 0.3 * np.sin(px * 160) * np.sin(py * 120)
+    mk = np.where((dmp < 1.0)[..., None], mk * 0.65 + C["damp"] * 0.35, mk)
+    # the ink bled into the fibres round the line
+    bleed = (dist < width * 1.05) & (np.abs(tx) <= 1.0) & ~band
+    mk = np.where(bleed[..., None], mk * 0.55 + C["ink"] * 0.45, mk)
+    mk = np.where(band[..., None], C["ink"], mk)
     img[y0:y1, x0:x1, :3] = np.clip(mk, 0, 1)
 
     im = bpy.data.images.new(P["name"] + "_atlas", n, n, alpha=False)
@@ -573,10 +1180,6 @@ def make_atlas():
 
 def make_material(image):
     mat = bpy.data.materials.new(P["name"] + "_mat")
-    try:
-        mat.use_nodes = True
-    except Exception:
-        pass
     nt = mat.node_tree
     bsdf = next((nd for nd in nt.nodes if nd.type == "BSDF_PRINCIPLED"), None)
     out = next((nd for nd in nt.nodes if nd.type == "OUTPUT_MATERIAL"), None)
@@ -589,17 +1192,20 @@ def make_material(image):
     tex.image = image
     tex.interpolation = "Closest"
     nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
-    bsdf.inputs["Roughness"].default_value = 0.85
+    bsdf.inputs["Roughness"].default_value = 0.9
     if "Specular IOR Level" in bsdf.inputs:
-        bsdf.inputs["Specular IOR Level"].default_value = 0.2
-    mat.use_backface_culling = False  # gown/mask are open shells -> glTF doubleSided
+        bsdf.inputs["Specular IOR Level"].default_value = 0.15
+    mat.use_backface_culling = False  # gown, sleeves and mask are open shells -> glTF doubleSided
     return mat
 
 
 # ============================ ASSEMBLY ============================
-def build_mesh(arm, bt):
+def collect_mesh():
     mb = MeshBuilder()
     build_torso(mb)
+    build_spine_knobs(mb)
+    build_scapulae(mb)
+    build_neck(mb)
     build_head(mb)
     build_cap(mb)
     build_mask(mb)
@@ -607,25 +1213,31 @@ def build_mesh(arm, bt):
         build_arm(mb, side, sfx)
         build_leg(mb, side, sfx)
     build_gown(mb)
+    return mb
 
+
+IDLE_SAG = 0.135  # how much lower the cap sits in the idle pose than at rest
+
+
+def build_mesh(mb, arm, bt):
+    K = P["scale"]
     me = bpy.data.meshes.new(P["name"])
-    me.from_pydata([tuple(c) for c in mb.co], [], mb.faces)
+    me.from_pydata([tuple(c * K) for c in mb.co], [], mb.faces)
     me.update()
     uvl = me.uv_layers.new(name="UVMap")
-    li = 0
     for poly, uvs in zip(me.polygons, mb.uvs):
         for k in range(poly.loop_total):
             uvl.data[poly.loop_start + k].uv = uvs[k]
-    for poly in me.polygons:
-        poly.use_smooth = False  # flat, late-90s shading
+    for poly, sm in zip(me.polygons, mb.sm):
+        poly.use_smooth = sm  # flat, late-90s shading on the body; the paper gown is smooth
     ob = bpy.data.objects.new(P["name"], me)
     bpy.context.scene.collection.objects.link(ob)
     groups = {name: ob.vertex_groups.new(name=name) for name in bt}
     for vi, w in enumerate(mb.w):
+        w = {k: v for k, v in w.items() if v > 1e-4}
         tot = sum(w.values())
         for bname, val in w.items():
-            if val > 1e-4:
-                groups[bname].add([vi], val / tot, "REPLACE")
+            groups[bname].add([vi], val / tot, "REPLACE")
     ob.parent = arm
     mod = ob.modifiers.new("Armature", "ARMATURE")
     mod.object = arm
@@ -637,23 +1249,42 @@ AX = {"x": Vector((1, 0, 0)), "y": Vector((0, 1, 0)), "z": Vector((0, 0, 1))}
 
 
 def set_pose(arm, spec):
-    """spec: {bone: [("x", deg), ("y", deg), ("s", (sx,sy,sz))]}. Rotations are about
-    armature-space axes (+X pitch = lean forward for up-bones / swing back for down-bones)."""
-    for pb in arm.pose.bones:
+    """spec: {bone: [op, ...]}. Ops, all about armature (rest) axes:
+        ("x"|"y"|"z", degrees)  rotate relative to the parent (+x pitches an up-bone forward,
+                                swings a down-bone back)
+        ("level",)              cancel every ancestor's rotation, so the bone keeps its rest
+                                orientation in the world (the head stays level); later rotations
+                                on the same bone are then world-space
+        ("s", (sx, sy, sz))     bone-local scale (y runs along the bone)
+        ("t", (x, y, z))        translate in armature space (metres)
+    """
+    bones = arm.pose.bones
+    for pb in bones:
         pb.rotation_mode = "QUATERNION"
         pb.rotation_quaternion = (1, 0, 0, 0)
         pb.location = (0, 0, 0)
         pb.scale = (1, 1, 1)
-    for bname, ops in spec.items():
-        pb = arm.pose.bones[bname]
+    D = {}  # accumulated rest-axis rotation from the root to each bone
+    for pb in bones:  # bones iterate parents first (creation order)
+        parentD = D[pb.parent.name] if pb.parent else Quaternion()
+        ops = spec.get(pb.name, [])
         q = Quaternion()
+        t = None
+        level = any(o[0] == "level" for o in ops)
         for op in ops:
             if op[0] == "s":
                 pb.scale = op[1]
-            else:
+            elif op[0] == "t":
+                t = (t if t is not None else Vector()) + Vector(op[1]) * P["scale"]
+            elif op[0] in AX:
                 q = Quaternion(AX[op[0]], math.radians(op[1])) @ q
+        if level:  # q is now the bone's world (rest-axis) rotation: undo the parents
+            q = parentD.inverted() @ q
         B = pb.bone.matrix_local.to_quaternion()
         pb.rotation_quaternion = B.inverted() @ q @ B
+        D[pb.name] = parentD @ q
+        if t is not None:
+            pb.location = B.inverted() @ (parentD.inverted() @ t)
 
 
 def iter_fcurves(act):
@@ -665,18 +1296,22 @@ def iter_fcurves(act):
 
 
 def make_action(arm, name, keys, interp):
+    """keys: list of (frame, spec) or (frame, spec, interpolation-from-this-key)."""
     bpy.context.preferences.edit.keyframe_new_interpolation_type = interp
     ad = arm.animation_data or arm.animation_data_create()
     act = bpy.data.actions.new(name)
     ad.action = act
-    for frame, spec in keys:
+    per = {}
+    for key in keys:
+        frame, spec = key[0], key[1]
+        per[frame] = key[2] if len(key) > 2 else interp
         set_pose(arm, spec)
         for pb in arm.pose.bones:
             for path in ("rotation_quaternion", "location", "scale"):
                 pb.keyframe_insert(path, frame=frame, group=pb.name)
     for fc in iter_fcurves(act):
         for kp in fc.keyframe_points:
-            kp.interpolation = interp
+            kp.interpolation = per.get(int(round(kp.co.x)), interp)
     act.use_fake_user = True
     track = ad.nla_tracks.new()
     track.name = name
@@ -687,11 +1322,19 @@ def make_action(arm, name, keys, interp):
 
 
 def mirror(spec):
-    """Swap .L/.R and flip y/z rotation signs."""
+    """Swap .L/.R and flip y/z rotation signs and x translation."""
     out = {}
     for b, ops in spec.items():
         nb = b.replace(".L", ".#").replace(".R", ".L").replace(".#", ".R")
-        out[nb] = [(o[0], -o[1]) if o[0] in "yz" else o for o in ops]
+        new = []
+        for o in ops:
+            if o[0] in "yz" and len(o) > 1:
+                new.append((o[0], -o[1]))
+            elif o[0] == "t":
+                new.append(("t", (-o[1][0], o[1][1], o[1][2])))
+            else:
+                new.append(o)
+        out[nb] = new
     return out
 
 
@@ -703,79 +1346,231 @@ def merge(*specs):
     return out
 
 
-# Constant asymmetry layered into idle/walk/still: one shoulder hitched, head canted.
-BASE = {"clavicle.L": [("y", -4)], "upperarm.L": [("y", 4)],      # left shoulder hitched up
-        "clavicle.R": [("y", -3)], "upperarm.R": [("y", 3)],      # right shoulder dropped
-        "head": [("y", -5), ("x", 9)], "spine2": [("z", 3)]}      # canted, looking down at you
+def curl(sfx, a, spread=0.0, side=None):
+    """Curl a whole hand's fingers by a degrees toward the palm (rest axes)."""
+    sgn = 1 if sfx == ".L" else -1
+    sp = {"index": -spread, "middle": 0, "ring": spread}
+    out = {}
+    for f, n in (("index", 3), ("middle", 3), ("ring", 2)):
+        for i in range(1, n + 1):
+            ops = [("y", sgn * a * (0.6 if i == 1 else 1.0))]
+            if i == 1 and spread:
+                ops.append(("x", sp[f]))
+            out[f"{f}{i}{sfx}"] = ops
+    out["thumb" + sfx] = [("y", sgn * a * 0.4)]
+    return out
+
+
+# ---------------- posture ----------------
+def body_pose():
+    """Everything but the arms. Not a person standing normally: knees soft, pelvis pushed forward,
+    the back folding over at the top, the head carried far out in front and inclined attentively,
+    both shoulders drawn up toward the ears and the left one much higher, one foot turned out."""
+    return {
+        "hips": [("t", (0, -0.030, -0.014))],
+        "spine": [("x", -3)], "spine1": [("x", 5)], "spine2": [("x", 13)], "neck": [("x", 19)],
+        "thigh.L": [("x", -11), ("z", 9)], "thigh.R": [("x", -6), ("z", -2)],
+        "shin.L": [("x", 18)], "shin.R": [("x", 12)],
+        "foot.L": [("x", -7), ("z", 24)], "foot.R": [("x", -6), ("z", -5)],
+        "clavicle.L": [("y", -27)], "clavicle.R": [("y", 17)],
+        "head": [("level",), ("y", -31), ("x", 7)],
+    }
+
+
+# Where the wrists rest when the hands are folded in front, waiting to be useful (unscaled metres).
+CLASP_TARGET = {".L": (0.040, -0.315, 1.400), ".R": (-0.028, -0.392, 1.448)}
+ELBOW_OUT = 0.37  # the elbows stand out to the sides: a waiting posture that reads as a shape far off
+CLASP = {}  # filled by solve_arm() in main(): upper and forearm rotations for the folded hands
+
+
+def solve_arm(arm, spec, sfx, target, elbow_out=0.0, guess=(-35.0, 0.0, 0.0, -80.0)):
+    """Two-bone reach by coordinate descent on the real rig: finds upperarm (x, y, z) and forearm x
+    rotations that put the wrist on `target`, preferring the elbow at least `elbow_out` metres out
+    to the side (unscaled). Returns the ops for those two bones."""
+    tgt = Vector(target) * P["scale"]
+    pb = arm.pose.bones["forearm" + sfx]
+    side = 1 if sfx == ".L" else -1
+
+    def ops(q):
+        return {"upperarm" + sfx: [("x", q[0]), ("y", q[1]), ("z", q[2])], "forearm" + sfx: [("x", q[3])]}
+
+    def err(q):
+        set_pose(arm, merge(spec, ops(q)))
+        bpy.context.view_layer.update()
+        e = (arm.matrix_world @ pb.tail - tgt).length
+        return e + 1.0 * max(0.0, elbow_out * P["scale"] - side * pb.head.x)
+
+    q = list(guess)
+    best = err(q)
+    step = 16.0
+    while step > 0.2:
+        better = False
+        for i in range(4):
+            for d in (step, -step):
+                t = list(q)
+                t[i] += d
+                t[3] = min(0.0, max(-150.0, t[3]))  # elbows only bend one way
+                e = err(t)
+                if e < best - 1e-7:
+                    best, q, better = e, t, True
+        if not better:
+            step *= 0.5
+    print(f"[build] {sfx} wrist solve: error {best * 1000:.1f} mm, angles {[round(v, 1) for v in q]}")
+    return ops(q)
+
+
+def clasp_arms(side=None):
+    """One long hand resting politely in the other, in front of the body. side limits it to one arm."""
+    out = merge(
+        {k: v for k, v in CLASP.items()},
+        {"hand.L": [("level",), ("z", -80), ("y", 18), ("x", -8)],
+         "hand.R": [("level",), ("z", 84), ("y", -24), ("x", -34)]},
+        curl(".L", 8, spread=3), curl(".R", 20, spread=4))
+    if side:
+        out = {k: v for k, v in out.items() if k.endswith(side)}
+    return out
+
+
+def hang_arms():
+    """For walking: the arms hang differently from each other; the left forearm is lifted with the
+    fingers in a small beckoning curl."""
+    return merge({"upperarm.L": [("y", 4), ("x", -8)], "forearm.L": [("x", -38)], "hand.L": [("x", -12)],
+                  "upperarm.R": [("y", 3), ("x", -4)], "forearm.R": [("x", -6)]},
+                 curl(".L", 34, spread=6), curl(".R", 10))
+
+
+def base_pose(arms="clasp"):
+    return merge(body_pose(), clasp_arms() if arms == "clasp" else hang_arms())
 
 
 def idle_keys():
-    keys = _idle_keys()
-    return [(f, merge(BASE, s)) for f, s in keys]
+    """4 s, in an attitude of service. The body breathes; the head does not move. The fingers of
+    the upper hand close one at a time (stepped), and once the head snaps further over and holds."""
+    def breath(a):
+        return {"spine1": [("x", -a * 0.5)], "spine2": [("x", -a * 0.8)],
+                "clavicle.L": [("y", a * 0.9)], "clavicle.R": [("y", -a * 0.9)]}
+
+    def head(tilt=0.0, turn=0.0):
+        return {"head": [("y", tilt), ("z", turn)]}
+    keys = []
+    B = base_pose()
+    keys.append((1, merge(B, breath(0), head()), "BEZIER"))
+    keys.append((25, merge(B, breath(1.8), head()), "BEZIER"))
+    keys.append((40, merge(B, breath(0.6), head()), "CONSTANT"))
+    fing = {}
+    for j, f in enumerate(("index1.R", "middle1.R", "ring1.R")):
+        fing.setdefault(f, []).append(("y", -24))
+        keys.append((43 + j * 3, merge(B, breath(0.6), head(), dict(fing)), "CONSTANT"))
+    keys.append((55, merge(B, breath(0.4), head(), dict(fing)), "CONSTANT"))
+    keys.append((58, merge(B, breath(0.4), head(-14, 8), dict(fing)), "CONSTANT"))
+    keys.append((61, merge(B, breath(0.5), head(-16, 9), dict(fing)), "CONSTANT"))
+    keys.append((79, merge(B, breath(0.3), head(), dict(fing)), "BEZIER"))
+    keys.append((97, merge(B, breath(0), head()), "BEZIER"))
+    return keys
 
 
-def _idle_keys():
-    breath = lambda a: {"spine1": [("x", -a * 0.6)], "spine2": [("x", -a)], "clavicle.L": [("y", a * 0.8)],
-                        "clavicle.R": [("y", -a * 0.8)], "head": [("x", a * 0.8)]}
-    tilt = {"head": [("y", 13), ("z", -6)], "neck": [("y", 4)]}
-    return [(1, breath(0)), (22, breath(1.6)), (43, breath(0)),
-            (50, merge(breath(0.5))), (53, merge(breath(0.6), tilt)), (70, merge(breath(1.2), tilt)),
-            (78, merge(breath(0.6), {"head": [("y", 4)]})), (85, breath(0))]
+def bump(p, c, w):
+    d = (p - c + math.pi) % (2 * math.pi) - math.pi
+    return math.exp(-(d / w) ** 2)
+
+
+WALK = dict(poses=16, thigh=24.0, drop=0.050, sway=3.0, twist=5.0, arm=9.0, lurch=5.0)
 
 
 def walk_pose(p):
-    """Stiff glide: short stride, almost no knee, flat feet, arms dead, head level."""
-    s = math.sin(p)
+    """Heavy, long-legged gait. p = 0: left heel strikes. Head held level at a constant height."""
+    W = WALK
+
     def leg(sfx, ph):
-        th = -17 * math.sin(ph)
-        kn = 16 * max(0.0, math.cos(ph)) ** 1.5
-        return {"thigh" + sfx: [("x", th)], "shin" + sfx: [("x", kn)], "foot" + sfx: [("x", -(th + kn))]}
-    sway = 2.0 * s
-    spec = merge(BASE, leg(".L", p), leg(".R", p + math.pi),
-                 {"hips": [("y", sway)], "spine": [("y", -sway * 0.7)], "neck": [("y", -sway * 0.3)],
-                  "head": [("x", 0)],
-                  "upperarm.L": [("y", -sway)], "upperarm.R": [("y", -sway)],  # arms stay vertical, no swing
-                  "finger1.L": [("x", 4 * s)], "finger1.R": [("x", -4 * s)]})
-    return spec
+        th = -W["thigh"] * math.cos(ph)
+        kn = 4 + 16 * bump(ph, 0.45, 0.45) + 30 * bump(ph, 3.9, 0.7)
+        ft = -(th + kn) * 0.85 + 26 * bump(ph, 3.6, 0.7)  # toes drag through the swing
+        return {"thigh" + sfx: [("x", th)], "shin" + sfx: [("x", kn)], "foot" + sfx: [("x", ft)]}
+
+    load = bump(p, 0.45, 0.5) + bump(p, math.pi + 0.45, 0.5)
+    drop = -W["drop"] * load
+    sway = W["sway"] * math.cos(p)
+    tw = W["twist"] * math.cos(p)
+    arm_l = W["arm"] * math.cos(p - 0.9)  # arms swing late, like dead weight
+    return merge(base_pose("hang"), leg(".L", p), leg(".R", p + math.pi), {
+        "hips": [("t", (0, 0, drop)), ("y", -sway), ("z", tw)],
+        "spine": [("y", sway * 0.6), ("z", -tw * 0.5)],
+        "spine1": [("x", W["lurch"] * load), ("z", -tw * 0.4)],
+        "spine2": [("x", 2 * load)],
+        "upperarm.L": [("x", arm_l * 0.5)], "upperarm.R": [("x", -arm_l)],
+        "forearm.R": [("x", -0.5 * W["arm"] * math.cos(p - 1.6))],
+        "head": [("t", (0, 0, -drop))],
+    })
 
 
 def walk_keys():
     st = P["step"]
-    n = 8
+    n = WALK["poses"]
     keys = [(1 + i * st, walk_pose(2 * math.pi * i / n)) for i in range(n)]
     keys.append((1 + n * st, walk_pose(0)))
     return keys
 
 
 def reach_keys():
+    """An offer of help: the right hand leaves the left, turns palm up and comes toward you low, and
+    the arm keeps on lengthening; the body bows a little, the head stays inclined."""
     st = P["step"]
     R = ".R"
-    stages = [  # (upperarm pitch, stretch, forearm, spine2 lean, head roll, finger spread)
-        (0, 1.0, 0, 0, 0, 0), (0, 1.0, 0, 2, 8, 0), (-25, 1.0, -8, 4, 10, 0), (-55, 1.0, -10, 6, 10, 5),
-        (-80, 1.0, -6, 8, 12, 10), (-88, 1.12, -3, 10, 12, 14), (-90, 1.25, 0, 12, 14, 18),
-        (-90, 1.38, 0, 13, 16, 22), (-91, 1.5, 0, 14, 18, 26), (-92, 1.6, 0, 15, 20, 30),
-        (-92, 1.65, 0, 15, 22, 32), (-92, 1.65, 0, 15, 22, 32), (-92, 1.65, 0, 15, 24, 34)]
+    stages = [  # (pitch, roll 0..1, stretch, bow, fingers open 0..1)
+        (-34, 0.2, 1.0, 2, 0.1), (-52, 0.45, 1.0, 3, 0.25), (-68, 0.7, 1.0, 4, 0.45), (-80, 0.9, 1.06, 5, 0.65),
+        (-88, 1.0, 1.14, 6, 0.8), (-92, 1.0, 1.24, 6, 0.9), (-94, 1.0, 1.33, 7, 1.0), (-95, 1.0, 1.40, 7, 1.0),
+        (-96, 1.0, 1.44, 7, 1.0), (-96, 1.0, 1.45, 7, 1.0), (-96, 1.0, 1.46, 8, 1.0)]
+    keys = [(1, base_pose())]
+    for i, (pitch, roll, stch, bow, op) in enumerate(stages):
+        spec = merge(body_pose(), clasp_arms(".L"), curl(R, 6 - 16 * op, spread=12 * op), {
+            "upperarm" + R: [("z", -90 * roll), ("x", pitch + 16 * op), ("y", 4)],
+            "clavicle" + R: [("x", pitch * 0.08)],
+            "forearm" + R: [("x", -24 * op), ("s", (1, stch, 1))],
+            "hand" + R: [("x", 8 * op), ("s", (1, 1 / stch, 1))],
+            "spine2": [("x", bow)], "spine1": [("x", bow * 0.4)]})
+        keys.append((1 + (i + 1) * st, spec))
+    return keys
+
+
+def duck_pose(f):
+    """f = 0 standing, 1 fully folded to pass under a 2.1 m door frame. The body folds at the
+    hunch, the arms hang straight down from the bent body, and the head stays level."""
+    e = f
+    return merge(base_pose("hang"), {
+        "hips": [("t", (0, 0.02 * e, -0.08 * e)), ("x", 6 * e)],
+        "thigh.L": [("x", -24 * e)], "thigh.R": [("x", -20 * e)],
+        "shin.L": [("x", 36 * e)], "shin.R": [("x", 32 * e)],
+        "foot.L": [("x", -12 * e)], "foot.R": [("x", -12 * e)],
+        "spine": [("x", 6 * e)], "spine1": [("x", 15 * e)], "spine2": [("x", 24 * e)],
+        "neck": [("x", -10 * e)],
+        "upperarm.L": [("level",), ("x", -4 * e), ("y", 6 * e)],
+        "upperarm.R": [("level",), ("x", -8 * e), ("y", -5 * e)],
+    })
+
+
+def duck_keys():
+    st = P["step"]
+    seq = [0, 0.08, 0.25, 0.45, 0.65, 0.82, 0.95, 1.0, 1.0, 1.0, 0.97, 1.0, 1.0, 1.0, 0.9, 0.72, 0.5, 0.3,
+           0.14, 0.04, 0.0]
     keys = []
-    for i, (up, stch, fo, lean, roll, spread) in enumerate(stages):
-        spec = {"upperarm" + R: [("x", up), ("z", -6 if up else 0), ("s", (1, stch, 1))],
-                "clavicle" + R: [("x", up * 0.12), ("z", up * 0.08)],
-                "forearm" + R: [("x", fo)],
-                "finger1" + R: [("x", -spread * 0.5)], "finger2" + R: [("x", spread * 0.3)],
-                "spine2": [("x", lean), ("z", -lean * 0.5)], "spine1": [("x", lean * 0.4)],
-                "head": [("y", -roll), ("x", -lean * 0.8)], "neck": [("x", -lean * 0.5)]}
+    for i, f in enumerate(seq):
+        spec = duck_pose(f)
+        if i == 10:  # a twitch of the head while folded
+            spec = merge(spec, {"head": [("y", 12)]})
         keys.append((1 + i * st, spec))
     return keys
 
 
 def still_keys():
-    spec = {"thigh.L": [("x", -17)], "shin.L": [("x", 6)], "foot.L": [("x", 11)],
-            "thigh.R": [("x", 13)], "shin.R": [("x", 24)], "foot.R": [("x", 8)],
-            "hips": [("y", -3)], "spine": [("y", 2)], "spine2": [("z", 8), ("x", 4)],
-            "neck": [("x", -6)], "head": [("y", 22), ("x", 6)],
-            "upperarm.L": [("x", -14), ("y", -4)], "forearm.L": [("x", -10)],
-            "finger1.L": [("x", -14)], "finger2.L": [("x", 10)],
-            "upperarm.R": [("x", 6)]}
-    spec = merge(BASE, spec)
+    """Frozen mid-step, as if caught: weight on the back foot, one hand lifted in a beckoning curl."""
+    spec = merge(body_pose(), {
+        "thigh.L": [("x", -16)], "shin.L": [("x", 8)], "foot.L": [("x", 10)],
+        "thigh.R": [("x", 14)], "shin.R": [("x", 18)], "foot.R": [("x", 2)],
+        "hips": [("y", -3), ("t", (0, 0, -0.02))], "spine": [("y", 2)], "spine2": [("z", 8)],
+        "head": [("y", -6)],
+        "upperarm.L": [("x", -22), ("y", 6)], "forearm.L": [("x", -70)], "hand.L": [("x", -24)],
+        "upperarm.R": [("y", 3), ("x", -4)], "forearm.R": [("x", -8)]},
+        curl(".L", 55, spread=10), curl(".R", 12))
     return [(1, spec), (2, spec)]
 
 
@@ -784,26 +1579,33 @@ def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(ROOT, "public", "assets", "entities", "orderly.glb"))
-    ap.add_argument("--blend", default=os.path.join(HERE, "orderly.blend"))
+    ap.add_argument("--blend", default="")
     args = ap.parse_args(argv)
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
     scn = bpy.context.scene
     scn.render.fps = P["fps"]
+    mb = collect_mesh()
+    P["scale"] = P["height"] / (max(c.z for c in mb.co) - IDLE_SAG)
+    print(f"[build] scale {P['scale']:.4f}")
     bt = bone_table()
     arm = build_armature(bt)
-    ob = build_mesh(arm, bt)
+    ob = build_mesh(mb, arm, bt)
     ob.data.materials.append(make_material(make_atlas()))
+    for sfx in (".L", ".R"):
+        CLASP.update(solve_arm(arm, body_pose(), sfx, CLASP_TARGET[sfx], ELBOW_OUT))
 
     make_action(arm, "idle", idle_keys(), "BEZIER")
     make_action(arm, "walk", walk_keys(), "CONSTANT")
     make_action(arm, "reach", reach_keys(), "CONSTANT")
+    make_action(arm, "duck", duck_keys(), "CONSTANT")
     make_action(arm, "still", still_keys(), "CONSTANT")
     set_pose(arm, {})
-    scn.frame_start, scn.frame_end = 1, 85
+    scn.frame_start, scn.frame_end = 1, 97
 
     tris = sum(len(p.vertices) - 2 for p in ob.data.polygons)
-    print(f"[build] verts={len(ob.data.vertices)} tris={tris} bones={len(arm.data.bones)}")
+    zs = [v.co.z for v in ob.data.vertices]
+    print(f"[build] verts={len(ob.data.vertices)} tris={tris} bones={len(arm.data.bones)} height={max(zs):.3f}")
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     if args.blend:
         bpy.ops.wm.save_as_mainfile(filepath=args.blend)

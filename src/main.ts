@@ -2,12 +2,13 @@ import * as THREE from 'three';
 import { AutoWalk } from './game/autoWalk';
 import { FrameStats } from './game/frameStats';
 import { Input } from './game/input';
-import { EYE_HEIGHT, Player, yawForDir } from './game/player';
+import { EYE_HEIGHT, Player, yawForDir, yawToward } from './game/player';
+import { EntityPreview } from './render/entityPreview';
 import { buildWorld } from './render/world';
 import { generateClinic } from './sim/clinic';
 import type { Level } from './sim/floor';
 import { landingFacing } from './sim/landing';
-import { cellOf } from './sim/move';
+import { bodyAtCell, cellOf } from './sim/move';
 
 declare const __BUILD__: string;
 
@@ -16,6 +17,8 @@ const params = new URLSearchParams(location.search);
 const seed = params.get('seed') ?? 'orientation';
 const depth = Math.max(1, Math.floor(Number(params.get('depth') ?? '1')) || 1);
 const debug = params.get('debug') === '1';
+// ?preview=orderly[&anim=walk|idle|reach|duck|still] stands an entity model in the level.
+const previewName = params.get('preview');
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const hud = document.getElementById('hud') as HTMLDivElement;
@@ -32,6 +35,19 @@ const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.05, 90);
 const player = new Player(plan, plan.landing.level, plan.landing.x, plan.landing.y, yawForDir(landingFacing(plan)));
 const input = new Input(canvas, overlay);
 const autoWalk = new AutoWalk();
+
+let preview: EntityPreview | null = null;
+if (previewName === 'orderly') {
+  renderer.shadowMap.enabled = true;
+  preview = new EntityPreview(scene, `${import.meta.env.BASE_URL}assets/entities/orderly.glb`);
+  preview.play(params.get('anim') ?? 'idle');
+  // At the entity's start, facing down the sightline it sits at the end of.
+  const s0 = plan.entityStart;
+  const line = plan.sightlines.find((s) => s.level === s0.level && ((s.x1 === s0.x && s.y1 === s0.y) || (s.x2 === s0.x && s.y2 === s0.y)));
+  const far = line ? (line.x1 === s0.x && line.y1 === s0.y ? { x: line.x2, y: line.y2 } : { x: line.x1, y: line.y1 }) : s0;
+  const b = bodyAtCell(plan, s0);
+  preview.place(b.x, b.y, b.z, line ? yawToward(far.x - s0.x, far.y - s0.y) : 0);
+}
 const stats = new FrameStats(120);
 
 // Low internal resolution, scaled up with hard pixels. The full tape look comes in a later task.
@@ -96,6 +112,19 @@ const state = {
   },
   walkTo: (level: Level, cx: number, cy: number) => autoWalk.start(plan, player, { level, x: cx, y: cy }),
   frameMs: () => stats.median(),
+  /** The previewed entity (?preview=orderly), or null. Positions in world metres, yaw in degrees. */
+  entity: preview && {
+    loaded: () => preview?.loaded ?? false,
+    animations: () => preview?.animations() ?? [],
+    current: () => preview?.current() ?? '',
+    play: (name: string) => preview?.play(name) ?? false,
+    placeCell: (level: Level, cx: number, cy: number, yawDegrees = 0) => {
+      const b = bodyAtCell(plan, { level, x: cx, y: cy });
+      preview?.place(b.x, b.y, b.z, yawDegrees * DEG);
+    },
+    placeAt: (x: number, y: number, z: number, yawDegrees = 0) => preview?.place(x, y, z, yawDegrees * DEG),
+    bone: (name: string) => preview?.bonePosition(name) ?? null,
+  },
   /** Hides the click-to-start overlay without a pointer lock. */
   start: () => input.dismissOverlay(),
 };
@@ -111,6 +140,7 @@ renderer.setAnimationLoop(() => {
   stats.add(ms);
   const dt = Math.min(ms / 1000, 0.1);
 
+  preview?.update(dt);
   if (autoWalk.active) autoWalk.tick(plan, player);
   else player.control(plan, input, dt);
   player.toCamera(camera);

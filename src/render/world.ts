@@ -19,7 +19,9 @@ const FOG = 0xdfe8e4;
 export function buildWorld(plan: FloorPlan): World {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(FOG);
-  scene.fog = new THREE.Fog(FOG, 16, 70);
+  // The Clinic's rule is that nowhere hides you, so its haze starts late: a figure standing at the
+  // far end of the longest hall (about 50 m) must still be crisp. Darker places will bring fog close.
+  scene.fog = new THREE.Fog(FOG, 38, 130);
 
   const shell = buildStructure(plan);
   const trim = new GeoBuilder();

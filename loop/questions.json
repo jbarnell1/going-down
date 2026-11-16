@@ -2,20 +2,77 @@
   "about": "Open questions for the owner. type is single, multi or text. The loop adds questions here, proceeds on the default, and reads answers from .local/answers.json.",
   "questions": [
     {
+      "id": "orderly-next",
+      "title": "The Orderly after three judged rounds: what next?",
+      "context": "Pictures are on the Progress page. It is now its own character and sits in the room, but five blind judges across three rounds scored it between 3 and 6 out of 10 for fear, and the scores did not rise. The last judge said the X-stitched eyes look like buttons and the pastel palette looks like a toy. Building figures entirely by script seems to have a ceiling for how frightening a still picture can be.",
+      "type": "single",
+      "options": [
+        {
+          "id": "behaviour",
+          "label": "Keep it and move on",
+          "note": "Make it frightening through how it behaves: frozen while watched, nearer each time you look, the trolley squeak, the tape look. Revisit the model after it moves."
+        },
+        {
+          "id": "another-pass",
+          "label": "One more modelling pass now",
+          "note": "Target the last judge: real sewn lids, mottled waxy skin, stained gown, a narrower grin."
+        },
+        {
+          "id": "sculpt",
+          "label": "Try a different way of making it",
+          "note": "For example an AI-generated 3D sculpt or a free base mesh, re-dressed and re-rigged. Some services need an account you would have to create."
+        },
+        {
+          "id": "redesign",
+          "label": "Rethink the character",
+          "note": "Tell me what you want instead in the box."
+        }
+      ],
+      "default": [
+        "behaviour"
+      ]
+    },
+    {
       "id": "orderly-look",
       "title": "The Orderly's first pass: what should the second pass push on?",
       "context": "Renders are on the Status page. It currently reads as a mannequin in a gown. The loop already plans elbows, wrists, sloped shoulders and a bigger printed smile.",
       "type": "multi",
       "options": [
-        { "id": "body", "label": "More of a body under the gown", "note": "Ribs, spine, collarbones showing through." },
-        { "id": "taller", "label": "Taller, so it has to duck under door frames" },
-        { "id": "face", "label": "Make the printed smile much bigger and bolder" },
-        { "id": "eyes", "label": "Something wrong where the eyes should be" },
-        { "id": "hands", "label": "Longer, more articulated hands" },
-        { "id": "less-funny", "label": "Less funny, more frightening" },
-        { "id": "more-funny", "label": "Keep it absurd, the smile is the joke" }
+        {
+          "id": "body",
+          "label": "More of a body under the gown",
+          "note": "Ribs, spine, collarbones showing through."
+        },
+        {
+          "id": "taller",
+          "label": "Taller, so it has to duck under door frames"
+        },
+        {
+          "id": "face",
+          "label": "Make the printed smile much bigger and bolder"
+        },
+        {
+          "id": "eyes",
+          "label": "Something wrong where the eyes should be"
+        },
+        {
+          "id": "hands",
+          "label": "Longer, more articulated hands"
+        },
+        {
+          "id": "less-funny",
+          "label": "Less funny, more frightening"
+        },
+        {
+          "id": "more-funny",
+          "label": "Keep it absurd, the smile is the joke"
+        }
       ],
-      "default": ["body", "face", "eyes"]
+      "default": [
+        "body",
+        "face",
+        "eyes"
+      ]
     },
     {
       "id": "license",
@@ -23,11 +80,24 @@
       "context": "Your other public repos use AGPL-3.0 or MIT. With no licence, others may look but not reuse.",
       "type": "single",
       "options": [
-        { "id": "none", "label": "None yet" },
-        { "id": "mit", "label": "MIT", "note": "Anyone may reuse it, including commercially." },
-        { "id": "agpl", "label": "AGPL-3.0", "note": "Reuse must stay open source." }
+        {
+          "id": "none",
+          "label": "None yet"
+        },
+        {
+          "id": "mit",
+          "label": "MIT",
+          "note": "Anyone may reuse it, including commercially."
+        },
+        {
+          "id": "agpl",
+          "label": "AGPL-3.0",
+          "note": "Reuse must stay open source."
+        }
       ],
-      "default": ["none"]
+      "default": [
+        "none"
+      ]
     },
     {
       "id": "publish-design-doc",
@@ -35,11 +105,22 @@
       "context": "It is written to you and mentions your other projects and this PC in passing. It stays local until you say otherwise.",
       "type": "single",
       "options": [
-        { "id": "no", "label": "Keep it local" },
-        { "id": "scrubbed", "label": "Publish it with personal mentions removed" },
-        { "id": "asis", "label": "Publish it as it is" }
+        {
+          "id": "no",
+          "label": "Keep it local"
+        },
+        {
+          "id": "scrubbed",
+          "label": "Publish it with personal mentions removed"
+        },
+        {
+          "id": "asis",
+          "label": "Publish it as it is"
+        }
       ],
-      "default": ["no"]
+      "default": [
+        "no"
+      ]
     },
     {
       "id": "public-play-link",
@@ -47,10 +128,18 @@
       "context": "It is free with a public repo and gives friends a link that works from anywhere, which game night needs. Anyone with the link could open it.",
       "type": "single",
       "options": [
-        { "id": "not-yet", "label": "Not yet" },
-        { "id": "yes", "label": "Yes, deploy every green build" }
+        {
+          "id": "not-yet",
+          "label": "Not yet"
+        },
+        {
+          "id": "yes",
+          "label": "Yes, deploy every green build"
+        }
       ],
-      "default": ["not-yet"]
+      "default": [
+        "not-yet"
+      ]
     },
     {
       "id": "voice-cap",
@@ -58,11 +147,22 @@
       "context": "The account is shared with your other work. The loop checks what is left before each batch.",
       "type": "single",
       "options": [
-        { "id": "25k", "label": "25,000" },
-        { "id": "50k", "label": "50,000" },
-        { "id": "100k", "label": "100,000" }
+        {
+          "id": "25k",
+          "label": "25,000"
+        },
+        {
+          "id": "50k",
+          "label": "50,000"
+        },
+        {
+          "id": "100k",
+          "label": "100,000"
+        }
       ],
-      "default": ["25k"]
+      "default": [
+        "25k"
+      ]
     },
     {
       "id": "watchdog",
@@ -70,10 +170,18 @@
       "context": "It would re-fire the loop every few hours, with a lock so two never run at once. It is a standing task on this PC.",
       "type": "single",
       "options": [
-        { "id": "no", "label": "No" },
-        { "id": "yes", "label": "Yes" }
+        {
+          "id": "no",
+          "label": "No"
+        },
+        {
+          "id": "yes",
+          "label": "Yes"
+        }
       ],
-      "default": ["no"]
+      "default": [
+        "no"
+      ]
     },
     {
       "id": "boot-start",
@@ -81,10 +189,18 @@
       "context": "Right now it starts when you log in. Starting at boot means adding it to your shared autostart script.",
       "type": "single",
       "options": [
-        { "id": "logon", "label": "Logon is fine" },
-        { "id": "boot", "label": "Add it to the boot script" }
+        {
+          "id": "logon",
+          "label": "Logon is fine"
+        },
+        {
+          "id": "boot",
+          "label": "Add it to the boot script"
+        }
       ],
-      "default": ["logon"]
+      "default": [
+        "logon"
+      ]
     },
     {
       "id": "setting",
@@ -92,13 +208,30 @@
       "context": "North Star Q5. Another game already uses an elevator descending a vast structure, so a specific, mundane building helps ours stand apart.",
       "type": "single",
       "options": [
-        { "id": "hotel", "label": "A hotel run by a cheerfully indifferent company" },
-        { "id": "hospital", "label": "A hospital that kept building downwards" },
-        { "id": "storage", "label": "A self-storage facility" },
-        { "id": "tv", "label": "A TV station" },
-        { "id": "institute", "label": "A research institute" }
+        {
+          "id": "hotel",
+          "label": "A hotel run by a cheerfully indifferent company"
+        },
+        {
+          "id": "hospital",
+          "label": "A hospital that kept building downwards"
+        },
+        {
+          "id": "storage",
+          "label": "A self-storage facility"
+        },
+        {
+          "id": "tv",
+          "label": "A TV station"
+        },
+        {
+          "id": "institute",
+          "label": "A research institute"
+        }
       ],
-      "default": ["hotel"]
+      "default": [
+        "hotel"
+      ]
     },
     {
       "id": "name",
@@ -114,13 +247,37 @@
       "context": "North Star A2. The Arboretum and the Flood need open ground and water, so they take longer.",
       "type": "multi",
       "options": [
-        { "id": "clinic", "label": "The Clinic", "note": "Sterile and bright." },
-        { "id": "overgrowth", "label": "The Overgrowth", "note": "Dark and overrun." },
-        { "id": "annex", "label": "The Annex", "note": "Endless yellow office." },
-        { "id": "arboretum", "label": "The Arboretum", "note": "A forest indoors." },
-        { "id": "flood", "label": "The Flood", "note": "Knee-deep, then a black basin." }
+        {
+          "id": "clinic",
+          "label": "The Clinic",
+          "note": "Sterile and bright."
+        },
+        {
+          "id": "overgrowth",
+          "label": "The Overgrowth",
+          "note": "Dark and overrun."
+        },
+        {
+          "id": "annex",
+          "label": "The Annex",
+          "note": "Endless yellow office."
+        },
+        {
+          "id": "arboretum",
+          "label": "The Arboretum",
+          "note": "A forest indoors."
+        },
+        {
+          "id": "flood",
+          "label": "The Flood",
+          "note": "Knee-deep, then a black basin."
+        }
       ],
-      "default": ["clinic", "overgrowth", "annex"]
+      "default": [
+        "clinic",
+        "overgrowth",
+        "annex"
+      ]
     },
     {
       "id": "candidates",
@@ -128,15 +285,43 @@
       "context": "North Star, Candidates section.",
       "type": "multi",
       "options": [
-        { "id": "scream", "label": "Scream to struggle" },
-        { "id": "pool", "label": "The office pool" },
-        { "id": "wires", "label": "Crossed wires" },
-        { "id": "mirror", "label": "The mirror" },
-        { "id": "lost", "label": "Connection lost", "note": "The game pretends you disconnected." },
-        { "id": "startover", "label": "Start over", "note": "A fake restart." },
-        { "id": "tab", "label": "The tab is still open" }
+        {
+          "id": "scream",
+          "label": "Scream to struggle"
+        },
+        {
+          "id": "pool",
+          "label": "The office pool"
+        },
+        {
+          "id": "wires",
+          "label": "Crossed wires"
+        },
+        {
+          "id": "mirror",
+          "label": "The mirror"
+        },
+        {
+          "id": "lost",
+          "label": "Connection lost",
+          "note": "The game pretends you disconnected."
+        },
+        {
+          "id": "startover",
+          "label": "Start over",
+          "note": "A fake restart."
+        },
+        {
+          "id": "tab",
+          "label": "The tab is still open"
+        }
       ],
-      "default": ["scream", "pool", "wires", "mirror"]
+      "default": [
+        "scream",
+        "pool",
+        "wires",
+        "mirror"
+      ]
     },
     {
       "id": "haunt",
@@ -144,10 +329,18 @@
       "context": "North Star Q14.",
       "type": "single",
       "options": [
-        { "id": "yes", "label": "Yes, with a small budget" },
-        { "id": "help-only", "label": "Help only" }
+        {
+          "id": "yes",
+          "label": "Yes, with a small budget"
+        },
+        {
+          "id": "help-only",
+          "label": "Help only"
+        }
       ],
-      "default": ["yes"]
+      "default": [
+        "yes"
+      ]
     },
     {
       "id": "false-lines",
@@ -155,10 +348,18 @@
       "context": "North Star Q23. Touching a line tests it.",
       "type": "single",
       "options": [
-        { "id": "yes", "label": "Yes" },
-        { "id": "no", "label": "No, lines are always trustworthy" }
+        {
+          "id": "yes",
+          "label": "Yes"
+        },
+        {
+          "id": "no",
+          "label": "No, lines are always trustworthy"
+        }
       ],
-      "default": ["yes"]
+      "default": [
+        "yes"
+      ]
     },
     {
       "id": "anything",

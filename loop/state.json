@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
-  "iteration": 4,
-  "now": "T3",
-  "nowText": "An Opus agent is studying two Blender tutorials, then rebuilding the Orderly to your notes. Two judged revision rounds follow.",
+  "iteration": 6,
+  "now": "T2b",
+  "nowText": "An Opus agent is building the tape-playback look as a screen filter, plus a debug overlay with a minimap.",
   "ci": {
     "status": "passed",
-    "commit": "d1da0e1",
-    "at": "2026-11-16T04:46:34.830Z"
+    "commit": "99a17b0",
+    "at": "2026-11-16T05:37:04.890Z"
   },
   "answersAppliedTo": "2026-11-16T04:20:00Z",
   "tasks": [
@@ -129,7 +129,7 @@
       "id": "T3",
       "title": "The Orderly, second pass",
       "why": "The first entity. The first pass reads as a mannequin; this pass has to make it frightening in bright light.",
-      "status": "doing",
+      "status": "done",
       "gates": [
         "G4"
       ],
@@ -151,25 +151,148 @@
           "caption": "First pass at game resolution: the smile is lost",
           "kind": "image",
           "at": "2026-11-16T04:16:44.328Z"
+        },
+        {
+          "src": "T3/20261116T045642-player_view.png",
+          "caption": "Orderly second pass, rounds 1 to 4: now 2.67 m tall (the door beside it is 2.1 m), thin body with knobbly knees and elbows, a bare bony left shoulder, darker gown so it stands out against the white walls, and a much bigger printed smile",
+          "kind": "image",
+          "at": "2026-11-16T04:56:42.054Z"
+        },
+        {
+          "src": "T3/20261116T045642-face.png",
+          "caption": "Close-up: above the mask there are no eyes, only two sunken dark sockets sewn shut with a few stitches. The printed grin now covers the whole mask in a thick black line",
+          "kind": "image",
+          "at": "2026-11-16T04:56:42.166Z"
+        },
+        {
+          "src": "T3/20261116T045642-poses.png",
+          "caption": "Poses: idle, two frames of the heavy stepped walk (the head stays level), the reach with the arm stretching longer than an arm should, folding to fit under a 2.1 m door frame with the arms hanging, and the frozen pose",
+          "kind": "image",
+          "at": "2026-11-16T04:56:42.275Z"
+        },
+        {
+          "src": "T3/20261116T045642-k450.png",
+          "caption": "From the horror-character tutorial by David Kohlmann: the eye socket built as rings of edges stepping back into the skull. The Orderly's sealed eye sockets are built the same way, in script",
+          "kind": "image",
+          "at": "2026-11-16T04:56:42.369Z"
+        },
+        {
+          "src": "T3/20261116T050405-22-orderly-near.png",
+          "caption": "In the game at 4 m: the Orderly in the real Clinic with its own shadow on the floor; the printed grin and the two dark sockets read at the game's resolution",
+          "kind": "image",
+          "at": "2026-11-16T05:04:05.015Z"
+        },
+        {
+          "src": "T3/20261116T050405-23-orderly-door.png",
+          "caption": "In the game beside a 2.1 m door frame: its head is well above the top of the frame, so it has to fold to get through",
+          "kind": "image",
+          "at": "2026-11-16T05:04:05.120Z"
+        },
+        {
+          "src": "T3/20261116T050405-21-orderly-mid.png",
+          "caption": "In the game at 16 m: a thin dark figure with a pale face patch at the end of the hall. At 40 m it shrinks to a dark sliver about 13 pixels tall and the face is lost",
+          "kind": "image",
+          "at": "2026-11-16T05:04:05.214Z"
+        },
+        {
+          "src": "T3/20261116T050639-22-orderly-near.png",
+          "caption": "Second pass standing in the game at 4 metres, with a real shadow",
+          "kind": "image",
+          "at": "2026-11-16T05:06:39.410Z"
+        },
+        {
+          "src": "T3/20261116T050639-20-orderly-far.png",
+          "caption": "The problem to fix: at 40 metres it is a sliver you cannot pick out",
+          "kind": "image",
+          "at": "2026-11-16T05:06:39.411Z"
+        },
+        {
+          "src": "T3/20261116T050639-face.png",
+          "caption": "Second pass face: sewn-shut sockets and a bolder printed smile",
+          "kind": "image",
+          "at": "2026-11-16T05:06:39.412Z"
+        },
+        {
+          "src": "T3/20261116T052133-turn_front.png",
+          "caption": "Round 1 fixes: new waiting posture (hunched at the top of the back, knees soft, head pushed forward and tilted, one foot turned out, long hands folded at the chest with elbows out), a thinner and much wider printed grin, bigger dark sewn sockets, real knees and long-toed bare feet, a hospital gown with a cross print, a wristband, an uneven hem and trailing ties",
+          "kind": "image",
+          "at": "2026-11-16T05:21:33.281Z"
+        },
+        {
+          "src": "T3/20261116T052133-22-orderly-near.png",
+          "caption": "Round 1 fixes in the game at 4 m: shaded like the room, lighter tones, less grain, and its shadow is now a soft pool directly under its feet",
+          "kind": "image",
+          "at": "2026-11-16T05:21:33.368Z"
+        },
+        {
+          "src": "T3/20261116T052133-far_crop_round1.png",
+          "caption": "Round 1 fixes in the game at 40 m (enlarged crop): the elbows standing out make it a figure rather than a post even at about 14 pixels tall",
+          "kind": "image",
+          "at": "2026-11-16T05:21:33.454Z"
+        },
+        {
+          "src": "T3/20261116T052133-poses.png",
+          "caption": "Round 1 fixes, poses: waiting, heavy walk with one hand lifted, the reach now a low palm-up offer of help with the arm still lengthening, folding through a 2.1 m door, frozen with a beckoning hand",
+          "kind": "image",
+          "at": "2026-11-16T05:21:33.556Z"
+        },
+        {
+          "src": "T3/20261116T053310-face.png",
+          "caption": "Round 2 fixes: the black eye holes are gone. The lids are closed and sewn with thick, uneven stitches, one sunk deeper than the other. The skin is waxy yellow-white, the cap is a puffy crinkled paper bouffant, and the mask is a blue pleated surgical mask with ear loops, a damp yellowed patch and a printed grin that runs off its edges",
+          "kind": "image",
+          "at": "2026-11-16T05:33:10.972Z"
+        },
+        {
+          "src": "T3/20261116T053311-22-orderly-near.png",
+          "caption": "Round 2 fixes in the game: pale flesh and washed blue paper in the corridor's light, lit from above, with a short contact shadow the feet stand in; shoulders hiked to the ears, head dropped further forward",
+          "kind": "image",
+          "at": "2026-11-16T05:33:11.059Z"
+        },
+        {
+          "src": "T3/20261116T053311-poses.png",
+          "caption": "Round 2 fixes, poses: knobbed knees, elbows and wrists with the limbs tapering between them, arched feet on their toes, and a reach where only the forearm lengthens and the elbow stays bent",
+          "kind": "image",
+          "at": "2026-11-16T05:33:11.159Z"
+        },
+        {
+          "src": "T3/20261116T053626-22-orderly-near.png",
+          "caption": "Final round, in the game at 4 metres: pale skin, paper cap, hands folded like staff waiting to help",
+          "kind": "image",
+          "at": "2026-11-16T05:36:26.479Z"
+        },
+        {
+          "src": "T3/20261116T053626-face.png",
+          "caption": "Final round face: lids sewn shut, and the printed smile runs off the mask",
+          "kind": "image",
+          "at": "2026-11-16T05:36:26.480Z"
+        },
+        {
+          "src": "T3/20261116T053626-21-orderly-mid.png",
+          "caption": "Final round at about 15 metres down a corridor",
+          "kind": "image",
+          "at": "2026-11-16T05:36:26.481Z"
+        },
+        {
+          "src": "T3/20261116T053626-poses.png",
+          "caption": "Final round poses: idle, walk, reach, the doorway duck, frozen",
+          "kind": "image",
+          "at": "2026-11-16T05:36:26.482Z"
         }
       ],
-      "todo": [
-        "First, study: the agent goes through two YouTube Blender tutorials on making horror characters or low-detail retro creatures (their transcripts plus frames sampled from the video), and writes what it learned to docs/ART-NOTES.md before touching the model.",
-        "Apply it, with your answers: taller so it ducks under door frames; a body under the gown (ribs, spine, collarbones, real elbows and wrists); the printed smile much bigger and bolder; something wrong where the eyes should be; longer, more articulated hands; less funny, more frightening.",
-        "Load it in the game on a Clinic floor and check the reach and the walk there.",
-        "Revision round 1: blind judges (fresh Opus agents shown only the pictures) and Fable each say what they see and what looks cheap; the agent fixes the worst of it.",
-        "Revision round 2: the same again on the fixed figure. Pictures from every round go on this page."
-      ],
-      "startedAt": "2026-11-16T04:36:16.722Z"
+      "todo": [],
+      "startedAt": "2026-11-16T04:36:16.722Z",
+      "finishedAt": "2026-11-16T05:37:04.584Z",
+      "summary": "The Orderly was rebuilt after tutorial study and three judged rounds. It is a rigged 2.6 m figure with five animations (idle, walk, reach, a duck under door frames, frozen), it stands in the game with a real shadow, and all checks pass. It is now its own character: pale waxy skin, lids sewn shut, a paper cap, hands folded like staff waiting to help. Honest result: five blind judges scored it 3 to 6 out of 10 for fear and the scores did not rise across rounds. A question about what to do next is waiting for you."
     },
     {
       "id": "T2b",
       "title": "The tape-playback look and the debug overlay",
       "why": "The degraded recovered-footage look that hides rough art, plus tools for testing.",
-      "status": "todo",
+      "status": "doing",
       "gates": [
         "G10"
-      ]
+      ],
+      "startedAt": "2026-11-16T05:37:04.973Z"
     },
     {
       "id": "T2v",
@@ -186,7 +309,17 @@
       "gates": [
         "G3",
         "G5"
+      ],
+      "todo": [
+        "Staging, from the player judge: the first sighting should be partly hidden (a peek round a door frame, a tilted head), and it should be nearer each time you look back. The doorway peek pose is the best scare so far."
       ]
+    },
+    {
+      "id": "T3b",
+      "title": "The Orderly, third pass",
+      "why": "After it moves and the tape look is on: real sewn lids instead of button-like discs, mottled skin, a stained gown that stands out from the walls, a narrower grin.",
+      "status": "todo",
+      "gates": []
     },
     {
       "id": "T5",
@@ -309,8 +442,17 @@
     {
       "id": "G4",
       "title": "The Orderly is a real figure",
-      "status": "open",
-      "evidence": ""
+      "status": "passed",
+      "evidence": "A re-runnable Blender script builds a rigged figure (7,380 triangles, 39 bones, 5 animations) that loads, animates and casts a shadow in the game; Fable looked at renders and in-game screenshots; five blind critics over three rounds, worst findings fixed each round. Deliberate break used: with the model file hidden, the Orderly browser test fails. Not claimed: that it is frightening. Blind fear scores stayed between 3 and 6 out of 10.",
+      "at": "2026-11-16T05:37:04.655Z",
+      "media": [
+        {
+          "src": "G4/20261116T053704-22-orderly-near.png",
+          "caption": "The Orderly in the game",
+          "kind": "image",
+          "at": "2026-11-16T05:37:04.658Z"
+        }
+      ]
     },
     {
       "id": "G5",
@@ -385,9 +527,128 @@
     {
       "at": "2026-11-16T03:45:00Z",
       "text": "The North Star design document stays out of the public repository (question \"publish-design-doc\")."
+    },
+    {
+      "at": "2026-11-16T05:37:04.809Z",
+      "text": "The Orderly: kept as it is for now and moved on, relying on behaviour, sound and the tape look for fear (question \"orderly-next\")."
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T05:37:04.974Z",
+      "text": "Started T2b: The tape-playback look and the debug overlay. An Opus agent is building the tape-playback look as a screen filter, plus a debug overlay with a minimap.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T05:37:04.810Z",
+      "text": "Took a default: The Orderly: kept as it is for now and moved on, relying on behaviour, sound and the tape look for fear (question \"orderly-next\").",
+      "kind": "decision"
+    },
+    {
+      "at": "2026-11-16T05:37:04.732Z",
+      "text": "Added task T3b: The Orderly, third pass.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T05:37:04.658Z",
+      "text": "Gate G4 (The Orderly is a real figure) is passed.",
+      "kind": "gate"
+    },
+    {
+      "at": "2026-11-16T05:37:04.585Z",
+      "text": "Finished T3: The Orderly, second pass.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T05:36:26.482Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T05:33:11.159Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T05:33:11.059Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T05:33:10.972Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T05:23:26.933Z",
+      "text": "Orderly, revision round 2. Fresh blind judges scored it 3/10 and 5/10 for fear: the scores have not improved. Both said the black eye sockets read as sunglasses at game size, and the art director said the grey grinning stick figure echoes three existing characters. The last round goes after exactly that: pale waxy skin, stitched-shut lids, a puffy paper cap, and a smile that runs off the mask onto the cheeks.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T05:21:33.556Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T05:21:33.454Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T05:21:33.368Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T05:21:33.281Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T05:07:11.364Z",
+      "text": "Orderly, revision round 1. A blind art-director judge scored it 4/10 frightening, 4/10 craft, 5/10 original. A blind player judge scored it 6/10 scary and 7/10 memorable, and said: \"Why is he smiling? Why is he SMILING.\" Both said the smile reads as an emoji at game size, the legs are sticks, the gown reads as a dress, and it stands like a plank. Fixes are going back to the modeller.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T05:06:39.412Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T05:04:05.214Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T05:04:05.120Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T05:04:05.015Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T04:56:42.369Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T04:56:42.275Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T04:56:42.166Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T04:56:42.054Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
     {
       "at": "2026-11-16T04:46:35.001Z",
       "text": "Started T3: The Orderly, second pass. An Opus agent is studying two Blender tutorials, then rebuilding the Orderly to your notes. Two judged revision rounds follow.",
