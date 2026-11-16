@@ -1,7 +1,8 @@
 # Credits
 
-Third-party art used in Going Down. All of it is CC0 1.0 (public domain dedication); credit is
-given here because the authors ask for it and because it is right to.
+Third-party art used in Going Down. All of it is CC0 1.0 (public domain dedication) except the
+crewmates' motion capture (below); credit is given here because the authors ask for it and because
+it is right to.
 
 ## 3D props (`public/assets/props/`)
 
@@ -23,3 +24,13 @@ each prop came from.
   - `modular_industrial_pipes_01`
   - `wheelchair_01` (used only as a size and proportion reference; the game's wheelchair was built
     from simple shapes by the script)
+
+## Crewmate movement (`godot/assets/entities/crewmate.glb`)
+
+- **Adobe Mixamo**, motion capture and auto-rigging. https://www.mixamo.com. The crewmate figure
+  (built by script, `assets_src/blender/convict/`) was rigged by Mixamo and moves with these Mixamo
+  clips: Standing Idle, Walking, Jog Forward, Sneaking Forward, Crouching Idle, Looking Behind,
+  Button Pushing, Standing Death Backward 01, Crawling, Praying, Northern Soul Spin Combo, Snake Hip
+  Hop Dance, Waving. Mixamo's terms allow its animations in games, but not handing on the raw files
+  by themselves: those stay on the owner's machine (`assets_src/inbox/`, ignored by git), and only the
+  baked game model, made by `assets_src/blender/convict/build_crewmate.py`, is published.

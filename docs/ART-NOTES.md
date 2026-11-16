@@ -337,3 +337,86 @@ Rule learned:
 22. **Look at a projection's side view before trusting its numbers.** A box that is 21 cm wide is
     still a slab if it grows from a 13 cm patch: the base must be as wide as the box, so grow it from
     columns that reach the sides of the head.
+
+## The crewmate moves: Mixamo round trip, clip trimming, Godot import (2026-11-16)
+
+`assets_src/blender/convict/build_crewmate.py` turns the Mixamo downloads into
+`godot/assets/entities/crewmate.glb` (one skinned mesh of 2,216 triangles, 34 bones, 13 clips, the
+two headwear pieces on the Head bone, about 1.3 MB). `godot/client/crew_view.gd` draws one crewmate;
+`godot/client/crew_demo.tscn` stands four in a real floor and saves pictures to
+`assets_src/renders/crewmate/`:
+
+```
+tools/blender/blender-5.3.0-windows-x64/blender.exe --background --factory-startup --python-exit-code 1 --python assets_src/blender/convict/build_crewmate.py
+node godot/tools/godot.mjs import        # once, so Godot imports the glb and learns the CrewView class
+cd godot && ../tools/godot/Godot_v4.7.2-stable_win64_console.exe --path . --resolution 960x540 --position 40,40 res://client/crew_demo.tscn
+```
+
+What the round trip did and did not do:
+
+- **Every file came back With Skin.** All 13 FBX files carry the mesh and both embedded textures, not
+  only the first. Harmless: the script takes the skeleton and weights from the first (Standing Idle)
+  and checks every other clip's skeleton against it (same joints to 0.05 cm).
+- **Mixamo kept the mesh exactly.** 2,216 triangles, the four material names, one UV layer, and every
+  triangle corner of `convict_tpose.glb` has a Mixamo vertex at the same place with the same UV. So
+  the script uses the game's own mesh (build_convict.py's glb: exact materials, normals, flat 0..1
+  face screen) and copies Mixamo's weights onto it by position (worst match 0.000 mm). Mixamo's
+  vertices are welded (1,110 against the glb's 2,144 split at UV seams), which is why the copy goes by
+  position, not index.
+- **"In Place" did not stick.** Walking, Jog Forward, Sneaking Forward and Crawling came with root
+  motion (1.8 m, 2.1 m, 3.7 m and 0.9 m per cycle, straight down -Y). That turned out useful: the
+  stride speed is measured from it exactly, then removed. Walk 1.78 m/s, run 2.58, sneak 2.22 (a
+  brisk sneak), crawl 0.51. The game's speeds (walk 3.0, sprint 5.0, creep 1.2) mean playback at 1.7x,
+  1.9x and 0.54x; crew_view does that division itself.
+- **The FBX armature carries a 90 degree turn and a 0.01 scale.** Applying both to the armature turns
+  every bone's frame with it, so rotation keys carry over unchanged and location keys just scale by
+  0.01. The script proves it: unprocessed idle frames put the toes, hand and head within 0.000 mm of
+  where the FBX had them.
+- **Mixamo's head weights fade down the neck.** Between 1.48 and 1.55 m the Head share ran 0.3 to
+  0.9, which bends the mask housing when the head turns. Every vertex above 1.535 m now follows the
+  Head only, easing in from 1.495 m, so the screen is rigid and the neck skin takes the twist.
+
+Trimming and fixing clips (all done on numbers, not by hand):
+
+- Mixamo clips mostly loop already: first and last frame identical. Only the crawl's ends differed
+  (up to 15 degrees in a forearm); the best cycle was the whole clip, and the leftover is spread over
+  it. Every loop then has its last frame set equal to the first. Godot plays it with LOOP_LINEAR.
+- Drift: the per-cycle root travel is removed linearly, then the clip is centred (moving clips on the
+  mean hips position, standing clips on the middle of the feet in the first frame), so cross-fades
+  between clips do not slide the figure.
+- Floor: the deformed mesh is sampled every frame; wherever it goes more than 6 mm under y = 0 the
+  hips are lifted (smoothed). The crawl was 13 to 16 cm under the floor all through (a smaller
+  character's clip), the spin's floor work 11 cm, the fall 5 cm.
+- `taken` (Standing Death Backward) travels a metre backwards. Taken out with a smoothstep while the
+  body is in the air (frames 36 to 49), so the figure lands where it stood and the crawl starts there.
+- `pray` kneels and stays down. The clip is played to frame 110 and then frames 79..0 backwards (the
+  closest join, 2.8 degrees, eased over 8 frames), so it ends standing and the emote can hand back.
+- Size: 13 clips sampled at 30 fps with the exporter's "optimize animation size" (constant channels
+  dropped) are 1.3 MB. Seven leaf bones with no weights (HeadTop_End, toe ends, finger tips) are
+  marked non-deform and left out.
+
+Godot import:
+
+- The glb imports as-is with the default scene importer. As with the Orderly, every clip comes in
+  non-looping; crew_view sets the loop mode per clip. Godot writes the embedded textures out as
+  `crewmate_convict_suit.png` etc.; the four skin textures are also copied as `crewmate_skin_1..4.png`
+  so the view can swap them.
+- The headwear, exported as objects parented to the Head bone, arrive as BoneAttachment3D nodes:
+  the view only toggles their visibility. If the headwear ever has to be attached by hand instead:
+  bone `Head`, origin (0, 0.0297, -0.0121) m from the Head joint in the bone's own axes.
+- Every material is replaced by the client's one prop shader (Level.prop_material), with the glb's
+  texture; the face screen gets `emit` 0.55 so a drawing reads in a dim corridor.
+- Changing bone poses from `_process` after the AnimationPlayer has posed the skeleton did not show in
+  the picture (the numbers were right, the skin was not). The raised instrument arm is a
+  SkeletonModifier3D instead, whose `influence` is the blend; that is the Godot 4 way and it works.
+  It aims in the figure's own space, so it is only drawn over upright clips (idle, walk, run, wave,
+  look_behind, button): over the sneak's forward lean the same aim twisted the arm.
+
+Rules learned:
+
+23. **Read the downloads before trusting the download settings.** "In Place" and "Without Skin"
+    were both asked for and neither happened; the numbers said so in the first minute.
+24. **Copy weights by position, not by index.** A round trip welds UV seams; the game's own mesh
+    stays the source of materials and UVs.
+25. **Sample the deformed mesh against the floor every frame.** Clips made for another body sink
+    (the crawl by 16 cm); a per-frame lift fixes it without touching the clips that were right.

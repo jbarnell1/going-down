@@ -39,3 +39,19 @@ Mixamo: upload `assets_src/inbox/convict-for-mixamo.fbx`. The FBX is in centimet
 embedded. The fallback is `convict-for-mixamo.zip`, which holds the OBJ, the MTL and both textures.
 The render script's test rig (automatic weights, Mixamo-like joints) is only there to prove the joint
 loops and to pose the review renders; it is never exported.
+
+## The animated crewmate
+
+`build_crewmate.py` bakes the figure Mixamo rigged, with 13 clips, into the game's one model
+`godot/assets/entities/crewmate.glb` (and copies the four skin textures beside it as
+`crewmate_skin_1..4.png`). It reads the Mixamo downloads from `assets_src/inbox/mixamo/` (kept out of
+git), takes the mesh, materials and UVs from `convict_tpose.glb` and only the weights and skeleton from
+Mixamo, and parents `headwear_knit` and `headwear_hair` to the `Head` bone:
+
+```
+tools/blender/blender-5.3.0-windows-x64/blender.exe --background --factory-startup --python-exit-code 1 --python assets_src/blender/convict/build_crewmate.py
+```
+
+It prints each clip's length, the stride speed of the moving clips and its checks. Godot draws it
+with `godot/client/crew_view.gd`; `godot/client/crew_demo.tscn` takes the review pictures
+(`assets_src/renders/crewmate/`). Notes: docs/ART-NOTES.md, "The crewmate moves".

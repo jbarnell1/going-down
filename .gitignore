@@ -39,3 +39,7 @@ __pycache__/
 *.pyc
 # The checked Godot build the owner runs (npm run godot:promote); rebuilt, never committed.
 play/
+# Crewmate clip pictures: 26 large files; the handful that show the result are tracked, the rest stay on this PC.
+assets_src/renders/crewmate/clip_*
+assets_src/renders/crewmate/corridor_walk_08m.png
+assets_src/renders/crewmate/corridor_walk_15m.png
