@@ -9,33 +9,43 @@ import { installDiagnostics, phoneLike, readSafeLevel } from './game/diagnostics
 import { FrameStats } from './game/frameStats';
 import { Input } from './game/input';
 import { EYE_HEIGHT, Player, WALK_SPEED, yawForDir, yawToward } from './game/player';
-import { isCrewEvent, isOrderlyEvent, RunHost, START_U } from './game/runHost';
+import { HostRules, isCrewEvent, isOrderlyEvent, startBody } from './game/runHost';
+import { blinkingView, blinkWarningView, CallTracker, clientView, doorsOpenView, hostView, type RunView } from './game/runView';
 import { ActionPrompt } from './render/actionPrompt';
 import { CaughtFx, NOISE_MS } from './render/caughtFx';
+import { CrewFigures, type CrewFigureState } from './render/crewFigures';
+import { CrewList, type CrewRow } from './render/crewList';
 import { ElevatorView, HOLD_BUTTON } from './render/elevator';
 import { EndScreen, type EndLine } from './render/endScreen';
 import { EntityPreview } from './render/entityPreview';
-import { blendPose, EntityView, exactPose, type DrawnPose } from './render/entityView';
+import { EntityView, type DrawnPose } from './render/entityView';
 import { InstrumentView } from './render/instrumentView';
 import { applyLighting } from './render/lighting';
+import { cleanName, Lobby } from './render/lobby';
 import { PickupPrompt } from './render/pickupPrompt';
 import { TapeDrops } from './render/tapeDrops';
 import { Osd } from './render/osd';
 import { Tape, type FxLevel } from './render/tape';
 import { buildWorld, FOG, replaceFloor } from './render/world';
-import { audibility, ORDERLY_HEIGHT, ORDERLY_RADIUS, REACH_RANGE, SQUEAK_HEIGHT, WIND_UP_TIME, type OrderlyAnim, type OrderlyEvent, type OrderlyState, type PlayerView } from './sim/entity';
-import type { Level } from './sim/floor';
-import { maxWalkSpeed, tapeValue, type CrewEvent } from './sim/instrument';
+import { BroadcastTransport } from './net/broadcastTransport';
+import type { Frame, LocalFrame, NetClient } from './net/client';
+import { CrewSession } from './net/crew';
+import type { Pose } from './net/protocol';
+import { carFor, moveLocal, planFor, TICK } from './net/session';
+import type { Transport } from './net/transport';
+import { audibility, HUNT_SPEED, REACH_RANGE, SQUEAK_HEIGHT, WIND_UP_TIME, type OrderlyEvent, type OrderlyState } from './sim/entity';
+import type { FloorPlan, Level } from './sim/floor';
+import { LOUDNESS_MAX, LOUDNESS_MIN, LOUDNESS_REST, maxWalkSpeed, member, PICKUP_REACH, pickUpTape, setRaised, TICK_SCALE, tapeValue, type CrewEvent, type Instrument } from './sim/instrument';
 import { landingFacing } from './sim/landing';
 import { bodyAtCell, cellOf, LEVEL_HEIGHT, type Body } from './sim/move';
-import { blinking, BOARD_TIME, CALL_REACH, carBody, carLocal, depthMultiplier, doorsOpen, inCar, moveInRun, RIDE_TIME, type PlayerInput, type RunEvent, type RunSummary, type Side } from './sim/run';
-import { canSee } from './sim/sight';
+import { BOARD_TIME, CALL_REACH, carBody, carLocal, depthMultiplier, inCar, RIDE_TIME, type RunEvent, type RunSummary, type Side } from './sim/run';
 
 declare const __BUILD__: string;
 
 // URL flags used by tests and by the owner when checking in. More are added as features land.
 const params = new URLSearchParams(location.search);
-const seed = params.get('seed') ?? 'orientation';
+const urlSeed = params.get('seed');
+const seed0 = urlSeed ?? 'orientation';
 /** ?depth=N starts the run on floor N (the run normally starts at 1). */
 const startDepth = Math.max(1, Math.floor(Number(params.get('depth') ?? '1')) || 1);
 const debug = params.get('debug') === '1';
@@ -50,6 +60,10 @@ const fxLevel: FxLevel = safe >= 2 ? 0 : settings.get('tape');
 // The live Orderly is on every floor by default. ?entity=0 leaves the floor empty; ?preview=orderly
 // shows a static figure instead.
 const entityOn = params.get('entity') !== '0' && previewName !== 'orderly';
+// A crew: ?room=CODE joins (or, in the tab that made it, hosts) that room; ?net=local keeps it to
+// the tabs of this browser (BroadcastChannel), otherwise peer to peer over the internet (Trystero).
+const roomParam = params.get('room')?.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || null;
+const netLocal = params.get('net') === 'local';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const hud = document.getElementById('hud') as HTMLDivElement;
@@ -60,29 +74,94 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPrefer
 renderer.setPixelRatio(1);
 let lastRunEvent = 'none';
 const diag = installDiagnostics(renderer, canvas, safe, () => ({
-  build: __BUILD__, fx: fxLevel, frames: state.frames, lastRunEvent, phase: run.state.phase, depth: run.state.depth,
+  build: __BUILD__, fx: fxLevel, frames: state.frames, lastRunEvent, phase: view?.phase ?? 'none', depth: view?.depth ?? 0,
   orderlyLoaded: orderlyView?.loaded ?? false, frameMs: stats.median(),
 }));
 
 // ---------------------------------------------------------------------------------------------
-// The run: one host steps the run's rules, the Orderly and the crew 20 times a second.
-const LOCAL_ID = 'local';
-const run = new RunHost(seed, LOCAL_ID, entityOn, startDepth);
-let plan = run.state.plan;
+// The session. The run is always stepped by the network layer's host (src/net/host.ts), 20 times a
+// second; this page's player always goes through a NetClient. Alone, this page is the host and its
+// player is the only client, on an in-page link. In a crew, one page hosts and the others are clients.
+
+const NAME_KEY = 'goingDown.name';
+function readName(): string {
+  try {
+    const n = cleanName(localStorage.getItem(NAME_KEY) ?? '');
+    if (n) return n;
+  } catch {
+    /* private window */
+  }
+  const n = `CONVICT ${String(1000 + Math.floor(Math.random() * 9000))}`;
+  saveName(n);
+  return n;
+}
+function saveName(n: string): void {
+  try {
+    localStorage.setItem(NAME_KEY, n);
+  } catch {
+    /* private window */
+  }
+}
+let myName = readName();
+
+const rules = new HostRules(entityOn, startDepth);
+/** The host's run clock (seconds): real time times the test hooks' time scale. */
+let vclock = 0;
+let timeScale = 1;
+/** Real seconds, for clients and the room. */
+const realNow = (): number => performance.now() / 1000;
+/** The session being played. */
+let crew = new CrewSession(null, roomParam ? 'client' : 'host', myName, realNow());
+/** A crew being gathered in the lobby while the solo run goes on behind it (the host's tab). */
+let pending: CrewSession | null = null;
+let seedOfRun = seed0;
+/** Code of the room this tab is in, or null alone. */
+let roomCode: string | null = roomParam;
+
+function startRun(on: CrewSession): void {
+  const runSeed = urlSeed ?? (on.peers().length > 0 ? randomSeed() : seed0);
+  seedOfRun = runSeed;
+  on.start({ seed: runSeed, prepare: rules.prepare, step: rules.step, now: vclock });
+}
+function randomSeed(): string {
+  return `crew-${Math.floor(Math.random() * 1e9).toString(36)}`;
+}
+if (!roomParam) startRun(crew);
+
+/** The client this page draws from (null before a run, on a client page). */
+function client(): NetClient | null {
+  return crew.client;
+}
+/** Local clock for the page's NetClient: the host's run clock on the host's page, real time elsewhere. */
+function clientNow(): number {
+  return crew.host ? vclock : realNow();
+}
+const myId = (): string => client()?.id ?? crew.myId;
+
+// The floor drawn is the floor this page's player is on.
+const backdrop = planFor(seed0, startDepth);
+function wantedPlan(): FloorPlan {
+  const c = client();
+  if (c?.seed) return planFor(c.seed, c.localDepth);
+  if (crew.host) return planFor(crew.host.seed, crew.host.state.depth);
+  return backdrop;
+}
+let plan = wantedPlan();
+let car = carFor(plan);
 const world = buildWorld(plan);
 const scene = world.scene;
 const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.05, 90);
-let elevator = new ElevatorView(run.state.car);
+let elevator = new ElevatorView(car);
 scene.add(elevator.group);
 
 const player = new Player(plan, plan.landing.level, plan.landing.x, plan.landing.y, yawForDir(landingFacing(plan)));
-/** Puts the player in the car, in the middle, facing the doors. */
-function placeInCar(u = START_U, v = 0): void {
-  player.body = carBody(run.state.car, u, v);
+/** Puts the player in the car where the run starts them, facing the doors. */
+function placeInCar(body: Body | null): void {
+  player.body = body ? { ...body } : startBody(car, 0, 1);
   player.yaw = yawForDir(landingFacing(plan));
   player.pitch = 0;
 }
-placeInCar();
+placeInCar(crew.host?.state.players.find((p) => p.id === crew.myId)?.body ?? null);
 const input = new Input(canvas, overlay);
 const autoWalk = new AutoWalk();
 
@@ -105,6 +184,7 @@ if (entityOn) {
   renderer.shadowMap.enabled = safe === 0;
   orderlyView = new EntityView(scene, `${import.meta.env.BASE_URL}assets/entities/orderly.glb`);
 }
+const figures = new CrewFigures(scene);
 const audio = new GameAudio();
 audio.setVolume(settings.get('volume'));
 // The elevator's voice (recorded lines through a speaker built in Web Audio), in the voice and with the
@@ -113,6 +193,8 @@ const announcer = new Announcer(() => audio.context, () => audio.output, import.
 announcer.startRun();
 const caughtFx = new CaughtFx(document.body);
 const endScreen = new EndScreen(document.body);
+const crewList = new CrewList(document.body);
+const lobby = new Lobby(document.body, overlay);
 
 // The crew's instruments, the tapes on the floor, and the prompts.
 const instrument = new InstrumentView();
@@ -120,31 +202,68 @@ const tapeDrops = new TapeDrops(scene);
 const pickupPrompt = new PickupPrompt(document.body, () => void tryPickUp());
 /** Set by the test hook __gd.raise(); null leaves it to the player's input. */
 let forcedRaise: boolean | null = null;
-/** Audible ticks the logic produced since the last frame (the needle kicks on each). */
-let pendingTicks = 0;
+/** The instrument's audible ticks, counted here from its tick rate (the needle kicks on each). */
+let tickPhase = 0;
 
 // The elevator's controls: the call button on the landing, the door-hold button in the car.
-/** A call is pressed: sent with the next tick. `callBody`, if set, is where the press is made from (tests). */
+/** A call is pressed: sent with the next input. */
 let pendingCall = false;
-let callBody: Body | null = null;
+/** A pick-up is pressed: sent with the next input. */
+let pendingPick = false;
 /** Set by runCtl.hold(); null leaves holding the doors to the player. */
 let forcedHold: boolean | null = null;
 const liftPrompt = new ActionPrompt(document.body, 'lift-prompt', () => {
   if (canCall()) pendingCall = true;
 });
 
+/** The run as this page shows it (refreshed during the frame). */
+let view: RunView | null = null;
+const callTracker = new CallTracker();
+function readView(): RunView | null {
+  const c = client();
+  if (crew.host && crew.host.state) return hostView(crew.host);
+  return c ? clientView(c, callTracker) : null;
+}
+view = readView();
+
+/** The nearest floor tape within reach of `body`, or null. */
+function tapeInReach(body: Body): { id: string; d: number } | null {
+  let best: { id: string; d: number } | null = null;
+  for (const f of view?.floor ?? []) {
+    if (f.at.level !== body.level) continue;
+    const d = Math.hypot(f.at.x - body.x, f.at.y - body.y, f.at.z - body.z);
+    if (d <= PICKUP_REACH && (!best || d < best.d)) best = { id: f.id, d };
+  }
+  return best;
+}
+
 function tryPickUp(): { ok: boolean; reason: string; tapeId: string | null } {
   if (caughtFx.noiseOn || endScreen.shown) return { ok: false, reason: 'inactive', tapeId: null };
-  return run.pickUp(player.body);
+  const near = tapeInReach(player.body);
+  if (!near) return { ok: false, reason: view?.floor.length ? 'tooFar' : 'noTape', tapeId: null };
+  const h = crew.host;
+  if (!h) {
+    // Another page's host picks it up on its next tick.
+    pendingPick = true;
+    return { ok: true, reason: 'ok', tapeId: near.id };
+  }
+  // The host's own player: at once, so a stopped clock (tests) cannot swallow the key press.
+  let out = { ok: false, reason: 'noTape', tapeId: null as string | null };
+  h.act((s) => {
+    const id = crew.myId;
+    const c = { ...s.crew, members: s.crew.members.map((m) => (m.id === id ? { ...m, body: { ...player.body } } : m)) };
+    const r = pickUpTape(c, id, near.id);
+    out = { ok: r.ok, reason: r.reason, tapeId: r.ok ? near.id : null };
+    return { state: { ...s, crew: r.crew }, events: r.event ? [{ ...r.event, t: s.t }] : [] };
+  });
+  return out;
 }
 
 let catches = 0;
-/** The local player's screen could show the figure this frame (any of the checks in frameSees). */
+/** The local player's screen shows the figure this frame (NetClient's own sight test). */
 let orderlyVisible = false;
-/** The logic's own judgement (radius ORDERLY_RADIUS) says the local view sees it this frame. */
-let orderlyLogicSeen = false;
 let squeak = { gain: 0, muffled: false };
-/** Per-frame record for tests: what was drawn against where the logic had it. */
+/** Per-frame record for tests: what was drawn against where the run has it. */
 const trace: { f: number; vis: boolean; dx: number; dz: number; lx: number; lz: number; t: number; anim: string; clip: number }[] = [];
 
 // The scene is drawn at a low internal resolution, then put on screen through the tape pass.
@@ -152,7 +271,7 @@ const INTERNAL_HEIGHT = 270;
 // ?hdr=0 forces the 8-bit render path that older phones fall back to.
 // Phones take the 8-bit path from the start: it is the cheaper one and costs nothing visible there.
 const tape = new Tape(renderer, fxLevel, INTERNAL_HEIGHT, params.get('hdr') === '0' || safe >= 1 || phoneLike());
-const osd = new Osd(document.body, seed);
+const osd = new Osd(document.body, seed0);
 osd.visible = fxLevel > 0;
 /** Lights glare through the tape; the clean render keeps them as built. */
 const LIGHT_GAIN = 3;
@@ -198,7 +317,7 @@ function closePanel(): void {
   panelFromUnlock = false;
 }
 input.onUnlock = () => {
-  if (endScreen.shown) return false;
+  if (endScreen.shown || lobby.shown) return false;
   openPanel(true);
   return true;
 };
@@ -214,7 +333,7 @@ window.addEventListener('pointerdown', () => {
 });
 // A refused mouse lock (closing with Esc is not always allowed to take it back) shows the start screen.
 document.addEventListener('pointerlockerror', () => {
-  if (!input.touch && !panel.isOpen) overlay.hidden = false;
+  if (!input.touch && !panel.isOpen && !lobby.shown) overlay.hidden = false;
 });
 const coarsePointer = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 /** The light level last applied (1 all on); applied again only when it changes. */
@@ -298,50 +417,20 @@ function probePixels(n = 8): number[][] {
 }
 
 const DEG = Math.PI / 180;
-/** The model's cap reaches 2.82 m; the logic samples its figure up to ORDERLY_HEIGHT (2.6 m). */
-const MESH_EXTRA_HEIGHT = 0.22;
 
-/** The local player as the logic sees them: eye height ABOVE THE FEET, the real camera's field of view. */
-function localView(): PlayerView {
+/** The local player's camera as the network layer judges sight: eye height above the feet, the real field of view. */
+function localFrame(): LocalFrame {
   const vFov = camera.fov;
   const hFov = (2 * Math.atan(Math.tan((vFov * DEG) / 2) * camera.aspect)) / DEG;
-  return { id: LOCAL_ID, active: true, body: { ...player.body }, eye: EYE_HEIGHT, yaw: player.yaw, pitch: player.pitch, hFovDeg: hFov, vFovDeg: vFov };
+  return { body: { ...player.body }, eye: EYE_HEIGHT, yaw: player.yaw, pitch: player.pitch, hFovDeg: hFov, vFovDeg: vFov };
 }
 
-/**
- * Whether this frame could show the figure: the logic's own test at the logic's position, the same
- * test widened to the measured reach of the current clip (the mesh pokes out past the logic's 0.35 m
- * body), and the widened test at the position drawn last frame.
- */
-function frameSees(v: PlayerView, h: RunHost, ev: EntityView): boolean {
-  const o = h.orderly;
-  if (canSee(plan, v, o.body, { height: ORDERLY_HEIGHT, radius: ORDERLY_RADIUS })) return true;
-  const ext = (anim: OrderlyAnim): number => Math.max(ORDERLY_RADIUS, ev.extent(anim));
-  // The mesh is taller than the logic's figure too (cap at 2.82 m against 2.6 m).
-  const height = ORDERLY_HEIGHT + MESH_EXTRA_HEIGHT;
-  // Widest of the clip the logic asks for and the clip on screen (a held reach pose, say).
-  const reach = Math.max(ext(o.anim), ev.drawn ? ext(ev.drawn.anim) : 0);
-  const seenWide = canSee(plan, v, o.body, { height, radius: reach });
-  if (seenWide) {
-    // Only the overhang is in view. Hand the logic this view with the field of view widened by
-    // just the overhang's angle, so it holds the figure too (decided in the player's favour).
-    const dist = Math.max(0.2, Math.hypot(o.body.x - v.body.x, o.body.z - v.body.z));
-    const extra = (Math.atan2(reach - ORDERLY_RADIUS + MESH_EXTRA_HEIGHT, dist) / DEG + 1) * 2;
-    h.noteSeen({ ...v, hFovDeg: v.hFovDeg + extra, vFovDeg: v.vFovDeg + extra });
-    return true;
-  }
-  const d = ev.drawn;
-  if (!d) return false;
-  const body: Body = { x: d.x, y: d.y, z: d.z, level: d.y >= LEVEL_HEIGHT - 0.01 ? 1 : o.body.level };
-  return canSee(plan, v, body, { height, radius: Math.max(ext(d.anim), ext(o.anim)) });
-}
-
-/** The pose to hold when it is first seen: the logic's exact pose, reaching if it froze within reach of you. */
-function freezePose(s: OrderlyState): DrawnPose {
-  const p = exactPose(s);
+/** The pose to hold while it is seen: frozen within reach of you while hunting, it is drawn reaching. */
+function freezePose(p: DrawnPose): DrawnPose {
   const b = player.body;
-  const near = b.level === s.body.level && Math.hypot(b.x - s.body.x, b.z - s.body.z) <= REACH_RANGE;
-  if (near && p.anim !== 'reach' && (s.mode === 'hunting' || s.mode === 'windUp')) return { ...p, anim: 'reach', animTime: WIND_UP_TIME * 0.85 };
+  const mode = view?.orderly.mode;
+  const near = Math.hypot(b.x - p.x, b.z - p.z) <= REACH_RANGE && Math.abs(b.y - p.y) < 1;
+  if (near && p.anim !== 'reach' && (mode === 'hunting' || mode === 'windUp')) return { ...p, anim: 'reach', animTime: WIND_UP_TIME * 0.85 };
   return p;
 }
 
@@ -388,27 +477,26 @@ let prevBellLeft = BOARD_TIME;
 /** Readings closed so far on each floor depth (tests: the depth multiplier). */
 let lastReadingDepth = 1;
 
-function localSide(): Side | null {
-  return run.state.players.find((p) => p.id === LOCAL_ID)?.side ?? null;
+function me(v: RunView | null = view) {
+  return v?.players.find((p) => p.id === myId()) ?? null;
 }
 
 function canCall(): boolean {
-  const s = run.state;
-  if (s.phase !== 'away' || caughtFx.noiseOn || endScreen.shown) return false;
+  const s = view;
+  if (!s || s.phase !== 'away' || caughtFx.noiseOn || endScreen.shown) return false;
   const b = player.body;
-  return b.level === s.car.level && !inCar(s.car, b) && Math.hypot(b.x - s.car.doorX, b.z - s.car.doorZ) <= CALL_REACH - 0.05;
+  return b.level === car.level && !inCar(car, b) && Math.hypot(b.x - car.doorX, b.z - car.doorZ) <= CALL_REACH - 0.05;
 }
 
 function nearHoldButton(): boolean {
-  const s = run.state;
-  if (s.phase !== 'boarding' || !inCar(s.car, player.body)) return false;
-  const { u, v } = carLocal(s.car, player.body.x, player.body.z);
+  if (view?.phase !== 'boarding' || !inCar(car, player.body)) return false;
+  const { u, v } = carLocal(car, player.body.x, player.body.z);
   return Math.hypot(u - 0.3, v - HOLD_BUTTON.x) <= 0.75;
 }
 
 /** What the car is doing, in one word. */
 function carState(): 'arriving' | 'open' | 'away' | 'coming' | 'riding' | 'ended' {
-  const p = run.state.phase;
+  const p = view?.phase;
   if (p === 'unloading' || p === 'boarding') return 'open';
   if (p === 'arriving') return 'arriving';
   if (p === 'away') return 'away';
@@ -417,21 +505,10 @@ function carState(): 'arriving' | 'open' | 'away' | 'coming' | 'riding' | 'ended
   return 'ended';
 }
 
-/** Seconds until the car arrives (while it is coming), else null. */
-function eta(): number | null {
-  const c = run.state.call;
-  return run.state.phase === 'coming' && c ? Math.max(0, c.at + c.plan.wait - run.state.t) : null;
-}
-
-/** The lights warn of a blink (announced, not yet dark). */
-function blinkWarning(): boolean {
-  const b = run.state.blink;
-  return b !== null && b.announced && b.endsAt === null;
-}
-
 /** Updates the indicator from the run (and, when the car has left empty, its cosmetic climb). */
 function showIndicator(now: number): void {
-  const s = run.state;
+  const s = view;
+  if (!s) return;
   const here = floorLabel(s.depth);
   switch (s.phase) {
     case 'arriving':
@@ -443,7 +520,7 @@ function showIndicator(now: number): void {
       const c = s.call;
       const label = floorLabel(s.depth - (c?.floorsAway ?? 0));
       // A false stop: the car sits one floor up, the arrow off.
-      elevator.setIndicator(label, true, c && c.stopUntil !== null ? 0 : -1);
+      elevator.setIndicator(label, true, c && c.falseStop ? 0 : -1);
       break;
     }
     case 'away': {
@@ -461,44 +538,25 @@ function showIndicator(now: number): void {
   }
 }
 
-/** After every logic tick: count the instrument's audible ticks, and follow the run if it moved the player. */
-function afterTick(events: readonly RunEvent[]): void {
-  pendingTicks += run.member()?.instrument.ticks ?? 0;
-  // The bell's warning dings, as the boarding countdown passes them (tick by tick, so a skip hears them too).
-  const s = run.state;
-  if (s.phase === 'boarding') {
-    for (const w of BELL_WARNINGS) if (prevBellLeft > w && s.bellLeft <= w) audio.bellWarning();
-    if (prevBellLeft > ANNOUNCE_BELL_AT && s.bellLeft <= ANNOUNCE_BELL_AT) announcer.bellSoon();
-    prevBellLeft = s.bellLeft;
-  }
-  syncBodies(events);
+/** The bell's warning dings and the announcer's bell line, as the boarding countdown passes them. */
+function bellCheck(): void {
+  const s = view;
+  if (!s || s.phase !== 'boarding') return;
+  for (const w of BELL_WARNINGS) if (prevBellLeft > w && s.bellLeft <= w) audio.bellWarning();
+  if (prevBellLeft > ANNOUNCE_BELL_AT && s.bellLeft <= ANNOUNCE_BELL_AT) announcer.bellSoon();
+  prevBellLeft = s.bellLeft;
 }
 
-/** The run moved the player (pushed out of the doorway, carried to a new floor): follow it, tick by tick. */
-function syncBodies(events: readonly RunEvent[]): void {
-  for (const e of events) {
-    lastRunEvent = e.type;
-    diag.note(e.type);
-    if (e.type === 'doorsClosed') {
-      const b = e.pushedOut[LOCAL_ID];
-      if (b) player.body = { ...b };
-    } else if (e.type === 'rodeDown') {
-      newFloor();
-      const b = e.bodies[LOCAL_ID];
-      if (b) player.body = { ...b };
-    }
-  }
-}
-
-/** The run is on a new plan (rode down, or a new run): rebuild everything that belongs to a floor. */
-function newFloor(): void {
-  if (run.state.plan === plan) return;
-  plan = run.state.plan;
+/** The floor this page's player is on changed (rode down, a new run, joined a crew): rebuild it. */
+function newFloor(next: FloorPlan): void {
+  if (next === plan) return;
+  plan = next;
+  car = carFor(plan);
   replaceFloor(world, plan);
   elevator.dispose();
-  elevator = new ElevatorView(run.state.car);
+  elevator = new ElevatorView(car);
   scene.add(elevator.group);
-  elevator.setDoors(doorsOpen(run.state), true);
+  elevator.setDoors(view ? doorsOpenView(view) : false, true);
   appliedLight = { gain: -1, level: -1 };
   autoWalk.cancel('new floor');
   carWalk = null;
@@ -508,14 +566,29 @@ function newFloor(): void {
     minimap = new Minimap(plan);
     debugBox.append(minimap.canvas);
   }
-  hud.textContent = `Going Down  build ${__BUILD__}  seed ${seed}  depth ${run.state.depth}`;
+  setHud();
 }
 
-/** A new run, without reloading: the car, the floor, the tapes and the Orderly start over. */
-function restartRun(): void {
-  run.restart(startDepth);
-  newFloor();
-  placeInCar();
+function setHud(): void {
+  hud.textContent = `Going Down  build ${__BUILD__}  seed ${seedOfRun}  depth ${view?.depth ?? startDepth}${roomCode ? `  crew ${roomCode}` : ''}`;
+}
+
+/** Everything that belongs to one run starts over (a new run, or the first run of a crew). */
+let runs = 0;
+let runClient: NetClient | null = null;
+let eventsSeen = 0;
+/** The first placement of a run turns the player to face the doors. */
+let facePending = false;
+function resetForRun(): void {
+  runClient = client();
+  // A run begins for this page (GO DOWN, or a client let into one): the lobby gives way to the game.
+  if (runClient && lobby.shown && !crew.ended && !pending) lobby.hide();
+  eventsSeen = 0;
+  callTracker.reset();
+  view = readView();
+  newFloor(wantedPlan());
+  if (crew.host) placeInCar(crew.host.state.players.find((p) => p.id === crew.myId)?.body ?? null);
+  facePending = !crew.host;
   elevator.setDoors(false, true);
   elevator.setVote(null);
   elevator.setCallLit(false);
@@ -526,31 +599,52 @@ function restartRun(): void {
   leftAt = -1;
   rideStartedAt = -1;
   pendingCall = false;
-  callBody = null;
+  pendingPick = false;
   autoWalk.cancel('new run');
   carWalk = null;
   audio.resetLift();
   tape.setDarkness(0);
   prevBellLeft = BOARD_TIME;
-  announcer.startRun();
+  if (runs > 0) announcer.startRun();
+  figures.clear();
+  stride = { x: 0, z: 0, t: 0, have: false };
   runs++;
+  setHud();
 }
-let runs = 1;
+
+/** A new run on the same crew, without reloading (the host decides; alone, that is you). */
+function restartRun(): void {
+  if (!crew.host) return;
+  startRun(crew);
+  resetForRun();
+}
+
+function shareOf(s: RunSummary, id: string): number {
+  return s.shares[id] ?? 0;
+}
 
 function summaryLines(s: RunSummary): EndLine[] {
   const n = (v: number): string => String(Math.floor(v)).padStart(4, '0');
-  return [
+  const ids = Object.keys(s.shares);
+  const lines: EndLine[] = [
     { text: 'BANKED', strong: true },
     { text: '' },
     { text: `FLOORS ${s.depth}` },
     { text: `READINGS ${s.readings}` },
     { text: `TOTAL ${n(s.total)}`, strong: true },
-    { text: `YOUR SHARE ${n(s.shares[LOCAL_ID] ?? 0)}`, strong: true },
-    { text: '' },
-    { text: `LIFETIME ${n(lifetime)}` },
-    { text: '' },
-    { text: input.touch ? 'TAP FOR A NEW RUN' : 'PRESS A KEY FOR A NEW RUN' },
+    { text: `YOUR SHARE ${n(shareOf(s, myId()))}`, strong: true },
   ];
+  if (ids.length > 1) {
+    lines.push({ text: '' });
+    for (const id of ids) lines.push({ text: `${(nameOf(id) || id).padEnd(14).slice(0, 14)} ${n(shareOf(s, id))}`, strong: id === myId() });
+  }
+  lines.push({ text: '' }, { text: `LIFETIME ${n(lifetime)}` }, { text: '' }, { text: againText() });
+  return lines;
+}
+
+function againText(): string {
+  if (!crew.host) return 'THE HOST STARTS THE NEXT RUN';
+  return input.touch ? 'TAP FOR A NEW RUN' : 'PRESS A KEY FOR A NEW RUN';
 }
 
 function showEnd(now: number): void {
@@ -558,13 +652,13 @@ function showEnd(now: number): void {
   const wait = ending.kind === 'banked' ? 2600 : ending.kind === 'wiped' ? NOISE_MS + 200 : 1500;
   if (now - ending.at < wait) return;
   audio.ride(false);
-  const again = { text: input.touch ? 'TAP FOR A NEW RUN' : 'PRESS A KEY FOR A NEW RUN' };
+  const again = { text: againText() };
   if (ending.kind === 'banked' && ending.summary) endScreen.show(summaryLines(ending.summary));
   else if (ending.kind === 'wiped') {
     endScreen.show([
       { text: 'NOBODY CAME BACK UP', strong: true },
       { text: '' },
-      { text: `FLOORS ${ending.summary?.depth ?? run.state.depth}` },
+      { text: `FLOORS ${ending.summary?.depth ?? view?.depth ?? 1}` },
       { text: 'NOTHING BANKED' },
       { text: '' },
       { text: `LIFETIME ${String(Math.floor(lifetime)).padStart(4, '0')}` },
@@ -588,13 +682,16 @@ endScreen.el.addEventListener('pointerdown', (e) => {
   endInput();
 });
 
-/** Events that change what is seen and heard (sounds, doors, the end), after the ticks that made them. */
+/** Events that change what is seen and heard (sounds, doors, the end), in host order, each once. */
 function present(events: readonly RunEvent[], now: number): void {
-  const s = run.state;
   const orderlyEvs: OrderlyEvent[] = [];
   const crewEvs: CrewEvent[] = [];
+  const id = myId();
   announcer.onEvents(events, startDepth);
   for (const e of events) {
+    lastRunEvent = e.type;
+    diag.note(e.type);
+    callTracker.onEvent(e);
     if (isOrderlyEvent(e)) {
       orderlyEvs.push(e);
       continue;
@@ -623,7 +720,7 @@ function present(events: readonly RunEvent[], now: number): void {
         audio.callChime();
         break;
       case 'indicator': {
-        const total = s.call?.plan.floors ?? e.floorsAway;
+        const total = view?.call?.floors ?? e.floorsAway;
         audio.floorDing(total > 0 ? 1 - e.floorsAway / total : 1);
         break;
       }
@@ -653,32 +750,27 @@ function present(events: readonly RunEvent[], now: number): void {
         audio.bell();
         elevator.setHoldLit(false);
         break;
-      case 'voteChanged':
-        if (e.playerId === LOCAL_ID) elevator.setVote(e.side);
-        break;
       case 'rodeDown':
         audio.ride(false);
         rideStartedAt = -1;
-        elevator.setVote(null);
         break;
       case 'banked':
-        addLifetime(e.summary.total);
+        addLifetime(shareOf(e.summary, id));
         ending = { kind: 'banked', at: now, summary: e.summary };
         audio.ride(true, 3);
-        elevator.setVote(null);
         break;
       case 'wiped':
         ending = { kind: 'wiped', at: now, summary: e.summary };
         break;
       case 'leftBehind':
-        if (e.playerId === LOCAL_ID) ending = { kind: 'leftBehind', at: now, summary: null, lost: e.lostValue };
+        if (e.playerId === id) ending = { kind: 'leftBehind', at: now, summary: null, lost: e.lostValue };
         break;
       default:
         break;
     }
   }
   for (const e of orderlyEvs) {
-    if (e.type !== 'caught' || e.playerId !== LOCAL_ID) continue;
+    if (e.type !== 'caught' || e.playerId !== id) continue;
     // Placeholder: interference, noise, and back to the landing (caughtFx decides when).
     catches++;
     tape.glitch(NOISE_MS + 500, 1);
@@ -686,13 +778,13 @@ function present(events: readonly RunEvent[], now: number): void {
     audio.caughtBurst();
   }
   for (const e of crewEvs) {
-    if (e.playerId !== LOCAL_ID) continue;
+    if (e.playerId !== id) continue;
     if (e.type === 'slip') {
       instrument.printSlip(e.text);
       audio.slipPrinted();
     } else if (e.type === 'readingClosed') {
       audio.readingClosed();
-      lastReadingDepth = s.depth;
+      lastReadingDepth = view?.depth ?? 1;
     }
   }
 }
@@ -704,7 +796,6 @@ let carWalk: { points: { u: number; v: number }[]; resolve: () => void; reject: 
 function startCarWalk(u: number, v: number): Promise<void> {
   carWalk?.reject(new Error('replaced by a new walk'));
   autoWalk.cancel('car walk');
-  const car = run.state.car;
   const here = carLocal(car, player.body.x, player.body.z);
   const inside = (p: { u: number }): boolean => p.u > 0;
   const points: { u: number; v: number }[] = [];
@@ -718,10 +809,13 @@ function startCarWalk(u: number, v: number): Promise<void> {
   });
 }
 
+function mover(b: Body, dx: number, dz: number, r: number): Body {
+  return moveLocal(plan, view?.phase ?? 'arriving', b, dx, dz, r);
+}
+
 function stepCarWalk(dt: number): void {
   const w = carWalk;
   if (!w) return;
-  const car = run.state.car;
   const target = w.points[0];
   if (!target) {
     carWalk = null;
@@ -740,7 +834,7 @@ function stepCarWalk(dt: number): void {
   const wx = car.inX * du + car.rightX * dv;
   const wz = car.inZ * du + car.rightZ * dv;
   const before = player.body;
-  player.body = moveInRun(run.state, before, (wx / dist) * step, (wz / dist) * step, 0.3);
+  player.body = mover(before, (wx / dist) * step, (wz / dist) * step, 0.3);
   player.yaw = yawToward(wx, wz);
   if (Math.hypot(player.body.x - before.x, player.body.z - before.z) < step * 0.2) {
     if ((w.stuck += dt) > 1.5) {
@@ -751,48 +845,222 @@ function stepCarWalk(dt: number): void {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The input for one logic tick.
+// One network frame: the local player's camera and intents in, what to draw out.
 let wantRaisedNow = false;
 let holdNow = false;
-function tickInput(): PlayerInput {
-  const v = localView();
-  const inp: PlayerInput = { id: LOCAL_ID, body: v.body, eye: v.eye, yaw: v.yaw, pitch: v.pitch, hFovDeg: v.hFovDeg, vFovDeg: v.vFovDeg, raised: wantRaisedNow };
-  if (pendingCall) {
-    inp.call = true;
-    if (callBody) inp.body = { ...callBody };
-    pendingCall = false;
-    callBody = null;
+/** The latest network frame. */
+let netFrame: Frame | null = null;
+
+function intents(): LocalFrame {
+  const lf = localFrame();
+  lf.raised = wantRaisedNow;
+  lf.holdDoors = holdNow;
+  if (pendingCall) lf.call = true;
+  if (pendingPick) lf.pickUp = true;
+  pendingCall = false;
+  pendingPick = false;
+  return lf;
+}
+
+/** The host moved this page's player: adopt it (and the floor it is on). */
+function adopt(f: Frame): void {
+  if (!f.placed) return;
+  newFloor(wantedPlan());
+  player.body = { ...f.placed };
+  autoWalk.cancel('placed');
+  carWalk = null;
+  if (facePending) {
+    facePending = false;
+    player.yaw = yawForDir(landingFacing(plan));
+    player.pitch = 0;
   }
-  if (holdNow) inp.holdDoors = true;
-  return inp;
+}
+
+/** The host's machine: the run's ticks that are due, then any glance reported since. */
+function hostStep(): void {
+  const h = crew.host;
+  if (!h) return;
+  h.update(vclock);
+  for (const id of rules.revived.splice(0)) {
+    // Back on their feet at the landing (this page's own player walks there itself, after the noise).
+    if (id !== crew.myId) h.placePlayer(id, bodyAtCell(h.state.plan, h.state.plan.landing));
+  }
+  h.flushReports(vclock);
+}
+
+/** Events that have arrived since the last frame. */
+function takeEvents(): RunEvent[] {
+  const c = client();
+  if (!c || c !== runClient) return [];
+  const out = c.events.slice(eventsSeen);
+  eventsSeen = c.events.length;
+  return out;
+}
+
+/** Runs the host's clock forward `n` ticks at once (tests: skip a wait), a network frame per tick. */
+function skipTicks(n: number, stop?: (types: string[]) => boolean): RunEvent[] {
+  const h = crew.host;
+  const c = client();
+  if (!h || !c) return [];
+  const from = h.log.length;
+  for (let i = 0; i < n; i++) {
+    const logBefore = h.log.length;
+    vclock += TICK;
+    c.receive(vclock);
+    const f = c.frame(vclock, intents());
+    adopt(f);
+    hostStep();
+    c.receive(vclock);
+    view = readView();
+    bellCheck();
+    if (stop?.(h.log.slice(logBefore).map((e) => e.e.type))) break;
+  }
+  return h.log.slice(from).map((e) => e.e);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The crew around this page: names, figures, the list in the corner.
+
+function nameOf(id: string): string {
+  return crew.nameOf(id);
+}
+
+/** A jumpsuit number for a player: the digits of a CONVICT name, else from their id. */
+function suitNumber(id: string): string {
+  const m = /(\d{4})/.exec(nameOf(id));
+  if (m?.[1]) return m[1];
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  return String(1000 + ((h >>> 0) % 9000));
+}
+
+function memberTotal(id: string): number {
+  const m = view?.crew.find((c) => c.id === id);
+  return m ? m.tape.total + m.carrying.reduce((s, t) => s + t.total, 0) : 0;
+}
+
+function crewRows(): CrewRow[] {
+  const v = view;
+  if (!v) return [];
+  const rows: CrewRow[] = v.players.map((p) => ({
+    name: nameOf(p.id) || '...',
+    me: p.id === myId(),
+    mark: p.status === 'caught' ? 'TAKEN' : p.status === 'leftBehind' ? (p.connected ? 'LEFT' : 'GONE') : !p.connected ? 'GONE' : '',
+    total: memberTotal(p.id),
+  }));
+  // Watchers: in the room, not yet in the run (they board at the next stop).
+  const inRun = new Set(v.players.map((p) => p.id));
+  for (const p of crew.people()) if (!inRun.has(p.id) && p.here && crew.runningEpoch > 0 && crew.role === 'host') rows.push({ name: p.name, me: p.me, mark: 'WATCHING', total: 0 });
+  return rows;
+}
+
+function drawFigures(f: Frame | null, dt: number): void {
+  const v = view;
+  if (!f || !v || f.depth !== client()?.localDepth) {
+    figures.sync([], dt);
+    return;
+  }
+  const order = v.players.map((p) => p.id);
+  const list: CrewFigureState[] = [];
+  for (const p of f.players) {
+    const snap = v.players.find((q) => q.id === p.id);
+    if (p.status !== 'ok' || !snap?.connected) continue;
+    list.push({
+      id: p.id,
+      name: nameOf(p.id) || '...',
+      number: suitNumber(p.id),
+      slot: Math.max(0, order.indexOf(p.id)),
+      x: p.body.x,
+      y: p.body.y,
+      z: p.body.z,
+      yaw: p.yaw,
+      pitch: p.pitch,
+      raised: v.crew.find((m) => m.id === p.id)?.raised ?? false,
+    });
+  }
+  if (list.length > 0 && entityOn === false && safe === 0) renderer.shadowMap.enabled = true;
+  figures.sync(list, dt);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The local player's instrument as the run has it.
+
+function myMember(): Instrument | null {
+  const h = crew.host;
+  if (h) return member(h.state.crew, crew.myId)?.instrument ?? null;
+  const m = view?.crew.find((c) => c.id === myId());
+  if (!m) return null;
+  const k = 1 - Math.exp(-m.open / TICK_SCALE);
+  return {
+    raised: m.raised,
+    needle: m.needle,
+    current: m.open > 0 ? { value: m.open, duration: 0 } : null,
+    rate: m.rate,
+    factor: 1,
+    distance: null,
+    tickHz: m.tickHz,
+    loudness: m.open > 0 ? LOUDNESS_MIN + (LOUDNESS_MAX - LOUDNESS_MIN) * k : m.tickHz > 0 ? LOUDNESS_REST : 0,
+    tickPhase: 0,
+    ticks: 0,
+    recorded: 0,
+  } as unknown as Instrument;
+}
+
+function heldTapes(): { count: number; value: number; carrying: number; own: number } {
+  const h = crew.host;
+  if (h) {
+    const m = member(h.state.crew, crew.myId);
+    if (!m) return { count: 0, value: 0, carrying: 0, own: 0 };
+    const all = [m.tape, ...m.carrying];
+    return { count: all.filter((t) => t.readings.length > 0).length, value: tapeValue(all), carrying: m.carrying.length, own: tapeValue(m.tape) };
+  }
+  const m = view?.crew.find((c) => c.id === myId());
+  if (!m) return { count: 0, value: 0, carrying: 0, own: 0 };
+  const all = [m.tape, ...m.carrying];
+  return { count: all.filter((t) => t.readings > 0).length, value: all.reduce((s, t) => s + t.total, 0), carrying: m.carrying.length, own: m.tape.total };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The Orderly's walk clock: walking clips run on the distance it has walked, so a creep is a slow
+// stride (as when the run's host smoothed it). Derived from the pose drawn, so it stops when it does.
+let stride = { x: 0, z: 0, t: 0, have: false };
+function strideOf(p: Pose): number {
+  if (stride.have) {
+    const d = Math.hypot(p.x - stride.x, p.z - stride.z);
+    if (d < 1) stride.t += d / HUNT_SPEED;
+  }
+  stride = { x: p.x, z: p.z, t: stride.t, have: true };
+  return stride.t;
 }
 
 function orderlyInfo() {
-  if (!orderlyView) return null;
-  const s = run.orderly;
-  const c = cellOf(plan, s.body);
+  if (!orderlyView || !view) return null;
+  const h = crew.host;
+  const s: OrderlyState | null = h ? h.state.orderly : null;
+  const o = view.orderly;
+  const c = cellOf(plan, o);
   const b = player.body;
   const d = orderlyView.drawn;
   return {
-    x: s.body.x,
-    y: s.body.y,
-    z: s.body.z,
-    level: s.body.level,
+    x: s ? s.body.x : o.x,
+    y: s ? s.body.y : o.y,
+    z: s ? s.body.z : o.z,
+    level: o.level,
     cx: c.x,
     cy: c.y,
-    yaw: s.yaw / DEG,
-    phase: s.mode,
-    frozen: s.frozen,
-    held: s.held,
-    moving: s.moving,
-    /** The local player's screen could show it this frame. */
+    yaw: (s ? s.yaw : o.yaw) / DEG,
+    phase: o.mode,
+    frozen: s ? s.frozen : o.frozen && (o.mode === 'hunting' || o.mode === 'windUp'),
+    held: s ? s.held : o.frozen,
+    moving: view.orderly.moving,
+    /** The local player's screen shows it this frame. */
     seen: orderlyVisible,
-    /** The logic's own sight test from the local view this frame. */
-    logicSeen: orderlyLogicSeen,
-    anim: s.anim,
-    animTime: s.animTime,
-    distance: Math.hypot(b.x - s.body.x, b.z - s.body.z),
-    t: s.t,
+    /** The same, as judged by the network layer's sight test. */
+    logicSeen: orderlyVisible,
+    anim: o.anim,
+    animTime: o.animTime,
+    distance: Math.hypot(b.x - (s ? s.body.x : o.x), b.z - (s ? s.body.z : o.z)),
+    t: view.t,
     loaded: orderlyView.loaded,
     drawn: d ? { x: d.x, y: d.y, z: d.z, yaw: d.yaw / DEG, anim: d.anim, animTime: d.animTime, frozen: orderlyView.isFrozen } : null,
   };
@@ -806,68 +1074,231 @@ function planKey(): string {
 }
 
 function runInfo() {
-  const s = run.state;
-  const me = s.players.find((p) => p.id === LOCAL_ID);
-  const c = s.call;
+  const s = view;
+  const mine = me();
+  const c = s?.call ?? null;
   return {
-    phase: s.phase,
-    depth: s.depth,
-    t: s.t,
+    phase: s?.phase ?? 'none',
+    depth: s?.depth ?? 0,
+    t: s?.t ?? 0,
     car: carState(),
-    doorsOpen: doorsOpen(s),
+    doorsOpen: s ? doorsOpenView(s) : false,
     /** The doors as drawn: 0 shut .. 1 open. */
     doors: elevator.status().doors,
-    indicator: { floorsAway: c?.floorsAway ?? 0, label: elevator.status().indicator, falseStop: c ? c.stopUntil !== null : false },
-    eta: eta(),
-    blink: blinking(s),
-    blinkSoon: blinkWarning(),
-    vote: me?.side ?? null,
-    aboard: me?.aboard ?? false,
-    status: me?.status ?? 'ok',
-    bellLeft: s.bellLeft,
-    holdLeft: s.holdLeft,
-    held: s.held,
-    calls: s.calls,
-    banked: s.summary && !s.summary.wiped ? s.summary.total : 0,
-    summary: s.summary,
+    indicator: { floorsAway: c?.floorsAway ?? 0, label: elevator.status().indicator, falseStop: c ? c.falseStop : false },
+    eta: c?.eta ?? null,
+    blink: s ? blinkingView(s) : false,
+    blinkSoon: s ? blinkWarningView(s) : false,
+    /** The screen is dark for a blink this frame (the network layer's window). */
+    dark: netFrame?.dark ?? false,
+    vote: mine?.side ?? null,
+    votes: elevator.status().votes,
+    aboard: mine?.aboard ?? false,
+    status: mine?.status ?? 'ok',
+    bellLeft: s?.bellLeft ?? 0,
+    holdLeft: s?.holdLeft ?? 0,
+    held: s?.held ?? false,
+    calls: s?.calls ?? 0,
+    banked: s?.summary && !s.summary.wiped ? s.summary.total : 0,
+    summary: s?.summary ?? null,
     lifetime,
-    multiplier: depthMultiplier(s.depth),
+    multiplier: depthMultiplier(s?.depth ?? 1),
     lastReadingDepth,
     planKey: planKey(),
     ended: ending?.kind ?? null,
     endShown: endScreen.shown,
     endText: endScreen.text,
     runs,
-    softCatches: run.softCatches,
+    softCatches: rules.softCatches,
     callPrompt: !liftPrompt.el.hidden && canCall(),
     holdPrompt: !liftPrompt.el.hidden && nearHoldButton(),
     lightLevel: appliedLight.level,
-    car3: { doorX: s.car.doorX, doorZ: s.car.doorZ, inX: s.car.inX, inZ: s.car.inZ, rightX: s.car.rightX, rightZ: s.car.rightZ, level: s.car.level },
+    car3: { doorX: car.doorX, doorZ: car.doorZ, inX: car.inX, inZ: car.inZ, rightX: car.rightX, rightZ: car.rightZ, level: car.level },
   };
 }
 
-/** Events from runCtl.skip, presented on the next frame. */
-const skipped: RunEvent[] = [];
+/** Replaces the run's Orderly (host only). */
+function setOrderly(f: (o: OrderlyState) => OrderlyState): void {
+  const h = crew.host;
+  if (h) h.replaceOrderly(f(h.state.orderly));
+}
 
+// ---------------------------------------------------------------------------------------------
+// Rooms and the lobby.
+
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function newCode(): string {
+  const a = new Uint8Array(5);
+  crypto.getRandomValues(a);
+  return [...a].map((b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
+}
+const HOST_KEY = 'goingDown.hosting';
+function hostingMarker(): string | null {
+  try {
+    return sessionStorage.getItem(HOST_KEY);
+  } catch {
+    return null;
+  }
+}
+function setHostingMarker(code: string): void {
+  try {
+    sessionStorage.setItem(HOST_KEY, code);
+  } catch {
+    /* private window: a reload of this tab joins instead of hosting */
+  }
+}
+function roomUrl(code: string): string {
+  const p = new URLSearchParams();
+  p.set('room', code);
+  if (netLocal) p.set('net', 'local');
+  return `${location.origin}${location.pathname}?${p.toString()}`;
+}
+/** Opens the room's transport: BroadcastChannel for ?net=local, Trystero otherwise. */
+async function openTransport(code: string): Promise<Transport> {
+  if (netLocal) return new BroadcastTransport(code);
+  const { TrysteroTransport } = await import('./net/trysteroTransport');
+  return TrysteroTransport.open(code);
+}
+/** Seconds after which a joining tab that has heard no host says so. */
+const NO_HOST_AFTER = 12;
+let netError = '';
+
+/** Alone: START A CREW. The solo run goes on behind the lobby until GO DOWN. */
+async function startCrew(code = newCode()): Promise<string> {
+  if (pending || roomCode) return roomCode ?? code;
+  roomCode = code;
+  setHostingMarker(code);
+  const p = new URLSearchParams(location.search);
+  p.set('room', code);
+  history.replaceState(null, '', `${location.pathname}?${p.toString()}`);
+  lobby.showHost(code, roomUrl(code), myName);
+  lobby.setStatus('OPENING THE ROOM...');
+  try {
+    const t = await openTransport(code);
+    pending = new CrewSession(t, 'host', myName, realNow());
+  } catch (e) {
+    netError = String(e);
+    lobby.setStatus('COULD NOT OPEN THE ROOM.\nCHECK THE CONNECTION.');
+  }
+  setHud();
+  return code;
+}
+
+/** The host: GO DOWN. Everyone in the room starts a run together. */
+function goDown(fromClick = false): boolean {
+  if (pending) {
+    crew.close();
+    crew = pending;
+    pending = null;
+  }
+  // Still opening the room (or not hosting): nothing to start yet.
+  if (crew.role !== 'host' || (roomCode !== null && crew.isSolo)) return false;
+  lobby.hide();
+  startRun(crew);
+  resetForRun();
+  if (fromClick) input.relock();
+  else input.dismissOverlay();
+  return true;
+}
+
+/** A joining tab: JOIN. */
+/** JOIN was pressed (maybe before the room's transport had opened: it joins as soon as it has). */
+let joinWanted = false;
+function join(fromClick = false): void {
+  joinWanted = true;
+  crew.join(realNow());
+  lobby.joined();
+  updateLobby();
+  if (fromClick) input.relock();
+}
+
+async function openRoom(code: string): Promise<void> {
+  const hosting = hostingMarker() === code;
+  if (hosting) lobby.showHost(code, roomUrl(code), myName);
+  else lobby.showJoin(code, myName);
+  lobby.setStatus('LOOKING FOR THE CREW...');
+  try {
+    const t = await openTransport(code);
+    if (hosting) {
+      // This tab made the room (and was reloaded): it hosts again, alone until GO DOWN.
+      crew = new CrewSession(null, 'host', myName, realNow());
+      startRun(crew);
+      resetForRun();
+      pending = new CrewSession(t, 'host', myName, realNow());
+    } else {
+      crew = new CrewSession(t, 'client', myName, realNow());
+      if (joinWanted) crew.join(realNow());
+    }
+  } catch (e) {
+    netError = String(e);
+    lobby.setStatus('COULD NOT REACH THE INTERNET.\nCHECK THE CONNECTION.');
+  }
+}
+
+lobby.onCrew = () => void startCrew();
+lobby.onGoDown = () => void goDown(true);
+lobby.onJoin = () => join(true);
+lobby.onLeave = () => {
+  crew.close();
+  pending?.close();
+  try {
+    sessionStorage.removeItem(HOST_KEY);
+  } catch {
+    /* nothing kept */
+  }
+  location.href = `${location.origin}${location.pathname}${netLocal ? '?net=local' : ''}`;
+};
+lobby.onName = (n) => {
+  myName = n;
+  saveName(n);
+  crew.setName(n);
+  pending?.setName(n);
+};
+if (roomParam) void openRoom(roomParam);
+window.addEventListener('pagehide', () => {
+  crew.close();
+  pending?.close();
+});
+
+/** What the lobby says, every few frames. */
+function updateLobby(): void {
+  if (!lobby.shown) return;
+  const on = pending ?? crew;
+  if (crew.ended) return;
+  lobby.setPeople(on.people().filter((p) => p.here).map((p) => ({ name: p.name, host: p.host, me: p.me })));
+  if (on.role === 'host') {
+    const n = on.peers().length;
+    lobby.setCanGo(pending !== null);
+    if (pending) lobby.setStatus(n === 0 ? 'WAITING FOR THE CREW.\nOR GO DOWN ALONE.' : 'READY WHEN YOU ARE');
+    return;
+  }
+  const waited = realNow() - on.since;
+  if (on.hostPeer === null) lobby.setStatus(waited > NO_HOST_AFTER ? 'NOBODY IS HOSTING THIS CODE.\nASK FOR A NEW LINK.' : `LOOKING FOR THE CREW... ${Math.floor(waited)}`);
+  else if (!on.hasJoined) lobby.setStatus('PRESS JOIN');
+  else if (on.runningEpoch === 0) lobby.setStatus('WAITING FOR THE HOST\nTO GO DOWN');
+  else lobby.setStatus('A RUN IS ON.\nYOU BOARD AT THE NEXT STOP.');
+}
+
+// ---------------------------------------------------------------------------------------------
 // Test hooks. Yaw is in degrees: 0 faces north (-z), 90 west, 180 south, -90 east.
 const state = {
   ready: false,
   frames: 0,
   build: __BUILD__,
-  seed,
+  seed: seed0,
   get depth() {
-    return run.state.depth;
+    return view?.depth ?? startDepth;
   },
   gpu: gpuName(),
   probeColours,
   probePixels,
-  /** The floor plan the run is on now. */
+  /** The floor plan this page's player is on. */
   get plan() {
     return plan;
   },
   player: () => {
     const c = cellOf(plan, player.body);
-    return { ...player.body, eye: player.body.y + EYE_HEIGHT, cx: c.x, cy: c.y, yaw: player.yaw / DEG, pitch: player.pitch / DEG, inCar: inCar(run.state.car, player.body) };
+    return { ...player.body, eye: player.body.y + EYE_HEIGHT, cx: c.x, cy: c.y, yaw: player.yaw / DEG, pitch: player.pitch / DEG, inCar: inCar(car, player.body) };
   },
   teleport: (level: Level, cx: number, cy: number, yawDegrees?: number) => {
     autoWalk.cancel('teleported');
@@ -879,7 +1310,7 @@ const state = {
     player.pitch = pitchDegrees * DEG;
   },
   walkTo: (level: Level, cx: number, cy: number) => {
-    if (inCar(run.state.car, player.body)) return Promise.reject(new Error('in the elevator car: step out first (runCtl.walkCar)'));
+    if (inCar(car, player.body)) return Promise.reject(new Error('in the elevator car: step out first (runCtl.walkCar)'));
     return autoWalk.start(plan, player, { level, x: cx, y: cy });
   },
   frameMs: () => stats.median(),
@@ -906,42 +1337,35 @@ const state = {
     input.dismissOverlay();
     audio.unlock();
   },
-  /** The live Orderly's state, or null with ?entity=0. Positions in metres, yaw in degrees. */
+  /** The live Orderly as this page has it, or null with ?entity=0. Positions in metres, yaw in degrees. */
   orderly: orderlyInfo,
-  /** Everything the Orderly's logic has reported so far. */
-  events: (): OrderlyEvent[] => (orderlyView ? run.orderlyEvents.map((e) => ({ ...e })) : []),
+  /** Everything the Orderly's logic has reported so far (as this page heard it). */
+  events: (): OrderlyEvent[] => (orderlyView ? (client()?.events ?? []).filter(isOrderlyEvent).map((e) => ({ ...e })) : []),
   catches: () => catches,
   caught: () => ({ noise: caughtFx.noiseOn, line: caughtFx.lineOn }),
-  /** Test controls for the live Orderly (null with ?entity=0). */
+  /** Test controls for the live Orderly (null with ?entity=0). They act on the host's page. */
   entityCtl: orderlyView && {
     placeCell: (level: Level, cx: number, cy: number, yawDegrees?: number) => {
-      const o = run.orderly;
       const body = bodyAtCell(plan, { level, x: cx, y: cy });
-      run.replaceOrderly({ ...o, body, yaw: yawDegrees === undefined ? o.yaw : yawDegrees * DEG, path: null, replanIn: 0 });
+      setOrderly((o) => ({ ...o, body, yaw: yawDegrees === undefined ? o.yaw : yawDegrees * DEG, path: null, replanIn: 0 }));
     },
     placeAt: (x: number, z: number, level: Level = 0, yawDegrees?: number) => {
-      const o = run.orderly;
       const body = { x, z, level, y: level === 1 ? LEVEL_HEIGHT : 0 };
-      run.replaceOrderly({ ...o, body, yaw: yawDegrees === undefined ? o.yaw : yawDegrees * DEG, path: null, replanIn: 0 });
+      setOrderly((o) => ({ ...o, body, yaw: yawDegrees === undefined ? o.yaw : yawDegrees * DEG, path: null, replanIn: 0 }));
     },
     /** Ends its waiting (or dormancy): it hunts on the next tick it is free to act. */
-    wake: () => {
-      const o = run.orderly;
-      if (o.mode === 'waiting' || o.mode === 'dormant') run.replaceOrderly({ ...o, mode: 'hunting', dormantLeft: 0, replanIn: 0, path: null });
-    },
+    wake: () => setOrderly((o) => (o.mode === 'waiting' || o.mode === 'dormant' ? { ...o, mode: 'hunting', dormantLeft: 0, replanIn: 0, path: null } : o)),
     /** Puts it to rest (dormant) for `seconds` of logic time, where it stands. */
-    rest: (seconds: number) => {
-      run.replaceOrderly({ ...run.orderly, mode: 'dormant', dormantLeft: seconds, path: null, moving: false, speed: 0 });
-    },
+    rest: (seconds: number) => setOrderly((o) => ({ ...o, mode: 'dormant', dormantLeft: seconds, path: null, moving: false, speed: 0 })),
     /** Logic seconds per real second: the whole run's clock (the Orderly is stepped by the run). */
     setTimeScale: (k: number) => {
-      run.timeScale = Math.max(0, k);
+      timeScale = Math.max(0, k);
     },
-    /** Per-frame records: drawn position (dx, dz) against the logic's (lx, lz), and visibility. */
+    /** Per-frame records: drawn position (dx, dz) against the run's (lx, lz), and visibility. */
     trace: () => trace.slice(),
     /** Widest reach of the mesh from its feet axis per clip, metres (measured at load). */
     extents: () => Object.fromEntries(['idle', 'walk', 'duck', 'reach', 'still'].map((n) => [n, orderlyView?.model.extent(n) ?? 0])),
-    ticks: () => run.ticks,
+    ticks: () => crew.host?.tick ?? 0,
   },
   audio: { state: () => audio.state() },
   /** The announcer: what is playing, waiting and said this run; say(id) asks for a line (false if it cannot). */
@@ -954,11 +1378,11 @@ const state = {
     isOpen: () => panel.isOpen,
     gearShown: () => !panel.gear.hidden,
   },
-  /** The local player's instrument: the logic's state and what is drawn. */
+  /** The local player's instrument: the run's state and what is drawn. */
   instrument: () => {
-    const m = run.member();
-    if (!m) return null;
-    const i = m.instrument;
+    const i = myMember();
+    if (!i) return null;
+    const t = heldTapes();
     return {
       raised: i.raised,
       needle: i.needle,
@@ -967,13 +1391,13 @@ const state = {
       /** Seconds recorded in the open reading. */
       recording: i.current?.duration ?? 0,
       /** Everything held: own tape plus tapes picked up. */
-      total: run.held(),
-      own: tapeValue(m.tape),
+      total: t.value,
+      own: t.own,
       tickHz: i.tickHz,
       loudness: i.loudness,
       /** Tapes held with something on them. */
-      tapes: run.heldCount(),
-      carrying: m.carrying.length,
+      tapes: t.count,
+      carrying: t.carrying,
       distance: i.distance,
       drawnRaise: instrument.raisedAmount,
       needleAngle: instrument.needleAngle,
@@ -987,28 +1411,28 @@ const state = {
   },
   /** Tapes lying on the floor. */
   tapes: () =>
-    run.state.crew.floor.map((f) => {
+    (view?.floor ?? []).map((f) => {
       const c = cellOf(plan, f.at);
-      return { id: f.tape.id, value: f.tape.total, readings: f.tape.readings.length, x: f.at.x, y: f.at.y, z: f.at.z, level: f.at.level, cx: c.x, cy: c.y };
+      return { id: f.id, value: f.total, readings: f.readings, owner: f.owner, x: f.at.x, y: f.at.y, z: f.at.z, level: f.at.level, cx: c.x, cy: c.y };
     }),
   /** Tries to pick up the nearest tape within reach. */
   pickUp: () => tryPickUp(),
   /** Every crew event (slip, readingClosed, tapeDropped, tapePickedUp) so far. */
-  crewEvents: (): CrewEvent[] => run.crewEvents.map((e) => ({ ...e })),
+  crewEvents: (): CrewEvent[] => (client()?.events ?? []).filter(isCrewEvent).map((e) => ({ ...e })),
   /** Whether the pick-up prompt is showing. */
   pickupShown: () => !pickupPrompt.el.hidden,
   /** The run: phase, depth, the car, the indicator, the blink, the vote, the totals. */
   run: runInfo,
-  /** Every run event so far (the last few thousand), with its type and time. */
-  runEvents: (): { type: string; t: number }[] => run.runEvents.map((e) => ({ ...e })),
-  /** Test controls for the run. */
+  /** Every run event so far, with its type and time. */
+  runEvents: (): { type: string; t: number }[] => (client()?.events ?? []).map((e) => ({ ...e })),
+  /** Test controls for the run (they act on the host's page). */
   runCtl: {
     /** Presses the call button (from where the player stands; `force` presses it from the landing wherever they are). */
     call: (opts: { force?: boolean } = {}) => {
-      const ok = run.state.phase === 'away' && (opts.force === true || canCall());
+      const ok = view?.phase === 'away' && (opts.force === true || canCall());
       if (ok) {
-        pendingCall = true;
-        if (opts.force) callBody = carBody(run.state.car, -0.8, 0);
+        if (opts.force && crew.host) rules.forceCall(crew.myId, carBody(car, -0.8, 0));
+        else pendingCall = true;
       }
       return ok;
     },
@@ -1018,23 +1442,14 @@ const state = {
     },
     /** Logic seconds per real second (the whole run). */
     setTimeScale: (k: number) => {
-      run.timeScale = Math.max(0, k);
+      timeScale = Math.max(0, k);
     },
     /** Runs `seconds` of logic now, tick by tick through stepRun, the player standing as they are. */
-    skip: (seconds: number) => {
-      const evs = run.skip(seconds, tickInput, (e) => afterTick(e));
-      skipped.push(...evs);
-      return evs.map((e) => e.type);
-    },
+    skip: (seconds: number) => skipTicks(Math.max(0, Math.round(seconds / TICK))).map((e) => e.type),
     /** Runs logic tick by tick until an event of this type, or `max` seconds. Returns whether it came. */
     skipUntil: (type: string, max = 120) => {
       let hit = false;
-      const evs = run.skip(max, tickInput, (e) => {
-        afterTick(e);
-        hit = e.some((x) => x.type === type);
-        return hit;
-      });
-      skipped.push(...evs);
+      skipTicks(Math.max(0, Math.round(max / TICK)), (types) => (hit = types.includes(type)));
       return hit;
     },
     /** Walks to car-local (u into the car, v to the right walking in), through the doorway if need be. */
@@ -1044,9 +1459,55 @@ const state = {
     /** A side of the car's floor in car-local metres: [u, v] of its middle. */
     spot: (side: Side) => (side === 'bank' ? [1.1, -0.5] : [1.1, 0.5]),
   },
+  /** The network: this page's role, room, peers and their names, round trip, snapshot age. */
+  net: () => {
+    const c = client();
+    const on = pending ?? crew;
+    const now = realNow();
+    return {
+      role: on.role,
+      room: roomCode,
+      transport: on.isSolo ? 'none' : netLocal ? 'broadcast' : 'trystero',
+      me: myId(),
+      host: on.hostPeer,
+      epoch: on.epoch,
+      running: on.runningEpoch,
+      ended: on.ended,
+      joined: on.hasJoined,
+      inRun: c?.playing ?? false,
+      peers: on.peers().map((id) => ({ id, name: on.nameOf(id) })),
+      people: on.people(),
+      rttMs: c ? c.clock.rtt * 1000 : null,
+      snapshotAgeMs: crew.host ? 0 : Number.isFinite(on.lastFromHost) ? (now - on.lastFromHost) * 1000 : null,
+      snapshots: c?.stats.snapshots ?? 0,
+      lobby: lobby.shown ? lobby.statusLine : null,
+      error: netError,
+    };
+  },
+  /** Every other player this page draws, with where and whether their instrument is up. */
+  crew: () => figures.drawn.map((f) => ({ id: f.id, name: f.name, number: f.number, slot: f.slot, x: f.x, y: f.y, z: f.z, yaw: f.yaw / DEG, raised: f.raised })),
+  /** Everyone in the run as this page last heard it from the host (where the host has them). */
+  players: () =>
+    (view?.players ?? []).map((p) => ({ id: p.id, name: nameOf(p.id), me: p.id === myId(), ...p.body, status: p.status, side: p.side, aboard: p.aboard, connected: p.connected, total: memberTotal(p.id) })),
+  /** The crew list in the corner, as drawn (shown with more than one in the run). */
+  crewList: () => ({ shown: !crewList.el.hidden, rows: crewList.rows }),
+  /** The lobby without clicking: set a name, start a crew (optionally with a given code), join, go down. */
+  lobby: {
+    setName: (n: string) => {
+      const c = cleanName(n);
+      if (c) lobby.onName?.(c);
+      lobby.nameInput.value = c;
+      return c;
+    },
+    startCrew: (code?: string) => startCrew(code ? cleanName(code).replace(/\s/g, '') : undefined),
+    join: () => join(false),
+    goDown: () => goDown(false),
+    shown: () => lobby.shown,
+    status: () => lobby.statusLine,
+  },
 };
 (window as unknown as { __gd: typeof state }).__gd = state;
-hud.textContent = `Going Down  build ${__BUILD__}  seed ${seed}  depth ${run.state.depth}`;
+setHud();
 debugBox.hidden = !debug;
 const debugText = document.createElement('div');
 let minimap: Minimap | null = null;
@@ -1055,6 +1516,8 @@ if (debug) {
   minimap = new Minimap(plan);
   debugBox.append(minimap.canvas);
 }
+runClient = client();
+runs = 1;
 
 const camForward = new THREE.Vector3();
 const camUp = new THREE.Vector3();
@@ -1065,18 +1528,34 @@ renderer.setAnimationLoop(() => {
   last = now;
   stats.add(ms);
   const dt = Math.min(ms / 1000, 0.1);
-  const s0 = run.state;
-  const ended = s0.phase === 'ended' || endScreen.shown;
+  if (crew.host) vclock += dt * timeScale;
+  // The room: lobby messages, and the other players' messages for the host or this client.
+  crew.pump(realNow());
+  pending?.pump(realNow());
+  if (crew.ended && !endScreen.shown && !lobby.shown) {
+    lobby.showEnded('THE HOST LEFT. THE SESSION IS OVER.', 'START A NEW ONE');
+    document.exitPointerLock?.();
+  }
+  if (client() !== runClient) resetForRun();
+  const c = client();
+  c?.receive(clientNow());
+  view = readView();
+  const ended = view?.phase === 'ended' || endScreen.shown;
 
   preview?.update(dt);
   // The instrument is up only while held (or forced by a test), never while the picture is noise.
-  wantRaisedNow = !caughtFx.noiseOn && !ended && (forcedRaise ?? input.instrumentHeld());
-  run.setRaised(wantRaisedNow);
-  const raised = run.member()?.instrument.raised ?? false;
-  const mover = (b: Body, dx: number, dz: number, r: number): Body => moveInRun(run.state, b, dx, dz, r);
+  wantRaisedNow = !caughtFx.noiseOn && !ended && !lobby.shown && (forcedRaise ?? input.instrumentHeld());
+  const h = crew.host;
+  if (h) {
+    // The host's own player raises it at once (the walk cap and the drawing answer on this frame).
+    const m = member(h.state.crew, crew.myId);
+    if (m && m.instrument.raised !== wantRaisedNow) h.state = { ...h.state, crew: setRaised(h.state.crew, crew.myId, wantRaisedNow) };
+  }
+  const raised = h ? (member(h.state.crew, crew.myId)?.instrument.raised ?? false) : wantRaisedNow;
+  const playing = !caughtFx.noiseOn && !ended && !lobby.shown;
   if (carWalk) stepCarWalk(dt);
   else if (autoWalk.active) autoWalk.tick(plan, player);
-  else if (!caughtFx.noiseOn && !ended) player.control(plan, input, dt, raised ? maxWalkSpeed(true, WALK_SPEED) : Infinity, mover);
+  else if (playing) player.control(plan, input, dt, raised ? maxWalkSpeed(true, WALK_SPEED) : Infinity, mover);
   else {
     input.takeLook();
     player.lastSpeed = 0;
@@ -1099,131 +1578,158 @@ renderer.setAnimationLoop(() => {
   const ePressed = input.takePress('KeyE');
   if (ePressed && callable) pendingCall = true;
   holdNow = forcedHold ?? (holdable && (input.down('KeyE') || liftPrompt.held));
+  const inReach = !caughtFx.noiseOn && !ended && tapeInReach(player.body) !== null;
+  if (ePressed && inReach && !callable) tryPickUp();
 
-  const v = localView();
-  const dark = blinking(run.state);
-  // 1. A glance on this frame counts, even if no tick lands on it (not in the dark: nobody can see).
-  let vis = false;
-  if (orderlyView && !dark) {
-    vis = frameSees(v, run, orderlyView);
-    run.noteSeen(v);
+  // The network frame: this frame's camera and intents go to the host; what to draw comes back. On
+  // the host's page the run's due ticks follow, and any glance this frame is applied at once.
+  let f: Frame | null = null;
+  if (c) {
+    f = c.frame(clientNow(), intents());
+    adopt(f);
   }
-  const events = skipped.splice(0);
-  events.push(...run.advance(dt, tickInput, (e) => afterTick(e)));
-  present(events, now);
-  if (events.some((e) => e.type === 'rodeDown' || e.type === 'doorsClosed')) player.toCamera(camera);
+  hostStep();
+  c?.receive(clientNow());
+  newFloor(wantedPlan());
+  view = readView();
+  bellCheck();
+  netFrame = f;
+  present(takeEvents(), now);
+  if (f?.placed) player.toCamera(camera);
 
-  const s = run.state;
-  const darkNow = blinking(s);
+  const s = view;
+  const dark = f?.dark ?? false;
+  orderlyVisible = f?.seeing ?? false;
   if (orderlyView) {
-    // 2. After the ticks: it may have stepped into view.
-    orderlyLogicSeen = !darkNow && run.sees(v);
-    if (orderlyLogicSeen) run.noteSeen(v);
-    vis = !darkNow && (vis || frameSees(v, run, orderlyView));
-    orderlyVisible = vis;
-    // 3. Seen: exactly where the logic has it, clock stopped. Unseen (or in the dark): smoothed between ticks.
-    // Walking clips run on the stride clock, which follows its speed: a creep is a slow stride.
-    const smooth = blendPose(run.prevOrderly, run.orderly, run.alpha);
-    if (smooth.anim === 'walk' || smooth.anim === 'duck') smooth.animTime = run.stride();
-    const hold = freezePose(run.orderly);
-    if (hold.anim === 'walk' || hold.anim === 'duck') hold.animTime = run.curStride;
-    orderlyView.update(vis, smooth, hold);
-    const d = orderlyView.drawn;
-    if (d) {
-      trace.push({ f: state.frames + 1, vis, dx: d.x, dz: d.z, lx: run.orderly.body.x, lz: run.orderly.body.z, t: run.orderly.t, anim: d.anim, clip: d.animTime });
-      if (trace.length > 600) trace.shift();
+    const p = f?.orderly ?? null;
+    orderlyView.setVisible(p !== null);
+    if (p) {
+      // Seen: held exactly as the network layer holds it. Unseen: as it draws it. Walking clips run
+      // on the stride clock (the distance walked), so a creep is a slow stride.
+      const pose: DrawnPose = { x: p.x, y: p.y, z: p.z, yaw: p.yaw, anim: p.anim, animTime: p.animTime };
+      const st = strideOf(p);
+      if (pose.anim === 'walk' || pose.anim === 'duck') pose.animTime = st;
+      orderlyView.update(f?.held === true, pose, freezePose(pose));
+      const d = orderlyView.drawn;
+      const lo = crew.host ? crew.host.state.orderly.body : s?.orderly;
+      if (d && lo) {
+        trace.push({ f: state.frames + 1, vis: f?.held === true, dx: d.x, dz: d.z, lx: lo.x, lz: lo.z, t: s?.t ?? 0, anim: d.anim, clip: d.animTime });
+        if (trace.length > 600) trace.shift();
+      }
+      // Sound: silent the instant it is seen, whatever the next tick says. Heard in the dark if it moves.
+      const away = s?.phase === 'riding' || s?.phase === 'ended';
+      const moving = s?.orderly.moving ?? false;
+      squeak =
+        orderlyVisible || f?.held || !moving || away || !s
+          ? { gain: 0, muffled: false }
+          : audibility(plan, { body: { x: p.x, y: p.y, z: p.z, level: p.level }, moving } as OrderlyState, { body: player.body, eye: EYE_HEIGHT });
+      camForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
+      camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+      audio.update(dt, squeak.gain, squeak.muffled, { x: p.x, y: p.y + SQUEAK_HEIGHT, z: p.z }, camera.position, camForward, camUp, s?.orderly.speed ?? 0);
+    } else {
+      squeak = { gain: 0, muffled: false };
+      audio.update(dt, 0, false, { x: 0, y: 0, z: 0 }, camera.position, camForward, camUp, 0);
     }
-    // Sound: silent the instant it is seen, whatever the next tick says. Heard in the dark if it moves.
-    const away = s.phase === 'riding' || s.phase === 'ended';
-    squeak = vis || run.orderly.held || away ? { gain: 0, muffled: false } : audibility(plan, run.orderly, { body: player.body, eye: EYE_HEIGHT });
-    const src = d ?? exactPose(run.orderly);
-    camForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
-    camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
-    audio.update(dt, squeak.gain, squeak.muffled, { x: src.x, y: src.y + SQUEAK_HEIGHT, z: src.z }, camera.position, camForward, camUp, run.orderly.speed);
   }
+  drawFigures(f, dt);
 
-  // The elevator: doors, indicator, vote, the bell's warnings, the machinery, and the lights.
+  // The elevator: doors, indicator, votes, the bell's warnings, the machinery, and the lights.
   showIndicator(now);
-  const c = s.call;
-  const machine = s.phase === 'coming' && c ? (1 - c.floorsAway / Math.max(1, c.plan.floors)) * (c.stopUntil !== null ? 0.5 : 1) + 0.05 : 0;
-  audio.machinery(machine, { x: s.car.doorX, y: s.car.floorY + 1.5, z: s.car.doorZ });
+  if (s) {
+    const mine = me(s);
+    const bank = s.players.filter((p) => p.side === 'bank').length;
+    const down = s.players.filter((p) => p.side === 'down').length;
+    elevator.setVotes(mine?.side ?? null, bank, down);
+  }
+  const cl = s?.call ?? null;
+  const machine = s?.phase === 'coming' && cl ? (1 - cl.floorsAway / Math.max(1, cl.floors)) * (cl.falseStop ? 0.5 : 1) + 0.05 : 0;
+  audio.machinery(machine, { x: car.doorX, y: car.floorY + 1.5, z: car.doorZ });
   // The blink: a flicker through the warning, then a deep dark with tape noise, then the lights back.
+  // Dark exactly while the network layer says so (its window covers the clock's uncertainty).
+  const warn = s ? blinkWarningView(s) : false;
   let light = 1;
-  if (darkNow) light = 0.07;
+  if (dark) light = 0.07;
   // The warning: the tubes sag and stutter (never back to full), so a glance at any moment of it shows trouble.
-  else if (blinkWarning()) light = Math.floor(now / 55) % 4 === 1 || Math.floor(now / 140) % 3 === 2 ? 0.18 : 0.6;
+  else if (warn) light = Math.floor(now / 55) % 4 === 1 || Math.floor(now / 140) % 3 === 2 ? 0.18 : 0.6;
   setLights(light);
-  tape.setDarkness(darkNow ? 1 : 0);
+  tape.setDarkness(dark ? 1 : 0);
   // The announcer: close in the car, from the speaker over the landing doors out on the floor.
   camForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
+  const inst = myMember();
   announcer.update({
-    depth: s.depth,
-    inCar: inCar(s.car, player.body),
+    depth: s?.depth ?? startDepth,
+    inCar: inCar(car, player.body),
     ear: camera.position,
     forward: camForward,
-    speaker: { x: s.car.doorX, y: s.car.floorY + 2.3, z: s.car.doorZ },
-    quiet: !darkNow && !blinkWarning() && !run.member()?.instrument.current && !caughtFx.noiseOn && !ended,
+    speaker: { x: car.doorX, y: car.floorY + 2.3, z: car.doorZ },
+    quiet: !dark && !warn && !inst?.current && !caughtFx.noiseOn && !ended,
   });
   elevator.update(dt, light, lightGain);
 
   // The instrument, its sound, the tapes on the floor and the tape count.
-  const inst = run.member()?.instrument;
   if (inst) {
+    tickPhase += inst.tickHz * dt;
+    const ticks = Math.floor(tickPhase);
+    tickPhase -= ticks;
     instrument.setTouchLayout(input.touch);
     instrument.update(dt, {
-      raised: inst.raised,
+      raised: h ? inst.raised : wantRaisedNow,
       needle: inst.needle,
       value: inst.current?.value ?? 0,
       distance: inst.distance,
       tickHz: inst.tickHz,
-      ticks: pendingTicks,
+      ticks,
       walkSpeed: player.lastSpeed,
     });
     audio.ticking(inst.tickHz, inst.loudness);
-  }
-  pendingTicks = 0;
-  tapeDrops.sync(s.crew.floor);
+  } else tickPhase = 0;
+  tapeDrops.sync((s?.floor ?? []).map((t) => ({ tape: { id: t.id }, at: t.at })));
   tapeDrops.update(dt);
-  osd.setTapes(run.heldCount(), run.held());
-  const inReach = !caughtFx.noiseOn && !ended && run.tapeInReach(player.body) !== null;
+  const held = heldTapes();
+  osd.setTapes(held.count, held.value);
   pickupPrompt.update(inReach && !callable, input.touch);
-  if (ePressed && inReach && !callable) tryPickUp();
+
+  // The crew in the corner (only with company), and the lobby.
+  const rows = crewRows();
+  crewList.update(rows, rows.length > 1 && !endScreen.shown && !lobby.shown);
+  if (state.frames % 5 === 0) updateLobby();
 
   showEnd(now);
   // The gear button: phones only (never on a computer, so never in the reference pictures).
-  panel.showGear((input.touch || coarsePointer) && overlay.hidden && !endScreen.shown);
+  panel.showGear((input.touch || coarsePointer) && overlay.hidden && !endScreen.shown && !lobby.shown);
   tape.render(scene, camera, instrument.visible ? instrument : null);
   osd.update(!tape.motion || Math.floor(now / 700) % 2 === 0);
   state.frames++;
   state.ready = true;
 
-  if (debug && state.frames % 10 === 0) {
+  if (debug && state.frames % 10 === 0 && s) {
     const b = player.body;
     const cc = cellOf(plan, b);
     const fm = stats.median();
-    const e = eta();
+    const e = s.call?.eta ?? null;
     debugText.textContent =
       `fps ${fm > 0 ? (1000 / fm).toFixed(0) : '-'}  median ${fm.toFixed(1)} ms\n` +
       `tape fx${tape.fx}${tape.motion ? '' : ' (reduced motion)'}\n` +
       `pos ${b.x.toFixed(2)} ${b.y.toFixed(2)} ${b.z.toFixed(2)}\n` +
       `cell L${cc.level} (${cc.x},${cc.y})  yaw ${(player.yaw / DEG).toFixed(0)}\n` +
-      `run ${s.phase}  depth ${s.depth}  car ${carState()}${e !== null ? `  eta ${e.toFixed(1)} s` : ''}${darkNow ? '  BLINK' : blinkWarning() ? '  blink soon' : ''}\n` +
-      `vote ${localSide() ?? '-'}${s.phase === 'boarding' ? `  bell ${s.bellLeft.toFixed(1)} s  hold ${s.holdLeft.toFixed(1)} s${s.held ? ' HELD' : ''}` : ''}`;
+      `run ${s.phase}  depth ${s.depth}  car ${carState()}${e !== null ? `  eta ${e.toFixed(1)} s` : ''}${dark ? '  BLINK' : warn ? '  blink soon' : ''}\n` +
+      `vote ${me(s)?.side ?? '-'}${s.phase === 'boarding' ? `  bell ${s.bellLeft.toFixed(1)} s  hold ${s.holdLeft.toFixed(1)} s${s.held ? ' HELD' : ''}` : ''}`;
     let ent: { level: Level; x: number; z: number; seen: boolean } | null = null;
     if (orderlyView) {
-      const o = run.orderly;
-      const dist = Math.hypot(o.body.x - b.x, o.body.z - b.z);
-      debugText.textContent +=
-        `\norderly ${o.mode}${o.frozen ? ' frozen' : ''}  ${orderlyVisible ? 'SEEN' : 'unseen'}  ${dist.toFixed(1)} m\n` +
-        `squeak ${squeak.gain.toFixed(2)}${squeak.muffled ? ' muffled' : ''}  audio ${audio.state().running ? 'on' : 'off'}  catches ${catches}`;
-      ent = { level: o.body.level, x: o.body.x, z: o.body.z, seen: orderlyVisible };
+      const o = orderlyInfo();
+      if (o) {
+        debugText.textContent +=
+          `\norderly ${o.phase}${o.frozen ? ' frozen' : ''}  ${orderlyVisible ? 'SEEN' : 'unseen'}  ${o.distance.toFixed(1)} m\n` +
+          `squeak ${squeak.gain.toFixed(2)}${squeak.muffled ? ' muffled' : ''}  audio ${audio.state().running ? 'on' : 'off'}  catches ${catches}`;
+        ent = { level: o.level, x: o.x, z: o.z, seen: orderlyVisible };
+      }
     }
     if (inst) {
       debugText.textContent +=
         `\ninstrument ${inst.raised ? 'up' : 'down'} ${inst.needle}  value ${(inst.current?.value ?? 0).toFixed(1)}  tick ${inst.tickHz.toFixed(1)} Hz\n` +
-        `tapes held ${run.heldCount()} worth ${run.held().toFixed(1)}  on floor ${s.crew.floor.length}`;
+        `tapes held ${held.count} worth ${held.value.toFixed(1)}  on floor ${s.floor.length}`;
     }
-    const floorTapes = s.crew.floor.map((f) => ({ level: f.at.level, x: f.at.x, z: f.at.z }));
+    const floorTapes = s.floor.map((t) => ({ level: t.at.level, x: t.at.x, z: t.at.z }));
     minimap?.update(cc.level, b.x, b.z, player.yaw, ent, floorTapes);
   }
 });

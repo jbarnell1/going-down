@@ -30,7 +30,7 @@ import { GRACE, ORDERLY_RADIUS, type OrderlyEvent, type OrderlyState } from '../
 import { isWalkable } from '../sim/floor';
 import { createInstrument, member } from '../sim/instrument';
 import { wallClearance, type Body } from '../sim/move';
-import { carBody, createRun, rectDistance, stepRun, type PlayerInput, type RunEvent, type RunPlayer, type RunState } from '../sim/run';
+import { carBody, createRun, rectDistance, stepRun, type PlayerInput, type RunEvent, type RunPlayer, type RunState, type RunStep } from '../sim/run';
 import { emptyTape } from '../sim/tape';
 import {
   decode,
@@ -76,6 +76,16 @@ export interface HostOptions {
   now: number;
   /** Tests: adjust the run before the first tick. */
   prepare?: (s: RunState) => RunState;
+  /**
+   * Steps the run one tick (default stepRun). The game passes its own wrapper for rules the logic
+   * does not have yet (see game/runHost.ts); it must call stepRun and keep its contract.
+   */
+  step?: (s: RunState, inputs: readonly PlayerInput[], dt: number) => RunStep;
+  /**
+   * Players whose bodies are taken as sent, with no speed check: the host's own player, whose
+   * machine is this one (a teleport by the game or a test is not a cheat).
+   */
+  trusted?: readonly string[];
 }
 
 interface HostPlayer {
@@ -176,12 +186,16 @@ export class NetHost {
   private pendingCatch: { victim: string; armedAt: number; armedHost: number } | null = null;
   private lastCatchTick = -1;
   private nextId = 1;
+  private readonly stepFn: (s: RunState, inputs: readonly PlayerInput[], dt: number) => RunStep;
+  private readonly trusted: Set<string>;
 
   constructor(opts: HostOptions) {
     this.transport = opts.transport;
     this.seed = opts.seed;
     this.startLocal = opts.now;
     this.rosterIds = new Set(opts.roster);
+    this.stepFn = opts.step ?? stepRun;
+    this.trusted = new Set(opts.trusted ?? []);
     let s = createRun(opts.seed, opts.roster);
     if (opts.prepare) s = opts.prepare(s);
     this.state = s;
@@ -190,7 +204,8 @@ export class NetHost {
       const hp = this.newPlayer(id, id, true);
       if (rp) {
         hp.body = rp.body;
-        hp.place = { seq: 1, depth: s.depth, body: qBody(rp.body) };
+        // A trusted player's page stands its own player where the run starts it (it is this page).
+        if (!this.trusted.has(id)) hp.place = { seq: 1, depth: s.depth, body: qBody(rp.body) };
       }
       this.players.set(id, hp);
       this.byPeer.set(id, id);
@@ -254,6 +269,54 @@ export class NetHost {
     }
     for (const m of this.transport.receive()) this.onMessage(m.from, m.data, now);
     while (this.nextTickAt() <= now + 1e-9) this.step(now);
+  }
+
+  /**
+   * Applies the seen reports that have arrived since the last tick now, between ticks, instead of
+   * waiting for the next one. The game calls it after every frame on the host's machine, so a
+   * glance by the host's own player puts the Orderly back on the same frame, as the single-player
+   * game always did. Remote reports go through it too: earlier is never worse for the rule.
+   */
+  flushReports(now: number): void {
+    if (this.ended) return;
+    for (const m of this.transport.receive()) this.onMessage(m.from, m.data, now);
+    if (this.queue.length === 0) return;
+    const extra: RunEvent[] = [];
+    let s = this.state;
+    for (const q of this.queue.splice(0)) s = this.applyReport(s, q.player, q.r, extra, s.t);
+    this.state = s;
+    this.states.set(this.tick, s);
+    for (const e of extra) this.log.push({ seq: this.log.length + 1, tick: this.tick, e: JSON.parse(JSON.stringify(e)) as RunEvent });
+  }
+
+  /**
+   * Replaces the Orderly outright (the game's test hooks: place it, wake it, rest it). The history
+   * is rewritten to the new state, so a seen report about an earlier moment puts it back here and
+   * never to where it stood before, nor to an earlier mode.
+   */
+  replaceOrderly(o: OrderlyState): void {
+    this.state = { ...this.state, orderly: o };
+    const h: History = { o, pose: orderlySnap(o) };
+    for (const k of this.hist.keys()) this.hist.set(k, h);
+    this.hist.set(this.tick, h);
+    this.states.set(this.tick, this.state);
+  }
+
+  /**
+   * Changes the run outside a tick (the host's own page: a pick-up pressed while a test has the
+   * clock stopped). The events are logged and reach every client with the next snapshot.
+   */
+  act(f: (s: RunState) => RunStep): void {
+    const r = f(this.state);
+    this.state = r.state;
+    this.states.set(this.tick, r.state);
+    for (const e of r.events) this.log.push({ seq: this.log.length + 1, tick: this.tick, e: JSON.parse(JSON.stringify(e)) as RunEvent });
+  }
+
+  /** Moves a player (the host's decision, like a ride): the client adopts it and acknowledges it. */
+  placePlayer(id: string, body: Body): void {
+    this.place(id, body, this.state.depth);
+    this.state = { ...this.state, players: this.state.players.map((p) => (p.id === id ? { ...p, body } : p)) };
   }
 
   /** Ends the session (the host leaving): every client is told by its transport. */
@@ -345,7 +408,7 @@ export class NetHost {
     }
     // The body: not until the client has the latest placement; never an impossible jump.
     if (p.place && m.placeAck < p.place.seq) return;
-    if (p.body && p.bodyCt !== null) {
+    if (p.body && p.bodyCt !== null && !this.trusted.has(p.id)) {
       const dt = Math.max(0, m.ct - p.bodyCt);
       const jump = Math.hypot(m.body.x - p.body.x, m.body.z - p.body.z, m.body.y - p.body.y);
       if (jump > MAX_PLAYER_SPEED * dt + JUMP_SLACK) {
@@ -408,7 +471,7 @@ export class NetHost {
     }
 
     // 5. The run.
-    const r = stepRun(s, inputs, TICK);
+    const r = this.stepFn(s, inputs, TICK);
     let state = r.state;
     const events = [...extra, ...r.events];
 
@@ -533,6 +596,10 @@ export class NetHost {
     const o = s.orderly;
     const gap = Math.hypot(o.body.x - target.x, o.body.z - target.z, o.body.y - target.y);
     if (gap <= 1e-6 && o.body.level === target.level && Math.abs(o.yaw - target.yaw) < 1e-3) return held();
+    // The client froze on the host's own pose as sent (to the centimetre): nothing to put back. Moving
+    // the logic onto the rounded pose would shift a figure in plain view by up to half a centimetre.
+    const sent = orderlySnap(o);
+    if (sent.x === target.x && sent.y === target.y && sent.z === target.z && sent.level === target.level && sent.yaw === target.yaw) return held();
     if (gap > PUT_BACK_MAX) {
       this.stats.boundViolations++;
       this.stats.maxViolationGap = Math.max(this.stats.maxViolationGap, gap);
@@ -567,6 +634,8 @@ export class NetHost {
       replanIn: 0,
       dormantLeft: mode === 'dormant' ? base.dormantLeft : 0,
     };
+    // The put-back freezes it outright, so the tick will not see the change: report it here.
+    if (restored.frozen && !o.frozen) extra.push({ type: 'froze', t, playerId: playerId } satisfies OrderlyEvent);
     if (wasWinding) {
       extra.push({ type: 'windUpCancelled', t, playerId: o.windUpTarget ?? '' });
       this.stats.windUpsCancelledByReport++;

@@ -23,3 +23,11 @@ docs/north-star.html
 
 .DS_Store
 Thumbs.db
+
+# files from outside services: only this folder's README is tracked
+assets_src/inbox/*
+!assets_src/inbox/README.md
+
+# paid-for source images and tiling checks: kept on this PC, too heavy for the repository
+assets_src/textures/raw/
+assets_src/textures/check/

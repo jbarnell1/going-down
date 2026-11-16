@@ -8,6 +8,7 @@ You (Claude Fable) are the architect and the checker. Each time this fires, do O
 
 ## One iteration
 
+0. If `.local/HANDOFF.md` exists and you do not remember its contents, read it first: it holds what was in flight (running agents, what to check when they report, lessons learned) when the conversation was last compacted. Keep it current whenever an agent is started or finishes.
 0. First iteration only: write the start time into PROGRESS, and ask the app to keep this PC awake if that tool is available.
 1. Run `node hub/track.mjs show` for the short status (iteration, current task, task list). Read `loop/PROGRESS.md` only when you need a task's evidence, to-do list or the decisions. Then `node hub/track.mjs iteration`. Read `loop/ENDPOINT.md` only when picking a task or closing a gate. Never read `docs/north-star.html` whole; grep for the mechanic you need (ids like `A2.`, `B8.`, `id="fairness"`).
    - Read `.local/answers.json` if it exists. For any answer newer than "answers applied to" in the tracker's status, act on it: update the task list, the gates or the code plan, and log what changed. The owner's free text counts as much as the options they ticked.

@@ -1,4 +1,9 @@
-"""Build "the Orderly" (second pass) from an empty scene and export a skinned, animated GLB.
+"""Build "the Orderly" (third pass) from an empty scene and export a skinned, animated GLB.
+
+Third pass: the gown is torn (hem in swinging strips, right sleeve half gone, a rip up the right
+side, frayed ties, holes), cloth, skin, mask and sewn lids come from the Gemini textures in
+public/assets/textures (made by assets_src/textures/generate.mjs), and the grin is thinner.
+The material is alpha-tested (glTF MASK) and double-sided so the torn cloth can be cut by texture.
 
 Usage (headless):
   blender.exe --background --factory-startup --python build_orderly.py -- [--out PATH] [--blend PATH]
@@ -17,6 +22,7 @@ from mathutils import Vector, Quaternion
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
+TEXDIR = os.path.join(ROOT, "public", "assets", "textures")
 
 # =========================== PARAMETERS ===========================
 P = dict(
@@ -35,6 +41,10 @@ P = dict(
         mask=(0.68, 0.81, 0.90), mask_line=(0.52, 0.65, 0.76), ink=(0.06, 0.06, 0.08),
         damp=(0.78, 0.76, 0.52), nose=(0.80, 0.82, 0.84),
         tie=(0.86, 0.88, 0.84), nail=(0.58, 0.55, 0.48),
+        # third pass: multipliers on the Gemini cloth (washed blue-green) toward dried yellow-grey,
+        # and the brown it turns at the hem and round every tear
+        gown_tint=(0.88, 0.86, 0.78), hem_mid=(0.58, 0.55, 0.42), hem_dirt=(0.40, 0.33, 0.22), tear_dirt=(0.33, 0.27, 0.19),
+        skin_mean=(0.80, 0.76, 0.63),
     ),
     fps=24,
     step=3,  # frames per pose for stepped actions: 24 / 3 = 8 poses a second
@@ -77,6 +87,16 @@ CAP = dict(front_lat=34.0, back_lat=-14.0, puff=0.40, lean=(0.035, 0.012, -0.006
 GOWN = dict(top_front=1.875, top_side=2.07, top_left=1.880, hem=0.74, gap=0.022,
             hang_front=1.0, hang_side=0.80, hang_back=0.96, flare=0.030, folds=7, fold_amp=0.014,
             slit_top=64.0, slit_bottom=22.0, slit_to=1.28, sides=34, collar_sag=0.035)
+# Third pass: the tears. Angles as in body_r (0 = left, 90 = back, -90 = front, 180 = right).
+TEAR = dict(
+    rip_a=181.0, rip_top=1.86, rip_bottom=0.60, rip_half=27.0,   # the long rip up the right side
+    # hanging strips below the hem: column boundaries (never crossing column 17, where the texture repeats)
+    strip_cuts=(0, 2, 4, 6, 8, 10, 12, 14, 17, 19, 21, 23, 25, 27, 29, 31, 34),
+    strip_len=(0.05, 0.34), strip_rows=4, strip_overlap=0.07,
+    # torn holes: (first column, last column + 1, first row, last row + 1) of gown faces
+    holes=((6, 11, 10, 13), (11, 15, 5, 8)),
+    sleeve_r=(0.14, 0.30),  # how far down the upper arm the half-gone right sleeve reaches: back, front
+)
 
 
 def lerp(a, b, t):
@@ -144,6 +164,8 @@ def body_r(a_deg, z):
         if 9 < off < 72:
             zc = 1.962 + 0.014 * (off - 9) / 63
             r += 0.008 * math.exp(-((z - zc) / 0.011) ** 2) * min(1.0, (off - 9) / 8)
+    # third pass: the crest of the hip bone stands out at the sides (it shows through the rip)
+    r += 0.011 * math.exp(-((z - 1.255) / 0.035) ** 2) * abs(c) ** 3
     # spine groove and shoulder-blade ridge on the back
     if s > 0:
         r -= 0.006 * max(0.0, 1 - abs(a_deg - 90) / 12) * (1.0 if 1.35 < z < 1.98 else 0.0)
@@ -218,7 +240,23 @@ def bone_table():
         b["thigh" + sfx] = (hip, knee, "hips")
         b["shin" + sfx] = (knee, ankle, "thigh" + sfx)
         b["foot" + sfx] = (ankle, toe, "shin" + sfx)
+    # third pass: cloth bones (new names; the 39 bones above are unchanged). Four hang inside the
+    # skirt and carry the hem strips; one hangs from the right sleeve and carries its rag.
+    for name, (x, y) in SKIRT_BONES.items():
+        b[name] = ((x, y, 1.02), (x * 1.3, y * 1.3, 0.60), "hips")
+    sh, el = Vector(mirror_pt(ARM["shoulder"], -1)), Vector(mirror_pt(ARM["elbow"], -1))
+    b["sleeve_rag.R"] = (tuple(sh.lerp(el, 0.22)), tuple(sh.lerp(el, 0.62)), "upperarm.R")
     return b
+
+
+SKIRT_BONES = {"skirt.F.L": (0.075, -0.085), "skirt.F.R": (-0.075, -0.085),
+               "skirt.B.L": (0.075, 0.095), "skirt.B.R": (-0.075, 0.095)}
+
+
+def skirt_bone_for(a_deg):
+    """Which skirt bone a direction belongs to (a: 0 = left, 90 = back, -90 / 270 = front)."""
+    s, c = math.sin(math.radians(a_deg)), math.cos(math.radians(a_deg))
+    return ("skirt.B" if s > 0 else "skirt.F") + (".L" if c > 0 else ".R")
 
 
 def build_armature(bt):
@@ -246,7 +284,10 @@ REG = dict(mask=(0.0, 0.5, 0.5, 1.0), gown=(0.5, 0.5, 1.0, 1.0), band=(0.0, 0.0,
            skin_hi=(0.0, 0.375, 0.125, 0.5), bruise=(0.125, 0.375, 0.25, 0.5),
            socket=(0.25, 0.25, 0.5, 0.5),
            cap=(0.5, 0.25, 0.75, 0.5), tie=(0.75, 0.25, 0.875, 0.375), nail=(0.875, 0.25, 1.0, 0.375),
-           gown_in=(0.75, 0.375, 1.0, 0.5))
+           gown_in=(0.75, 0.375, 1.0, 0.5),
+           # third pass, in the space that was free: the torn cloth (alpha), holes and dirty edges
+           strips=(0.375, 0.0, 0.875, 0.25), holes=(0.0, 0.125, 0.25, 0.25),
+           dirty=(0.875, 0.0, 1.0, 0.125), skin_dk=(0.875, 0.125, 1.0, 0.25))
 
 
 def ruv(reg, u, v):
@@ -411,6 +452,10 @@ def build_torso(mb):
         # hollow above the collarbones and the belly under the ribcage
         if -130 < a < -50 and 1.43 < z < 1.56:
             return REG["skin_lo"]
+        if 1.22 < z < 1.29 and abs(math.cos(math.radians(a))) > 0.85:
+            return REG["skin_hi"]  # the hip crest catches the light
+        if 1.14 < z < 1.22 and abs(math.cos(math.radians(a))) > 0.8:
+            return REG["skin_lo"]  # and the hollow under it
         return REG["skin"]
     tube(mb, rings, sides, REG["skin"], cap0=True, cap1=False, ref=(1, 0, 0), reg_fn=reg_fn)
 
@@ -578,26 +623,38 @@ def build_head(mb):
         if yp.z < 0:
             yp = -yp
         dep = SOCKET["depth"] * (SOCKET["right_depth"] if side < 0 else 1.0)
-        # a puffy, puckered rim, then the closed lid sunk below it and bulging a little
-        loops = [(1.45, -0.004), (1.15, SOCKET["rim"]), (0.95, -dep * 0.9),
-                 (0.66, -dep * 0.62), (0.36, -dep * 0.48), (0.0, -dep * 0.44)]
+        # third pass: no disc. A soft swollen rim, then skin sinking into the socket, puckered into
+        # radial folds that all pull toward one seam (the lids sewn together), deepest along the seam.
+        loops = [(1.45, -0.001), (1.22, -0.003), (1.00, -dep * 0.60),
+                 (0.78, -dep * 0.95), (0.55, -dep * 1.15), (0.30, -dep * 1.25), (0.0, -dep * 1.45)]
         rot = math.radians(SOCKET["stitch_angle"][0 if side > 0 else 1])
-        sides = 10
+        sides = 16
         rows = []
-        for (rs, dep) in loops[:-1]:
+        for li, (rs, d0) in enumerate(loops[:-1]):
             row = []
             for k in range(sides):
                 a = 2 * math.pi * k / sides
                 lx, ly = rs * math.cos(a), rs * math.sin(a) * 0.78  # a little wider than tall
-                p = c + xp * (lx * r) + yp * (ly * r) + n * dep
+                if 0 < rs < 1.1:
+                    # puckering: the inner rings are drawn in toward the seam (ly shrinks) and
+                    # folded (depth alternates), more strongly the closer to the seam
+                    ly *= 0.70 + 0.30 * rs
+                    fold = 0.0022 * (1.0 if k % 2 else -0.6) * (1.1 - rs)
+                    seam = -0.0045 * math.exp(-(ly / 0.22) ** 2) * (1.0 - rs * 0.6)
+                    dd = d0 + fold + seam
+                else:
+                    dd = d0
+                # stitches rotate with the texture, so rotate the pucker the same way
+                rx = lx * math.cos(rot) - ly * math.sin(rot)
+                ry = lx * math.sin(rot) + ly * math.cos(rot)
+                p = c + xp * (rx * r) + yp * (ry * r) + n * dd
                 row.append((mb.vert(p, W), (lx, ly)))
             rows.append(row)
         ctr = mb.vert(c + n * loops[-1][1], W)
 
-        def suv(l, rot=rot):
-            x = l[0] * math.cos(rot) - l[1] * math.sin(rot)
-            y = l[0] * math.sin(rot) + l[1] * math.cos(rot)
-            return ruv(REG["socket"], 0.5 + x / 3.0, 0.5 + y / 3.0)
+        def suv(l):
+            # the geometry is already turned by `rot`, so the decal's seam follows the pucker
+            return ruv(REG["socket"], 0.5 + l[0] / 3.0, 0.5 + l[1] / (3.0 * 0.78))
         inside = c - n * 0.2
         for j in range(len(rows) - 1):
             for k in range(sides):
@@ -735,7 +792,7 @@ def build_cheek_ink(mb):
             tan = (pts[min(i + 1, n)] - pts[max(i - 1, 0)]).normalized()
             nrm = (p - hc).normalized()
             side = tan.cross(nrm).normalized()
-            hw = 0.0065 * (1.0 + 0.45 * math.sin(i * 2.7 + sgn)) * (0.6 if i == n else 1.0)
+            hw = 0.0040 * (1.0 + 0.45 * math.sin(i * 2.7 + sgn)) * (0.6 if i == n else 1.0)
             rows.append((mb.vert(p + side * hw, {"head": 1}), mb.vert(p - side * hw, {"head": 1})))
         reg = REG["ink"]
         for i in range(n):
@@ -990,28 +1047,62 @@ def build_gown(mb):
         verts.append(col)
         zcol.append(zc)
     n = len(fr)
+    T = TEAR
+
+    def rip_open(a_deg, z, k, j):
+        """How far inside the side rip a face is (> 0: open). The rip is widest at the hip and closes
+        to a point under the ribs; its edges are ragged (a fixed per-face jitter)."""
+        t = (z - T["rip_bottom"]) / (T["rip_top"] - T["rip_bottom"])
+        if t <= 0 or t >= 1:
+            return -99.0
+        half = T["rip_half"] * math.sin(math.pi * t) ** 0.6
+        jit = 10.0 * (hash01(k * 31 + j * 7) - 0.5)
+        d = abs((a_deg - T["rip_a"] + 180) % 360 - 180)
+        return half + jit - d
+
+    open_at = {}
     for k in range(sides):
         k2 = (k + 1) % sides
+        ac = -90 + 360.0 * (k + 1) / sides
         for j in range(n - 1):
             if k == kb and max(zcol[k][j], zcol[k2][j]) > GOWN["slit_to"]:
                 continue  # the open back
             zm = (zcol[k][j] + zcol[k][j + 1]) / 2
+            ro = rip_open(ac, zm, k, j)
+            open_at[(k, j)] = ro > 0
+            if ro > 0:
+                continue  # the long rip up the right side
             interior = Vector((0, spine_y(max(zm, 1.05)), zm))
             reg = REG["gown"]
-            mb.face([verts[k][j], verts[k2][j], verts[k2][j + 1], verts[k][j + 1]],
-                    [ruv(reg, k / sides, 1 - fr[j]), ruv(reg, (k + 1) / sides, 1 - fr[j]),
-                     ruv(reg, (k + 1) / sides, 1 - fr[j + 1]), ruv(reg, k / sides, 1 - fr[j + 1])], interior)
-    # ties across the open back, hanging loose
+            uv = [ruv(reg, k / sides, 1 - fr[j]), ruv(reg, (k + 1) / sides, 1 - fr[j]),
+                  ruv(reg, (k + 1) / sides, 1 - fr[j + 1]), ruv(reg, k / sides, 1 - fr[j + 1])]
+            if ro > -5.5:  # the cloth right along the rip is frayed and filthy (judge round: narrower)
+                reg = REG["dirty"]
+                uv = [ruv(reg, 0, 1), ruv(reg, 1, 1), ruv(reg, 1, 0), ruv(reg, 0, 0)]
+            for (k0, k1, j0, j1) in T["holes"]:
+                if k0 <= k < k1 and j0 <= j < j1:  # a patch of the torn texture: holes cut by alpha
+                    reg = REG["holes"]
+                    uv = [ruv(reg, (k - k0) / (k1 - k0), 1 - (j - j0) / (j1 - j0)),
+                          ruv(reg, (k + 1 - k0) / (k1 - k0), 1 - (j - j0) / (j1 - j0)),
+                          ruv(reg, (k + 1 - k0) / (k1 - k0), 1 - (j + 1 - j0) / (j1 - j0)),
+                          ruv(reg, (k - k0) / (k1 - k0), 1 - (j + 1 - j0) / (j1 - j0))]
+            mb.face([verts[k][j], verts[k2][j], verts[k2][j + 1], verts[k][j + 1]], uv, interior)
+    build_hem_strips(mb, verts, n, sides, open_at)
+    # ties across the open back, hanging loose; their ends are frayed into threads, one is torn short
     for z in (1.86, 1.58):
         hw = slit_half(z)
         l = body_point(90 - hw, z, GOWN["gap"] + 0.004)
         r = body_point(90 + hw, z, GOWN["gap"] + 0.004)
         w = torso_weights((l + r) / 2)
-        for p0, p1, L in ((l, l.lerp(r, 0.40), 0.24), (r, r.lerp(l, 0.30), 0.17)):
+        lens = ((0.24, 0.17) if z > 1.7 else (0.27, 0.07))
+        for i, (p0, p1, L) in enumerate(((l, l.lerp(r, 0.40), lens[0]), (r, r.lerp(l, 0.30), lens[1]))):
             d1 = p1 + Vector((0.01, 0.012, -L * 0.5))
             d2 = p1 + Vector((-0.006, 0.020, -L))
-            rings = [(p0, 0.006, w), (p1, 0.006, w), (d1, 0.005, w), (d2, 0.004, w)]
-            tube(mb, rings, 3, REG["gown_in"], cap0=False, cap1=True)
+            rings = [(p0, 0.006, w), (p1, 0.006, w), (d1, 0.005, w), (d2, 0.0045, w)]
+            tube(mb, rings, 3, REG["dirty"], cap0=False, cap1=False)
+            for t, (dx, dz) in enumerate(((0.012, -0.045), (-0.010, -0.060), (0.002, -0.030))):
+                e = d2 + Vector((dx, 0.006 * (t - 1), dz))
+                tube(mb, [(d2, 0.0022, w), (e, 0.0012, w)], 3, REG["dirty"], cap0=False, cap1=True)
     # sleeves: raglan, following the slope of the shoulder; the left one has slid down the arm
     for side, sfx in ((1, ".L"), (-1, ".R")):
         sh, el = Vector(mirror_pt(ARM["shoulder"], side)), Vector(mirror_pt(ARM["elbow"], side))
@@ -1023,20 +1114,119 @@ def build_gown(mb):
             return lambda d: base + droop * max(0.0, d.y) ** 2 + 2.2 * droop * max(0.0, -d.z) ** 2
 
         if side < 0:
+            # third pass: the right sleeve is half gone, torn off short at the back and a little
+            # longer at the front, with a frayed edge and one rag hanging from it
             rings = [(sh + Vector((-0.055 * side, 0.004, 0.030)), srad(0.034, 0.0), {"spine2": .5, C: .5}),
                      (sh + Vector((-0.012 * side, 0.002, 0.016)), srad(0.054, 0.004), {C: .6, U: .4}),
-                     (sh + ax * 0.16, srad(0.056, 0.008), {U: 1}),
-                     (sh + ax * 0.40 + Vector((0, 0.006, -0.030)), srad(0.060, 0.016), {U: 1})]
+                     (sh + ax * 0.12, srad(0.056, 0.008), {U: 1}),
+                     (sh + ax * 0.22 + Vector((0, 0.004, -0.012)), srad(0.059, 0.012), {U: 1})]
         else:
             rings = [(sh + ax * 0.10, srad(0.050, 0.004), {C: .3, U: .7}),
                      (sh + ax * 0.32, srad(0.055, 0.008), {U: 1}),
                      (sh + ax * 0.58 + Vector((0, 0.006, -0.030)), srad(0.062, 0.018), {U: 1})]
-        tube(mb, rings, 10, REG["gown_top"], cap0=False, cap1=False, ref=(side, 0, 0))
+        idx = tube(mb, rings, 10, REG["gown_top"], cap0=False, cap1=False, ref=(side, 0, 0))
+        if side < 0:
+            build_torn_sleeve(mb, idx[-1], sh, ax, U)
     mb.smooth = False
 
 
+def hash01(i):
+    """A fixed pseudo-random number in 0..1 for an integer (so the build stays deterministic)."""
+    return (math.sin(i * 12.9898 + 78.233) * 43758.5453) % 1.0
+
+
+def fringe(mb, tops, bottoms, wfn, reg, u0, u1, v_len, interior, rows):
+    """A band of cloth from a row of top points to a row of bottom points, mapped onto the torn-cloth
+    strips (v = 1 at the top, where the strips join the cloth). v_len[i]: how much of the texture's
+    height column i uses, so short strips end part-way down the texture. Returns the vertex rows."""
+    grid = []
+    for r_ in range(rows + 1):
+        t = r_ / rows
+        row = []
+        for i, (a, b) in enumerate(zip(tops, bottoms)):
+            p = a.lerp(b, t)
+            row.append(mb.vert(p, wfn(p, t)))
+        grid.append(row)
+    m = len(tops)
+    for r_ in range(rows):
+        for i in range(m - 1):
+            def uv(ii, rr):
+                return ruv(reg, lerp(u0, u1, ii / (m - 1)), 1 - v_len[ii] * rr / rows)
+            q = [grid[r_][i], grid[r_][i + 1], grid[r_ + 1][i + 1], grid[r_ + 1][i]]
+            mb.face(q, [uv(i, r_), uv(i + 1, r_), uv(i + 1, r_ + 1), uv(i, r_ + 1)], interior)
+    return grid
+
+
+def build_hem_strips(mb, verts, n, sides, open_at):
+    """The hem hangs in strips of different lengths: separate pieces of real geometry (so neighbours
+    can part), each carried partly by one of the skirt bones so they swing a little in the walk, and
+    cut into frayed strips by the torn texture. They overlap the bottom of the gown to hide the join."""
+    T = TEAR
+    cuts = T["strip_cuts"]
+    lmax = T["strip_len"][1] + T["strip_overlap"]
+    for si, (c0, c1) in enumerate(zip(cuts, cuts[1:])):
+        cols = list(range(c0, c1 + 1))
+        if any(open_at.get((k % sides, n - 2), False) for k in cols[:-1]):
+            continue  # no strips where the rip runs out through the hem
+        L = lerp(T["strip_len"][0], T["strip_len"][1], hash01(si * 5 + 1))
+        share = 0.45 + 0.5 * hash01(si * 11 + 3)  # how freely this strip swings
+        tops, bots, vl = [], [], []
+        for c in cols:
+            k = c % sides
+            hv, av = mb.co[verts[k][n - 1]], mb.co[verts[k][n - 2]]
+            up = (av - hv).normalized()
+            down = -up
+            outward = Vector((hv.x, hv.y - spine_y(1.05), 0)).normalized()
+            l_here = L * (0.75 + 0.5 * hash01(si * 17 + c))
+            tops.append(hv + up * T["strip_overlap"] + outward * 0.002)
+            bots.append(hv + down * l_here + outward * (0.010 + 0.03 * l_here))
+            vl.append((T["strip_overlap"] + l_here) / lmax)
+        a_mid = -90 + 360.0 * (0.5 * (c0 + c1) + 0.5) / sides
+        bone = skirt_bone_for(a_mid)
+
+        def wfn(p, t, bone=bone, share=share):
+            w = gown_weights(p)
+            s = share * min(1.0, t * 1.4)
+            out = {k: v * (1 - s) for k, v in w.items()}
+            out[bone] = out.get(bone, 0) + s
+            return out
+        u0 = (c0 % 17) / 17.0
+        u1 = u0 + (c1 - c0) / 17.0
+        zc = mb.co[verts[c0 % sides][n - 1]].z
+        fringe(mb, tops, bots, wfn, REG["strips"], u0, u1, vl, Vector((0, spine_y(1.05), zc)), T["strip_rows"])
+
+
+def build_torn_sleeve(mb, last, sh, ax, U):
+    """Ragged end of the half-gone right sleeve and a rag hanging from it toward the elbow."""
+    axn = ax.normalized()
+    ring = [Vector(mb.co[i]) for i in last]
+    cen = sum(ring, Vector()) / len(ring)
+    # the torn edge: back of the sleeve shorter, front longer; frayed by the strips texture
+    tops, bots, vl = [], [], []
+    for i, p in enumerate(ring + ring[:1]):
+        d = (p - cen).normalized()
+        front = max(0.0, -d.y)
+        ln = 0.02 + 0.07 * front * (0.6 + 0.8 * hash01(i + 40))
+        tops.append(p - axn * 0.025)
+        bots.append(p + axn * ln + (p - cen) * 0.12)
+        vl.append(0.25 + 1.6 * ln)
+    fringe(mb, tops, bots, lambda p, t: {U: 1}, REG["strips"], 0.05, 0.62, vl, cen - axn * 0.05, 2)
+    # one rag, hanging straight down from the front of the torn edge
+    lo = min(ring, key=lambda p: p.z + 0.5 * p.y)
+    side = Vector((-1, 0, 0)).cross(Vector((0, 0, 1)))  # front-back spread
+    w0 = 0.020
+    tops = [lo + Vector((0.006, -w0, 0.004)), lo + Vector((0.004, w0, 0.004))]
+    drop = Vector((0.010, 0.0, -0.24)) + axn * 0.04
+    bots = [tops[0] + drop + Vector((0.004, 0.006, 0.02)), tops[1] + drop + Vector((0, -0.004, 0))]
+
+    def wfn(p, t):
+        s = min(1.0, t * 1.6)
+        return {U: 1 - s, "sleeve_rag.R": s}
+    fringe(mb, tops, bots, wfn, REG["strips"], 0.30, 0.40, [1.0, 1.0], lo + Vector((-0.05, 0, 0)), 4)
+
+
 # ============================ TEXTURE ============================
-SMILE = dict(cy=0.098, depth=0.044, lift=0.010, half=0.50, width=0.0105,
+SMILE = dict(cy=0.098, depth=0.044, lift=0.010, half=0.50, width=0.0058,
              cheek=((10.0, 27.0), (5.0, 17.0)))  # how far the ink runs on past the mask: (az, rise) left, right
 
 
@@ -1142,13 +1332,22 @@ def make_atlas():
     u = ((xx + 0.5) / w - m) / (1 - 2 * m)
     v = ((yy + 0.5) / h - m) / (1 - 2 * m)
     px, py = (u - 0.5) * mw, (v - 0.5) * mh
-    mk = np.tile(C["mask"], (h, w, 1)) + (rng.random((h, w, 1)) - 0.5) * 0.006
-    for pl in (1 / 6, 0.5, 5 / 6):
-        band = (np.abs(v - pl) < 0.014)[..., None]
-        mk = np.where(band, mk * 0.35 + C["mask_line"] * 0.65, mk)
-    mk = np.where((v > 0.94)[..., None], C["nose"], mk)  # the wire across the top
-    edge = ((v < 0.035) | (v > 0.965))[..., None]
-    mk = np.where(edge, C["mask_line"], mk)
+    gem_mask = load_tex("orderly_mask.png", w, h)
+    if gem_mask is not None:
+        # third pass: the stained, pleated paper panel made with Gemini (it has its own pleats,
+        # hems and nose wire); only the smile is drawn by code. The pleat shadows are softened so
+        # the printed line is the only hard dark line on the mask.
+        mk = soften(gem_mask[..., :3], 1.0)
+        mmean = mk.reshape(-1, 3).mean(0)
+        mk = mmean + np.maximum(mk - mmean, (mk - mmean) * 0.45)
+    else:
+        mk = np.tile(C["mask"], (h, w, 1)) + (rng.random((h, w, 1)) - 0.5) * 0.006
+        for pl in (1 / 6, 0.5, 5 / 6):
+            band = (np.abs(v - pl) < 0.014)[..., None]
+            mk = np.where(band, mk * 0.35 + C["mask_line"] * 0.65, mk)
+        mk = np.where((v > 0.94)[..., None], C["nose"], mk)  # the wire across the top
+        edge = ((v < 0.035) | (v > 0.965))[..., None]
+        mk = np.where(edge, C["mask_line"], mk)
     S_ = SMILE
     # Printed on the flat mask before it was pleated, so every fold shifts the line a little.
     jog = np.select([v < 1 / 6, v < 0.5, v < 5 / 6], [0.004, -0.003, 0.002], -0.004)
@@ -1165,17 +1364,186 @@ def make_atlas():
     band &= ~((np.abs(tx) > 0.93) & (((yy // 2) % 3) == 0))
     # a damp, yellowed patch over the mouth
     dmp = ((px / 0.034) ** 2 + ((py - 0.030) / 0.020) ** 2) + 0.3 * np.sin(px * 160) * np.sin(py * 120)
-    mk = np.where((dmp < 1.0)[..., None], mk * 0.65 + C["damp"] * 0.35, mk)
-    # the ink bled into the fibres round the line
-    bleed = (dist < width * 1.05) & (np.abs(tx) <= 1.0) & ~band
-    mk = np.where(bleed[..., None], mk * 0.55 + C["ink"] * 0.45, mk)
+    if gem_mask is None:
+        mk = np.where((dmp < 1.0)[..., None], mk * 0.65 + C["damp"] * 0.35, mk)
+    # the ink bled into the fibres round the line (a thinner bleed for the thinner third-pass line)
+    bleed = (dist < width * 0.95) & (np.abs(tx) <= 1.0) & ~band
+    mk = np.where(bleed[..., None], mk * 0.60 + C["ink"] * 0.40, mk)
     mk = np.where(band[..., None], C["ink"], mk)
     img[y0:y1, x0:x1, :3] = np.clip(mk, 0, 1)
 
-    im = bpy.data.images.new(P["name"] + "_atlas", n, n, alpha=False)
+    apply_gemini_textures(img, C, region_px)
+    im = bpy.data.images.new(P["name"] + "_atlas", n, n, alpha=True)
+    im.alpha_mode = "STRAIGHT"
     im.pixels.foreach_set(img.ravel())
     im.pack()
     return im
+
+
+def soften(a, k):
+    """A small blur ([1,2,1] in each direction), mixed in by k: takes the dither grain off."""
+    b = (np.roll(a, 1, 0) + 2 * a + np.roll(a, -1, 0)) / 4
+    b = (np.roll(b, 1, 1) + 2 * b + np.roll(b, -1, 1)) / 4
+    return a * (1 - k) + b * k
+
+
+def load_tex(name, w=None, h=None):
+    """A texture from public/assets/textures as a float array (rows bottom-up, as Blender stores
+    them), resized to w x h by area averaging / nearest pick. None if the file is missing."""
+    path = os.path.join(TEXDIR, name)
+    if not os.path.exists(path):
+        print(f"[build] {name} missing: falling back to the code-made texture")
+        return None
+    im = bpy.data.images.load(path)
+    W, H = im.size
+    a = np.array(im.pixels[:], dtype=np.float32).reshape(H, W, 4)
+    bpy.data.images.remove(im)
+    if w is None:
+        return a
+    ys = ((np.arange(h) + 0.5) * H / h).astype(int)
+    xs = ((np.arange(w) + 0.5) * W / w).astype(int)
+    if W >= 2 * w and H >= 2 * h:  # average 2x2 around each pick so the dither does not alias
+        ys1, xs1 = np.minimum(ys + 1, H - 1), np.minimum(xs + 1, W - 1)
+        out = (a[ys][:, xs] + a[ys1][:, xs] + a[ys][:, xs1] + a[ys1][:, xs1]) / 4
+        out[..., 3] = np.minimum.reduce([a[ys][:, xs, 3], a[ys1][:, xs, 3], a[ys][:, xs1, 3], a[ys1][:, xs1, 3]])
+        return out
+    return a[ys][:, xs]
+
+
+def apply_gemini_textures(img, C, region_px):
+    """Third pass: put the Gemini textures into the atlas, tinted so the figure separates from the pale
+    green walls: the gown dirtied toward dried yellow-grey, brown at the hem and round every tear."""
+    def put(reg, arr):
+        x0, y0, x1, y1 = region_px(reg)
+        img[y0:y1, x0:x1, :] = np.clip(arr, 0, 1)
+
+    def size(reg):
+        x0, y0, x1, y1 = region_px(reg)
+        return x1 - x0, y1 - y0
+
+    tint = np.array(C["gown_tint"], np.float32)
+    hem = np.array(C["hem_dirt"], np.float32)
+    tear = np.array(C["tear_dirt"], np.float32)
+
+    def blotches(h, w, count, seed, r0, r1, ymax=1.0):
+        rng = np.random.default_rng(seed)
+        yy, xx = np.mgrid[0:h, 0:w]
+        m = np.zeros((h, w), np.float32)
+        for _ in range(count):
+            cx, cy = rng.random() * w, rng.random() * h * ymax
+            r = r0 + rng.random() * (r1 - r0)
+            m = np.maximum(m, np.clip(1 - ((xx - cx) ** 2 + ((yy - cy) * 0.6) ** 2) / r ** 2, 0, 1))
+        return m
+
+    # gown: the cloth, dirtied; v = 0 (bottom rows) is the hem
+    w, h = size(REG["gown"])
+    cloth = load_tex("orderly_gown_cloth.png", w, h)
+    if cloth is not None:
+        g = soften(cloth[..., :3], 0.5) * tint
+        v = (np.arange(h, dtype=np.float32) / h)[:, None, None]
+        # grimy hospital blue-green above, going dried yellow-grey toward the hem, brown at the hem
+        f1 = 0.22 + np.clip(1 - v / 0.62, 0, 1) ** 1.2 * 0.45
+        f1 = np.maximum(f1, blotches(h, w, 6, 9, 6, 16)[..., None] * 0.45)  # old stains all over
+        g = g * (1 - f1) + np.array(C["hem_mid"], np.float32) * f1
+        f = np.clip(1 - v / 0.26, 0, 1) ** 1.4 * 0.80
+        f = np.maximum(f, blotches(h, w, 14, 7, 4, 12, ymax=0.40)[..., None] * 0.55)
+        g = g * (1 - f) + hem * f
+        put(REG["gown"], np.dstack([g, np.ones((h, w, 1), np.float32)]))
+        # the inside of the gown (ties, inner faces) and the filthy cloth along the rip
+        wi, hi = size(REG["gown_in"])
+        put(REG["gown_in"], np.dstack([cloth[:hi, :wi, :3] * tint * 0.75, np.ones((hi, wi, 1))]))
+        wd, hd = size(REG["dirty"])
+        d = cloth[:hd, :wd, :3] * tint * 0.45 + tear * 0.55
+        put(REG["dirty"], np.dstack([d, np.ones((hd, wd, 1))]))
+
+    # torn cloth: the lower half (strips) and upper half (holes) of the Gemini tear, alpha kept
+    torn = load_tex("orderly_gown_torn.png")
+    if torn is not None:
+        H = torn.shape[0]
+        lower, upper = torn[: H // 2], torn[H // 2:]  # rows are bottom-up: the strips are the first half
+
+        def dirty_torn(t, reg, seed):
+            w, h = size(reg)
+            ys = ((np.arange(h) + 0.5) * t.shape[0] / h).astype(int)
+            xs = ((np.arange(w) + 0.5) * t.shape[1] / w).astype(int)
+            a = t[ys][:, xs].copy()
+            rgb = a[..., :3]
+            # pink fringe left by the cut-out colour: pull it back to dirty cloth
+            pink = (rgb[..., 0] - rgb[..., 1] > 0.08) & (rgb[..., 2] - rgb[..., 1] > 0.08)
+            rgb[pink] = tear
+            rgb = rgb * tint
+            # brown near every edge of the cloth (distance to transparent, a few pixels)
+            al = (a[..., 3] > 0.5).astype(np.float32)
+            near = al.copy()
+            for _ in range(3):
+                near = np.minimum.reduce([near, np.roll(near, 1, 0), np.roll(near, -1, 0),
+                                          np.roll(near, 1, 1), np.roll(near, -1, 1)])
+            edge = (1 - near)[..., None] * 0.6
+            v = (np.arange(h, dtype=np.float32) / h)[:, None, None]
+            low = np.clip(1 - v / 0.9, 0, 1) * 0.45 if reg == REG["strips"] else 0.15
+            f = np.maximum(edge, low)
+            rgb = rgb * (1 - f) + tear * f
+            # cut-away pixels get a deep shadow colour: if a renderer ever ignores the alpha test,
+            # the gaps between strips still read as dark gaps, not as a flat band
+            rgb = np.where(al[..., None] > 0.5, rgb, np.array((0.12, 0.11, 0.09), np.float32))
+            a[..., :3] = rgb
+            a[..., 3] = al
+            put(reg, a)
+        dirty_torn(lower, REG["strips"], 3)
+        dirty_torn(upper, REG["holes"], 4)
+
+    # skin: the mottled waxy skin, matched to the old skin tone so the figure keeps its colour
+    w, h = size(REG["skin"])
+    sk = load_tex("orderly_skin.png", w, h)
+    if sk is not None:
+        rgb = soften(sk[..., :3], 1.0)
+        mean = rgb.reshape(-1, 3).mean(0)
+        rgb = mean + (rgb - mean) * 0.55  # rule 14: keep texture noise low, it crawls at 480x270
+        rgb = rgb / mean * np.array(C["skin_mean"], np.float32)
+        one = np.ones((h, w, 1), np.float32)
+        put(REG["skin"], np.dstack([rgb, one]))
+        put(REG["skin_lo"], np.dstack([rgb * 0.80 * np.array((1.0, 0.95, 0.97)), one]))
+        put(REG["skin_hi"], np.dstack([rgb * 1.09, one]))
+        put(REG["bruise"], np.dstack([rgb * 0.80 * np.array((1.0, 0.88, 0.96)), one]))
+        put(REG["skin_dk"], np.dstack([rgb * 0.6, one]))
+
+    # sewn lids: the Gemini decal (an oval of puckered, bruised skin with thick thread) turned so the
+    # seam runs across, set into skin; its edge fades into the skin so it is not a disc
+    w, h = size(REG["socket"])
+    dec = load_tex("orderly_eyelid.png")
+    if dec is not None:
+        x0, y0, x1, y1 = region_px(REG["skin"])
+        base = img[y0:y1, x0:x1, :3]
+        skin_tile = np.tile(base, (h // base.shape[0] + 1, w // base.shape[1] + 1, 1))[:h, :w]
+        out = skin_tile.copy()
+        D = 104  # decal size in atlas pixels (its oval then meets the socket's rim ring)
+        dd = np.rot90(dec, 1)
+        ys = ((np.arange(D) + 0.5) * dd.shape[0] / D).astype(int)
+        xs = ((np.arange(D) + 0.5) * dd.shape[1] / D).astype(int)
+        dd = dd[ys][:, xs]
+        oy, ox = (h - D) // 2, (w - D) // 2
+        yy, xx = np.mgrid[0:D, 0:D]
+        rr = np.sqrt((xx - D / 2 + 0.5) ** 2 + (yy - D / 2 + 0.5) ** 2) / (D * 0.47)
+        inside = rr < 1.0
+        slit = inside & (dd[..., 3] < 0.5)  # the gap between the lids where the decal is cut out
+        # judge round: at 10 m the seam must still read, so thicken it into a bold dark line across
+        # (a slit, never a dark disc, which reads as sunglasses)
+        sy = np.abs(yy - D / 2 + 0.5)
+        sx = np.abs(xx - D / 2 + 0.5)
+        taper = np.clip(1 - (sx / (D * 0.34)) ** 2, 0, 1)
+        slit |= (sy - 0.9 * np.sin(xx * 0.21) < 0.8 + 2.4 * taper + 0.5 * np.sin(xx * 0.9)) & (taper > 0)
+        for _ in range(1):
+            slit = slit | np.roll(slit, 1, 0) & inside
+        rgb = dd[..., :3].copy()
+        # match the decal's skin to the head's skin, then shade it darker toward the seam (sunken)
+        sel = inside & ~slit
+        rgb = rgb / rgb[sel].mean(0) * base.reshape(-1, 3).mean(0) * 0.97
+        rgb *= (0.78 + 0.22 * np.clip(rr, 0, 1))[..., None]
+        rgb[slit] = (0.16, 0.10, 0.09)
+        k = np.clip((1.0 - rr) / 0.45, 0, 1)[..., None] * inside[..., None]  # a wide fade: no disc edge
+        patch = out[oy:oy + D, ox:ox + D]
+        out[oy:oy + D, ox:ox + D] = patch * (1 - k) + rgb * k
+        put(REG["socket"], np.dstack([out, np.ones((h, w, 1), np.float32)]))
 
 
 def make_material(image):
@@ -1196,6 +1564,15 @@ def make_material(image):
     if "Specular IOR Level" in bsdf.inputs:
         bsdf.inputs["Specular IOR Level"].default_value = 0.15
     mat.use_backface_culling = False  # gown, sleeves and mask are open shells -> glTF doubleSided
+    # third pass: torn cloth is cut by the texture's alpha. A Math "Round" node between the alpha and
+    # the shader is what the glTF exporter reads as alpha test (alphaMode MASK, cutoff 0.5), which
+    # three.js draws as alphaTest, not as blended transparency.
+    rnd = nt.nodes.new("ShaderNodeMath")
+    rnd.operation = "ROUND"
+    nt.links.new(tex.outputs["Alpha"], rnd.inputs[0])
+    nt.links.new(rnd.outputs[0], bsdf.inputs["Alpha"])
+    if hasattr(mat, "surface_render_method"):
+        mat.surface_render_method = "DITHERED"
     return mat
 
 
@@ -1374,7 +1751,18 @@ def body_pose():
         "foot.L": [("x", -7), ("z", 24)], "foot.R": [("x", -6), ("z", -5)],
         "clavicle.L": [("y", -27)], "clavicle.R": [("y", 17)],
         "head": [("level",), ("y", -31), ("x", 7)],
+        # third pass: the cloth bones hang plumb whatever the body does; actions add swing on top
+        "skirt.F.L": [("level",)], "skirt.F.R": [("level",)], "skirt.B.L": [("level",)],
+        "skirt.B.R": [("level",)], "sleeve_rag.R": [("level",)],
     }
+
+
+def cloth(fl=0.0, fr=0.0, bl=0.0, br=0.0, side=0.0, rag=0.0, rag_side=0.0):
+    """Swing of the hem strips and the sleeve rag in degrees (world axes, since the bones are levelled):
+    + x swings the hanging cloth backward, + z (side) toward the figure's right."""
+    return {"skirt.F.L": [("x", fl), ("z", side)], "skirt.F.R": [("x", fr), ("z", side)],
+            "skirt.B.L": [("x", bl), ("z", side)], "skirt.B.R": [("x", br), ("z", side)],
+            "sleeve_rag.R": [("x", rag), ("z", rag_side)]}
 
 
 # Where the wrists rest when the hands are folded in front, waiting to be useful (unscaled metres).
@@ -1447,8 +1835,9 @@ def idle_keys():
     """4 s, in an attitude of service. The body breathes; the head does not move. The fingers of
     the upper hand close one at a time (stepped), and once the head snaps further over and holds."""
     def breath(a):
-        return {"spine1": [("x", -a * 0.5)], "spine2": [("x", -a * 0.8)],
-                "clavicle.L": [("y", a * 0.9)], "clavicle.R": [("y", -a * 0.9)]}
+        return merge({"spine1": [("x", -a * 0.5)], "spine2": [("x", -a * 0.8)],
+                      "clavicle.L": [("y", a * 0.9)], "clavicle.R": [("y", -a * 0.9)]},
+                     cloth(fl=a * 0.8, fr=-a * 0.5, bl=-a * 0.6, br=a * 0.4, rag=a * 1.5, rag_side=-a))
 
     def head(tilt=0.0, turn=0.0):
         return {"head": [("y", tilt), ("z", turn)]}
@@ -1492,7 +1881,13 @@ def walk_pose(p):
     sway = W["sway"] * math.cos(p)
     tw = W["twist"] * math.cos(p)
     arm_l = W["arm"] * math.cos(p - 0.9)  # arms swing late, like dead weight
-    return merge(base_pose("hang"), leg(".L", p), leg(".R", p + math.pi), {
+    # third pass: the hem strips follow the thighs late and loosely; the sleeve rag swings with the arm
+    th = lambda ph: -W["thigh"] * math.cos(ph)
+    cl = cloth(fl=0.55 * th(p - 0.9) + 3, fr=0.55 * th(p + math.pi - 0.9) + 3,
+               bl=0.35 * th(p - 1.3) + 2, br=0.35 * th(p + math.pi - 1.3) + 2,
+               side=4.0 * math.sin(p - 0.8), rag=-14 * math.cos(p - 1.6 - math.pi) + 4,
+               rag_side=5 * math.sin(p - 1.2))
+    return merge(base_pose("hang"), leg(".L", p), leg(".R", p + math.pi), cl, {
         "hips": [("t", (0, 0, drop)), ("y", -sway), ("z", tw)],
         "spine": [("y", sway * 0.6), ("z", -tw * 0.5)],
         "spine1": [("x", W["lurch"] * load), ("z", -tw * 0.4)],
@@ -1527,7 +1922,8 @@ def reach_keys():
             "clavicle" + R: [("x", pitch * 0.08)],
             "forearm" + R: [("x", -24 * op), ("s", (1, stch, 1))],
             "hand" + R: [("x", 8 * op), ("s", (1, 1 / stch, 1))],
-            "spine2": [("x", bow)], "spine1": [("x", bow * 0.4)]})
+            "spine2": [("x", bow)], "spine1": [("x", bow * 0.4)]},
+            cloth(fl=-1.5 * (i % 2), br=1.0 * ((i + 1) % 2), rag=-3 * roll + 4 * (i % 2)))
         keys.append((1 + (i + 1) * st, spec))
     return keys
 
@@ -1545,7 +1941,7 @@ def duck_pose(f):
         "neck": [("x", -10 * e)],
         "upperarm.L": [("level",), ("x", -4 * e), ("y", 6 * e)],
         "upperarm.R": [("level",), ("x", -8 * e), ("y", -5 * e)],
-    })
+    }, cloth(fl=-16 * e, fr=-13 * e, bl=-4 * e, br=-4 * e, rag=-3 * e))
 
 
 def duck_keys():
@@ -1570,7 +1966,8 @@ def still_keys():
         "head": [("y", -6)],
         "upperarm.L": [("x", -22), ("y", 6)], "forearm.L": [("x", -70)], "hand.L": [("x", -24)],
         "upperarm.R": [("y", 3), ("x", -4)], "forearm.R": [("x", -8)]},
-        curl(".L", 55, spread=10), curl(".R", 12))
+        curl(".L", 55, spread=10), curl(".R", 12),
+        cloth(fl=-9, fr=6, bl=-3, br=4, side=-2, rag=5))  # caught mid-step: the strips still swinging
     return [(1, spec), (2, spec)]
 
 
@@ -1580,6 +1977,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(ROOT, "public", "assets", "entities", "orderly.glb"))
     ap.add_argument("--blend", default="")
+    ap.add_argument("--atlas", default="", help="also save the atlas PNG here, for review")
     args = ap.parse_args(argv)
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -1591,7 +1989,13 @@ def main():
     bt = bone_table()
     arm = build_armature(bt)
     ob = build_mesh(mb, arm, bt)
-    ob.data.materials.append(make_material(make_atlas()))
+    atlas = make_atlas()
+    if args.atlas:
+        cp = atlas.copy()
+        cp.filepath_raw = args.atlas
+        cp.file_format = "PNG"
+        cp.save()
+    ob.data.materials.append(make_material(atlas))
     for sfx in (".L", ".R"):
         CLASP.update(solve_arm(arm, body_pose(), sfx, CLASP_TARGET[sfx], ELBOW_OUT))
 

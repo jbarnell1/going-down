@@ -1,0 +1,96 @@
+{
+ "file": "assets_src/blender/orderly/orderly.pass2.glb",
+ "bytes": 1099684,
+ "joints": [
+  "hips",
+  "spine",
+  "spine1",
+  "spine2",
+  "clavicle.L",
+  "upperarm.L",
+  "forearm.L",
+  "hand.L",
+  "index1.L",
+  "index2.L",
+  "index3.L",
+  "middle1.L",
+  "middle2.L",
+  "middle3.L",
+  "ring1.L",
+  "ring2.L",
+  "thumb.L",
+  "clavicle.R",
+  "upperarm.R",
+  "forearm.R",
+  "hand.R",
+  "index1.R",
+  "index2.R",
+  "index3.R",
+  "middle1.R",
+  "middle2.R",
+  "middle3.R",
+  "ring1.R",
+  "ring2.R",
+  "thumb.R",
+  "neck",
+  "neck1",
+  "head",
+  "thigh.L",
+  "shin.L",
+  "foot.L",
+  "thigh.R",
+  "shin.R",
+  "foot.R"
+ ],
+ "jointCount": 39,
+ "anims": [
+  {
+   "name": "duck",
+   "seconds": 2.5
+  },
+  {
+   "name": "idle",
+   "seconds": 4
+  },
+  {
+   "name": "reach",
+   "seconds": 1.375
+  },
+  {
+   "name": "still",
+   "seconds": 0.0417
+  },
+  {
+   "name": "walk",
+   "seconds": 2
+  }
+ ],
+ "roots": [
+  {
+   "name": "Orderly_Rig"
+  }
+ ],
+ "tris": 7380,
+ "mats": [
+  {
+   "name": "Orderly_mat",
+   "alphaMode": "OPAQUE",
+   "doubleSided": true
+  }
+ ],
+ "images": [
+  {
+   "name": "Orderly_atlas",
+   "mime": "image/png",
+   "width": 512,
+   "height": 512
+  }
+ ],
+ "samplers": [
+  {
+   "magFilter": 9728,
+   "minFilter": 9984
+  }
+ ],
+ "footL": true
+}

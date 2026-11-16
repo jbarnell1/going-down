@@ -18,7 +18,8 @@
     "e2e:update": "playwright test tests/e2e/visual.spec.ts --update-snapshots"
   },
   "dependencies": {
-    "three": "0.187.0"
+    "three": "0.187.0",
+    "trystero": "0.27.0"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",

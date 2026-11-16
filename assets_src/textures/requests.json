@@ -1,0 +1,210 @@
+{
+ "model": "gemini-3.1-flash-image",
+ "model_choice": "Chosen 2026-11-16 from GET /v1beta/models, which listed gemini-2.5-flash-image, gemini-3-pro-image(-preview), nano-banana-pro-preview, gemini-3.1-flash-image(-preview) and gemini-3.1-flash-lite-image. gemini-3.1-flash-image is the newest generally available (non-preview) Flash image model, matching the 'current image model' on the price guide; the Pro models cost several times more and Lite trades away quality. The price was checked against the first response's usage metadata (see README).",
+ "budget": {
+  "task_usd": 3,
+  "max_images": 60,
+  "est_usd_per_image": {
+   "1K": 0.04,
+   "2K": 0.06
+  },
+  "price_note": "Google's pricing page, read 2026-11-15: about $0.034 per 1K image and $0.050 per 2K image, no free tier. The ledger charges $0.04 per 1K image to stay on the safe side."
+ },
+ "style": "Game texture, 1990s. A flat, evenly lit material photographed straight on, filling the whole frame edge to edge: no perspective, no vignette, no cast shadows, no light falloff, no border or frame, no text or letters unless asked. Institutional and worn. Muted hospital palette: washed greens, off-whites, nicotine yellow, dried brown.",
+ "tile_clause": "It must be a seamless repeating texture: an even, uniform surface with the same density of detail everywhere and nothing centred.",
+ "alpha_clause": "The background, and every hole or gap, is a perfectly flat solid {KEY} with no texture, no shading and no shadow, so it can be cut out.",
+ "requests": [
+  {
+   "id": "orderly_gown_cloth",
+   "purpose": "Orderly: gown cloth, tiled across the gown",
+   "tile": true,
+   "size": 256,
+   "prompt": "Worn cotton hospital gown fabric seen flat and close up. Washed-out pale blue-green cloth printed with a small repeating pattern of little plus-shaped crosses in a darker grey-blue, on an even staggered grid, about twelve crosses across the frame. The cloth is old: faded, pilled, the weave faintly visible, with blotchy dried stains in yellow-grey and brown scattered unevenly, a few darker grime streaks.",
+   "palette": "washed blue-green #a3b6b0, cross print #6d8691, stains nicotine yellow #b5a46c and dried brown #6b5a3e",
+   "post": {
+    "tile_method": "none"
+   }
+  },
+  {
+   "id": "orderly_gown_torn",
+   "purpose": "Orderly: torn gown cloth with alpha for holes, frayed edges and hanging strips",
+   "size": 256,
+   "alpha_key": "#FF00FF",
+   "alpha_key_name": "pure magenta (#FF00FF)",
+   "prompt": "A rectangle of the same worn pale blue-green hospital gown cloth with the small grey-blue cross print, badly torn. The lower half is ripped upward into ragged vertical strips of very different lengths hanging down, with frayed thread ends. Higher up there are four or five irregular torn holes of different sizes with frayed, darkened edges. The cloth is darker and stained yellow-brown and grey near every tear.",
+   "palette": "washed blue-green #a3b6b0, cross print #6d8691, stains #b5a46c and #6b5a3e",
+   "post": {
+    "key_fuzz": 28
+   }
+  },
+  {
+   "id": "orderly_skin",
+   "purpose": "Orderly: mottled waxy skin, tiled on the body",
+   "tile": true,
+   "size": 256,
+   "prompt": "Close-up of mottled, waxy, unhealthy pale human skin: sallow yellow-grey with faint blue-grey and purple veins branching under the surface, patchy blotches, fine pores, a few small bruises. Corpse-like but even across the frame.",
+   "palette": "sallow #cfc39f, shadow #a99c82, vein blue-grey #8d97a6, bruise #9a7f80",
+   "post": {}
+  },
+  {
+   "id": "orderly_eyelid",
+   "purpose": "Orderly: sewn-shut eyelid decal on the sunken sockets",
+   "size": 128,
+   "alpha_key": "#00FF00",
+   "alpha_key_name": "pure bright green (#00FF00)",
+   "prompt": "A single human eye that has been sewn shut, seen straight on, centred and filling most of the frame. The two lids are pulled together into one puckered seam, the skin around it sunken, wrinkled and bruised purple-grey and sallow yellow. Five thick, dark brown-black surgical threads cross the seam as crude stitches, pulling the skin into puckered folds, thread ends sticking out. The patch of skin is an oval with a ragged edge; outside it is background.",
+   "palette": "sallow skin #cdbf9c, bruise #8c6f72, thread #241a16",
+   "post": {
+    "key_fuzz": 30
+   }
+  },
+  {
+   "id": "orderly_mask",
+   "purpose": "Orderly: surgical mask panel (the smile is painted on by code)",
+   "size": 256,
+   "prompt": "A pleated paper surgical mask panel laid flat and seen straight on, filling the frame edge to edge: pale blue-green non-woven paper with three horizontal pleats, a stitched hem along the top and bottom edges and a stiff nose wire strip along the top. Old and stained: a damp yellow patch in the lower middle, brownish smudges and grime in the folds. Plain: no print, no mouth, no smile, no face, no ear loops.",
+   "palette": "paper #a8c3cf, pleat shadow #7f9aa8, damp yellow #c4b77a, grime #7b6a52",
+   "post": {}
+  },
+  {
+   "id": "wall_paint",
+   "purpose": "Building: clinic wall paint (tiles horizontally; the stripe sits at a fixed height)",
+   "tile": "x",
+   "size": 256,
+   "prompt": "Painted plaster clinic corridor wall in dead-flat matte pale washed green paint, no shine, no highlight, no reflection, evenly lit. Scuffs, grey rubber marks and small chips showing off-white plaster scattered irregularly over the whole surface, every one different. A faded darker green painted stripe, a little worn, runs perfectly straight and level across the whole width; its centre is 30 percent of the height up from the bottom edge.",
+   "palette": "wall #d3dcd5, stripe #6f9580, scuffs #8e8f84",
+   "post": {},
+   "rejected": [
+    {
+     "hash": "ca0e34ca3ac83ed3",
+     "why": "glossy hotspot at the top (lighting the style block forbids) and the scuffs repeat as a mirrored 2x2 inside the frame"
+    }
+   ]
+  },
+  {
+   "id": "floor_tile",
+   "purpose": "Building: cracked off-white floor tile",
+   "tile": true,
+   "size": 128,
+   "prompt": "Square off-white floor tiles seen from straight above, exactly four by four tiles filling the frame, with dirty grey-brown grout lines, hairline cracks across some tiles, yellowed wax build-up and scuffs.",
+   "palette": "tile #e3e2d8, grout #8a8270, wax #cfc49c",
+   "post": {}
+  },
+  {
+   "id": "ceiling_tile",
+   "purpose": "Building: stained suspended-ceiling tile",
+   "tile": true,
+   "size": 128,
+   "prompt": "One suspended acoustic ceiling tile filling the whole frame, seen straight up: off-white mineral fibre with a pinhole and fissure pattern, a large brown water-stain ring off to one side and patches of yellow nicotine discolouration. No metal grid bars.",
+   "palette": "tile #d9d6c8, stain #9b7f55, nicotine #c8b47a",
+   "post": {},
+   "rejected": [
+    {
+     "hash": "7a168e90e7a37178",
+     "why": "second try: the stains came out as round coffee rings that repeat like polka dots once tiled; the first, plainer try is kept and big stains are left to decals"
+    },
+    {
+     "hash": "85857e91baf83bad",
+     "why": "first try was KEPT in the end, though it has no ring stain and only faint yellowing"
+    }
+   ]
+  },
+  {
+   "id": "decal_rust_stain",
+   "purpose": "Building: rust-and-water stain decal",
+   "size": 256,
+   "prompt": "A rust and water stain shape on its own, like a stain printed on paper: a dark brown-orange rusty blotch at the top with opaque dirty brown water streaks dripping straight down from it, darker tide-mark rings, the streaks ending at different lengths.",
+   "palette": "rust #8a5a32, water mark #a8946a",
+   "post": {
+    "white_cut": 12
+   },
+   "rejected": [
+    {
+     "hash": "c2657ecd461e5673",
+     "why": "painted a whole pale-green wall behind the stain and kept magenta only as a thin border, so nothing could be cut out"
+    },
+    {
+     "hash": "1439e651863569a9",
+     "why": "second try: painted the wall again and put magenta only inside the drips"
+    }
+   ],
+   "alpha_from_white": true
+  },
+  {
+   "id": "decal_handprint",
+   "purpose": "Building: smeared handprint decal",
+   "size": 128,
+   "prompt": "One smeared human handprint in dark dried brown-red grime on its own, like a print on paper: fingers pointing up, the palm dragged downward into a smear.",
+   "palette": "dried #5e3426, smear #7c4a33",
+   "post": {
+    "white_cut": 14
+   },
+   "alpha_from_white": true
+  },
+  {
+   "id": "sign_ward4",
+   "purpose": "Building: sign WARD 4",
+   "size": [
+    256,
+    144
+   ],
+   "aspect": "16:9",
+   "prompt": "A flat institutional wall sign seen straight on and filling the whole frame: an off-white enamel plate with the words WARD 4 in large, plain, bold black sans-serif capital letters centred on it, slightly yellowed and scratched. Only the text WARD 4, nothing else written.",
+   "palette": "plate #e2dfd2, letters #1e1e1c",
+   "post": {
+    "dither": "none",
+    "colors": 16,
+    "keep_aspect": true
+   }
+  },
+  {
+   "id": "sign_quiet",
+   "purpose": "Building: sign QUIET PLEASE",
+   "size": [
+    256,
+    144
+   ],
+   "aspect": "16:9",
+   "prompt": "A flat institutional wall sign seen straight on and filling the whole frame: a faded green enamel plate with the words QUIET PLEASE in large, plain, bold off-white sans-serif capital letters on two lines, slightly scratched. Only the text QUIET PLEASE, nothing else written.",
+   "palette": "plate #4f7a62, letters #e6e4d8",
+   "post": {
+    "dither": "none",
+    "colors": 16,
+    "keep_aspect": true
+   }
+  },
+  {
+   "id": "sign_staff",
+   "purpose": "Building: sign STAFF ONLY",
+   "size": [
+    256,
+    144
+   ],
+   "aspect": "16:9",
+   "prompt": "A flat institutional door sign seen straight on and filling the whole frame: a dull red enamel plate with the words STAFF ONLY in large, plain, bold white sans-serif capital letters, chipped at the corners. Only the text STAFF ONLY, nothing else written.",
+   "palette": "plate #8e3a31, letters #ece8dc",
+   "post": {
+    "dither": "none",
+    "colors": 16,
+    "keep_aspect": true
+   }
+  },
+  {
+   "id": "sign_wash",
+   "purpose": "Building: sign WASH YOUR HANDS",
+   "size": [
+    256,
+    144
+   ],
+   "aspect": "16:9",
+   "prompt": "A flat institutional wall sign seen straight on and filling the whole frame: an off-white enamel plate with a dark blue border and the words WASH YOUR HANDS in large, plain, bold dark blue sans-serif capital letters on two lines, yellowed with age. Only the text WASH YOUR HANDS, nothing else written.",
+   "palette": "plate #e2dfd2, letters and border #26375c",
+   "post": {
+    "dither": "none",
+    "colors": 16,
+    "keep_aspect": true
+   }
+  }
+ ],
+ "alpha_white_clause": "It is drawn on a plain, pure white background (#FFFFFF) with nothing else on it: no wall, no surface, no texture, no shadow, no border."
+}

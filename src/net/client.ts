@@ -104,6 +104,14 @@ interface KnownBlink {
   announced: boolean;
 }
 
+/** Per-client tuning. The host's own player, on a perfect in-page link, uses tighter values. */
+export interface ClientOptions {
+  /** How far behind the newest snapshot to draw, seconds (default INTERP_DELAY). */
+  interpDelay?: number;
+  /** Seconds between inputs (default INPUT_INTERVAL; 0 sends one every frame). */
+  inputInterval?: number;
+}
+
 const LAG_WINDOW = 60;
 const SNAP_KEEP = 3;
 
@@ -150,13 +158,18 @@ export class NetClient {
   private pendingPlace: Placement | null = null;
   private readonly blinks = new Map<number, KnownBlink>();
   private lastJoin = -Infinity;
+  private readonly interpDelay: number;
+  private readonly inputInterval: number;
 
   constructor(
     private readonly transport: Transport,
     readonly hostId: PeerId,
     readonly name: string,
     now: number,
+    opts: ClientOptions = {},
   ) {
+    this.interpDelay = opts.interpDelay ?? INTERP_DELAY;
+    this.inputInterval = opts.inputInterval ?? INPUT_INTERVAL;
     this.sendJoin(now);
   }
 
@@ -281,7 +294,7 @@ export class NetClient {
     if (this.lags.length === 0) return this.rt;
     let lag = Infinity;
     for (const l of this.lags) lag = Math.min(lag, l);
-    const target = now - lag - INTERP_DELAY;
+    const target = now - lag - this.interpDelay;
     if (this.rt === null) {
       this.rt = target;
     } else {
@@ -427,7 +440,7 @@ export class NetClient {
     }
 
     // The input: every INPUT_INTERVAL, and at once on a new sighting.
-    if (report || now - this.lastSend >= INPUT_INTERVAL - 1e-9) this.send(now, cam, local, rt);
+    if (report || now - this.lastSend >= this.inputInterval - 1e-9) this.send(now, cam, local, rt);
     return { dark: dk.dark, orderly, held: this.frozen, seeing: seeingNow, depth: show?.a.depth ?? this.localDepth, players, renderTime: rt, placed };
   }
 

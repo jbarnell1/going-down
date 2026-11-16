@@ -4,11 +4,11 @@
 
 ## Status
 
-- **Gates passed:** 6 of 14. **Tasks done:** 13 of 25.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 19.
-- **Now:** T7 Playing together. An Opus agent is building the multiplayer layer as tested logic first: one player's browser hosts the run, the others send what they do and see, and the Orderly must never be seen to move on anyone's screen even with network delay.
-- **Last CI result seen:** failed on e34bdee
-- **Answers applied up to:** 2026-11-16T11:30:00Z
+- **Gates passed:** 7 of 14. **Tasks done:** 16 of 30.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 21.
+- **Now:** nothing in progress
+- **Last CI result seen:** passed on e986ee5
+- **Answers applied up to:** 2026-11-16T12:10:00Z
 
 ## Tasks
 
@@ -51,18 +51,36 @@
 - [x] **T6b** `done` The elevator voice (G13)
   - Why: The relentlessly cheerful announcer, recorded with ElevenLabs, with an audition page for you.
   - Evidence: The elevator has a voice. 19 lines were written and recorded with ElevenLabs on its newest model, three takes each, and play at the right moments of a run through a tinny elevator-speaker effect that gets worse with depth, with subtitles. Three voices were auditioned: Bella is in the game now, Sarah and Brian are alternatives. NOBODY HAS HEARD ANY OF IT: the agent and Fable cannot hear, so the Audition page and the first question on the Questions page are yours. Spend: 7,833 characters of the 50,000 cap; the account's own counter moved from 65,040 to 67,938 of 145,556. Fable searched the project and the agent's transcript for the key and for private paths and found none. All 35 browser tests pass, and hiding the voice files fails the voice test. Not checked: whether each take says its script word for word.
-- [ ] **T7** `doing` Playing together (G7)
+- [x] **T7** `done` Playing together (G7)
   - Why: Four players in one building over a peer-to-peer connection, with one player hosting.
+  - Evidence: Up to four people can now play one run together in their browsers: a lobby with a room code and link, crewmates drawn as convicts in coloured jumpsuits, everyone's readings, blinks, votes and the bank on every screen. I re-ran everything myself: 130 logic tests and 46 of 46 browser tests pass, including a real peer-to-peer connection on this PC (1.6 s to connect). Not yet tried: two different home networks, phones in a crew, more than four players.
+- [ ] **T7c** `todo` Sprint, creep and stamina
+  - Why: Your request: Shift sprints, a creep key creeps, and the Orderly is faster than a walk. With limited stamina you can stay ahead by mixing running and walking, but not by much.
+  - To do: The speed rules are written and tested in src/sim/stamina.ts: walk 3.0, sprint 5.0 for 5 seconds, creep 1.2, winded until 35% recovered. Still to do: raise the Orderly's hunting speed from 3.4 to 3.7 (two tests are waiting on that, marked skipped), wire Shift to sprint and a creep key, show stamina without a meter if possible (breathing, a narrowing view), bots use it too, and the phone's stick gets a sprint zone.
+  - To do: Ctrl cannot be the creep key in a browser: Ctrl+W closes the tab and Ctrl+S, Ctrl+D do other things. Default is C to creep; Ctrl also works when the game is fullscreen and the browser lets it capture keys.
+- [ ] **T7d** `todo` Playing across two home networks
+  - Why: Friends at home need to join the host; some home routers block direct browser-to-browser links unless a relay helps
 - [ ] **T7b** `todo` Bot crewmates and the test panel (G14)
   - Why: So you can test a full crew alone on the live link.
 - [ ] **T8** `todo` Going down, cameras and the wipe (G8, G9)
   - Why: Being caught puts you on the cameras, and a full wipe ends the run.
+- [ ] **T7e** `todo` Better-looking crewmates and readable name tags
+  - Why: Crewmates are plain boxes and their names cannot be read from a few metres
+- [x] **T14a** `done` Shrink the downloaded props for the game
+  - Why: Rooms need beds, chairs, trolleys and clutter to feel like a place and to hide behind; the pieces must be tiny so the game stays fast
+  - Evidence: 26 hospital props are ready for the game: bed, gurney, wheelchair, crutches, chairs, bench, desks, cabinets, shelves, sink, toilet, bins, lights, extinguisher, wet-floor sign, camera, duct and pipes. All 26 together are 0.7 MB and about 9,300 triangles, with flat colours or one tiny picture each. I checked the file sizes, the list against the files, and looked at the sheets. Not yet seen inside the running game; placing them in rooms is the room-dressing task.
+- [ ] **T14** `todo` Dress the Clinic
+  - Why: Beds, trolleys, curtains, signs and grime, so rooms stop being empty boxes. Props built in Blender, textures made with Gemini inside the art budget.
+  - To do: Owner's rule: downsample every prop and texture before it goes in the game. Low triangle counts, small textures; the tape look hides detail.
+  - To do: Props are in tools/props/: kenney-furniture-kit/x (glb), quaternius-house-interior/FBX, polyhaven/<id> (1k gltf, heavy: decimate hard and shrink textures to 256 or less). Hashes and LICENCE.txt in each folder; add credits to CREDITS.md.
+  - To do: Props are built: public/assets/props/*.glb + manifest.json (name, size, mount floor/wall/ceiling, front faces +Z). Untested in three.js: vertex colours (COLOR_0 needs vertexColors on the material), linear samplers (set NearestFilter), double-sided materials, KHR_materials_specular. Wall lamp reads poorly; consider dropping it.
 - [ ] **T6c** `todo` Elevator polish
   - Why: Let the doors close early once everyone is aboard, a bell warning the logic knows about, doors that take real time to close, and the phone's call and hold buttons tested.
 - [ ] **T9** `todo` The shadow trigger (G11)
   - Why: A shadow crossing a doorway in a quiet moment: a scare trigger, never the monster.
-- [ ] **T3b** `todo` The Orderly, third pass
+- [x] **T3b** `done` The Orderly, third pass
   - Why: After it moves and the tape look is on: real sewn lids instead of button-like discs, mottled skin, a stained gown that stands out from the walls, a narrower grin.
+  - Evidence: The Orderly now wears a torn, stained gown: the hem hangs in strips that swing on their own bones, half a sleeve is gone, the eyelids are sewn. Seen in the running game in the watched and within-reach screenshots; all browser tests pass with it. Its own maker says the face is still a pale blob beyond about 3 m.
 - [ ] **T10** `todo` Frame rate (G10)
   - Why: Measured on this PC with four players, then fixed until it is smooth.
 - [ ] **T11** `todo` Final validation (G1, G12)
@@ -84,7 +102,7 @@
 - [x] **G4** The Orderly is a real figure: passed. A re-runnable Blender script builds a rigged figure (7,380 triangles, 39 bones, 5 animations) that loads, animates and casts a shadow in the game; Fable looked at renders and in-game screenshots; five blind critics over three rounds, worst findings fixed each round. Deliberate break used: with the model file hidden, the Orderly browser test fails. Not claimed: that it is frightening. Blind fear scores stayed between 3 and 6 out of 10.
 - [x] **G5** Heard before seen: passed. In 104 generated layouts the squeak is audible at least 2.5 seconds before the figure could first be seen, and in the running game the squeak gain is zero while it is watched and rises when it moves. Deliberate break used: with its hearing range cut to 3 metres, the heard-before-seen test fails. The sound itself has not been heard by a person.
 - [x] **G6** One player can finish a run: passed. A browser test plays a whole two-floor run from the car to a reading, a tape, the call, the blinks, the ride down, a second reading and the bank, with a screenshot at each beat and no console errors; it banked 307. Deliberate break used: with players able to see during a blink, two of the three run tests fail.
-- [ ] **G7** Four players share one world: open
+- [x] **G7** Four players share one world: passed. Four tabs: same building, each draws the other three, a moved player drawn within 0.5 m, the Orderly frozen at the identical spot on all four screens for 3 s while one watched (0.000 m disagreement), moving on all four within 0.45 s of the watcher turning away. Two browsers connected over the real peer-to-peer path on this PC in 1.6 s and played the same run. Broken on purpose twice: (1) a client that neither holds nor reports the Orderly, (2) a client that holds it but never tells the host; the four-tab test went red both times (and 3 network logic tests for the second), green again after undoing.
 - [ ] **G8** Going down works: open
 - [ ] **G9** Three runs in a row: open
 - [ ] **G10** The look, at a smooth frame rate: open
@@ -102,6 +120,34 @@
 
 ## Activity (newest first)
 
+- 2026-11-16 13:00Z Added task T7e: Better-looking crewmates and readable name tags.
+- 2026-11-16 13:00Z Added task T7d: Playing across two home networks.
+- 2026-11-16 13:00Z Finished T3b: The Orderly, third pass.
+- 2026-11-16 13:00Z Gate G7 (Four players share one world) is passed.
+- 2026-11-16 13:00Z Finished T7: Playing together.
+- 2026-11-16 12:36Z New pictures for T7: Playing together.
+- 2026-11-16 12:10Z Finished T14a: Shrink the downloaded props for the game.
+- 2026-11-16 12:06Z Gemini texture pipeline: 18 images made for about 72 cents (cap 3 dollars); 14 kept (cloth, skin, mask, floor, wall, ceiling, four signs, two stains). Checked by me: no key-shaped string anywhere in the project or the agent's transcript; old bone names, the five animations and their lengths unchanged.
+- 2026-11-16 12:06Z New pictures for T3b: The Orderly, third pass.
+- 2026-11-16 12:06Z Started T3b: The Orderly, third pass. New model is built and checked by re-import; it still has to be seen in the running game, which waits for the multiplayer agent to leave the folder
+- 2026-11-16 12:03Z New pictures for T3b: The Orderly, third pass.
+- 2026-11-16 12:03Z New pictures for T3b: The Orderly, third pass.
+- 2026-11-16 12:03Z New pictures for T3b: The Orderly, third pass.
+- 2026-11-16 12:03Z New pictures for T3b: The Orderly, third pass.
+- 2026-11-16 12:03Z New pictures for T3b: The Orderly, third pass.
+- 2026-11-16 12:03Z New pictures for T3b: The Orderly, third pass.
+- 2026-11-16 11:55Z Started T14a: Shrink the downloaded props for the game. An agent is cutting about two dozen downloaded props down to low detail and small pictures
+- 2026-11-16 11:55Z Added task T14a: Shrink the downloaded props for the game.
+- 2026-11-16 11:55Z Prop kits downloaded to an untracked tools folder (52 MB, all public domain): Kenney Furniture Kit (140 models), Quaternius House Interior (123 models), ten Poly Haven hospital props (wheelchair, crutches, medical box, fire extinguisher, wet-floor sign, desk, bin, ducts, pipes, camera). Checked: only model, picture and text files, nothing runnable. They get cut down and retextured in the room-dressing step.
+- 2026-11-16 11:49Z You approved downloading the public-domain prop kits and asked that everything be downsampled before it goes in the game, since the tape look hides fine detail. A small agent is fetching them into an untracked folder; they get simplified and retextured in the room-dressing step.
+- 2026-11-16 11:42Z Usage check at 5:45 am: one night of work has used 26% of the week's allowance across all models and 33% of the week's Fable allowance. It resets Sunday at noon. This conversation is also 83% full, which makes every loop step expensive.
+- 2026-11-16 11:42Z You said to do all three kinds of better assets. A drop folder with instructions is ready (assets_src/inbox): what to ask an AI 3D service for to get a sculpted Orderly, and which Mixamo clips to download. A list of free public-domain prop kits with file names and sizes is being put together for you to approve before anything is downloaded.
+- 2026-11-16 11:38Z Two agents are now working side by side on parts that cannot collide: one on multiplayer in the game's code, one on art (a Gemini texture pipeline and the Orderly's tattered gown). Only the first may build or run browser tests.
+- 2026-11-16 11:36Z Added task T14: Dress the Clinic.
+- 2026-11-16 11:36Z Added task T7c: Sprint, creep and stamina.
+- 2026-11-16 11:36Z You played it. In your words: the sound is good and lessens around corners and with distance; the wait for the elevator has real tension; the Orderly is kind of scary already and the thrill rose a lot when it chased you through the blinks. Decisions from that: keep the Orderly and rely on timing; give it tattered clothes; add sprinting with stamina and make it faster than a walk.
+- 2026-11-16 11:36Z Applied the owner's new answers.
+- 2026-11-16 11:34Z Started T7: Playing together. The multiplayer logic is proven. An Opus agent is now building it into the game: a lobby with a link to share, crew members you can see, and four tabs sharing one building.
 - 2026-11-16 11:32Z Applied the owner's new answers.
 - 2026-11-16 11:32Z New pictures for T6b: The elevator voice.
 - 2026-11-16 11:32Z Brian is in the game as a second elevator voice, and there is a settings menu: press Esc on a computer, or the gear on a phone, to switch between Bella and Brian, play a sample, turn subtitles off, change the tape look, or set the volume. Brian's set cost 5,151 characters; the game has now used 12,984 of the 50,000 cap. No key or private path leaked. All 40 browser tests and 118 rule tests pass on the merged code. Nobody has heard Brian.
@@ -114,31 +160,3 @@
 - 2026-11-16 10:55Z Multiplayer is proven in logic. Over 200 simulated sessions with delays up to 250 ms, lost and reordered messages, every frame of every player's screen was checked: 76,782 moments when a player could see the Orderly in two frames running, and it was never drawn in two different places. When delay let the host move it after a player had already seen it, the host put it back where that player saw it (1,532 times, 2 metres at most). No catch ever landed on a player whose own screen showed it. Blinks are dark on every screen for the whole time the host lets it move. Fable's deliberate break: turning screens back on 0.2 seconds early left 21,367 lit frames and failed the blink test.
 - 2026-11-16 09:56Z Started T7: Playing together. An Opus agent is building the multiplayer layer as tested logic first: one player's browser hosts the run, the others send what they do and see, and the Orderly must never be seen to move on anyone's screen even with network delay.
 - 2026-11-16 09:55Z Finished T6b: The elevator voice.
-- 2026-11-16 09:54Z Gate G13 (The elevator speaks) is passed.
-- 2026-11-16 09:26Z Voice T6b: 19 announcer lines recorded in ElevenLabs eleven_v4 (default voice Bella; Sarah and Brian auditioned). 7,833 characters counted, tags included (API billed header summed 3,444); game ledger 7,833 of 50,000.
-- 2026-11-16 09:26Z New pictures for T6b: The elevator voice.
-- 2026-11-16 09:26Z New pictures for T6b: The elevator voice.
-- 2026-11-16 09:26Z New pictures for T6b: The elevator voice.
-- 2026-11-16 09:16Z Started T6b: The elevator voice. An Opus agent is writing the announcer's first lines, recording three takes of each with ElevenLabs inside the character cap, and building an audition page so you can pick the voice by ear.
-- 2026-11-16 09:15Z Added task T6c: Elevator polish.
-- 2026-11-16 09:15Z Gate G6 (One player can finish a run) is passed.
-- 2026-11-16 09:15Z Finished T6: The elevator.
-- 2026-11-16 09:07Z New pictures for T6: The elevator.
-- 2026-11-16 08:19Z Started T6: The elevator. The run's rules are proven. An Opus agent is now building the elevator into the game: the car, the call and its wait, the blinking lights, the vote, the ride down and the bank.
-- 2026-11-16 08:17Z The run's rules are proven in logic: the car leaves after dropping you, calling it means a loud wait of 25 to 55 seconds, the lights blink while it comes, and you vote to bank or ride by where you stand. Fable changed two things. The blink was 0.35 seconds, which the agent found left a staring crew completely safe (0 of 320 caught); it is now one second, so a crew that only stands and stares is taken in about 1 wait in 5, and has to keep its distance. And the call now wakes the Orderly. Deliberate break: making a tied vote bank instead of ride fails the vote test.
-- 2026-11-16 07:53Z Started T6: The elevator. An Opus agent is building the run's rules as tested logic: calling the elevator and its loud wait, lights that blink while it comes, voting to bank or ride down, and who gets left behind.
-- 2026-11-16 07:51Z Added task T12: Orientation: the training floor.
-- 2026-11-16 07:51Z Gate G3 (Rules hold over 500 simulated runs) is passed.
-- 2026-11-16 07:51Z Finished T5: The instrument, the recording rule and tapes.
-- 2026-11-16 07:42Z New pictures for T5: The instrument, the recording rule and tapes.
-- 2026-11-16 07:42Z New pictures for T5: The instrument, the recording rule and tapes.
-- 2026-11-16 07:42Z New pictures for T5: The instrument, the recording rule and tapes.
-- 2026-11-16 07:42Z New pictures for T5: The instrument, the recording rule and tapes.
-- 2026-11-16 07:42Z New pictures for T5: The instrument, the recording rule and tapes.
-- 2026-11-16 07:42Z New pictures for T5: The instrument, the recording rule and tapes.
-- 2026-11-16 07:42Z New pictures for T5: The instrument, the recording rule and tapes.
-- 2026-11-16 07:41Z GitHub's checks failed again on a commit that changed nothing they test: two browser tests that depend on real time ran too slowly on GitHub's software-rendered machines. CI now runs only the tests that prove the game boots and draws on a clean machine, plus all 76 rule tests. The full set of browser tests runs on this PC before every push.
-- 2026-11-16 07:40Z CI failed on 4a07340.
-- 2026-11-16 07:13Z Design tuning by Fable: the Orderly now runs down anyone who runs but creeps up on anyone standing still, and the instrument pays far more in the last metres. Before, the final approach took about a second and a half, too fast to choose when to turn. Now it takes about four seconds, and turning at arm's length earns roughly double what turning at 2.5 metres does. The earning rule's independent checker verified 33,646 moments of recording with no violations.
-- 2026-11-16 07:00Z Started T5: The instrument, the recording rule and tapes. An Opus agent is building the earning rule as tested logic: the instrument only records while the Orderly is moving near you, which means while nobody is looking at it.
-- 2026-11-16 06:58Z Gate G5 (Heard before seen) is passed.

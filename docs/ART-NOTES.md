@@ -144,3 +144,54 @@ before showing it.
 - **Pale sits in the room; dark reads at distance.** Lifting the tones made the figure belong to the
   bright corridor but cost contrast at 16 to 40 m. Get distance readability from silhouette (elbows
   out, a tilted head), not from darkness.
+
+## Third pass: Gemini textures and the torn gown (2026-11-16)
+
+Textures now come from `assets_src/textures/generate.mjs` (model `gemini-3.1-flash-image`, see the
+README there for the budget rule and the style block). 18 images, about $0.72 by the ledger.
+
+What the image model did well and badly:
+
+- **Good:** flat cloth with a regular print (the cross-print gown came out seamless on the first
+  try), torn cloth on a flat key colour (clean magenta holes and strips), a puckered sewn-shut eye,
+  a pleated mask without a face when told "no mouth, no smile, no face", floor tiles on an exact
+  4x4 grid, and plain signs: short text in capitals is spelled right and legible at 256 px.
+- **Lighting:** it added a glossy hotspot to "gloss paint" (fixed by asking for dead-flat matte).
+  Removing gradients afterwards by dividing by a blur made halos next to strong edges (the wall
+  stripe, tile grout), so that step is off by default: fix it in the prompt instead.
+- **Borders and surfaces:** asked for a stain on magenta it painted a whole wall and kept magenta
+  only as a thin frame, twice. "On a plain white background, like a print on paper" worked; alpha
+  is then taken from darkness.
+- **Placement and stains:** it ignored "stripe at 30% height" twice, and "nothing centred / even"
+  for tiling beats "a stain ring off to one side". It often tiles 2x2 inside one image by itself.
+- Keep alpha hard (keyed, then threshold) and fill the cut-out colour dark before shrinking, or the
+  edges go pink.
+
+What changed on the Orderly (same silhouette, posture, folded hands, cap, printed smile):
+
+1. **Torn gown.** Hem strips are separate pieces of geometry, 0.05 to 0.34 m long, cut into frayed
+   strips by the torn texture's alpha and carried partly by four new levelled bones (`skirt.F.L`,
+   `skirt.F.R`, `skirt.B.L`, `skirt.B.R`) that swing late after the thighs in `walk`, settle in
+   `duck` and breathe in `idle`. The right sleeve is torn off short with a frayed edge and one rag on
+   `sleeve_rag.R`. A rip runs up the right side from the hem to under the ribs, showing a new hip
+   crest and the ribs. Three hole patches use the torn texture's holes. The back ties are frayed into
+   threads, one torn short.
+2. **Separates from the walls.** The Gemini cloth is grimed, going dried yellow-grey toward the hem
+   and brown at the hem and along every tear. The first try (khaki all over) matched the skin and
+   made one beige blob: keep the gown cooler than the skin, dirty it from the bottom up.
+3. **Sewn lids.** The Gemini decal on 16-sided sockets that sink and fold toward one seam. Its skin
+   is matched to the head's skin and faded over a wide band, and the old raised rim is gone: an edge
+   of different colour or a ridge turns any socket back into a disc. A bold, tapered dark seam keeps
+   it readable at 10 m (a slit, never a dark disc).
+4. **Narrower grin.** Printed line 10.5 mm -> 5.8 mm, cheek ink 6.5 -> 4.0 mm half-width; the
+   Gemini mask's pleat shadows are softened so the printed line is the only hard dark line.
+
+Rules learned:
+
+16. **Cloth bones hang plumb.** Give cloth bones a `("level",)` op so they keep hanging whatever the
+    body does, then add the swing on top; they never need rework when a body pose changes.
+17. **Alpha-cut cloth needs the renderer's help.** The material exports as glTF MASK, double-sided;
+    any code that replaces materials must carry `alphaTest` over. Cut-away pixels are painted a deep
+    shadow colour so the cloth still reads as torn if it does not.
+18. **Judge through the tape.** `tape_look.mjs` brings every render down to 480 px, desaturates it
+    toward green-grey and adds blur and grain; judge the `tape_*.png` files, not the clean renders.

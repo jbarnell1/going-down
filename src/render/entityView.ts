@@ -90,6 +90,15 @@ export class EntityView {
     }
   }
 
+  /** Shows or hides the figure (it is on another floor, or there is nothing to draw yet). */
+  setVisible(on: boolean): void {
+    this.model.root.visible = on;
+    if (!on) {
+      this.drawn = null;
+      this.frozen = null;
+    }
+  }
+
   private apply(p: DrawnPose): void {
     this.drawn = p;
     this.model.place(p.x, p.y, p.z, p.yaw);

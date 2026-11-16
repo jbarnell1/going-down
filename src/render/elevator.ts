@@ -152,6 +152,7 @@ export interface ElevatorStatus {
   doors: number;
   indicator: string;
   vote: Side | null;
+  votes: { bank: number; down: number };
   callLit: boolean;
   holdLit: boolean;
 }
@@ -169,6 +170,8 @@ export class ElevatorView {
   private doorAmount = 0;
   private doorTarget = 0;
   private vote: Side | null = null;
+  /** Everyone's votes: how many stand on each half (the local player's included). */
+  private votes = { bank: 0, down: 0 };
   private callLit = false;
   private holdLit = false;
   private t = 0;
@@ -309,7 +312,13 @@ export class ElevatorView {
   }
 
   setVote(side: Side | null): void {
-    this.vote = side;
+    this.setVotes(side, side === 'bank' ? 1 : 0, side === 'down' ? 1 : 0);
+  }
+
+  /** The local player's vote (it pulses) and how many of the crew stand on each half (they glow). */
+  setVotes(mine: Side | null, bank: number, down: number): void {
+    this.vote = mine;
+    this.votes = { bank: Math.max(bank, mine === 'bank' ? 1 : 0), down: Math.max(down, mine === 'down' ? 1 : 0) };
   }
 
   setCallLit(on: boolean): void {
@@ -328,8 +337,9 @@ export class ElevatorView {
     else if (this.doorAmount > this.doorTarget) this.doorAmount = Math.max(this.doorTarget, this.doorAmount - step);
     this.placeDoors();
     const pulse = 0.5 + 0.5 * Math.sin(this.t * 7);
-    const glow = (side: Side): number => (this.vote === side ? VOTE_GLOW.on + (VOTE_GLOW.max - VOTE_GLOW.on) * pulse : VOTE_GLOW.rest);
-    const paint = (side: Side): number => (this.vote === null ? VOTE_PAINT.none : this.vote === side ? VOTE_PAINT.on : VOTE_PAINT.off);
+    const glow = (side: Side): number => (this.vote === side ? VOTE_GLOW.on + (VOTE_GLOW.max - VOTE_GLOW.on) * pulse : this.votes[side] > 0 ? VOTE_GLOW.on : VOTE_GLOW.rest);
+    const anyVote = this.votes.bank + this.votes.down > 0;
+    const paint = (side: Side): number => (!anyVote ? VOTE_PAINT.none : this.votes[side] > 0 ? VOTE_PAINT.on : VOTE_PAINT.off);
     this.bankMat.emissiveIntensity = glow('bank') * light;
     this.downMat.emissiveIntensity = glow('down') * light;
     this.bankMat.color.setScalar(paint('bank'));
@@ -340,7 +350,7 @@ export class ElevatorView {
   }
 
   status(): ElevatorStatus {
-    return { doors: this.doorAmount, indicator: this.indicator.shown, vote: this.vote, callLit: this.callLit, holdLit: this.holdLit };
+    return { doors: this.doorAmount, indicator: this.indicator.shown, vote: this.vote, votes: { ...this.votes }, callLit: this.callLit, holdLit: this.holdLit };
   }
 
   private placeDoors(): void {

@@ -1,0 +1,474 @@
+{
+ "about": "Clinic props. glTF, +Y up, metres, front faces +Z. mount: floor = origin at the centre of the footprint on the floor; wall = origin at the centre of the back face; ceiling = origin at the centre of the top face. size_m is the bounding box (x width, y height, z depth). Built by assets_src/blender/props/build_props.py; see CREDITS.md.",
+ "props": [
+  {
+   "name": "bed_hospital",
+   "file": "bed_hospital.glb",
+   "triangles": 334,
+   "size_m": [
+    1.114,
+    0.737,
+    2.05
+   ],
+   "mount": "floor",
+   "kit": "kenney",
+   "source": "bedSingle.glb",
+   "licence": "CC0 1.0 (Kenney, Furniture Kit)",
+   "textured": false,
+   "method": "as is, parts added by script",
+   "materials": 1,
+   "bytes": 25096
+  },
+  {
+   "name": "gurney",
+   "file": "gurney.glb",
+   "triangles": 406,
+   "size_m": [
+    0.733,
+    0.953,
+    1.95
+   ],
+   "mount": "floor",
+   "kit": "kenney",
+   "source": "bedSingle.glb",
+   "licence": "CC0 1.0 (Kenney, Furniture Kit)",
+   "textured": false,
+   "method": "as is, parts added by script",
+   "materials": 1,
+   "bytes": 30920
+  },
+  {
+   "name": "chair_waiting",
+   "file": "chair_waiting.glb",
+   "triangles": 284,
+   "size_m": [
+    0.462,
+    0.85,
+    0.425
+   ],
+   "mount": "floor",
+   "kit": "kenney",
+   "source": "chairModernFrameCushion.glb",
+   "licence": "CC0 1.0 (Kenney, Furniture Kit)",
+   "textured": false,
+   "method": "as is",
+   "materials": 1,
+   "bytes": 21576
+  },
+  {
+   "name": "chair_desk",
+   "file": "chair_desk.glb",
+   "triangles": 436,
+   "size_m": [
+    0.551,
+    1.0,
+    0.517
+   ],
+   "mount": "floor",
+   "kit": "kenney",
+   "source": "chairDesk.glb",
+   "licence": "CC0 1.0 (Kenney, Furniture Kit)",
+   "textured": false,
+   "method": "decimated",
+   "materials": 1,
+   "bytes": 34300
+  },
+  {
+   "name": "bench_waiting",
+   "file": "bench_waiting.glb",
+   "triangles": 194,
+   "size_m": [
+    1.5,
+    0.908,
+    0.395
+   ],
+   "mount": "floor",
+   "kit": "kenney",
+   "source": "benchCushion.glb",
+   "licence": "CC0 1.0 (Kenney, Furniture Kit)",
+   "textured": false,
+   "method": "as is",
+   "materials": 1,
+   "bytes": 12208
+  },
+  {
+   "name": "desk_reception",
+   "file": "desk_reception.glb",
+   "triangles": 249,
+   "size_m": [
+    1.8,
+    0.71,
+    1.8
+   ],
+   "mount": "floor",
+   "kit": "kenney",
+   "source": "deskCorner.glb",
+   "licence": "CC0 1.0 (Kenney, Furniture Kit)",
+   "textured": false,
+   "method": "as is",
+   "materials": 1,
+   "bytes": 16420
+  },
+  {
+   "name": "desk_office_metal",
+   "file": "desk_office_metal.glb",
+   "triangles": 678,
+   "size_m": [
+    1.5,
+    0.59,
+    0.711
+   ],
+   "mount": "floor",
+   "kit": "polyhaven",
+   "source": "metal_office_desk_1k.gltf",
+   "licence": "CC0 1.0 (Poly Haven)",
+   "textured": true,
+   "method": "decimated",
+   "materials": 1,
+   "bytes": 58100
+  },
+  {
+   "name": "side_table",
+   "file": "side_table.glb",
+   "triangles": 182,
+   "size_m": [
+    0.627,
+    0.62,
+    0.512
+   ],
+   "mount": "floor",
+   "kit": "kenney",
+   "source": "cabinetBedDrawer.glb",
+   "licence": "CC0 1.0 (Kenney, Furniture Kit)",
+   "textured": false,
+   "method": "as is",
+   "materials": 1,
+   "bytes": 12600
+  },
+  {
+   "name": "cabinet_tall",
+   "file": "cabinet_tall.glb",
+   "triangles": 292,
+   "size_m": [
+    0.894,
+    1.9,
+    0.559
+   ],
+   "mount": "floor",
+   "kit": "kenney",
+   "source": "bookcaseClosedDoors.glb",
+   "licence": "CC0 1.0 (Kenney, Furniture Kit)",
+   "textured": false,
+   "method": "as is",
+   "materials": 1,
+   "bytes": 19204
+  },
+  {
+   "name": "drawers_low",
+   "file": "drawers_low.glb",
+   "triangles": 334,
+   "size_m": [
+    1.147,
+    0.85,
+    0.459
+   ],
+   "mount": "floor",
+   "kit": "quaternius",
+   "source": "Drawer_4.fbx",
+   "licence": "CC0 1.0 (Quaternius, Ultimate House Interior Pack)",
+   "textured": false,
+   "method": "planar-dissolved",
+   "materials": 1,
+   "bytes": 32220
+  },
+  {
+   "name": "shelf_open",
+   "file": "shelf_open.glb",
+   "triangles": 120,
+   "size_m": [
+    0.454,
+    1.8,
+    0.307
+   ],
+   "mount": "floor",
+   "kit": "quaternius",
+   "source": "Shelf_2.fbx",
+   "licence": "CC0 1.0 (Quaternius, Ultimate House Interior Pack)",
+   "textured": false,
+   "method": "as is",
+   "materials": 1,
+   "bytes": 10628
+  },
+  {
+   "name": "shelf_records",
+   "file": "shelf_records.glb",
+   "triangles": 358,
+   "size_m": [
+    1.6,
+    1.58,
+    0.5
+   ],
+   "mount": "floor",
+   "kit": "kenney",
+   "source": "bookcaseClosedWide.glb",
+   "licence": "CC0 1.0 (Kenney, Furniture Kit)",
+   "textured": false,
+   "method": "as is",
+   "materials": 1,
+   "bytes": 23276
+  },
+  {
+   "name": "sink",
+   "file": "sink.glb",
+   "triangles": 316,
+   "size_m": [
+    0.546,
+    0.9,
+    0.466
+   ],
+   "mount": "floor",
+   "kit": "kenney",
+   "source": "bathroomSink.glb",
+   "licence": "CC0 1.0 (Kenney, Furniture Kit)",
+   "textured": false,
+   "method": "as is",
+   "materials": 1,
+   "bytes": 23800
+  },
+  {
+   "name": "toilet",
+   "file": "toilet.glb",
+   "triangles": 229,
+   "size_m": [
+    0.541,
+    0.78,
+    0.825
+   ],
+   "mount": "floor",
+   "kit": "kenney",
+   "source": "toilet.glb",
+   "licence": "CC0 1.0 (Kenney, Furniture Kit)",
+   "textured": false,
+   "method": "as is",
+   "materials": 1,
+   "bytes": 16720
+  },
+  {
+   "name": "bin_pedal",
+   "file": "bin_pedal.glb",
+   "triangles": 68,
+   "size_m": [
+    0.267,
+    0.55,
+    0.301
+   ],
+   "mount": "floor",
+   "kit": "kenney",
+   "source": "trashcan.glb",
+   "licence": "CC0 1.0 (Kenney, Furniture Kit)",
+   "textured": false,
+   "method": "as is",
+   "materials": 1,
+   "bytes": 6212
+  },
+  {
+   "name": "bin_metal",
+   "file": "bin_metal.glb",
+   "triangles": 484,
+   "size_m": [
+    0.536,
+    0.75,
+    0.462
+   ],
+   "mount": "floor",
+   "kit": "polyhaven",
+   "source": "metal_trash_can_1k.gltf",
+   "licence": "CC0 1.0 (Poly Haven)",
+   "textured": true,
+   "method": "decimated",
+   "materials": 1,
+   "bytes": 30968
+  },
+  {
+   "name": "light_ceiling",
+   "file": "light_ceiling.glb",
+   "triangles": 112,
+   "size_m": [
+    0.571,
+    0.138,
+    0.6
+   ],
+   "mount": "ceiling",
+   "kit": "quaternius",
+   "source": "Light_Ceiling6.fbx",
+   "licence": "CC0 1.0 (Quaternius, Ultimate House Interior Pack)",
+   "textured": false,
+   "method": "as is",
+   "materials": 1,
+   "bytes": 8428
+  },
+  {
+   "name": "lamp_wall",
+   "file": "lamp_wall.glb",
+   "triangles": 42,
+   "size_m": [
+    0.35,
+    0.143,
+    0.232
+   ],
+   "mount": "wall",
+   "kit": "kenney",
+   "source": "lampWall.glb",
+   "licence": "CC0 1.0 (Kenney, Furniture Kit)",
+   "textured": false,
+   "method": "as is",
+   "materials": 1,
+   "bytes": 4468
+  },
+  {
+   "name": "wheelchair",
+   "file": "wheelchair.glb",
+   "triangles": 924,
+   "size_m": [
+    0.717,
+    0.95,
+    0.928
+   ],
+   "mount": "floor",
+   "kit": "handbuilt",
+   "source": "wheelchair_01_1k.gltf",
+   "licence": "CC0 1.0 (built for this game; proportions from a Poly Haven CC0 scan)",
+   "textured": false,
+   "method": "hand-built",
+   "materials": 1,
+   "bytes": 67872
+  },
+  {
+   "name": "crutches",
+   "file": "crutches.glb",
+   "triangles": 485,
+   "size_m": [
+    0.323,
+    1.35,
+    0.17
+   ],
+   "mount": "floor",
+   "kit": "polyhaven",
+   "source": "vintage_crutches_01_1k.gltf",
+   "licence": "CC0 1.0 (Poly Haven)",
+   "textured": true,
+   "method": "decimated",
+   "materials": 1,
+   "bytes": 39236
+  },
+  {
+   "name": "medical_box",
+   "file": "medical_box.glb",
+   "triangles": 291,
+   "size_m": [
+    0.45,
+    0.083,
+    0.299
+   ],
+   "mount": "floor",
+   "kit": "polyhaven",
+   "source": "medical_box_1k.gltf",
+   "licence": "CC0 1.0 (Poly Haven)",
+   "textured": true,
+   "method": "decimated",
+   "materials": 1,
+   "bytes": 31328
+  },
+  {
+   "name": "fire_extinguisher",
+   "file": "fire_extinguisher.glb",
+   "triangles": 581,
+   "size_m": [
+    0.255,
+    0.6,
+    0.335
+   ],
+   "mount": "floor",
+   "kit": "polyhaven",
+   "source": "korean_fire_extinguisher_01_1k.gltf",
+   "licence": "CC0 1.0 (Poly Haven)",
+   "textured": true,
+   "method": "decimated",
+   "materials": 1,
+   "bytes": 42044
+  },
+  {
+   "name": "wet_floor_sign",
+   "file": "wet_floor_sign.glb",
+   "triangles": 228,
+   "size_m": [
+    0.3,
+    0.63,
+    0.359
+   ],
+   "mount": "floor",
+   "kit": "polyhaven",
+   "source": "WetFloorSign_01_1k.gltf",
+   "licence": "CC0 1.0 (Poly Haven)",
+   "textured": true,
+   "method": "as is",
+   "materials": 1,
+   "bytes": 15032
+  },
+  {
+   "name": "security_camera",
+   "file": "security_camera.glb",
+   "triangles": 484,
+   "size_m": [
+    0.121,
+    0.206,
+    0.4
+   ],
+   "mount": "wall",
+   "kit": "polyhaven",
+   "source": "security_camera_01_1k.gltf",
+   "licence": "CC0 1.0 (Poly Haven)",
+   "textured": true,
+   "method": "decimated",
+   "materials": 1,
+   "bytes": 36804
+  },
+  {
+   "name": "air_duct",
+   "file": "air_duct.glb",
+   "triangles": 581,
+   "size_m": [
+    1.8,
+    0.512,
+    0.663
+   ],
+   "mount": "ceiling",
+   "kit": "polyhaven",
+   "source": "modular_airduct_rectangular_01_1k.gltf",
+   "licence": "CC0 1.0 (Poly Haven)",
+   "textured": true,
+   "method": "decimated",
+   "materials": 1,
+   "bytes": 47472
+  },
+  {
+   "name": "pipe_run",
+   "file": "pipe_run.glb",
+   "triangles": 581,
+   "size_m": [
+    2.0,
+    0.532,
+    0.211
+   ],
+   "mount": "wall",
+   "kit": "polyhaven",
+   "source": "modular_industrial_pipes_01_1k.gltf",
+   "licence": "CC0 1.0 (Poly Haven)",
+   "textured": true,
+   "method": "decimated, parts added by script",
+   "materials": 1,
+   "bytes": 44276
+  }
+ ],
+ "total_bytes": 711208
+}

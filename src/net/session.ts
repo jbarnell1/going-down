@@ -131,6 +131,9 @@ export function cameraSees(plan: FloorPlan, cam: Camera, pose: Pose, doorsOpen: 
  * the least disturbed by jitter); its offset error is at most half that round trip, whatever the
  * asymmetry, because neither direction can take less than nothing. That bound is the guard.
  */
+/** A host clock that disagrees with the estimate by more than this (plus a round trip) has jumped. */
+export const CLOCK_JUMP = 0.5;
+
 export class HostClock {
   private readonly rtts: number[] = [];
   private readonly offsets: number[] = [];
@@ -141,8 +144,15 @@ export class HostClock {
   sample(t0: number, hold: number, hostSend: number, t3: number): void {
     const rtt = t3 - t0 - hold;
     if (!(rtt >= 0) || !(hold >= 0)) return;
+    // The host's clock jumped (its tab stalled, or a test skipped time): every older sample describes
+    // a clock that no longer exists, and the best of them would be trusted for a whole window.
+    const off = hostSend + rtt / 2 - t3;
+    if (this.ready && Math.abs(off - this.offset) > CLOCK_JUMP + this.rtt) {
+      this.rtts.length = 0;
+      this.offsets.length = 0;
+    }
     this.rtts.push(rtt);
-    this.offsets.push(hostSend + rtt / 2 - t3);
+    this.offsets.push(off);
     if (this.rtts.length > this.window) {
       this.rtts.shift();
       this.offsets.shift();

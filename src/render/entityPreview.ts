@@ -82,7 +82,8 @@ export class EntityPreview {
             map.generateMipmaps = false;
             map.needsUpdate = true;
           }
-          const out = new THREE.MeshLambertMaterial({ map, side: m.side });
+          // Keep the model's cut-out (glTF alpha MASK arrives as alphaTest).
+          const out = new THREE.MeshLambertMaterial({ map, side: m.side, alphaTest: m.alphaTest ?? 0 });
           m.dispose();
           return out;
         };

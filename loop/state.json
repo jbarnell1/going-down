@@ -3,15 +3,15 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
-  "iteration": 19,
-  "now": "T7",
-  "nowText": "An Opus agent is building the multiplayer layer as tested logic first: one player's browser hosts the run, the others send what they do and see, and the Orderly must never be seen to move on anyone's screen even with network delay.",
+  "iteration": 21,
+  "now": null,
+  "nowText": "",
   "ci": {
-    "status": "failed",
-    "commit": "e34bdee",
-    "at": "2026-11-16T11:22:13.464Z"
+    "status": "passed",
+    "commit": "e986ee5",
+    "at": "2026-11-16T11:55:11.291Z"
   },
-  "answersAppliedTo": "2026-11-16T11:30:00Z",
+  "answersAppliedTo": "2026-11-16T12:10:00Z",
   "tasks": [
     {
       "id": "T0",
@@ -699,11 +699,94 @@
       "id": "T7",
       "title": "Playing together",
       "why": "Four players in one building over a peer-to-peer connection, with one player hosting.",
-      "status": "doing",
+      "status": "done",
       "gates": [
         "G7"
       ],
-      "startedAt": "2026-11-16T09:56:42.985Z"
+      "startedAt": "2026-11-16T09:56:42.985Z",
+      "media": [
+        {
+          "src": "T7/20261116T123604-100-crew.png",
+          "caption": "Three crewmates seen from the fourth player's screen: each a boxy convict in a different jumpsuit colour with a number on the chest, standing in front of the elevator",
+          "kind": "image",
+          "at": "2026-11-16T12:36:04.952Z"
+        },
+        {
+          "src": "T7/20261116T123604-101-watched-by-one.png",
+          "caption": "The Orderly far down the corridor, held still because this one player is looking at it while the other three face away",
+          "kind": "image",
+          "at": "2026-11-16T12:36:04.953Z"
+        },
+        {
+          "src": "T7/20261116T123604-102-voting.png",
+          "caption": "Inside the elevator: three crewmates stand on the red DOWN half, the photographer stands on yellow BANK",
+          "kind": "image",
+          "at": "2026-11-16T12:36:04.955Z"
+        },
+        {
+          "src": "T7/20261116T123604-103-banked-crew.png",
+          "caption": "The end screen after a crew of four banked: the total, and each player's equal share by name",
+          "kind": "image",
+          "at": "2026-11-16T12:36:04.956Z"
+        },
+        {
+          "src": "T7/20261116T123604-106-lobby-phone-host.png",
+          "caption": "Starting a crew on a phone: the room code in large letters, the link with a copy button, your name, and GO DOWN",
+          "kind": "image",
+          "at": "2026-11-16T12:36:04.957Z"
+        },
+        {
+          "src": "T7/20261116T123604-107-lobby-phone-join.png",
+          "caption": "Opening a shared link on a phone: the code, your name, the crew so far, and JOIN",
+          "kind": "image",
+          "at": "2026-11-16T12:36:04.957Z"
+        },
+        {
+          "src": "T7/20261116T130014-100-crew.png",
+          "caption": "Three crewmates seen from the fourth player's screen, crew list top-left",
+          "kind": "image",
+          "at": "2026-11-16T13:00:14.646Z"
+        },
+        {
+          "src": "T7/20261116T130014-101-watched-by-one.png",
+          "caption": "One player watches the Orderly; it holds still on all four screens",
+          "kind": "image",
+          "at": "2026-11-16T13:00:14.647Z"
+        },
+        {
+          "src": "T7/20261116T130014-102-voting.png",
+          "caption": "Voting in the car: red half is DOWN, yellow half is BANK",
+          "kind": "image",
+          "at": "2026-11-16T13:00:14.649Z"
+        },
+        {
+          "src": "T7/20261116T130014-103-banked-crew.png",
+          "caption": "The crew banks its earnings",
+          "kind": "image",
+          "at": "2026-11-16T13:00:14.650Z"
+        }
+      ],
+      "finishedAt": "2026-11-16T13:00:14.643Z",
+      "summary": "Up to four people can now play one run together in their browsers: a lobby with a room code and link, crewmates drawn as convicts in coloured jumpsuits, everyone's readings, blinks, votes and the bank on every screen. I re-ran everything myself: 130 logic tests and 46 of 46 browser tests pass, including a real peer-to-peer connection on this PC (1.6 s to connect). Not yet tried: two different home networks, phones in a crew, more than four players.",
+      "todo": []
+    },
+    {
+      "id": "T7c",
+      "title": "Sprint, creep and stamina",
+      "why": "Your request: Shift sprints, a creep key creeps, and the Orderly is faster than a walk. With limited stamina you can stay ahead by mixing running and walking, but not by much.",
+      "status": "todo",
+      "gates": [],
+      "todo": [
+        "The speed rules are written and tested in src/sim/stamina.ts: walk 3.0, sprint 5.0 for 5 seconds, creep 1.2, winded until 35% recovered. Still to do: raise the Orderly's hunting speed from 3.4 to 3.7 (two tests are waiting on that, marked skipped), wire Shift to sprint and a creep key, show stamina without a meter if possible (breathing, a narrowing view), bots use it too, and the phone's stick gets a sprint zone.",
+        "Ctrl cannot be the creep key in a browser: Ctrl+W closes the tab and Ctrl+S, Ctrl+D do other things. Default is C to creep; Ctrl also works when the game is fullscreen and the browser lets it capture keys."
+      ]
+    },
+    {
+      "id": "T7d",
+      "title": "Playing across two home networks",
+      "why": "Friends at home need to join the host; some home routers block direct browser-to-browser links unless a relay helps",
+      "status": "todo",
+      "gates": []
     },
     {
       "id": "T7b",
@@ -722,6 +805,50 @@
       "gates": [
         "G8",
         "G9"
+      ]
+    },
+    {
+      "id": "T7e",
+      "title": "Better-looking crewmates and readable name tags",
+      "why": "Crewmates are plain boxes and their names cannot be read from a few metres",
+      "status": "todo",
+      "gates": []
+    },
+    {
+      "id": "T14a",
+      "title": "Shrink the downloaded props for the game",
+      "why": "Rooms need beds, chairs, trolleys and clutter to feel like a place and to hide behind; the pieces must be tiny so the game stays fast",
+      "status": "done",
+      "gates": [],
+      "startedAt": "2026-11-16T11:55:30.007Z",
+      "finishedAt": "2026-11-16T12:10:06.310Z",
+      "summary": "26 hospital props are ready for the game: bed, gurney, wheelchair, crutches, chairs, bench, desks, cabinets, shelves, sink, toilet, bins, lights, extinguisher, wet-floor sign, camera, duct and pipes. All 26 together are 0.7 MB and about 9,300 triangles, with flat colours or one tiny picture each. I checked the file sizes, the list against the files, and looked at the sheets. Not yet seen inside the running game; placing them in rooms is the room-dressing task.",
+      "todo": [],
+      "media": [
+        {
+          "src": "T14a/20261116T121006-sheet_1.png",
+          "caption": "Bed, gurney, chairs, bench and reception desk beside a 1.7 m marker",
+          "kind": "image",
+          "at": "2026-11-16T12:10:06.313Z"
+        },
+        {
+          "src": "T14a/20261116T121006-sheet_4_game.png",
+          "caption": "Wheelchair, crutches, medical box, extinguisher, wet-floor sign and camera at the game's own resolution",
+          "kind": "image",
+          "at": "2026-11-16T12:10:06.314Z"
+        }
+      ]
+    },
+    {
+      "id": "T14",
+      "title": "Dress the Clinic",
+      "why": "Beds, trolleys, curtains, signs and grime, so rooms stop being empty boxes. Props built in Blender, textures made with Gemini inside the art budget.",
+      "status": "todo",
+      "gates": [],
+      "todo": [
+        "Owner's rule: downsample every prop and texture before it goes in the game. Low triangle counts, small textures; the tape look hides detail.",
+        "Props are in tools/props/: kenney-furniture-kit/x (glb), quaternius-house-interior/FBX, polyhaven/<id> (1k gltf, heavy: decimate hard and shrink textures to 256 or less). Hashes and LICENCE.txt in each folder; add credits to CREDITS.md.",
+        "Props are built: public/assets/props/*.glb + manifest.json (name, size, mount floor/wall/ceiling, front faces +Z). Untested in three.js: vertex colours (COLOR_0 needs vertexColors on the material), linear samplers (set NearestFilter), double-sided materials, KHR_materials_specular. Wall lamp reads poorly; consider dropping it."
       ]
     },
     {
@@ -744,8 +871,74 @@
       "id": "T3b",
       "title": "The Orderly, third pass",
       "why": "After it moves and the tape look is on: real sewn lids instead of button-like discs, mottled skin, a stained gown that stands out from the walls, a narrower grin.",
-      "status": "todo",
-      "gates": []
+      "status": "done",
+      "gates": [],
+      "todo": [],
+      "media": [
+        {
+          "src": "T3b/20261116T120317-player_view.png",
+          "caption": "Third pass: the gown torn into strips, using a cloth texture made with Gemini",
+          "kind": "image",
+          "at": "2026-11-16T12:03:17.691Z"
+        },
+        {
+          "src": "T3b/20261116T120317-face.png",
+          "caption": "Third pass close-up: sewn lids from a Gemini decal on puckered, sunken sockets; a thinner printed grin",
+          "kind": "image",
+          "at": "2026-11-16T12:03:17.775Z"
+        },
+        {
+          "src": "T3b/20261116T120317-tape_poses.png",
+          "caption": "Third pass through a rough tape filter: idle, walk (hem strips swing on new cloth bones), reach, duck, still",
+          "kind": "image",
+          "at": "2026-11-16T12:03:17.853Z"
+        },
+        {
+          "src": "T3b/20261116T120317-orderly_gown_torn__3ea1e70d6165192d.png",
+          "caption": "Raw Gemini texture: torn gown cloth on magenta, cut into alpha for the hem strips and holes",
+          "kind": "image",
+          "at": "2026-11-16T12:03:17.941Z"
+        },
+        {
+          "src": "T3b/20261116T120318-orderly_eyelid__1a1297e254d942f5.png",
+          "caption": "Raw Gemini texture: sewn-shut eyelid decal (green is cut away)",
+          "kind": "image",
+          "at": "2026-11-16T12:03:18.026Z"
+        },
+        {
+          "src": "T3b/20261116T120318-floor_tile__4b944b09a47e9ec7.png",
+          "caption": "Raw Gemini texture: cracked clinic floor tile, for a later task to wire into the building",
+          "kind": "image",
+          "at": "2026-11-16T12:03:18.118Z"
+        },
+        {
+          "src": "T3b/20261116T120602-tape_player_view.png",
+          "caption": "Third pass, seen down a corridor through the tape look: the gown now hangs in torn strips and the figure is darker than the walls",
+          "kind": "image",
+          "at": "2026-11-16T12:06:02.099Z"
+        },
+        {
+          "src": "T3b/20261116T120602-turn_34.png",
+          "caption": "Third pass in plain light: torn hem, half a sleeve gone, sewn eyelids",
+          "kind": "image",
+          "at": "2026-11-16T12:06:02.102Z"
+        },
+        {
+          "src": "T3b/20261116T130014-51-orderly-closer.png",
+          "caption": "The new Orderly down a corridor in the game",
+          "kind": "image",
+          "at": "2026-11-16T13:00:14.818Z"
+        },
+        {
+          "src": "T3b/20261116T130014-54-orderly-within-reach.png",
+          "caption": "Within reach: the cross-print gown and the long arm",
+          "kind": "image",
+          "at": "2026-11-16T13:00:14.820Z"
+        }
+      ],
+      "startedAt": "2026-11-16T12:06:01.968Z",
+      "finishedAt": "2026-11-16T13:00:14.815Z",
+      "summary": "The Orderly now wears a torn, stained gown: the hem hangs in strips that swing on their own bones, half a sleeve is gone, the eyelids are sewn. Seen in the running game in the watched and within-reach screenshots; all browser tests pass with it. Its own maker says the face is still a pale blob beyond about 3 m."
     },
     {
       "id": "T10",
@@ -848,8 +1041,9 @@
     {
       "id": "G7",
       "title": "Four players share one world",
-      "status": "open",
-      "evidence": ""
+      "status": "passed",
+      "evidence": "Four tabs: same building, each draws the other three, a moved player drawn within 0.5 m, the Orderly frozen at the identical spot on all four screens for 3 s while one watched (0.000 m disagreement), moving on all four within 0.45 s of the watcher turning away. Two browsers connected over the real peer-to-peer path on this PC in 1.6 s and played the same run. Broken on purpose twice: (1) a client that neither holds nor reports the Orderly, (2) a client that holds it but never tells the host; the four-tab test went red both times (and 3 network logic tests for the second), green again after undoing.",
+      "at": "2026-11-16T13:00:14.735Z"
     },
     {
       "id": "G8",
@@ -914,6 +1108,146 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T13:00:14.971Z",
+      "text": "Added task T7e: Better-looking crewmates and readable name tags.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T13:00:14.896Z",
+      "text": "Added task T7d: Playing across two home networks.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T13:00:14.820Z",
+      "text": "Finished T3b: The Orderly, third pass.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T13:00:14.735Z",
+      "text": "Gate G7 (Four players share one world) is passed.",
+      "kind": "gate"
+    },
+    {
+      "at": "2026-11-16T13:00:14.650Z",
+      "text": "Finished T7: Playing together.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T12:36:04.958Z",
+      "text": "New pictures for T7: Playing together.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T12:10:06.314Z",
+      "text": "Finished T14a: Shrink the downloaded props for the game.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T12:06:02.244Z",
+      "text": "Gemini texture pipeline: 18 images made for about 72 cents (cap 3 dollars); 14 kept (cloth, skin, mask, floor, wall, ceiling, four signs, two stains). Checked by me: no key-shaped string anywhere in the project or the agent's transcript; old bone names, the five animations and their lengths unchanged.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T12:06:02.102Z",
+      "text": "New pictures for T3b: The Orderly, third pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T12:06:01.969Z",
+      "text": "Started T3b: The Orderly, third pass. New model is built and checked by re-import; it still has to be seen in the running game, which waits for the multiplayer agent to leave the folder",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T12:03:18.118Z",
+      "text": "New pictures for T3b: The Orderly, third pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T12:03:18.026Z",
+      "text": "New pictures for T3b: The Orderly, third pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T12:03:17.941Z",
+      "text": "New pictures for T3b: The Orderly, third pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T12:03:17.853Z",
+      "text": "New pictures for T3b: The Orderly, third pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T12:03:17.775Z",
+      "text": "New pictures for T3b: The Orderly, third pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T12:03:17.691Z",
+      "text": "New pictures for T3b: The Orderly, third pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T11:55:30.008Z",
+      "text": "Started T14a: Shrink the downloaded props for the game. An agent is cutting about two dozen downloaded props down to low detail and small pictures",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T11:55:29.927Z",
+      "text": "Added task T14a: Shrink the downloaded props for the game.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T11:55:11.369Z",
+      "text": "Prop kits downloaded to an untracked tools folder (52 MB, all public domain): Kenney Furniture Kit (140 models), Quaternius House Interior (123 models), ten Poly Haven hospital props (wheelchair, crutches, medical box, fire extinguisher, wet-floor sign, desk, bin, ducts, pipes, camera). Checked: only model, picture and text files, nothing runnable. They get cut down and retextured in the room-dressing step.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T11:49:00.624Z",
+      "text": "You approved downloading the public-domain prop kits and asked that everything be downsampled before it goes in the game, since the tape look hides fine detail. A small agent is fetching them into an untracked folder; they get simplified and retextured in the room-dressing step.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T11:42:50.552Z",
+      "text": "Usage check at 5:45 am: one night of work has used 26% of the week's allowance across all models and 33% of the week's Fable allowance. It resets Sunday at noon. This conversation is also 83% full, which makes every loop step expensive.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T11:42:50.440Z",
+      "text": "You said to do all three kinds of better assets. A drop folder with instructions is ready (assets_src/inbox): what to ask an AI 3D service for to get a sculpted Orderly, and which Mixamo clips to download. A list of free public-domain prop kits with file names and sizes is being put together for you to approve before anything is downloaded.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T11:38:38.650Z",
+      "text": "Two agents are now working side by side on parts that cannot collide: one on multiplayer in the game's code, one on art (a Gemini texture pipeline and the Orderly's tattered gown). Only the first may build or run browser tests.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T11:36:24.156Z",
+      "text": "Added task T14: Dress the Clinic.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T11:36:24.074Z",
+      "text": "Added task T7c: Sprint, creep and stamina.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T11:36:23.993Z",
+      "text": "You played it. In your words: the sound is good and lessens around corners and with distance; the wait for the elevator has real tension; the Orderly is kind of scary already and the thrill rose a lot when it chased you through the blinks. Decisions from that: keep the Orderly and rely on timing; give it tattered clothes; add sprinting with stamina and make it faster than a walk.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T11:36:23.917Z",
+      "text": "Applied the owner's new answers.",
+      "kind": "answers"
+    },
+    {
+      "at": "2026-11-16T11:34:20.397Z",
+      "text": "Started T7: Playing together. The multiplayer logic is proven. An Opus agent is now building it into the game: a lobby with a link to share, crew members you can see, and four tabs sharing one building.",
+      "kind": "start"
+    },
     {
       "at": "2026-11-16T11:32:11.194Z",
       "text": "Applied the owner's new answers.",

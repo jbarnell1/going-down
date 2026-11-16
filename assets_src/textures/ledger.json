@@ -1,0 +1,582 @@
+{
+ "budget_usd": 3,
+ "max_images": 60,
+ "model": "TBD",
+ "price_note": "Google's pricing page, read 2026-11-15: about $0.034 per 1K image and $0.050 per 2K image, no free tier. The ledger charges $0.04 per 1K image to stay on the safe side.",
+ "spent_usd": 0.72,
+ "images": 18,
+ "entries": [
+  {
+   "kind": "model_list",
+   "time": "2026-11-16T11:40:28.538Z",
+   "cost_usd": 0,
+   "image_models": [
+    "models/gemini-2.5-flash-image",
+    "models/gemini-3-pro-image-preview",
+    "models/gemini-3-pro-image",
+    "models/nano-banana-pro-preview",
+    "models/gemini-3.1-flash-image-preview",
+    "models/gemini-3.1-flash-image",
+    "models/gemini-3.1-flash-lite-image"
+   ]
+  },
+  {
+   "kind": "image",
+   "id": "orderly_gown_cloth",
+   "purpose": "Orderly: gown cloth, tiled across the gown",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "dd6f085d81654133",
+   "time": "2026-11-16T11:42:19.678Z",
+   "cost_usd": 0.04,
+   "ms": 7217,
+   "usage": {
+    "promptTokenCount": 240,
+    "candidatesTokenCount": 1371,
+    "totalTokenCount": 1611,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 240
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/orderly_gown_cloth__dd6f085d81654133.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "orderly_gown_torn",
+   "purpose": "Orderly: torn gown cloth with alpha for holes, frayed edges and hanging strips",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "3ea1e70d6165192d",
+   "time": "2026-11-16T11:43:31.953Z",
+   "cost_usd": 0.04,
+   "ms": 7583,
+   "usage": {
+    "promptTokenCount": 243,
+    "candidatesTokenCount": 1396,
+    "totalTokenCount": 1639,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 243
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/orderly_gown_torn__3ea1e70d6165192d.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "orderly_skin",
+   "purpose": "Orderly: mottled waxy skin, tiled on the body",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "a2e4c37966a60bc7",
+   "time": "2026-11-16T11:44:00.444Z",
+   "cost_usd": 0.04,
+   "ms": 7914,
+   "usage": {
+    "promptTokenCount": 201,
+    "candidatesTokenCount": 1340,
+    "totalTokenCount": 1541,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 201
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/orderly_skin__a2e4c37966a60bc7.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "orderly_eyelid",
+   "purpose": "Orderly: sewn-shut eyelid decal on the sunken sockets",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "1a1297e254d942f5",
+   "time": "2026-11-16T11:44:26.132Z",
+   "cost_usd": 0.04,
+   "ms": 8842,
+   "usage": {
+    "promptTokenCount": 249,
+    "candidatesTokenCount": 1426,
+    "totalTokenCount": 1675,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 249
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/orderly_eyelid__1a1297e254d942f5.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "orderly_mask",
+   "purpose": "Orderly: surgical mask panel (the smile is painted on by code)",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "a6764f319eb989c4",
+   "time": "2026-11-16T11:44:47.340Z",
+   "cost_usd": 0.04,
+   "ms": 8239,
+   "usage": {
+    "promptTokenCount": 213,
+    "candidatesTokenCount": 1431,
+    "totalTokenCount": 1644,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 213
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/orderly_mask__a6764f319eb989c4.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "wall_paint",
+   "purpose": "Building: clinic wall paint (tiles horizontally; the stripe sits at a fixed height)",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "ca0e34ca3ac83ed3",
+   "time": "2026-11-16T11:45:09.886Z",
+   "cost_usd": 0.04,
+   "ms": 8012,
+   "usage": {
+    "promptTokenCount": 188,
+    "candidatesTokenCount": 1449,
+    "totalTokenCount": 1637,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 188
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/wall_paint__ca0e34ca3ac83ed3.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "wall_paint",
+   "purpose": "Building: clinic wall paint (tiles horizontally; the stripe sits at a fixed height)",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "ba88746871659d99",
+   "time": "2026-11-16T11:45:52.663Z",
+   "cost_usd": 0.04,
+   "ms": 7656,
+   "usage": {
+    "promptTokenCount": 224,
+    "candidatesTokenCount": 1367,
+    "totalTokenCount": 1591,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 224
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/wall_paint__ba88746871659d99.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "floor_tile",
+   "purpose": "Building: cracked off-white floor tile",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "4b944b09a47e9ec7",
+   "time": "2026-11-16T11:46:12.483Z",
+   "cost_usd": 0.04,
+   "ms": 6944,
+   "usage": {
+    "promptTokenCount": 178,
+    "candidatesTokenCount": 1338,
+    "totalTokenCount": 1516,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 178
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/floor_tile__4b944b09a47e9ec7.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "ceiling_tile",
+   "purpose": "Building: stained suspended-ceiling tile",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "85857e91baf83bad",
+   "time": "2026-11-16T11:46:45.549Z",
+   "cost_usd": 0.04,
+   "ms": 7765,
+   "usage": {
+    "promptTokenCount": 188,
+    "candidatesTokenCount": 1372,
+    "totalTokenCount": 1560,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 188
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/ceiling_tile__85857e91baf83bad.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "ceiling_tile",
+   "purpose": "Building: stained suspended-ceiling tile",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "7a168e90e7a37178",
+   "time": "2026-11-16T11:47:11.450Z",
+   "cost_usd": 0.04,
+   "ms": 8283,
+   "usage": {
+    "promptTokenCount": 217,
+    "candidatesTokenCount": 1426,
+    "totalTokenCount": 1643,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 217
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/ceiling_tile__7a168e90e7a37178.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "decal_rust_stain",
+   "purpose": "Building: rust-and-water stain decal",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "c2657ecd461e5673",
+   "time": "2026-11-16T11:47:37.876Z",
+   "cost_usd": 0.04,
+   "ms": 7937,
+   "usage": {
+    "promptTokenCount": 190,
+    "candidatesTokenCount": 1498,
+    "totalTokenCount": 1688,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 190
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/decal_rust_stain__c2657ecd461e5673.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "decal_rust_stain",
+   "purpose": "Building: rust-and-water stain decal",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "1439e651863569a9",
+   "time": "2026-11-16T11:48:13.249Z",
+   "cost_usd": 0.04,
+   "ms": 7349,
+   "usage": {
+    "promptTokenCount": 210,
+    "candidatesTokenCount": 1434,
+    "totalTokenCount": 1644,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 210
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/decal_rust_stain__1439e651863569a9.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "decal_rust_stain",
+   "purpose": "Building: rust-and-water stain decal",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "7124f7798941aec7",
+   "time": "2026-11-16T11:48:52.107Z",
+   "cost_usd": 0.04,
+   "ms": 7746,
+   "usage": {
+    "promptTokenCount": 190,
+    "candidatesTokenCount": 1409,
+    "totalTokenCount": 1599,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 190
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/decal_rust_stain__7124f7798941aec7.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "decal_handprint",
+   "purpose": "Building: smeared handprint decal",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "12baed323183d4f5",
+   "time": "2026-11-16T11:49:10.361Z",
+   "cost_usd": 0.04,
+   "ms": 7389,
+   "usage": {
+    "promptTokenCount": 170,
+    "candidatesTokenCount": 1333,
+    "totalTokenCount": 1503,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 170
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/decal_handprint__12baed323183d4f5.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "sign_ward4",
+   "purpose": "Building: sign WARD 4",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "4e5123ff483eeeb8",
+   "time": "2026-11-16T11:49:28.122Z",
+   "cost_usd": 0.04,
+   "ms": 7679,
+   "usage": {
+    "promptTokenCount": 161,
+    "candidatesTokenCount": 1372,
+    "totalTokenCount": 1533,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 161
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/sign_ward4__4e5123ff483eeeb8.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "sign_quiet",
+   "purpose": "Building: sign QUIET PLEASE",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "898a54737b28cec3",
+   "time": "2026-11-16T11:49:47.250Z",
+   "cost_usd": 0.04,
+   "ms": 7341,
+   "usage": {
+    "promptTokenCount": 158,
+    "candidatesTokenCount": 1292,
+    "totalTokenCount": 1450,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 158
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/sign_quiet__898a54737b28cec3.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "sign_staff",
+   "purpose": "Building: sign STAFF ONLY",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "56ebe1c16905d449",
+   "time": "2026-11-16T11:50:02.721Z",
+   "cost_usd": 0.04,
+   "ms": 7202,
+   "usage": {
+    "promptTokenCount": 150,
+    "candidatesTokenCount": 1376,
+    "totalTokenCount": 1526,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 150
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/sign_staff__56ebe1c16905d449.jpg",
+   "mime": "image/jpeg"
+  },
+  {
+   "kind": "image",
+   "id": "sign_wash",
+   "purpose": "Building: sign WASH YOUR HANDS",
+   "model": "gemini-3.1-flash-image",
+   "size": "1K",
+   "hash": "65a4715a6ee4a4e3",
+   "time": "2026-11-16T11:50:20.284Z",
+   "cost_usd": 0.04,
+   "ms": 8277,
+   "usage": {
+    "promptTokenCount": 168,
+    "candidatesTokenCount": 1421,
+    "totalTokenCount": 1589,
+    "promptTokensDetails": [
+     {
+      "modality": "TEXT",
+      "tokenCount": 168
+     }
+    ],
+    "candidatesTokensDetails": [
+     {
+      "modality": "IMAGE",
+      "tokenCount": 1120
+     }
+    ],
+    "serviceTier": "standard"
+   },
+   "raw": "assets_src/textures/raw/sign_wash__65a4715a6ee4a4e3.jpg",
+   "mime": "image/jpeg"
+  }
+ ]
+}
