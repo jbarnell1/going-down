@@ -2,6 +2,8 @@
 
 A co-op suspense game for the browser. A crew rides an elevator down through a building that gets worse on every floor, and gets paid for getting close to the things that live there.
 
+The civilisation above never stopped building upward: hospitals on top of TV stations on top of storage halls, each new age laid over the last. You are convicts, sentenced to explore what is underneath. Earn enough down there and you buy your freedom.
+
 ![The Orderly, first pass, standing in the Clinic](assets_src/renders/orderly/player_view.png)
 
 *The Orderly, first pass. It gets a second one.*
@@ -57,4 +59,4 @@ Third-party assets and their licences are listed in `CREDITS.md` as they are add
 
 ## Licence
 
-Not yet chosen. Until a licence file is added, all rights are reserved.
+[GNU Affero General Public License v3.0](LICENSE). You may use, change and share this, including over a network, as long as what you share stays open under the same licence.

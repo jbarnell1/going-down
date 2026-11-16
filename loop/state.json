@@ -1,0 +1,473 @@
+{
+  "title": "The Clinic slice",
+  "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
+  "startedAt": "2026-11-16T03:38:00Z",
+  "deadlineAt": "2026-11-17T09:38:00Z",
+  "iteration": 4,
+  "now": "T0b",
+  "nowText": "Adding a job that publishes every green build to GitHub Pages, then switching Pages on.",
+  "ci": {
+    "status": "passed",
+    "commit": "85ff12a",
+    "at": "2026-11-16T04:34:47.691Z"
+  },
+  "answersAppliedTo": "2026-11-16T04:20:00Z",
+  "tasks": [
+    {
+      "id": "T0",
+      "title": "Project setup",
+      "why": "The tools that build, test and publish the game, and the live link.",
+      "status": "done",
+      "gates": [],
+      "finishedAt": "2026-11-16T04:16:44.091Z",
+      "summary": "Typecheck, 7 rule tests and the build pass. The browser test boots the game on this PC's graphics card and its screenshot was looked at. CI and a secret scan run on every push.",
+      "todo": [],
+      "media": [
+        {
+          "src": "T0/20261116T041644-00-boot.png",
+          "caption": "The very first frame: a placeholder corridor at the game's low internal resolution",
+          "kind": "image",
+          "at": "2026-11-16T04:16:44.095Z"
+        }
+      ]
+    },
+    {
+      "id": "T1",
+      "title": "The Clinic floor generator",
+      "why": "Every floor is built from a seed, so every player gets the same building and no two runs match.",
+      "status": "done",
+      "gates": [
+        "G2"
+      ],
+      "finishedAt": "2026-11-16T04:16:44.170Z",
+      "summary": "29 tests pass over 800 generated floors (200 seeds at four depths): every room reachable from the elevator, two levels joined by a stair, an atrium, dead-end side branches, a corridor loop and long sight lines. Fable re-ran the checks and read a printed map.",
+      "todo": [],
+      "media": [
+        {
+          "src": "T1/20261116T041644-alpha-d1.txt",
+          "caption": "Printed map of one floor, lower then upper level",
+          "kind": "text",
+          "at": "2026-11-16T04:16:44.173Z"
+        }
+      ]
+    },
+    {
+      "id": "T2a",
+      "title": "Walking through a floor",
+      "why": "The first time the game is a place you can move around in, in first person.",
+      "status": "done",
+      "gates": [],
+      "startedAt": "2026-11-16T04:16:45.090Z",
+      "finishedAt": "2026-11-16T04:34:47.538Z",
+      "summary": "You can walk a generated two-level Clinic floor in first person: corridors, rooms with door gaps, a stair, and a balcony over the atrium. 48 rule tests pass, including collision. A browser test walks from the elevator up the stair to the balcony, and a second one presses real keys: W walks, Shift creeps, a wall stops you. Fable re-ran everything and looked at the screenshots. Lighting is flat and the rooms are empty; mouse look is not tested.",
+      "todo": [],
+      "media": [
+        {
+          "src": "T2a/20261116T043447-11-corridor.png",
+          "caption": "A 48-metre corridor, the kind of sight line you will first see the Orderly down",
+          "kind": "image",
+          "at": "2026-11-16T04:34:47.541Z"
+        },
+        {
+          "src": "T2a/20261116T043447-13-balcony.png",
+          "caption": "Looking down into the atrium from the upper balcony",
+          "kind": "image",
+          "at": "2026-11-16T04:34:47.542Z"
+        },
+        {
+          "src": "T2a/20261116T043447-12-atrium-below.png",
+          "caption": "The atrium from below, two storeys tall",
+          "kind": "image",
+          "at": "2026-11-16T04:34:47.543Z"
+        },
+        {
+          "src": "T2a/20261116T043447-10-landing.png",
+          "caption": "Where you step out of the elevator",
+          "kind": "image",
+          "at": "2026-11-16T04:34:47.544Z"
+        },
+        {
+          "src": "T2a/20261116T043447-15-stair-bottom.png",
+          "caption": "The foot of the stair",
+          "kind": "image",
+          "at": "2026-11-16T04:34:47.545Z"
+        }
+      ]
+    },
+    {
+      "id": "T0b",
+      "title": "A public play link on GitHub Pages",
+      "why": "You said yes: every green build also goes to a public link friends can open from anywhere.",
+      "status": "doing",
+      "gates": [],
+      "startedAt": "2026-11-16T04:34:47.762Z"
+    },
+    {
+      "id": "T0c",
+      "title": "AGPL-3.0 licence",
+      "why": "You chose it for the public repository.",
+      "status": "done",
+      "gates": [],
+      "finishedAt": "2026-11-16T04:34:47.619Z",
+      "summary": "The AGPL-3.0 licence text is in the repository and the README says so.",
+      "todo": []
+    },
+    {
+      "id": "T3",
+      "title": "The Orderly, second pass",
+      "why": "The first entity. The first pass reads as a mannequin; this pass has to make it frightening in bright light.",
+      "status": "todo",
+      "gates": [
+        "G4"
+      ],
+      "media": [
+        {
+          "src": "T3/20261116T041644-player_view.png",
+          "caption": "First pass, as a player would meet it",
+          "kind": "image",
+          "at": "2026-11-16T04:16:44.325Z"
+        },
+        {
+          "src": "T3/20261116T041644-poses.png",
+          "caption": "First pass poses: idle, walk, walk, reach, frozen",
+          "kind": "image",
+          "at": "2026-11-16T04:16:44.326Z"
+        },
+        {
+          "src": "T3/20261116T041644-lowres_view.png",
+          "caption": "First pass at game resolution: the smile is lost",
+          "kind": "image",
+          "at": "2026-11-16T04:16:44.328Z"
+        }
+      ],
+      "todo": [
+        "First, study: the agent goes through two YouTube Blender tutorials on making horror characters or low-detail retro creatures (their transcripts plus frames sampled from the video), and writes what it learned to docs/ART-NOTES.md before touching the model.",
+        "Apply it, with your answers: taller so it ducks under door frames; a body under the gown (ribs, spine, collarbones, real elbows and wrists); the printed smile much bigger and bolder; something wrong where the eyes should be; longer, more articulated hands; less funny, more frightening.",
+        "Load it in the game on a Clinic floor and check the reach and the walk there.",
+        "Revision round 1: blind judges (fresh Opus agents shown only the pictures) and Fable each say what they see and what looks cheap; the agent fixes the worst of it.",
+        "Revision round 2: the same again on the fixed figure. Pictures from every round go on this page."
+      ]
+    },
+    {
+      "id": "T2b",
+      "title": "The tape-playback look and the debug overlay",
+      "why": "The degraded recovered-footage look that hides rough art, plus tools for testing.",
+      "status": "todo",
+      "gates": [
+        "G10"
+      ]
+    },
+    {
+      "id": "T2v",
+      "title": "Stronger checks",
+      "why": "So a regression is caught by a machine, not by luck: reference screenshots that fail the test when the picture changes, a frame-time limit inside the browser test, a smoke test for the hub, and a deliberate-break check on every gate already passed.",
+      "status": "todo",
+      "gates": []
+    },
+    {
+      "id": "T4",
+      "title": "The Orderly comes alive",
+      "why": "It walks the floor, is heard before it is seen, and never moves while anyone is watching it.",
+      "status": "todo",
+      "gates": [
+        "G3",
+        "G5"
+      ]
+    },
+    {
+      "id": "T5",
+      "title": "The instrument, the recording rule and tapes",
+      "why": "How the crew earns: readings only record the scary part, and the tape has to be carried out.",
+      "status": "todo",
+      "gates": [
+        "G3"
+      ]
+    },
+    {
+      "id": "T6",
+      "title": "The elevator",
+      "why": "The only safe place. Calling it, waiting out its loud arrival, then bank or ride down.",
+      "status": "todo",
+      "gates": [
+        "G6"
+      ]
+    },
+    {
+      "id": "T6b",
+      "title": "The elevator voice",
+      "why": "The relentlessly cheerful announcer, recorded with ElevenLabs, with an audition page for you.",
+      "status": "todo",
+      "gates": [
+        "G13"
+      ]
+    },
+    {
+      "id": "T7",
+      "title": "Playing together",
+      "why": "Four players in one building over a peer-to-peer connection, with one player hosting.",
+      "status": "todo",
+      "gates": [
+        "G7"
+      ]
+    },
+    {
+      "id": "T7b",
+      "title": "Bot crewmates and the test panel",
+      "why": "So you can test a full crew alone on the live link.",
+      "status": "todo",
+      "gates": [
+        "G14"
+      ]
+    },
+    {
+      "id": "T8",
+      "title": "Going down, cameras and the wipe",
+      "why": "Being caught puts you on the cameras, and a full wipe ends the run.",
+      "status": "todo",
+      "gates": [
+        "G8",
+        "G9"
+      ]
+    },
+    {
+      "id": "T9",
+      "title": "The shadow trigger",
+      "why": "A shadow crossing a doorway in a quiet moment: a scare trigger, never the monster.",
+      "status": "todo",
+      "gates": [
+        "G11"
+      ]
+    },
+    {
+      "id": "T10",
+      "title": "Frame rate",
+      "why": "Measured on this PC with four players, then fixed until it is smooth.",
+      "status": "todo",
+      "gates": [
+        "G10"
+      ]
+    },
+    {
+      "id": "T11",
+      "title": "Final validation",
+      "why": "A fresh reviewer audits everything against the gates and the fairness rules.",
+      "status": "todo",
+      "gates": [
+        "G1",
+        "G12"
+      ]
+    },
+    {
+      "id": "T1b",
+      "title": "More than one floor skeleton",
+      "why": "Every Clinic floor shares one skeleton today, which will feel samey by the third floor.",
+      "status": "todo",
+      "gates": []
+    },
+    {
+      "id": "S",
+      "title": "Stretch: voice that fades with distance, a second trait, the Tenant, a second place",
+      "why": "Only if every gate is green with time left.",
+      "status": "todo",
+      "gates": []
+    }
+  ],
+  "gates": [
+    {
+      "id": "G1",
+      "title": "Builds clean from a fresh clone",
+      "status": "open",
+      "evidence": ""
+    },
+    {
+      "id": "G2",
+      "title": "Floors are sound",
+      "status": "passed",
+      "evidence": "800 floors checked by test; one printed map read by eye.",
+      "at": "2026-11-16T04:16:44.248Z"
+    },
+    {
+      "id": "G3",
+      "title": "Rules hold over 500 simulated runs",
+      "status": "open",
+      "evidence": ""
+    },
+    {
+      "id": "G4",
+      "title": "The Orderly is a real figure",
+      "status": "open",
+      "evidence": ""
+    },
+    {
+      "id": "G5",
+      "title": "Heard before seen",
+      "status": "open",
+      "evidence": ""
+    },
+    {
+      "id": "G6",
+      "title": "One player can finish a run",
+      "status": "open",
+      "evidence": ""
+    },
+    {
+      "id": "G7",
+      "title": "Four players share one world",
+      "status": "open",
+      "evidence": ""
+    },
+    {
+      "id": "G8",
+      "title": "Going down works",
+      "status": "open",
+      "evidence": ""
+    },
+    {
+      "id": "G9",
+      "title": "Three runs in a row",
+      "status": "open",
+      "evidence": ""
+    },
+    {
+      "id": "G10",
+      "title": "The look, at a smooth frame rate",
+      "status": "open",
+      "evidence": ""
+    },
+    {
+      "id": "G11",
+      "title": "A shadow as a trigger",
+      "status": "open",
+      "evidence": ""
+    },
+    {
+      "id": "G12",
+      "title": "Final validation",
+      "status": "open",
+      "evidence": ""
+    },
+    {
+      "id": "G13",
+      "title": "The elevator speaks",
+      "status": "open",
+      "evidence": ""
+    },
+    {
+      "id": "G14",
+      "title": "Playable alone, and always live",
+      "status": "open",
+      "evidence": ""
+    }
+  ],
+  "decisions": [
+    {
+      "at": "2026-11-16T03:45:00Z",
+      "text": "Pinned Vite 6 and Vitest 3 to suit the Node already on this PC, not upgrading Node."
+    },
+    {
+      "at": "2026-11-16T03:45:00Z",
+      "text": "Repository licence: none yet (question \"license\" on the hub)."
+    },
+    {
+      "at": "2026-11-16T03:45:00Z",
+      "text": "The North Star design document stays out of the public repository (question \"publish-design-doc\")."
+    }
+  ],
+  "feed": [
+    {
+      "at": "2026-11-16T04:34:47.763Z",
+      "text": "Started T0b: A public play link on GitHub Pages. Adding a job that publishes every green build to GitHub Pages, then switching Pages on.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T04:34:47.620Z",
+      "text": "Finished T0c: AGPL-3.0 licence.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T04:34:47.545Z",
+      "text": "Finished T2a: Walking through a floor.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T04:30:42.004Z",
+      "text": "Added two standing rules: break a thing on purpose to prove its test can fail before ticking a gate, and check anything live from a second device.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T04:30:41.913Z",
+      "text": "Added task T2v: Stronger checks.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T04:30:07.333Z",
+      "text": "You asked for the Orderly's second pass to start with tutorial study and end with two judged revision rounds. It now comes right after the public play link.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T04:19:08.468Z",
+      "text": "The Progress page was rebuilt: a roadmap of steps that fill with their own pictures, an overall bar, and a strip of the newest output.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T04:19:08.397Z",
+      "text": "Your answers are in: the setting (a civilisation that kept building upward, with convicts sent down to buy their freedom), the name stays Going Down, all five places, six candidate mechanics including the fake-disconnect and fake-restart, 50,000 voice characters, AGPL, and a public play link.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T04:19:08.324Z",
+      "text": "Added task T0c: AGPL-3.0 licence.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T04:19:08.252Z",
+      "text": "Added task T0b: A public play link on GitHub Pages.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T04:19:07.608Z",
+      "text": "Applied the owner's new answers.",
+      "kind": "answers"
+    },
+    {
+      "at": "2026-11-16T04:16:45.090Z",
+      "text": "Started T2a: Walking through a floor. An Opus agent is building it: collision as tested logic, the floor as real geometry, the bright Clinic look, and a browser test that walks from the elevator up the stair to the balcony.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T04:16:45.004Z",
+      "text": "The hub is live on the tailnet and linked from the home dashboard.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T04:16:44.922Z",
+      "text": "CI's first full run failed (the browser test could not find the preview server on Linux). Fixed and green since.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T04:16:44.328Z",
+      "text": "New pictures for T3: The Orderly, second pass.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T04:16:44.248Z",
+      "text": "Gate G2 (Floors are sound) is passed.",
+      "kind": "gate"
+    },
+    {
+      "at": "2026-11-16T04:16:44.173Z",
+      "text": "Finished T1: The Clinic floor generator.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T04:16:44.095Z",
+      "text": "Finished T0: Project setup.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T03:38:00Z",
+      "text": "The loop started. Public repository created; secret scanning on every commit and push.",
+      "kind": "note"
+    }
+  ]
+}

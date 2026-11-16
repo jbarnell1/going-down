@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Progress</title>
+<link rel="stylesheet" href="/hub.css">
+<style>
+  .bar { height: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--acc); width: 0; transition: width .6s; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 8px 0 4px; color: var(--dim); font-size: 14px; }
+  .meta strong { color: var(--ink); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; }
+  .chip { font-size: 13px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); color: var(--dim); text-decoration: none; }
+  .chip.ok { color: var(--acc); border-color: var(--acc); }
+  .chip.warn { color: var(--warn); border-color: var(--warn); }
+  .now { border: 1px solid var(--acc); background: var(--panel); border-radius: 10px; padding: 14px 16px; margin: 16px 0; }
+  .now h2 { margin: 0 0 4px; font-size: 18px; display: flex; gap: 10px; align-items: center; }
+  .now p { margin: 4px 0 0; color: var(--dim); }
+  .spin { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--acc); border-radius: 50%; animation: sp 1s linear infinite; flex: none; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } .bar > div { transition: none; } }
+  .strip { display: grid; grid-auto-flow: column; grid-auto-columns: 150px; gap: 10px; overflow-x: auto; padding-bottom: 8px; }
+  .tile2 { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px; cursor: pointer; text-align: left; color: var(--ink); font: inherit; position: relative; }
+  .tile2 img, .tile2 .ph { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 5px; display: block; background: #000; }
+  .tile2 .ph { display: grid; place-items: center; color: var(--dim); font-size: 13px; background: var(--bg); border: 1px dashed var(--line); }
+  .tile2 b { display: block; font-size: 12px; font-weight: 600; margin-top: 5px; }
+  .tile2 small { display: block; font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .new { position: absolute; top: 10px; left: 10px; background: var(--warn); color: #201400; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 99px; }
+  .step { display: grid; grid-template-columns: 28px 1fr; gap: 0 10px; }
+  .rail { display: flex; flex-direction: column; align-items: center; }
+  .dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: 12px; color: var(--dim); background: var(--bg); flex: none; }
+  .line { width: 2px; flex: 1; background: var(--line); min-height: 10px; }
+  .step.done .dot { background: var(--acc); border-color: var(--acc); color: #0b1410; }
+  .step.doing .dot { border-color: var(--acc); }
+  .step.blocked .dot { border-color: var(--warn); color: var(--warn); }
+  .scard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; min-width: 0; }
+  .step.todo .scard { opacity: .7; }
+  .step.doing .scard { border-color: var(--acc); }
+  .scard h3 { margin: 0; font-size: 16px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+  .scard h3 span.id { color: var(--dim); font-weight: 400; font-size: 13px; }
+  .scard p { margin: 4px 0 0; font-size: 14px; color: var(--dim); }
+  .scard p.sum { color: var(--ink); }
+  .scard ul { margin: 6px 0 0; padding-left: 18px; font-size: 14px; color: var(--dim); }
+  .scard .strip { margin-top: 10px; grid-auto-columns: 130px; }
+  .gates { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+  .gate { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+  .gate.passed { border-color: var(--acc); }
+  .gate small { display: block; color: var(--dim); margin-top: 2px; }
+  .feed { list-style: none; padding: 0; margin: 0; font-size: 14px; }
+  .feed li { padding: 6px 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: 84px 1fr; gap: 10px; }
+  .feed time { color: var(--dim); font-size: 12px; padding-top: 2px; }
+  #box { position: fixed; inset: 0; background: rgba(0,0,0,.88); display: none; z-index: 5; padding: 16px; overflow: auto; }
+  #box.on { display: block; }
+  #box .inner { max-width: 1100px; margin: 0 auto; color: #e8ece9; }
+  #box img { max-width: 100%; display: block; margin: 0 auto; image-rendering: pixelated; }
+  #box pre { font-size: 11px; line-height: 1.15; white-space: pre; overflow: auto; }
+  #box .cap { margin: 10px 0; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+  #box a { color: #9fe0b8; }
+  details { margin-top: 28px; }
+  summary { cursor: pointer; color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+<nav><a href="/">Hub</a><a href="/play/">Play</a><a href="/status">Progress</a><a href="/questions">Questions</a></nav>
+<h1 id="title">Progress</h1>
+<p class="dim" id="goal"></p>
+<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="barwrap"><div id="bar"></div></div>
+<div class="meta" id="meta"></div>
+<div class="chips" id="chips"></div>
+<div id="now"></div>
+<h2>Newest pictures and assets</h2>
+<p class="dim" id="latestNote"></p>
+<div class="strip" id="latest"></div>
+<h2>Roadmap</h2>
+<div id="steps"></div>
+<h2>Gates: what "done" means</h2>
+<div class="gates" id="gates"></div>
+<h2>Decided without asking you</h2>
+<ul id="decisions" class="dim" style="font-size:14px"></ul>
+<h2>Activity</h2>
+<ul class="feed" id="feed"></ul>
+<details><summary>The full written record</summary><pre id="raw">Loading...</pre></details>
+</main>
+<div id="box" role="dialog" aria-modal="true"><div class="inner"><div class="cap"><span id="boxcap"></span><span><a id="boxopen" target="_blank" rel="noopener">Open file</a> &nbsp; <button type="button" id="boxclose">Close</button></span></div><div id="boxbody"></div></div></div>
+<script>
+const $ = (id) => document.getElementById(id);
+function el(tag, props = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') n.className = v; else if (k === 'text') n.textContent = v; else n.setAttribute(k, v);
+  }
+  for (const k of kids) if (k) n.append(k);
+  return n;
+}
+let lastVisit = 0;
+try { lastVisit = Number(localStorage.getItem('gd-last-visit') || 0); } catch {}
+const markSeen = () => { try { localStorage.setItem('gd-last-visit', String(Date.now())); } catch {} };
+setTimeout(markSeen, 15000);
+
+const ago = (ms) => {
+  const m = Math.max(0, Math.round((Date.now() - ms) / 60000));
+  if (m < 1) return 'just now';
+  if (m < 60) return m + ' min ago';
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h} h ${m % 60} min ago` : Math.floor(h / 24) + ' d ago';
+};
+const span = (ms) => { const m = Math.max(0, Math.round(ms / 60000)); return `${Math.floor(m / 60)} h ${m % 60} min`; };
+
+async function openBox(item) {
+  $('boxcap').textContent = item.caption || item.name || '';
+  $('boxopen').href = item.url;
+  const body = $('boxbody');
+  body.replaceChildren();
+  if (item.kind === 'image') body.append(el('img', { src: item.url, alt: item.caption || '' }));
+  else if (item.kind === 'text') {
+    const pre = el('pre', { text: 'Loading...' });
+    body.append(pre);
+    try { pre.textContent = await (await fetch(item.url)).text(); } catch { pre.textContent = 'Could not load.'; }
+  } else if (item.kind === 'audio') body.append(el('audio', { src: item.url, controls: '' }));
+  else body.append(el('p', { text: 'This is a 3D model or other file. Use "Open file" to download it.' }));
+  $('box').classList.add('on');
+}
+$('boxclose').addEventListener('click', () => $('box').classList.remove('on'));
+$('box').addEventListener('click', (e) => { if (e.target === $('box')) $('box').classList.remove('on'); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('box').classList.remove('on'); });
+
+function tile(item) {
+  const b = el('button', { type: 'button', class: 'tile2' });
+  if (item.kind === 'image') b.append(el('img', { src: item.url, loading: 'lazy', alt: '' }));
+  else b.append(el('div', { class: 'ph', text: { text: 'Map / text', model: '3D model', audio: 'Audio' }[item.kind] || 'File' }));
+  if (item.when && item.when > lastVisit && lastVisit > 0) b.append(el('span', { class: 'new', text: 'NEW' }));
+  b.append(el('b', { text: item.caption || item.label || '' }), el('small', { text: (item.when ? ago(item.when) + ' · ' : '') + (item.name || '') }));
+  b.addEventListener('click', () => openBox(item));
+  return b;
+}
+
+function render(d) {
+  const s = d.state;
+  if (!s) { $('goal').textContent = 'The loop has not written any progress yet.'; return; }
+  const passed = s.gates.filter((g) => g.status === 'passed').length;
+  const done = s.tasks.filter((t) => t.status === 'done').length;
+  const pct = Math.round(100 * done / s.tasks.length);
+  $('title').textContent = s.title;
+  $('goal').textContent = s.goal || '';
+  $('bar').style.width = pct + '%';
+  $('barwrap').setAttribute('aria-valuenow', String(pct));
+  const start = Date.parse(s.startedAt), end = Date.parse(s.deadlineAt);
+  $('meta').replaceChildren(
+    el('span', {}, el('strong', { text: `${done} of ${s.tasks.length}` }), ' steps done'),
+    el('span', {}, el('strong', { text: `${passed} of ${s.gates.length}` }), ' gates passed'),
+    el('span', {}, el('strong', { text: span(Date.now() - start) }), ' in, ', el('strong', { text: span(end - Date.now()) }), ' left of the time budget'),
+    el('span', { text: `iteration ${s.iteration}` }),
+  );
+  const chips = [];
+  if (s.ci) chips.push(el('span', { class: 'chip ' + (s.ci.status === 'passed' ? 'ok' : 'warn'), text: `Checks on GitHub: ${s.ci.status}` }));
+  chips.push(el('a', { class: 'chip ok', href: '/play/', text: d.live ? `Play the live build (${d.live.commit})` : 'No live build yet' }));
+  chips.push(el('a', { class: 'chip ' + (d.questionsOpen ? 'warn' : ''), href: '/questions', text: `${d.questionsOpen} question${d.questionsOpen === 1 ? '' : 's'} waiting for you` }));
+  const blocked = s.tasks.filter((t) => t.status === 'blocked').length;
+  if (blocked) chips.push(el('span', { class: 'chip warn', text: `${blocked} step${blocked === 1 ? '' : 's'} blocked` }));
+  $('chips').replaceChildren(...chips);
+
+  const cur = s.tasks.find((t) => t.id === s.now);
+  $('now').replaceChildren(cur
+    ? el('div', { class: 'now' }, el('h2', {}, el('span', { class: 'spin' }), el('span', { text: 'Right now: ' + cur.title })), el('p', { text: s.nowText || cur.why || '' }),
+        el('p', { text: cur.startedAt ? 'Started ' + ago(Date.parse(cur.startedAt)) : '' }))
+    : el('div', { class: 'now' }, el('h2', { text: 'Between steps' }), el('p', { text: 'Nothing is in progress this minute. The loop picks the next step when it wakes.' })));
+
+  // Pictures lead. Maps, models and audio are capped per kind so nine floor maps cannot push the pictures off screen.
+  const seenPerLabel = {};
+  const latest = d.latest.map((f) => ({ ...f, when: f.mtime, caption: f.label }))
+    .filter((f) => f.kind === 'image' || (seenPerLabel[f.label] = (seenPerLabel[f.label] || 0) + 1) <= 2)
+    .sort((a, b) => (a.kind === 'image' ? 0 : 1) - (b.kind === 'image' ? 0 : 1) || b.when - a.when);
+  $('latestNote').textContent = latest.length ? 'Anything the loop produces appears here by itself, newest first. Tap to enlarge.' : 'Nothing has been produced yet.';
+  $('latest').replaceChildren(...latest.slice(0, 24).map(tile));
+
+  $('steps').replaceChildren(...s.tasks.map((t, i) => {
+    const mark = { done: '✓', doing: '', blocked: '!', todo: String(i + 1) }[t.status] ?? '';
+    const dot = el('div', { class: 'dot' }, t.status === 'doing' ? el('span', { class: 'spin' }) : document.createTextNode(mark));
+    const card = el('div', { class: 'scard' });
+    const h = el('h3', {}, el('span', { text: t.title }), el('span', { class: 'id', text: t.id + (t.gates && t.gates.length ? ' · ' + t.gates.join(', ') : '') }));
+    card.append(h);
+    if (t.status === 'done' && t.summary) card.append(el('p', { class: 'sum', text: t.summary }));
+    else if (t.why) card.append(el('p', { text: t.why }));
+    if (t.blocked) card.append(el('p', { class: 'sum', text: 'Blocked: ' + t.blocked }));
+    if (t.todo && t.todo.length) card.append(el('ul', {}, ...t.todo.map((x) => el('li', { text: x }))));
+    if (t.media && t.media.length) {
+      card.append(el('div', { class: 'strip' }, ...t.media.slice().reverse().map((m) =>
+        tile({ url: '/media/' + m.src, kind: m.kind, caption: m.caption, name: '', when: Date.parse(m.at) }))));
+    }
+    if (t.status === 'done' && t.finishedAt) card.append(el('p', { text: 'Finished ' + ago(Date.parse(t.finishedAt)) }));
+    return el('div', { class: 'step ' + t.status }, el('div', { class: 'rail' }, dot, i < s.tasks.length - 1 ? el('div', { class: 'line' }) : null), card);
+  }));
+
+  $('gates').replaceChildren(...s.gates.map((g) => el('div', { class: 'gate ' + g.status },
+    el('strong', { text: (g.status === 'passed' ? '✓ ' : '') + g.id + '  ' + g.title }),
+    el('small', { text: g.status === 'passed' ? g.evidence : g.status === 'unverified' ? 'Could not be verified: ' + g.evidence : 'Not yet' }))));
+
+  $('decisions').replaceChildren(...(s.decisions.length ? s.decisions : [{ text: 'Nothing yet.' }]).map((x) => el('li', { text: x.text })));
+  $('feed').replaceChildren(...s.feed.slice(0, 30).map((f) => el('li', {}, el('time', { text: ago(Date.parse(f.at)) }), el('span', { text: f.text }))));
+}
+
+let lastJson = '';
+async function tick() {
+  try {
+    const r = await fetch('/api/status', { cache: 'no-store' });
+    const d = await r.json();
+    const key = JSON.stringify({ s: d.state, l: d.latest, v: d.live, q: d.questionsOpen });
+    if (key !== lastJson) { lastJson = key; render(d); fetch('/api/progress.md').then((x) => x.text()).then((t) => { $('raw').textContent = t; }).catch(() => {}); }
+  } catch {}
+}
+tick();
+setInterval(tick, 20000);
+</script>
+</body>
+</html>

@@ -16,10 +16,17 @@ const LIVE = path.join(ROOT, '.live');
 const ANSWERS = path.join(ROOT, '.local', 'answers.json');
 const QUESTIONS = path.join(ROOT, 'loop', 'questions.json');
 const PROGRESS = path.join(ROOT, 'loop', 'PROGRESS.md');
+const STATE = path.join(ROOT, 'loop', 'state.json');
+const MEDIA = path.join(ROOT, '.local', 'media');
+// Folders the Status page watches for new output, and what each holds.
 const GALLERIES = [
-  ['Latest test screenshots', 'test-results/shots'],
-  ['Character renders', 'assets_src/renders'],
+  ['Game screenshot', 'test-results/shots'],
+  ['Floor map', 'test-results/floors'],
+  ['Character render', 'assets_src/renders'],
+  ['Game asset', 'public/assets'],
+  ['Voice take', 'assets_src/voice'],
 ];
+const KIND = { '.png': 'image', '.jpg': 'image', '.jpeg': 'image', '.webp': 'image', '.txt': 'text', '.glb': 'model', '.mp3': 'audio', '.wav': 'audio' };
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg',
@@ -27,7 +34,6 @@ const MIME = {
   '.bin': 'application/octet-stream', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.wasm': 'application/wasm',
   '.woff2': 'font/woff2', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8', '.map': 'application/json',
 };
-const IMG = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -59,28 +65,41 @@ async function serveFile(res, file) {
   } catch { return false; }
 }
 
-async function listImages(relDir, depth = 3) {
+// Every watched output file, newest first: this is what makes new work show up without being announced.
+async function latestFiles(limit = 40) {
   const out = [];
-  async function walk(rel, d) {
+  async function walk(rel, d, label) {
     let entries;
     try { entries = await fs.readdir(path.join(ROOT, rel), { withFileTypes: true }); } catch { return; }
     for (const e of entries) {
       const r = rel + '/' + e.name;
-      if (e.isDirectory() && d > 0) await walk(r, d - 1);
-      else if (e.isFile() && IMG.has(path.extname(e.name).toLowerCase())) {
+      if (e.isDirectory() && d > 0) await walk(r, d - 1, label);
+      else if (e.isFile() && KIND[path.extname(e.name).toLowerCase()]) {
         const st = await fs.stat(path.join(ROOT, r));
-        out.push({ rel: r, mtime: st.mtimeMs });
+        out.push({ url: '/files/' + r, name: r.split('/').slice(-2).join('/'), label, kind: KIND[path.extname(e.name).toLowerCase()], mtime: st.mtimeMs, size: st.size });
       }
     }
   }
-  await walk(relDir, depth);
-  return out.sort((a, b) => b.mtime - a.mtime).slice(0, 24);
+  for (const [label, dir] of GALLERIES) await walk(dir, 3, label);
+  return out.sort((a, b) => b.mtime - a.mtime).slice(0, limit);
+}
+
+async function apiStatus() {
+  const qs = await readJson(QUESTIONS, { questions: [] });
+  const ans = await readJson(ANSWERS, {});
+  return {
+    serverTime: Date.now(),
+    state: await readJson(STATE, null),
+    latest: await latestFiles(),
+    live: await readJson(path.join(LIVE, 'version.json'), null),
+    questionsOpen: qs.questions.filter((q) => !ans[q.id]).length,
+  };
 }
 
 const page = (title, body, refresh = '') => `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">${refresh}<title>${esc(title)}</title>
 <link rel="stylesheet" href="/hub.css"></head><body><main>
-<nav><a href="/">Hub</a><a href="/play/">Play</a><a href="/status">Status</a><a href="/questions">Questions</a></nav>
+<nav><a href="/">Hub</a><a href="/play/">Play</a><a href="/status">Progress</a><a href="/questions">Questions</a></nav>
 ${body}</main></body></html>`;
 
 async function home() {
@@ -94,24 +113,11 @@ async function home() {
   return page('Going Down hub', `<h1>Going Down</h1>${build}
 <div class="tiles">
 <a class="tile" href="/play/"><strong>Play</strong><span>The last known-good build. Add <code>?bots=3</code> to fill the crew with bots.</span></a>
-<a class="tile" href="/status"><strong>Status</strong><span>What the loop is doing, what is verified, newest screenshots.</span></a>
+<a class="tile" href="/status"><strong>Progress</strong><span>The roadmap, what is being built right now, and every new picture and asset as it lands.</span></a>
 <a class="tile" href="/questions"><strong>Questions</strong><span>${open} waiting for you. The loop carries on with defaults until you answer.</span></a>
 </div>`);
 }
 
-async function status() {
-  let md = '';
-  try { md = await fs.readFile(PROGRESS, 'utf8'); } catch { md = 'No progress file yet.'; }
-  let galleries = '';
-  for (const [title, dir] of GALLERIES) {
-    const imgs = await listImages(dir);
-    if (!imgs.length) continue;
-    galleries += `<h2>${esc(title)}</h2><div class="grid">` + imgs.map((i) =>
-      `<a href="/files/${esc(i.rel)}"><img loading="lazy" src="/files/${esc(i.rel)}" alt=""><span>${esc(i.rel.split('/').slice(-2).join('/'))}</span></a>`).join('') + '</div>';
-  }
-  return page('Status', `<h1>Status</h1><p class="dim">Refreshes every minute.</p><pre>${esc(md)}</pre>${galleries}`,
-    '<meta http-equiv="refresh" content="60">');
-}
 
 function readBody(req, limit = 20000) {
   return new Promise((resolve, reject) => {
@@ -150,7 +156,13 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed', 'text/plain');
 
     if (p === '/') return send(res, 200, await home());
-    if (p === '/status') return send(res, 200, await status());
+    if (p === '/status') return (await serveFile(res, path.join(HERE, 'status.html'))) || send(res, 404, '', 'text/plain');
+    if (p === '/api/status') return send(res, 200, JSON.stringify(await apiStatus()), MIME['.json']);
+    if (p === '/api/progress.md') return (await serveFile(res, PROGRESS)) || send(res, 404, '', 'text/plain');
+    if (p.startsWith('/media/')) {
+      const file = KIND[path.extname(p).toLowerCase()] ? inside(MEDIA, p.slice('/media/'.length)) : null;
+      return (file && (await serveFile(res, file))) || send(res, 404, 'Not found', 'text/plain');
+    }
     if (p === '/hub.css') return (await serveFile(res, path.join(HERE, 'hub.css'))) || send(res, 404, '', 'text/plain');
     if (p === '/questions') return (await serveFile(res, path.join(HERE, 'questions.html'))) || send(res, 404, '', 'text/plain');
     if (p === '/api/questions') {
@@ -159,7 +171,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (p.startsWith('/files/')) {
       const rel = p.slice('/files/'.length);
-      const ok = GALLERIES.some(([, dir]) => rel.startsWith(dir + '/')) && IMG.has(path.extname(rel).toLowerCase());
+      const ok = GALLERIES.some(([, dir]) => rel.startsWith(dir + '/')) && KIND[path.extname(rel).toLowerCase()];
       const file = ok ? inside(ROOT, rel) : null;
       return (file && (await serveFile(res, file))) || send(res, 404, 'Not found', 'text/plain');
     }
@@ -169,7 +181,7 @@ const server = http.createServer(async (req, res) => {
       if (rel.endsWith('/')) rel += 'index.html';
       const file = inside(LIVE, rel);
       if (file && (await serveFile(res, file))) return;
-      if (rel === 'index.html') return send(res, 200, page('No build yet', '<h1>No build yet</h1><p>The loop has not deployed a playable build. Check <a href="/status">Status</a>.</p>'));
+      if (rel === 'index.html') return send(res, 200, page('No build yet', '<h1>No build yet</h1><p>The loop has not deployed a playable build. Check <a href="/status">Progress</a>.</p>'));
       return send(res, 404, 'Not found', 'text/plain');
     }
     send(res, 404, 'Not found', 'text/plain');

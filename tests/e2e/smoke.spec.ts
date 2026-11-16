@@ -28,3 +28,11 @@ test('the game boots, draws frames and logs no errors', async ({ page }) => {
   expect(colours).toBeGreaterThan(8);
   expect(errors).toEqual([]);
 });
+
+test('?debug=1 shows position, cell and level', async ({ page }) => {
+  await page.goto('/?seed=smoke&debug=1');
+  await page.waitForFunction(() => (window as any).__gd?.frames > 20);
+  const text = await page.locator('#debug').innerText();
+  expect(text).toMatch(/fps/);
+  expect(text).toMatch(/cell L0 \(\d+,\d+\)/);
+});
