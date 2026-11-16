@@ -18,6 +18,8 @@ export default defineConfig({
   build: {
     target: 'es2022',
     sourcemap: true,
+    // three.js alone is about 500 kB; the default warning is noise here.
+    chunkSizeWarningLimit: 1500,
   },
   test: {
     include: ['tests/sim/**/*.test.ts'],

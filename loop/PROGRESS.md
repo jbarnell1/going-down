@@ -2,14 +2,14 @@
 
 ## Status (read this first)
 
-- **Needs the owner (once):** the hub runs on this PC's localhost but is not on the tailnet yet, because changing Tailscale serve needs an administrator. The exact command is in `.local/MACHINE.md`. Until it is run, the live link only opens on this PC itself.
+- **Hub:** runs on this PC. Not yet reachable from the owner's other devices: the first tailnet port chosen is outside the ports the tailnet's access rules allow, and the owner has been asked to move it to an allowed one (details in `.local/MACHINE.md`). My earlier "reachable" check was made from this PC and proved nothing about other devices.
 - **Started:** 2026-11-16T03:38Z (2026-11-15 21:38 Central). The 30-hour limit is 2026-11-17T09:38Z.
 - **Iterations so far:** 1
 - **Now working on:** T1, the Clinic floor generator
 - **What you can play:** nothing yet. The hub's Play link shows a placeholder corridor with some crates, which only proves the pipeline from seed to pixels.
 - **How to run it:** `npm ci`, then `npm run dev`. Checks: `npm run check` and `npm run e2e`.
 - **Last fully green build:** tag `good-1`
-- **Unverified:** CI's first full run (pushed, result not yet seen). Whether the hub is reachable from the tailnet.
+- **Unverified:** CI's first full run (pushed, result not yet seen).
 - **Answers applied up to:** none yet (no answers file existed at iteration 1)
 - **Last CI result seen:** gitleaks passed on the first two commits. The `ci` workflow first runs on the T0 commit.
 
