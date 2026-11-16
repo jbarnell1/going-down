@@ -348,8 +348,8 @@
       "status": "done",
       "gates": [],
       "startedAt": "2026-11-16T05:59:34.661Z",
-      "finishedAt": "2026-11-16T06:02:45.931Z",
-      "summary": "Four new safety nets. Reference pictures of three views fail the test if the scenery changes (a faint pink tint on the corridor walls was caught). A frame-time limit of 20 ms is enforced in three situations, including the Orderly on screen and the heavy tape level at 1080p. A hub smoke test checks its pages answer and ten path-escape attempts are refused, on every commit. And the floor generator's tests were proven able to fail by removing its stairs. Reference pictures and the frame limit run on this PC only; CI draws in software and skips them.",
+      "finishedAt": "2026-11-16T06:08:52.454Z",
+      "summary": "Four new safety nets. Reference pictures of three views fail the test if the scenery changes: after tightening, a 4% pink tint on the corridor walls and doors 10 cm taller are both caught, and unchanged scenery passes three runs in a row. A frame-time limit of 20 ms is enforced in three situations, including the Orderly on screen and the heavy tape level at 1080p. A hub smoke test checks its pages answer and ten path-escape attempts are refused, on every commit. The floor generator's tests were proven able to fail by removing its stairs. Reference pictures and the frame limit run on this PC only; CI draws in software and skips them.",
       "todo": []
     },
     {
@@ -585,6 +585,16 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T06:08:52.525Z",
+      "text": "Correction: the first version of the picture test let a deliberate wall tint through, and for a few minutes this page said it had been caught. The test was tightened twice until it really does catch it.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T06:08:52.454Z",
+      "text": "Finished T2v: Stronger checks.",
+      "kind": "done"
+    },
     {
       "at": "2026-11-16T06:02:45.932Z",
       "text": "Finished T2v: Stronger checks.",

@@ -6,7 +6,10 @@ import { expect, test } from '@playwright/test';
 // Pictures differ between graphics drivers, so this runs on the development PC and not in CI.
 test.skip(!!process.env.CI, 'reference pictures are specific to this graphics card');
 
-const OPTS = { maxDiffPixelRatio: 0.01, threshold: 0.2 };
+// Tight on purpose. With the tape look off and the camera fixed, the same card draws the same
+// picture every time, so even a faint tint over a wall fails. (Looser settings, threshold 0.2
+// and then 0.03, let a deliberate 4% pink tint on the corridor walls through.)
+const OPTS = { maxDiffPixelRatio: 0.002, threshold: 0.01 };
 
 async function ready(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/?seed=alpha&fx=0');
