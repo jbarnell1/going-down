@@ -21,6 +21,20 @@ var end_lines: Array = []      # [{text, strong}]
 var center_note := ""
 var osd_on := true
 var tape_text := ""
+## The menu shown while the mouse is free (Esc, or before the first click): the controls.
+## The game does not stop behind it; with friends in the run it cannot.
+var menu_on := false
+const MENU_ROWS: Array[Array] = [
+	["W A S D", "WALK"],
+	["SHIFT", "SPRINT"],
+	["CTRL OR C", "CREEP"],
+	["MOUSE", "LOOK"],
+	["E", "INSTRUMENT OUT / AWAY"],
+	["RIGHT MOUSE", "HOLD THE INSTRUMENT UP"],
+	["F", "CALL LIFT / HOLD DOORS / PICK UP"],
+	["T", "TAPE LOOK ON / OFF"],
+	["ESC", "THIS MENU"],
+]
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -87,6 +101,39 @@ func _draw() -> void:
 		PixelFont.draw_shadowed(self, center_note, Vector2((size.x - PixelFont.width(center_note) * px) * 0.5, size.y * 0.3), px, Color("#ffd27a"))
 	if subtitle != "":
 		_draw_subtitle(px)
+	if menu_on and not black:
+		_draw_menu()
+
+func _draw_menu() -> void:
+	var key_w := 0
+	var act_w := 0
+	for row: Array in MENU_ROWS:
+		var key: String = row[0]
+		var act: String = row[1]
+		key_w = maxi(key_w, PixelFont.width(key))
+		act_w = maxi(act_w, PixelFont.width(act))
+	var title := "CONTROLS"
+	var foot := "CLICK TO PLAY"
+	var gap := 10
+	var w := key_w + gap + act_w + 16
+	var line := 12
+	var h := (MENU_ROWS.size() + 4) * line + 8
+	var sc := maxf(1.0, floor(minf(size.x * 0.92 / w, size.y * 0.86 / h)))
+	var origin := Vector2(floorf((size.x - w * sc) * 0.5), floorf((size.y - h * sc) * 0.5))
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.5))
+	draw_rect(Rect2(origin, Vector2(w, h) * sc), Color(0.02, 0.02, 0.025, 0.88))
+	var amber := Color("#ffd27a")
+	var pale := Color("#f4f4ec")
+	PixelFont.draw_shadowed(self, title, origin + Vector2(floorf((w - PixelFont.width(title)) / 2.0), 6) * sc, sc, amber)
+	for i in MENU_ROWS.size():
+		var row: Array = MENU_ROWS[i]
+		var key: String = row[0]
+		var act: String = row[1]
+		var y := 6 + (i + 2) * line
+		PixelFont.draw_shadowed(self, key, origin + Vector2(8 + key_w - PixelFont.width(key), y) * sc, sc, amber)
+		PixelFont.draw_shadowed(self, act, origin + Vector2(8 + key_w + gap, y) * sc, sc, pale)
+	if (Time.get_ticks_msec() / 600) % 2 == 0:
+		PixelFont.draw_shadowed(self, foot, origin + Vector2(floorf((w - PixelFont.width(foot)) / 2.0), 6 + (MENU_ROWS.size() + 3) * line) * sc, sc, amber)
 
 func _draw_subtitle(_px: float) -> void:
 	var text := subtitle.to_upper().replace("’", "'").replace("‘", "'").replace("…", "...")

@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 36,
-  "now": null,
-  "nowText": "",
+  "iteration": 37,
+  "now": "P3",
+  "nowText": "Moving the networking and its fairness rules to Godot, and building the small server that will run on the lab box behind a join passphrase",
   "ci": {
     "status": "passed",
-    "commit": "2d10de6",
-    "at": "2026-11-16T20:35:41.512Z"
+    "commit": "68a0b2e",
+    "at": "2026-11-16T21:40:47.675Z"
   },
   "answersAppliedTo": "2026-11-16T20:44:47.437Z",
   "tasks": [
@@ -944,7 +944,8 @@
         "G9"
       ],
       "todo": [
-        "Owner asked (2026-11-16): an animated being-caught sequence with noise. The Orderly's reach filling the view, the tape tearing, a loud burst; then the downed view. Later is fine, after more of the game is settled."
+        "Owner asked (2026-11-16): an animated being-caught sequence with noise. The Orderly's reach filling the view, the tape tearing, a loud burst; then the downed view. Later is fine, after more of the game is settled.",
+        "New from the owner (16 Nov): caught means downed first. A crewmate can heal you for about 10 seconds; only if nobody does do you go out to the security cameras. The camera drops when downed"
       ],
       "ns": [
         "B6",
@@ -962,7 +963,8 @@
       "todo": [
         "Owner asked what they must do for assets (2026-11-16). Answer given: nothing is required; the one useful thing is Mixamo clips for the crewmates (free Adobe account). Steps are in assets_src/inbox/README.md section 2. The upload file assets_src/inbox/convict-for-mixamo.fbx is being built; tell the owner when it is judged and ready. Then: import their clips, trim/loop, bake into public/assets/entities/convict.glb, replace the box figures in src/render/crewFigures.ts, keep per-player tint and number patches.",
         "Owner (2026-11-16): 'Don't forget to reference the North star, though, we talked about drawing faces on. Maybe keep the models the way they are but every person wears a mask with a screen on it that covers the full face and has whatever face they drew on it.' North Star H1 (Your face is everywhere): each player draws a face before the run; it appears on their avatar, the elevator monitor, the standee left where they fall (B6), and posters. The crewmate figure now wears a full-face screen mask with its own flat face_screen surface.",
-        "Mesh is FINAL (2,216 triangles, one closed symmetric mesh, T-pose, 1.78 m) after two blind judging rounds and the owner's steer: 'we don't need a lot of those fixes because the filter makes everything so grainy we get a lot for free... Mittens are perfectly acceptable.' Upload file: assets_src/inbox/convict-for-mixamo.fbx (fallback .zip). Waiting on the owner's Mixamo clips in assets_src/inbox/mixamo/."
+        "Mesh is FINAL (2,216 triangles, one closed symmetric mesh, T-pose, 1.78 m) after two blind judging rounds and the owner's steer: 'we don't need a lot of those fixes because the filter makes everything so grainy we get a lot for free... Mittens are perfectly acceptable.' Upload file: assets_src/inbox/convict-for-mixamo.fbx (fallback .zip). Waiting on the owner's Mixamo clips in assets_src/inbox/mixamo/.",
+        "R opens a wheel of emotes (hold R, move the mouse to pick, let go): wave, the two dances, pray, look behind"
       ],
       "media": [
         {
@@ -1195,18 +1197,52 @@
       ]
     },
     {
-      "id": "P3",
-      "title": "Playing together through the home server",
-      "why": "One small server at home runs the rules and keeps everyone in sync, so friends in their own houses can join and nobody's browser has to host",
+      "id": "T2c",
+      "title": "The camera drops when you creep",
+      "why": "Creeping should feel like ducking, and what you can see over things should change with it",
       "status": "todo",
       "gates": [],
       "ns": [],
+      "nsWhy": "The design has no line on eye height; the owner asked for it in chat on 16 Nov, recorded in the amendments"
+    },
+    {
+      "id": "T5q",
+      "title": "A quota before the lift can be called",
+      "why": "You cannot just ride straight back up: the crew has to earn a set amount on the instrument on each floor before the call button works",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "C1",
+        "C5"
+      ]
+    },
+    {
+      "id": "P3",
+      "title": "Playing together through the home server",
+      "why": "One small server at home runs the rules and keeps everyone in sync, so friends in their own houses can join and nobody's browser has to host",
+      "status": "doing",
+      "gates": [],
+      "ns": [
+        "B1",
+        "B6",
+        "C5"
+      ],
       "nsWhy": "Foundations, amended by the owner: 'server should just be responsible for handling client updates and keeping everyone in sync'; the fairness contract still applies in full",
       "todo": [
         "Public door: Tailscale Funnel, chosen by the owner. Funnel only works on ports 443, 8443 and 10000. On this PC 443 and 10000 are in use for tailnet-only pages and 8443 is already funnelled for another project by path. Cleanest: add ONE path for the game server on the existing funnelled port, with a command for the owner to run (path mount to the server's local port); the browser build then connects with wss to that path. The server runs on this PC for Friday (it is already the funnel node); the lab box later. Never touch the other paths on that port.",
         "Join secret: the owner sets a passphrase for the night on the server (never in the game file, never in git); friends type it or get it in the invite; the server refuses any connection without it before reading game traffic, with a limit on wrong tries, on connections and on message size",
         "Isolation: run the server on the lab box inside a Docker container with no folders shared, a read-only filesystem, no extra privileges and CPU and memory caps, listening only on the lab box itself; Funnel points at that one port, so friends reach the game server and nothing else"
-      ]
+      ],
+      "startedAt": "2026-11-16T21:26:09.607Z"
+    },
+    {
+      "id": "T0g",
+      "title": "Godot tests stand on their own results",
+      "why": "Any rule change made only in Godot (bigger lift, crouch height, being downed) would fail today's comparison with the old game, so the tests must first keep Godot's own results as the reference",
+      "status": "todo",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "Test tooling"
     },
     {
       "id": "P4",
@@ -1607,6 +1643,41 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T21:48:15.374Z",
+      "text": "A checked Windows build now lives in one fixed place, C:\\new_game\\play\\GoingDown.exe, with BUILD.txt beside it saying when it was built. This one has your control scheme and the controls list on Esc.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T21:39:29.878Z",
+      "text": "Added task T5q: A quota before the lift can be called.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T21:39:19.040Z",
+      "text": "Added task T0g: Godot tests stand on their own results.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T21:39:18.926Z",
+      "text": "Added task T2c: The camera drops when you creep.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T21:29:14.608Z",
+      "text": "Controls changed to your scheme: Ctrl (or C) creeps, E brings the instrument out and puts it away, F now calls the lift, holds the doors and picks up tapes. The emote wheel on R comes with the crewmates.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T21:26:09.607Z",
+      "text": "Started P3: Playing together through the home server. Moving the networking and its fairness rules to Godot, and building the small server that will run on the lab box behind a join passphrase",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T21:26:09.410Z",
+      "text": "Linked P3 to the North Star: B1, B6, C5.",
+      "kind": "note"
+    },
     {
       "at": "2026-11-16T21:25:43.015Z",
       "text": "Finished P0: Godot project, tests and builds.",
@@ -2569,41 +2640,6 @@
     },
     {
       "at": "2026-11-16T05:36:26.482Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T05:33:11.159Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T05:33:11.059Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T05:33:10.972Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T05:23:26.933Z",
-      "text": "Orderly, revision round 2. Fresh blind judges scored it 3/10 and 5/10 for fear: the scores have not improved. Both said the black eye sockets read as sunglasses at game size, and the art director said the grey grinning stick figure echoes three existing characters. The last round goes after exactly that: pale waxy skin, stitched-shut lids, a puffy paper cap, and a smile that runs off the mask onto the cheeks.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T05:21:33.556Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T05:21:33.454Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T05:21:33.368Z",
       "text": "New pictures for T3: The Orderly, second pass.",
       "kind": "media"
     }

@@ -160,6 +160,7 @@ function render(d) {
   const chips = [];
   if (s.ci) chips.push(el('span', { class: 'chip ' + (s.ci.status === 'passed' ? 'ok' : 'warn'), text: `Checks on GitHub: ${s.ci.status}` }));
   chips.push(el('a', { class: 'chip ok', href: '/play/', text: d.live ? `Play the live build (${d.live.commit})` : 'No live build yet' }));
+  if (d.godotBuild) chips.push(el('a', { class: 'chip ok', href: '/godot/', text: `Godot build: ${new Date(d.godotBuild.builtAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })} (${d.godotBuild.commit}${d.godotBuild.uncommittedChanges ? '+' : ''})` }));
   chips.push(el('a', { class: 'chip ' + (d.questionsOpen ? 'warn' : ''), href: '/questions', text: `${d.questionsOpen} question${d.questionsOpen === 1 ? '' : 's'} waiting for you` }));
   const blocked = s.tasks.filter((t) => t.status === 'blocked').length;
   if (blocked) chips.push(el('span', { class: 'chip warn', text: `${blocked} step${blocked === 1 ? '' : 's'} blocked` }));

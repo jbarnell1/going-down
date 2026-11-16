@@ -37,3 +37,5 @@ spikes/
 
 __pycache__/
 *.pyc
+# The checked Godot build the owner runs (npm run godot:promote); rebuilt, never committed.
+play/

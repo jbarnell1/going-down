@@ -4,10 +4,10 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 25 of 44.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 36.
-- **Now:** nothing in progress
-- **Last CI result seen:** passed on 2d10de6
+- **Gates passed:** 7 of 14. **Tasks done:** 25 of 47.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 37.
+- **Now:** P3 Playing together through the home server. Moving the networking and its fairness rules to Godot, and building the small server that will run on the lab box behind a join passphrase
+- **Last CI result seen:** passed on 68a0b2e
 - **Answers applied up to:** 2026-11-16T20:44:47.437Z
 
 ## Tasks
@@ -78,11 +78,13 @@
 - [ ] **T8** `todo` Going down, cameras and the wipe (G8, G9)
   - Why: Being caught puts you on the cameras, and a full wipe ends the run.
   - To do: Owner asked (2026-11-16): an animated being-caught sequence with noise. The Orderly's reach filling the view, the tape tearing, a loud burst; then the downed view. Later is fine, after more of the game is settled.
+  - To do: New from the owner (16 Nov): caught means downed first. A crewmate can heal you for about 10 seconds; only if nobody does do you go out to the security cameras. The camera drops when downed
 - [ ] **T7e** `doing` Better-looking crewmates and readable name tags
   - Why: Crewmates are plain boxes and their names cannot be read from a few metres
   - To do: Owner asked what they must do for assets (2026-11-16). Answer given: nothing is required; the one useful thing is Mixamo clips for the crewmates (free Adobe account). Steps are in assets_src/inbox/README.md section 2. The upload file assets_src/inbox/convict-for-mixamo.fbx is being built; tell the owner when it is judged and ready. Then: import their clips, trim/loop, bake into public/assets/entities/convict.glb, replace the box figures in src/render/crewFigures.ts, keep per-player tint and number patches.
   - To do: Owner (2026-11-16): 'Don't forget to reference the North star, though, we talked about drawing faces on. Maybe keep the models the way they are but every person wears a mask with a screen on it that covers the full face and has whatever face they drew on it.' North Star H1 (Your face is everywhere): each player draws a face before the run; it appears on their avatar, the elevator monitor, the standee left where they fall (B6), and posters. The crewmate figure now wears a full-face screen mask with its own flat face_screen surface.
   - To do: Mesh is FINAL (2,216 triangles, one closed symmetric mesh, T-pose, 1.78 m) after two blind judging rounds and the owner's steer: 'we don't need a lot of those fixes because the filter makes everything so grainy we get a lot for free... Mittens are perfectly acceptable.' Upload file: assets_src/inbox/convict-for-mixamo.fbx (fallback .zip). Waiting on the owner's Mixamo clips in assets_src/inbox/mixamo/.
+  - To do: R opens a wheel of emotes (hold R, move the mouse to pick, let go): wave, the two dances, pray, look behind
 - [ ] **T7f** `todo` Draw your face
   - Why: North Star H1: each player doodles a face before the run and it shows on the screen mask their crewmate figure wears, glowing in the dark, and on the lift monitor
   - To do: A small drawing pad in the lobby (about 48 x 48, one colour on dark, a few brush sizes, clear, and a random doodle for the lazy); sent to the crew as a few hundred bytes; shown on the mask screen (glowing), the crew list, the lift monitor, and later the standee where a player falls and the posters. Bots get generated doodles. Remembered in the browser between runs.
@@ -105,11 +107,17 @@
   - Why: The car is a 2 metre square today, so each side of the BANK or DOWN choice is 1 metre wide: cramped for four and a crush for eight
   - To do: Default size 3 m by 3 m with a 1.6 m door unless the owner says otherwise; the floor generator must keep the space behind and beside the lift wall empty; the lift drawing must read its size from the rules, not its own numbers
   - To do: Size is now 4 m by 4 m with a 1.8 m door (the owner said bigger still than 3 by 3): each of BANK and DOWN becomes 2 m wide
-- [ ] **P3** `todo` Playing together through the home server
+- [ ] **T2c** `todo` The camera drops when you creep
+  - Why: Creeping should feel like ducking, and what you can see over things should change with it
+- [ ] **T5q** `todo` A quota before the lift can be called
+  - Why: You cannot just ride straight back up: the crew has to earn a set amount on the instrument on each floor before the call button works
+- [ ] **P3** `doing` Playing together through the home server
   - Why: One small server at home runs the rules and keeps everyone in sync, so friends in their own houses can join and nobody's browser has to host
   - To do: Public door: Tailscale Funnel, chosen by the owner. Funnel only works on ports 443, 8443 and 10000. On this PC 443 and 10000 are in use for tailnet-only pages and 8443 is already funnelled for another project by path. Cleanest: add ONE path for the game server on the existing funnelled port, with a command for the owner to run (path mount to the server's local port); the browser build then connects with wss to that path. The server runs on this PC for Friday (it is already the funnel node); the lab box later. Never touch the other paths on that port.
   - To do: Join secret: the owner sets a passphrase for the night on the server (never in the game file, never in git); friends type it or get it in the invite; the server refuses any connection without it before reading game traffic, with a limit on wrong tries, on connections and on message size
   - To do: Isolation: run the server on the lab box inside a Docker container with no folders shared, a read-only filesystem, no extra privileges and CPU and memory caps, listening only on the lab box itself; Funnel points at that one port, so friends reach the game server and nothing else
+- [ ] **T0g** `todo` Godot tests stand on their own results
+  - Why: Any rule change made only in Godot (bigger lift, crouch height, being downed) would fail today's comparison with the old game, so the tests must first keep Godot's own results as the reference
 - [ ] **P4** `todo` Light browser build and a download for friends
   - Why: Friends either click a link that loads in a few seconds or run a small downloaded file
   - To do: Run the Godot quick tests on GitHub as well (the runner must download Godot 4.7.2); today they only run on this PC before each commit
@@ -184,6 +192,13 @@
 
 ## Activity (newest first)
 
+- 2026-11-16 21:48Z A checked Windows build now lives in one fixed place, C:\new_game\play\GoingDown.exe, with BUILD.txt beside it saying when it was built. This one has your control scheme and the controls list on Esc.
+- 2026-11-16 21:39Z Added task T5q: A quota before the lift can be called.
+- 2026-11-16 21:39Z Added task T0g: Godot tests stand on their own results.
+- 2026-11-16 21:39Z Added task T2c: The camera drops when you creep.
+- 2026-11-16 21:29Z Controls changed to your scheme: Ctrl (or C) creeps, E brings the instrument out and puts it away, F now calls the lift, holds the doors and picks up tapes. The emote wheel on R comes with the crewmates.
+- 2026-11-16 21:26Z Started P3: Playing together through the home server. Moving the networking and its fairness rules to Godot, and building the small server that will run on the lab box behind a join passphrase
+- 2026-11-16 21:26Z Linked P3 to the North Star: B1, B6, C5.
 - 2026-11-16 21:25Z Finished P0: Godot project, tests and builds.
 - 2026-11-16 20:52Z Applied the owner's new answers.
 - 2026-11-16 20:52Z Time limit moved to 2026-11-21T05:00:00.000Z: the owner answered 'Keep going until Friday' on the Questions page
@@ -217,10 +232,3 @@
 - 2026-11-16 17:52Z Finished T6e: Blinks that grow into a blackout.
 - 2026-11-16 17:52Z Finished T2w: Browser tests must not grab the owner's mouse.
 - 2026-11-16 17:36Z Godot trial finished in 35 minutes: the lighting is clearly better, but a first visit took 27 to 34 seconds before the first frame against under half a second for the current game, and the download is about 11 MB against 0.3 MB. The trial's own recommendation is to stay for the browser game. The trial build is on the hub at /godot/ for the owner to try.
-- 2026-11-16 17:36Z New pictures for T7e: Better-looking crewmates and readable name tags.
-- 2026-11-16 17:26Z Crewmate figure, judging round two: both blind judges said the glowing drawn face is what the eye goes to and that the crew read as allies they could tell apart. The worst thing left is how the mask is mounted (it looks like a thin slab stuck on a bald head), then the mitten hands. Sent back for a deep monitor-style housing sealed to the face, bigger gloves with a cuff, softer folds and better joints.
-- 2026-11-16 17:25Z New pictures for T7e: Better-looking crewmates and readable name tags.
-- 2026-11-16 17:18Z A launch guard is now active: no agent can be started unless its brief quotes the relevant part of the North Star, or says why the design has nothing on it. Tested both ways: an unmarked brief was refused, a marked one went through.
-- 2026-11-16 17:15Z New guard against drifting from the design: every task must now be linked to the North Star mechanics it builds before it can start, and the tracker prints that part of the design at the start and again at the finish. A one-page index replaces re-reading the whole document.
-- 2026-11-16 17:14Z Linked X1 to the North Star: nothing in it (An engine trial the owner approved on 2026-11-16).
-- 2026-11-16 17:14Z Linked T7b to the North Star: nothing in it (The owner tests alone, so bots stand in for a crew (loop rules), not a North Star mechanic).

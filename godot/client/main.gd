@@ -55,10 +55,14 @@ var runs := 0
 # Test overrides (empty / null = from the keyboard and mouse).
 var t_move: Array = []     # [f, r, sprint, creep]
 var t_raise: Variant = null
+## Tests: show the menu although the mouse is never captured under automation.
+var t_menu := false
 var t_hold: Variant = null
 var time_scale := 1.0
 var pending_call := false
 var pending_pick := false
+## The instrument is out: E toggles it (the right mouse button still raises it while held).
+var raise_latch := false
 
 # Presentation state.
 var dark_since := -1
@@ -202,7 +206,7 @@ func _read_options() -> void:
 
 func _add_actions() -> void:
 	var keys := {"forward": [KEY_W, KEY_UP], "back": [KEY_S, KEY_DOWN], "left": [KEY_A, KEY_LEFT], "right": [KEY_D, KEY_RIGHT],
-		"sprint": [KEY_SHIFT], "creep": [KEY_C], "use": [KEY_E], "raise": [KEY_F]}
+		"sprint": [KEY_SHIFT], "creep": [KEY_CTRL, KEY_C], "use": [KEY_F]}
 	for action: String in keys:
 		if InputMap.has_action(action):
 			continue
@@ -292,6 +296,7 @@ func _new_run() -> void:
 	if placed is Dictionary:
 		yaw = float((placed as Dictionary).get("yaw", 0.0))
 	pitch = 0.0
+	raise_latch = false
 	ending = {}
 	end_shown_at = -1
 	hud.end_lines = []
@@ -353,6 +358,8 @@ func _input(event: InputEvent) -> void:
 		elif not hud.end_lines.is_empty() and Time.get_ticks_msec() - end_shown_at > 1200:
 			_new_run()
 		elif k.physical_keycode == KEY_E:
+			raise_latch = not raise_latch
+		elif k.physical_keycode == KEY_F:
 			pending_call = true
 			pending_pick = true
 		elif k.physical_keycode == KEY_T:
@@ -415,7 +422,7 @@ func _process(delta: float) -> void:
 		r = Input.get_action_strength("right") - Input.get_action_strength("left")
 		sprint = Input.is_action_pressed("sprint")
 		creep = Input.is_action_pressed("creep")
-	var raised: bool = t_raise if t_raise != null else (Input.is_action_pressed("raise") or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT))
+	var raised: bool = t_raise if t_raise != null else (raise_latch or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT))
 	var me: Dictionary = snap.get("me", {})
 	var hold: bool = t_hold if t_hold != null else (Input.is_action_pressed("use") and bool(me.get("nearHold", false)))
 	var call: bool = pending_call and bool(me.get("canCall", false))
@@ -534,16 +541,16 @@ func _process(delta: float) -> void:
 	hud.set_tapes(int(tapes["count"]), float(tapes["value"]))
 	hud.subtitle = announcer.subtitle
 	hud.center_note = error_text
-	if error_text == "" and not automated and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and hud.end_lines.is_empty():
-		hud.center_note = "CLICK TO LOOK AROUND"
+	# The menu (the controls) shows whenever the mouse is free: after Esc, and before the first click.
+	hud.menu_on = t_menu or (error_text == "" and not automated and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and hud.end_lines.is_empty())
 	var prompt := ""
 	if not ended and not noise:
 		if bool(me.get("canCall", false)):
-			prompt = "E  ▼ CALL"
+			prompt = "F  ▼ CALL"
 		elif bool(me.get("nearHold", false)):
-			prompt = "E  <|> HOLD"
+			prompt = "F  <|> HOLD"
 		elif _tape_in_reach(me):
-			prompt = "E  PICK UP"
+			prompt = "F  PICK UP"
 	hud.prompt = prompt
 	_show_end(now)
 
@@ -646,6 +653,7 @@ func _present(events: Array, now: int) -> void:
 			"caught":
 				if mine:
 					caught_at = now
+					raise_latch = false
 					sfx.play("caught")
 			"slip":
 				if mine:
@@ -726,6 +734,8 @@ func _command(c: String) -> String:
 			frames = 6
 		"move":
 			t_move = [float(p[1]), float(p[2]), p.size() > 3 and p[3] == "1", p.size() > 4 and p[4] == "1"]
+		"menu":
+			t_menu = p.size() > 1 and p[1] == "1"
 		"stopmove":
 			t_move = []
 		"look":
@@ -808,6 +818,6 @@ func _test_state() -> Dictionary:
 			"raise": inst_view.raise, "needle": inst_view.needle, "needleAngle": inst_view.angle, "subtitle": announcer.subtitle,
 			"spoken": announcer.history.map(func(h: Dictionary) -> String: return str(h["id"])), "caught": caught_at >= 0, "noise": _noise_on(),
 			"wentDown": hud.went_down, "end": hud.end_lines.map(func(l: Dictionary) -> String: return str(l["text"])), "tapeText": hud.tape_text,
-			"prompt": hud.prompt, "built": built_depth, "timeScale": time_scale, "hudSize": [hud.size.x, hud.size.y]},
+			"prompt": hud.prompt, "menu": hud.menu_on, "built": built_depth, "timeScale": time_scale, "hudSize": [hud.size.x, hud.size.y]},
 		"events": event_counts,
 	}

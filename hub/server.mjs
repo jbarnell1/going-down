@@ -118,6 +118,7 @@ async function apiStatus() {
     state: await readJson(STATE, null),
     latest: await latestFiles(),
     live: await readJson(path.join(LIVE, 'version.json'), null),
+    godotBuild: await readJson(path.join(ROOT, 'play', 'build.json'), null),
     questionsOpen: qs.questions.filter((q) => !ans[q.id]).length,
   };
 }
@@ -222,9 +223,9 @@ const server = http.createServer(async (req, res) => {
     if (p.startsWith('/godot/')) {
       let rel = p.slice('/godot/'.length) || 'index.html';
       if (rel.endsWith('/')) rel += 'index.html';
-      // The real project's build first (npm run godot:export), then the older trial builds if it is missing.
-      const dir = [['godot'], ['spikes', 'godot-client'], ['spikes', 'godot-trial']]
-        .map((p) => path.join(ROOT, ...p, 'export', 'web')).find((d) => existsSync(path.join(d, 'index.html'))) ?? path.join(ROOT, 'godot', 'export', 'web');
+      // The checked build first (npm run godot:promote), then the newest export, then the older trial builds.
+      const dir = [['play', 'web'], ['godot', 'export', 'web'], ['spikes', 'godot-client', 'export', 'web'], ['spikes', 'godot-trial', 'export', 'web']]
+        .map((p) => path.join(ROOT, ...p)).find((d) => existsSync(path.join(d, 'index.html'))) ?? path.join(ROOT, 'godot', 'export', 'web');
       const file = inside(dir, rel);
       const hidden = /\.(br|gz)$/i.test(rel);
       return (file && !hidden && (await serveBuild(req, res, file))) || send(res, 404, 'No Godot build on this machine', 'text/plain');

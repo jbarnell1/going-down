@@ -78,7 +78,12 @@ node godot/tools/serve.mjs godot/export/web 4440 &      # then open http://127.0
 godot/export/windows/GoingDown.exe                      # the main build: nothing else needed beside it
 ```
 
-`npm run godot:export -- web` or `-- windows` builds one. Controls, URL parameters and desktop
+Controls: WASD or arrows walk, Shift sprints, Ctrl (or C) creeps, mouse looks (click to capture the
+mouse, Esc frees it), E brings the instrument out and puts it away (the right mouse button raises it
+while held), F calls the lift, holds the doors from inside the car and picks up a dropped tape, T
+toggles the tape look. In a browser use C to creep: Ctrl+W closes the tab.
+
+`npm run godot:export -- web` or `-- windows` builds one. URL parameters and desktop
 arguments (`seed=`, `quality=`, `entity=0`, `auto=1`, `testport=`, `--bench=`) are the client's,
 unchanged: see `spikes/godot-client/README.md`. After the web export `godot:export` runs
 `node hub/precompress.mjs godot/export/web` (the hub serves the compressed copies only when they are
