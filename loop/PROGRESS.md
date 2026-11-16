@@ -8,7 +8,7 @@
 - **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 19.
 - **Now:** T7 Playing together. An Opus agent is building the multiplayer layer as tested logic first: one player's browser hosts the run, the others send what they do and see, and the Orderly must never be seen to move on anyone's screen even with network delay.
 - **Last CI result seen:** failed on e34bdee
-- **Answers applied up to:** 2026-11-16T04:20:00Z
+- **Answers applied up to:** 2026-11-16T11:30:00Z
 
 ## Tasks
 
@@ -102,6 +102,9 @@
 
 ## Activity (newest first)
 
+- 2026-11-16 11:32Z Applied the owner's new answers.
+- 2026-11-16 11:32Z New pictures for T6b: The elevator voice.
+- 2026-11-16 11:32Z Brian is in the game as a second elevator voice, and there is a settings menu: press Esc on a computer, or the gear on a phone, to switch between Bella and Brian, play a sample, turn subtitles off, change the tape look, or set the volume. Brian's set cost 5,151 characters; the game has now used 12,984 of the 50,000 cap. No key or private path leaked. All 40 browser tests and 118 rule tests pass on the merged code. Nobody has heard Brian.
 - 2026-11-16 11:22Z CI failed on e34bdee.
 - 2026-11-16 11:14Z You said not to spend much energy on the phone crash, so it is parked as its own step with what your phone reported. Development continues on the main roadmap.
 - 2026-11-16 11:14Z Added task T13: Phone picture crash on your Pixel.
@@ -139,6 +142,3 @@
 - 2026-11-16 07:13Z Design tuning by Fable: the Orderly now runs down anyone who runs but creeps up on anyone standing still, and the instrument pays far more in the last metres. Before, the final approach took about a second and a half, too fast to choose when to turn. Now it takes about four seconds, and turning at arm's length earns roughly double what turning at 2.5 metres does. The earning rule's independent checker verified 33,646 moments of recording with no violations.
 - 2026-11-16 07:00Z Started T5: The instrument, the recording rule and tapes. An Opus agent is building the earning rule as tested logic: the instrument only records while the Orderly is moving near you, which means while nobody is looking at it.
 - 2026-11-16 06:58Z Gate G5 (Heard before seen) is passed.
-- 2026-11-16 06:58Z Finished T4: The Orderly comes alive.
-- 2026-11-16 06:58Z Correction: GitHub's checks have been failing since the tape look went in, four commits ago, and the public play link stopped updating. Twice I recorded them as passed without reading the result. The cause was frame-time limits that a software-rendered CI machine cannot meet; those now apply only on a real graphics card. The loop's rules now say to record a CI result only from what was actually printed.
-- 2026-11-16 06:58Z CI failed on 4a9ac1f.

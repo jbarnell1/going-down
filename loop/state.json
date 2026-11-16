@@ -11,7 +11,7 @@
     "commit": "e34bdee",
     "at": "2026-11-16T11:22:13.464Z"
   },
-  "answersAppliedTo": "2026-11-16T04:20:00Z",
+  "answersAppliedTo": "2026-11-16T11:30:00Z",
   "tasks": [
     {
       "id": "T0",
@@ -677,6 +677,18 @@
           "caption": "Brian on calling the elevator (unheard by its maker)",
           "kind": "audio",
           "at": "2026-11-16T11:01:55.786Z"
+        },
+        {
+          "src": "T6b/20261116T113211-90-settings.png",
+          "caption": "The settings menu: voice, subtitles, tape look, volume",
+          "kind": "image",
+          "at": "2026-11-16T11:32:11.117Z"
+        },
+        {
+          "src": "T6b/20261116T113211-called_1.mp3",
+          "caption": "Brian on calling the elevator (unheard: please listen)",
+          "kind": "audio",
+          "at": "2026-11-16T11:32:11.118Z"
         }
       ],
       "finishedAt": "2026-11-16T09:55:36.510Z",
@@ -902,6 +914,21 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T11:32:11.194Z",
+      "text": "Applied the owner's new answers.",
+      "kind": "answers"
+    },
+    {
+      "at": "2026-11-16T11:32:11.119Z",
+      "text": "New pictures for T6b: The elevator voice.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T11:32:11.043Z",
+      "text": "Brian is in the game as a second elevator voice, and there is a settings menu: press Esc on a computer, or the gear on a phone, to switch between Bella and Brian, play a sample, turn subtitles off, change the tape look, or set the volume. Brian's set cost 5,151 characters; the game has now used 12,984 of the 50,000 cap. No key or private path leaked. All 40 browser tests and 118 rule tests pass on the merged code. Nobody has heard Brian.",
+      "kind": "note"
+    },
     {
       "at": "2026-11-16T11:22:13.464Z",
       "text": "CI failed on e34bdee.",
