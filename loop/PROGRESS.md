@@ -5,9 +5,9 @@
 ## Status
 
 - **Gates passed:** 4 of 14. **Tasks done:** 11 of 23.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 12.
-- **Now:** nothing in progress
-- **Last CI result seen:** passed on 4f1e489
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 13.
+- **Now:** T6 The elevator. An Opus agent is building the run's rules as tested logic: calling the elevator and its loud wait, lights that blink while it comes, voting to bank or ride down, and who gets left behind.
+- **Last CI result seen:** passed on 6ba26d4
 - **Answers applied up to:** 2026-11-16T04:20:00Z
 
 ## Tasks
@@ -45,7 +45,7 @@
 - [x] **T5** `done` The instrument, the recording rule and tapes (G3)
   - Why: How the crew earns: readings only record the scary part, and the tape has to be carried out.
   - Evidence: The earning loop is playable. Raise the instrument (hold right mouse or F, or the round button on a phone), turn your back on the Orderly, and the needle climbs and the ticking races as it creeps up behind you; turn round and it freezes. In the browser test, turning at 2.5 metres earned 131 and turning at 1.3 metres earned 246. Staring at it earns nothing. Being taken drops your tape where you fell, and you can walk back and pick it up. The first time it records, the instrument prints a slip: the only words on screen. All 29 browser tests and 76 rule tests pass on Fable's own run, and shrinking the instrument's range on purpose fails three of them. Nobody has heard the ticking or the squeak. One weakness: nothing yet teaches a new player to raise it and turn their back; the training floor is meant to.
-- [ ] **T6** `todo` The elevator (G6)
+- [ ] **T6** `doing` The elevator (G6)
   - Why: The only safe place. Calling it, waiting out its loud arrival, then bank or ride down.
 - [ ] **T6b** `todo` The elevator voice (G13)
   - Why: The relentlessly cheerful announcer, recorded with ElevenLabs, with an audition page for you.
@@ -96,6 +96,8 @@
 
 ## Activity (newest first)
 
+- 2026-11-16 08:17Z The run's rules are proven in logic: the car leaves after dropping you, calling it means a loud wait of 25 to 55 seconds, the lights blink while it comes, and you vote to bank or ride by where you stand. Fable changed two things. The blink was 0.35 seconds, which the agent found left a staring crew completely safe (0 of 320 caught); it is now one second, so a crew that only stands and stares is taken in about 1 wait in 5, and has to keep its distance. And the call now wakes the Orderly. Deliberate break: making a tied vote bank instead of ride fails the vote test.
+- 2026-11-16 07:53Z Started T6: The elevator. An Opus agent is building the run's rules as tested logic: calling the elevator and its loud wait, lights that blink while it comes, voting to bank or ride down, and who gets left behind.
 - 2026-11-16 07:51Z Added task T12: Orientation: the training floor.
 - 2026-11-16 07:51Z Gate G3 (Rules hold over 500 simulated runs) is passed.
 - 2026-11-16 07:51Z Finished T5: The instrument, the recording rule and tapes.
@@ -134,5 +136,3 @@
 - 2026-11-16 05:37Z Started T2b: The tape-playback look and the debug overlay. An Opus agent is building the tape-playback look as a screen filter, plus a debug overlay with a minimap.
 - 2026-11-16 05:37Z Took a default: The Orderly: kept as it is for now and moved on, relying on behaviour, sound and the tape look for fear (question "orderly-next").
 - 2026-11-16 05:37Z Added task T3b: The Orderly, third pass.
-- 2026-11-16 05:37Z Gate G4 (The Orderly is a real figure) is passed.
-- 2026-11-16 05:37Z Finished T3: The Orderly, second pass.

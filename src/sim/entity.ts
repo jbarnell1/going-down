@@ -92,6 +92,11 @@ export type OrderlyAnim = 'idle' | 'walk' | 'duck' | 'reach';
 export interface PlayerView extends Viewer {
   id: string;
   active: boolean;
+  /**
+   * Present and huntable (it can target, reach for and catch them) but seeing nothing this tick,
+   * e.g. during a light blink. Never counts as looking. Default false.
+   */
+  blind?: boolean;
 }
 
 export interface OrderlyState {
@@ -253,7 +258,7 @@ export function createOrderly(plan: FloorPlan): OrderlyState {
 /** Whether any active player's screen could be showing it, and who (first in list order). */
 export function seenBy(plan: FloorPlan, body: Body, players: readonly PlayerView[]): PlayerView | null {
   for (const p of players) {
-    if (!p.active) continue;
+    if (!p.active || p.blind === true) continue;
     // The true body first, then the larger outlines the drawn figure can reach. Each extra pass can
     // only add sightings: checking the big outline INSTEAD of the body moved the sample points above
     // door frames and missed real ones, which the independent oracle caught.

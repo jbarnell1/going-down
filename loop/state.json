@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
-  "iteration": 12,
-  "now": null,
-  "nowText": "",
+  "iteration": 13,
+  "now": "T6",
+  "nowText": "An Opus agent is building the run's rules as tested logic: calling the elevator and its loud wait, lights that blink while it comes, voting to bank or ride down, and who gets left behind.",
   "ci": {
     "status": "passed",
-    "commit": "4f1e489",
-    "at": "2026-11-16T07:49:36.029Z"
+    "commit": "6ba26d4",
+    "at": "2026-11-16T08:14:25.612Z"
   },
   "answersAppliedTo": "2026-11-16T04:20:00Z",
   "tasks": [
@@ -513,10 +513,11 @@
       "id": "T6",
       "title": "The elevator",
       "why": "The only safe place. Calling it, waiting out its loud arrival, then bank or ride down.",
-      "status": "todo",
+      "status": "doing",
       "gates": [
         "G6"
-      ]
+      ],
+      "startedAt": "2026-11-16T07:53:14.525Z"
     },
     {
       "id": "T6b",
@@ -729,6 +730,16 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T08:17:52.894Z",
+      "text": "The run's rules are proven in logic: the car leaves after dropping you, calling it means a loud wait of 25 to 55 seconds, the lights blink while it comes, and you vote to bank or ride by where you stand. Fable changed two things. The blink was 0.35 seconds, which the agent found left a staring crew completely safe (0 of 320 caught); it is now one second, so a crew that only stands and stares is taken in about 1 wait in 5, and has to keep its distance. And the call now wakes the Orderly. Deliberate break: making a tied vote bank instead of ride fails the vote test.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T07:53:14.525Z",
+      "text": "Started T6: The elevator. An Opus agent is building the run's rules as tested logic: calling the elevator and its loud wait, lights that blink while it comes, voting to bank or ride down, and who gets left behind.",
+      "kind": "start"
+    },
     {
       "at": "2026-11-16T07:51:25.137Z",
       "text": "Added task T12: Orientation: the training floor.",
