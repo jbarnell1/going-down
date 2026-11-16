@@ -29,13 +29,15 @@ test('the Orderly on screen with its shadow stays inside the frame budget', asyn
   expect(ms).toBeLessThan(BUDGET_MS);
 });
 
-test('the live Orderly hunting, glanced at and away, stays inside the frame budget', async ({ page }) => {
+test('the live Orderly hunting, glanced at and away, with the instrument up, stays inside the frame budget', async ({ page }) => {
   await page.goto('/?seed=alpha');
   await page.waitForFunction(() => (window as any).__gd?.orderly()?.loaded === true, undefined, { timeout: 30_000 });
   // 40 m down the longest corridor, awake; the player looks at it and away every half second, so
-  // it is drawn frozen with its shadow, then walks (path planning, animation, squeak) unseen.
+  // it is drawn frozen with its shadow, then walks (path planning, animation, squeak) unseen. The
+  // instrument is raised the whole time: its own pass, the needle, the ticking and the crew logic.
   await page.evaluate(() => {
     const g = (window as any).__gd;
+    g.raise(true);
     const s = g.plan.sightlines.filter((l: any) => l.level === 0).sort((p: any, q: any) => q.length - p.length)[0];
     const yaw = (Math.atan2(-(s.x2 - s.x1), -(s.y2 - s.y1)) * 180) / Math.PI;
     g.teleport(0, s.x1, s.y1, yaw);
@@ -46,8 +48,10 @@ test('the live Orderly hunting, glanced at and away, stays inside the frame budg
   });
   const ms = await settledFrameMs(page);
   const o = await page.evaluate(() => (window as any).__gd.orderly());
-  console.log(`budget orderly hunting=${ms.toFixed(2)} ms (phase ${o.phase}, ${o.distance.toFixed(1)} m)`);
+  const i = await page.evaluate(() => (window as any).__gd.instrument());
+  console.log(`budget orderly hunting + instrument=${ms.toFixed(2)} ms (phase ${o.phase}, ${o.distance.toFixed(1)} m, needle ${i.needle})`);
   expect(o.phase).toBe('hunting');
+  expect(i.raised).toBe(true);
   expect(ms).toBeLessThan(BUDGET_MS);
 });
 

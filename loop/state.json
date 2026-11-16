@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
-  "iteration": 10,
-  "now": "T5",
-  "nowText": "An Opus agent is building the earning rule as tested logic: the instrument only records while the Orderly is moving near you, which means while nobody is looking at it.",
+  "iteration": 12,
+  "now": null,
+  "nowText": "",
   "ci": {
     "status": "passed",
-    "commit": "5ec3ac8",
-    "at": "2026-11-16T07:10:21.802Z"
+    "commit": "4f1e489",
+    "at": "2026-11-16T07:49:36.029Z"
   },
   "answersAppliedTo": "2026-11-16T04:20:00Z",
   "tasks": [
@@ -426,11 +426,88 @@
       "id": "T5",
       "title": "The instrument, the recording rule and tapes",
       "why": "How the crew earns: readings only record the scary part, and the tape has to be carried out.",
-      "status": "doing",
+      "status": "done",
       "gates": [
         "G3"
       ],
-      "startedAt": "2026-11-16T07:00:30.907Z"
+      "startedAt": "2026-11-16T07:00:30.907Z",
+      "media": [
+        {
+          "src": "T5/20261116T074208-61-recording.png",
+          "caption": "Back turned, instrument raised: an empty corridor ahead, the needle swinging up toward the red as the thing comes up behind me",
+          "kind": "image",
+          "at": "2026-11-16T07:42:08.137Z"
+        },
+        {
+          "src": "T5/20261116T074208-62-turned.png",
+          "caption": "Turned round at 2.5 m: it is right there and frozen, the needle falling back; that reading is now on my tape",
+          "kind": "image",
+          "at": "2026-11-16T07:42:08.218Z"
+        },
+        {
+          "src": "T5/20261116T074208-60-instrument-dormant.png",
+          "caption": "Staring at it from 6 m with the instrument up earns nothing: the needle only twitches nervously off its peg",
+          "kind": "image",
+          "at": "2026-11-16T07:42:08.294Z"
+        },
+        {
+          "src": "T5/20261116T074208-63-slip.png",
+          "caption": "The first time it records, the device prints a paper slip: the only words the game ever shows about the rule",
+          "kind": "image",
+          "at": "2026-11-16T07:42:08.371Z"
+        },
+        {
+          "src": "T5/20261116T074208-64-tape-on-floor.png",
+          "caption": "After being taken, my tape lies on the floor where I fell (a black cassette with a blinking red lamp)",
+          "kind": "image",
+          "at": "2026-11-16T07:42:08.449Z"
+        },
+        {
+          "src": "T5/20261116T074208-65-picked-up.png",
+          "caption": "Walked back and picked it up with E: the camcorder display shows one tape carried and its worth",
+          "kind": "image",
+          "at": "2026-11-16T07:42:08.529Z"
+        },
+        {
+          "src": "T5/20261116T074208-66-phone-instrument.png",
+          "caption": "Phone: the round button under the right thumb raises the instrument and the same thumb still turns the view; the padlock latches it up",
+          "kind": "image",
+          "at": "2026-11-16T07:42:08.607Z"
+        },
+        {
+          "src": "T5/20261116T075124-61-recording.png",
+          "caption": "Back turned, instrument raised. The corridor ahead is empty, the needle is climbing, and it is behind me",
+          "kind": "image",
+          "at": "2026-11-16T07:51:24.989Z"
+        },
+        {
+          "src": "T5/20261116T075124-62-turned.png",
+          "caption": "I turned round at 2.5 metres",
+          "kind": "image",
+          "at": "2026-11-16T07:51:24.990Z"
+        },
+        {
+          "src": "T5/20261116T075124-60-instrument-dormant.png",
+          "caption": "Staring at it: the needle only twitches, and nothing is earned",
+          "kind": "image",
+          "at": "2026-11-16T07:51:24.991Z"
+        },
+        {
+          "src": "T5/20261116T075124-64-tape-on-floor.png",
+          "caption": "Taken: my tape lies where I fell",
+          "kind": "image",
+          "at": "2026-11-16T07:51:24.992Z"
+        },
+        {
+          "src": "T5/20261116T075124-66-phone-instrument.png",
+          "caption": "On a phone: the raise button under the right thumb",
+          "kind": "image",
+          "at": "2026-11-16T07:51:24.993Z"
+        }
+      ],
+      "finishedAt": "2026-11-16T07:51:24.986Z",
+      "summary": "The earning loop is playable. Raise the instrument (hold right mouse or F, or the round button on a phone), turn your back on the Orderly, and the needle climbs and the ticking races as it creeps up behind you; turn round and it freezes. In the browser test, turning at 2.5 metres earned 131 and turning at 1.3 metres earned 246. Staring at it earns nothing. Being taken drops your tape where you fell, and you can walk back and pick it up. The first time it records, the instrument prints a slip: the only words on screen. All 29 browser tests and 76 rule tests pass on Fable's own run, and shrinking the instrument's range on purpose fails three of them. Nobody has heard the ticking or the squeak. One weakness: nothing yet teaches a new player to raise it and turn their back; the training floor is meant to.",
+      "todo": []
     },
     {
       "id": "T6",
@@ -514,6 +591,13 @@
       ]
     },
     {
+      "id": "T12",
+      "title": "Orientation: the training floor",
+      "why": "Floor one of every run, where nothing can hurt you and a cardboard statue on wheels teaches the instrument. Without it nothing shows a new player to raise the instrument and turn their back.",
+      "status": "todo",
+      "gates": []
+    },
+    {
       "id": "T1b",
       "title": "More than one floor skeleton",
       "why": "Every Clinic floor shares one skeleton today, which will feel samey by the third floor.",
@@ -545,8 +629,9 @@
     {
       "id": "G3",
       "title": "Rules hold over 500 simulated runs",
-      "status": "open",
-      "evidence": ""
+      "status": "passed",
+      "evidence": "Two independent checkers over 500 simulated runs each: 48,882 moments when a player could see the Orderly, and it had moved in none; 33,646 moments when a reading grew, all with the Orderly moving within range of a raised instrument. Deliberate breaks used: a too-narrow idea of 'seen', no grace period, and recording with the instrument lowered. Each failed its test.",
+      "at": "2026-11-16T07:51:25.065Z"
     },
     {
       "id": "G4",
@@ -644,6 +729,66 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T07:51:25.137Z",
+      "text": "Added task T12: Orientation: the training floor.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T07:51:25.066Z",
+      "text": "Gate G3 (Rules hold over 500 simulated runs) is passed.",
+      "kind": "gate"
+    },
+    {
+      "at": "2026-11-16T07:51:24.993Z",
+      "text": "Finished T5: The instrument, the recording rule and tapes.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T07:42:08.607Z",
+      "text": "New pictures for T5: The instrument, the recording rule and tapes.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T07:42:08.529Z",
+      "text": "New pictures for T5: The instrument, the recording rule and tapes.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T07:42:08.449Z",
+      "text": "New pictures for T5: The instrument, the recording rule and tapes.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T07:42:08.371Z",
+      "text": "New pictures for T5: The instrument, the recording rule and tapes.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T07:42:08.294Z",
+      "text": "New pictures for T5: The instrument, the recording rule and tapes.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T07:42:08.218Z",
+      "text": "New pictures for T5: The instrument, the recording rule and tapes.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T07:42:08.137Z",
+      "text": "New pictures for T5: The instrument, the recording rule and tapes.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T07:41:48.634Z",
+      "text": "GitHub's checks failed again on a commit that changed nothing they test: two browser tests that depend on real time ran too slowly on GitHub's software-rendered machines. CI now runs only the tests that prove the game boots and draws on a clean machine, plus all 76 rule tests. The full set of browser tests runs on this PC before every push.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T07:40:17.047Z",
+      "text": "CI failed on 4a07340.",
+      "kind": "ci"
+    },
     {
       "at": "2026-11-16T07:13:23.103Z",
       "text": "Design tuning by Fable: the Orderly now runs down anyone who runs but creeps up on anyone standing still, and the instrument pays far more in the last metres. Before, the final approach took about a second and a half, too fast to choose when to turn. Now it takes about four seconds, and turning at arm's length earns roughly double what turning at 2.5 metres does. The earning rule's independent checker verified 33,646 moments of recording with no violations.",

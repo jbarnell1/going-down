@@ -1,6 +1,11 @@
 // Keyboard, mouse and touch. Mouse look only while the pointer is locked; the click-to-start
 // overlay asks for the lock. On a phone there is no lock: the left thumb is a walk stick and the
 // right thumb drags to look. Nothing else in the game waits on the lock, so tests can drive it headless.
+//
+// The instrument is raised only while it is held: the right mouse button or F on a computer. On a
+// phone a round hold-button sits under the right thumb; a press on it raises the instrument AND
+// starts a look-drag with the same finger, so you can hold it up and still turn. A small latch
+// button beside it keeps it raised without holding, for anyone who cannot hold and drag at once.
 
 /** How the player wants to move this frame, in their own frame of reference. */
 export interface MoveIntent {
@@ -37,9 +42,24 @@ export class Input {
   private lookY = 0;
   private ring: HTMLDivElement;
   private knob: HTMLDivElement;
+  /** Right mouse button held. */
+  private rmb = false;
+  /** Keys pressed since the last takePress for them (no auto-repeat). */
+  private pressed = new Set<string>();
+  /** The finger holding the phone's raise button, if any. */
+  private raiseId: number | null = null;
+  /** The phone's latch: raised without holding. */
+  latched = false;
+  readonly raiseBtn: HTMLDivElement;
+  readonly latchBtn: HTMLDivElement;
 
   constructor(private canvas: HTMLCanvasElement, private overlay: HTMLElement) {
-    window.addEventListener('keydown', (e) => this.keys.add(e.code));
+    window.addEventListener('keydown', (e) => {
+      this.keys.add(e.code);
+      if (!e.repeat) this.pressed.add(e.code);
+    });
+    window.addEventListener('mousedown', (e) => { if (e.button === 2) this.rmb = true; });
+    window.addEventListener('mouseup', (e) => { if (e.button === 2) this.rmb = false; });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.releaseAll());
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.releaseAll(); });
@@ -71,16 +91,61 @@ export class Input {
     window.addEventListener('pointermove', (e) => this.touchMove(e));
     window.addEventListener('pointerup', (e) => this.touchUp(e));
     window.addEventListener('pointercancel', (e) => this.touchUp(e));
-    // A long press must not open a menu or start a text selection mid-game.
-    window.addEventListener('contextmenu', (e) => { if (this.touch) e.preventDefault(); });
+    // A long press, or the right mouse button that raises the instrument, must not open a menu.
+    window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    this.raiseBtn = touchButton('raise-btn', 'right:max(5vw,16px);bottom:max(16vh,28px);width:86px;height:86px;', meterIcon(), 4);
+    this.latchBtn = touchButton('latch-btn', 'right:calc(max(5vw,16px) + 98px);bottom:calc(max(16vh,28px) + 50px);width:46px;height:46px;', latchIcon(), 3);
+    document.body.append(this.raiseBtn, this.latchBtn);
+    this.raiseBtn.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      this.touch = true;
+      this.raiseId = e.pointerId;
+      // The same finger also looks, so holding the instrument up never stops you turning.
+      if (this.lookId === null) {
+        this.lookId = e.pointerId;
+        this.lookX = e.clientX;
+        this.lookY = e.clientY;
+      }
+      this.drawButtons();
+    });
+    this.latchBtn.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      this.latched = !this.latched;
+      this.drawButtons();
+    });
+  }
+
+  /** The instrument is being held up (any of the ways to hold it). */
+  instrumentHeld(): boolean {
+    return this.rmb || this.down('KeyF') || this.raiseId !== null || this.latched;
+  }
+
+  /** Whether `code` was pressed since the last call for it. */
+  takePress(code: string): boolean {
+    const had = this.pressed.has(code);
+    this.pressed.delete(code);
+    return had;
+  }
+
+  private drawButtons(): void {
+    const on = this.touch && this.overlay.hidden;
+    this.raiseBtn.hidden = !on;
+    this.latchBtn.hidden = !on;
+    this.raiseBtn.style.background = this.raiseId !== null || this.latched ? 'rgba(240,245,242,0.38)' : 'rgba(240,245,242,0.12)';
+    this.latchBtn.style.background = this.latched ? 'rgba(240,245,242,0.55)' : 'rgba(240,245,242,0.12)';
   }
 
   private touchDown(e: PointerEvent): void {
     if (e.pointerType !== 'touch') return;
     this.touch = true;
+    this.drawButtons();
     if (!this.overlay.hidden) {
       // The first tap only starts the game.
       this.overlay.hidden = true;
+      this.drawButtons();
       return;
     }
     if (e.clientX < window.innerWidth * STICK_ZONE && this.stickId === null) {
@@ -109,6 +174,10 @@ export class Input {
   }
 
   private touchUp(e: PointerEvent): void {
+    if (e.pointerId === this.raiseId) {
+      this.raiseId = null;
+      this.drawButtons();
+    }
     if (e.pointerId === this.stickId) {
       this.stickId = null;
       this.drawStick();
@@ -119,6 +188,9 @@ export class Input {
 
   private releaseAll(): void {
     this.keys.clear();
+    this.rmb = false;
+    this.raiseId = null;
+    this.drawButtons();
     this.stickId = null;
     this.lookId = null;
     this.drawStick();
@@ -140,6 +212,7 @@ export class Input {
   /** Hides the overlay without a pointer lock (tests, and anyone who just wants to watch). */
   dismissOverlay(): void {
     this.overlay.hidden = true;
+    this.drawButtons();
   }
 
   down(code: string): boolean {
@@ -174,6 +247,57 @@ export class Input {
     this.dy = 0;
     return out;
   }
+}
+
+function touchButton(id: string, place: string, icon: HTMLCanvasElement, iconPx: number): HTMLDivElement {
+  const d = document.createElement('div');
+  d.id = id;
+  d.hidden = true;
+  d.style.cssText =
+    `position:fixed;${place}border-radius:50%;border:2px solid rgba(240,245,242,0.5);background:rgba(240,245,242,0.12);` +
+    'box-sizing:border-box;z-index:4;display:flex;align-items:center;justify-content:center;touch-action:none;';
+  // Whole pixels per icon pixel, sized explicitly (the page's canvas rule would stretch it otherwise).
+  icon.style.cssText = `width:${icon.width * iconPx}px;height:${icon.height * iconPx}px;image-rendering:pixelated;pointer-events:none;flex:none;`;
+  d.append(icon);
+  return d;
+}
+
+/** Pixel icons, drawn in code: a needle meter (raise) and a padlock (latch). */
+function pixelIcon(rows: string[]): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = rows[0]?.length ?? 1;
+  c.height = rows.length;
+  const g = c.getContext('2d');
+  if (g) {
+    g.fillStyle = 'rgba(244,244,236,0.9)';
+    rows.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (row[x] === '1') g.fillRect(x, y, 1, 1); });
+  }
+  return c;
+}
+
+function meterIcon(): HTMLCanvasElement {
+  return pixelIcon([
+    '1111111111111',
+    '1000000000001',
+    '1010101010101',
+    '1000000010001',
+    '1000000100001',
+    '1000001000001',
+    '1000010000001',
+    '1111111111111',
+  ]);
+}
+
+function latchIcon(): HTMLCanvasElement {
+  return pixelIcon([
+    '0011100',
+    '0100010',
+    '0100010',
+    '1111111',
+    '1110111',
+    '1110111',
+    '1111111',
+  ]);
 }
 
 function stickPart(size: number, border: string, fill: string): HTMLDivElement {

@@ -1,20 +1,25 @@
 import * as THREE from 'three';
 import { GameAudio } from './game/audio';
 import { AutoWalk } from './game/autoWalk';
+import { CrewHost } from './game/crewHost';
 import { EntityHost } from './game/entityHost';
 import { Minimap } from './game/minimap';
 import { FrameStats } from './game/frameStats';
 import { Input } from './game/input';
-import { EYE_HEIGHT, Player, yawForDir, yawToward } from './game/player';
+import { EYE_HEIGHT, Player, WALK_SPEED, yawForDir, yawToward } from './game/player';
 import { CaughtFx, NOISE_MS } from './render/caughtFx';
 import { EntityPreview } from './render/entityPreview';
 import { blendPose, EntityView, exactPose, type DrawnPose } from './render/entityView';
+import { InstrumentView } from './render/instrumentView';
+import { PickupPrompt } from './render/pickupPrompt';
+import { TapeDrops } from './render/tapeDrops';
 import { Osd } from './render/osd';
 import { setLightGain, Tape, type FxLevel } from './render/tape';
 import { buildWorld } from './render/world';
 import { generateClinic } from './sim/clinic';
 import { audibility, ORDERLY_HEIGHT, ORDERLY_RADIUS, REACH_RANGE, SQUEAK_HEIGHT, WIND_UP_TIME, type OrderlyAnim, type OrderlyEvent, type OrderlyState, type PlayerView } from './sim/entity';
 import type { Level } from './sim/floor';
+import { maxWalkSpeed, tapeValue, type CrewEvent, type EntityTick } from './sim/instrument';
 import { landingFacing } from './sim/landing';
 import { bodyAtCell, cellOf, LEVEL_HEIGHT, type Body } from './sim/move';
 import { canSee } from './sim/sight';
@@ -77,6 +82,41 @@ if (entityOn) {
 }
 const audio = new GameAudio();
 const caughtFx = new CaughtFx(document.body);
+
+// ---------------------------------------------------------------------------------------------
+// The crew's instruments: stepped once per logic tick right after the Orderly (host.onTick), or on
+// their own clock when the floor is empty.
+const ORDERLY_ID = 'orderly';
+const crew = new CrewHost(plan, [LOCAL_ID]);
+const instrument = new InstrumentView();
+const tapeDrops = new TapeDrops(scene);
+const pickupPrompt = new PickupPrompt(document.body, () => void tryPickUp());
+/** Set by the test hook __gd.raise(); null leaves it to the player's input. */
+let forcedRaise: boolean | null = null;
+/** Audible ticks the logic produced since the last frame (the needle kicks on each). */
+let pendingTicks = 0;
+if (host) {
+  host.onTick = (prev, cur, events, players) => {
+    const ent: EntityTick = { id: ORDERLY_ID, trait: 'stillness', prev, next: cur, events };
+    crew.tick(players.map((p) => ({ id: p.id, body: p.body, active: p.active })), [ent]);
+    pendingTicks += crew.member(LOCAL_ID)?.instrument.ticks ?? 0;
+  };
+}
+
+function tryPickUp(): { ok: boolean; reason: string; tapeId: string | null } {
+  if (caughtFx.noiseOn) return { ok: false, reason: 'inactive', tapeId: null };
+  return crew.pickUp(LOCAL_ID, player.body);
+}
+
+function onCrewEvents(evs: CrewEvent[]): void {
+  for (const e of evs) {
+    if (e.playerId !== LOCAL_ID) continue;
+    if (e.type === 'slip') {
+      instrument.printSlip(e.text);
+      audio.slipPrinted();
+    } else if (e.type === 'readingClosed') audio.readingClosed();
+  }
+}
 let catches = 0;
 /** The local player's screen could show the figure this frame (any of the checks in frameSees). */
 let orderlyVisible = false;
@@ -100,6 +140,7 @@ function resize(): void {
   tape.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = aspect;
   camera.updateProjectionMatrix();
+  instrument.setAspect(aspect);
 }
 window.addEventListener('resize', resize);
 resize();
@@ -113,7 +154,7 @@ function gpuName(): string {
 /** Draws a full frame (scene and tape pass) and reads the screen back, straight from the GPU. */
 function readScreen(): { w: number; h: number; px: Uint8Array } {
   player.toCamera(camera);
-  tape.render(scene, camera);
+  tape.render(scene, camera, instrument.visible ? instrument : null);
   const gl = renderer.getContext();
   const w = gl.drawingBufferWidth;
   const h = gl.drawingBufferHeight;
@@ -340,6 +381,49 @@ const state = {
     ticks: () => host?.ticks ?? 0,
   },
   audio: { state: () => audio.state() },
+  /** The local player's instrument: the logic's state and what is drawn. */
+  instrument: () => {
+    const m = crew.member(LOCAL_ID);
+    if (!m) return null;
+    const i = m.instrument;
+    return {
+      raised: i.raised,
+      needle: i.needle,
+      /** Value of the reading open now (0 if none). */
+      value: i.current?.value ?? 0,
+      /** Seconds recorded in the open reading. */
+      recording: i.current?.duration ?? 0,
+      /** Everything held: own tape plus tapes picked up. */
+      total: crew.held(LOCAL_ID),
+      own: tapeValue(m.tape),
+      tickHz: i.tickHz,
+      loudness: i.loudness,
+      /** Tapes held with something on them. */
+      tapes: crew.heldCount(LOCAL_ID),
+      carrying: m.carrying.length,
+      distance: i.distance,
+      drawnRaise: instrument.raisedAmount,
+      needleAngle: instrument.needleAngle,
+      slip: { text: instrument.slipText, shown: instrument.slipShown },
+      osd: osd.tapeText,
+    };
+  },
+  /** Raises (true) or lowers (false) the instrument regardless of input; null hands it back to input. */
+  raise: (on: boolean | null) => {
+    forcedRaise = on;
+  },
+  /** Tapes lying on the floor. */
+  tapes: () =>
+    crew.crew.floor.map((f) => {
+      const c = cellOf(plan, f.at);
+      return { id: f.tape.id, value: f.tape.total, readings: f.tape.readings.length, x: f.at.x, y: f.at.y, z: f.at.z, level: f.at.level, cx: c.x, cy: c.y };
+    }),
+  /** Tries to pick up the nearest tape within reach. */
+  pickUp: () => tryPickUp(),
+  /** Every crew event (slip, readingClosed, tapeDropped, tapePickedUp) so far. */
+  crewEvents: (): CrewEvent[] => crew.events.map((e) => ({ ...e })),
+  /** Whether the pick-up prompt is showing. */
+  pickupShown: () => !pickupPrompt.el.hidden,
 };
 (window as unknown as { __gd: typeof state }).__gd = state;
 hud.textContent = `Going Down  build ${__BUILD__}  seed ${seed}  depth ${depth}`;
@@ -363,8 +447,13 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(ms / 1000, 0.1);
 
   preview?.update(dt);
+  // The instrument is up only while held (or forced by a test), never while the picture is noise.
+  const wantRaised = !caughtFx.noiseOn && (forcedRaise ?? input.instrumentHeld());
+  crew.setRaised(LOCAL_ID, wantRaised);
+  const raised = crew.member(LOCAL_ID)?.instrument.raised ?? false;
   if (autoWalk.active) autoWalk.tick(plan, player);
-  else if (!caughtFx.noiseOn) player.control(plan, input, dt);
+  else if (!caughtFx.noiseOn) player.control(plan, input, dt, raised ? maxWalkSpeed(true, WALK_SPEED) : Infinity);
+  else player.lastSpeed = 0;
   if (caughtFx.update(now)) {
     // Back at the elevator landing, facing out, as on arrival.
     autoWalk.cancel('caught');
@@ -385,7 +474,12 @@ renderer.setAnimationLoop(() => {
     vis = vis || frameSees(v, host, orderlyView);
     orderlyVisible = vis;
     // 3. Seen: exactly where the logic has it, clock stopped. Unseen: smoothed between ticks.
-    orderlyView.update(vis, blendPose(host.prev, host.cur, host.alpha), freezePose(host.cur));
+    // Walking clips run on the stride clock, which follows its speed: a creep is a slow stride.
+    const smooth = blendPose(host.prev, host.cur, host.alpha);
+    if (smooth.anim === 'walk' || smooth.anim === 'duck') smooth.animTime = host.stride();
+    const hold = freezePose(host.cur);
+    if (hold.anim === 'walk' || hold.anim === 'duck') hold.animTime = host.curStride;
+    orderlyView.update(vis, smooth, hold);
     const d = orderlyView.drawn;
     if (d) {
       trace.push({ f: state.frames + 1, vis, dx: d.x, dz: d.z, lx: host.cur.body.x, lz: host.cur.body.z, t: host.cur.t, anim: d.anim, clip: d.animTime });
@@ -396,9 +490,36 @@ renderer.setAnimationLoop(() => {
     const src = d ?? exactPose(host.cur);
     camForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
     camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
-    audio.update(dt, squeak.gain, squeak.muffled, { x: src.x, y: src.y + SQUEAK_HEIGHT, z: src.z }, camera.position, camForward, camUp);
+    audio.update(dt, squeak.gain, squeak.muffled, { x: src.x, y: src.y + SQUEAK_HEIGHT, z: src.z }, camera.position, camForward, camUp, host.cur.speed);
+  } else {
+    crew.advanceAlone(dt, [{ id: LOCAL_ID, body: { ...player.body }, active: true }]);
   }
-  tape.render(scene, camera);
+
+  // The instrument, its sound, the tapes on the floor and the tape count.
+  onCrewEvents(crew.take());
+  const inst = crew.member(LOCAL_ID)?.instrument;
+  if (inst) {
+    instrument.setTouchLayout(input.touch);
+    instrument.update(dt, {
+      raised: inst.raised,
+      needle: inst.needle,
+      value: inst.current?.value ?? 0,
+      distance: inst.distance,
+      tickHz: inst.tickHz,
+      ticks: pendingTicks,
+      walkSpeed: player.lastSpeed,
+    });
+    audio.ticking(inst.tickHz, inst.loudness);
+  }
+  pendingTicks = 0;
+  tapeDrops.sync(crew.crew.floor);
+  tapeDrops.update(dt);
+  osd.setTapes(crew.heldCount(LOCAL_ID), crew.held(LOCAL_ID));
+  const inReach = !caughtFx.noiseOn && crew.tapeInReach(player.body) !== null;
+  pickupPrompt.update(inReach, input.touch);
+  if (input.takePress('KeyE') && inReach) tryPickUp();
+
+  tape.render(scene, camera, instrument.visible ? instrument : null);
   osd.update(!tape.motion || Math.floor(now / 700) % 2 === 0);
   state.frames++;
   state.ready = true;
@@ -421,6 +542,12 @@ renderer.setAnimationLoop(() => {
         `squeak ${squeak.gain.toFixed(2)}${squeak.muffled ? ' muffled' : ''}  audio ${audio.state().running ? 'on' : 'off'}  catches ${catches}`;
       ent = { level: o.body.level, x: o.body.x, z: o.body.z, seen: orderlyVisible };
     }
-    minimap?.update(c.level, b.x, b.z, player.yaw, ent);
+    if (inst) {
+      debugText.textContent +=
+        `\ninstrument ${inst.raised ? 'up' : 'down'} ${inst.needle}  value ${(inst.current?.value ?? 0).toFixed(1)}  tick ${inst.tickHz.toFixed(1)} Hz\n` +
+        `tapes held ${crew.heldCount(LOCAL_ID)} worth ${crew.held(LOCAL_ID).toFixed(1)}  on floor ${crew.crew.floor.length}`;
+    }
+    const floorTapes = crew.crew.floor.map((f) => ({ level: f.at.level, x: f.at.x, z: f.at.z }));
+    minimap?.update(c.level, b.x, b.z, player.yaw, ent, floorTapes);
   }
 });

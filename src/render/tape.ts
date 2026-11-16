@@ -406,11 +406,22 @@ export class Tape {
     }
   }
 
-  /** Draws the scene into the small target, then the target to the screen. */
-  render(scene: THREE.Scene, camera: THREE.Camera): void {
+  /**
+   * Draws the scene into the small target, then the target to the screen. `overlay` (the instrument
+   * in the hand) is drawn into the same target over the scene with the depth cleared, so it goes
+   * through the tape look too and never sinks into a wall.
+   */
+  render(scene: THREE.Scene, camera: THREE.Camera, overlay?: { scene: THREE.Scene; camera: THREE.Camera } | null): void {
     const r = this.renderer;
     r.setRenderTarget(this.target);
     r.render(scene, camera);
+    if (overlay) {
+      const auto = r.autoClear;
+      r.autoClear = false;
+      r.clearDepth();
+      r.render(overlay.scene, overlay.camera);
+      r.autoClear = auto;
+    }
     r.setRenderTarget(null);
     const now = this.now();
     const g = this.glitchAt(now);

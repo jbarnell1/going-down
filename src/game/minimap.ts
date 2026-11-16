@@ -28,13 +28,30 @@ export class Minimap {
   /**
    * Draws level `level` with the player at (x, z) metres facing `yaw` (radians, 0 = north/-z), and
    * the live entity if given: a square, filled white while the player can see it, red while unseen.
+   * Dropped tapes are small yellow bars with a black edge.
    */
-  update(level: Level, x: number, z: number, yaw: number, entity?: { level: Level; x: number; z: number; seen: boolean } | null): void {
+  update(
+    level: Level,
+    x: number,
+    z: number,
+    yaw: number,
+    entity?: { level: Level; x: number; z: number; seen: boolean } | null,
+    tapes: readonly { level: Level; x: number; z: number }[] = [],
+  ): void {
     const g = this.canvas.getContext('2d');
     if (!g) return;
     g.clearRect(0, 0, this.canvas.width, this.canvas.height);
     g.drawImage(this.levelImage(level), 0, 0);
     const k = this.px / this.plan.cellSize;
+    for (const t of tapes) {
+      const tr = Math.max(2, this.px * 0.6);
+      g.globalAlpha = t.level === level ? 1 : 0.4;
+      g.fillStyle = '#ffd23a';
+      g.strokeStyle = '#000';
+      g.fillRect(t.x * k - tr, t.z * k - tr * 0.6, tr * 2, tr * 1.2);
+      g.strokeRect(t.x * k - tr, t.z * k - tr * 0.6, tr * 2, tr * 1.2);
+      g.globalAlpha = 1;
+    }
     const cx = x * k;
     const cy = z * k;
     const fx = -Math.sin(yaw);

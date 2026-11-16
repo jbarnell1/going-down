@@ -29,6 +29,8 @@ export class Player {
   body: Body;
   yaw = 0;
   pitch = 0;
+  /** The speed asked for on the last control() call, m/s (0 when standing). */
+  lastSpeed = 0;
 
   constructor(plan: FloorPlan, level: Level, cx: number, cy: number, yaw: number) {
     this.body = bodyAtCell(plan, { level, x: cx, y: cy });
@@ -40,15 +42,17 @@ export class Player {
     if (yaw !== undefined) this.yaw = yaw;
   }
 
-  /** Mouse look and WASD walking for one frame. */
-  control(plan: FloorPlan, input: Input, dt: number): void {
+  /** Mouse look and WASD walking for one frame. `maxSpeed` caps the walk (instrument raised). */
+  control(plan: FloorPlan, input: Input, dt: number, maxSpeed = Infinity): void {
     const [mx, my] = input.takeLook();
     this.yaw -= mx * MOUSE_SENSITIVITY;
     this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch - my * MOUSE_SENSITIVITY));
     const want = input.move();
+    this.lastSpeed = 0;
     if (!want) return;
     // Keys walk or creep. A phone's stick is analogue: push gently to go slowly.
-    const speed = want.creep ? CREEP_SPEED : WALK_SPEED * want.strength;
+    const speed = Math.min(maxSpeed, want.creep ? CREEP_SPEED : WALK_SPEED * want.strength);
+    this.lastSpeed = speed;
     const { f, r } = want;
     const sin = Math.sin(this.yaw);
     const cos = Math.cos(this.yaw);

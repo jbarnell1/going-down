@@ -6,8 +6,12 @@
 // caller hands over that frame's view with noteSeen(), and the next tick is given that view for that
 // player if the player's current view would no longer see it. The logic then holds it, exactly as if
 // the tick had landed on the frame.
+//
+// After each tick the onTick hook runs (the crew's instruments are stepped there, after the Orderly,
+// as the instrument logic requires). The host also keeps a stride clock: seconds of walk cycle, which
+// advance with the logic's speed, so a slow creep is drawn as a slow stride and a run as a fast one.
 
-import { createOrderly, ORDERLY_HEIGHT, ORDERLY_RADIUS, seenBy, stepEntity, type OrderlyEvent, type OrderlyState, type PlayerView } from '../sim/entity';
+import { createOrderly, HUNT_SPEED, ORDERLY_HEIGHT, ORDERLY_RADIUS, seenBy, stepEntity, type OrderlyEvent, type OrderlyState, type PlayerView } from '../sim/entity';
 import type { FloorPlan } from '../sim/floor';
 import { canSee } from '../sim/sight';
 
@@ -26,6 +30,11 @@ export class EntityHost {
   timeScale = 1;
   /** Ticks run so far. */
   ticks = 0;
+  /** Walk-cycle clock after the tick before last and after the last tick (seconds at running pace). */
+  prevStride = 0;
+  curStride = 0;
+  /** Called after every tick with the states either side of it, its events and the players given to it. */
+  onTick: ((prev: OrderlyState, cur: OrderlyState, events: readonly OrderlyEvent[], players: readonly PlayerView[]) => void) | null = null;
   private acc = 0;
   private readonly latched = new Map<string, PlayerView>();
 
@@ -53,6 +62,12 @@ export class EntityHost {
   replace(state: OrderlyState): void {
     this.prev = state;
     this.cur = state;
+    this.prevStride = this.curStride;
+  }
+
+  /** The stride clock between the last two ticks. */
+  stride(alpha = this.alpha): number {
+    return this.prevStride + (this.curStride - this.prevStride) * Math.min(1, Math.max(0, alpha));
   }
 
   /** Advances real time `dt` seconds. Returns the events of the ticks that ran. */
@@ -73,11 +88,14 @@ export class EntityHost {
       const r = stepEntity(this.plan, this.cur, views, TICK);
       this.prev = this.cur;
       this.cur = r.state;
+      this.prevStride = this.curStride;
+      this.curStride += TICK * (r.state.speed / HUNT_SPEED);
       this.ticks++;
       for (const e of r.events) {
         this.events.push(e);
         out.push(e);
       }
+      this.onTick?.(this.prev, this.cur, r.events, players);
     }
     if (n === MAX_TICKS_PER_FRAME && this.acc >= TICK) this.acc = this.acc % TICK;
     return out;

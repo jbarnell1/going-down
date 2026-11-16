@@ -1,27 +1,11 @@
 // The camcorder's on-screen display: "PLAY" in the top right and a running tape counter in the
 // bottom right, in a blocky 5x7 character-generator font drawn into tiny canvases and scaled up with
 // hard pixels. Sits inside the picture's safe area, well away from the centre of view.
+//
+// Above the counter, once there is anything on it, the value on the tapes you hold: a cassette mark,
+// how many tapes, and their worth. It blinks for a moment when a reading lands on it.
 
-const GLYPHS: Record<string, string[]> = {
-  '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'],
-  '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'],
-  '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'],
-  '3': ['11111', '00010', '00100', '00010', '00001', '10001', '01110'],
-  '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'],
-  '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'],
-  '6': ['00110', '01000', '10000', '11110', '10001', '10001', '01110'],
-  '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'],
-  '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'],
-  '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'],
-  ':': ['00000', '01100', '01100', '00000', '01100', '01100', '00000'],
-  ' ': ['00000', '00000', '00000', '00000', '00000', '00000', '00000'],
-  P: ['11110', '10001', '10001', '11110', '10000', '10000', '10000'],
-  L: ['10000', '10000', '10000', '10000', '10000', '10000', '11111'],
-  A: ['01110', '10001', '10001', '11111', '10001', '10001', '10001'],
-  Y: ['10001', '10001', '01010', '00100', '00100', '00100', '00100'],
-  S: ['01111', '10000', '10000', '01110', '00001', '00001', '11110'],
-  '>': ['10000', '11000', '11100', '11110', '11100', '11000', '10000'],
-};
+import { drawText } from './pixelFont';
 
 function draw(c: HTMLCanvasElement, text: string, scale: number): void {
   const w = text.length * 6 + 1;
@@ -34,27 +18,30 @@ function draw(c: HTMLCanvasElement, text: string, scale: number): void {
   if (!g) return;
   g.clearRect(0, 0, w, h);
   // A dark drop shadow one pixel down-right, then the characters, like a camcorder's char generator.
-  for (const [ox, oy, colour] of [[1, 1, 'rgba(0,0,0,0.55)'], [0, 0, '#f4f4ec']] as const) {
-    g.fillStyle = colour;
-    for (let i = 0; i < text.length; i++) {
-      const rows = GLYPHS[text[i] ?? ' '] ?? GLYPHS[' ']!;
-      for (let y = 0; y < 7; y++) {
-        const row = rows[y] ?? '';
-        for (let x = 0; x < 5; x++) if (row[x] === '1') g.fillRect(i * 6 + x + ox, y + oy, 1, 1);
-      }
-    }
-  }
+  g.fillStyle = 'rgba(0,0,0,0.55)';
+  drawText(g, text, 1, 1);
+  g.fillStyle = '#f4f4ec';
+  drawText(g, text, 0, 0);
 }
+
+/** How long the tape line blinks after its value jumps, ms, and the blink period. */
+const JUMP_MS = 900;
+const JUMP_BLINK_MS = 150;
 
 export class Osd {
   private readonly root: HTMLDivElement;
   private readonly top: HTMLCanvasElement;
   private readonly bottom: HTMLCanvasElement;
+  private readonly tapeLine: HTMLCanvasElement;
   private lastTop = '';
   private lastBottom = '';
+  private lastTape = '';
   private readonly startSec: number;
   private readonly t0 = performance.now();
   private scale = 2;
+  private tapeValue = 0;
+  private tapeCount = 0;
+  private jumpAt = -1e9;
 
   constructor(parent: HTMLElement, seed: string) {
     this.root = document.createElement('div');
@@ -63,7 +50,10 @@ export class Osd {
     this.top.className = 'osd-top';
     this.bottom = document.createElement('canvas');
     this.bottom.className = 'osd-bottom';
-    this.root.append(this.top, this.bottom);
+    this.tapeLine = document.createElement('canvas');
+    this.tapeLine.className = 'osd-tape';
+    this.tapeLine.hidden = true;
+    this.root.append(this.top, this.bottom, this.tapeLine);
     parent.append(this.root);
     // The counter starts part-way into the tape, picked from the seed: this is not the first recording.
     let h = 2166136261;
@@ -77,10 +67,24 @@ export class Osd {
     this.root.hidden = !v;
   }
 
+  /** The tapes held: how many have something on them, and their total value. */
+  setTapes(count: number, value: number): void {
+    const v = Math.floor(value);
+    if (v > Math.floor(this.tapeValue)) this.jumpAt = performance.now();
+    this.tapeValue = value;
+    this.tapeCount = count;
+  }
+
+  /** The text of the tape line as drawn now ('' while hidden). For tests. */
+  get tapeText(): string {
+    return this.tapeLine.hidden ? '' : this.lastTape;
+  }
+
   /** Called once a frame; only redraws when the text changes. */
   update(blinkOn: boolean): void {
     if (this.root.hidden) return;
-    const s = Math.floor(this.startSec + (performance.now() - this.t0) / 1000);
+    const now = performance.now();
+    const s = Math.floor(this.startSec + (now - this.t0) / 1000);
     const top = blinkOn ? 'PLAY >' : 'PLAY  ';
     const hh = Math.floor(s / 3600);
     const mm = String(Math.floor(s / 60) % 60).padStart(2, '0');
@@ -88,11 +92,22 @@ export class Osd {
     const bottom = `SP ${hh}:${mm}:${ss}`;
     if (top !== this.lastTop) draw(this.top, (this.lastTop = top), this.scale);
     if (bottom !== this.lastBottom) draw(this.bottom, (this.lastBottom = bottom), this.scale);
+
+    const show = this.tapeCount > 0 || this.tapeValue > 0;
+    const since = now - this.jumpAt;
+    // Blinks off and on a few times right after a jump.
+    const blinkOff = since < JUMP_MS && Math.floor(since / JUMP_BLINK_MS) % 2 === 1;
+    this.tapeLine.hidden = !show || blinkOff;
+    const tape = `#x${this.tapeCount} ${String(Math.floor(this.tapeValue)).padStart(4, '0')}`;
+    if (show && tape !== this.lastTape) draw(this.tapeLine, (this.lastTape = tape), this.scale);
   }
 
   private resize(): void {
     this.scale = Math.max(2, Math.floor(window.innerHeight / 320));
     this.lastTop = '';
     this.lastBottom = '';
+    this.lastTape = '';
+    // The tape line sits one text row above the counter.
+    this.tapeLine.style.bottom = `calc(max(6vh, 12px) + ${12 * this.scale}px)`;
   }
 }
