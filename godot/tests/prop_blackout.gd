@@ -68,7 +68,7 @@ func test_dark_schedule(t: T) -> void:
 
 func test_fairness(t: T) -> void:
 	var ref: Dictionary = Snap.load_ref("properties.json")
-	var want: Dictionary = ref["full" if t.full else "sub"]["blackout"]
+	var want: Dictionary = ref[t.size_key()]["blackout"]
 	var waits: int = want["waits"]
 	var tables: Array = []
 	var lines := PackedStringArray()
@@ -78,7 +78,9 @@ func test_fairness(t: T) -> void:
 			tables.append({"style": String(style), "depth": depth, "waits": waits, "lost": tb.lost, "boarded": tb.boarded, "caught": tb.caught,
 				"caughtInBlackout": tb.caught_in_blackout, "caughtAfter": tb.caught_after, "chased": tb.chased, "medianFarthest": tb.median_farthest})
 			lines.append(Waits.table_line(tb))
-			if style == &"stay":
+			if t.quick:
+				pass  # two waits per cell: the shares below are for the default and full runs
+			elif style == &"stay":
 				t.check(float(tb.lost) / waits >= 0.7, "depth %d: a crew that stays lost someone in only %d of %d" % [depth, tb.lost, waits])
 			else:
 				t.check(float(tb.lost) / waits <= 0.3, "depth %d: a crew that flees lost someone in %d of %d" % [depth, tb.lost, waits])

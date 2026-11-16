@@ -5,6 +5,13 @@ var failures := PackedStringArray()
 var notes := PackedStringArray()
 ## Long runs (the full-size property tests) only when asked: see run_tests.gd.
 var full := false
+## The quick set (--quick): every test, on the first seeds only, sameness still exact; the
+## statistical "not vacuous" and fairness thresholds are left to the default and full runs.
+var quick := false
+
+## Which sizes of tests/reference/properties.json this run uses.
+func size_key() -> String:
+	return "full" if full else ("quick" if quick else "sub")
 
 ## Records a failure unless `ok`. Returns `ok`.
 func check(ok: bool, message: String) -> bool:

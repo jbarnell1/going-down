@@ -2,6 +2,7 @@
 #   godot --headless --path godot --script res://tests/run_tests.gd
 #   godot --headless --path godot --script res://tests/run_tests.gd -- ref_rng prop_clinic   (only these files)
 #   godot --headless --path godot --script res://tests/run_tests.gd -- --full                (full-size property runs)
+#   godot --headless --path godot --script res://tests/run_tests.gd -- --quick               (about a minute: first seeds only)
 # A test file is a script under tests/ whose methods named test_* take one argument, the T
 # context (tests/t.gd). Any engine or script error while a test runs (a failed call, a push_error
 # from the rules, a script that does not compile) fails that test.
@@ -10,7 +11,7 @@ extends SceneTree
 const T = preload("res://tests/t.gd")
 
 const FILES: Array[String] = [
-	"test_jsmath", "ref_rng", "ref_floors", "ref_move", "ref_sight", "ref_entity", "ref_instrument", "ref_run", "ref_bots",
+	"test_jsmath", "ref_rng", "ref_floors", "ref_move", "ref_sight", "ref_entity", "ref_instrument", "ref_run", "ref_bots", "ref_bridge",
 	"prop_stamina", "prop_clinic", "prop_entity", "prop_instrument", "prop_run", "prop_blackout",
 ]
 
@@ -43,6 +44,9 @@ func _init() -> void:
 	OS.add_logger(errors)
 	var args := OS.get_cmdline_user_args()
 	var full := args.has("--full")
+	var quick := args.has("--quick") and not full
+	if quick:
+		print("quick set: every test file, first seeds only (the default run is the full check)")
 	var only: Array[String] = []
 	for a in args:
 		if not a.begins_with("--"):
@@ -70,6 +74,7 @@ func _init() -> void:
 		for mname in methods:
 			var t := T.new()
 			t.full = full
+			t.quick = quick
 			var t0 := Time.get_ticks_msec()
 			suite.call(mname, t)
 			var ms := Time.get_ticks_msec() - t0

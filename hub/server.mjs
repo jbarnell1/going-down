@@ -217,14 +217,14 @@ const server = http.createServer(async (req, res) => {
       const file = ok ? inside(ROOT, rel) : null;
       return (file && (await serveFile(res, file))) || send(res, 404, 'Not found', 'text/plain');
     }
-    // The Godot browser build kept on this PC (not in git): the playable client when it exists,
-    // otherwise the first engine trial.
+    // The Godot browser build kept on this PC (builds are not in git).
     if (p === '/godot') return send(res, 302, '', 'text/plain', { Location: '/godot/' });
     if (p.startsWith('/godot/')) {
       let rel = p.slice('/godot/'.length) || 'index.html';
       if (rel.endsWith('/')) rel += 'index.html';
-      const client = path.join(ROOT, 'spikes', 'godot-client', 'export', 'web');
-      const dir = existsSync(path.join(client, 'index.html')) ? client : path.join(ROOT, 'spikes', 'godot-trial', 'export', 'web');
+      // The real project's build first (npm run godot:export), then the older trial builds if it is missing.
+      const dir = [['godot'], ['spikes', 'godot-client'], ['spikes', 'godot-trial']]
+        .map((p) => path.join(ROOT, ...p, 'export', 'web')).find((d) => existsSync(path.join(d, 'index.html'))) ?? path.join(ROOT, 'godot', 'export', 'web');
       const file = inside(dir, rel);
       const hidden = /\.(br|gz)$/i.test(rel);
       return (file && !hidden && (await serveBuild(req, res, file))) || send(res, 404, 'No Godot build on this machine', 'text/plain');

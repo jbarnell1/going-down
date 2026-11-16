@@ -76,10 +76,12 @@ func test_forty_plans_field_by_field(t: T) -> void:
 func test_eight_hundred_plan_hashes(t: T) -> void:
 	var ref: Dictionary = Snap.load_ref("floors.json")
 	var hashes: Array = ref["hashes"]
-	var plans := Plans.property_plans()
+	var plans := Plans.property_plans(t.quick)
 	var wrong := 0
 	for i in plans.size():
-		if Floor.hash_plan(plans[i]) != hashes[i]:
+		# The reference lists all 800 (depth-major, 200 seeds a depth); the quick set is seed-0..9 of each.
+		var k := i if not t.quick else (plans[i].depth - 1) * 200 + i % Plans.QUICK_SEEDS
+		if Floor.hash_plan(plans[i]) != hashes[k]:
 			wrong += 1
 			t.check(false, "hashPlan %s d%d" % [plans[i].seed, plans[i].depth])
-	t.note("800 floors (seed-0..199, depths 1-4): %d hashes differ" % wrong)
+	t.note("%d floors (seed-0..%d, depths 1-4): %d hashes differ" % [plans.size(), plans.size() / 4 - 1, wrong])

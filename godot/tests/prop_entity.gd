@@ -265,7 +265,7 @@ static func counts(n: int) -> Dictionary:
 
 static func expected(t: T, key: String) -> Dictionary:
 	var ref: Dictionary = Snap.load_ref("properties.json")
-	return ref["full" if t.full else "sub"][key]
+	return ref[t.size_key()][key]
 
 func test_stillness_by_the_oracle(t: T) -> void:
 	var want := expected(t, "entity")
@@ -276,10 +276,11 @@ func test_stillness_by_the_oracle(t: T) -> void:
 	t.eq(c["frameViolations"], 0, "visible in two consecutive frames at two positions")
 	t.eq(c["catchesWhileWatched"], 0, "caught someone who could see it during the wind-up")
 	t.eq(c["graceViolations"], 0, "moved within GRACE of the last sighting")
-	t.check(c["oracleSeenTicks"] > 5000 * frac, "not vacuous: seen-ticks %d" % c["oracleSeenTicks"])
-	t.check(float(c["moving"]) / n > 0.6 and float(c["seenRuns"]) / n > 0.6, "not vacuous: moving %d, seen %d of %d" % [c["moving"], c["seenRuns"], n])
-	t.check(c["catchRuns"] > 10 * frac, "not vacuous: runs with a catch %d" % c["catchRuns"])
-	t.check(c["graceChecks"] > 1000 * frac, "not vacuous: grace checks %d" % c["graceChecks"])
+	if not t.quick:
+		t.check(c["oracleSeenTicks"] > 5000 * frac, "not vacuous: seen-ticks %d" % c["oracleSeenTicks"])
+		t.check(float(c["moving"]) / n > 0.6 and float(c["seenRuns"]) / n > 0.6, "not vacuous: moving %d, seen %d of %d" % [c["moving"], c["seenRuns"], n])
+		t.check(c["catchRuns"] > 10 * frac, "not vacuous: runs with a catch %d" % c["catchRuns"])
+		t.check(c["graceChecks"] > 1000 * frac, "not vacuous: grace checks %d" % c["graceChecks"])
 	var d := Snap.compare(c, want, "entity")
 	t.check(d.ok(), "counts differ from TypeScript's: " + d.summary())
 	t.note("%d runs x 75 s: oracle checks %d, seen-ticks %d, moved >5 m %d, seen %d, runs with a catch %d (%d catches), grace ticks %d; violations %d/%d/%d/%d" % [

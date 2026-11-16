@@ -95,7 +95,13 @@ func test_thirty_crews(t: T) -> void:
 	var events := 0
 	var firsts := PackedStringArray()
 	var pay_ticks := 0
-	for i in 30:
+	# The quick set: two crews (crew-7's pay differs from TypeScript's in the last bits early on).
+	var crews: Array[int] = [0, 7]
+	if not t.quick:
+		crews.clear()
+		for i in 30:
+			crews.append(i)
+	for i in crews:
 		var tr := bot_crew(i, ref[i])
 		ticks += tr.ticks
 		events += tr.events.size()
@@ -103,5 +109,5 @@ func test_thirty_crews(t: T) -> void:
 		total.add(tr.finish(t, true))
 		if tr.exact_first >= 0 or tr.full_first >= 0:
 			firsts.append("%s: %s" % [tr.name, tr.first_difference()])
-	t.note("30 crews x 1800 ticks = %d ticks, %d events; every tick's state (pay masked) identical; events, snapshots: %s" % [ticks, events, total.summary()])
+	t.note("%d crews x 1800 ticks = %d ticks, %d events; every tick's state (pay masked) identical; events, snapshots: %s" % [crews.size(), ticks, events, total.summary()])
 	t.note("ticks whose pay fields differ in the last bits (pow): %d; first differences: %s" % [pay_ticks, ", ".join(firsts) if not firsts.is_empty() else "never"])

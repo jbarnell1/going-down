@@ -4,11 +4,11 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 23 of 44.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 33.
-- **Now:** P2b Fixes from your first play of the Godot build. The agent that built the Godot client is finding why the browser is silent, moving the big room's lights onto a real ceiling, thickening walls and keeping props inside their rooms
-- **Last CI result seen:** passed on e100309
-- **Answers applied up to:** 2026-11-16T15:51:27.242Z
+- **Gates passed:** 7 of 14. **Tasks done:** 25 of 44.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 36.
+- **Now:** nothing in progress
+- **Last CI result seen:** passed on 2d10de6
+- **Answers applied up to:** 2026-11-16T20:44:47.437Z
 
 ## Tasks
 
@@ -69,6 +69,7 @@
   - To do: Props are in tools/props/: kenney-furniture-kit/x (glb), quaternius-house-interior/FBX, polyhaven/<id> (1k gltf, heavy: decimate hard and shrink textures to 256 or less). Hashes and LICENCE.txt in each folder; add credits to CREDITS.md.
   - To do: Props are built: public/assets/props/*.glb + manifest.json (name, size, mount floor/wall/ceiling, front faces +Z). Untested in three.js: vertex colours (COLOR_0 needs vertexColors on the material), linear samplers (set NearestFilter), double-sided materials, KHR_materials_specular. Wall lamp reads poorly; consider dropping it.
   - To do: Owner (2026-11-16): 'When do we work on the dynamic lighting and textures for the map? I wonder if one side of the hospital is more normal and one side is more corrupted.' Plan: every room and corridor gets a corruption value from the seed, low near the lift and high toward where the Orderly starts. It drives which wall/floor textures and stains are used, how many props are overturned, and the lights: steady and bright on the clean side, dimmer, flickering and some dead on the corrupted side. It doubles as a way to know which way the lift is.
+  - To do: On Windows the corrupted side is darker than in the browser and the Orderly is nearly invisible at 10 m; lift the darkest end to match the browser unless the owner prefers it this dark
 - [x] **T6d** `done` Even voice loudness and thirty more announcer lines
   - Why: The owner found the voice much quieter after being caught than in the car, and the same lines get tiring
   - Evidence: The announcer is now even: the landing speaker never drops below 55 percent of its near level, and the taken, wipe, banked, blackout and lights lines always play at full level wherever you are. 35 new lines for both voices (54 in all); each moment cycles through all its lines before repeating. One bug found in my re-run and fixed: the thank-you-for-calling line sometimes expired while queued behind two long lines. Checked by numbers and by putting the old level back to see the test fail; nobody has heard it yet.
@@ -88,16 +89,18 @@
 - [x] **X1** `done` Trial: one Clinic floor in Godot
   - Why: The owner asked whether a game engine would save work and give better lighting. A five-hour trial answers with evidence before any decision to switch
   - Evidence: The five-hour trial finished in 35 minutes and answered the question: Godot gives clearly better lighting and a simple home server, at the cost of a slow first load in the browser (27 to 34 seconds, about 9 with a light setup) and a port of four to six agent-weeks by the trial's estimate. The build is on the hub at /godot/. The owner then decided to move.
-- [ ] **P0** `doing` Godot project, tests and builds
+- [x] **P0** `done` Godot project, tests and builds
   - Why: The new home of the game: a project that tests itself from the command line and produces a light browser build and a download for friends
+  - Evidence: There is now one Godot project that plays the game on the Godot rules: no TypeScript and no Node needed to run it. One command tests it, one command builds the Windows file and the browser build. I checked it myself: the reference results regenerate unchanged; 34 of 34 tests pass (a one-minute quick set and the 7-minute full set); the link between the client and the rules is proven the same as the old one over 7,833 scripted frames, and when I broke the soft-catch rule on purpose that test went red; the browser playthrough passed 29 of 29 with measured sound; the Windows playthrough passed 33 of 33; and the Windows file ran on a path with only Windows on it, reporting rules via gdscript at 0.28 ms a frame. The new build is at the hub's /godot/ link, fetched from the lab box. The rules cost about half a millisecond a frame. Not done: the Godot tests do not run on GitHub yet, only on this PC before each commit. The moment a ride ends takes about 60 ms on Windows (building the next floor) and is unmeasured in the browser; it happens while the doors are shut.
 - [x] **P1** `done` The rules, moved to Godot and proven identical
   - Why: Every rule already tuned (floors, the Orderly, earning, the lift, blinks and blackout, stamina) must behave exactly as it does today, checked seed by seed against the current game
   - Evidence: The game's rules now exist in Godot and behave the same as the old game: floors, walls, movement, line of sight, the Orderly, stamina, the instrument and tapes, the lift, blinks and blackout, and the test bots. I regenerated the old game's reference results (they came out unchanged) and ran the whole Godot suite myself: 31 of 31 passed in 7 minutes, covering tens of thousands of tick-by-tick comparisons with no difference. One exception, on purpose: pay differs from the old game in the last decimal bits (never in what the screen shows), because the two languages compute powers differently. To prove the tests can fail I doubled the width of the view cone: the sight test went red with 1,227 wrong answers, and green again when I put it back. Godot runs these rules 15 to 30 times slower than the old game, which is still fast enough for a server ticking 20 times a second.
 - [x] **P2** `done` Walking the Clinic in Godot
   - Why: The floor you can walk through with real lighting, the tape look, the Orderly, the lift and the instrument, drawn from the moved rules
   - Evidence: The Godot build can be played alone from start to finish in a browser: walk both wings of the Clinic, watch the Orderly freeze and creep, take a reading, call the lift, survive the blinks and the blackout, board, then bank or ride down to a new floor. Checked by running its scripted playthrough myself (26 of 26, no browser errors, first picture after 9.8 seconds), then running it against a copy I broke on purpose (the Orderly drawn in the dark), which failed the two blackout checks as it should. It is at the hub's /godot/ link and was fetched from the lab box. The rules are still the old game's, called through one bridge file; joining them to the moved rules is the next step. Not done here: playing together, touch controls, the proper caught sequence. Nobody has listened to the sound yet.
-- [ ] **P2b** `doing` Fixes from your first play of the Godot build
+- [x] **P2b** `done` Fixes from your first play of the Godot build
   - Why: No sound in the browser, ceiling lights floating in the big room, and props poking through paper-thin walls all break the place; and the Windows file is now the main way to play, so it gets checked with pictures and measured sound
+  - Evidence: All three things you found are fixed. Sound: the browser build was silent because the game created its sound channels while running, which Godot's browser sound mode cannot cope with; they are now set up in advance, and a new check measures what actually reaches the speakers under a browser's real rules (it passes, and fails when I mute the game). Lights in the big room now sit on the real high ceiling. Walls are 14 cm thick with proper edges at doorways, and props are placed by their real size so nothing pokes through. I re-ran everything myself: browser playthrough 29 of 29, Windows playthrough 33 of 33 including measured sound from the voice, the hum and the Orderly's squeak, and the new build is at the hub's /godot/ link, fetched from the lab box. Nobody has listened by ear yet. In the browser the squeak is not muffled round corners and the voice has no speaker effect; on Windows both work. The far side is darker on Windows than in the browser, and the Orderly is hard to see there.
 - [ ] **T6f** `todo` A bigger elevator
   - Why: The car is a 2 metre square today, so each side of the BANK or DOWN choice is 1 metre wide: cramped for four and a crush for eight
   - To do: Default size 3 m by 3 m with a 1.6 m door unless the owner says otherwise; the floor generator must keep the space behind and beside the lift wall empty; the lift drawing must read its size from the rules, not its own numbers
@@ -105,8 +108,11 @@
 - [ ] **P3** `todo` Playing together through the home server
   - Why: One small server at home runs the rules and keeps everyone in sync, so friends in their own houses can join and nobody's browser has to host
   - To do: Public door: Tailscale Funnel, chosen by the owner. Funnel only works on ports 443, 8443 and 10000. On this PC 443 and 10000 are in use for tailnet-only pages and 8443 is already funnelled for another project by path. Cleanest: add ONE path for the game server on the existing funnelled port, with a command for the owner to run (path mount to the server's local port); the browser build then connects with wss to that path. The server runs on this PC for Friday (it is already the funnel node); the lab box later. Never touch the other paths on that port.
+  - To do: Join secret: the owner sets a passphrase for the night on the server (never in the game file, never in git); friends type it or get it in the invite; the server refuses any connection without it before reading game traffic, with a limit on wrong tries, on connections and on message size
+  - To do: Isolation: run the server on the lab box inside a Docker container with no folders shared, a read-only filesystem, no extra privileges and CPU and memory caps, listening only on the lab box itself; Funnel points at that one port, so friends reach the game server and nothing else
 - [ ] **P4** `todo` Light browser build and a download for friends
   - Why: Friends either click a link that loads in a few seconds or run a small downloaded file
+  - To do: Run the Godot quick tests on GitHub as well (the runner must download Godot 4.7.2); today they only run on this PC before each commit
 - [x] **T14a** `done` Shrink the downloaded props for the game
   - Why: Rooms need beds, chairs, trolleys and clutter to feel like a place and to hide behind; the pieces must be tiny so the game stays fast
   - Evidence: 26 hospital props are ready for the game: bed, gurney, wheelchair, crutches, chairs, bench, desks, cabinets, shelves, sink, toilet, bins, lights, extinguisher, wet-floor sign, camera, duct and pipes. All 26 together are 0.7 MB and about 9,300 triangles, with flat colours or one tiny picture each. I checked the file sizes, the list against the files, and looked at the sheets. Not yet seen inside the running game; placing them in rooms is the room-dressing task.
@@ -178,6 +184,12 @@
 
 ## Activity (newest first)
 
+- 2026-11-16 21:25Z Finished P0: Godot project, tests and builds.
+- 2026-11-16 20:52Z Applied the owner's new answers.
+- 2026-11-16 20:52Z Time limit moved to 2026-11-21T05:00:00.000Z: the owner answered 'Keep going until Friday' on the Questions page
+- 2026-11-16 20:35Z Finished P2b: Fixes from your first play of the Godot build.
+- 2026-11-16 20:22Z Started P0: Godot project, tests and builds. Joining the Godot client to the moved rules, so one project makes the Windows file and the browser build and the Windows file needs nothing else installed
+- 2026-11-16 20:22Z Linked P0 to the North Star: A2, B8, C1, C5.
 - 2026-11-16 20:22Z P0 is half done: the Godot project tests itself from one command (npm run godot:test). Still to do there: join the client so the project makes the Windows file and the browser build, and run a quick set of the Godot tests on every commit and in CI.
 - 2026-11-16 20:22Z Finished P1: The rules, moved to Godot and proven identical.
 - 2026-11-16 19:59Z Started P2b: Fixes from your first play of the Godot build. The agent that built the Godot client is finding why the browser is silent, moving the big room's lights onto a real ceiling, thickening walls and keeping props inside their rooms
@@ -212,9 +224,3 @@
 - 2026-11-16 17:15Z New guard against drifting from the design: every task must now be linked to the North Star mechanics it builds before it can start, and the tracker prints that part of the design at the start and again at the finish. A one-page index replaces re-reading the whole document.
 - 2026-11-16 17:14Z Linked X1 to the North Star: nothing in it (An engine trial the owner approved on 2026-11-16).
 - 2026-11-16 17:14Z Linked T7b to the North Star: nothing in it (The owner tests alone, so bots stand in for a crew (loop rules), not a North Star mechanic).
-- 2026-11-16 17:14Z Linked T7d to the North Star: nothing in it (Foundations: how friends connect; the owner said everyone plays from their own house).
-- 2026-11-16 17:14Z Linked T7c to the North Star: nothing in it (Sprint, creep and stamina were the owner's request on 2026-11-16, after playing).
-- 2026-11-16 17:14Z Linked T7 to the North Star: nothing in it (Networking is in the North Star's Foundations and fairness contract, not a numbered mechanic).
-- 2026-11-16 17:14Z Linked T2b to the North Star: nothing in it (The tape look comes from the North Star's Look and sound section, which is not a numbered mechanic).
-- 2026-11-16 17:14Z Linked T2p to the North Star: nothing in it (Phone play was the owner's request on 2026-11-15; the North Star does not cover devices).
-- 2026-11-16 17:14Z Linked T13 to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).

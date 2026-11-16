@@ -27,6 +27,11 @@ const DT = 0.05;
 /** Default sizes of the Godot suite (tests/prop_*.gd); --full runs the Vitest sizes. */
 export const SUB = { entity: 24, instrument: 24, stare: 24, safe: 16, hear: 16, waits: 20 };
 export const FULL = { entity: 500, instrument: 500, stare: 320, safe: 300, hear: 104, waits: 300 };
+/** The quick set (npm run godot:test -- --quick): the first seeds only, for every commit. */
+export const QUICK = { entity: 4, instrument: 4, stare: 4, safe: 3, hear: 3, waits: 2 };
+/** Floors per depth of the clinic property tests: all of them, and the quick set's. */
+const CLINIC_SEEDS = 200;
+const CLINIC_SEEDS_QUICK = 10;
 
 // =============================================================================================
 // entity.test.ts: the oracle and runOne (copied).
@@ -787,12 +792,12 @@ function safeCounts(n: number) {
 // =============================================================================================
 // clinic.test.ts connectivity, as a count.
 
-function clinicCounts() {
+function clinicCounts(seeds: number) {
   let missing = 0;
   let unreachableRooms = 0;
   let walkable = 0;
   for (const depth of [1, 2, 3, 4]) {
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < seeds; i++) {
       const p = generateClinic(`seed-${i}`, depth);
       const seen = reachableFrom(p, p.landing);
       for (const level of [0, 1] as const) for (let y = 0; y < p.height; y++) for (let x = 0; x < p.width; x++) {
@@ -803,7 +808,7 @@ function clinicCounts() {
       for (const r of p.rooms) if (!seen.has(posIndex(p, { level: r.level, x: r.x, y: r.y }))) unreachableRooms++;
     }
   }
-  return { floors: 800, walkable, missing, unreachableRooms };
+  return { floors: 4 * seeds, walkable, missing, unreachableRooms };
 }
 
 // =============================================================================================
@@ -816,8 +821,9 @@ function blackoutCounts(waits: number) {
 
 const t0 = performance.now();
 const result: Record<string, unknown> = {};
-const sizes = process.argv.includes('--sub-only') ? [['sub', SUB]] as const : ([['sub', SUB], ['full', FULL]] as const);
-result.clinic = clinicCounts();
+const sizes = process.argv.includes('--sub-only') ? ([['quick', QUICK], ['sub', SUB]] as const) : ([['quick', QUICK], ['sub', SUB], ['full', FULL]] as const);
+result.clinic = clinicCounts(CLINIC_SEEDS);
+result.clinicQuick = clinicCounts(CLINIC_SEEDS_QUICK);
 for (const [name, n] of sizes) {
   result[name] = {
     entity: entityCounts(n.entity),

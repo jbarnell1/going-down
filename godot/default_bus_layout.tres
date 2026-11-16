@@ -1,0 +1,47 @@
+[gd_resource type="AudioBusLayout" load_steps=5 format=3]
+
+[sub_resource type="AudioEffectLowPassFilter" id="squeak_lp"]
+resource_name = "LowPassFilter"
+cutoff_hz = 20000.0
+
+[sub_resource type="AudioEffectHighPassFilter" id="voice_hp"]
+resource_name = "HighPassFilter"
+cutoff_hz = 320.0
+
+[sub_resource type="AudioEffectLowPassFilter" id="voice_lp"]
+resource_name = "LowPassFilter"
+cutoff_hz = 5200.0
+
+[sub_resource type="AudioEffectCompressor" id="voice_comp"]
+resource_name = "Compressor"
+threshold = -18.0
+ratio = 4.0
+gain = 4.0
+
+[resource]
+bus/1/name = &"Sfx"
+bus/1/solo = false
+bus/1/mute = false
+bus/1/bypass_fx = false
+bus/1/volume_db = 0.0
+bus/1/send = &"Master"
+bus/2/name = &"Squeak"
+bus/2/solo = false
+bus/2/mute = false
+bus/2/bypass_fx = false
+bus/2/volume_db = 0.0
+bus/2/send = &"Master"
+bus/2/effect/0/effect = SubResource("squeak_lp")
+bus/2/effect/0/enabled = true
+bus/3/name = &"Voice"
+bus/3/solo = false
+bus/3/mute = false
+bus/3/bypass_fx = false
+bus/3/volume_db = 0.0
+bus/3/send = &"Master"
+bus/3/effect/0/effect = SubResource("voice_hp")
+bus/3/effect/0/enabled = true
+bus/3/effect/1/effect = SubResource("voice_lp")
+bus/3/effect/1/enabled = true
+bus/3/effect/2/effect = SubResource("voice_comp")
+bus/3/effect/2/enabled = true

@@ -4,3 +4,5 @@
 tools/node_modules/
 # The repository's root .gitignore ignores every folder named tools/; this one is source.
 !/tools/
+# Builds (npm run godot:export) and the playthroughs' pictures: rebuildable, never committed.
+export/

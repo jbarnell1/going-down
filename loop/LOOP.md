@@ -36,7 +36,7 @@ You (Claude Fable) are the architect and the checker. Each time this fires, do O
 
 - **Reached:** every gate in ENDPOINT.md is ticked with evidence and the final validation task is done. Write `loop/FINAL-REPORT.md`, send a push notification if that tool is available, then call ScheduleWakeup with `stop: true`.
 - **Told to stop:** a file `loop/STOP` exists. Stop at once and say so in PROGRESS.
-- **Out of time:** more than 30 hours since "Started" in PROGRESS, or more than 80 iterations. Write the report with what is and is not done, then stop.
+- **Out of time:** past the "Time limit" shown by `node hub/track.mjs show` (the owner moved it to game night, Friday 20 November 2026, on the Questions page; only the owner moves it, with `track.mjs deadline`). Write the report with what is and is not done, then stop.
 - **Stuck:** the same task has failed in 3 iterations. Write it up under "Blocked" in PROGRESS and move to the next task that does not depend on it. If none is left, write the report, notify, and stop.
 
 Never stop to ask a question. Add it to `loop/questions.json` (id, title, context, type `single`, `multi` or `text`, options, default), take the default, record it with `node hub/track.mjs decision "<text>"`, and carry on. The owner answers on the hub's Questions page whenever they check in.

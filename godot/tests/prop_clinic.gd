@@ -12,11 +12,11 @@ const Plans = preload("res://tests/plans.gd")
 const Floor = preload("res://sim/floor.gd")
 
 func test_every_walkable_cell_reachable(t: T) -> void:
-	var want: Dictionary = Snap.load_ref("properties.json")["clinic"]
+	var want: Dictionary = Snap.load_ref("properties.json")["clinicQuick" if t.quick else "clinic"]
 	var walkable := 0
 	var missing := 0
 	var unreachable_rooms := 0
-	for p in Plans.property_plans():
+	for p in Plans.property_plans(t.quick):
 		# The oracle: a flood fill from the landing over can_step, written here.
 		var seen := {}
 		var stack: Array[Floor.Pos] = [p.landing]
@@ -45,13 +45,13 @@ func test_every_walkable_cell_reachable(t: T) -> void:
 				unreachable_rooms += 1
 	t.eq(missing, 0, "walkable cells not reachable from the landing")
 	t.eq(unreachable_rooms, 0, "rooms not reachable")
-	var got := {"floors": 800, "walkable": walkable, "missing": missing, "unreachableRooms": unreachable_rooms}
+	var got := {"floors": Plans.property_plans(t.quick).size(), "walkable": walkable, "missing": missing, "unreachableRooms": unreachable_rooms}
 	var d := Snap.compare(got, want, "clinic")
 	t.check(d.ok(), "counts differ from TypeScript's: " + d.summary())
-	t.note("800 floors, %d walkable cells, %d unreachable (TypeScript: %d cells, %d unreachable)" % [walkable, missing, want["walkable"], want["missing"]])
+	t.note("%d floors, %d walkable cells, %d unreachable (TypeScript: %d cells, %d unreachable)" % [want["floors"], walkable, missing, want["walkable"], want["missing"]])
 
 func test_walls_steps_sightlines_and_the_entity_start(t: T) -> void:
-	var plans := Plans.property_plans()
+	var plans := Plans.property_plans(t.quick)
 	var checked := 0
 	var asymmetric := 0
 	for pi in plans.size():
@@ -104,11 +104,11 @@ func test_walls_steps_sightlines_and_the_entity_start(t: T) -> void:
 		for b in bad.slice(0, 3):
 			t.check(false, "%s d%d: %s" % [p.seed, p.depth, b])
 	t.eq(asymmetric, 0, "asymmetric neighbours")
-	t.check(checked > 1000, "room-corridor edges checked: %d" % checked)
-	t.note("800 floors: sightlines and entity starts checked; %d room-corridor edges, neighbours symmetric on 40 floors" % checked)
+	t.check(checked > (400 if t.quick else 1000), "room-corridor edges checked: %d" % checked)
+	t.note("%d floors: sightlines and entity starts checked; %d room-corridor edges, neighbours symmetric on 40 floors" % [plans.size(), checked])
 
 func test_side_branches_are_dead_ends(t: T) -> void:
-	var plans := Plans.property_plans()
+	var plans := Plans.property_plans(t.quick)
 	var groups_total := 0
 	for p in plans:
 		# Side groups from scratch: union side rooms joined by doors; exits are doors leaving a group.
@@ -150,4 +150,4 @@ func test_side_branches_are_dead_ends(t: T) -> void:
 		t.check(exits.size() >= 2 and suites >= 2, "%s d%d: %d side branches, %d of two or more rooms" % [p.seed, p.depth, exits.size(), suites])
 		for g: int in exits:
 			t.check(int(exits[g]) == 1, "%s d%d: side group %d has %d doors out" % [p.seed, p.depth, g, exits[g]])
-	t.note("800 floors, %d side branches, each with exactly one door out" % groups_total)
+	t.note("%d floors, %d side branches, each with exactly one door out" % [plans.size(), groups_total])

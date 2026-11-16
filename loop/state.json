@@ -2,16 +2,16 @@
   "title": "The Clinic slice",
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
-  "deadlineAt": "2026-11-17T09:38:00Z",
-  "iteration": 33,
-  "now": "P2b",
-  "nowText": "The agent that built the Godot client is finding why the browser is silent, moving the big room's lights onto a real ceiling, thickening walls and keeping props inside their rooms",
+  "deadlineAt": "2026-11-21T05:00:00.000Z",
+  "iteration": 36,
+  "now": null,
+  "nowText": "",
   "ci": {
     "status": "passed",
-    "commit": "e100309",
-    "at": "2026-11-16T18:28:16.151Z"
+    "commit": "2d10de6",
+    "at": "2026-11-16T20:35:41.512Z"
   },
-  "answersAppliedTo": "2026-11-16T15:51:27.242Z",
+  "answersAppliedTo": "2026-11-16T20:44:47.437Z",
   "tasks": [
     {
       "id": "T0",
@@ -902,7 +902,8 @@
         "Owner's rule: downsample every prop and texture before it goes in the game. Low triangle counts, small textures; the tape look hides detail.",
         "Props are in tools/props/: kenney-furniture-kit/x (glb), quaternius-house-interior/FBX, polyhaven/<id> (1k gltf, heavy: decimate hard and shrink textures to 256 or less). Hashes and LICENCE.txt in each folder; add credits to CREDITS.md.",
         "Props are built: public/assets/props/*.glb + manifest.json (name, size, mount floor/wall/ceiling, front faces +Z). Untested in three.js: vertex colours (COLOR_0 needs vertexColors on the material), linear samplers (set NearestFilter), double-sided materials, KHR_materials_specular. Wall lamp reads poorly; consider dropping it.",
-        "Owner (2026-11-16): 'When do we work on the dynamic lighting and textures for the map? I wonder if one side of the hospital is more normal and one side is more corrupted.' Plan: every room and corridor gets a corruption value from the seed, low near the lift and high toward where the Orderly starts. It drives which wall/floor textures and stains are used, how many props are overturned, and the lights: steady and bright on the clean side, dimmer, flickering and some dead on the corrupted side. It doubles as a way to know which way the lift is."
+        "Owner (2026-11-16): 'When do we work on the dynamic lighting and textures for the map? I wonder if one side of the hospital is more normal and one side is more corrupted.' Plan: every room and corridor gets a corruption value from the seed, low near the lift and high toward where the Orderly starts. It drives which wall/floor textures and stains are used, how many props are overturned, and the lights: steady and bright on the clean side, dimmer, flickering and some dead on the corrupted side. It doubles as a way to know which way the lift is.",
+        "On Windows the corrupted side is darker than in the browser and the Orderly is nearly invisible at 10 m; lift the darkest end to match the browser unless the owner prefers it this dark"
       ],
       "ns": [
         "A2"
@@ -1048,11 +1049,20 @@
       "id": "P0",
       "title": "Godot project, tests and builds",
       "why": "The new home of the game: a project that tests itself from the command line and produces a light browser build and a download for friends",
-      "status": "doing",
+      "status": "done",
       "gates": [],
-      "ns": [],
+      "ns": [
+        "A2",
+        "B8",
+        "C1",
+        "C5"
+      ],
       "nsWhy": "Foundations, amended by the owner on 2026-11-16: the engine is now Godot, a home server is allowed, and a download is acceptable",
-      "startedAt": "2026-11-16T17:55:48.334Z"
+      "startedAt": "2026-11-16T17:55:48.334Z",
+      "nsCheck": "A2, B8, C1, C5: nothing about the floor, the Orderly, the instrument or the lift changed in the join; the client's behaviour is bit-identical to the trial's on the scripted runs, and both playthroughs still pass. The owner's direction that logic lives in one place is now true: godot/ is the only folder the game is edited in.",
+      "finishedAt": "2026-11-16T21:25:43.014Z",
+      "summary": "There is now one Godot project that plays the game on the Godot rules: no TypeScript and no Node needed to run it. One command tests it, one command builds the Windows file and the browser build. I checked it myself: the reference results regenerate unchanged; 34 of 34 tests pass (a one-minute quick set and the 7-minute full set); the link between the client and the rules is proven the same as the old one over 7,833 scripted frames, and when I broke the soft-catch rule on purpose that test went red; the browser playthrough passed 29 of 29 with measured sound; the Windows playthrough passed 33 of 33; and the Windows file ran on a path with only Windows on it, reporting rules via gdscript at 0.28 ms a frame. The new build is at the hub's /godot/ link, fetched from the lab box. The rules cost about half a millisecond a frame. Not done: the Godot tests do not run on GitHub yet, only on this PC before each commit. The moment a ride ends takes about 60 ms on Windows (building the next floor) and is unmeasured in the browser; it happens while the doors are shut.",
+      "todo": []
     },
     {
       "id": "P1",
@@ -1131,14 +1141,44 @@
       "id": "P2b",
       "title": "Fixes from your first play of the Godot build",
       "why": "No sound in the browser, ceiling lights floating in the big room, and props poking through paper-thin walls all break the place; and the Windows file is now the main way to play, so it gets checked with pictures and measured sound",
-      "status": "doing",
+      "status": "done",
       "gates": [],
       "ns": [
         "A2",
         "B8",
         "H5"
       ],
-      "startedAt": "2026-11-16T19:59:43.242Z"
+      "startedAt": "2026-11-16T19:59:43.242Z",
+      "nsCheck": "A2: the open two-storey room now reads as a real space with its lights on the upper ceiling; clean side and corrupted side kept as the owner asked. B8: the Orderly untouched, as the owner asked. H5: the elevator voice now plays in the browser after the first click or key and is measured on both builds. Heard before seen: the squeak is measured on Windows while the Orderly moves unseen; in the browser it plays but without the muffling round corners, which Godot's browser sound mode does not support.",
+      "finishedAt": "2026-11-16T20:35:28.308Z",
+      "summary": "All three things you found are fixed. Sound: the browser build was silent because the game created its sound channels while running, which Godot's browser sound mode cannot cope with; they are now set up in advance, and a new check measures what actually reaches the speakers under a browser's real rules (it passes, and fails when I mute the game). Lights in the big room now sit on the real high ceiling. Walls are 14 cm thick with proper edges at doorways, and props are placed by their real size so nothing pokes through. I re-ran everything myself: browser playthrough 29 of 29, Windows playthrough 33 of 33 including measured sound from the voice, the hum and the Orderly's squeak, and the new build is at the hub's /godot/ link, fetched from the lab box. Nobody has listened by ear yet. In the browser the squeak is not muffled round corners and the voice has no speaker effect; on Windows both work. The far side is darker on Windows than in the browser, and the Orderly is hard to see there.",
+      "todo": [],
+      "media": [
+        {
+          "src": "P2b/20261116T203528-18-open-room-looking-up.png",
+          "caption": "The big room looking up: the light panels now sit on the real ceiling",
+          "kind": "image",
+          "at": "2026-11-16T20:35:28.312Z"
+        },
+        {
+          "src": "P2b/20261116T203528-20-doorway-wall-thickness.png",
+          "caption": "A doorway: walls now have thickness and proper edges",
+          "kind": "image",
+          "at": "2026-11-16T20:35:28.314Z"
+        },
+        {
+          "src": "P2b/20261116T203528-22-props-room-1-other-side.png",
+          "caption": "The far side of a wall with a chair against it: nothing pokes through",
+          "kind": "image",
+          "at": "2026-11-16T20:35:28.316Z"
+        },
+        {
+          "src": "P2b/20261116T203528-05-orderly-watched.png",
+          "caption": "Windows build, far side: darker than the browser, the Orderly is hard to make out",
+          "kind": "image",
+          "at": "2026-11-16T20:35:28.317Z"
+        }
+      ]
     },
     {
       "id": "T6f",
@@ -1163,7 +1203,9 @@
       "ns": [],
       "nsWhy": "Foundations, amended by the owner: 'server should just be responsible for handling client updates and keeping everyone in sync'; the fairness contract still applies in full",
       "todo": [
-        "Public door: Tailscale Funnel, chosen by the owner. Funnel only works on ports 443, 8443 and 10000. On this PC 443 and 10000 are in use for tailnet-only pages and 8443 is already funnelled for another project by path. Cleanest: add ONE path for the game server on the existing funnelled port, with a command for the owner to run (path mount to the server's local port); the browser build then connects with wss to that path. The server runs on this PC for Friday (it is already the funnel node); the lab box later. Never touch the other paths on that port."
+        "Public door: Tailscale Funnel, chosen by the owner. Funnel only works on ports 443, 8443 and 10000. On this PC 443 and 10000 are in use for tailnet-only pages and 8443 is already funnelled for another project by path. Cleanest: add ONE path for the game server on the existing funnelled port, with a command for the owner to run (path mount to the server's local port); the browser build then connects with wss to that path. The server runs on this PC for Friday (it is already the funnel node); the lab box later. Never touch the other paths on that port.",
+        "Join secret: the owner sets a passphrase for the night on the server (never in the game file, never in git); friends type it or get it in the invite; the server refuses any connection without it before reading game traffic, with a limit on wrong tries, on connections and on message size",
+        "Isolation: run the server on the lab box inside a Docker container with no folders shared, a read-only filesystem, no extra privileges and CPU and memory caps, listening only on the lab box itself; Funnel points at that one port, so friends reach the game server and nothing else"
       ]
     },
     {
@@ -1173,7 +1215,10 @@
       "status": "todo",
       "gates": [],
       "ns": [],
-      "nsWhy": "Foundations, amended by the owner: a light browser build, or a packaged download"
+      "nsWhy": "Foundations, amended by the owner: a light browser build, or a packaged download",
+      "todo": [
+        "Run the Godot quick tests on GitHub as well (the runner must download Godot 4.7.2); today they only run on this PC before each commit"
+      ]
     },
     {
       "id": "T14a",
@@ -1562,6 +1607,36 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T21:25:43.015Z",
+      "text": "Finished P0: Godot project, tests and builds.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T20:52:48.539Z",
+      "text": "Applied the owner's new answers.",
+      "kind": "answers"
+    },
+    {
+      "at": "2026-11-16T20:52:48.436Z",
+      "text": "Time limit moved to 2026-11-21T05:00:00.000Z: the owner answered 'Keep going until Friday' on the Questions page",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T20:35:28.317Z",
+      "text": "Finished P2b: Fixes from your first play of the Godot build.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T20:22:46.426Z",
+      "text": "Started P0: Godot project, tests and builds. Joining the Godot client to the moved rules, so one project makes the Windows file and the browser build and the Windows file needs nothing else installed",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T20:22:46.194Z",
+      "text": "Linked P0 to the North Star: A2, B8, C1, C5.",
+      "kind": "note"
+    },
     {
       "at": "2026-11-16T20:22:08.085Z",
       "text": "P0 is half done: the Godot project tests itself from one command (npm run godot:test). Still to do there: join the client so the project makes the Windows file and the browser build, and run a quick set of the Godot tests on every commit and in CI.",
@@ -2529,36 +2604,6 @@
     },
     {
       "at": "2026-11-16T05:21:33.368Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T05:21:33.281Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T05:07:11.364Z",
-      "text": "Orderly, revision round 1. A blind art-director judge scored it 4/10 frightening, 4/10 craft, 5/10 original. A blind player judge scored it 6/10 scary and 7/10 memorable, and said: \"Why is he smiling? Why is he SMILING.\" Both said the smile reads as an emoji at game size, the legs are sticks, the gown reads as a dress, and it stands like a plank. Fixes are going back to the modeller.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T05:06:39.412Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T05:04:05.214Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T05:04:05.120Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T05:04:05.015Z",
       "text": "New pictures for T3: The Orderly, second pass.",
       "kind": "media"
     }

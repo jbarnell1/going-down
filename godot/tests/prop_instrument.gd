@@ -232,17 +232,18 @@ static func counts(n: int) -> Dictionary:
 
 func test_recording_rule_by_the_oracle(t: T) -> void:
 	var ref: Dictionary = Snap.load_ref("properties.json")
-	var want: Dictionary = ref["full" if t.full else "sub"]["instrument"]
+	var want: Dictionary = ref[t.size_key()]["instrument"]
 	var n: int = want["runs"]
 	var frac := float(n) / 500.0
 	var c := counts(n)
 	t.eq(c["violations"], 0, "a reading grew when the rule says it may not")
 	t.eq(c["slipNotOk"], 0, "runs where the slip did not print exactly once, on the first recording tick")
-	t.check(c["growthTicks"] > 5000 * frac and c["lowered"] > 1000 * frac and c["inactiveRaisedTicks"] > 1000 * frac, "not vacuous: %s" % str(c))
-	t.check(float(c["withReading"]) / n > 0.3, "readings close in many runs: %d of %d" % [c["withReading"], n])
+	if not t.quick:
+		t.check(c["growthTicks"] > 5000 * frac and c["lowered"] > 1000 * frac and c["inactiveRaisedTicks"] > 1000 * frac, "not vacuous: %s" % str(c))
+		t.check(float(c["withReading"]) / n > 0.3, "readings close in many runs: %d of %d" % [c["withReading"], n])
 	var rate_e := float(c["earnersCaught"]) / maxi(1, c["earners"])
 	var rate_n := float(c["nonEarnersCaught"]) / maxi(1, c["nonEarners"])
-	t.check(rate_e > rate_n, "greed costs: earners caught %s, non-earners %s" % [rate_e, rate_n])
+	t.check(t.quick or rate_e > rate_n, "greed costs: earners caught %s, non-earners %s" % [rate_e, rate_n])
 	var d := Snap.compare(c, want, "instrument")
 	t.check(d.ok(), "counts differ from TypeScript's: " + d.summary())
 	t.note("%d runs x 60 s: growth-ticks %d, lowered %d, inactive-raised %d, runs with a reading %d (%d readings), tapes dropped %d in %d runs, picked up %d" % [

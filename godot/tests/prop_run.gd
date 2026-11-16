@@ -324,7 +324,7 @@ static func stare_run(i: int) -> StareResult:
 
 func test_staring_while_the_car_comes(t: T) -> void:
 	var ref: Dictionary = Snap.load_ref("properties.json")
-	var want: Dictionary = ref["full" if t.full else "sub"]["stare"]
+	var want: Dictionary = ref[t.size_key()]["stare"]
 	var n: int = want["runs"]
 	var c := {"runs": n, "violations": 0, "telegraph": 0, "moved": 0, "caught": 0, "blinks": 0, "blackouts": 0, "advance": 0.0, "arrived": 0, "arrivedOneBlackout": 0}
 	for i in n:
@@ -340,9 +340,9 @@ func test_staring_while_the_car_comes(t: T) -> void:
 		c["arrivedOneBlackout"] += 1 if (r.arrived and r.blackouts == 1) else 0
 	t.eq(c["violations"], 0, "moved while stared at with the lights on (or an event about the call)")
 	t.eq(c["telegraph"], 0, "a dark not telegraphed, not longer than the last, or a blackout not ending as the car arrives")
-	t.check(c["moved"] > n / 2, "staring is not safe: it moved during a blink in %d of %d" % [c["moved"], n])
+	t.check(t.quick or c["moved"] > n / 2, "staring is not safe: it moved during a blink in %d of %d" % [c["moved"], n])
 	# Vitest asks for more than half the waits to reach the car; the first 24 seeds reach it in 11.
-	t.check(c["blinks"] > n * 2 and c["arrived"] > (n / 2 if t.full else n / 3) and c["arrived"] == c["arrivedOneBlackout"], "not vacuous: %s" % str(c))
+	t.check(t.quick or c["blinks"] > n * 2 and c["arrived"] > (n / 2 if t.full else n / 3) and c["arrived"] == c["arrivedOneBlackout"], "not vacuous: %s" % str(c))
 	var d := Snap.compare(c, want, "stare")
 	t.check(d.ok(), "counts differ from TypeScript's: " + d.summary())
 	t.note("%d calls: %d dark stretches (%d blackouts); it moved during a blink in %d, caught while waiting %d, arrived %d; TypeScript: %d darks, moved %d, caught %d" % [
@@ -509,7 +509,7 @@ static func safe_run(i: int, seconds: float = 90.0) -> SafeResult:
 
 func test_the_car_is_safe(t: T) -> void:
 	var ref: Dictionary = Snap.load_ref("properties.json")
-	var want: Dictionary = ref["full" if t.full else "sub"]["safe"]
+	var want: Dictionary = ref[t.size_key()]["safe"]
 	var n: int = want["runs"]
 	var c := {"runs": n, "violations": 0, "encounterRuns": 0, "encounterTicks": 0, "caught": 0, "rides": 0, "events": 0}
 	for i in n:
@@ -521,7 +521,7 @@ func test_the_car_is_safe(t: T) -> void:
 		c["rides"] += r.rides
 		c["events"] += r.events
 	t.eq(c["violations"], 0, "the Orderly in (or overlapping) the car, or someone caught inside it")
-	t.check(c["encounterRuns"] > n / 10 and c["caught"] > 10 * n / 300, "not vacuous: %s" % str(c))
+	t.check(t.quick or c["encounterRuns"] > n / 10 and c["caught"] > 10 * n / 300, "not vacuous: %s" % str(c))
 	var d := Snap.compare(c, want, "safe")
 	t.check(d.ok(), "counts differ from TypeScript's: " + d.summary())
 	t.note("%d runs: %d with the Orderly within 2.5 m of an occupied car (%d ticks), %d catches outside, %d rides, %d events; TypeScript: %d (%d), %d, %d, %d" % [

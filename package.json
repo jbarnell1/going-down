@@ -17,7 +17,8 @@
     "test:hub": "node hub/smoke.mjs",
     "e2e:update": "playwright test tests/e2e/visual.spec.ts --update-snapshots",
     "godot:reference": "node godot/tools/godot.mjs reference",
-    "godot:test": "node godot/tools/godot.mjs test"
+    "godot:test": "node godot/tools/godot.mjs test",
+    "godot:export": "node godot/tools/godot.mjs export"
   },
   "dependencies": {
     "three": "0.187.0",

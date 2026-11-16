@@ -2,4 +2,13 @@
 # Runs before every commit. First refuse anything that looks like a secret, then refuse a broken build.
 # Enabled by: git config core.hooksPath scripts/hooks
 node hub/scan-secrets.mjs || exit 1
-npm run --silent check || { echo "Commit blocked: npm run check failed."; exit 1; }
+staged=$(git diff --cached --name-only)
+# The old browser game and the hub: checked whenever anything they are built from is in the commit.
+if echo "$staged" | grep -qE '^(src/|tests/|public/|hub/|scripts/|index\.html|package(-lock)?\.json|vite\.config|tsconfig|playwright)'; then
+  npm run --silent check || { echo "Commit blocked: npm run check failed."; exit 1; }
+fi
+# The Godot game: the one-minute quick set (every test file, first seeds). The full set is
+# `npm run godot:test`, run by hand before a build is handed to anyone.
+if echo "$staged" | grep -q '^godot/'; then
+  npm run --silent godot:test -- --quick || { echo "Commit blocked: the Godot quick tests failed."; exit 1; }
+fi

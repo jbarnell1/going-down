@@ -1,11 +1,20 @@
 ; Going Down, on the Godot engine. Plain text: agents and people can read and edit it.
-; So far this project holds the game's rules (sim/) and the tests that prove they behave exactly
-; like the TypeScript rules in src/sim (tests/). See README.md for the commands.
+; The game: the rules (sim/, proved the same as the TypeScript rules in src/sim by tests/), the
+; client that draws and plays them (client/, assets/, data/, main.tscn; copied from
+; spikes/godot-client by tools/sync_client.mjs), and the bridge between them (client/rules_bridge.gd,
+; proved the same as the interim TypeScript host by tests/ref_bridge.gd). See README.md.
 config_version=5
 
 [application]
 config/name="Going Down"
+run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[audio]
+; The Sfx, Squeak and Voice buses are declared in this file. Never add buses at run time
+; (AudioServer.add_bus): in the browser's Sample playback mode that silences everything.
+buses/default_bus_layout="res://default_bus_layout.tres"
+driver/mix_rate.web=44100
 
 [debug]
 ; Typed GDScript throughout: a declaration without a type is a compile error, not a warning.
@@ -14,7 +23,18 @@ gdscript/warnings/unsafe_property_access=1
 gdscript/warnings/unsafe_method_access=1
 gdscript/warnings/unsafe_call_argument=1
 
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="disabled"
+
 [rendering]
 ; The Compatibility renderer is the one that runs in a browser.
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+textures/canvas_textures/default_texture_filter=0
+limits/opengl/max_lights_per_object=16
+limits/opengl/max_renderable_lights=256
+lights_and_shadows/positional_shadow/atlas_size=2048
+lights_and_shadows/positional_shadow/atlas_size.mobile=2048
+anti_aliasing/quality/msaa_3d=0

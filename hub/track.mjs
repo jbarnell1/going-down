@@ -16,6 +16,7 @@
 //   node hub/track.mjs decision "a default taken without asking"
 //   node hub/track.mjs ci passed|failed <commit>
 //   node hub/track.mjs answers <iso time of newest answer applied>
+//   node hub/track.mjs deadline <iso time> "who decided and why"           move the loop's time limit (the owner's call only)
 //   node hub/track.mjs note "one line for the activity feed"
 //   node hub/track.mjs show                                                print the short status the loop reads
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -192,6 +193,10 @@ switch (cmd) {
   case 'unblock': { const t = task(s, pos[0]); t.status = 'todo'; delete t.blocked; break; }
   case 'decision': s.decisions.push({ at: now(), text: pos[0] ?? die('decision needs text') }); feed(s, `Took a default: ${pos[0]}`, 'decision'); break;
   case 'ci': s.ci = { status: pos[0], commit: pos[1] ?? '', at: now() }; if (pos[0] !== 'passed') feed(s, `CI ${pos[0]} on ${pos[1] ?? ''}.`, 'ci'); break;
+  case 'deadline': {
+    if (!pos[0] || Number.isNaN(Date.parse(pos[0]))) die('deadline needs an ISO time');
+    s.deadlineAt = new Date(pos[0]).toISOString(); feed(s, `Time limit moved to ${s.deadlineAt}: ${pos[1] ?? die('say who decided and why')}`); break;
+  }
   case 'answers': s.answersAppliedTo = pos[0] ?? now(); feed(s, 'Applied the owner\'s new answers.', 'answers'); break;
   case 'note': feed(s, pos[0] ?? die('note needs text')); break;
   default: die(`unknown command: ${cmd}`);

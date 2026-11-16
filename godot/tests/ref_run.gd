@@ -456,7 +456,12 @@ func test_whole_waits_with_wait_bots(t: T) -> void:
 	var ref: Dictionary = Snap.load_ref("run.json")
 	var total := Snap.Diff.new()
 	var n := 0
-	for want: Dictionary in ref["waits"]:
+	var waits: Array = ref["waits"]
+	for wi in waits.size():
+		# The quick set: every sixth wait (stay and flee, each depth).
+		if t.quick and wi % 6 != 0:
+			continue
+		var want: Dictionary = waits[wi]
 		var r := Waits.run_wait(StringName(want["style"]), want["depth"], want["i"])
 		var got := {
 			"style": want["style"], "depth": want["depth"], "i": want["i"], "caught": r.caught, "boarded": r.boarded,

@@ -32,6 +32,7 @@ import { exertion, freshStamina, gaitFor, speedFor, stepStamina, sustainedFleeSp
 import { addReading, emptyTape, type Tape } from '../../src/sim/tape';
 import { edgeKind, northEdge, segmentsNear, westEdge } from '../../src/sim/walls';
 import { runWait } from '../../tests/sim/waits';
+import { bridgeScenes } from './bridge_script';
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'tests', 'reference');
 
@@ -1161,6 +1162,45 @@ function dumpMath(): void {
   write('math.json', J({ ...rows, hfov: BOT_HFOV_DEG }));
 }
 
+// ---------------------------------------------------------------------------------------------
+// 11. The client's rules bridge: the reference host (rules_host.ts, the interim TypeScript host of
+// the Godot client) driven by bridge_script.ts. Every reply is recorded as the client received it
+// (JSON): per request the two digests of the reply without its events and plan, every event, the
+// full reply every 20 requests and the last, every plan in full, and per request the pay-derived
+// values (compared within 1e-9) plus the run's tick count.
+
+function payOf(r: any): unknown[] {
+  return [r.inst?.value ?? null, r.inst?.rate ?? null, r.inst?.tickHz ?? null, r.inst?.loudness ?? null, r.tapes?.value ?? null, r.ticks ?? null, r.summary?.total ?? null];
+}
+
+/** The keys of a frame request, in the order a compact frame row carries them (ref_bridge.gd FRAME_KEYS). */
+const FRAME_KEYS = ['dt', 'f', 'r', 'sprint', 'creep', 'yaw', 'pitch', 'hfov', 'vfov', 'raised', 'call', 'hold', 'pickUp', 'still', 'timeScale'];
+/** Frame requests as rows [values in FRAME_KEYS order] (they are most of the file); other requests as they are. */
+function compactRequest(r: Record<string, unknown>): unknown {
+  if (r.op !== 'frame') return r;
+  const keys = Object.keys(r).filter((k) => k !== 'op');
+  if (keys.length !== FRAME_KEYS.length || !FRAME_KEYS.every((k) => k in r)) throw new Error(`frame request with other keys: ${keys}`);
+  return FRAME_KEYS.map((k) => r[k]);
+}
+
+function dumpBridge(): void {
+  const scenes = bridgeScenes().map((sc) => {
+    const rec = new Recorder(sc.name, 20);
+    const plans: Record<string, unknown> = {};
+    sc.replies.forEach((reply, k) => {
+      const { events, plan, ...rest } = reply as Record<string, unknown>;
+      if (plan !== undefined) plans[String(k)] = J(plan);
+      rec.tick(rest, (events as unknown[] | undefined) ?? [], payOf(reply));
+    });
+    const types: Record<string, number> = {};
+    for (const r of sc.replies) for (const e of (r.events ?? []) as { type: string }[]) types[e.type] = (types[e.type] ?? 0) + 1;
+    const caughtIn = sc.replies.filter((r) => (r.events ?? []).some((e: { type: string }) => e.type === 'caught')).map((r) => (r.blackout ? 'blackout' : r.dark ? 'blink' : 'light'));
+    console.log(`  ${sc.name}: ${sc.requests.length} requests, events ${JSON.stringify(types)}, caught in: ${caughtIn.join(',') || '-'}`);
+    return { name: sc.name, frameKeys: FRAME_KEYS, requests: J(sc.requests.map(compactRequest)), trace: rec.done(), plans };
+  });
+  write('bridge.json', { scenes });
+}
+
 const only = process.argv[2];
 const jobs: Record<string, () => void> = {
   literals: dumpLiterals,
@@ -1173,6 +1213,7 @@ const jobs: Record<string, () => void> = {
   instrument: dumpInstrument,
   run: dumpRun,
   bots: dumpBots,
+  bridge: dumpBridge,
 };
 for (const [name, job] of Object.entries(jobs)) {
   if (only && only !== name) continue;
