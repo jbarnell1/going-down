@@ -43,6 +43,16 @@ export const WAKE_DISTANCE = 12;
 export const WAKE_TIMEOUT = 60;
 /** Hunting speed in m/s (players walk 3.0 and creep 1.2). */
 export const HUNT_SPEED = 3.4;
+/**
+ * It runs down prey that runs, and creeps up on prey that stands still. Within CREEP_DISTANCE of a
+ * target moving slower than CREEP_PREY_SPEED it slows to CREEP_SPEED. This is what makes recording it
+ * a gamble a person can play: at full speed the last five metres take a second and a half, too fast
+ * to choose when to turn; at a creep they take about four, with the ticking climbing all the way.
+ * A player who flees still gets chased at full speed, so turning your back and walking away is no escape.
+ */
+export const CREEP_DISTANCE = 5.5;
+export const CREEP_PREY_SPEED = 1.6;
+export const CREEP_SPEED = 1.3;
 /** Seconds between route re-plans while hunting. */
 export const REPLAN_INTERVAL = 0.5;
 /** Horizontal distance (metres) to a player on the same level at which it starts reaching. */
@@ -108,6 +118,13 @@ export interface OrderlyState {
   /** Time of the last tick it was seen, or null. */
   lastSeenAt: number | null;
   targetId: string | null;
+  /** Its current walking speed in m/s (0 when not moving); the renderer and the squeak follow it. */
+  speed: number;
+  /** Smoothed speed of its target and where the target was on the last hunting tick. */
+  preySpeed: number;
+  preyX: number;
+  preyZ: number;
+  preyId: string | null;
   path: readonly Pos[] | null;
   pathNext: number;
   replanIn: number;
@@ -219,6 +236,11 @@ export function createOrderly(plan: FloorPlan): OrderlyState {
     seenTotal: 0,
     lastSeenAt: null,
     targetId: null,
+    speed: 0,
+    preySpeed: HUNT_SPEED,
+    preyX: 0,
+    preyZ: 0,
+    preyId: null,
     path: null,
     pathNext: 0,
     replanIn: 0,
@@ -247,7 +269,7 @@ export function seenBy(plan: FloorPlan, body: Body, players: readonly PlayerView
 /** Advances the Orderly by dt seconds. Never mutates `prev`. */
 export function stepEntity(plan: FloorPlan, prev: OrderlyState, players: readonly PlayerView[], dt: number): StepResult {
   const t = prev.t + dt;
-  const s: OrderlyState = { ...prev, t, moving: false };
+  const s: OrderlyState = { ...prev, t, moving: false, speed: 0 };
   const events: OrderlyEvent[] = [];
 
   // 1. Is it seen? Decided before anything else, from where it stands now.
@@ -380,19 +402,36 @@ function hunt(plan: FloorPlan, s: OrderlyState, players: readonly PlayerView[], 
   }
 
   const before = s.body;
+
+  // How fast is the prey moving? Measured between hunting ticks and smoothed over about a quarter
+  // of a second. A new target is assumed to be running until shown otherwise.
+  if (s.preyId === target.id && dt > EPS) {
+    const inst = Math.min(6, Math.hypot(target.body.x - s.preyX, target.body.z - s.preyZ) / dt);
+    s.preySpeed += (inst - s.preySpeed) * Math.min(1, dt * 4);
+  } else {
+    s.preySpeed = HUNT_SPEED;
+  }
+  s.preyId = target.id;
+  s.preyX = target.body.x;
+  s.preyZ = target.body.z;
+  const gap = Math.hypot(target.body.x - before.x, target.body.z - before.z);
+  const creeping = target.body.level === before.level && gap < CREEP_DISTANCE && s.preySpeed < CREEP_PREY_SPEED;
+  const pace = creeping ? CREEP_SPEED : HUNT_SPEED;
+
   const here = cellOf(plan, before);
   if (sameCell(here, cellOf(plan, target.body))) {
     const dx = target.body.x - before.x;
     const dz = target.body.z - before.z;
     const d = Math.hypot(dx, dz);
-    const step = Math.min(HUNT_SPEED * dt, d - APPROACH_STOP);
+    const step = Math.min(pace * dt, d - APPROACH_STOP);
     if (step > 1e-6) s.body = moveWithCollision(plan, before, (dx / d) * step, (dz / d) * step, ORDERLY_RADIUS);
   } else {
     // stepPathWalk only advances `next`; the path itself is never written to.
     const walk: PathWalk = { path: s.path as Pos[], next: s.pathNext };
-    s.body = stepPathWalk(plan, walk, before, HUNT_SPEED * dt, ORDERLY_RADIUS);
+    s.body = stepPathWalk(plan, walk, before, pace * dt, ORDERLY_RADIUS);
     s.pathNext = walk.next;
   }
+  s.speed = Math.hypot(s.body.x - before.x, s.body.z - before.z) / Math.max(dt, EPS);
 
   const mx = s.body.x - before.x;
   const mz = s.body.z - before.z;

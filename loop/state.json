@@ -645,6 +645,11 @@
   ],
   "feed": [
     {
+      "at": "2026-11-16T07:13:23.103Z",
+      "text": "Design tuning by Fable: the Orderly now runs down anyone who runs but creeps up on anyone standing still, and the instrument pays far more in the last metres. Before, the final approach took about a second and a half, too fast to choose when to turn. Now it takes about four seconds, and turning at arm's length earns roughly double what turning at 2.5 metres does. The earning rule's independent checker verified 33,646 moments of recording with no violations.",
+      "kind": "note"
+    },
+    {
       "at": "2026-11-16T07:00:30.908Z",
       "text": "Started T5: The instrument, the recording rule and tapes. An Opus agent is building the earning rule as tested logic: the instrument only records while the Orderly is moving near you, which means while nobody is looking at it.",
       "kind": "start"

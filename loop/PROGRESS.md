@@ -93,6 +93,7 @@
 
 ## Activity (newest first)
 
+- 2026-11-16 07:13Z Design tuning by Fable: the Orderly now runs down anyone who runs but creeps up on anyone standing still, and the instrument pays far more in the last metres. Before, the final approach took about a second and a half, too fast to choose when to turn. Now it takes about four seconds, and turning at arm's length earns roughly double what turning at 2.5 metres does. The earning rule's independent checker verified 33,646 moments of recording with no violations.
 - 2026-11-16 07:00Z Started T5: The instrument, the recording rule and tapes. An Opus agent is building the earning rule as tested logic: the instrument only records while the Orderly is moving near you, which means while nobody is looking at it.
 - 2026-11-16 06:58Z Gate G5 (Heard before seen) is passed.
 - 2026-11-16 06:58Z Finished T4: The Orderly comes alive.
@@ -131,5 +132,4 @@
 - 2026-11-16 05:21Z New pictures for T3: The Orderly, second pass.
 - 2026-11-16 05:07Z Orderly, revision round 1. A blind art-director judge scored it 4/10 frightening, 4/10 craft, 5/10 original. A blind player judge scored it 6/10 scary and 7/10 memorable, and said: "Why is he smiling? Why is he SMILING." Both said the smile reads as an emoji at game size, the legs are sticks, the gown reads as a dress, and it stands like a plank. Fixes are going back to the modeller.
 - 2026-11-16 05:06Z New pictures for T3: The Orderly, second pass.
-- 2026-11-16 05:04Z New pictures for T3: The Orderly, second pass.
 - 2026-11-16 05:04Z New pictures for T3: The Orderly, second pass.

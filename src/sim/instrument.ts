@@ -46,9 +46,9 @@ export const NEAR_DISTANCE = 1.5;
 /** Pay per second at the edge of RECORD_RANGE. */
 export const RATE_EDGE = 8;
 /** Pay per second at NEAR_DISTANCE or closer. */
-export const RATE_NEAR = 60;
+export const RATE_NEAR = 140;
 /** Shape of the rate curve between edge and near: 2 means most of the gain is in the last metres. */
-export const RATE_CURVE = 2;
+export const RATE_CURVE = 3;
 /** A reading closes once recording has stopped for this long (seconds). */
 export const READING_GAP = 1.5;
 /** A closed reading counts only if it recorded for at least this long (seconds). */
