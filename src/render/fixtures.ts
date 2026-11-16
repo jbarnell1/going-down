@@ -7,7 +7,7 @@ import { LEVEL_HEIGHT } from '../sim/move';
 import { DOOR_WIDTH, northEdge, westEdge, type EdgeKind } from '../sim/walls';
 import type { GeoBuilder, RGB, V3 } from './geoBuilder';
 import { TRIM } from './palette';
-import { DOOR_HEIGHT } from './structure';
+import { DOOR_HEIGHT, LIFT_DOOR_HEIGHT, LIFT_HALF_WIDTH } from './structure';
 
 const STEP_RISE = 0.2;
 const UP: V3 = [0, 1, 0];
@@ -115,7 +115,7 @@ function doorFrames(g: GeoBuilder, plan: FloorPlan): void {
   }
 }
 
-/** Steel doors in a dark frame on the landing's back wall, a lit indicator, a marked floor square. */
+/** The dark steel frame round the elevator's doorway on the landing's back wall, and a marked floor square. */
 function elevator(g: GeoBuilder, lights: GeoBuilder, plan: FloorPlan): void {
   const S = plan.cellSize;
   const { x, y, level } = plan.landing;
@@ -136,10 +136,9 @@ function elevator(g: GeoBuilder, lights: GeoBuilder, plan: FloorPlan): void {
   const wx = cx + (v.dx * S) / 2;
   const wz = cz + (v.dy * S) / 2;
   const pt = (l: number, out: number, yy: number): V3 => [wx + lat[0] * l + into[0] * out, yy, wz + lat[2] * l + into[2] * out];
-  const halfW = 0.65;
-  const doorH = 2.25;
-  g.quadFacing(pt(-halfW, 0.02, base), [lat[0] * 2 * halfW, 0, lat[2] * 2 * halfW], [0, doorH, 0], into, TRIM.steel);
-  g.quadFacing(pt(-0.025, 0.025, base), [lat[0] * 0.05, 0, lat[2] * 0.05], [0, doorH, 0], into, TRIM.seam);
+  const halfW = LIFT_HALF_WIDTH;
+  const doorH = LIFT_DOOR_HEIGHT;
+  // The doors themselves, the indicator and the call button are drawn by elevator.ts (they move and light).
   const fw = 0.14;
   const fd = 0.1;
   const frameBox = (l0: number, l1: number, y0: number, y1: number): void => {
@@ -150,8 +149,7 @@ function elevator(g: GeoBuilder, lights: GeoBuilder, plan: FloorPlan): void {
   frameBox(-halfW - fw, -halfW, base, base + doorH + fw);
   frameBox(halfW, halfW + fw, base, base + doorH + fw);
   frameBox(-halfW, halfW, base + doorH, base + doorH + fw);
-  // Lit floor indicator above the doors.
-  lights.quadFacing(pt(-0.15, 0.03, base + doorH + fw + 0.1), [lat[0] * 0.3, 0, lat[2] * 0.3], [0, 0.12, 0], into, [1, 1, 1]);
+  void lights;
 }
 
 export function buildFixtures(plan: FloorPlan, trim: GeoBuilder, lights: GeoBuilder): void {

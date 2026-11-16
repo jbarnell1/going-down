@@ -25,6 +25,9 @@ export function yawToward(dx: number, dz: number): number {
   return Math.atan2(-dx, -dz);
 }
 
+/** Moves a body by (dx, dz) with collision. */
+export type Mover = (body: Body, dx: number, dz: number, radius: number) => Body;
+
 export class Player {
   body: Body;
   yaw = 0;
@@ -42,8 +45,11 @@ export class Player {
     if (yaw !== undefined) this.yaw = yaw;
   }
 
-  /** Mouse look and WASD walking for one frame. `maxSpeed` caps the walk (instrument raised). */
-  control(plan: FloorPlan, input: Input, dt: number, maxSpeed = Infinity): void {
+  /**
+   * Mouse look and WASD walking for one frame. `maxSpeed` caps the walk (instrument raised). `move`
+   * does the collision (the run's, which knows the elevator's doorway); plain floor collision if absent.
+   */
+  control(plan: FloorPlan, input: Input, dt: number, maxSpeed = Infinity, move?: Mover): void {
     const [mx, my] = input.takeLook();
     this.yaw -= mx * MOUSE_SENSITIVITY;
     this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch - my * MOUSE_SENSITIVITY));
@@ -59,7 +65,7 @@ export class Player {
     // Forward is (-sin, -cos), right is (cos, -sin) on the (x, z) plane.
     const dx = (-sin * f + cos * r) * speed * dt;
     const dz = (-cos * f - sin * r) * speed * dt;
-    this.body = moveWithCollision(plan, this.body, dx, dz, PLAYER_RADIUS);
+    this.body = move ? move(this.body, dx, dz, PLAYER_RADIUS) : moveWithCollision(plan, this.body, dx, dz, PLAYER_RADIUS);
   }
 
   toCamera(camera: THREE.PerspectiveCamera): void {

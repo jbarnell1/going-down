@@ -8,6 +8,8 @@ test('W walks forward, Shift creeps, and a wall stops you', async ({ page }) => 
   await page.goto('/?seed=alpha&entity=0');
   await page.waitForFunction(() => (window as any).__gd?.ready === true);
   await page.evaluate(() => (window as any).__gd.start());
+  // The run starts in the elevator car: wait for its doors to open onto the floor.
+  await page.waitForFunction(() => (window as any).__gd.run().car === 'open', undefined, { timeout: 5000 });
 
   const pos = () => page.evaluate(() => { const p = (window as any).__gd.player(); return { x: p.x as number, z: p.z as number }; });
   const dist = (a: { x: number; z: number }, b: { x: number; z: number }) => Math.hypot(a.x - b.x, a.z - b.z);

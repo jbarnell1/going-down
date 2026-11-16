@@ -1,5 +1,9 @@
 // Turns a FloorPlan into a lit three.js scene: five merged meshes (floors, walls, ceilings, trim,
 // lights), cheap lighting, and fog so long halls fade rather than end.
+//
+// The floor's meshes and lights live in one group, so a run can swap floors without rebuilding the
+// scene (the Orderly, the tapes and the elevator car stay in it): replaceFloor() disposes the old
+// group's geometry, materials and textures and builds the new one.
 
 import * as THREE from 'three';
 import type { FloorPlan } from '../sim/floor';
@@ -12,17 +16,16 @@ export interface World {
   scene: THREE.Scene;
   /** One per material, for counting draw calls and, later, picking shadow casters. */
   meshes: THREE.Mesh[];
+  /** The floor's meshes and lights. */
+  floor: THREE.Group;
 }
 
-const FOG = 0xdfe8e4;
+export const FOG = 0xdfe8e4;
 
-export function buildWorld(plan: FloorPlan): World {
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(FOG);
-  // The Clinic's rule is that nowhere hides you, so its haze starts late: a figure standing at the
-  // far end of the longest hall (about 50 m) must still be crisp. Darker places will bring fog close.
-  scene.fog = new THREE.Fog(FOG, 38, 130);
-
+/** The meshes and lights of one floor, in a group named 'floor'. */
+export function buildFloor(plan: FloorPlan): { group: THREE.Group; meshes: THREE.Mesh[] } {
+  const group = new THREE.Group();
+  group.name = 'floor';
   const shell = buildStructure(plan);
   const trim = new GeoBuilder();
   buildFixtures(plan, trim, shell.lights);
@@ -40,23 +43,60 @@ export function buildWorld(plan: FloorPlan): World {
   ];
   const meshes: THREE.Mesh[] = [];
   for (const [g, mat, name] of parts) {
-    if (g.empty) continue;
+    if (g.empty) {
+      mat.dispose();
+      continue;
+    }
     const mesh = new THREE.Mesh(g.build(), mat);
     mesh.name = name;
     mesh.matrixAutoUpdate = false;
-    scene.add(mesh);
+    group.add(mesh);
     meshes.push(mesh);
   }
 
   // Every light on: an even wash from above, plus two weak directional fills from different sides so
   // walls facing different ways shade differently and corners read.
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xd2dad6, 2.0));
+  group.add(new THREE.HemisphereLight(0xffffff, 0xd2dad6, 2.0));
   const key = new THREE.DirectionalLight(0xffffff, 0.9);
   key.position.set(0.6, 1, 0.25);
-  scene.add(key);
+  group.add(key);
   const fill = new THREE.DirectionalLight(0xf2fff8, 0.35);
   fill.position.set(-0.3, 0.6, -0.9);
-  scene.add(fill);
+  group.add(fill);
+  return { group, meshes };
+}
 
-  return { scene, meshes };
+/** Frees everything a group's meshes hold on the GPU: geometry, materials and their textures. */
+export function disposeGroup(group: THREE.Object3D): void {
+  group.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.geometry.dispose();
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const m of mats) {
+      for (const v of Object.values(m)) if (v instanceof THREE.Texture) v.dispose();
+      m.dispose();
+    }
+  });
+}
+
+export function buildWorld(plan: FloorPlan): World {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(FOG);
+  // The Clinic's rule is that nowhere hides you, so its haze starts late: a figure standing at the
+  // far end of the longest hall (about 50 m) must still be crisp. Darker places will bring fog close.
+  scene.fog = new THREE.Fog(FOG, 38, 130);
+  const { group, meshes } = buildFloor(plan);
+  scene.add(group);
+  return { scene, meshes, floor: group };
+}
+
+/** Swaps the world's floor for a new plan's, disposing the old one. */
+export function replaceFloor(world: World, plan: FloorPlan): void {
+  world.scene.remove(world.floor);
+  disposeGroup(world.floor);
+  const { group, meshes } = buildFloor(plan);
+  world.scene.add(group);
+  world.floor = group;
+  world.meshes = meshes;
 }

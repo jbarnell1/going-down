@@ -140,7 +140,9 @@ test('the staring contest: still while watched, closer every time you look away,
   console.log(`turned back: ${start.distance.toFixed(1)} m -> ${near.distance.toFixed(1)} m (was ${away.distance.toFixed(1)} m when turning), pose ${first.anim} t=${first.clip.toFixed(2)} frames held=${rows.length}`);
   await page.screenshot({ path: `${SHOTS}/51-orderly-closer.png` });
 
-  // 4. Turn away and wait for it.
+  // 4. Call the elevator (a catch while the car is gone is a wipe; this one is the placeholder), then
+  // turn away and wait for it.
+  expect(await page.evaluate(() => (window as any).__gd.runCtl.call({ force: true }))).toBe(true);
   await page.evaluate((y) => (window as any).__gd.look(y, 0), c.face + 180);
   await page.waitForFunction(() => (window as any).__gd.events().some((e: any) => e.type === 'caught'), undefined, { timeout: 15_000 });
   await page.waitForTimeout(250);

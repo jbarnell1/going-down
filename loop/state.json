@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
-  "iteration": 13,
-  "now": "T6",
-  "nowText": "An Opus agent is building the run's rules as tested logic: calling the elevator and its loud wait, lights that blink while it comes, voting to bank or ride down, and who gets left behind.",
+  "iteration": 15,
+  "now": null,
+  "nowText": "",
   "ci": {
     "status": "passed",
-    "commit": "6ba26d4",
-    "at": "2026-11-16T08:14:25.612Z"
+    "commit": "1d86350",
+    "at": "2026-11-16T09:15:15.567Z"
   },
   "answersAppliedTo": "2026-11-16T04:20:00Z",
   "tasks": [
@@ -513,11 +513,118 @@
       "id": "T6",
       "title": "The elevator",
       "why": "The only safe place. Calling it, waiting out its loud arrival, then bank or ride down.",
-      "status": "doing",
+      "status": "done",
       "gates": [
         "G6"
       ],
-      "startedAt": "2026-11-16T07:53:14.525Z"
+      "startedAt": "2026-11-16T07:53:14.525Z",
+      "media": [
+        {
+          "src": "T6/20261116T090735-70-in-the-car.png",
+          "caption": "The run starts inside the elevator: its doors sliding open onto floor 1 (B1 on the indicator)",
+          "kind": "image",
+          "at": "2026-11-16T09:07:35.322Z"
+        },
+        {
+          "src": "T6/20261116T090735-71-car-leaves.png",
+          "caption": "Stepped out: the doors shut behind you and the indicator climbs away; the car has left",
+          "kind": "image",
+          "at": "2026-11-16T09:07:35.323Z"
+        },
+        {
+          "src": "T6/20261116T090735-73-called.png",
+          "caption": "Elevator called: the indicator counts down while the Orderly comes for the noise",
+          "kind": "image",
+          "at": "2026-11-16T09:07:35.325Z"
+        },
+        {
+          "src": "T6/20261116T090735-74-blink-warning.png",
+          "caption": "Blink warning: the lights sag and stutter for 0.6 s while the chime stutters; the Orderly is still frozen",
+          "kind": "image",
+          "at": "2026-11-16T09:07:35.326Z"
+        },
+        {
+          "src": "T6/20261116T090735-75-blink-dark.png",
+          "caption": "The blink: one second of failed lights and tape noise; nobody can see, so the Orderly moves",
+          "kind": "image",
+          "at": "2026-11-16T09:07:35.327Z"
+        },
+        {
+          "src": "T6/20261116T090735-76-doors-open.png",
+          "caption": "The car arrives: harsh light inside, doors open for 20 seconds before the bell",
+          "kind": "image",
+          "at": "2026-11-16T09:07:35.328Z"
+        },
+        {
+          "src": "T6/20261116T090735-77-vote-down.png",
+          "caption": "Standing on DOWN: that half glows and BANK dims; at the bell you ride to a deeper floor",
+          "kind": "image",
+          "at": "2026-11-16T09:07:35.329Z"
+        },
+        {
+          "src": "T6/20261116T090735-78-floor-two.png",
+          "caption": "Floor two, from inside the car: a new, larger floor where readings pay 1.35 times as much",
+          "kind": "image",
+          "at": "2026-11-16T09:07:35.331Z"
+        },
+        {
+          "src": "T6/20261116T090735-79-vote-bank.png",
+          "caption": "Standing on BANK on floor two: at the bell the run ends and the tapes aboard are banked",
+          "kind": "image",
+          "at": "2026-11-16T09:07:35.332Z"
+        },
+        {
+          "src": "T6/20261116T090735-80-banked.png",
+          "caption": "The summary: floors reached, readings, total banked, your share and the lifetime total",
+          "kind": "image",
+          "at": "2026-11-16T09:07:35.333Z"
+        },
+        {
+          "src": "T6/20261116T090735-81-wiped.png",
+          "caption": "Caught with the car gone and nobody to call it: the run is wiped, nothing banked",
+          "kind": "image",
+          "at": "2026-11-16T09:07:35.335Z"
+        },
+        {
+          "src": "T6/20261116T091515-73-called.png",
+          "caption": "Elevator called. The indicator says it is ten floors away",
+          "kind": "image",
+          "at": "2026-11-16T09:15:15.342Z"
+        },
+        {
+          "src": "T6/20261116T091515-75-blink-dark.png",
+          "caption": "The lights fail for a second. It moves in the dark",
+          "kind": "image",
+          "at": "2026-11-16T09:15:15.343Z"
+        },
+        {
+          "src": "T6/20261116T091515-77-vote-down.png",
+          "caption": "Inside the car: stand on BANK or DOWN",
+          "kind": "image",
+          "at": "2026-11-16T09:15:15.345Z"
+        },
+        {
+          "src": "T6/20261116T091515-78-floor-two.png",
+          "caption": "Floor two",
+          "kind": "image",
+          "at": "2026-11-16T09:15:15.346Z"
+        },
+        {
+          "src": "T6/20261116T091515-80-banked.png",
+          "caption": "Banked",
+          "kind": "image",
+          "at": "2026-11-16T09:15:15.347Z"
+        },
+        {
+          "src": "T6/20261116T091515-70-in-the-car.png",
+          "caption": "The start of a run",
+          "kind": "image",
+          "at": "2026-11-16T09:15:15.348Z"
+        }
+      ],
+      "finishedAt": "2026-11-16T09:15:15.339Z",
+      "summary": "A whole run is playable alone. You start in the elevator, step out, and it leaves. You earn, come back, and call it: an indicator counts its floors down for 25 to 55 seconds while the lights blink and the Orderly closes in. You board and stand on BANK or DOWN. DOWN rides to a larger floor where readings pay 35% more; BANK ends the run with a summary and a lifetime total that survives a restart. The scripted two-floor run banked 307. All 33 browser tests and 93 rule tests pass on Fable's own run, and letting players see during a blink fails the run test. Unheard: every elevator sound. Untested: the phone's call and hold buttons. Weak spots the agent found: 20 seconds in the car with nothing to do, and a warning too short to do more than brace.",
+      "todo": []
     },
     {
       "id": "T6b",
@@ -555,6 +662,13 @@
         "G8",
         "G9"
       ]
+    },
+    {
+      "id": "T6c",
+      "title": "Elevator polish",
+      "why": "Let the doors close early once everyone is aboard, a bell warning the logic knows about, doors that take real time to close, and the phone's call and hold buttons tested.",
+      "status": "todo",
+      "gates": []
     },
     {
       "id": "T9",
@@ -659,8 +773,9 @@
     {
       "id": "G6",
       "title": "One player can finish a run",
-      "status": "open",
-      "evidence": ""
+      "status": "passed",
+      "evidence": "A browser test plays a whole two-floor run from the car to a reading, a tape, the call, the blinks, the ride down, a second reading and the bank, with a screenshot at each beat and no console errors; it banked 307. Deliberate break used: with players able to see during a blink, two of the three run tests fail.",
+      "at": "2026-11-16T09:15:15.421Z"
     },
     {
       "id": "G7",
@@ -730,6 +845,31 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T09:15:15.493Z",
+      "text": "Added task T6c: Elevator polish.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T09:15:15.421Z",
+      "text": "Gate G6 (One player can finish a run) is passed.",
+      "kind": "gate"
+    },
+    {
+      "at": "2026-11-16T09:15:15.348Z",
+      "text": "Finished T6: The elevator.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T09:07:35.335Z",
+      "text": "New pictures for T6: The elevator.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T08:19:26.542Z",
+      "text": "Started T6: The elevator. The run's rules are proven. An Opus agent is now building the elevator into the game: the car, the call and its wait, the blinking lights, the vote, the ride down and the bank.",
+      "kind": "start"
+    },
     {
       "at": "2026-11-16T08:17:52.894Z",
       "text": "The run's rules are proven in logic: the car leaves after dropping you, calling it means a loud wait of 25 to 55 seconds, the lights blink while it comes, and you vote to bank or ride by where you stand. Fable changed two things. The blink was 0.35 seconds, which the agent found left a staring crew completely safe (0 of 320 caught); it is now one second, so a crew that only stands and stares is taken in about 1 wait in 5, and has to keep its distance. And the call now wakes the Orderly. Deliberate break: making a tied vote bank instead of ride fails the vote test.",

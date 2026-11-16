@@ -33,6 +33,10 @@ test('one player walks the alpha clinic from the landing to the balcony', async 
   await page.evaluate(() => (window as any).__gd.start());
   await settle(page, 10);
   mkdirSync(SHOTS, { recursive: true });
+  // The run starts in the elevator car: wait for its doors to open onto the floor.
+  await page.waitForFunction(() => (window as any).__gd.run().car === 'open', undefined, { timeout: 5000 });
+  // Step out of the car onto the middle of the landing.
+  await page.evaluate(() => (window as any).__gd.runCtl.walkCar(-1, 0));
 
   // Where to go, worked out from the plan the game is actually running.
   const route = await page.evaluate(() => {

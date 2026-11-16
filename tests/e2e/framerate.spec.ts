@@ -62,3 +62,35 @@ test('the heavy tape level on a large window stays inside the frame budget', asy
   console.log(`budget heavy 1080p depth4=${ms.toFixed(2)} ms`);
   expect(ms).toBeLessThan(BUDGET_MS);
 });
+
+test('the elevator wait (called, indicator counting, a blink, its sounds) stays inside the frame budget', async ({ page }) => {
+  await page.goto('/?seed=alpha');
+  await page.waitForFunction(() => (window as any).__gd?.ready === true);
+  await page.evaluate(() => (window as any).__gd.start());
+  await page.waitForFunction(() => (window as any).__gd.orderly()?.loaded === true, undefined, { timeout: 30_000 });
+  // Out of the car onto the landing, the car gone; the Orderly awake in view across the lobby; call.
+  await page.waitForFunction(() => (window as any).__gd.run().doors > 0.99, undefined, { timeout: 5000 });
+  await page.evaluate(() => (window as any).__gd.runCtl.walkCar(-1, 0));
+  await page.waitForFunction(() => (window as any).__gd.run().car === 'away', undefined, { timeout: 5000 });
+  await page.evaluate(() => {
+    const g = (window as any).__gd;
+    const r = g.run();
+    const p = g.player();
+    const yaw = (Math.atan2(r.car3.inX, r.car3.inZ) * 180) / Math.PI;
+    g.look(yaw, 0);
+    g.entityCtl.placeCell(p.level, p.cx - r.car3.inX * 4, p.cy - r.car3.inZ * 4, yaw + 180);
+    g.entityCtl.wake();
+    g.runCtl.call();
+    // To just before a blink, so the window below holds the warning, the dark and the lights coming back.
+    g.runCtl.skipUntil('blinkSoon', 20);
+  });
+  const from = await page.evaluate(() => (window as any).__gd.frames as number);
+  await page.waitForFunction((f) => (window as any).__gd.frames > f + 150, from, { timeout: 30_000 });
+  const ms = await page.evaluate(() => (window as any).__gd.frameMs() as number);
+  const r = await page.evaluate(() => (window as any).__gd.run());
+  const a = await page.evaluate(() => (window as any).__gd.audio.state());
+  console.log(`budget elevator wait=${ms.toFixed(2)} ms (car ${r.car}, indicator ${r.indicator.label}, blink warnings ${a.blinkWarnings}, darks ${a.blinkOuts}, machine ${a.machine.toFixed(2)})`);
+  expect(r.car).toBe('coming');
+  expect(a.blinkOuts).toBeGreaterThanOrEqual(1);
+  expect(ms).toBeLessThan(BUDGET_MS);
+});

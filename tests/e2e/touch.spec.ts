@@ -24,6 +24,8 @@ test('a phone can start, walk with the left thumb, creep, and look with the righ
   await touch('pointerdown', 1, 400, 200);
   await touch('pointerup', 1, 400, 200);
   await expect(page.locator('#start')).toBeHidden();
+  // The run starts in the elevator car: wait for its doors to open onto the floor.
+  await page.waitForFunction(() => (window as any).__gd.run().car === 'open', undefined, { timeout: 5000 });
 
   // Left thumb pushed fully up: walk forward.
   const s0 = await state();

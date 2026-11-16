@@ -4,13 +4,17 @@
 // Walls are zero-thickness: each solid edge gets one face per non-empty side, back to back, so
 // corners meet exactly with no cracks. Door frames (fixtures.ts) give the openings visible depth.
 
-import { cellAt, isWalkable, type CellKind, type FloorPlan, type Level } from '../sim/floor';
+import { cellAt, DIR_VEC, isWalkable, type CellKind, type FloorPlan, type Level } from '../sim/floor';
+import { elevatorWall } from '../sim/landing';
 import { LEVEL_HEIGHT } from '../sim/move';
 import { DOOR_WIDTH, northEdge, westEdge, type EdgeKind } from '../sim/walls';
 import { GeoBuilder, type RGB } from './geoBuilder';
 import { areaAt, floorColour, scale, wallColour } from './palette';
 
 export const DOOR_HEIGHT = 2.1;
+/** The elevator's opening in the landing wall: half its width and its height (the frame in fixtures.ts). */
+export const LIFT_HALF_WIDTH = 0.65;
+export const LIFT_DOOR_HEIGHT = 2.25;
 
 export interface StructureGeometry {
   floors: GeoBuilder;
@@ -90,6 +94,8 @@ function wallFaces(
   x1: number,
   z1: number,
   sides: { cx: number; cy: number; nx: number; nz: number }[],
+  /** The landing cell's elevator wall face: (level, cell, normal into it), or null. */
+  lift: { level: Level; x: number; y: number; nx: number; nz: number } | null = null,
 ): void {
   const solid = kind === 'wall' || kind === 'door' || (kind === 'stairTop' && level === 0);
   if (!solid) return;
@@ -105,7 +111,14 @@ function wallFaces(
     if (kind === 'stairTop' && k !== 'stair') continue;
     const tint = wallColour(areaAt(plan, level, s.cx, s.cy));
     const plain = level === 1 && k === 'atriumOpen';
-    if (kind === 'door') {
+    if (lift && level === lift.level && s.cx === lift.x && s.cy === lift.y && s.nx === lift.nx && s.nz === lift.nz) {
+      // The elevator's doorway: the car's sliding doors close it (elevator.ts).
+      const a = len / 2 - LIFT_HALF_WIDTH;
+      const b = len / 2 + LIFT_HALF_WIDTH;
+      wallPiece(g, x0, z0, x1, z1, s.nx, s.nz, base, 0, a, 0, H, tint, plain);
+      wallPiece(g, x0, z0, x1, z1, s.nx, s.nz, base, b, len, 0, H, tint, plain);
+      wallPiece(g, x0, z0, x1, z1, s.nx, s.nz, base, a, b, LIFT_DOOR_HEIGHT, H, tint, plain);
+    } else if (kind === 'door') {
       wallPiece(g, x0, z0, x1, z1, s.nx, s.nz, base, 0, gap0, 0, H, tint, plain);
       wallPiece(g, x0, z0, x1, z1, s.nx, s.nz, base, gap1, len, 0, H, tint, plain);
       wallPiece(g, x0, z0, x1, z1, s.nx, s.nz, base, gap0, gap1, DOOR_HEIGHT, H, tint, plain);
@@ -123,6 +136,8 @@ export function buildStructure(plan: FloorPlan): StructureGeometry {
   const ceilings = new GeoBuilder();
   const lights = new GeoBuilder();
   const white: RGB = [1, 1, 1];
+  const ew = elevatorWall(plan);
+  const lift = ew ? { level: plan.landing.level, x: plan.landing.x, y: plan.landing.y, nx: -DIR_VEC[ew].dx, nz: -DIR_VEC[ew].dy } : null;
 
   for (const level of [0, 1] as const) {
     const base = level * H;
@@ -157,12 +172,12 @@ export function buildStructure(plan: FloorPlan): StructureGeometry {
         wallFaces(walls, plan, level, west, x0, z0, x0, z0 + S, [
           { cx: x - 1, cy: y, nx: -1, nz: 0 },
           { cx: x, cy: y, nx: 1, nz: 0 },
-        ]);
+        ], lift);
         const north = northEdge(plan, level, x, y);
         wallFaces(walls, plan, level, north, x0, z0, x0 + S, z0, [
           { cx: x, cy: y - 1, nx: 0, nz: -1 },
           { cx: x, cy: y, nx: 0, nz: 1 },
-        ]);
+        ], lift);
       }
     }
     // Plans keep a void margin, so the far boundary edges never have anything on them; drawn anyway

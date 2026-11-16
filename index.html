@@ -30,6 +30,13 @@
       /* Being caught (placeholder): the picture cuts to tape noise, then one line of text. */
       #caught-noise { position: fixed; inset: 0; width: 100vw; height: 100vh; image-rendering: pixelated; pointer-events: none; }
       #went-down { position: fixed; left: 0; right: 0; top: 58%; text-align: center; color: #e8ece9; font: 600 22px ui-monospace, Consolas, monospace; letter-spacing: 0.35em; text-shadow: 2px 0 rgba(255, 40, 60, 0.5), -2px 0 rgba(40, 200, 255, 0.4); pointer-events: none; }
+      /* The elevator's prompt (call the car, hold the doors): like the pick-up prompt, a little higher. */
+      .action-prompt { position: fixed; left: 50%; top: 76%; transform: translateX(-50%); pointer-events: none; opacity: 0.9; }
+      .action-prompt canvas { display: block; image-rendering: pixelated; }
+      .action-prompt.touch { pointer-events: auto; padding: 14px; border: 2px solid rgba(240, 245, 242, 0.5); border-radius: 12px; background: rgba(240, 245, 242, 0.12); touch-action: none; }
+      /* The end of a run: a plain screen in the camcorder font. */
+      #end { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(4, 6, 5, 0.92); z-index: 6; cursor: pointer; }
+      #end canvas { display: block; image-rendering: pixelated; }
       [hidden] { display: none !important; }
     </style>
   </head>
@@ -38,7 +45,7 @@
     <div id="hud"></div>
     <div id="debug" hidden></div>
     <div id="start">
-      <div class="mouse">CLICK TO START<small>WASD walk &middot; Shift creep &middot; mouse look &middot; Esc release</small><small>hold right mouse or F: raise the instrument &middot; E pick up</small></div>
+      <div class="mouse">CLICK TO START<small>WASD walk &middot; Shift creep &middot; mouse look &middot; Esc release</small><small>hold right mouse or F: raise the instrument &middot; E pick up, call the elevator, hold its doors</small></div>
       <div class="touch">TAP TO START<small>Left thumb walks, push gently to creep &middot; right thumb looks</small><small>Hold the round button to raise the instrument, and drag from it to look</small><small class="turn">Turn your phone sideways for a wider view</small></div>
     </div>
     <script type="module" src="/src/main.ts"></script>

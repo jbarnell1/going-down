@@ -255,9 +255,11 @@ test('being taken drops the tape where you fell; walk back and pick it up', asyn
   const earned = r.end.total;
   expect(earned).toBeGreaterThan(0);
 
-  // Back turned again, and never turn round.
+  // Back turned again, and never turn round. The elevator is called first: a catch with the car gone
+  // ends the run (a wipe), while one with the car coming is the placeholder and play goes on.
   const where = await page.evaluate((c) => {
     const g = (window as any).__gd;
+    g.runCtl.call({ force: true });
     g.look(c.away, 0);
     return g.player();
   }, r.c);

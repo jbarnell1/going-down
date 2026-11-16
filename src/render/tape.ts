@@ -301,6 +301,8 @@ export class Tape {
   private glitchUntil = 0;
   private glitchStrength = 0;
   private frame = 0;
+  /** 0..1: the lights have failed. Adds tape noise and lifts the blacks, at every fx level. */
+  private dark = 0;
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
@@ -406,6 +408,15 @@ export class Tape {
     }
   }
 
+  /** The lights failing (a blink): 0 none .. 1 the full dark. More grain and a lifted black. */
+  setDarkness(k: number): void {
+    this.dark = Math.max(0, Math.min(1, k));
+  }
+
+  get darkness(): number {
+    return this.dark;
+  }
+
   /**
    * Draws the scene into the small target, then the target to the screen. `overlay` (the instrument
    * in the hand) is drawn into the same target over the scene with the depth cleared, so it goes
@@ -425,7 +436,7 @@ export class Tape {
     r.setRenderTarget(null);
     const now = this.now();
     const g = this.glitchAt(now);
-    if (this.level === 0 && g === 0) {
+    if (this.level === 0 && g === 0 && this.dark === 0) {
       this.quad.material = this.blit;
     } else {
       this.quad.material = this.tape;
@@ -469,7 +480,7 @@ export class Tape {
     u.uCoolSat!.value = s.coolSaturation;
     u.uRing!.value = s.ringing;
     u.uChromaNoise!.value = s.chromaNoise;
-    u.uGrain!.value = s.grain + g * 0.12;
+    u.uGrain!.value = s.grain + g * 0.12 + this.dark * 0.2;
     u.uScan!.value = s.scanlines;
     u.uWobble!.value = s.wobble;
     u.uHead!.value = s.headSwitch;
@@ -480,7 +491,7 @@ export class Tape {
     u.uLevels!.value = s.levels;
     u.uVignette!.value = s.vignette;
     u.uBarrel!.value = s.barrel;
-    (u.uLift!.value as THREE.Vector3).fromArray(s.lift);
+    (u.uLift!.value as THREE.Vector3).fromArray(s.lift).addScalar(this.dark * 0.025);
     (u.uCast!.value as THREE.Vector3).fromArray(s.cast);
     u.uGlitch!.value = g;
 

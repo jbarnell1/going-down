@@ -26,6 +26,11 @@ async function settle(page: import('@playwright/test').Page): Promise<void> {
 
 test('the view on stepping out of the elevator', async ({ page }) => {
   await ready(page);
+  // The run starts inside the car; this is the view one step out, in the middle of the landing.
+  await page.evaluate(() => {
+    const g = (window as any).__gd;
+    g.teleport(g.plan.landing.level, g.plan.landing.x, g.plan.landing.y);
+  });
   await settle(page);
   await expect(page).toHaveScreenshot('landing.png', OPTS);
 });

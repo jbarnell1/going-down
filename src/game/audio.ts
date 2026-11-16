@@ -14,8 +14,16 @@
 //   - The trolley's cadence, note length and wheel throb follow the Orderly's speed: a slow, drawn-out
 //     creak at its creep, a frantic rattle at its run.
 //
+//   - The elevator (all of it in LIFT below): the call chime, loud and slightly wrong; the machinery
+//     of the car coming, a motor drone and cable rattle that grow as it nears; a soft ding per floor on
+//     the indicator; the doors' motor whirr and thump; the muffled chime and doors of a false stop one
+//     floor up; two warning dings and then the bell before the doors close; the ride between floors, a
+//     falling hum with the room tone gone.
+//   - The blink: the warning is the chime stuttering and the lights' ballasts crackling; the dark is a
+//     relay clunk and the room tone cut; the lights coming back are a ballast ping and the hum returning.
+//
 // NOTE: these sounds were designed from first principles and checked by numbers (gains over time,
-// cut-off time, oscillators running), not by ear.
+// cut-off time, oscillators running), not by ear. Nobody has listened to the elevator sounds.
 
 // ------------------------------------------------------------------------------------------------
 // Tuning: what each number does to the sound.
@@ -133,6 +141,73 @@ const RASP = {
   slipSeconds: 1.05,
 };
 
+/** The elevator and the blink. */
+const LIFT = {
+  /** The call chime: two notes (Hz), the second detuned flat by `wrongCents` so it sounds slightly
+   * off, each about `noteSeconds` long, at `chimeLevel` (loud: the ticking peaks at 0.85). */
+  chime: [784, 523.25] as const,
+  wrongCents: -38,
+  noteSeconds: 0.75,
+  chimeLevel: 0.42,
+  /** Bell-like partials of each chime note (multiple, level). */
+  chimePartials: [
+    [1, 1],
+    [2.0, 0.28],
+    [2.76, 0.12],
+  ] as const,
+  /** Machinery of the car coming: motor drone (Hz, sawtooth through a low-pass at `droneCutoff`),
+   * cable rattle (band-passed noise, centre Hz, level against the drone), and the overall level when
+   * the car is far (just called) and when it arrives; in between it rises as level^1.6. */
+  droneHz: 46,
+  droneCutoff: 240,
+  rattleHz: 900,
+  rattleLevel: 0.35,
+  machineFar: 0.012,
+  machineNear: 0.16,
+  /** Seconds for the machinery level to follow (smoothing). */
+  machineTau: 0.6,
+  /** A ding per floor on the indicator: pitch Hz, length s, level far and near. */
+  dingHz: 1318,
+  dingSeconds: 0.45,
+  dingFar: 0.03,
+  dingNear: 0.14,
+  /** Doors: motor whirr (band-passed noise centre Hz, sweeping by `whirrSweep`) for `doorSeconds`,
+   * then a thump (Hz, level). Muffled (false stop above): through a low-pass at `muffledCutoff`, scaled
+   * by `muffledLevel`. */
+  whirrHz: 520,
+  whirrSweep: 1.6,
+  whirrLevel: 0.12,
+  doorSeconds: 0.9,
+  thumpHz: 70,
+  thumpLevel: 0.35,
+  muffledCutoff: 420,
+  muffledLevel: 0.35,
+  /** The bell before the doors close: a bright strike (Hz), length s, level; the warning dings before
+   * it (at 5 s and 3 s left) are softer copies at `warnLevel`. */
+  bellHz: 1046.5,
+  bellSeconds: 1.4,
+  bellLevel: 0.36,
+  warnLevel: 0.14,
+  /** The ride down: a hum falling from `rideFromHz` to `rideToHz` over the ride, level, plus rumble. */
+  rideFromHz: 96,
+  rideToHz: 52,
+  rideLevel: 0.12,
+  rideRumble: 0.09,
+  /** The blink warning: the chime's first note cut into `stutters` fragments over `stutterSeconds`,
+   * at `stutterLevel`, over a ballast crackle at `crackleLevel`. */
+  stutters: 4,
+  stutterSeconds: 0.5,
+  stutterLevel: 0.2,
+  crackleLevel: 0.1,
+  /** The dark: a relay clunk (Hz, level); the room tone falls to `roomDark` of its level. */
+  clunkHz: 90,
+  clunkLevel: 0.45,
+  roomDark: 0.0,
+  /** The lights back: a ballast ping (Hz, level). */
+  pingHz: 2600,
+  pingLevel: 0.05,
+};
+
 /** Tape hiss on being caught: level and length. */
 const CAUGHT_HISS = { level: 0.22, seconds: 2.0 };
 
@@ -226,6 +301,19 @@ export interface AudioState {
   rasps: number;
   /** The trolley's cadence now (squeaks per second, from the Orderly's speed). */
   cadenceHz: number;
+  /** Elevator sounds started so far. */
+  chimes: number;
+  dings: number;
+  doorSounds: number;
+  bells: number;
+  warnDings: number;
+  blinkWarnings: number;
+  blinkOuts: number;
+  /** Machinery level being aimed for (0 silent .. 1 arriving) and whether the ride hum is playing. */
+  machine: number;
+  riding: boolean;
+  /** Room tone level aimed for: 1 normal, 0 gone (ride, blink). */
+  room: number;
 }
 
 export class GameAudio {
@@ -258,6 +346,17 @@ export class GameAudio {
   private ticks = 0;
   private thunks = 0;
   private rasps = 0;
+  // Elevator.
+  private roomOut: GainNode | null = null;
+  private roomWant = 1;
+  private blinkDark = false;
+  private machineGain: GainNode | null = null;
+  private machinePanner: PannerNode | null = null;
+  private machineWant = 0;
+  private rideOn = false;
+  private rideNodes: AudioScheduledSourceNode[] = [];
+  private rideGain: GainNode | null = null;
+  private counts = { chimes: 0, dings: 0, doorSounds: 0, bells: 0, warnDings: 0, blinkWarnings: 0, blinkOuts: 0 };
 
   constructor() {
     if (typeof window === 'undefined') return;
@@ -325,8 +424,9 @@ export class GameAudio {
 
     // Room tone: straight to the output, not positional.
     const roomOut = ctx.createGain();
-    roomOut.gain.value = 1;
+    roomOut.gain.value = this.roomWant;
     roomOut.connect(ctx.destination);
+    this.roomOut = roomOut;
     ROOM.hum.forEach((g, i) => {
       const o = ctx.createOscillator();
       o.frequency.value = ROOM.humHz * (i + 1);
@@ -364,6 +464,42 @@ export class GameAudio {
     hiss.connect(hissHp).connect(hissGain).connect(roomOut);
     hiss.start(t);
     this.room = true;
+
+    // The car's machinery: drone and rattle -> gain -> panner at the doors. Silent until called.
+    const mg = ctx.createGain();
+    mg.gain.value = 0;
+    const mp = ctx.createPanner();
+    mp.panningModel = 'HRTF';
+    mp.distanceModel = 'linear';
+    mp.rolloffFactor = 0;
+    mg.connect(mp).connect(ctx.destination);
+    const drone = ctx.createOscillator();
+    drone.type = 'sawtooth';
+    drone.frequency.value = LIFT.droneHz;
+    const droneLp = ctx.createBiquadFilter();
+    droneLp.type = 'lowpass';
+    droneLp.frequency.value = LIFT.droneCutoff;
+    drone.connect(droneLp).connect(mg);
+    const wobble = ctx.createOscillator();
+    wobble.frequency.value = 0.7;
+    const wobbleDepth = ctx.createGain();
+    wobbleDepth.gain.value = 3;
+    wobble.connect(wobbleDepth).connect(drone.frequency);
+    const rattle = ctx.createBufferSource();
+    rattle.buffer = noiseBuffer(ctx, 2, false);
+    rattle.loop = true;
+    const rattleBp = ctx.createBiquadFilter();
+    rattleBp.type = 'bandpass';
+    rattleBp.frequency.value = LIFT.rattleHz;
+    rattleBp.Q.value = 3;
+    const rattleGain = ctx.createGain();
+    rattleGain.gain.value = LIFT.rattleLevel;
+    rattle.connect(rattleBp).connect(rattleGain).connect(mg);
+    drone.start(t);
+    wobble.start(t);
+    rattle.start(t);
+    this.machineGain = mg;
+    this.machinePanner = mp;
   }
 
   /**
@@ -620,6 +756,283 @@ export class GameAudio {
     }
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // The elevator and the blink.
+
+  /** Runs `fn` with the context and a start time just ahead, swallowing any audio error. */
+  private play(fn: (ctx: Ctx, t: number) => void): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    try {
+      fn(ctx, ctx.currentTime + 0.01);
+    } catch {
+      /* audio must never break the game */
+    }
+  }
+
+  /** A struck bell-ish note: partials decaying exponentially, into `out`. */
+  private strike(ctx: Ctx, at: number, hz: number, seconds: number, level: number, out: AudioNode, partials: readonly (readonly [number, number])[] = LIFT.chimePartials): void {
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, at);
+    env.gain.linearRampToValueAtTime(level, at + 0.008);
+    env.gain.exponentialRampToValueAtTime(0.0008, at + seconds);
+    env.connect(out);
+    for (const [mult, g] of partials) {
+      const o = ctx.createOscillator();
+      o.frequency.value = hz * mult;
+      const pg = ctx.createGain();
+      pg.gain.value = g;
+      o.connect(pg).connect(env);
+      o.start(at);
+      o.stop(at + seconds + 0.02);
+    }
+  }
+
+  /** A low-pass into the output for muffled sounds (heard through a floor), or the output itself. */
+  private outFor(ctx: Ctx, muffled: boolean): AudioNode {
+    if (!muffled) return ctx.destination;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = LIFT.muffledCutoff;
+    const g = ctx.createGain();
+    g.gain.value = LIFT.muffledLevel;
+    lp.connect(g).connect(ctx.destination);
+    return lp;
+  }
+
+  /** The call chime: loud, two notes, the second one flat. Muffled: a false stop one floor up. */
+  callChime(muffled = false): void {
+    this.play((ctx, t) => {
+      const out = this.outFor(ctx, muffled);
+      const [a, b] = LIFT.chime;
+      this.strike(ctx, t, a, LIFT.noteSeconds * 1.4, LIFT.chimeLevel, out);
+      this.strike(ctx, t + LIFT.noteSeconds * 0.55, b * 2 ** (LIFT.wrongCents / 1200), LIFT.noteSeconds * 1.8, LIFT.chimeLevel, out);
+      this.counts.chimes++;
+    });
+  }
+
+  /** One floor on the indicator: a soft ding, louder the nearer the car (`near` 0 far .. 1 here). */
+  floorDing(near: number): void {
+    this.play((ctx, t) => {
+      const k = Math.max(0, Math.min(1, near));
+      this.strike(ctx, t, LIFT.dingHz, LIFT.dingSeconds, LIFT.dingFar + (LIFT.dingNear - LIFT.dingFar) * k, ctx.destination, [
+        [1, 1],
+        [2.4, 0.15],
+      ]);
+      this.counts.dings++;
+    });
+  }
+
+  /** The doors opening or closing: a motor whirr, then a thump as they meet (softer opening). */
+  doors(open: boolean, muffled = false): void {
+    this.play((ctx, t) => {
+      if (!this.hissBuf) return;
+      const out = this.outFor(ctx, muffled);
+      const src = ctx.createBufferSource();
+      src.buffer = this.hissBuf;
+      src.loop = true;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.Q.value = 4;
+      const f0 = open ? LIFT.whirrHz : LIFT.whirrHz * LIFT.whirrSweep;
+      const f1 = open ? LIFT.whirrHz * LIFT.whirrSweep : LIFT.whirrHz;
+      bp.frequency.setValueAtTime(f0, t);
+      bp.frequency.linearRampToValueAtTime(f1, t + LIFT.doorSeconds);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(LIFT.whirrLevel, t + 0.12);
+      env.gain.setValueAtTime(LIFT.whirrLevel, t + LIFT.doorSeconds - 0.15);
+      env.gain.linearRampToValueAtTime(0, t + LIFT.doorSeconds);
+      src.connect(bp).connect(env).connect(out);
+      src.start(t, Math.random());
+      src.stop(t + LIFT.doorSeconds + 0.05);
+      const end = t + LIFT.doorSeconds;
+      const o = ctx.createOscillator();
+      o.frequency.setValueAtTime(open ? LIFT.thumpHz * 1.5 : LIFT.thumpHz, end);
+      o.frequency.exponentialRampToValueAtTime(LIFT.thumpHz * 0.6, end + 0.15);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, end);
+      g.gain.linearRampToValueAtTime(open ? LIFT.thumpLevel * 0.35 : LIFT.thumpLevel, end + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.001, end + 0.18);
+      o.connect(g).connect(out);
+      o.start(end);
+      o.stop(end + 0.2);
+      this.counts.doorSounds++;
+    });
+  }
+
+  /** A softer warning ding before the bell. */
+  bellWarning(): void {
+    this.play((ctx, t) => {
+      this.strike(ctx, t, LIFT.bellHz, LIFT.bellSeconds * 0.5, LIFT.warnLevel, ctx.destination, [
+        [1, 1],
+        [2.0, 0.3],
+      ]);
+      this.counts.warnDings++;
+    });
+  }
+
+  /** The bell: the doors close now. */
+  bell(): void {
+    this.play((ctx, t) => {
+      this.strike(ctx, t, LIFT.bellHz, LIFT.bellSeconds, LIFT.bellLevel, ctx.destination, [
+        [1, 1],
+        [2.0, 0.4],
+        [3.0, 0.15],
+      ]);
+      this.counts.bells++;
+    });
+  }
+
+  /** The car's machinery while it comes: `level` 0 silent .. 1 arriving; `at` the doors. Per frame. */
+  machinery(level: number, at: Vec3): void {
+    const want = Math.max(0, Math.min(1, level));
+    const ctx = this.ctx;
+    if (!ctx || !this.machineGain || !this.machinePanner) {
+      this.machineWant = want;
+      return;
+    }
+    try {
+      const t = ctx.currentTime;
+      if (want !== this.machineWant) {
+        const g = want <= 0 ? 0 : LIFT.machineFar + (LIFT.machineNear - LIFT.machineFar) * want ** 1.6;
+        this.machineGain.gain.setTargetAtTime(g, t, want <= 0 ? 0.15 : LIFT.machineTau);
+      }
+      this.machineWant = want;
+      setPos(this.machinePanner.positionX, at.x, t);
+      setPos(this.machinePanner.positionY, at.y, t);
+      setPos(this.machinePanner.positionZ, at.z, t);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** The ride between floors: a falling hum over `seconds`, and the room tone goes. Off: it stops. */
+  ride(on: boolean, seconds = 6): void {
+    if (on === this.rideOn) return;
+    this.rideOn = on;
+    this.setRoom(on ? 0 : this.blinkDark ? LIFT.roomDark : 1);
+    this.play((ctx, t) => {
+      if (!on) {
+        this.rideGain?.gain.setTargetAtTime(0, t, 0.2);
+        for (const n of this.rideNodes) n.stop(t + 1);
+        this.rideNodes = [];
+        this.rideGain = null;
+        return;
+      }
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(LIFT.rideLevel, t + 0.6);
+      g.connect(ctx.destination);
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(LIFT.rideFromHz, t);
+      o.frequency.exponentialRampToValueAtTime(LIFT.rideToHz, t + seconds);
+      o.connect(g);
+      const o2 = ctx.createOscillator();
+      o2.frequency.setValueAtTime(LIFT.rideFromHz * 1.5, t);
+      o2.frequency.exponentialRampToValueAtTime(LIFT.rideToHz * 1.5, t + seconds);
+      const g2 = ctx.createGain();
+      g2.gain.value = 0.3;
+      o2.connect(g2).connect(g);
+      const rum = ctx.createBufferSource();
+      rum.buffer = noiseBuffer(ctx, 2, true);
+      rum.loop = true;
+      const rg = ctx.createGain();
+      rg.gain.value = LIFT.rideRumble / LIFT.rideLevel;
+      rum.connect(rg).connect(g);
+      o.start(t);
+      o2.start(t);
+      rum.start(t);
+      this.rideGain = g;
+      this.rideNodes = [o, o2, rum];
+    });
+  }
+
+  /** The blink is coming: the chime stutters and the ballasts crackle. */
+  blinkWarning(): void {
+    this.play((ctx, t) => {
+      const frag = LIFT.stutterSeconds / LIFT.stutters;
+      for (let i = 0; i < LIFT.stutters; i++) {
+        const at = t + i * frag;
+        // Each fragment a clipped, slightly lower restart of the chime's first note.
+        const env = ctx.createGain();
+        env.gain.setValueAtTime(0, at);
+        env.gain.linearRampToValueAtTime(LIFT.stutterLevel, at + 0.005);
+        env.gain.setValueAtTime(LIFT.stutterLevel, at + frag * 0.5);
+        env.gain.linearRampToValueAtTime(0, at + frag * 0.6);
+        env.connect(ctx.destination);
+        const o = ctx.createOscillator();
+        o.frequency.value = LIFT.chime[0] * (1 - 0.03 * i);
+        o.connect(env);
+        o.start(at);
+        o.stop(at + frag);
+      }
+      if (this.hissBuf) {
+        const src = ctx.createBufferSource();
+        src.buffer = this.hissBuf;
+        const hp = ctx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = 3000;
+        const chop = ctx.createGain();
+        chop.gain.value = 0;
+        // Crackle: random on/off gates over the warning.
+        for (let k = 0; k < 14; k++) chop.gain.setValueAtTime(Math.random() < 0.5 ? LIFT.crackleLevel : 0, t + (k * LIFT.stutterSeconds) / 14);
+        chop.gain.setValueAtTime(0, t + LIFT.stutterSeconds + 0.05);
+        src.connect(hp).connect(chop).connect(ctx.destination);
+        src.start(t, Math.random());
+        src.stop(t + LIFT.stutterSeconds + 0.1);
+      }
+      this.counts.blinkWarnings++;
+    });
+  }
+
+  /** The lights fail (true) or come back (false). */
+  blink(dark: boolean): void {
+    if (dark === this.blinkDark) return;
+    this.blinkDark = dark;
+    this.setRoom(this.rideOn ? 0 : dark ? LIFT.roomDark : 1);
+    this.play((ctx, t) => {
+      if (dark) {
+        const o = ctx.createOscillator();
+        o.type = 'square';
+        o.frequency.setValueAtTime(LIFT.clunkHz, t);
+        o.frequency.exponentialRampToValueAtTime(LIFT.clunkHz * 0.5, t + 0.08);
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 400;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(LIFT.clunkLevel, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+        o.connect(lp).connect(g).connect(ctx.destination);
+        o.start(t);
+        o.stop(t + 0.14);
+        this.counts.blinkOuts++;
+      } else {
+        this.strike(ctx, t, LIFT.pingHz, 0.25, LIFT.pingLevel, ctx.destination, [[1, 1]]);
+      }
+    });
+  }
+
+  private setRoom(level: number): void {
+    const was = this.roomWant;
+    this.roomWant = level;
+    const ctx = this.ctx;
+    if (!ctx || !this.roomOut) return;
+    try {
+      this.roomOut.gain.setTargetAtTime(level, ctx.currentTime, level < was ? 0.01 : 0.15);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** Stops everything the elevator keeps playing (a new run). */
+  resetLift(): void {
+    this.ride(false);
+    this.blink(false);
+    this.machinery(0, { x: 0, y: 0, z: 0 });
+  }
+
   state(): AudioState {
     return {
       running: this.ctx?.state === 'running',
@@ -634,6 +1047,10 @@ export class GameAudio {
       thunks: this.thunks,
       rasps: this.rasps,
       cadenceHz: this.cadence(),
+      ...this.counts,
+      machine: this.machineWant,
+      riding: this.rideOn,
+      room: this.roomWant,
     };
   }
 }

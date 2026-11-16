@@ -41,13 +41,22 @@ export class CaughtFx {
     return !this.line.hidden;
   }
 
-  /** Per frame. Returns true on the frame the noise ends (the moment to put the player back). */
-  update(now: number): boolean {
+  /** Clears the noise and the line at once (a new run). */
+  reset(): void {
+    this.noise.hidden = true;
+    this.line.hidden = true;
+  }
+
+  /**
+   * Per frame. Returns true on the frame the noise ends (the moment to put the player back). With
+   * `line` false the line is not shown afterwards (the run ended instead: its own screen follows).
+   */
+  update(now: number, line = true): boolean {
     let ended = false;
     if (!this.noise.hidden) {
       if (now >= this.noiseUntil) {
         this.noise.hidden = true;
-        this.line.hidden = false;
+        this.line.hidden = !line;
         this.lineUntil = now + LINE_MS;
         ended = true;
       } else this.draw();

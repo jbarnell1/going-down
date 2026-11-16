@@ -33,6 +33,43 @@
       ]
     },
     {
+      "id": "blink-feel",
+      "title": "Waiting for the elevator: how do the blinking lights feel?",
+      "context": "While the car comes, the lights go out for one second every 5 to 9 seconds, with a 0.6 second warning flicker, and the Orderly moves in the dark. Try it on the Play link: earn something, go back to the elevator, press E on the call button, and wait.",
+      "type": "multi",
+      "options": [
+        {
+          "id": "good",
+          "label": "It works as it is"
+        },
+        {
+          "id": "longer-warning",
+          "label": "The warning is too short to react to",
+          "note": "Lengthen it to about 1.2 seconds."
+        },
+        {
+          "id": "shorter-dark",
+          "label": "One second of dark is too long"
+        },
+        {
+          "id": "longer-dark",
+          "label": "One second of dark is too short to be frightening"
+        },
+        {
+          "id": "fewer",
+          "label": "Too many blinks"
+        },
+        {
+          "id": "boarding-dull",
+          "label": "Standing in the car waiting for the bell is dull",
+          "note": "Let the doors close early once everyone is aboard."
+        }
+      ],
+      "default": [
+        "good"
+      ]
+    },
+    {
       "id": "orderly-look",
       "title": "The Orderly's first pass: what should the second pass push on?",
       "context": "Renders are on the Status page. It currently reads as a mannequin in a gown. The loop already plans elbows, wrists, sloped shoulders and a bigger printed smile.",
