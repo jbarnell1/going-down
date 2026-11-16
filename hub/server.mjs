@@ -146,6 +146,19 @@ async function saveAnswer(req, res) {
   send(res, 200, JSON.stringify({ ok: true, answer: answers[q.id] }), MIME['.json']);
 }
 
+// What a player's device reports when the game's picture fails (see src/game/diagnostics.ts):
+// the graphics chip, its limits and what the game was doing. Kept in .local, never committed.
+async function clientLog(req, res) {
+  let entry;
+  try { entry = JSON.parse(await readBody(req, 8000)); } catch { return send(res, 400, '{"error":"bad json"}', MIME['.json']); }
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return send(res, 400, '{"error":"bad entry"}', MIME['.json']);
+  const file = path.join(ROOT, '.local', 'client-log.jsonl');
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  try { if ((await fs.stat(file)).size > 2_000_000) await fs.rename(file, file + '.old'); } catch { /* no log yet */ }
+  await fs.appendFile(file, JSON.stringify({ received: new Date().toISOString(), ...entry }) + '\n');
+  send(res, 200, '{"ok":true}', MIME['.json']);
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://x');
@@ -153,6 +166,7 @@ const server = http.createServer(async (req, res) => {
     try { p = decodeURIComponent(url.pathname); } catch { return send(res, 400, 'Bad request', 'text/plain'); }
 
     if (req.method === 'POST' && p === '/api/answers') return saveAnswer(req, res);
+    if (req.method === 'POST' && p === '/api/clientlog') return clientLog(req, res);
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed', 'text/plain');
 
     if (p === '/') return send(res, 200, await home());

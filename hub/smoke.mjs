@@ -49,6 +49,8 @@ try {
   // Answers: unknown questions and bad bodies are refused; nothing is written by this test.
   expect('unknown question refused', (await get('/api/answers', 'POST', JSON.stringify({ id: 'no-such-question' }))).status === 404);
   expect('bad json refused', (await get('/api/answers', 'POST', '{not json')).status === 400);
+  expect('client log refuses bad json', (await get('/api/clientlog', 'POST', '{not json')).status === 400);
+  expect('client log refuses a non-object', (await get('/api/clientlog', 'POST', '[1,2]')).status === 400);
   expect('other methods refused', (await get('/status', 'DELETE')).status === 405);
 } catch (e) {
   failures.push(`hub smoke crashed: ${e.message}`);

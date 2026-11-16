@@ -3,6 +3,7 @@ import { Announcer } from './game/announcer';
 import { GameAudio } from './game/audio';
 import { AutoWalk } from './game/autoWalk';
 import { Minimap } from './game/minimap';
+import { installDiagnostics, phoneLike, readSafeLevel } from './game/diagnostics';
 import { FrameStats } from './game/frameStats';
 import { Input } from './game/input';
 import { EYE_HEIGHT, Player, WALK_SPEED, yawForDir, yawToward } from './game/player';
@@ -40,7 +41,9 @@ const debug = params.get('debug') === '1';
 const previewName = params.get('preview');
 // ?fx=0 clean render, 1 the tape look (default), 2 heavy interference.
 const fxParam = Number(params.get('fx') ?? '1');
-const fxLevel: FxLevel = fxParam >= 2 ? 2 : fxParam === 0 ? 0 : 1;
+// A device that lost its picture earlier draws more lightly: 1 = 8-bit and no shadows, 2 = also no tape look.
+const safe = readSafeLevel(params);
+const fxLevel: FxLevel = safe >= 2 ? 0 : fxParam >= 2 ? 2 : fxParam === 0 ? 0 : 1;
 // The live Orderly is on every floor by default. ?entity=0 leaves the floor empty; ?preview=orderly
 // shows a static figure instead.
 const entityOn = params.get('entity') !== '0' && previewName !== 'orderly';
@@ -52,6 +55,11 @@ const debugBox = document.getElementById('debug') as HTMLDivElement;
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(1);
+let lastRunEvent = 'none';
+const diag = installDiagnostics(renderer, canvas, safe, () => ({
+  build: __BUILD__, fx: fxLevel, frames: state.frames, lastRunEvent, phase: run.state.phase, depth: run.state.depth,
+  orderlyLoaded: orderlyView?.loaded ?? false, frameMs: stats.median(),
+}));
 
 // ---------------------------------------------------------------------------------------------
 // The run: one host steps the run's rules, the Orderly and the crew 20 times a second.
@@ -77,7 +85,7 @@ const autoWalk = new AutoWalk();
 
 let preview: EntityPreview | null = null;
 if (previewName === 'orderly') {
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = safe === 0;
   preview = new EntityPreview(scene, `${import.meta.env.BASE_URL}assets/entities/orderly.glb`);
   preview.play(params.get('anim') ?? 'idle');
   // At the entity's start, facing down the sightline it sits at the end of.
@@ -91,7 +99,7 @@ const stats = new FrameStats(120);
 
 let orderlyView: EntityView | null = null;
 if (entityOn) {
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = safe === 0;
   orderlyView = new EntityView(scene, `${import.meta.env.BASE_URL}assets/entities/orderly.glb`);
 }
 const audio = new GameAudio();
@@ -138,7 +146,8 @@ const trace: { f: number; vis: boolean; dx: number; dz: number; lx: number; lz: 
 // The scene is drawn at a low internal resolution, then put on screen through the tape pass.
 const INTERNAL_HEIGHT = 270;
 // ?hdr=0 forces the 8-bit render path that older phones fall back to.
-const tape = new Tape(renderer, fxLevel, INTERNAL_HEIGHT, params.get('hdr') === '0');
+// Phones take the 8-bit path from the start: it is the cheaper one and costs nothing visible there.
+const tape = new Tape(renderer, fxLevel, INTERNAL_HEIGHT, params.get('hdr') === '0' || safe >= 1 || phoneLike());
 const osd = new Osd(document.body, seed);
 osd.visible = fxLevel > 0;
 /** Lights glare through the tape; the clean render keeps them as built. */
@@ -404,6 +413,8 @@ function afterTick(events: readonly RunEvent[]): void {
 /** The run moved the player (pushed out of the doorway, carried to a new floor): follow it, tick by tick. */
 function syncBodies(events: readonly RunEvent[]): void {
   for (const e of events) {
+    lastRunEvent = e.type;
+    diag.note(e.type);
     if (e.type === 'doorsClosed') {
       const b = e.pushedOut[LOCAL_ID];
       if (b) player.body = { ...b };
