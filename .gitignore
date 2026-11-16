@@ -1,0 +1,25 @@
+# dependencies and build output
+node_modules/
+dist/
+.live/
+test-results/
+playwright-report/
+
+# machine-specific and private: never commit
+.local/
+.env
+.env.*
+*.key
+*.pem
+
+# large or rebuildable
+tools/
+*.blend
+*.blend1
+assets_src/voice/takes/
+
+# kept local until the owner says otherwise
+docs/north-star.html
+
+.DS_Store
+Thumbs.db

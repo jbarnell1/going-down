@@ -1,0 +1,34 @@
+:root { --bg: #111413; --panel: #1a1f1d; --line: #2c3431; --ink: #e8ece9; --dim: #94a09a; --acc: #9fe0b8; --warn: #f0c36a; }
+@media (prefers-color-scheme: light) { :root { --bg: #f4f6f4; --panel: #ffffff; --line: #d5dcd8; --ink: #17201c; --dim: #5d6a64; --acc: #1f7a4d; --warn: #9a6a00; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, "Segoe UI", sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 16px 16px 64px; }
+nav { display: flex; gap: 16px; padding: 8px 0 16px; border-bottom: 1px solid var(--line); margin-bottom: 16px; flex-wrap: wrap; }
+a { color: var(--acc); }
+h1 { font-size: 28px; margin: 8px 0; }
+h2 { font-size: 18px; margin: 28px 0 8px; }
+.dim { color: var(--dim); }
+code { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; white-space: pre-wrap; font: 13px/1.5 ui-monospace, Consolas, monospace; }
+.tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.tile { display: flex; flex-direction: column; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; text-decoration: none; color: var(--ink); }
+.tile strong { color: var(--acc); font-size: 18px; }
+.tile span { color: var(--dim); font-size: 14px; }
+.grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.grid a { display: block; text-decoration: none; color: var(--dim); font-size: 12px; }
+.grid img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); display: block; background: #000; }
+.q { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin: 12px 0; }
+.q h3 { margin: 0 0 4px; font-size: 17px; }
+.q p { margin: 4px 0 10px; color: var(--dim); font-size: 14px; }
+.q label { display: flex; gap: 10px; align-items: flex-start; padding: 8px 4px; border-top: 1px solid var(--line); cursor: pointer; }
+.q label small { color: var(--dim); display: block; }
+.q input[type=checkbox], .q input[type=radio] { margin-top: 4px; width: 18px; height: 18px; flex: none; }
+.q textarea { width: 100%; min-height: 64px; margin-top: 10px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 8px; font: inherit; }
+.q .row { display: flex; gap: 12px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+button { background: var(--acc); color: #0b1410; border: 0; border-radius: 6px; padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; }
+.badge { font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--dim); }
+.badge.open { color: var(--warn); border-color: var(--warn); }
+.badge.done { color: var(--acc); border-color: var(--acc); }
+.filters { display: flex; gap: 8px; margin: 8px 0 16px; }
+.filters button { background: var(--panel); color: var(--ink); border: 1px solid var(--line); font-weight: 400; padding: 6px 12px; }
+.filters button[aria-pressed=true] { border-color: var(--acc); color: var(--acc); }

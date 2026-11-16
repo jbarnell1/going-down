@@ -1,0 +1,172 @@
+{
+  "about": "Open questions for the owner. type is single, multi or text. The loop adds questions here, proceeds on the default, and reads answers from .local/answers.json.",
+  "questions": [
+    {
+      "id": "orderly-look",
+      "title": "The Orderly's first pass: what should the second pass push on?",
+      "context": "Renders are on the Status page. It currently reads as a mannequin in a gown. The loop already plans elbows, wrists, sloped shoulders and a bigger printed smile.",
+      "type": "multi",
+      "options": [
+        { "id": "body", "label": "More of a body under the gown", "note": "Ribs, spine, collarbones showing through." },
+        { "id": "taller", "label": "Taller, so it has to duck under door frames" },
+        { "id": "face", "label": "Make the printed smile much bigger and bolder" },
+        { "id": "eyes", "label": "Something wrong where the eyes should be" },
+        { "id": "hands", "label": "Longer, more articulated hands" },
+        { "id": "less-funny", "label": "Less funny, more frightening" },
+        { "id": "more-funny", "label": "Keep it absurd, the smile is the joke" }
+      ],
+      "default": ["body", "face", "eyes"]
+    },
+    {
+      "id": "license",
+      "title": "Which licence should the public repo carry?",
+      "context": "Your other public repos use AGPL-3.0 or MIT. With no licence, others may look but not reuse.",
+      "type": "single",
+      "options": [
+        { "id": "none", "label": "None yet" },
+        { "id": "mit", "label": "MIT", "note": "Anyone may reuse it, including commercially." },
+        { "id": "agpl", "label": "AGPL-3.0", "note": "Reuse must stay open source." }
+      ],
+      "default": ["none"]
+    },
+    {
+      "id": "publish-design-doc",
+      "title": "Put the full North Star design document in the public repo?",
+      "context": "It is written to you and mentions your other projects and this PC in passing. It stays local until you say otherwise.",
+      "type": "single",
+      "options": [
+        { "id": "no", "label": "Keep it local" },
+        { "id": "scrubbed", "label": "Publish it with personal mentions removed" },
+        { "id": "asis", "label": "Publish it as it is" }
+      ],
+      "default": ["no"]
+    },
+    {
+      "id": "public-play-link",
+      "title": "Also publish a public play link on GitHub Pages?",
+      "context": "It is free with a public repo and gives friends a link that works from anywhere, which game night needs. Anyone with the link could open it.",
+      "type": "single",
+      "options": [
+        { "id": "not-yet", "label": "Not yet" },
+        { "id": "yes", "label": "Yes, deploy every green build" }
+      ],
+      "default": ["not-yet"]
+    },
+    {
+      "id": "voice-cap",
+      "title": "How many ElevenLabs characters may the game use this month?",
+      "context": "The account is shared with your other work. The loop checks what is left before each batch.",
+      "type": "single",
+      "options": [
+        { "id": "25k", "label": "25,000" },
+        { "id": "50k", "label": "50,000" },
+        { "id": "100k", "label": "100,000" }
+      ],
+      "default": ["25k"]
+    },
+    {
+      "id": "watchdog",
+      "title": "Add a scheduled task that restarts the loop if the session dies?",
+      "context": "It would re-fire the loop every few hours, with a lock so two never run at once. It is a standing task on this PC.",
+      "type": "single",
+      "options": [
+        { "id": "no", "label": "No" },
+        { "id": "yes", "label": "Yes" }
+      ],
+      "default": ["no"]
+    },
+    {
+      "id": "boot-start",
+      "title": "Start the hub at boot with your other apps?",
+      "context": "Right now it starts when you log in. Starting at boot means adding it to your shared autostart script.",
+      "type": "single",
+      "options": [
+        { "id": "logon", "label": "Logon is fine" },
+        { "id": "boot", "label": "Add it to the boot script" }
+      ],
+      "default": ["logon"]
+    },
+    {
+      "id": "setting",
+      "title": "What is the building, and who is paying for readings?",
+      "context": "North Star Q5. Another game already uses an elevator descending a vast structure, so a specific, mundane building helps ours stand apart.",
+      "type": "single",
+      "options": [
+        { "id": "hotel", "label": "A hotel run by a cheerfully indifferent company" },
+        { "id": "hospital", "label": "A hospital that kept building downwards" },
+        { "id": "storage", "label": "A self-storage facility" },
+        { "id": "tv", "label": "A TV station" },
+        { "id": "institute", "label": "A research institute" }
+      ],
+      "default": ["hotel"]
+    },
+    {
+      "id": "name",
+      "title": "What is the game called?",
+      "context": "\"Going Down\" is a working title.",
+      "type": "text",
+      "options": [],
+      "default": []
+    },
+    {
+      "id": "first-places",
+      "title": "Which three places come first?",
+      "context": "North Star A2. The Arboretum and the Flood need open ground and water, so they take longer.",
+      "type": "multi",
+      "options": [
+        { "id": "clinic", "label": "The Clinic", "note": "Sterile and bright." },
+        { "id": "overgrowth", "label": "The Overgrowth", "note": "Dark and overrun." },
+        { "id": "annex", "label": "The Annex", "note": "Endless yellow office." },
+        { "id": "arboretum", "label": "The Arboretum", "note": "A forest indoors." },
+        { "id": "flood", "label": "The Flood", "note": "Knee-deep, then a black basin." }
+      ],
+      "default": ["clinic", "overgrowth", "annex"]
+    },
+    {
+      "id": "candidates",
+      "title": "Which candidate mechanics go in?",
+      "context": "North Star, Candidates section.",
+      "type": "multi",
+      "options": [
+        { "id": "scream", "label": "Scream to struggle" },
+        { "id": "pool", "label": "The office pool" },
+        { "id": "wires", "label": "Crossed wires" },
+        { "id": "mirror", "label": "The mirror" },
+        { "id": "lost", "label": "Connection lost", "note": "The game pretends you disconnected." },
+        { "id": "startover", "label": "Start over", "note": "A fake restart." },
+        { "id": "tab", "label": "The tab is still open" }
+      ],
+      "default": ["scream", "pool", "wires", "mirror"]
+    },
+    {
+      "id": "haunt",
+      "title": "May downed players prank the living with phantoms?",
+      "context": "North Star Q14.",
+      "type": "single",
+      "options": [
+        { "id": "yes", "label": "Yes, with a small budget" },
+        { "id": "help-only", "label": "Help only" }
+      ],
+      "default": ["yes"]
+    },
+    {
+      "id": "false-lines",
+      "title": "May a highly exposed player see Trackmaster lines that are not there?",
+      "context": "North Star Q23. Touching a line tests it.",
+      "type": "single",
+      "options": [
+        { "id": "yes", "label": "Yes" },
+        { "id": "no", "label": "No, lines are always trustworthy" }
+      ],
+      "default": ["yes"]
+    },
+    {
+      "id": "anything",
+      "title": "Anything else for the loop?",
+      "context": "Notes, ideas, things that felt wrong when you played. Update this as often as you like.",
+      "type": "text",
+      "options": [],
+      "default": []
+    }
+  ]
+}
