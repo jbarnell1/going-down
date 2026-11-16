@@ -5,7 +5,7 @@
 //   /questions   open questions for the owner to answer; answers are saved to .local/answers.json
 // No dependencies. Binds to localhost only; put it behind a private reverse proxy to reach it remotely.
 import http from 'node:http';
-import { promises as fs, createReadStream } from 'node:fs';
+import { promises as fs, createReadStream, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -61,6 +61,32 @@ async function serveFile(res, file) {
       'Content-Length': st.size, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
     });
     createReadStream(file).pipe(res);
+    return true;
+  } catch { return false; }
+}
+
+// A game build's file: sent compressed when a precompressed copy at least as new sits beside it
+// (hub/precompress.mjs writes them), and checked by ETag so a returning player does not download
+// the engine again while a new build still shows up at once.
+async function serveBuild(req, res, file) {
+  try {
+    const st = await fs.stat(file);
+    if (!st.isFile()) return false;
+    const etag = `W/"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`;
+    const head = {
+      'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
+      'Cache-Control': 'no-cache', ETag: etag, Vary: 'Accept-Encoding', 'X-Content-Type-Options': 'nosniff',
+    };
+    if (req.headers['if-none-match'] === etag) { res.writeHead(304, head); res.end(); return true; }
+    const accepts = String(req.headers['accept-encoding'] ?? '');
+    let body = file, size = st.size;
+    for (const [enc, ext] of [['br', '.br'], ['gzip', '.gz']]) {
+      if (!new RegExp(`\\b${enc}\\b`).test(accepts)) continue;
+      const cs = await fs.stat(file + ext).catch(() => null);
+      if (cs && cs.isFile() && cs.mtimeMs >= st.mtimeMs) { body = file + ext; size = cs.size; head['Content-Encoding'] = enc; break; }
+    }
+    res.writeHead(200, { ...head, 'Content-Length': size });
+    createReadStream(body).pipe(res);
     return true;
   } catch { return false; }
 }
@@ -191,13 +217,17 @@ const server = http.createServer(async (req, res) => {
       const file = ok ? inside(ROOT, rel) : null;
       return (file && (await serveFile(res, file))) || send(res, 404, 'Not found', 'text/plain');
     }
-    // An engine trial kept on this PC (not in git): the Godot browser export, when it exists.
+    // The Godot browser build kept on this PC (not in git): the playable client when it exists,
+    // otherwise the first engine trial.
     if (p === '/godot') return send(res, 302, '', 'text/plain', { Location: '/godot/' });
     if (p.startsWith('/godot/')) {
       let rel = p.slice('/godot/'.length) || 'index.html';
       if (rel.endsWith('/')) rel += 'index.html';
-      const file = inside(path.join(ROOT, 'spikes', 'godot-trial', 'export', 'web'), rel);
-      return (file && (await serveFile(res, file))) || send(res, 404, 'No Godot trial build on this machine', 'text/plain');
+      const client = path.join(ROOT, 'spikes', 'godot-client', 'export', 'web');
+      const dir = existsSync(path.join(client, 'index.html')) ? client : path.join(ROOT, 'spikes', 'godot-trial', 'export', 'web');
+      const file = inside(dir, rel);
+      const hidden = /\.(br|gz)$/i.test(rel);
+      return (file && !hidden && (await serveBuild(req, res, file))) || send(res, 404, 'No Godot build on this machine', 'text/plain');
     }
     if (p === '/play') return send(res, 302, '', 'text/plain', { Location: '/play/' });
     if (p.startsWith('/play/')) {

@@ -4,10 +4,10 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 20 of 37.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 28.
-- **Now:** X1 Trial: one Clinic floor in Godot. An agent is building one Clinic floor in the Godot engine, in its own folder, to compare lighting, browser play and testing with what we have
-- **Last CI result seen:** passed on c9e549d
+- **Gates passed:** 7 of 14. **Tasks done:** 23 of 44.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 33.
+- **Now:** P2b Fixes from your first play of the Godot build. The agent that built the Godot client is finding why the browser is silent, moving the big room's lights onto a real ceiling, thickening walls and keeping props inside their rooms
+- **Last CI result seen:** passed on e100309
 - **Answers applied up to:** 2026-11-16T15:51:27.242Z
 
 ## Tasks
@@ -63,11 +63,6 @@
 - [x] **T6e** `done` Blinks that grow into a blackout
   - Why: The owner wants the wait for the car to build: each blink longer than the last, ending in a long dark stretch that drives the crew away from the lift, then a mad dash back with the Orderly after them
   - Evidence: While you wait for the car the blinks now grow (1, 1.5, 2.5, 4, 6 seconds) and end in a blackout: 9 to 10 seconds on a run's first floor, 12 to 15 deeper, after a 3-second warning and the announcer's line. Amber strips along the floor and red glows over doors let you run; the Orderly is never drawn in the dark, only heard. The lights return as the car arrives. In 300 simulated waits per depth a crew that stays by the lift always loses someone, and a crew that runs and comes back loses someone 2 to 4 percent of the time and nearly always makes the car. I re-ran everything myself (143 logic tests, 52 browser tests) and broke it on purpose twice: drawing the Orderly in the dark and shrinking the blackout to one second both turned tests red.
-- [ ] **T7d** `todo` Playing across two home networks
-  - Why: Friends at home need to join the host; some home routers block direct browser-to-browser links unless a relay helps
-  - To do: Owner's answer (2026-11-16): 'Every one in their own house'. So every player joins over the internet from a different home network, and friends use the PUBLIC play link, not the tailnet hub. This is now needed for game night.
-  - To do: Plan: (1) a connection test in the lobby that says plainly whether a direct link to the host works and what kind of router each side has, plus a short note the owner can send a friend to try it this week; (2) a relay (TURN) path for the pairs that cannot link directly. The public build is a static site in a public repo, so the relay's secret cannot live in it: use a provider that hands out short-lived credentials through a tiny free hosted function the owner deploys, or a free-tier static credential that is quota-limited. Research current free offerings first, then give the owner exact sign-up steps on the Questions page. (3) Also warn in the lobby that the host must keep the game tab in front (a background tab stalls the run).
-  - To do: Owner (2026-11-16): 'We can definitely run a server on either mo's pc or the homelab pc... server should just be responsible for handling client updates and keeping everyone in sync.' This changes the plan: the game's host logic already runs without a browser (it does in the tests), so a small always-on game server on the lab box can host every run. Friends then connect to it, nobody's router has to accept a direct link, no relay account is needed, and the host's tab going to the background no longer stalls the run. Open point: friends are outside the tailnet, so the server needs one public door; that choice is the owner's (question server-door).
 - [ ] **T14** `todo` Dress the Clinic
   - Why: Beds, trolleys, curtains, signs and grime, so rooms stop being empty boxes. Props built in Blender, textures made with Gemini inside the art budget.
   - To do: Owner's rule: downsample every prop and texture before it goes in the game. Low triangle counts, small textures; the tape look hides detail.
@@ -90,9 +85,28 @@
 - [ ] **T7f** `todo` Draw your face
   - Why: North Star H1: each player doodles a face before the run and it shows on the screen mask their crewmate figure wears, glowing in the dark, and on the lift monitor
   - To do: A small drawing pad in the lobby (about 48 x 48, one colour on dark, a few brush sizes, clear, and a random doodle for the lazy); sent to the crew as a few hundred bytes; shown on the mask screen (glowing), the crew list, the lift monitor, and later the standee where a player falls and the posters. Bots get generated doodles. Remembered in the browser between runs.
-- [ ] **X1** `doing` Trial: one Clinic floor in Godot
+- [x] **X1** `done` Trial: one Clinic floor in Godot
   - Why: The owner asked whether a game engine would save work and give better lighting. A five-hour trial answers with evidence before any decision to switch
-  - To do: Owner (2026-11-16): 'let's give it 5 hours to work alongside the other work that's currently being done.' Nothing in the game changes; the trial lives in spikes/godot-trial (not in git yet).
+  - Evidence: The five-hour trial finished in 35 minutes and answered the question: Godot gives clearly better lighting and a simple home server, at the cost of a slow first load in the browser (27 to 34 seconds, about 9 with a light setup) and a port of four to six agent-weeks by the trial's estimate. The build is on the hub at /godot/. The owner then decided to move.
+- [ ] **P0** `doing` Godot project, tests and builds
+  - Why: The new home of the game: a project that tests itself from the command line and produces a light browser build and a download for friends
+- [x] **P1** `done` The rules, moved to Godot and proven identical
+  - Why: Every rule already tuned (floors, the Orderly, earning, the lift, blinks and blackout, stamina) must behave exactly as it does today, checked seed by seed against the current game
+  - Evidence: The game's rules now exist in Godot and behave the same as the old game: floors, walls, movement, line of sight, the Orderly, stamina, the instrument and tapes, the lift, blinks and blackout, and the test bots. I regenerated the old game's reference results (they came out unchanged) and ran the whole Godot suite myself: 31 of 31 passed in 7 minutes, covering tens of thousands of tick-by-tick comparisons with no difference. One exception, on purpose: pay differs from the old game in the last decimal bits (never in what the screen shows), because the two languages compute powers differently. To prove the tests can fail I doubled the width of the view cone: the sight test went red with 1,227 wrong answers, and green again when I put it back. Godot runs these rules 15 to 30 times slower than the old game, which is still fast enough for a server ticking 20 times a second.
+- [x] **P2** `done` Walking the Clinic in Godot
+  - Why: The floor you can walk through with real lighting, the tape look, the Orderly, the lift and the instrument, drawn from the moved rules
+  - Evidence: The Godot build can be played alone from start to finish in a browser: walk both wings of the Clinic, watch the Orderly freeze and creep, take a reading, call the lift, survive the blinks and the blackout, board, then bank or ride down to a new floor. Checked by running its scripted playthrough myself (26 of 26, no browser errors, first picture after 9.8 seconds), then running it against a copy I broke on purpose (the Orderly drawn in the dark), which failed the two blackout checks as it should. It is at the hub's /godot/ link and was fetched from the lab box. The rules are still the old game's, called through one bridge file; joining them to the moved rules is the next step. Not done here: playing together, touch controls, the proper caught sequence. Nobody has listened to the sound yet.
+- [ ] **P2b** `doing` Fixes from your first play of the Godot build
+  - Why: No sound in the browser, ceiling lights floating in the big room, and props poking through paper-thin walls all break the place; and the Windows file is now the main way to play, so it gets checked with pictures and measured sound
+- [ ] **T6f** `todo` A bigger elevator
+  - Why: The car is a 2 metre square today, so each side of the BANK or DOWN choice is 1 metre wide: cramped for four and a crush for eight
+  - To do: Default size 3 m by 3 m with a 1.6 m door unless the owner says otherwise; the floor generator must keep the space behind and beside the lift wall empty; the lift drawing must read its size from the rules, not its own numbers
+  - To do: Size is now 4 m by 4 m with a 1.8 m door (the owner said bigger still than 3 by 3): each of BANK and DOWN becomes 2 m wide
+- [ ] **P3** `todo` Playing together through the home server
+  - Why: One small server at home runs the rules and keeps everyone in sync, so friends in their own houses can join and nobody's browser has to host
+  - To do: Public door: Tailscale Funnel, chosen by the owner. Funnel only works on ports 443, 8443 and 10000. On this PC 443 and 10000 are in use for tailnet-only pages and 8443 is already funnelled for another project by path. Cleanest: add ONE path for the game server on the existing funnelled port, with a command for the owner to run (path mount to the server's local port); the browser build then connects with wss to that path. The server runs on this PC for Friday (it is already the funnel node); the lab box later. Never touch the other paths on that port.
+- [ ] **P4** `todo` Light browser build and a download for friends
+  - Why: Friends either click a link that loads in a few seconds or run a small downloaded file
 - [x] **T14a** `done` Shrink the downloaded props for the game
   - Why: Rooms need beds, chairs, trolleys and clutter to feel like a place and to hide behind; the pieces must be tiny so the game stays fast
   - Evidence: 26 hospital props are ready for the game: bed, gurney, wheelchair, crutches, chairs, bench, desks, cabinets, shelves, sink, toilet, bins, lights, extinguisher, wet-floor sign, camera, duct and pipes. All 26 together are 0.7 MB and about 9,300 triangles, with flat colours or one tiny picture each. I checked the file sizes, the list against the files, and looked at the sheets. Not yet seen inside the running game; placing them in rooms is the room-dressing task.
@@ -125,6 +139,12 @@
 - [ ] **S** `todo` Stretch: voice that fades with distance, a second trait, the Tenant, a second place
   - Why: Only if every gate is green with time left.
   - To do: Owner (2026-11-16): 'multiple different types of entities once we program other levels'. Each new place brings its own entity with its own rule.
+- [ ] **T7d** `todo` Playing across two home networks
+  - Why: Friends at home need to join the host; some home routers block direct browser-to-browser links unless a relay helps
+  - To do: Owner's answer (2026-11-16): 'Every one in their own house'. So every player joins over the internet from a different home network, and friends use the PUBLIC play link, not the tailnet hub. This is now needed for game night.
+  - To do: Plan: (1) a connection test in the lobby that says plainly whether a direct link to the host works and what kind of router each side has, plus a short note the owner can send a friend to try it this week; (2) a relay (TURN) path for the pairs that cannot link directly. The public build is a static site in a public repo, so the relay's secret cannot live in it: use a provider that hands out short-lived credentials through a tiny free hosted function the owner deploys, or a free-tier static credential that is quota-limited. Research current free offerings first, then give the owner exact sign-up steps on the Questions page. (3) Also warn in the lobby that the host must keep the game tab in front (a background tab stalls the run).
+  - To do: Owner (2026-11-16): 'We can definitely run a server on either mo's pc or the homelab pc... server should just be responsible for handling client updates and keeping everyone in sync.' This changes the plan: the game's host logic already runs without a browser (it does in the tests), so a small always-on game server on the lab box can host every run. Friends then connect to it, nobody's router has to accept a direct link, no relay account is needed, and the host's tab going to the background no longer stalls the run. Open point: friends are outside the tailnet, so the server needs one public door; that choice is the owner's (question server-door).
+  - To do: Superseded by P3 (the home server in Godot) after the owner chose to play the Godot build on Friday. No relay is being built for the old browser game.
 
 ## Gates
 
@@ -152,9 +172,35 @@
 - 2026-11-16: Playing across home networks: until the owner answers the new question, the default is to build a connection test page first and no relay.
 - 2026-11-16: Everyone plays from their own house (owner, 2026-11-16), so playing across home networks moves up to right after the blackout work, ahead of room dressing.
 - 2026-11-16: Until the owner answers server-door: build the game server and test it on the tailnet only; open nothing to the internet.
+- 2026-11-16: Owner's decision, 2026-11-16: move the game to the Godot engine, one codebase. Their words: 'I don't want to keep logic in two places. Let's run a light version of godot in the browser, otherwise we can give friends a packaged game file to download, which they'll also be fine with.' The current browser game is frozen at its last green build as the fallback; all new work goes into the Godot project.
+- 2026-11-16: Owner, 2026-11-16: on Friday we play 'Whatever Godot has'. All effort goes into the Godot build; the frozen browser game stays up but is not the plan for game night.
+- 2026-11-16: Owner, 2026-11-16: friends reach the home game server through Tailscale Funnel ('Let's do the funnel with tailscale'). Nothing is opened until the server exists; the owner runs the one admin command.
 
 ## Activity (newest first)
 
+- 2026-11-16 20:22Z P0 is half done: the Godot project tests itself from one command (npm run godot:test). Still to do there: join the client so the project makes the Windows file and the browser build, and run a quick set of the Godot tests on every commit and in CI.
+- 2026-11-16 20:22Z Finished P1: The rules, moved to Godot and proven identical.
+- 2026-11-16 19:59Z Started P2b: Fixes from your first play of the Godot build. The agent that built the Godot client is finding why the browser is silent, moving the big room's lights onto a real ceiling, thickening walls and keeping props inside their rooms
+- 2026-11-16 19:59Z Added task P2b: Fixes from your first play of the Godot build.
+- 2026-11-16 19:59Z You played the Godot build: the Orderly made you jump coming round a corner (keeping it as it is). To fix: no sound in the browser, ceiling lights floating in the big room, props poking through thin walls. From now on the downloaded Godot file is the main way to play and the browser is the backup.
+- 2026-11-16 19:54Z Added task T6f: A bigger elevator.
+- 2026-11-16 19:34Z The hub now sends the Godot build compressed and lets browsers keep it: 11.7 MB instead of 43 MB on a first visit, and a second visit is ready in under 2 seconds. Checked from the lab box and in a test browser.
+- 2026-11-16 19:04Z Asked on the Questions page whether the loop should run past its 30-hour limit (about 3:40 Tuesday morning); it stops there unless you say otherwise.
+- 2026-11-16 19:04Z Finished P2: Walking the Clinic in Godot.
+- 2026-11-16 18:59Z New pictures for P2: Walking the Clinic in Godot.
+- 2026-11-16 18:01Z Took a default: Owner, 2026-11-16: friends reach the home game server through Tailscale Funnel ('Let's do the funnel with tailscale'). Nothing is opened until the server exists; the owner runs the one admin command.
+- 2026-11-16 18:00Z Started P2: Walking the Clinic in Godot. An agent is building the visible side in Godot: the floor, lighting, tape look, the Orderly, the lift
+- 2026-11-16 18:00Z Took a default: Owner, 2026-11-16: on Friday we play 'Whatever Godot has'. All effort goes into the Godot build; the frozen browser game stays up but is not the plan for game night.
+- 2026-11-16 17:57Z Live build is now e100309 (tag good-13): the growing blackout with emergency lighting, even announcer levels and 35 new lines. Checked from the lab box. This is the last build of the current browser game: it stays playable as the fallback while the game moves to Godot.
+- 2026-11-16 17:55Z Started P1: The rules, moved to Godot and proven identical. An agent is moving the rules into Godot and checking them seed by seed against the current game
+- 2026-11-16 17:55Z Started P0: Godot project, tests and builds. Setting up the Godot project and its command-line tests
+- 2026-11-16 17:55Z Added task P4: Light browser build and a download for friends.
+- 2026-11-16 17:55Z Added task P3: Playing together through the home server.
+- 2026-11-16 17:55Z Added task P2: Walking the Clinic in Godot.
+- 2026-11-16 17:55Z Added task P1: The rules, moved to Godot and proven identical.
+- 2026-11-16 17:55Z Added task P0: Godot project, tests and builds.
+- 2026-11-16 17:55Z Finished X1: Trial: one Clinic floor in Godot.
+- 2026-11-16 17:55Z Took a default: Owner's decision, 2026-11-16: move the game to the Godot engine, one codebase. Their words: 'I don't want to keep logic in two places. Let's run a light version of godot in the browser, otherwise we can give friends a packaged game file to download, which they'll also be fine with.' The current browser game is frozen at its last green build as the fallback; all new work goes into the Godot project.
 - 2026-11-16 17:52Z Finished T6d: Even voice loudness and thirty more announcer lines.
 - 2026-11-16 17:52Z Finished T6e: Blinks that grow into a blackout.
 - 2026-11-16 17:52Z Finished T2w: Browser tests must not grab the owner's mouse.
@@ -172,26 +218,3 @@
 - 2026-11-16 17:14Z Linked T2b to the North Star: nothing in it (The tape look comes from the North Star's Look and sound section, which is not a numbered mechanic).
 - 2026-11-16 17:14Z Linked T2p to the North Star: nothing in it (Phone play was the owner's request on 2026-11-15; the North Star does not cover devices).
 - 2026-11-16 17:14Z Linked T13 to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).
-- 2026-11-16 17:14Z Linked T11 to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).
-- 2026-11-16 17:14Z Linked T10 to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).
-- 2026-11-16 17:14Z Linked T2w to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).
-- 2026-11-16 17:14Z Linked T2v to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).
-- 2026-11-16 17:14Z Linked T0c to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).
-- 2026-11-16 17:14Z Linked T0b to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).
-- 2026-11-16 17:14Z Linked T0 to the North Star: nothing in it (Tooling, hosting or validation; the North Star has no mechanic for it).
-- 2026-11-16 17:14Z Linked S to the North Star: A4, B1, B11, F4, A2.
-- 2026-11-16 17:14Z Linked T15 to the North Star: A2, B1.
-- 2026-11-16 17:14Z Linked T9b to the North Star: B1, B11.
-- 2026-11-16 17:14Z Linked T1b to the North Star: A2.
-- 2026-11-16 17:14Z Linked T12 to the North Star: A3, H4.
-- 2026-11-16 17:14Z Linked T9 to the North Star: B8, A6.
-- 2026-11-16 17:14Z Linked T6c to the North Star: C5, C6.
-- 2026-11-16 17:14Z Linked T7f to the North Star: H1.
-- 2026-11-16 17:14Z Linked T7e to the North Star: H1, F4.
-- 2026-11-16 17:14Z Linked T8 to the North Star: B6, B7, F3.
-- 2026-11-16 17:14Z Linked T6d to the North Star: H5.
-- 2026-11-16 17:14Z Linked T14 to the North Star: A2.
-- 2026-11-16 17:14Z Linked T6e to the North Star: C5.
-- 2026-11-16 17:14Z Linked T3b to the North Star: B8.
-- 2026-11-16 17:14Z Linked T14a to the North Star: A2.
-- 2026-11-16 17:14Z Linked T6b to the North Star: H5.

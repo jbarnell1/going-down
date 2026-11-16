@@ -1,0 +1,9 @@
+{
+  "name": "going-down-godot-tools",
+  "private": true,
+  "type": "module",
+  "description": "Writes the reference files the Godot tests compare against, from the real TypeScript rules.",
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  }
+}

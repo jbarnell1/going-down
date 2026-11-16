@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
-  "iteration": 28,
-  "now": "X1",
-  "nowText": "An agent is building one Clinic floor in the Godot engine, in its own folder, to compare lighting, browser play and testing with what we have",
+  "iteration": 33,
+  "now": "P2b",
+  "nowText": "The agent that built the Godot client is finding why the browser is silent, moving the big room's lights onto a real ceiling, thickening walls and keeping props inside their rooms",
   "ci": {
     "status": "passed",
-    "commit": "c9e549d",
-    "at": "2026-11-16T16:29:12.593Z"
+    "commit": "e100309",
+    "at": "2026-11-16T18:28:16.151Z"
   },
   "answersAppliedTo": "2026-11-16T15:51:27.242Z",
   "tasks": [
@@ -893,20 +893,6 @@
       ]
     },
     {
-      "id": "T7d",
-      "title": "Playing across two home networks",
-      "why": "Friends at home need to join the host; some home routers block direct browser-to-browser links unless a relay helps",
-      "status": "todo",
-      "gates": [],
-      "todo": [
-        "Owner's answer (2026-11-16): 'Every one in their own house'. So every player joins over the internet from a different home network, and friends use the PUBLIC play link, not the tailnet hub. This is now needed for game night.",
-        "Plan: (1) a connection test in the lobby that says plainly whether a direct link to the host works and what kind of router each side has, plus a short note the owner can send a friend to try it this week; (2) a relay (TURN) path for the pairs that cannot link directly. The public build is a static site in a public repo, so the relay's secret cannot live in it: use a provider that hands out short-lived credentials through a tiny free hosted function the owner deploys, or a free-tier static credential that is quota-limited. Research current free offerings first, then give the owner exact sign-up steps on the Questions page. (3) Also warn in the lobby that the host must keep the game tab in front (a background tab stalls the run).",
-        "Owner (2026-11-16): 'We can definitely run a server on either mo's pc or the homelab pc... server should just be responsible for handling client updates and keeping everyone in sync.' This changes the plan: the game's host logic already runs without a browser (it does in the tests), so a small always-on game server on the lab box can host every run. Friends then connect to it, nobody's router has to accept a direct link, no relay account is needed, and the host's tab going to the background no longer stalls the run. Open point: friends are outside the tailnet, so the server needs one public door; that choice is the owner's (question server-door)."
-      ],
-      "ns": [],
-      "nsWhy": "Foundations: how friends connect; the owner said everyone plays from their own house"
-    },
-    {
       "id": "T14",
       "title": "Dress the Clinic",
       "why": "Beds, trolleys, curtains, signs and grime, so rooms stop being empty boxes. Props built in Blender, textures made with Gemini inside the art budget.",
@@ -1049,14 +1035,145 @@
       "id": "X1",
       "title": "Trial: one Clinic floor in Godot",
       "why": "The owner asked whether a game engine would save work and give better lighting. A five-hour trial answers with evidence before any decision to switch",
-      "status": "doing",
+      "status": "done",
       "gates": [],
       "startedAt": "2026-11-16T16:58:48.820Z",
-      "todo": [
-        "Owner (2026-11-16): 'let's give it 5 hours to work alongside the other work that's currently being done.' Nothing in the game changes; the trial lives in spikes/godot-trial (not in git yet)."
-      ],
+      "todo": [],
       "ns": [],
-      "nsWhy": "An engine trial the owner approved on 2026-11-16"
+      "nsWhy": "An engine trial the owner approved on 2026-11-16",
+      "finishedAt": "2026-11-16T17:55:47.674Z",
+      "summary": "The five-hour trial finished in 35 minutes and answered the question: Godot gives clearly better lighting and a simple home server, at the cost of a slow first load in the browser (27 to 34 seconds, about 9 with a light setup) and a port of four to six agent-weeks by the trial's estimate. The build is on the hub at /godot/. The owner then decided to move."
+    },
+    {
+      "id": "P0",
+      "title": "Godot project, tests and builds",
+      "why": "The new home of the game: a project that tests itself from the command line and produces a light browser build and a download for friends",
+      "status": "doing",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "Foundations, amended by the owner on 2026-11-16: the engine is now Godot, a home server is allowed, and a download is acceptable",
+      "startedAt": "2026-11-16T17:55:48.334Z"
+    },
+    {
+      "id": "P1",
+      "title": "The rules, moved to Godot and proven identical",
+      "why": "Every rule already tuned (floors, the Orderly, earning, the lift, blinks and blackout, stamina) must behave exactly as it does today, checked seed by seed against the current game",
+      "status": "done",
+      "gates": [],
+      "ns": [
+        "A1",
+        "A2",
+        "B1",
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6"
+      ],
+      "startedAt": "2026-11-16T17:55:53.087Z",
+      "nsCheck": "A1/A2: floors generated from one seed, 40 whole plans identical field by field and 800 floors hash-identical. B1: the Orderly's stillness rule identical tick by tick in 14 scenes, oracle violations 0. C1 to C6: instrument, tapes, carrying and dropping, calling the lift, blinks and blackout, vote and bank all identical outside the last bits of pay. Nothing in the design was changed by the move; the owner's later amendments (bigger lift, hide floor) are separate tasks.",
+      "finishedAt": "2026-11-16T20:22:07.968Z",
+      "summary": "The game's rules now exist in Godot and behave the same as the old game: floors, walls, movement, line of sight, the Orderly, stamina, the instrument and tapes, the lift, blinks and blackout, and the test bots. I regenerated the old game's reference results (they came out unchanged) and ran the whole Godot suite myself: 31 of 31 passed in 7 minutes, covering tens of thousands of tick-by-tick comparisons with no difference. One exception, on purpose: pay differs from the old game in the last decimal bits (never in what the screen shows), because the two languages compute powers differently. To prove the tests can fail I doubled the width of the view cone: the sight test went red with 1,227 wrong answers, and green again when I put it back. Godot runs these rules 15 to 30 times slower than the old game, which is still fast enough for a server ticking 20 times a second.",
+      "todo": []
+    },
+    {
+      "id": "P2",
+      "title": "Walking the Clinic in Godot",
+      "why": "The floor you can walk through with real lighting, the tape look, the Orderly, the lift and the instrument, drawn from the moved rules",
+      "status": "done",
+      "gates": [],
+      "ns": [
+        "A2",
+        "B8",
+        "C1",
+        "C5"
+      ],
+      "startedAt": "2026-11-16T18:00:20.434Z",
+      "media": [
+        {
+          "src": "P2/20261116T185925-03-clean-corridor.png",
+          "caption": "Godot build, in the browser: the clean side of the Clinic near the lift",
+          "kind": "image",
+          "at": "2026-11-16T18:59:25.254Z"
+        },
+        {
+          "src": "P2/20261116T185925-05-orderly-watched.png",
+          "caption": "Godot build: the Orderly on the corrupted side, standing still because it is being watched",
+          "kind": "image",
+          "at": "2026-11-16T18:59:25.256Z"
+        },
+        {
+          "src": "P2/20261116T185925-11-blackout-emergency-strips.png",
+          "caption": "Godot build: the blackout, with amber strips at the foot of the walls and a red glow over the door",
+          "kind": "image",
+          "at": "2026-11-16T18:59:25.259Z"
+        },
+        {
+          "src": "P2/20261116T190432-07-orderly-closer-slip.png",
+          "caption": "Godot build: the instrument recording as the Orderly moves, with the slip that names what was happening",
+          "kind": "image",
+          "at": "2026-11-16T19:04:32.643Z"
+        },
+        {
+          "src": "P2/20261116T190432-12-lights-back-car-open.png",
+          "caption": "Godot build: the lights back on and the car open, BANK on the left and DOWN on the right",
+          "kind": "image",
+          "at": "2026-11-16T19:04:32.645Z"
+        }
+      ],
+      "nsCheck": "A2: one Clinic floor from the seed, two levels and a stair; it differs from 'nowhere is dark' on purpose, because the owner asked on 16 Nov for a normal side and a corrupted side, and the far side is dim and flickering. B8: the Orderly is the full rigged figure, never a sprite, and is not drawn in the dark. C1: closeness-based instrument with the needle states and the slip printing once; the contaminated state is drawn but nothing produces it yet. C5: the call is loud, the indicator shows a different starting floor, the false stop and the growing blinks are there; the Tenant is not built.",
+      "finishedAt": "2026-11-16T19:04:32.639Z",
+      "summary": "The Godot build can be played alone from start to finish in a browser: walk both wings of the Clinic, watch the Orderly freeze and creep, take a reading, call the lift, survive the blinks and the blackout, board, then bank or ride down to a new floor. Checked by running its scripted playthrough myself (26 of 26, no browser errors, first picture after 9.8 seconds), then running it against a copy I broke on purpose (the Orderly drawn in the dark), which failed the two blackout checks as it should. It is at the hub's /godot/ link and was fetched from the lab box. The rules are still the old game's, called through one bridge file; joining them to the moved rules is the next step. Not done here: playing together, touch controls, the proper caught sequence. Nobody has listened to the sound yet.",
+      "todo": []
+    },
+    {
+      "id": "P2b",
+      "title": "Fixes from your first play of the Godot build",
+      "why": "No sound in the browser, ceiling lights floating in the big room, and props poking through paper-thin walls all break the place; and the Windows file is now the main way to play, so it gets checked with pictures and measured sound",
+      "status": "doing",
+      "gates": [],
+      "ns": [
+        "A2",
+        "B8",
+        "H5"
+      ],
+      "startedAt": "2026-11-16T19:59:43.242Z"
+    },
+    {
+      "id": "T6f",
+      "title": "A bigger elevator",
+      "why": "The car is a 2 metre square today, so each side of the BANK or DOWN choice is 1 metre wide: cramped for four and a crush for eight",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "C5"
+      ],
+      "todo": [
+        "Default size 3 m by 3 m with a 1.6 m door unless the owner says otherwise; the floor generator must keep the space behind and beside the lift wall empty; the lift drawing must read its size from the rules, not its own numbers",
+        "Size is now 4 m by 4 m with a 1.8 m door (the owner said bigger still than 3 by 3): each of BANK and DOWN becomes 2 m wide"
+      ]
+    },
+    {
+      "id": "P3",
+      "title": "Playing together through the home server",
+      "why": "One small server at home runs the rules and keeps everyone in sync, so friends in their own houses can join and nobody's browser has to host",
+      "status": "todo",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "Foundations, amended by the owner: 'server should just be responsible for handling client updates and keeping everyone in sync'; the fairness contract still applies in full",
+      "todo": [
+        "Public door: Tailscale Funnel, chosen by the owner. Funnel only works on ports 443, 8443 and 10000. On this PC 443 and 10000 are in use for tailnet-only pages and 8443 is already funnelled for another project by path. Cleanest: add ONE path for the game server on the existing funnelled port, with a command for the owner to run (path mount to the server's local port); the browser build then connects with wss to that path. The server runs on this PC for Friday (it is already the funnel node); the lab box later. Never touch the other paths on that port."
+      ]
+    },
+    {
+      "id": "P4",
+      "title": "Light browser build and a download for friends",
+      "why": "Friends either click a link that loads in a few seconds or run a small downloaded file",
+      "status": "todo",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "Foundations, amended by the owner: a light browser build, or a packaged download"
     },
     {
       "id": "T14a",
@@ -1284,6 +1401,21 @@
         "F4",
         "A2"
       ]
+    },
+    {
+      "id": "T7d",
+      "title": "Playing across two home networks",
+      "why": "Friends at home need to join the host; some home routers block direct browser-to-browser links unless a relay helps",
+      "status": "todo",
+      "gates": [],
+      "todo": [
+        "Owner's answer (2026-11-16): 'Every one in their own house'. So every player joins over the internet from a different home network, and friends use the PUBLIC play link, not the tailnet hub. This is now needed for game night.",
+        "Plan: (1) a connection test in the lobby that says plainly whether a direct link to the host works and what kind of router each side has, plus a short note the owner can send a friend to try it this week; (2) a relay (TURN) path for the pairs that cannot link directly. The public build is a static site in a public repo, so the relay's secret cannot live in it: use a provider that hands out short-lived credentials through a tiny free hosted function the owner deploys, or a free-tier static credential that is quota-limited. Research current free offerings first, then give the owner exact sign-up steps on the Questions page. (3) Also warn in the lobby that the host must keep the game tab in front (a background tab stalls the run).",
+        "Owner (2026-11-16): 'We can definitely run a server on either mo's pc or the homelab pc... server should just be responsible for handling client updates and keeping everyone in sync.' This changes the plan: the game's host logic already runs without a browser (it does in the tests), so a small always-on game server on the lab box can host every run. Friends then connect to it, nobody's router has to accept a direct link, no relay account is needed, and the host's tab going to the background no longer stalls the run. Open point: friends are outside the tailnet, so the server needs one public door; that choice is the owner's (question server-door).",
+        "Superseded by P3 (the home server in Godot) after the owner chose to play the Godot build on Friday. No relay is being built for the old browser game."
+      ],
+      "ns": [],
+      "nsWhy": "Foundations: how friends connect; the owner said everyone plays from their own house"
     }
   ],
   "gates": [
@@ -1415,9 +1547,136 @@
     {
       "at": "2026-11-16T16:58:52.249Z",
       "text": "Until the owner answers server-door: build the game server and test it on the tailnet only; open nothing to the internet."
+    },
+    {
+      "at": "2026-11-16T17:55:47.584Z",
+      "text": "Owner's decision, 2026-11-16: move the game to the Godot engine, one codebase. Their words: 'I don't want to keep logic in two places. Let's run a light version of godot in the browser, otherwise we can give friends a packaged game file to download, which they'll also be fine with.' The current browser game is frozen at its last green build as the fallback; all new work goes into the Godot project."
+    },
+    {
+      "at": "2026-11-16T18:00:05.920Z",
+      "text": "Owner, 2026-11-16: on Friday we play 'Whatever Godot has'. All effort goes into the Godot build; the frozen browser game stays up but is not the plan for game night."
+    },
+    {
+      "at": "2026-11-16T18:01:30.780Z",
+      "text": "Owner, 2026-11-16: friends reach the home game server through Tailscale Funnel ('Let's do the funnel with tailscale'). Nothing is opened until the server exists; the owner runs the one admin command."
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T20:22:08.085Z",
+      "text": "P0 is half done: the Godot project tests itself from one command (npm run godot:test). Still to do there: join the client so the project makes the Windows file and the browser build, and run a quick set of the Godot tests on every commit and in CI.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T20:22:07.969Z",
+      "text": "Finished P1: The rules, moved to Godot and proven identical.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T19:59:43.243Z",
+      "text": "Started P2b: Fixes from your first play of the Godot build. The agent that built the Godot client is finding why the browser is silent, moving the big room's lights onto a real ceiling, thickening walls and keeping props inside their rooms",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T19:59:43.091Z",
+      "text": "Added task P2b: Fixes from your first play of the Godot build.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T19:59:04.016Z",
+      "text": "You played the Godot build: the Orderly made you jump coming round a corner (keeping it as it is). To fix: no sound in the browser, ceiling lights floating in the big room, props poking through thin walls. From now on the downloaded Godot file is the main way to play and the browser is the backup.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T19:54:01.986Z",
+      "text": "Added task T6f: A bigger elevator.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T19:34:26.414Z",
+      "text": "The hub now sends the Godot build compressed and lets browsers keep it: 11.7 MB instead of 43 MB on a first visit, and a second visit is ready in under 2 seconds. Checked from the lab box and in a test browser.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T19:04:53.663Z",
+      "text": "Asked on the Questions page whether the loop should run past its 30-hour limit (about 3:40 Tuesday morning); it stops there unless you say otherwise.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T19:04:32.645Z",
+      "text": "Finished P2: Walking the Clinic in Godot.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T18:59:25.259Z",
+      "text": "New pictures for P2: Walking the Clinic in Godot.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T18:01:30.781Z",
+      "text": "Took a default: Owner, 2026-11-16: friends reach the home game server through Tailscale Funnel ('Let's do the funnel with tailscale'). Nothing is opened until the server exists; the owner runs the one admin command.",
+      "kind": "decision"
+    },
+    {
+      "at": "2026-11-16T18:00:20.434Z",
+      "text": "Started P2: Walking the Clinic in Godot. An agent is building the visible side in Godot: the floor, lighting, tape look, the Orderly, the lift",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T18:00:05.920Z",
+      "text": "Took a default: Owner, 2026-11-16: on Friday we play 'Whatever Godot has'. All effort goes into the Godot build; the frozen browser game stays up but is not the plan for game night.",
+      "kind": "decision"
+    },
+    {
+      "at": "2026-11-16T17:57:34.847Z",
+      "text": "Live build is now e100309 (tag good-13): the growing blackout with emergency lighting, even announcer levels and 35 new lines. Checked from the lab box. This is the last build of the current browser game: it stays playable as the fallback while the game moves to Godot.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:55:53.088Z",
+      "text": "Started P1: The rules, moved to Godot and proven identical. An agent is moving the rules into Godot and checking them seed by seed against the current game",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T17:55:48.334Z",
+      "text": "Started P0: Godot project, tests and builds. Setting up the Godot project and its command-line tests",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T17:55:48.250Z",
+      "text": "Added task P4: Light browser build and a download for friends.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:55:48.170Z",
+      "text": "Added task P3: Playing together through the home server.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:55:48.085Z",
+      "text": "Added task P2: Walking the Clinic in Godot.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:55:47.933Z",
+      "text": "Added task P1: The rules, moved to Godot and proven identical.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:55:47.760Z",
+      "text": "Added task P0: Godot project, tests and builds.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T17:55:47.674Z",
+      "text": "Finished X1: Trial: one Clinic floor in Godot.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T17:55:47.585Z",
+      "text": "Took a default: Owner's decision, 2026-11-16: move the game to the Godot engine, one codebase. Their words: 'I don't want to keep logic in two places. Let's run a light version of godot in the browser, otherwise we can give friends a packaged game file to download, which they'll also be fine with.' The current browser game is frozen at its last green build as the fallback; all new work goes into the Godot project.",
+      "kind": "decision"
+    },
     {
       "at": "2026-11-16T17:52:58.602Z",
       "text": "Finished T6d: Even voice loudness and thirty more announcer lines.",
@@ -2302,121 +2561,6 @@
       "at": "2026-11-16T05:04:05.015Z",
       "text": "New pictures for T3: The Orderly, second pass.",
       "kind": "media"
-    },
-    {
-      "at": "2026-11-16T04:56:42.369Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T04:56:42.275Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T04:56:42.166Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T04:56:42.054Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T04:46:35.001Z",
-      "text": "Started T3: The Orderly, second pass. An Opus agent is studying two Blender tutorials, then rebuilding the Orderly to your notes. Two judged revision rounds follow.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T04:46:34.911Z",
-      "text": "You asked the loop to keep working through the night and will answer questions in the morning.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T04:46:34.754Z",
-      "text": "Finished T0b: A public play link on GitHub Pages.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T04:45:59.819Z",
-      "text": "Finished T2p: Playing on a phone.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T04:45:59.745Z",
-      "text": "Added task T2p: Playing on a phone.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T04:36:16.722Z",
-      "text": "Started T3: The Orderly, second pass. An Opus agent is studying two Blender tutorials, then rebuilding the Orderly to your notes. Pictures will appear here as it works; two judged revision rounds follow.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T04:34:47.763Z",
-      "text": "Started T0b: A public play link on GitHub Pages. Adding a job that publishes every green build to GitHub Pages, then switching Pages on.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T04:34:47.620Z",
-      "text": "Finished T0c: AGPL-3.0 licence.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T04:34:47.545Z",
-      "text": "Finished T2a: Walking through a floor.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T04:30:42.004Z",
-      "text": "Added two standing rules: break a thing on purpose to prove its test can fail before ticking a gate, and check anything live from a second device.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T04:30:41.913Z",
-      "text": "Added task T2v: Stronger checks.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T04:30:07.333Z",
-      "text": "You asked for the Orderly's second pass to start with tutorial study and end with two judged revision rounds. It now comes right after the public play link.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T04:19:08.468Z",
-      "text": "The Progress page was rebuilt: a roadmap of steps that fill with their own pictures, an overall bar, and a strip of the newest output.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T04:19:08.397Z",
-      "text": "Your answers are in: the setting (a civilisation that kept building upward, with convicts sent down to buy their freedom), the name stays Going Down, all five places, six candidate mechanics including the fake-disconnect and fake-restart, 50,000 voice characters, AGPL, and a public play link.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T04:19:08.324Z",
-      "text": "Added task T0c: AGPL-3.0 licence.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T04:19:08.252Z",
-      "text": "Added task T0b: A public play link on GitHub Pages.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T04:19:07.608Z",
-      "text": "Applied the owner's new answers.",
-      "kind": "answers"
-    },
-    {
-      "at": "2026-11-16T04:16:45.090Z",
-      "text": "Started T2a: Walking through a floor. An Opus agent is building it: collision as tested logic, the floor as real geometry, the bright Clinic look, and a browser test that walks from the elevator up the stair to the balcony.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T04:16:45.004Z",
-      "text": "The hub is live on the tailnet and linked from the home dashboard.",
-      "kind": "note"
     }
   ]
 }

@@ -1,0 +1,514 @@
+# The Orderly: a 2.6 m figure pushing a squeaking trolley. Its trait is Stillness: it only moves
+# while nobody is looking at it. Pure, deterministic logic; the renderer plays `anim` and `yaw`,
+# the audio plays audibility(). Port of src/sim/entity.ts.
+#
+# The fairness contract: entities always obey their traits, and anything that depends on looking
+# is decided in the player's favour. So, within every tick:
+#   1. decide whether any active player could be seeing it (sight.gd, with a widened cone and
+#      generous geometry);
+#   2. only then act. It never moves, turns, advances its animation, or progresses a wind-up in a
+#      tick in which it is seen, nor for GRACE seconds after the last tick it was seen (so a player
+#      whose view reaches the server late never sees it move);
+#   3. looking at it during a wind-up always cancels the wind-up.
+#
+# Modes: waiting (standing at plan.entity_start) -> hunting -> windUp -> dormant -> hunting ...
+extends RefCounted
+
+const Floor = preload("res://sim/floor.gd")
+const Follow = preload("res://sim/follow.gd")
+const Move = preload("res://sim/move.gd")
+const Sight = preload("res://sim/sight.gd")
+const Walls = preload("res://sim/walls.gd")
+const M = preload("res://sim/jsmath.gd")
+
+# ---------------------------------------------------------------------------------------------
+# Tuning.
+
+const ORDERLY_HEIGHT := 2.6
+const ORDERLY_RADIUS := 0.35
+## How big it counts as being for the purpose of "can anyone see it". Larger than the body it
+## collides with, on purpose: the drawn figure's cap reaches 2.82 m and its reaching arm 2.0 m from
+## its centre, and an arm seen moving round a corner would break the rule as surely as the body.
+const SEEN_HEIGHT := 2.9
+const SEEN_RADIUS := 2.1
+## The swinging arms in the walk reach about 1.05 m from its centre.
+const SEEN_RADIUS_WALK := 1.1
+## Seconds it stays frozen after the last tick anyone could see it. Absorbs network delay.
+const GRACE := 0.3
+## Waiting ends after it has been seen for this long in total (seconds)...
+const WAKE_SEEN_TIME := 1.0
+## ...or a player's walking distance to it drops under this (metres)...
+const WAKE_DISTANCE := 12.0
+## ...or this much time has passed (seconds).
+const WAKE_TIMEOUT := 60.0
+## Hunting speed in m/s: faster than a walk (3.0), slower than a sprint (5.0); see stamina.gd.
+const HUNT_SPEED := 3.7
+## It runs down prey that runs, and creeps up on prey that stands still. Within CREEP_DISTANCE of a
+## target moving slower than CREEP_PREY_SPEED it slows to CREEP_SPEED. This is what makes recording it
+## a gamble a person can play: at full speed the last five metres take a second and a half, too fast
+## to choose when to turn; at a creep they take about four, with the ticking climbing all the way.
+## A player who flees still gets chased at full speed, so turning your back and walking away is no escape.
+const CREEP_DISTANCE := 5.5
+const CREEP_PREY_SPEED := 1.6
+const CREEP_SPEED := 1.3
+## Seconds between route re-plans while hunting.
+const REPLAN_INTERVAL := 0.5
+## Horizontal distance (metres) to a player on the same level at which it starts reaching.
+const CATCH_RANGE := 0.9
+## Wind-up of the reach, seconds.
+const WIND_UP_TIME := 0.6
+## A wind-up completes only if its target is still this close (metres) and on the same level.
+const REACH_RANGE := 1.6
+## After a catch it does nothing for this long (seconds).
+const DORMANT_TIME := 10.0
+## When it shares a cell with its target it walks straight at them, stopping this far away.
+const APPROACH_STOP := 0.6
+## Maximum turn rate, radians per second.
+const TURN_RATE := 5.0
+## Within this straight-line distance (metres, same level) it faces its target while it walks.
+const FACE_TARGET_RANGE := 6.0
+## It ducks while its centre is within this distance (metres) of a door's edge line.
+const DUCK_DISTANCE := 0.6
+## The trolley squeak: audible out to this straight-line distance (metres) while it moves.
+const HEAR_RANGE := 34.0
+## Gain multiplier when there is no line of sight to it.
+const MUFFLED_GAIN := 0.45
+## Height of the squeaking wheels above its feet (metres).
+const SQUEAK_HEIGHT := 0.4
+
+## Below this, timers count as run out (float sums of dt are not exact).
+const EPS := 1e-9
+
+# ---------------------------------------------------------------------------------------------
+# Types.
+
+# OrderlyMode: 'waiting' | 'hunting' | 'windUp' | 'dormant'
+# OrderlyAnim (what the renderer plays; a frozen Orderly keeps its last hint and its clock stops):
+#   'idle' | 'walk' | 'duck' | 'reach'
+
+## A player as the Orderly sees them. `eye` is the eye height above the feet.
+class PlayerView extends Sight.Viewer:
+	var id: String
+	var active: bool
+	## Present and huntable (it can target, reach for and catch them) but seeing nothing this tick,
+	## e.g. during a light blink. Never counts as looking. Default false.
+	var blind: bool = false
+
+	static func make(id_: String, body_: Move.Body, eye_: float, yaw_: float, pitch_: float, h_fov: float, v_fov: float, active_: bool, blind_: bool = false) -> PlayerView:
+		var v := PlayerView.new()
+		v.id = id_
+		v.body = body_
+		v.eye = eye_
+		v.yaw = yaw_
+		v.pitch = pitch_
+		v.h_fov_deg = h_fov
+		v.v_fov_deg = v_fov
+		v.active = active_
+		v.blind = blind_
+		return v
+
+class OrderlyState:
+	## Simulation time in seconds.
+	var t: float = 0.0
+	var body: Move.Body
+	## Facing, radians, three.js style (0 faces -z).
+	var yaw: float = 0.0
+	var mode: StringName = &"waiting"
+	var anim: StringName = &"idle"
+	## Animation clock in seconds; stops whenever it is held still. (TypeScript: animTime)
+	var anim_time: float = 0.0
+	## Some active player could see it this tick.
+	var seen: bool = false
+	## Held still this tick: seen now, or within GRACE of the last seen tick.
+	var held: bool = false
+	## Held while hunting or winding up (what `froze` and `released` report).
+	var frozen: bool = false
+	## It changed position this tick.
+	var moving: bool = false
+	var ever_seen: bool = false  # TypeScript: everSeen
+	## Total seconds seen while waiting. (TypeScript: seenTotal)
+	var seen_total: float = 0.0
+	## Time of the last tick it was seen, or null. (TypeScript: lastSeenAt)
+	var last_seen_at: Variant = null
+	var target_id: Variant = null  # String or null
+	## Its current walking speed in m/s (0 when not moving); the renderer and the squeak follow it.
+	var speed: float = 0.0
+	## Smoothed speed of its target and where the target was on the last hunting tick.
+	var prey_speed: float = HUNT_SPEED
+	var prey_x: float = 0.0
+	var prey_z: float = 0.0
+	var prey_id: Variant = null  # String or null
+	## The route; empty means none (TypeScript: null). Never written to once made.
+	var path: Array[Floor.Pos] = []
+	var path_next: int = 0
+	var replan_in: float = 0.0
+	var wind_up_left: float = 0.0
+	var wind_up_target: Variant = null  # String or null
+	var dormant_left: float = 0.0
+
+	## TypeScript: { ...state }.
+	func copy() -> OrderlyState:
+		var s := OrderlyState.new()
+		s.t = t
+		s.body = body
+		s.yaw = yaw
+		s.mode = mode
+		s.anim = anim
+		s.anim_time = anim_time
+		s.seen = seen
+		s.held = held
+		s.frozen = frozen
+		s.moving = moving
+		s.ever_seen = ever_seen
+		s.seen_total = seen_total
+		s.last_seen_at = last_seen_at
+		s.target_id = target_id
+		s.speed = speed
+		s.prey_speed = prey_speed
+		s.prey_x = prey_x
+		s.prey_z = prey_z
+		s.prey_id = prey_id
+		s.path = path
+		s.path_next = path_next
+		s.replan_in = replan_in
+		s.wind_up_left = wind_up_left
+		s.wind_up_target = wind_up_target
+		s.dormant_left = dormant_left
+		return s
+
+# OrderlyEvent: Dictionaries with the TypeScript shapes:
+#   {type: "firstSeen", t, playerId} {type: "startedHunting", t} {type: "froze", t, playerId (or null)}
+#   {type: "released", t} {type: "windUp", t, playerId} {type: "windUpCancelled", t, playerId}
+#   {type: "caught", t, playerId}
+
+class StepResult:
+	var state: OrderlyState
+	var events: Array[Dictionary] = []
+
+# ---------------------------------------------------------------------------------------------
+# Helpers.
+
+## Yaw that faces along (dx, dz), three.js style.
+static func yaw_toward(dx: float, dz: float) -> float:
+	return M.atan2_js(-dx, -dz)
+
+static func _wrap_angle(a: float) -> float:
+	var r := fmod(a, 2.0 * PI)
+	if r > PI:
+		r -= 2.0 * PI
+	if r < -PI:
+		r += 2.0 * PI
+	return r
+
+static func _turn_toward(yaw: float, want: float, max_turn: float) -> float:
+	var d := _wrap_angle(want - yaw)
+	return _wrap_angle(yaw + maxf(-max_turn, minf(max_turn, d)))
+
+## One distance field per plan, for the cell asked for last: a waiting Orderly asks for the same one every tick.
+static func _distances_cached(plan: Floor.FloorPlan, from: Floor.Pos) -> PackedInt32Array:
+	var index := Floor.pos_index(plan, from)
+	if plan._field_index == index:
+		return plan._field
+	var dist := Floor.distances_from(plan, from)
+	plan._field_index = index
+	plan._field = dist
+	return dist
+
+class Nearest:
+	var player: PlayerView
+	var steps: int
+	var line: float
+
+## The nearest active player by walking distance (ties: straight-line distance, then list order).
+static func _nearest_by_walk(plan: Floor.FloorPlan, body: Move.Body, players: Array[PlayerView]) -> Nearest:
+	var dist := _distances_cached(plan, Move.cell_of(plan, body))
+	var best: Nearest = null
+	for p in players:
+		if not p.active:
+			continue
+		var steps := dist[Floor.pos_index(plan, Move.cell_of(plan, p.body))]
+		if steps < 0:
+			continue
+		var line := M.hypot2(p.body.x - body.x, p.body.z - body.z)
+		if best == null or steps < best.steps or (steps == best.steps and line < best.line):
+			best = Nearest.new()
+			best.player = p
+			best.steps = steps
+			best.line = line
+	return best
+
+static func _same_cell(a: Floor.Pos, b: Floor.Pos) -> bool:
+	return a.level == b.level and a.x == b.x and a.y == b.y
+
+## Whether a body's centre is within DUCK_DISTANCE of a door on one of its cell's edges.
+static func near_door(plan: Floor.FloorPlan, body: Move.Body) -> bool:
+	var s := float(plan.cell_size)
+	var c := Move.cell_of(plan, body)
+	var half := Walls.DOOR_WIDTH / 2.0 + ORDERLY_RADIUS
+	var lx := body.x - c.x * s
+	var lz := body.z - c.y * s
+	var along_z := absf(lz - s / 2.0) <= half
+	var along_x := absf(lx - s / 2.0) <= half
+	if along_z and lx <= DUCK_DISTANCE and Walls.west_edge(plan, c.level, c.x, c.y) == Walls.DOOR:
+		return true
+	if along_z and s - lx <= DUCK_DISTANCE and Walls.west_edge(plan, c.level, c.x + 1, c.y) == Walls.DOOR:
+		return true
+	if along_x and lz <= DUCK_DISTANCE and Walls.north_edge(plan, c.level, c.x, c.y) == Walls.DOOR:
+		return true
+	if along_x and s - lz <= DUCK_DISTANCE and Walls.north_edge(plan, c.level, c.x, c.y + 1) == Walls.DOOR:
+		return true
+	return false
+
+static func _find_player(players: Array[PlayerView], id: Variant) -> PlayerView:
+	for p in players:
+		if id != null and p.id == id:
+			return p
+	return null
+
+# ---------------------------------------------------------------------------------------------
+# The state machine.
+
+## A waiting Orderly at plan.entity_start, facing the landing.
+static func create_orderly(plan: Floor.FloorPlan) -> OrderlyState:
+	var body := Move.body_at_cell(plan, plan.entity_start)
+	var s := plan.cell_size
+	var st := OrderlyState.new()
+	st.body = body
+	st.yaw = yaw_toward((plan.landing.x + 0.5) * s - body.x, (plan.landing.y + 0.5) * s - body.z)
+	return st
+
+## Whether any active player's screen could be showing it, and who (first in list order).
+static func seen_by(plan: Floor.FloorPlan, body: Move.Body, players: Array[PlayerView]) -> PlayerView:
+	for p in players:
+		if not p.active or p.blind:
+			continue
+		# The true body first, then the larger outlines the drawn figure can reach. Each extra pass can
+		# only add sightings: checking the big outline INSTEAD of the body moved the sample points above
+		# door frames and missed real ones, which the independent oracle caught.
+		var look := Sight.look_of(p, Sight.SIGHT_MARGIN_DEG)
+		if Sight.can_see_with(plan, look, body, Sight.SIGHT_FAR, ORDERLY_HEIGHT, ORDERLY_RADIUS) \
+			or Sight.can_see_with(plan, look, body, Sight.SIGHT_FAR, ORDERLY_HEIGHT, SEEN_RADIUS_WALK) \
+			or Sight.can_see_with(plan, look, body, Sight.SIGHT_FAR, SEEN_HEIGHT, SEEN_RADIUS):
+			return p
+	return null
+
+## Advances the Orderly by dt seconds. Never mutates `prev`. (TypeScript HuntOptions: speed, creep.)
+static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float = HUNT_SPEED, creep: bool = true) -> StepResult:
+	var t := prev.t + dt
+	var s := prev.copy()
+	s.t = t
+	s.moving = false
+	s.speed = 0.0
+	var res := StepResult.new()
+	res.state = s
+	var events := res.events
+
+	# 1. Is it seen? Decided before anything else, from where it stands now.
+	var seer := seen_by(plan, prev.body, players)
+	var seen := seer != null
+	s.seen = seen
+	if seen:
+		s.last_seen_at = t
+	# Held: seen now, or the time since it was last seen, measured from the start of this tick's
+	# movement interval, is still under GRACE.
+	var held := seen or (prev.last_seen_at != null and t - dt - float(prev.last_seen_at) < GRACE - EPS)
+	s.held = held
+	if seer != null and not prev.ever_seen:
+		s.ever_seen = true
+		events.append({"type": "firstSeen", "t": t, "playerId": seer.id})
+
+	# 2. Mode changes that do not need it to move.
+	if s.mode == &"waiting":
+		if seen:
+			s.seen_total += dt
+		var near := _nearest_by_walk(plan, s.body, players)
+		var close := near != null and near.steps * plan.cell_size < WAKE_DISTANCE
+		if s.seen_total >= WAKE_SEEN_TIME - EPS or close or t >= WAKE_TIMEOUT - EPS:
+			s.mode = &"hunting"
+			s.replan_in = 0.0
+			events.append({"type": "startedHunting", "t": t})
+	elif s.mode == &"dormant":
+		s.dormant_left -= dt
+		if s.dormant_left <= EPS:
+			s.dormant_left = 0.0
+			s.mode = &"hunting"
+			s.replan_in = 0.0
+			events.append({"type": "startedHunting", "t": t})
+	elif s.mode == &"windUp" and seer != null:
+		# Looking at it always saves you.
+		events.append({"type": "windUpCancelled", "t": t, "playerId": s.wind_up_target if s.wind_up_target != null else ""})
+		s.mode = &"hunting"
+		s.wind_up_target = null
+		s.wind_up_left = 0.0
+
+	s.frozen = held and (s.mode == &"hunting" or s.mode == &"windUp")
+	if s.frozen and not prev.frozen:
+		events.append({"type": "froze", "t": t, "playerId": seer.id if seer != null else null})
+	if not s.frozen and prev.frozen and (s.mode == &"hunting" or s.mode == &"windUp"):
+		events.append({"type": "released", "t": t})
+
+	# 3. Held: nothing else changes. Position, facing, animation hint and clock all stay as they are.
+	if held:
+		if s.mode == &"waiting" or s.mode == &"dormant":
+			s.anim = &"idle"
+		return res
+	s.anim_time += dt
+
+	# 4. Act.
+	if s.mode == &"waiting" or s.mode == &"dormant":
+		s.anim = &"idle"
+		return res
+
+	if s.mode == &"windUp":
+		var target := _find_player(players, s.wind_up_target)
+		var ok := target != null and target.active and target.body.level == s.body.level \
+			and M.hypot2(target.body.x - s.body.x, target.body.z - s.body.z) <= REACH_RANGE
+		if not ok:
+			events.append({"type": "windUpCancelled", "t": t, "playerId": s.wind_up_target if s.wind_up_target != null else ""})
+			s.mode = &"hunting"
+			s.wind_up_target = null
+			s.wind_up_left = 0.0
+		else:
+			s.yaw = _turn_toward(s.yaw, yaw_toward(target.body.x - s.body.x, target.body.z - s.body.z), TURN_RATE * dt)
+			s.wind_up_left -= dt
+			s.anim = &"reach"
+			if s.wind_up_left <= EPS:
+				events.append({"type": "caught", "t": t, "playerId": target.id})
+				s.mode = &"dormant"
+				s.dormant_left = DORMANT_TIME
+				s.wind_up_target = null
+				s.wind_up_left = 0.0
+				s.path = []
+				s.target_id = null
+				s.anim = &"idle"
+			return res
+
+	# Hunting and free to act. Close enough to someone on this level? Start reaching, do not move.
+	var victim: PlayerView = null
+	var victim_dist := INF
+	for p in players:
+		if not p.active or p.body.level != s.body.level:
+			continue
+		var d := M.hypot2(p.body.x - s.body.x, p.body.z - s.body.z)
+		if d <= CATCH_RANGE and d < victim_dist:
+			victim = p
+			victim_dist = d
+	if victim != null:
+		s.mode = &"windUp"
+		s.wind_up_target = victim.id
+		s.wind_up_left = WIND_UP_TIME
+		s.anim = &"reach"
+		s.anim_time = 0.0
+		events.append({"type": "windUp", "t": t, "playerId": victim.id})
+		return res
+
+	_hunt(plan, s, players, dt, hunt_speed, creep)
+	return res
+
+## One tick of walking toward the nearest player. Mutates the (already copied) state.
+static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool) -> void:
+	s.replan_in -= dt
+	if s.replan_in <= EPS or s.path.is_empty():
+		s.replan_in = REPLAN_INTERVAL
+		var near := _nearest_by_walk(plan, s.body, players)
+		s.target_id = near.player.id if near != null else null
+		if near != null:
+			s.path = Floor.find_path(plan, Move.cell_of(plan, s.body), Move.cell_of(plan, near.player.body))
+		else:
+			s.path = []
+		s.path_next = 1 if s.path.size() > 1 else 0
+	var target: PlayerView = null
+	for p in players:
+		if s.target_id != null and p.id == s.target_id and p.active:
+			target = p
+			break
+	if target == null or s.path.is_empty():
+		s.anim = &"idle"
+		s.path = []
+		return
+
+	var before := s.body
+
+	# How fast is the prey moving? Measured between hunting ticks and smoothed over about a quarter
+	# of a second. A new target is assumed to be running until shown otherwise.
+	if s.prey_id != null and s.prey_id == target.id and dt > EPS:
+		var inst := minf(6.0, M.hypot2(target.body.x - s.prey_x, target.body.z - s.prey_z) / dt)
+		s.prey_speed += (inst - s.prey_speed) * minf(1.0, dt * 4.0)
+	else:
+		s.prey_speed = HUNT_SPEED
+	s.prey_id = target.id
+	s.prey_x = target.body.x
+	s.prey_z = target.body.z
+	var gap := M.hypot2(target.body.x - before.x, target.body.z - before.z)
+	var creeping := creep and target.body.level == before.level and gap < CREEP_DISTANCE and s.prey_speed < CREEP_PREY_SPEED
+	var pace := CREEP_SPEED if creeping else hunt_speed
+
+	var here := Move.cell_of(plan, before)
+	if _same_cell(here, Move.cell_of(plan, target.body)):
+		var dx := target.body.x - before.x
+		var dz := target.body.z - before.z
+		var d := M.hypot2(dx, dz)
+		var step := minf(pace * dt, d - APPROACH_STOP)
+		if step > 1e-6:
+			s.body = Move.move_with_collision(plan, before, (dx / d) * step, (dz / d) * step, ORDERLY_RADIUS)
+	else:
+		# step_path_walk only advances `next`; the path itself is never written to.
+		var walk := Follow.PathWalk.make(s.path, s.path_next)
+		s.body = Follow.step_path_walk(plan, walk, before, pace * dt, ORDERLY_RADIUS)
+		s.path_next = walk.next
+	s.speed = M.hypot2(s.body.x - before.x, s.body.z - before.z) / maxf(dt, EPS)
+
+	var mx := s.body.x - before.x
+	var mz := s.body.z - before.z
+	var moved := M.hypot2(mx, mz)
+	s.moving = moved > 1e-9
+	if moved < 1e-4:
+		s.replan_in = 0.0  # blocked or arrived: think again next tick
+
+	var tx := target.body.x - s.body.x
+	var tz := target.body.z - s.body.z
+	var face_target := target.body.level == s.body.level and M.hypot2(tx, tz) <= FACE_TARGET_RANGE
+	if face_target:
+		s.yaw = _turn_toward(s.yaw, yaw_toward(tx, tz), TURN_RATE * dt)
+	elif s.moving:
+		s.yaw = _turn_toward(s.yaw, yaw_toward(mx, mz), TURN_RATE * dt)
+	if s.moving:
+		s.anim = &"duck" if near_door(plan, s.body) else &"walk"
+	else:
+		s.anim = &"idle"
+
+# ---------------------------------------------------------------------------------------------
+# Sound.
+
+class Audibility:
+	## 0 (silent) to 1.
+	var gain: float = 0.0
+	## No line of sight: play it through a low-pass filter.
+	var muffled: bool = false
+
+	static func make(gain_: float, muffled_: bool) -> Audibility:
+		var a := Audibility.new()
+		a.gain = gain_
+		a.muffled = muffled_
+		return a
+
+## How loud the trolley squeak is for a listener. Silent unless it moved this tick: squeaking means
+## nobody is watching it; silence means it is watched, or standing still. Falls off with straight-line
+## distance to nothing at HEAR_RANGE; muffled and quieter without line of sight.
+static func audibility(plan: Floor.FloorPlan, state: OrderlyState, listener_body: Move.Body, listener_eye: float) -> Audibility:
+	if not state.moving:
+		return Audibility.make(0.0, false)
+	var ear := Sight.eye_point(listener_body, listener_eye)
+	var b := state.body
+	var d := M.hypot3(b.x - ear.x, b.y + SQUEAK_HEIGHT - ear.y, b.z - ear.z)
+	if d >= HEAR_RANGE:
+		return Audibility.make(0.0, false)
+	var base := M.pow_js(1.0 - d / HEAR_RANGE, 2.0)
+	var src := Sight.Point3.make(b.x, b.y + SQUEAK_HEIGHT, b.z, b.level)
+	var clear := Sight.has_line_of_sight(plan, ear, src)
+	if not clear:
+		for p in Sight.figure_points(b, ear.x, ear.z, ORDERLY_HEIGHT, ORDERLY_RADIUS):
+			if Sight.has_line_of_sight(plan, ear, p):
+				clear = true
+				break
+	return Audibility.make(base, false) if clear else Audibility.make(base * MUFFLED_GAIN, true)

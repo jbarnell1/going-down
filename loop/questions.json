@@ -492,6 +492,27 @@
       ]
     },
     {
+      "id": "loop-limit",
+      "title": "Keep the work loop running past tonight?",
+      "context": "The loop was set to stop itself 30 hours after it started, which is about 3:40 tomorrow morning (Tuesday). The move to Godot will not be finished by then. Until you answer, it stops at that time as written.",
+      "type": "single",
+      "options": [
+        {
+          "id": "friday",
+          "label": "Keep going until Friday",
+          "note": "The loop carries on until game night or until you stop it."
+        },
+        {
+          "id": "stop",
+          "label": "Stop at the limit",
+          "note": "It writes its report at about 3:40 on Tuesday morning and waits for you."
+        }
+      ],
+      "default": [
+        "stop"
+      ]
+    },
+    {
       "id": "anything",
       "title": "Anything else for the loop?",
       "context": "Notes, ideas, things that felt wrong when you played. Update this as often as you like.",

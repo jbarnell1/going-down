@@ -1,0 +1,6 @@
+# Godot's generated cache: it records absolute machine paths. Never commit it.
+.godot/
+# tsx for godot/tools, installed by `npm run godot:reference` (package-lock.json is committed).
+tools/node_modules/
+# The repository's root .gitignore ignores every folder named tools/; this one is source.
+!/tools/
