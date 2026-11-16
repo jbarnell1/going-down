@@ -7,7 +7,7 @@ import { expect, test, type Page } from '@playwright/test';
 // right is for ears: docs/VOICE.md.
 test.skip(!!process.env.CI, 'needs a real graphics card and real time');
 
-type Hist = { id: string; moment: string; start: number; end: number | null; depth: number; mode: 'car' | 'landing' };
+type Hist = { id: string; moment: string; voice: string; file: string; start: number; end: number | null; depth: number; mode: 'car' | 'landing' };
 type Ann = { ready: boolean; playing: string | null; queue: string[]; played: string[]; slipPlayed: boolean; history: Hist[]; missing: string[]; subtitle: string; subsOn: boolean };
 
 const ann = (page: Page) => page.evaluate(() => (window as any).__gd.announcer.state() as Ann);
@@ -145,4 +145,121 @@ test('the slip: only from floor 2, once a run, then the pause and the cheerful l
   expect(await page1.evaluate(() => document.getElementById('subs'))).toBeNull();
   expect(errors).toEqual([]);
   expect(errors1).toEqual([]);
+  await page1.close();
+});
+
+test('the settings panel: voice, a sample, subtitles, tape look, volume; by keyboard; the run keeps going; remembered', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors = watchErrors(page);
+  await boot(page, '/?seed=alpha&entity=0');
+  const set = () => page.evaluate(() => (window as any).__gd.settings.get() as { voice: string; subtitles: boolean; tape: number; volume: number });
+  const isOpen = () => page.evaluate(() => (window as any).__gd.settings.isOpen() as boolean);
+  const click = async (key: string, dir: string) => {
+    await page.click(`#settings button[data-setting="${key}"][data-dir="${dir}"]`);
+    await settle(page, 2);
+  };
+
+  // The default voice is Bella, and the first line came from her folder.
+  expect((await set()).voice).toBe('bella');
+  const board = await spoke(page, 'board', 10_000);
+  expect(board.voice).toBe('bella');
+  expect(board.file).toContain('assets/voice/bella/');
+  // On a computer there is no gear button.
+  expect(await page.evaluate(() => (window as any).__gd.settings.gearShown())).toBe(false);
+
+  // Esc opens it; the run's clock keeps going underneath.
+  await page.evaluate(() => (window as any).__gd.runCtl.setTimeScale(1));
+  await page.bringToFront();
+  await page.keyboard.press('Escape');
+  await settle(page, 2);
+  expect(await isOpen()).toBe(true);
+  const t0 = await page.evaluate(() => (window as any).__gd.run().t as number);
+  await page.waitForTimeout(1200);
+  const t1 = await page.evaluate(() => (window as any).__gd.run().t as number);
+  expect(t1 - t0).toBeGreaterThan(0.8);
+  await page.screenshot({ path: 'test-results/shots/90-settings.png' });
+
+  // Voice: Brian. The next line (the sample) loads from his folder and plays.
+  await click('voice', 'next');
+  expect((await set()).voice).toBe('brian');
+  expect(await page.getAttribute('#settings [data-setting="voice"][data-value]', 'data-value')).toBe('brian');
+  const brianFile = page.waitForRequest((r) => r.url().includes('/assets/voice/brian/'));
+  const before = (await ann(page)).history.length;
+  await click('sample', 'run');
+  await brianFile;
+  await page.waitForFunction((n) => (window as any).__gd.announcer.state().history.length > n, before, { timeout: 8000 });
+  const sample = (await ann(page)).history.at(-1)!;
+  expect(sample.voice).toBe('brian');
+  expect(sample.file).toContain('assets/voice/brian/');
+  expect((await ann(page)).playing).toBe(sample.id);
+
+  // Subtitles off and on again.
+  await click('subtitles', 'next');
+  expect((await set()).subtitles).toBe(false);
+  expect(await page.evaluate(() => document.getElementById('subs'))).toBeNull();
+  await click('subtitles', 'next');
+  expect((await set()).subtitles).toBe(true);
+  expect((await ann(page)).subsOn).toBe(true);
+
+  // Tape look: heavy, off, normal (the existing fx levels).
+  await click('tape', 'next');
+  expect(await page.evaluate(() => (window as any).__gd.fx())).toBe(2);
+  await click('tape', 'next');
+  expect(await page.evaluate(() => (window as any).__gd.fx())).toBe(0);
+  await click('tape', 'next');
+  expect(await page.evaluate(() => (window as any).__gd.fx())).toBe(1);
+
+  // Volume down a step: the master gain follows.
+  await click('volume', 'prev');
+  expect((await set()).volume).toBeCloseTo(0.9, 6);
+  expect(await page.evaluate(() => (window as any).__gd.audio.state().volume)).toBeCloseTo(0.9, 6);
+
+  // Esc closes it.
+  await page.keyboard.press('Escape');
+  await settle(page, 2);
+  expect(await isOpen()).toBe(false);
+
+  // Remembered over a reload.
+  await page.reload();
+  await page.waitForFunction(() => (window as any).__gd?.ready === true);
+  expect((await set()).voice).toBe('brian');
+  expect((await set()).volume).toBeCloseTo(0.9, 6);
+  expect(await page.evaluate(() => (window as any).__gd.announcer.state().voice)).toBe('brian');
+  // ?voice= overrides, and is remembered too.
+  await page.goto('/?seed=alpha&entity=0&voice=bella');
+  await page.waitForFunction(() => (window as any).__gd?.ready === true);
+  expect((await set()).voice).toBe('bella');
+  await page.goto('/?seed=alpha&entity=0');
+  await page.waitForFunction(() => (window as any).__gd?.ready === true);
+  expect((await set()).voice).toBe('bella');
+  expect(errors).toEqual([]);
+});
+
+test('the settings panel on a phone: the gear opens and closes it, and a tap back in the game closes it', async ({ browser }) => {
+  test.setTimeout(60_000);
+  const context = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 844, height: 390 } });
+  const page = await context.newPage();
+  const errors = watchErrors(page);
+  await boot(page, '/?seed=alpha&entity=0');
+  const isOpen = () => page.evaluate(() => (window as any).__gd.settings.isOpen() as boolean);
+  await page.evaluate(() => (window as any).__gd.runCtl.setTimeScale(1));
+  await page.waitForFunction(() => (window as any).__gd.settings.gearShown() === true, undefined, { timeout: 5000 });
+  await page.tap('#settings-gear');
+  await settle(page, 3);
+  expect(await isOpen()).toBe(true);
+  await page.screenshot({ path: 'test-results/shots/91-settings-phone.png' });
+  const t0 = await page.evaluate(() => (window as any).__gd.run().t as number);
+  await page.tap('#settings-gear');
+  await settle(page, 2);
+  expect(await isOpen()).toBe(false);
+  await page.tap('#settings-gear');
+  await settle(page, 2);
+  expect(await isOpen()).toBe(true);
+  await page.waitForTimeout(300);
+  await page.touchscreen.tap(600, 250);
+  await settle(page, 2);
+  expect(await isOpen()).toBe(false);
+  expect(await page.evaluate(() => (window as any).__gd.run().t as number)).toBeGreaterThan(t0);
+  expect(errors).toEqual([]);
+  await context.close();
 });

@@ -52,9 +52,14 @@ export class Input {
   latched = false;
   readonly raiseBtn: HTMLDivElement;
   readonly latchBtn: HTMLDivElement;
+  /** The mouse was released after play had started (Esc): return true to keep the start overlay hidden (the settings panel opens instead). */
+  onUnlock: (() => boolean) | null = null;
+  /** Esc pressed while the mouse is not locked and the game has started. */
+  onEscape: (() => void) | null = null;
 
   constructor(private canvas: HTMLCanvasElement, private overlay: HTMLElement) {
     window.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape' && !e.repeat && !this.locked && this.overlay.hidden) this.onEscape?.();
       this.keys.add(e.code);
       if (!e.repeat) this.pressed.add(e.code);
     });
@@ -64,17 +69,11 @@ export class Input {
     window.addEventListener('blur', () => this.releaseAll());
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.releaseAll(); });
 
-    overlay.addEventListener('click', () => {
-      if (this.touch) return;
-      try {
-        // Some browsers return a promise that rejects when the lock is refused; that is not an error.
-        const req = canvas.requestPointerLock() as unknown;
-        if (req instanceof Promise) req.catch(() => undefined);
-      } catch { /* no pointer lock on this device */ }
-    });
+    overlay.addEventListener('click', () => this.relock());
     document.addEventListener('pointerlockchange', () => {
+      const was = this.locked;
       this.locked = document.pointerLockElement === this.canvas;
-      this.overlay.hidden = this.locked;
+      this.overlay.hidden = this.locked || (was && this.onUnlock?.() === true);
       if (!this.locked) this.keys.clear();
     });
     document.addEventListener('mousemove', (e) => {
@@ -207,6 +206,16 @@ export class Input {
     if (len > STICK_RADIUS) { ox *= STICK_RADIUS / len; oy *= STICK_RADIUS / len; }
     this.ring.style.transform = `translate(${this.stickX0 - STICK_RADIUS}px, ${this.stickY0 - STICK_RADIUS}px)`;
     this.knob.style.transform = `translate(${this.stickX0 + ox - 22}px, ${this.stickY0 + oy - 22}px)`;
+  }
+
+  /** Asks for the mouse (desktop only; a refusal is not an error). */
+  relock(): void {
+    if (this.touch) return;
+    try {
+      // Some browsers return a promise that rejects when the lock is refused; that is not an error.
+      const req = this.canvas.requestPointerLock() as unknown;
+      if (req instanceof Promise) req.catch(() => undefined);
+    } catch { /* no pointer lock on this device */ }
   }
 
   /** Hides the overlay without a pointer lock (tests, and anyone who just wants to watch). */

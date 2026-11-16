@@ -3,7 +3,8 @@
 //
 //   node assets_src/voice/check.mjs
 //
-// For every line in lines.json: public/assets/voice/<id>.mp3 exists and is in the manifest; its
+// For every shipped voice (voices.ship) and every line in lines.json: public/assets/voice/<voice>/<id>.mp3
+// exists and the line is in the manifest; its
 // duration is 0.4 to 1.6 times the estimate (words at 2.5 a second, plus the pauses its tags and
 // ellipses ask for; far outside that usually means a tag was read aloud or a sound effect produced);
 // no clipping (sample peak under -0.1 dBFS, true peak at most -1 dBTP); loudness within 1 LU of
@@ -37,16 +38,24 @@ export function estimate(line) {
 
 const fails = [];
 const ids = new Set();
+const slug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const ship = (cfg.voices.ship ?? []).map(slug);
+if (ship.length === 0) fails.push('lines.json ships no voices (voices.ship)');
+if (JSON.stringify((manifest.voices ?? []).map((v) => v.id)) !== JSON.stringify(ship)) fails.push(`manifest.json voices ${JSON.stringify((manifest.voices ?? []).map((v) => v.id))} do not match voices.ship (run --publish)`);
+if (!ship.includes(manifest.default)) fails.push(`manifest.json default voice ${manifest.default} is not shipped`);
 for (const line of cfg.lines) {
   if (ids.has(line.id)) fails.push(`${line.id}: duplicate id`);
   ids.add(line.id);
   if (!cfg.moments[line.moment]) fails.push(`${line.id}: unknown moment ${line.moment}`);
-  const file = path.join(PUBLIC, `${line.id}.mp3`);
+  if (!manifest.lines.some((l) => l.id === line.id && l.plain === line.plain)) fails.push(`${line.id}: missing or stale in manifest.json (run --publish)`);
+}
+for (const voice of ship) for (const line of cfg.lines) {
+  const name = `${voice}/${line.id}`;
+  const file = path.join(PUBLIC, voice, `${line.id}.mp3`);
   if (!existsSync(file)) {
-    fails.push(`${line.id}: no file public/assets/voice/${line.id}.mp3`);
+    fails.push(`${name}: no file public/assets/voice/${name}.mp3`);
     continue;
   }
-  if (!manifest.lines.some((l) => l.id === line.id && l.plain === line.plain)) fails.push(`${line.id}: missing or stale in manifest.json (run --publish)`);
   const m = measure(file);
   const est = estimate(line);
   const k = m.duration / est;
@@ -55,9 +64,9 @@ for (const line of cfg.lines) {
   if (!(m.samplePeak < -0.1)) bad.push(`sample peak ${m.samplePeak} dBFS (clipping)`);
   if (!(m.truePeak <= -1)) bad.push(`true peak ${m.truePeak} dBTP`);
   if (!(Math.abs(m.lufs - TARGET_LUFS) <= 1)) bad.push(`loudness ${m.lufs} LUFS`);
-  const row = `${line.id.padEnd(10)} ${m.duration.toFixed(2).padStart(5)} s (est ${est.toFixed(2)}, x${k.toFixed(2)})  ${m.lufs.toFixed(1)} LUFS  TP ${m.truePeak.toFixed(1)}  SP ${m.samplePeak.toFixed(1)}`;
+  const row = `${name.padEnd(16)} ${m.duration.toFixed(2).padStart(5)} s (est ${est.toFixed(2)}, x${k.toFixed(2)})  ${m.lufs.toFixed(1)} LUFS  TP ${m.truePeak.toFixed(1)}  SP ${m.samplePeak.toFixed(1)}`;
   console.log(`${bad.length ? 'FAIL' : 'ok  '} ${row}`);
-  for (const b of bad) fails.push(`${line.id}: ${b}`);
+  for (const b of bad) fails.push(`${name}: ${b}`);
 }
 for (const l of manifest.lines) if (!ids.has(l.id)) fails.push(`manifest.json has ${l.id}, which lines.json does not`);
 const sum = ledger.entries.reduce((n, e) => n + e.characters, 0);
@@ -69,4 +78,4 @@ if (fails.length) {
   console.error(`\n${fails.length} problem(s):\n  ${fails.join('\n  ')}`);
   process.exit(1);
 }
-console.log(`voice check: ${cfg.lines.length} lines ok`);
+console.log(`voice check: ${cfg.lines.length} lines x ${ship.length} voices (${ship.join(', ')}) ok`);

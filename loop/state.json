@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
-  "iteration": 18,
+  "iteration": 19,
   "now": "T7",
   "nowText": "An Opus agent is building the multiplayer layer as tested logic first: one player's browser hosts the run, the others send what they do and see, and the Orderly must never be seen to move on anyone's screen even with network delay.",
   "ci": {
-    "status": "passed",
-    "commit": "1c1e84b",
-    "at": "2026-11-16T10:55:22.515Z"
+    "status": "failed",
+    "commit": "e34bdee",
+    "at": "2026-11-16T11:22:13.464Z"
   },
   "answersAppliedTo": "2026-11-16T04:20:00Z",
   "tasks": [
@@ -671,6 +671,12 @@
           "caption": "The slip: the one line with no cheer in it",
           "kind": "audio",
           "at": "2026-11-16T09:55:36.514Z"
+        },
+        {
+          "src": "T6b/20261116T110155-called_1.mp3",
+          "caption": "Brian on calling the elevator (unheard by its maker)",
+          "kind": "audio",
+          "at": "2026-11-16T11:01:55.786Z"
         }
       ],
       "finishedAt": "2026-11-16T09:55:36.510Z",
@@ -752,6 +758,13 @@
       "id": "T12",
       "title": "Orientation: the training floor",
       "why": "Floor one of every run, where nothing can hurt you and a cardboard statue on wheels teaches the instrument. Without it nothing shows a new player to raise the instrument and turn their back.",
+      "status": "todo",
+      "gates": []
+    },
+    {
+      "id": "T13",
+      "title": "Phone picture crash on your Pixel",
+      "why": "Parked at your request. The phone reported a PowerVR D-Series graphics chip. Its browser threw the picture away on the very first frame, restored it, then lost it again about six seconds later while the Orderly was on screen; the game then switched itself to the lighter level. Next step when picked up: three test links (no Orderly, no tape look, lightest level) to find which part that chip's driver cannot take. Computers are unaffected.",
       "status": "todo",
       "gates": []
     },
@@ -889,6 +902,31 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T11:22:13.464Z",
+      "text": "CI failed on e34bdee.",
+      "kind": "ci"
+    },
+    {
+      "at": "2026-11-16T11:14:59.867Z",
+      "text": "You said not to spend much energy on the phone crash, so it is parked as its own step with what your phone reported. Development continues on the main roadmap.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T11:14:59.616Z",
+      "text": "Added task T13: Phone picture crash on your Pixel.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T11:09:44.067Z",
+      "text": "Your phone's picture went blank a few seconds into a run: the browser threw the graphics context away. Fixed in the live build three ways. The game now restores the picture when that happens, and shows a notice while it does. Phones use a lighter 8-bit drawing path from the start. If the picture is lost twice the game switches to a lighter level by itself and reloads once. The phone also reports its graphics chip and what the game was doing to the hub, so the real cause can be read. Tested by taking the context away on purpose in a browser; NOT yet confirmed on your phone.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T11:01:55.786Z",
+      "text": "New pictures for T6b: The elevator voice.",
+      "kind": "media"
+    },
     {
       "at": "2026-11-16T10:55:22.661Z",
       "text": "You chose Brian and Bella as your top two voices. Recording Brian's full set now, about 5,150 characters, and adding a settings switch between them.",

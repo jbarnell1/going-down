@@ -4,10 +4,10 @@
 
 ## Status
 
-- **Gates passed:** 6 of 14. **Tasks done:** 13 of 24.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 18.
+- **Gates passed:** 6 of 14. **Tasks done:** 13 of 25.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 19.
 - **Now:** T7 Playing together. An Opus agent is building the multiplayer layer as tested logic first: one player's browser hosts the run, the others send what they do and see, and the Orderly must never be seen to move on anyone's screen even with network delay.
-- **Last CI result seen:** passed on 1c1e84b
+- **Last CI result seen:** failed on e34bdee
 - **Answers applied up to:** 2026-11-16T04:20:00Z
 
 ## Tasks
@@ -69,6 +69,8 @@
   - Why: A fresh reviewer audits everything against the gates and the fairness rules.
 - [ ] **T12** `todo` Orientation: the training floor
   - Why: Floor one of every run, where nothing can hurt you and a cardboard statue on wheels teaches the instrument. Without it nothing shows a new player to raise the instrument and turn their back.
+- [ ] **T13** `todo` Phone picture crash on your Pixel
+  - Why: Parked at your request. The phone reported a PowerVR D-Series graphics chip. Its browser threw the picture away on the very first frame, restored it, then lost it again about six seconds later while the Orderly was on screen; the game then switched itself to the lighter level. Next step when picked up: three test links (no Orderly, no tape look, lightest level) to find which part that chip's driver cannot take. Computers are unaffected.
 - [ ] **T1b** `todo` More than one floor skeleton
   - Why: Every Clinic floor shares one skeleton today, which will feel samey by the third floor.
 - [ ] **S** `todo` Stretch: voice that fades with distance, a second trait, the Tenant, a second place
@@ -100,6 +102,11 @@
 
 ## Activity (newest first)
 
+- 2026-11-16 11:22Z CI failed on e34bdee.
+- 2026-11-16 11:14Z You said not to spend much energy on the phone crash, so it is parked as its own step with what your phone reported. Development continues on the main roadmap.
+- 2026-11-16 11:14Z Added task T13: Phone picture crash on your Pixel.
+- 2026-11-16 11:09Z Your phone's picture went blank a few seconds into a run: the browser threw the graphics context away. Fixed in the live build three ways. The game now restores the picture when that happens, and shows a notice while it does. Phones use a lighter 8-bit drawing path from the start. If the picture is lost twice the game switches to a lighter level by itself and reloads once. The phone also reports its graphics chip and what the game was doing to the hub, so the real cause can be read. Tested by taking the context away on purpose in a browser; NOT yet confirmed on your phone.
+- 2026-11-16 11:01Z New pictures for T6b: The elevator voice.
 - 2026-11-16 10:55Z You chose Brian and Bella as your top two voices. Recording Brian's full set now, about 5,150 characters, and adding a settings switch between them.
 - 2026-11-16 10:55Z Multiplayer is proven in logic. Over 200 simulated sessions with delays up to 250 ms, lost and reordered messages, every frame of every player's screen was checked: 76,782 moments when a player could see the Orderly in two frames running, and it was never drawn in two different places. When delay let the host move it after a player had already seen it, the host put it back where that player saw it (1,532 times, 2 metres at most). No catch ever landed on a player whose own screen showed it. Blinks are dark on every screen for the whole time the host lets it move. Fable's deliberate break: turning screens back on 0.2 seconds early left 21,367 lit frames and failed the blink test.
 - 2026-11-16 09:56Z Started T7: Playing together. An Opus agent is building the multiplayer layer as tested logic first: one player's browser hosts the run, the others send what they do and see, and the Orderly must never be seen to move on anyone's screen even with network delay.
@@ -135,8 +142,3 @@
 - 2026-11-16 06:58Z Finished T4: The Orderly comes alive.
 - 2026-11-16 06:58Z Correction: GitHub's checks have been failing since the tape look went in, four commits ago, and the public play link stopped updating. Twice I recorded them as passed without reading the result. The cause was frame-time limits that a software-rendered CI machine cannot meet; those now apply only on a real graphics card. The loop's rules now say to record a CI result only from what was actually printed.
 - 2026-11-16 06:58Z CI failed on 4a9ac1f.
-- 2026-11-16 06:50Z New pictures for T4: The Orderly comes alive.
-- 2026-11-16 06:50Z New pictures for T4: The Orderly comes alive.
-- 2026-11-16 06:50Z New pictures for T4: The Orderly comes alive.
-- 2026-11-16 06:50Z New pictures for T4: The Orderly comes alive.
-- 2026-11-16 06:50Z New pictures for T4: The Orderly comes alive.

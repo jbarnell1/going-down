@@ -1,6 +1,8 @@
 // The elevator's voice: a relentlessly cheerful corporate announcer (docs/VOICE.md). The lines are
-// recorded ahead of time (assets_src/voice/) and shipped as public/assets/voice/<id>.mp3 with a
-// manifest of ids, moments and subtitles. Everything here is lazy and forgiving: the manifest and each
+// recorded ahead of time (assets_src/voice/) in more than one voice and shipped as
+// public/assets/voice/<voice>/<id>.mp3, with a manifest of voices, ids, moments and subtitles. The voice
+// is a setting and can change at any time: the next line simply comes from the other folder, and the
+// old voice's decoded audio is dropped the next time a line is fetched. Everything here is lazy and forgiving: the manifest and each
 // line are fetched the first time they are needed, a missing file is noted and skipped, and no call
 // ever throws into the game.
 //
@@ -59,6 +61,8 @@ interface LineInfo {
 }
 
 interface Manifest {
+  voices?: { id: string; name: string }[];
+  default?: string;
   moments: Record<string, { priority: number }>;
   lines: LineInfo[];
 }
@@ -99,7 +103,12 @@ export interface AnnouncerState {
   /** When the slip is due (performance.now ms), once floor 2 is reached; null before or after. */
   slipAt: number | null;
   /** Every line started (this page), with real start and end times in ms; end is null while playing. */
-  history: { id: string; moment: string; start: number; end: number | null; depth: number; mode: 'car' | 'landing' }[];
+  history: { id: string; moment: string; voice: string; file: string; start: number; end: number | null; depth: number; mode: 'car' | 'landing' }[];
+  /** The voice asked for (setting) and the one in use (the manifest's default if that one is not shipped). */
+  voice: string;
+  voiceInUse: string;
+  /** Audio files decoded and kept, as <voice>/<id>. */
+  cached: string[];
   /** Ids asked for that have no file (or are unknown). */
   missing: string[];
   /** The subtitle on screen now ('' when none) and whether subtitles are on. */
@@ -285,17 +294,74 @@ export class Announcer {
   private readonly history: AnnouncerState['history'] = [];
   private readonly missing = new Set<string>();
   private frame: AnnouncerFrame = { depth: 1, inCar: true, ear: { x: 0, y: 0, z: 0 }, forward: { x: 0, y: 0, z: -1 }, speaker: { x: 0, y: 0, z: 0 }, quiet: true };
-  private readonly subs: Subtitles | null;
+  private subs: Subtitles | null = null;
+  private voice = 'bella';
+  private cacheVoice = '';
   private noise: AudioBuffer | null = null;
   private speakerInfo: AnnouncerState['speaker'] = null;
 
   constructor(
     private readonly context: () => AudioContext | null,
+    /** Where lines go (the game's master volume), or null for the context's own output. */
+    private readonly output: () => AudioNode | null,
     private readonly base: string,
-    parent: HTMLElement,
+    private readonly parent: HTMLElement,
     subsOn: boolean,
+    voice = 'bella',
   ) {
-    this.subs = subsOn ? new Subtitles(parent) : null;
+    this.voice = voice;
+    this.setSubtitles(subsOn);
+  }
+
+  // ---- settings ------------------------------------------------------------------------------
+
+  /** The voice for the next line (a line already playing finishes in its own voice). */
+  setVoice(voice: string): void {
+    this.voice = voice;
+  }
+
+  /** The voices shipped (from the manifest; Bella and Brian until it has loaded). */
+  voices(): { id: string; name: string }[] {
+    return this.manifest?.voices ?? [
+      { id: 'bella', name: 'Bella' },
+      { id: 'brian', name: 'Brian' },
+    ];
+  }
+
+  setSubtitles(on: boolean): void {
+    if (on && !this.subs) this.subs = new Subtitles(this.parent);
+    if (!on && this.subs) {
+      this.subs.el.remove();
+      this.subs = null;
+    }
+    if (on && this.subs && this.current && !this.current.done) this.subs.show(this.current.plain);
+  }
+
+  /** A short line now, through the speaker, cutting off whatever is playing (the settings' sample). */
+  sample(): boolean {
+    let ok = false;
+    this.safe(() => {
+      this.loadManifest();
+      const m = this.manifest;
+      if (!m) return;
+      const pick = [...m.lines].filter((l) => l.moment !== 'slip' && l.moment !== 'resume').sort((a, b) => a.plain.length - b.plain.length)[0];
+      if (!pick) return;
+      this.stopCurrent();
+      this.loading = null;
+      this.gapUntil = 0;
+      const now = performance.now();
+      this.queue = this.queue.filter((q) => q.id !== pick.id);
+      this.queue.unshift({ id: pick.id, moment: pick.moment, priority: 9, queuedAt: now, expires: now + VOICE.expireMs });
+      ok = true;
+    });
+    return ok;
+  }
+
+  /** The voice lines are taken from now: the setting, if the manifest ships it. */
+  private voiceInUse(): string {
+    const vs = this.manifest?.voices;
+    if (!vs || vs.some((v) => v.id === this.voice)) return this.voice;
+    return this.manifest?.default ?? vs[0]?.id ?? this.voice;
   }
 
   // ---- what happens in the run ---------------------------------------------------------------
@@ -413,7 +479,7 @@ export class Announcer {
   private requestMoment(moment: string, expireMs: number): void {
     const m = this.manifest;
     if (!m) return;
-    const options = m.lines.filter((l) => l.moment === moment && !this.missing.has(l.id));
+    const options = m.lines.filter((l) => l.moment === moment && !this.missing.has(this.fileOf(l.id)));
     if (options.length === 0) return;
     const last = this.lastOf.get(moment);
     const fresh = options.length > 1 ? options.filter((l) => l.id !== last) : options;
@@ -478,23 +544,36 @@ export class Announcer {
       .catch(() => undefined);
   }
 
+  private fileOf(id: string): string {
+    return `${this.voiceInUse()}/${id}`;
+  }
+
   private buffer(id: string): Promise<AudioBuffer | null> {
-    let p = this.buffers.get(id);
+    const voice = this.voiceInUse();
+    if (voice !== this.cacheVoice) {
+      // The voice changed: let the old one's audio go (lazily, now that a line is wanted).
+      this.buffers.clear();
+      this.decoded.clear();
+      this.cacheVoice = voice;
+    }
+    const key = `${voice}/${id}`;
+    let p = this.buffers.get(key);
     if (!p) {
       const ctx = this.context();
-      p = fetch(`${this.base}assets/voice/${id}.mp3`)
+      p = fetch(`${this.base}assets/voice/${key}.mp3`)
         .then((r) => (r.ok ? r.arrayBuffer() : null))
         .then((bytes) => (bytes && ctx ? ctx.decodeAudioData(bytes) : null))
         .then((b) => {
-          if (b) this.decoded.set(id, b);
-          else this.missing.add(id);
+          if (b) {
+            if (this.cacheVoice === voice) this.decoded.set(key, b);
+          } else this.missing.add(key);
           return b;
         })
         .catch(() => {
-          this.missing.add(id);
+          this.missing.add(key);
           return null;
         });
-      this.buffers.set(id, p);
+      this.buffers.set(key, p);
     }
     return p;
   }
@@ -502,7 +581,7 @@ export class Announcer {
   // ---- playing -------------------------------------------------------------------------------
 
   private begin(item: Item): void {
-    const ready = this.decoded.get(item.id);
+    const ready = this.cacheVoice === this.voiceInUse() ? this.decoded.get(`${this.cacheVoice}/${item.id}`) : undefined;
     if (ready) {
       this.play(item, ready);
       return;
@@ -608,8 +687,9 @@ export class Announcer {
     const farLp = add(ctx.createBiquadFilter());
     farLp.type = 'lowpass';
     const pan = add(ctx.createStereoPanner());
-    bus.connect(close).connect(ctx.destination);
-    bus.connect(farLp).connect(far).connect(pan).connect(ctx.destination);
+    const out = this.output() ?? ctx.destination;
+    bus.connect(close).connect(out);
+    bus.connect(farLp).connect(far).connect(pan).connect(out);
 
     const now = performance.now();
     const p: Playing = { item, plain: this.lineOf(item.id)?.plain ?? '', src, nodes, close, far, farLp, pan, startedAt: now, endsAt: now + dur * 1000 + 40, done: false };
@@ -622,7 +702,8 @@ export class Announcer {
     this.speakerInfo = { depth: this.frame.depth, highpass: hp.frequency.value, lowpass: lp.frequency.value, drive, crackle: popLevel, dropout: pDrop };
     this.played.push(item.id);
     this.lastOf.set(item.moment, item.id);
-    this.history.push({ id: item.id, moment: item.moment, start: now, end: null, depth: this.frame.depth, mode: this.frame.inCar ? 'car' : 'landing' });
+    const file = this.fileOf(item.id);
+    this.history.push({ id: item.id, moment: item.moment, voice: file.split('/')[0] ?? '', file: `assets/voice/${file}.mp3`, start: now, end: null, depth: this.frame.depth, mode: this.frame.inCar ? 'car' : 'landing' });
     if (this.history.length > 80) this.history.shift();
     this.subs?.show(p.plain);
   }
@@ -746,6 +827,9 @@ export class Announcer {
       subsOn: this.subs !== null,
       speaker: this.speakerInfo,
       mode: this.frame.inCar ? 'car' : 'landing',
+      voice: this.voice,
+      voiceInUse: this.voiceInUse(),
+      cached: [...this.decoded.keys()],
     };
   }
 }

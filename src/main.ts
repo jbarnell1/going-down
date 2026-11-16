@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { Announcer } from './game/announcer';
 import { GameAudio } from './game/audio';
+import { SettingsStore, type TapeLook } from './game/settings';
+import { SettingsPanel } from './render/settingsPanel';
 import { AutoWalk } from './game/autoWalk';
 import { Minimap } from './game/minimap';
 import { installDiagnostics, phoneLike, readSafeLevel } from './game/diagnostics';
@@ -39,11 +41,12 @@ const startDepth = Math.max(1, Math.floor(Number(params.get('depth') ?? '1')) ||
 const debug = params.get('debug') === '1';
 // ?preview=orderly[&anim=walk|idle|reach|duck|still] stands an entity model in the level.
 const previewName = params.get('preview');
+// The player's settings (saved in this browser). The address overrides some: ?voice=, ?subs=0, and
 // ?fx=0 clean render, 1 the tape look (default), 2 heavy interference.
-const fxParam = Number(params.get('fx') ?? '1');
+const settings = new SettingsStore(params);
 // A device that lost its picture earlier draws more lightly: 1 = 8-bit and no shadows, 2 = also no tape look.
 const safe = readSafeLevel(params);
-const fxLevel: FxLevel = safe >= 2 ? 0 : fxParam >= 2 ? 2 : fxParam === 0 ? 0 : 1;
+const fxLevel: FxLevel = safe >= 2 ? 0 : settings.get('tape');
 // The live Orderly is on every floor by default. ?entity=0 leaves the floor empty; ?preview=orderly
 // shows a static figure instead.
 const entityOn = params.get('entity') !== '0' && previewName !== 'orderly';
@@ -103,9 +106,10 @@ if (entityOn) {
   orderlyView = new EntityView(scene, `${import.meta.env.BASE_URL}assets/entities/orderly.glb`);
 }
 const audio = new GameAudio();
-// The elevator's voice (recorded lines through a speaker built in Web Audio). ?subs=0 hides its subtitles;
-// so does the clean render (?fx=0), which shows no on-screen display at all (the reference pictures use it).
-const announcer = new Announcer(() => audio.context, import.meta.env.BASE_URL, document.body, params.get('subs') !== '0' && fxLevel > 0);
+audio.setVolume(settings.get('volume'));
+// The elevator's voice (recorded lines through a speaker built in Web Audio), in the voice and with the
+// subtitles the settings say.
+const announcer = new Announcer(() => audio.context, () => audio.output, import.meta.env.BASE_URL, document.body, settings.get('subtitles'), settings.get('voice'));
 announcer.startRun();
 const caughtFx = new CaughtFx(document.body);
 const endScreen = new EndScreen(document.body);
@@ -153,6 +157,66 @@ osd.visible = fxLevel > 0;
 /** Lights glare through the tape; the clean render keeps them as built. */
 const LIGHT_GAIN = 3;
 let lightGain = fxLevel > 0 ? LIGHT_GAIN : 1;
+/** Sets the tape look (0 clean, 1 normal, 2 heavy) and everything that goes with it. */
+function applyFx(level: number): FxLevel {
+  const l = tape.setFx(level);
+  osd.visible = l > 0;
+  lightGain = l > 0 ? LIGHT_GAIN : 1;
+  return l;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The settings panel. Esc on a computer (the browser releases the mouse, and the panel opens in place
+// of the start screen), the gear button on a phone; closed the same way or by clicking back into the
+// game. It never pauses the run.
+const panel = new SettingsPanel(document.body);
+panel.choice('voice', 'VOICE', () => announcer.voices().map((v) => ({ value: v.id, label: v.name })), () => settings.get('voice'), (v) => settings.set('voice', v));
+panel.action('sample', 'PLAY A SAMPLE', () => {
+  audio.unlock();
+  announcer.sample();
+});
+panel.choice('subtitles', 'SUBTITLES', () => [{ value: true, label: 'ON' }, { value: false, label: 'OFF' }], () => settings.get('subtitles'), (v) => settings.set('subtitles', v));
+panel.choice<TapeLook>('tape', 'TAPE LOOK', () => [{ value: 0, label: 'OFF' }, { value: 1, label: 'NORMAL' }, { value: 2, label: 'HEAVY' }], () => settings.get('tape'), (v) => settings.set('tape', v));
+panel.stepper('volume', 'VOLUME', () => settings.get('volume'), (n) => settings.set('volume', n), { step: 0.1, min: 0, max: 1, format: (n) => String(Math.round(n * 100)) });
+panel.action('close', 'BACK TO THE GAME', () => closePanel());
+settings.onChange((key, v) => {
+  if (key === 'voice') announcer.setVoice(v.voice);
+  else if (key === 'subtitles') announcer.setSubtitles(v.subtitles);
+  else if (key === 'tape') applyFx(v.tape);
+  else if (key === 'volume') audio.setVolume(v.volume);
+  panel.refresh();
+});
+/** The panel was opened by losing the mouse: closing it asks for the mouse back. */
+let panelFromUnlock = false;
+function openPanel(fromUnlock: boolean): void {
+  panelFromUnlock = fromUnlock;
+  panel.open();
+}
+function closePanel(): void {
+  panel.close();
+  if (panelFromUnlock && !input.locked) input.relock();
+  panelFromUnlock = false;
+}
+input.onUnlock = () => {
+  if (endScreen.shown) return false;
+  openPanel(true);
+  return true;
+};
+input.onEscape = () => {
+  // The Esc that released the mouse may arrive too: ignore it straight after opening.
+  if (performance.now() - panel.changedAt < 300) return;
+  if (panel.isOpen) closePanel();
+  else openPanel(false);
+};
+// Clicking (or tapping) back into the game closes it.
+window.addEventListener('pointerdown', () => {
+  if (panel.isOpen && performance.now() - panel.changedAt > 200) closePanel();
+});
+// A refused mouse lock (closing with Esc is not always allowed to take it back) shows the start screen.
+document.addEventListener('pointerlockerror', () => {
+  if (!input.touch && !panel.isOpen) overlay.hidden = false;
+});
+const coarsePointer = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 /** The light level last applied (1 all on); applied again only when it changes. */
 let appliedLight = { gain: -1, level: -1 };
 function setLights(level: number): void {
@@ -821,12 +885,7 @@ const state = {
   frameMs: () => stats.median(),
   /** Tape strength: 0 clean, 1 default, 2 heavy. */
   fx: () => tape.fx,
-  setFx: (level: number) => {
-    const l = tape.setFx(level);
-    osd.visible = l > 0;
-    lightGain = l > 0 ? LIGHT_GAIN : 1;
-    return l;
-  },
+  setFx: (level: number) => applyFx(level),
   /** A burst of tape interference, `ms` long, `strength` 0..1. */
   glitch: (ms: number, strength = 1) => tape.glitch(ms, strength),
   /** The previewed entity (?preview=orderly), or null. Positions in world metres, yaw in degrees. */
@@ -887,6 +946,14 @@ const state = {
   audio: { state: () => audio.state() },
   /** The announcer: what is playing, waiting and said this run; say(id) asks for a line (false if it cannot). */
   announcer: { state: () => announcer.state(), say: (id: string) => announcer.say(id) },
+  /** The settings in force, and the panel (open, close, whether open, whether its gear button shows). */
+  settings: {
+    get: () => ({ ...settings.all }),
+    open: () => openPanel(false),
+    close: () => closePanel(),
+    isOpen: () => panel.isOpen,
+    gearShown: () => !panel.gear.hidden,
+  },
   /** The local player's instrument: the logic's state and what is drawn. */
   instrument: () => {
     const m = run.member();
@@ -1123,6 +1190,8 @@ renderer.setAnimationLoop(() => {
   if (ePressed && inReach && !callable) tryPickUp();
 
   showEnd(now);
+  // The gear button: phones only (never on a computer, so never in the reference pictures).
+  panel.showGear((input.touch || coarsePointer) && overlay.hidden && !endScreen.shown);
   tape.render(scene, camera, instrument.visible ? instrument : null);
   osd.update(!tape.motion || Math.floor(now / 700) % 2 === 0);
   state.frames++;

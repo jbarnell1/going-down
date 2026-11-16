@@ -315,10 +315,14 @@ export interface AudioState {
   riding: boolean;
   /** Room tone level aimed for: 1 normal, 0 gone (ride, blink). */
   room: number;
+  /** Master volume 0..1 (the settings). */
+  volume: number;
 }
 
 export class GameAudio {
   private ctx: Ctx | null = null;
+  private master: GainNode | null = null;
+  private volume = 1;
   private failed = false;
   // Trolley chain.
   private squeakBus: GainNode | null = null;
@@ -370,6 +374,28 @@ export class GameAudio {
     return this.ctx;
   }
 
+  /** Where every sound goes: the master gain (the settings' volume), or null before the context exists. */
+  get output(): AudioNode | null {
+    return this.master;
+  }
+
+  private get out(): AudioNode {
+    return this.master ?? (this.ctx as Ctx).destination;
+  }
+
+  /** Master volume 0..1, applied at once (and to a context made later). */
+  setVolume(v: number): void {
+    this.volume = Math.max(0, Math.min(1, v));
+    const ctx = this.ctx;
+    if (ctx && this.master) {
+      try {
+        this.master.gain.setTargetAtTime(this.volume, ctx.currentTime, 0.03);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   /** Creates (if needed) and resumes the context. Safe to call any number of times. */
   unlock(): void {
     if (this.failed) return;
@@ -393,6 +419,10 @@ export class GameAudio {
     const ctx = new AC();
     this.ctx = ctx;
     const t = ctx.currentTime;
+    // Everything goes through one master gain: the settings' volume.
+    this.master = ctx.createGain();
+    this.master.gain.value = this.volume;
+    this.master.connect(ctx.destination);
 
     // Trolley: notes and rumble -> bus -> muffle -> level -> panner -> out.
     this.squeakBus = ctx.createGain();
@@ -407,7 +437,7 @@ export class GameAudio {
     this.panner.distanceModel = 'linear';
     // Loudness over distance comes from audibility(); the panner only gives direction.
     this.panner.rolloffFactor = 0;
-    this.squeakBus.connect(this.muffle).connect(this.level).connect(this.panner).connect(ctx.destination);
+    this.squeakBus.connect(this.muffle).connect(this.level).connect(this.panner).connect(this.out);
 
     const rumble = ctx.createBufferSource();
     rumble.buffer = noiseBuffer(ctx, 3, true);
@@ -431,7 +461,7 @@ export class GameAudio {
     // Room tone: straight to the output, not positional.
     const roomOut = ctx.createGain();
     roomOut.gain.value = this.roomWant;
-    roomOut.connect(ctx.destination);
+    roomOut.connect(this.out);
     this.roomOut = roomOut;
     ROOM.hum.forEach((g, i) => {
       const o = ctx.createOscillator();
@@ -478,7 +508,7 @@ export class GameAudio {
     mp.panningModel = 'HRTF';
     mp.distanceModel = 'linear';
     mp.rolloffFactor = 0;
-    mg.connect(mp).connect(ctx.destination);
+    mg.connect(mp).connect(this.out);
     const drone = ctx.createOscillator();
     drone.type = 'sawtooth';
     drone.frequency.value = LIFT.droneHz;
@@ -637,7 +667,7 @@ export class GameAudio {
     src.buffer = buf;
     const g = ctx.createGain();
     g.gain.value = TICK.level * loudness * (1 + (Math.random() * 2 - 1) * TICK.levelJitter);
-    src.connect(g).connect(ctx.destination);
+    src.connect(g).connect(this.out);
     src.start(at);
     this.ticks++;
   }
@@ -655,7 +685,7 @@ export class GameAudio {
       g.gain.setValueAtTime(0, t);
       g.gain.linearRampToValueAtTime(THUNK.level, t + 0.006);
       g.gain.exponentialRampToValueAtTime(0.001, t + THUNK.seconds);
-      o.connect(g).connect(ctx.destination);
+      o.connect(g).connect(this.out);
       o.start(t);
       o.stop(t + THUNK.seconds + 0.02);
       this.thunks++;
@@ -700,7 +730,7 @@ export class GameAudio {
     env.gain.linearRampToValueAtTime(RASP.level, at + 0.02);
     env.gain.setValueAtTime(RASP.level, at + seconds - 0.05);
     env.gain.linearRampToValueAtTime(0, at + seconds);
-    src.connect(bp).connect(chop).connect(env).connect(ctx.destination);
+    src.connect(bp).connect(chop).connect(env).connect(this.out);
     src.start(at, Math.random() * 2);
     head.start(at);
     src.stop(at + seconds + 0.02);
@@ -754,7 +784,7 @@ export class GameAudio {
       g.gain.setValueAtTime(CAUGHT_HISS.level, t);
       g.gain.setValueAtTime(CAUGHT_HISS.level, t + CAUGHT_HISS.seconds - 0.05);
       g.gain.linearRampToValueAtTime(0, t + CAUGHT_HISS.seconds);
-      src.connect(g).connect(ctx.destination);
+      src.connect(g).connect(this.out);
       src.start(t);
       src.stop(t + CAUGHT_HISS.seconds + 0.05);
     } catch {
@@ -796,13 +826,13 @@ export class GameAudio {
 
   /** A low-pass into the output for muffled sounds (heard through a floor), or the output itself. */
   private outFor(ctx: Ctx, muffled: boolean): AudioNode {
-    if (!muffled) return ctx.destination;
+    if (!muffled) return this.out;
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
     lp.frequency.value = LIFT.muffledCutoff;
     const g = ctx.createGain();
     g.gain.value = LIFT.muffledLevel;
-    lp.connect(g).connect(ctx.destination);
+    lp.connect(g).connect(this.out);
     return lp;
   }
 
@@ -821,7 +851,7 @@ export class GameAudio {
   floorDing(near: number): void {
     this.play((ctx, t) => {
       const k = Math.max(0, Math.min(1, near));
-      this.strike(ctx, t, LIFT.dingHz, LIFT.dingSeconds, LIFT.dingFar + (LIFT.dingNear - LIFT.dingFar) * k, ctx.destination, [
+      this.strike(ctx, t, LIFT.dingHz, LIFT.dingSeconds, LIFT.dingFar + (LIFT.dingNear - LIFT.dingFar) * k, this.out, [
         [1, 1],
         [2.4, 0.15],
       ]);
@@ -870,7 +900,7 @@ export class GameAudio {
   /** A softer warning ding before the bell. */
   bellWarning(): void {
     this.play((ctx, t) => {
-      this.strike(ctx, t, LIFT.bellHz, LIFT.bellSeconds * 0.5, LIFT.warnLevel, ctx.destination, [
+      this.strike(ctx, t, LIFT.bellHz, LIFT.bellSeconds * 0.5, LIFT.warnLevel, this.out, [
         [1, 1],
         [2.0, 0.3],
       ]);
@@ -881,7 +911,7 @@ export class GameAudio {
   /** The bell: the doors close now. */
   bell(): void {
     this.play((ctx, t) => {
-      this.strike(ctx, t, LIFT.bellHz, LIFT.bellSeconds, LIFT.bellLevel, ctx.destination, [
+      this.strike(ctx, t, LIFT.bellHz, LIFT.bellSeconds, LIFT.bellLevel, this.out, [
         [1, 1],
         [2.0, 0.4],
         [3.0, 0.15],
@@ -929,7 +959,7 @@ export class GameAudio {
       const g = ctx.createGain();
       g.gain.setValueAtTime(0, t);
       g.gain.linearRampToValueAtTime(LIFT.rideLevel, t + 0.6);
-      g.connect(ctx.destination);
+      g.connect(this.out);
       const o = ctx.createOscillator();
       o.type = 'triangle';
       o.frequency.setValueAtTime(LIFT.rideFromHz, t);
@@ -967,7 +997,7 @@ export class GameAudio {
         env.gain.linearRampToValueAtTime(LIFT.stutterLevel, at + 0.005);
         env.gain.setValueAtTime(LIFT.stutterLevel, at + frag * 0.5);
         env.gain.linearRampToValueAtTime(0, at + frag * 0.6);
-        env.connect(ctx.destination);
+        env.connect(this.out);
         const o = ctx.createOscillator();
         o.frequency.value = LIFT.chime[0] * (1 - 0.03 * i);
         o.connect(env);
@@ -985,7 +1015,7 @@ export class GameAudio {
         // Crackle: random on/off gates over the warning.
         for (let k = 0; k < 14; k++) chop.gain.setValueAtTime(Math.random() < 0.5 ? LIFT.crackleLevel : 0, t + (k * LIFT.stutterSeconds) / 14);
         chop.gain.setValueAtTime(0, t + LIFT.stutterSeconds + 0.05);
-        src.connect(hp).connect(chop).connect(ctx.destination);
+        src.connect(hp).connect(chop).connect(this.out);
         src.start(t, Math.random());
         src.stop(t + LIFT.stutterSeconds + 0.1);
       }
@@ -1010,12 +1040,12 @@ export class GameAudio {
         const g = ctx.createGain();
         g.gain.setValueAtTime(LIFT.clunkLevel, t);
         g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-        o.connect(lp).connect(g).connect(ctx.destination);
+        o.connect(lp).connect(g).connect(this.out);
         o.start(t);
         o.stop(t + 0.14);
         this.counts.blinkOuts++;
       } else {
-        this.strike(ctx, t, LIFT.pingHz, 0.25, LIFT.pingLevel, ctx.destination, [[1, 1]]);
+        this.strike(ctx, t, LIFT.pingHz, 0.25, LIFT.pingLevel, this.out, [[1, 1]]);
       }
     });
   }
@@ -1057,6 +1087,7 @@ export class GameAudio {
       machine: this.machineWant,
       riding: this.rideOn,
       room: this.roomWant,
+      volume: this.volume,
     };
   }
 }

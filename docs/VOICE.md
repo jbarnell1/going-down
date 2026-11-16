@@ -79,8 +79,14 @@ All control on v4 is in the text. SSML, `<break>` and `<phoneme>` tags do not wo
 - `assets_src/voice/audition.html`: the audition page, rewritten from `lines.json` by `--page` (and after every batch).
 - `assets_src/voice/ledger.json`: every request (line, voice, take, characters counted with tags, the API's billed figure, time, cache hash) and the running total.
 - `assets_src/voice/check.mjs`: the checks below; exits non-zero on failure.
-- `public/assets/voice/<id>.mp3`: the chosen take, loudness-normalised with ffmpeg to -16 LUFS (true peak -1.5 dBTP), mono 128 kb/s; and `manifest.json` (id, moment, subtitle, priorities) which the game reads.
+- `public/assets/voice/<voice>/<id>.mp3`: the chosen take of each line in each shipped voice, loudness-normalised with ffmpeg to -16 LUFS (true peak -1.5 dBTP), mono 128 kb/s; and one `manifest.json` (the voices, the default, each line's id, moment and subtitle, the priorities) which the game reads.
 - In the game: `src/game/announcer.ts` maps run events to moments, plays one line at a time through the speaker chain, and draws the subtitles (`?subs=0` hides them, and so does the clean render `?fx=0`, like the rest of the on-screen display).
+
+## Voices that ship
+
+Two voices ship, chosen by the owner after the audition: **Bella** (the default) and **Brian**, with identical text and settings so they compare fairly. The player picks one in the settings panel (Esc on a computer, the gear on a phone) or with `?voice=bella|brian`; the choice is remembered in the browser and the next line uses it, without a reload. Until the owner picks takes, take 1 of each line ships (`chosen` in `lines.json` overrides per voice and line).
+
+To add a third (for example Sarah, already shortlisted, whose three audition lines exist): add her name to `voices.ship` in `lines.json`, then run `node assets_src/voice/generate.mjs --all --voice Sarah --budget <ledger total + 5200>` with `GD_ELEVENLABS_ENV` set (see `.local/MACHINE.md`). That makes her missing takes (16 lines x 3, 5,151 counted characters), publishes every shipped voice and rewrites the audition page; `check.mjs` then checks her files too. The game reads the voice list from the manifest, so the settings panel offers her with no code change.
 
 ## Learned on 2026-11-16 (first batch)
 

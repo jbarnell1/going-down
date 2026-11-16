@@ -24,10 +24,12 @@
         "why": "An advertising voice, and a male alternative so the owner can compare."
       }
     ],
-    "default": { "id": "hpp4J3VqNfWAUOO0d1Us", "name": "Bella" }
+    "default": { "id": "hpp4J3VqNfWAUOO0d1Us", "name": "Bella" },
+    "ship": ["Bella", "Brian"],
+    "settingsNote": "Brian uses exactly Bella's text and settings (slip stability 0.6 included) so the two compare fairly; VOICE.md gives no different setting for a deep voice, and his three audition takes, made with these settings, are reused."
   },
   "audition": ["arrived_1", "taken_1", "slip_1"],
-  "chosen": {},
+  "chosen": { "bella": {}, "brian": {} },
   "moments": {
     "board": { "priority": 2, "when": "the start of a run, in the car before the doors open" },
     "doors": { "priority": 2, "when": "the doors open on a new floor (not the run's first floor: the boarding line covers it)" },

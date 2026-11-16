@@ -24,5 +24,8 @@ export default defineConfig({
   test: {
     include: ['tests/sim/**/*.test.ts', 'tests/net/**/*.test.ts'],
     environment: 'node',
+    // The property tests simulate hundreds of runs each. They take a few seconds here and several
+    // times that on a shared CI machine, where the default 5 s limit failed one of them.
+    testTimeout: 180_000,
   },
 });
