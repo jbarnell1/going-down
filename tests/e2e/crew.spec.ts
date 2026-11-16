@@ -269,8 +269,33 @@ test('a crew of four: a reading on every screen, a taken crewmate, and their tap
   console.log(`B earned ${earned.toFixed(1)}; every crew list shows it`);
 
   // B turns away again and is taken (the others still look at the floor; the car is gone, but three are left).
+  // B's page records every frame from here: whether the Orderly is on screen, the taken latch, the noise.
+  await b.evaluate(() => {
+    const g = (window as any).__gd;
+    const w = window as any;
+    w.__takenLog = [];
+    const tick = (): void => {
+      const o = g.orderly();
+      w.__takenLog.push({ t: performance.now(), seen: o?.seen === true, taken: g.run().taken === true, noise: g.caught().noise === true });
+      if (w.__takenLog.length < 4000) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
   const where = await b.evaluate((y) => { const g = (window as any).__gd; g.look(y, 0); return g.player(); }, cor.away);
   await b.waitForFunction(() => (window as any).__gd.events().some((e: any) => e.type === 'caught'), undefined, { timeout: 20_000 });
+  await b.waitForFunction(() => (window as any).__gd.caught().noise === true, undefined, { timeout: 4000 });
+  // A remote victim's screen commits first: a hard cut to black (the taken latch), then the noise, and
+  // no frame in the second before that commit showed it the Orderly.
+  const log = await b.evaluate(() => (window as any).__takenLog as { t: number; seen: boolean; taken: boolean; noise: boolean }[]);
+  const commit = log.findIndex((f) => f.taken || f.noise);
+  expect(commit).toBeGreaterThan(0);
+  expect(log[commit]?.taken).toBe(true);
+  const commitT = log[commit]?.t ?? 0;
+  expect(log.filter((f, k) => k < commit && f.t >= commitT - 1000 && f.seen)).toEqual([]);
+  // Black until the noise takes over: no visible frame between.
+  const noiseAt = log.findIndex((f) => f.noise);
+  expect(log.slice(commit, noiseAt).every((f) => f.taken && !f.seen)).toBe(true);
+  console.log(`B taken: black for ${(((log[noiseAt]?.t ?? commitT) - commitT) / 1000).toFixed(2)} s before the noise; no sighting in the second before`);
   for (const p of c.pages) {
     await p.waitForFunction((owner) => (window as any).__gd.tapes().some((t: any) => t.owner === owner), c.ids[1], { timeout: 4000 });
     const t = (await gd<{ owner: string; x: number; z: number; value: number }[]>(p, 'tapes')).find((q) => q.owner === c.ids[1]);
@@ -369,6 +394,8 @@ test('a crew of four: a whole run, the blinks on every screen, the vote, two flo
   await a.evaluate(() => (window as any).__gd.entityCtl.rest(6000));
   // Everyone back to the landing.
   await Promise.all(c.pages.map((p) => p.evaluate(() => { const g = (window as any).__gd; const l = g.plan.landing; return g.walkTo(l.level, l.x, l.y); })));
+  // The test walk is ten times a walk: the host takes remote bodies at the pace their gait allows, so wait for it.
+  await waitHostHas(c);
   expect(await a.evaluate(() => (window as any).__gd.runCtl.call({ force: true }))).toBe(true);
   expect(await a.evaluate(() => (window as any).__gd.runCtl.skipUntil('carArrived', 90))).toBe(true);
   for (const p of c.pages) await p.waitForFunction(() => (window as any).__gd.run().doors > 0.99, undefined, { timeout: 8000 });

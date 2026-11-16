@@ -70,13 +70,18 @@ async function walkCar(page: Page, u: number, v: number): Promise<void> {
 async function orderlyInView(page: Page): Promise<number> {
   const r = await run(page);
   for (const k of [4, 3, 2, 5]) {
-    await page.evaluate(([k, ix, iz, yaw]) => {
+    // A cell it could never stand in (a wall, the void past the corridor) is refused by the hook.
+    const placed = await page.evaluate(([k, ix, iz, yaw]) => {
       const g = (window as any).__gd;
       const p = g.player();
       g.look(yaw, 0);
-      g.entityCtl.placeCell(p.level, p.cx - Math.round(ix) * k, p.cy - Math.round(iz) * k, yaw + 180);
+      if (!g.entityCtl.placeCell(p.level, p.cx - Math.round(ix) * k, p.cy - Math.round(iz) * k, yaw + 180)) return false;
       g.entityCtl.wake();
+      return true;
     }, [k, r.car3.inX, r.car3.inZ, yawOut(r)] as const);
+    if (!placed) continue;
+    // Judge it where it now stands: wait until the page draws it there, not where it was.
+    await page.waitForFunction(() => { const o = (window as any).__gd.orderly(); return o.drawn !== null && Math.hypot(o.drawn.x - o.x, o.drawn.z - o.z) < 0.6; }, undefined, { timeout: 3000 });
     await settle(page, 3);
     const o = await orderly(page);
     if (o.seen) return o.distance;

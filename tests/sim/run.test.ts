@@ -575,7 +575,7 @@ function safeRun(i: number, seconds = 90): SafeResult {
           }
           break;
         case 'wander':
-          stepBot(st.plan, r.bot, DT);
+          stepBot(st.plan, r.bot, DT, st.orderly.body);
           a.body = r.bot.body;
           a.yaw = r.bot.yaw;
           a.pitch = r.bot.pitch;

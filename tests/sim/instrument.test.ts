@@ -153,7 +153,8 @@ function runOne(i: number): RunResult {
     // A caught bot stays down, but in odd runs it raises its instrument anyway (it must not record).
     if (i % 2 === 1) for (const id of ids) if (!active.get(id)) crew = setRaised(crew, id, true);
 
-    for (const b of bots) if (active.get(b.id)) stepBot(p, b, DT);
+    // Bots sprint away when it is close behind them and their tank allows, never with the instrument up.
+    for (const b of bots) if (active.get(b.id)) stepBot(p, b, DT, member(crew, b.id)?.instrument.raised ? null : orderly.body);
     const views: PlayerView[] = bots.map((b) => ({ ...botView(b), active: active.get(b.id) ?? false }));
     const before = orderly;
     const res = stepEntity(p, before, views, DT);

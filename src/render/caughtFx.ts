@@ -1,5 +1,7 @@
 // Placeholder for being caught: the picture cuts to tape noise, then a brief line of text. The real
-// rules for what being caught means come in a later task.
+// rules for what being caught means come in a later task. Before the noise there may be a hard cut to
+// black: the first instant of being taken, when this screen has committed to the catch (net/client.ts,
+// the taken latch) and the host's word has not arrived yet.
 
 /** How long the picture is noise before the player comes back at the landing, ms. */
 export const NOISE_MS = 2000;
@@ -10,6 +12,7 @@ export class CaughtFx {
   private readonly noise: HTMLCanvasElement;
   private readonly line: HTMLDivElement;
   private readonly img: ImageData | null;
+  private readonly black: HTMLDivElement;
   private noiseUntil = 0;
   private lineUntil = 0;
 
@@ -23,7 +26,12 @@ export class CaughtFx {
     this.line.id = 'went-down';
     this.line.textContent = 'YOU WENT DOWN';
     this.line.hidden = true;
-    parent.append(this.noise, this.line);
+    this.black = document.createElement('div');
+    this.black.id = 'taken-black';
+    this.black.hidden = true;
+    this.black.style.cssText = 'position:fixed;inset:0;background:#000;pointer-events:none;';
+    // Under the noise, so the noise takes over from the black with no frame between.
+    parent.append(this.black, this.noise, this.line);
     this.img = this.noise.getContext('2d')?.createImageData(this.noise.width, this.noise.height) ?? null;
   }
 
@@ -31,6 +39,15 @@ export class CaughtFx {
   start(now: number): void {
     this.noiseUntil = now + NOISE_MS;
     this.noise.hidden = false;
+  }
+
+  /** The hard cut to black of being taken (on while the latch holds). */
+  blackout(on: boolean): void {
+    this.black.hidden = !on;
+  }
+
+  get blackOn(): boolean {
+    return !this.black.hidden;
   }
 
   get noiseOn(): boolean {
@@ -45,6 +62,7 @@ export class CaughtFx {
   reset(): void {
     this.noise.hidden = true;
     this.line.hidden = true;
+    this.black.hidden = true;
   }
 
   /**

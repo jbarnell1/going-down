@@ -14,6 +14,7 @@ import type { Level } from '../sim/floor';
 import type { Needle } from '../sim/instrument';
 import type { Body } from '../sim/move';
 import type { PlayerStatus, RunEvent, RunPhase, RunSummary, Side } from '../sim/run';
+import type { Gait, Stamina } from '../sim/stamina';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -65,6 +66,8 @@ export interface OrderlySnap extends Pose {
   /** Held still this tick (seen, or in its grace). */
   frozen: boolean;
   mode: OrderlyMode;
+  /** During a wind-up: whom it reaches for, and the seconds of it left (frozen while it is held). */
+  windUp?: { target: string; left: number };
 }
 
 export function quantPose(p: Pose): Pose {
@@ -84,6 +87,7 @@ export function orderlySnap(o: OrderlyState): OrderlySnap {
     speed: q2(o.speed),
     frozen: o.held,
     mode: o.mode,
+    ...(o.mode === 'windUp' && o.windUpTarget !== null ? { windUp: { target: o.windUpTarget, left: q3(o.windUpLeft) } } : {}),
   };
 }
 
@@ -147,6 +151,8 @@ export interface InputMsg {
   vFovDeg: number;
   raised: boolean;
   holdDoors: boolean;
+  /** The gait asked for (creep, walk or sprint). The host decides what the tank allows. Default walk. */
+  gait?: Gait;
   /** The local player saw the drawn Orderly on some frame since the last input. */
   seeing: boolean;
   /** Presses so far (a counter, so a lost or repeated message neither drops nor doubles a press). */
@@ -175,6 +181,8 @@ export interface SnapPlayer {
   aboard: boolean;
   side: Side | null;
   connected: boolean;
+  /** How they are moving, as the host allows it (so their figure can stride or run). */
+  gait: Gait;
 }
 
 export interface TapeSnap {
@@ -249,6 +257,8 @@ export interface SnapshotMsg extends WorldSnap {
   events: RunEvent[];
   /** The host moved this client's player (ride, push-out, start, joining): until acknowledged. */
   place: Placement | null;
+  /** This client's player's tank as the host has it after input `ackIn` (the truth), or null. */
+  stamina?: Stamina | null;
 }
 
 export interface JoinMsg {
@@ -296,6 +306,7 @@ const ANIMS: readonly OrderlyAnim[] = ['idle', 'walk', 'duck', 'reach'];
 const MODES: readonly OrderlyMode[] = ['waiting', 'hunting', 'windUp', 'dormant'];
 const NEEDLES: readonly Needle[] = ['off', 'idle', 'dormant', 'recording', 'contaminated'];
 const STATUSES: readonly PlayerStatus[] = ['ok', 'caught', 'leftBehind'];
+const GAITS: readonly Gait[] = ['walk', 'creep', 'sprint'];
 
 function idx<T>(list: readonly T[], v: T): number {
   const i = list.indexOf(v);
@@ -342,13 +353,13 @@ function encWorld(w: WorldSnap): Wire {
     q2(w.holdLeft),
     w.held ? 1 : 0,
     w.blink ? [w.blink.at, w.blink.announced ? 1 : 0, w.blink.endsAt] : 0,
-    [...encPose(o), o.speed, o.frozen ? 1 : 0, idx(MODES, o.mode)],
+    [...encPose(o), o.speed, o.frozen ? 1 : 0, idx(MODES, o.mode), ...(o.windUp ? [o.windUp.target, o.windUp.left] : [])],
     w.players.map((p) => [
       p.id,
       ...encBody(p.body),
       q3(p.yaw),
       q3(p.pitch),
-      (p.active ? 1 : 0) | (p.aboard ? 2 : 0) | (p.connected ? 4 : 0) | (p.side === 'bank' ? 8 : p.side === 'down' ? 16 : 0) | (idx(STATUSES, p.status) << 5),
+      (p.active ? 1 : 0) | (p.aboard ? 2 : 0) | (p.connected ? 4 : 0) | (p.side === 'bank' ? 8 : p.side === 'down' ? 16 : 0) | (idx(STATUSES, p.status) << 5) | (idx(GAITS, p.gait) << 7),
     ]),
     w.crew.map((m) => [m.id, idx(NEEDLES, m.needle), m.raised ? 1 : 0, q2(m.open), q2(m.rate), q2(m.tickHz), encTape(m.tape), m.carrying.map(encTape)]),
     w.floor.map((f) => [...encTape(f), encBody(f.at)]),
@@ -371,7 +382,7 @@ function decWorld(a: unknown[]): WorldSnap {
     holdLeft: Number(a[7]),
     held: a[8] === 1,
     blink: blink ? { at: Number(blink[0]), announced: blink[1] === 1, endsAt: blink[2] === null ? null : Number(blink[2]) } : null,
-    orderly: { ...pose, speed: Number(o[7]), frozen: o[8] === 1, mode: at(MODES, o[9]) },
+    orderly: { ...pose, speed: Number(o[7]), frozen: o[8] === 1, mode: at(MODES, o[9]), ...(o.length > 11 ? { windUp: { target: String(o[10]), left: Number(o[11]) } } : {}) },
     players: (a[11] as unknown[][]).map((p) => {
       const f = Number(p[7]);
       return {
@@ -383,7 +394,8 @@ function decWorld(a: unknown[]): WorldSnap {
         aboard: (f & 2) !== 0,
         connected: (f & 4) !== 0,
         side: f & 8 ? 'bank' : f & 16 ? 'down' : null,
-        status: at(STATUSES, f >> 5),
+        status: at(STATUSES, (f >> 5) & 3),
+        gait: at(GAITS, (f >> 7) & 3),
       };
     }),
     crew: (a[12] as unknown[][]).map((m) => ({
@@ -417,7 +429,16 @@ export function worldJson(w: WorldSnap): string {
  * once per tick and only the per-client head per client.
  */
 export function snapshotText(m: Omit<SnapshotMsg, keyof WorldSnap | 'type'>, world: string): string {
-  const head = [m.st, m.ackIn, m.echo ?? 0, m.ackSeen, m.evFrom, m.events, m.place ? [m.place.seq, m.place.depth, encBody(m.place.body)] : 0];
+  const head = [
+    m.st,
+    m.ackIn,
+    m.echo ?? 0,
+    m.ackSeen,
+    m.evFrom,
+    m.events,
+    m.place ? [m.place.seq, m.place.depth, encBody(m.place.body)] : 0,
+    m.stamina ? [q3(m.stamina.level), m.stamina.winded ? 1 : 0] : 0,
+  ];
   return `[${PROTOCOL_VERSION},"S",${JSON.stringify(head)},${world}]`;
 }
 
@@ -438,7 +459,7 @@ export function encode(m: Message): string {
         q3(m.pitch),
         q2(m.hFovDeg),
         q2(m.vFovDeg),
-        (m.raised ? 1 : 0) | (m.holdDoors ? 2 : 0) | (m.seeing ? 4 : 0),
+        (m.raised ? 1 : 0) | (m.holdDoors ? 2 : 0) | (m.seeing ? 4 : 0) | (idx(GAITS, m.gait ?? 'walk') << 3),
         m.calls,
         m.pickUps,
         m.ackEvent,
@@ -475,6 +496,7 @@ export function decode(text: string): Message | null {
         const h = a[2] as unknown[];
         const echo = h[2] as number[] | 0;
         const place = h[6] as unknown[] | 0;
+        const st = h[7] as unknown[] | 0 | undefined;
         return {
           type: 'snap',
           ...decWorld(a[3] as unknown[]),
@@ -485,6 +507,7 @@ export function decode(text: string): Message | null {
           evFrom: Number(h[4]),
           events: h[5] as RunEvent[],
           place: place ? { seq: Number(place[0]), depth: Number(place[1]), body: decBody(place[2]) } : null,
+          stamina: st ? { level: Math.max(0, Math.min(1, Number(st[0]))), winded: st[1] === 1 } : null,
         };
       }
       case 'I': {
@@ -502,6 +525,7 @@ export function decode(text: string): Message | null {
           raised: (f & 1) !== 0,
           holdDoors: (f & 2) !== 0,
           seeing: (f & 4) !== 0,
+          gait: at(GAITS, (f >> 3) & 3),
           calls: Number(a[11]),
           pickUps: Number(a[12]),
           ackEvent: Number(a[13]),

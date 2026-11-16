@@ -26,6 +26,8 @@ export interface CrewFigureState {
   yaw: number;
   pitch: number;
   raised: boolean;
+  /** How the host says they are moving: a sprint strides faster and swings wider. Default walk. */
+  gait?: 'creep' | 'walk' | 'sprint';
 }
 
 const SKIN = 0xc9a088;
@@ -208,8 +210,10 @@ class Figure {
     const v = dt > 0 && moved < 1 ? moved / dt : 0;
     this.speed += (v - this.speed) * Math.min(1, dt * 10);
     const walking = this.speed > 0.25;
-    this.phase += dt * Math.min(this.speed, 4) * 3.4;
-    const swing = walking ? Math.sin(this.phase) * Math.min(0.55, this.speed * 0.2) : 0;
+    // A sprint: the stride clock may run faster and the limbs swing wider than any walk.
+    const sprint = s.gait === 'sprint';
+    this.phase += dt * Math.min(this.speed, sprint ? 6 : 4) * 3.4;
+    const swing = walking ? Math.sin(this.phase) * Math.min(sprint ? 0.8 : 0.55, this.speed * 0.2) : 0;
     // The body turns toward where they look, lazily; the head the rest of the way.
     if (this.bodyYaw === null) this.bodyYaw = s.yaw;
     let d = wrap(s.yaw - this.bodyYaw);

@@ -34,11 +34,12 @@ import type { Pose } from './net/protocol';
 import { carFor, moveLocal, planFor, TICK } from './net/session';
 import type { Transport } from './net/transport';
 import { audibility, HUNT_SPEED, REACH_RANGE, SQUEAK_HEIGHT, WIND_UP_TIME, type OrderlyEvent, type OrderlyState } from './sim/entity';
-import type { FloorPlan, Level } from './sim/floor';
+import { isWalkable, type FloorPlan, type Level } from './sim/floor';
 import { LOUDNESS_MAX, LOUDNESS_MIN, LOUDNESS_REST, maxWalkSpeed, member, PICKUP_REACH, pickUpTape, setRaised, TICK_SCALE, tapeValue, type CrewEvent, type Instrument } from './sim/instrument';
 import { landingFacing } from './sim/landing';
 import { bodyAtCell, cellOf, LEVEL_HEIGHT, type Body } from './sim/move';
 import { BOARD_TIME, CALL_REACH, carBody, carLocal, depthMultiplier, inCar, RIDE_TIME, type RunEvent, type RunSummary, type Side } from './sim/run';
+import { exertion, freshStamina } from './sim/stamina';
 
 declare const __BUILD__: string;
 
@@ -608,6 +609,8 @@ function resetForRun(): void {
   if (runs > 0) announcer.startRun();
   figures.clear();
   stride = { x: 0, z: 0, t: 0, have: false };
+  player.stamina = freshStamina();
+  player.gait = 'walk';
   runs++;
   setHud();
 }
@@ -855,11 +858,27 @@ function intents(): LocalFrame {
   const lf = localFrame();
   lf.raised = wantRaisedNow;
   lf.holdDoors = holdNow;
+  lf.gait = player.gait;
+  lf.stamina = { ...player.stamina };
   if (pendingCall) lf.call = true;
   if (pendingPick) lf.pickUp = true;
   pendingCall = false;
   pendingPick = false;
   return lf;
+}
+
+/**
+ * Being taken, on this screen: the moment the network layer latches (the wind-up it drew ended and
+ * nothing saw it) the picture cuts hard to black through a tape glitch, held until the caught noise
+ * takes over. A latch the host calls off (a crewmate looked in time) ends in a tape drop-out and the
+ * picture snaps back. The player is held still meanwhile: they are in its hands.
+ */
+let wasTaken = false;
+function showTaken(f: Frame, falseRelease: boolean): void {
+  if (f.taken && !wasTaken) tape.glitch(260, 1);
+  if (!f.taken && wasTaken && falseRelease) tape.glitch(420, 0.9);
+  caughtFx.blackout(f.taken);
+  wasTaken = f.taken;
 }
 
 /** The host moved this page's player: adopt it (and the floor it is on). */
@@ -909,6 +928,7 @@ function skipTicks(n: number, stop?: (types: string[]) => boolean): RunEvent[] {
     c.receive(vclock);
     const f = c.frame(vclock, intents());
     adopt(f);
+    showTaken(f, c.latchReleased);
     hostStep();
     c.receive(vclock);
     view = readView();
@@ -976,6 +996,7 @@ function drawFigures(f: Frame | null, dt: number): void {
       yaw: p.yaw,
       pitch: p.pitch,
       raised: v.crew.find((m) => m.id === p.id)?.raised ?? false,
+      gait: p.gait,
     });
   }
   if (list.length > 0 && entityOn === false && safe === 0) renderer.shadowMap.enabled = true;
@@ -1089,8 +1110,10 @@ function runInfo() {
     eta: c?.eta ?? null,
     blink: s ? blinkingView(s) : false,
     blinkSoon: s ? blinkWarningView(s) : false,
-    /** The screen is dark for a blink this frame (the network layer's window). */
+    /** The screen is dark for a blink this frame (the network layer's window), or blind while taken. */
     dark: netFrame?.dark ?? false,
+    /** This screen has committed to being taken (black until the catch lands or is called off). */
+    taken: netFrame?.taken ?? false,
     vote: mine?.side ?? null,
     votes: elevator.status().votes,
     aboard: mine?.aboard ?? false,
@@ -1120,7 +1143,11 @@ function runInfo() {
 /** Replaces the run's Orderly (host only). */
 function setOrderly(f: (o: OrderlyState) => OrderlyState): void {
   const h = crew.host;
-  if (h) h.replaceOrderly(f(h.state.orderly));
+  if (!h) return;
+  h.replaceOrderly(f(h.state.orderly));
+  // A test's teleport is not a move: this page drops the pose it was drawing (or holding, if it was in
+  // view) and draws the new one from the next snapshot, as on a new floor.
+  client()?.forgetOrderly();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1298,7 +1325,24 @@ const state = {
   },
   player: () => {
     const c = cellOf(plan, player.body);
-    return { ...player.body, eye: player.body.y + EYE_HEIGHT, cx: c.x, cy: c.y, yaw: player.yaw / DEG, pitch: player.pitch / DEG, inCar: inCar(car, player.body) };
+    return { ...player.body, eye: player.body.y + EYE_HEIGHT, cx: c.x, cy: c.y, yaw: player.yaw / DEG, pitch: player.pitch / DEG, inCar: inCar(car, player.body), gait: player.gait, speed: player.lastSpeed };
+  },
+  /**
+   * The local player's breath: the page's tank (0..1) and whether winded, the gait, how out of
+   * breath that sounds and looks (0..1), and the host's copy (the truth, a round trip old).
+   */
+  stamina: () => {
+    const h = client()?.hostStamina ?? null;
+    return {
+      level: player.stamina.level,
+      winded: player.stamina.winded,
+      gait: player.gait,
+      exertion: exertion(player.stamina),
+      vignette: tape.tired,
+      breath: audio.breathState(),
+      host: h ? { level: h.level, winded: h.winded } : null,
+      ctrlCreep: input.ctrlCreep,
+    };
   },
   teleport: (level: Level, cx: number, cy: number, yawDegrees?: number) => {
     autoWalk.cancel('teleported');
@@ -1345,9 +1389,12 @@ const state = {
   caught: () => ({ noise: caughtFx.noiseOn, line: caughtFx.lineOn }),
   /** Test controls for the live Orderly (null with ?entity=0). They act on the host's page. */
   entityCtl: orderlyView && {
-    placeCell: (level: Level, cx: number, cy: number, yawDegrees?: number) => {
+    /** Stands it in a cell; refused (false) for a cell it could never be in (not walkable: a wall, the void). */
+    placeCell: (level: Level, cx: number, cy: number, yawDegrees?: number): boolean => {
+      if (!isWalkable(plan, level, cx, cy)) return false;
       const body = bodyAtCell(plan, { level, x: cx, y: cy });
       setOrderly((o) => ({ ...o, body, yaw: yawDegrees === undefined ? o.yaw : yawDegrees * DEG, path: null, replanIn: 0 }));
+      return true;
     },
     placeAt: (x: number, z: number, level: Level = 0, yawDegrees?: number) => {
       const body = { x, z, level, y: level === 1 ? LEVEL_HEIGHT : 0 };
@@ -1480,12 +1527,14 @@ const state = {
       rttMs: c ? c.clock.rtt * 1000 : null,
       snapshotAgeMs: crew.host ? 0 : Number.isFinite(on.lastFromHost) ? (now - on.lastFromHost) * 1000 : null,
       snapshots: c?.stats.snapshots ?? 0,
+      latches: c?.stats.latches ?? 0,
+      falseLatches: c?.stats.falseLatches ?? 0,
       lobby: lobby.shown ? lobby.statusLine : null,
       error: netError,
     };
   },
-  /** Every other player this page draws, with where and whether their instrument is up. */
-  crew: () => figures.drawn.map((f) => ({ id: f.id, name: f.name, number: f.number, slot: f.slot, x: f.x, y: f.y, z: f.z, yaw: f.yaw / DEG, raised: f.raised })),
+  /** Every other player this page draws, with where, whether their instrument is up, and their gait (as the host allows it). */
+  crew: () => figures.drawn.map((f) => ({ id: f.id, name: f.name, number: f.number, slot: f.slot, x: f.x, y: f.y, z: f.z, yaw: f.yaw / DEG, raised: f.raised, gait: f.gait ?? 'walk' })),
   /** Everyone in the run as this page last heard it from the host (where the host has them). */
   players: () =>
     (view?.players ?? []).map((p) => ({ id: p.id, name: nameOf(p.id), me: p.id === myId(), ...p.body, status: p.status, side: p.side, aboard: p.aboard, connected: p.connected, total: memberTotal(p.id) })),
@@ -1553,13 +1602,24 @@ renderer.setAnimationLoop(() => {
   }
   const raised = h ? (member(h.state.crew, crew.myId)?.instrument.raised ?? false) : wantRaisedNow;
   const playing = !caughtFx.noiseOn && !ended && !lobby.shown;
-  if (carWalk) stepCarWalk(dt);
-  else if (autoWalk.active) autoWalk.tick(plan, player);
-  else if (playing) player.control(plan, input, dt, raised ? maxWalkSpeed(true, WALK_SPEED) : Infinity, mover);
+  // The tank: the host's truth (a round trip old) corrects this page's copy before the frame uses it.
+  if (c) player.stamina = c.correctStamina(player.stamina);
+  if (carWalk) {
+    stepCarWalk(dt);
+    player.idle(dt, WALK_SPEED);
+  } else if (autoWalk.active) {
+    autoWalk.tick(plan, player);
+    player.idle(dt, WALK_SPEED);
+  } else if (playing && netFrame?.taken !== true) player.control(plan, input, dt, raised ? maxWalkSpeed(true, WALK_SPEED) : Infinity, mover);
   else {
     input.takeLook();
-    player.lastSpeed = 0;
+    player.idle(dt);
   }
+  // Breath, without a meter: breathing that rises as the tank empties (ragged when winded), and the
+  // edge of the view closing in a little. A full tank is silent and draws exactly as before.
+  const tired = playing ? exertion(player.stamina) : 0;
+  audio.breathing(tired, playing && player.stamina.winded);
+  tape.setTired(tired);
   if (caughtFx.update(now, ending?.kind !== 'wiped')) {
     if (ending?.kind !== 'wiped') {
       // Back at the elevator landing, facing out, as on arrival.
@@ -1587,6 +1647,7 @@ renderer.setAnimationLoop(() => {
   if (c) {
     f = c.frame(clientNow(), intents());
     adopt(f);
+    showTaken(f, c.latchReleased);
   }
   hostStep();
   c?.receive(clientNow());

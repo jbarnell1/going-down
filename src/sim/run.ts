@@ -383,6 +383,8 @@ export interface PlayerInput {
   raised?: boolean;
   /** Pick up a tape: its id, or true for the nearest one within reach. */
   pickUp?: string | true;
+  /** Sees nothing this tick, though present and huntable (the host's call: see net/host.ts). */
+  blind?: boolean;
 }
 
 export type RunEvent =
@@ -841,10 +843,10 @@ function stepOnce(prev: RunState, inputs: readonly PlayerInput[], dt: number): R
       } else if (p.aboard) {
         // Never huntable inside the car. With the doors open and the lights on, they still watch the floor.
         const w = thresholdView(car, i);
-        if (open && !blind && seenBy(s.plan, s.orderly.body, [w]) !== null) views.push(w);
+        if (open && !blind && i.blind !== true && seenBy(s.plan, s.orderly.body, [w]) !== null) views.push(w);
         else views.push(viewOf(i, false, false));
       } else {
-        views.push(viewOf(i, true, blind));
+        views.push(viewOf(i, true, blind || i.blind === true));
       }
     }
     // The call pulls it toward the landing, until it gets there.

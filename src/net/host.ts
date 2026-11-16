@@ -14,23 +14,38 @@
 //    in progress, and the Orderly is held (as if seen this tick, with the usual grace after).
 //  - A catch is not completed until the victim's machine has shown, by an input, that it drew every
 //    frame up to the moment the wind-up would finish without seeing it (its newest snapshot and its
-//    render clock have both passed that moment). Until then the Orderly holds its reach. A seen report
-//    arriving meanwhile cancels it. After CATCH_CONFIRM_MAX the catch completes regardless.
+//    render clock have both passed that moment). Until then the Orderly holds its reach. The victim's
+//    own page commits at that same moment of its drawn timeline (client.ts, the taken latch: its screen
+//    goes blind and the confirmation goes out at once), so the promise is: a player is never taken after
+//    any frame, up to the last one they see, showed them the Orderly during the wind-up. While the catch
+//    waits, a sighting saves the victim only if it is of a moment before the wind-up's end: a seen
+//    report about an earlier drawn moment, or a player whose drawn clock is still before that end (a
+//    player drawing a later moment is blind to it for those ticks). After CATCH_CONFIRM_MAX the catch
+//    completes regardless.
 //
 // Inputs: the latest by sequence number wins; older ones still deliver their acknowledgements and
-// seen reports. Bodies are the clients' own (no policing), except that a jump faster than
-// MAX_PLAYER_SPEED is refused (the allowance grows until the next input fits), bodies are ignored
-// until the client acknowledges a placement the run made (rides, push-outs, joining), and inputs from
-// players who are caught, left behind or gone are not given to the run.
+// seen reports. Bodies are the clients' own (no policing), except that a body further than the
+// player could have gone is refused (the allowance grows until the next input fits), bodies are
+// ignored until the client acknowledges a placement the run made (rides, push-outs, joining), and
+// inputs from players who are caught, left behind or gone are not given to the run.
+//
+// Gait and breath: each input says how the player asks to move (creep, walk, sprint). The host owns
+// every player's tank (sim/stamina.ts) and steps it on every new input, in the client's own clock,
+// with the gait the tank allows and the ground the bodies covered. The allowance grows at that
+// gait's speed (sprint 5 m/s while the tank lasts, otherwise walking pace) and banks at most
+// JUMP_SLACK, so a client that claims to sprint on an empty tank is held to walking pace, while an
+// honest one never notices (the slack absorbs the few frames by which the two clocks of the tank can
+// disagree). Each snapshot carries the player's own tank back, so its breathing follows the host.
 //
 // Events are numbered and kept; each snapshot carries the events after the ones its client has
 // acknowledged (up to EVENT_BUDGET bytes), so they arrive exactly once and in order.
 
 import { GRACE, ORDERLY_RADIUS, type OrderlyEvent, type OrderlyState } from '../sim/entity';
 import { isWalkable } from '../sim/floor';
-import { createInstrument, member } from '../sim/instrument';
+import { createInstrument, maxWalkSpeed, member } from '../sim/instrument';
 import { wallClearance, type Body } from '../sim/move';
 import { carBody, createRun, rectDistance, stepRun, type PlayerInput, type RunEvent, type RunPlayer, type RunState, type RunStep } from '../sim/run';
+import { freshStamina, gaitFor, stepStamina, WALK_SPEED, type Gait, type Stamina } from '../sim/stamina';
 import { emptyTape } from '../sim/tape';
 import {
   decode,
@@ -114,6 +129,14 @@ interface HostPlayer {
   placeAck: number;
   seenDone: Set<number>;
   ackSeen: number;
+  /** The tank, owned here, and the gait it allowed on the newest input. */
+  stamina: Stamina;
+  gait: Gait;
+  /** Metres the body may still move before an input is refused (grows with time at the gait's speed). */
+  allowance: number;
+  /** Client time and claimed body of the newest input (for the tank's clock and ground speed). */
+  lastCt: number | null;
+  claim: Body | null;
 }
 
 interface History {
@@ -143,6 +166,8 @@ export interface HostStats {
   windUpsCancelledByReport: number;
   catchHoldTicks: number;
   catchesForced: number;
+  /** Sightings ignored while a catch waited, because they were of a moment after the wind-up's end. */
+  lateSightings: number;
   clampedInputs: number;
   snapshots: number;
   snapshotBytes: number;
@@ -168,6 +193,7 @@ export class NetHost {
     windUpsCancelledByReport: 0,
     catchHoldTicks: 0,
     catchesForced: 0,
+    lateSightings: 0,
     clampedInputs: 0,
     snapshots: 0,
     snapshotBytes: 0,
@@ -183,7 +209,8 @@ export class NetHost {
   private readonly states = new Map<number, RunState>();
   private readonly queue: { player: string; r: SeenReport }[] = [];
   private readonly rosterIds: Set<string>;
-  private pendingCatch: { victim: string; armedAt: number; armedHost: number } | null = null;
+  /** A catch waiting for its victim's screen: the wind-up's end (host time), and where the victim stood then. */
+  private pendingCatch: { victim: string; armedAt: number; armedHost: number; body: Body | null } | null = null;
   private lastCatchTick = -1;
   private nextId = 1;
   private readonly stepFn: (s: RunState, inputs: readonly PlayerInput[], dt: number) => RunStep;
@@ -238,6 +265,11 @@ export class NetHost {
       placeAck: 0,
       seenDone: new Set(),
       ackSeen: 0,
+      stamina: freshStamina(),
+      gait: 'walk',
+      allowance: JUMP_SLACK,
+      lastCt: null,
+      claim: null,
     };
   }
 
@@ -254,6 +286,17 @@ export class NetHost {
   /** The run as it was after tick `k` (recent ticks only). */
   stateAt(k: number): RunState | undefined {
     return this.states.get(k);
+  }
+
+  /** A player's tank as the host has it (null for nobody by that id). */
+  staminaOf(id: string): Stamina | null {
+    const p = this.players.get(id);
+    return p ? { ...p.stamina } : null;
+  }
+
+  /** The gait the host allowed a player on their newest input. */
+  gaitOf(id: string): Gait | null {
+    return this.players.get(id)?.gait ?? null;
   }
 
   /** Players the host knows (ids), with whether they are connected, in the run, and gone. */
@@ -406,18 +449,43 @@ export class NetHost {
       p.pickUps = m.pickUps;
       p.pickPending = true;
     }
-    // The body: not until the client has the latest placement; never an impossible jump.
+    this.stepGait(p, m);
+    // The body: not until the client has the latest placement; never further than they could go.
     if (p.place && m.placeAck < p.place.seq) return;
     if (p.body && p.bodyCt !== null && !this.trusted.has(p.id)) {
-      const dt = Math.max(0, m.ct - p.bodyCt);
-      const jump = Math.hypot(m.body.x - p.body.x, m.body.z - p.body.z, m.body.y - p.body.y);
-      if (jump > MAX_PLAYER_SPEED * dt + JUMP_SLACK) {
+      const flat = Math.hypot(m.body.x - p.body.x, m.body.z - p.body.z);
+      // Climbing a stair adds height at most 0.8 m per metre; anything steeper counts as distance.
+      const jump = flat + Math.max(0, Math.abs(m.body.y - p.body.y) - 0.85 * flat);
+      if (jump > p.allowance + 1e-9) {
         this.stats.clampedInputs++;
         return;
       }
+      p.allowance = Math.min(JUMP_SLACK, p.allowance - jump);
+    } else {
+      p.allowance = JUMP_SLACK;
     }
     p.body = m.body;
     p.bodyCt = m.ct;
+  }
+
+  /**
+   * The tank, stepped on a new input over the client time since the previous one: the gait it allows
+   * (gaitFor, as the client's own page decides it) and the ground the claimed bodies covered. The
+   * allowance grows at that gait's pace: sprinting only while there is breath for it. A creep is
+   * allowed walking pace (creeping gains nothing, so there is nothing to police).
+   */
+  private stepGait(p: HostPlayer, m: InputMsg): void {
+    const dt = p.lastCt === null ? 0 : Math.max(0, m.ct - p.lastCt);
+    const from = p.claim;
+    const ground = dt > 0 && from && from.level === m.body.level ? Math.hypot(m.body.x - from.x, m.body.z - from.z) / dt : 0;
+    const want = m.gait ?? 'walk';
+    const cap = maxWalkSpeed(m.raised, Infinity);
+    const gait = gaitFor(p.stamina, { sprint: want === 'sprint', creep: want === 'creep', moving: ground > 0, cap });
+    p.allowance += (gait === 'sprint' ? MAX_PLAYER_SPEED : WALK_SPEED) * dt;
+    p.stamina = stepStamina(p.stamina, gait, ground, dt);
+    p.gait = gait;
+    p.lastCt = m.ct;
+    p.claim = m.body;
   }
 
   // -------------------------------------------------------------------------------------------
@@ -441,7 +509,7 @@ export class NetHost {
     for (const q of this.queue.splice(0)) s = this.applyReport(s, q.player, q.r, extra, tNext);
 
     // 2. Anyone saying they can see it now: held, and a wind-up is off.
-    const seeing = [...this.players.values()].some((p) => this.playing(p) && p.input?.seeing === true && ht - p.inputAt <= SEEING_TIMEOUT);
+    const seeing = [...this.players.values()].some((p) => this.playing(p) && p.input?.seeing === true && ht - p.inputAt <= SEEING_TIMEOUT && this.beforeArmed(p.input.renderTime, true));
     if (seeing) s = this.hold(s, true, extra, tNext, null);
 
     // 3. A catch waits for its victim's screen.
@@ -453,9 +521,11 @@ export class NetHost {
       const p = this.players.get(rp.id);
       if (!p || !this.playing(p) || !p.input) continue;
       const m = p.input;
+      // A victim whose catch waits is judged where they stood when the wind-up ended (as with no delay).
+      const pc = this.pendingCatch;
       inputs.push({
         id: p.id,
-        body: p.body ?? rp.body,
+        body: pc && pc.victim === p.id && pc.body ? pc.body : (p.body ?? rp.body),
         eye: m.eye,
         yaw: m.yaw,
         pitch: m.pitch,
@@ -463,6 +533,8 @@ export class NetHost {
         vFovDeg: m.vFovDeg,
         raised: m.raised,
         holdDoors: m.holdDoors,
+        // While a catch waits for its victim, a player drawing a moment past the wind-up's end cannot save them.
+        blind: this.beforeArmed(m.renderTime, false) ? undefined : true,
         call: p.callPending || undefined,
         pickUp: p.pickPending ? true : undefined,
       });
@@ -513,6 +585,7 @@ export class NetHost {
     p.place = { seq: (p.place?.seq ?? 0) + 1, depth, body: qBody(body) };
     p.body = body;
     p.bodyCt = null;
+    p.claim = null;
   }
 
   /** Spectators waiting for the next stop join the run now (the car is here, doors shut, crew inside). */
@@ -556,13 +629,26 @@ export class NetHost {
     return o === s.orderly ? s : { ...s, orderly: o };
   }
 
+  /**
+   * Whether a sighting at drawn host time `t` still counts while a catch waits: always when none
+   * waits, else only if `t` is before the wind-up's end. `count` records an ignored one.
+   */
+  private beforeArmed(t: number, count: boolean): boolean {
+    const pc = this.pendingCatch;
+    if (!pc || t < pc.armedAt - 1e-6) return true;
+    if (count) this.stats.lateSightings++;
+    return false;
+  }
+
   private confirmCatch(s: RunState, ht: number): RunState {
     const o = s.orderly;
     if (o.mode !== 'windUp' || o.windUpLeft - TICK > EPS || !o.windUpTarget) return s;
     // Already held this tick by grace: it will not complete now anyway.
     if (o.lastSeenAt !== null && o.t - o.lastSeenAt < GRACE - EPS) return s;
     const victim = o.windUpTarget;
-    if (!this.pendingCatch || this.pendingCatch.victim !== victim) this.pendingCatch = { victim, armedAt: s.t + TICK, armedHost: ht };
+    if (!this.pendingCatch || this.pendingCatch.victim !== victim) {
+      this.pendingCatch = { victim, armedAt: s.t + TICK, armedHost: ht, body: s.players.find((q) => q.id === victim)?.body ?? null };
+    }
     const pc = this.pendingCatch;
     const p = this.players.get(victim);
     const gone = !p || !p.connected || p.left;
@@ -580,6 +666,8 @@ export class NetHost {
     const p = this.players.get(playerId);
     if (!p || !this.playing(p)) return s;
     this.stats.reports++;
+    // A catch waiting for its victim: a sighting of a moment after the wind-up's end saves nobody.
+    if (!this.beforeArmed((r.a + (r.b - r.a) * r.alpha) * TICK, true)) return s;
     if (r.depth !== s.depth) {
       this.stats.staleReports++;
       return s;
@@ -689,6 +777,7 @@ export class NetHost {
           aboard: rp.aboard,
           side: rp.side,
           connected: p?.connected === true,
+          gait: p && this.playing(p) ? p.gait : 'walk',
         };
       }),
       crew: s.crew.members.map((m) => ({
@@ -723,7 +812,7 @@ export class NetHost {
       }
       const place = p.place && p.place.seq > p.placeAck ? p.place : null;
       const data = snapshotText(
-        { st: ht, ackIn: p.lastSeq, echo: p.echo ? [p.echo[0], ht - p.echo[1]] : null, ackSeen: p.ackSeen, evFrom: p.ackEvent + 1, events, place },
+        { st: ht, ackIn: p.lastSeq, echo: p.echo ? [p.echo[0], ht - p.echo[1]] : null, ackSeen: p.ackSeen, evFrom: p.ackEvent + 1, events, place, stamina: p.inRun ? p.stamina : null },
         text,
       );
       this.transport.send(p.peer, data);

@@ -4,10 +4,10 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 16 of 30.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 21.
+- **Gates passed:** 7 of 14. **Tasks done:** 17 of 35.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 24.
 - **Now:** nothing in progress
-- **Last CI result seen:** passed on e986ee5
+- **Last CI result seen:** passed on a117efd
 - **Answers applied up to:** 2026-11-16T12:10:00Z
 
 ## Tasks
@@ -54,16 +54,28 @@
 - [x] **T7** `done` Playing together (G7)
   - Why: Four players in one building over a peer-to-peer connection, with one player hosting.
   - Evidence: Up to four people can now play one run together in their browsers: a lobby with a room code and link, crewmates drawn as convicts in coloured jumpsuits, everyone's readings, blinks, votes and the bank on every screen. I re-ran everything myself: 130 logic tests and 46 of 46 browser tests pass, including a real peer-to-peer connection on this PC (1.6 s to connect). Not yet tried: two different home networks, phones in a crew, more than four players.
-- [ ] **T7c** `todo` Sprint, creep and stamina
+- [x] **T7c** `done` Sprint, creep and stamina
   - Why: Your request: Shift sprints, a creep key creeps, and the Orderly is faster than a walk. With limited stamina you can stay ahead by mixing running and walking, but not by much.
-  - To do: The speed rules are written and tested in src/sim/stamina.ts: walk 3.0, sprint 5.0 for 5 seconds, creep 1.2, winded until 35% recovered. Still to do: raise the Orderly's hunting speed from 3.4 to 3.7 (two tests are waiting on that, marked skipped), wire Shift to sprint and a creep key, show stamina without a meter if possible (breathing, a narrowing view), bots use it too, and the phone's stick gets a sprint zone.
-  - To do: Ctrl cannot be the creep key in a browser: Ctrl+W closes the tab and Ctrl+S, Ctrl+D do other things. Default is C to creep; Ctrl also works when the game is fullscreen and the browser lets it capture keys.
+  - Evidence: Shift sprints, C creeps, and the Orderly now hunts a little faster than you walk (3.7 against 3.0; sprint is 5.0 for five seconds). No meter: you breathe harder and the edges of the view darken as you tire. A player mixing running and walking stays ahead by about 10 m a minute; a walker is caught up. On a phone the stick's outer edge sprints. The host owns everyone's stamina, so nobody's browser can cheat it. It also closed a fairness hole: a remote player's screen now cuts to black at the instant a grab is decided, so nobody is taken after seeing the Orderly. I re-ran everything myself (137 logic tests, 49 browser tests) and broke the black-cut and the host's stamina check on purpose; both turned their tests red.
+- [ ] **T2w** `todo` Browser tests must not grab the owner's mouse
+  - Why: While the tests ran, the real mouse was confined to a small corner of the left monitor
+  - To do: Cause: the headless test browsers take pointer lock, and Chrome on Windows then confines the real cursor to the test window's rectangle (seen: 312 x 675 at the top-left). Fix so it cannot happen: in the Playwright setup replace requestPointerLock with a stand-in for tests (or give the game a test switch), keep one deliberate pointer-lock test out of the default run. Until then a watcher frees the cursor during test runs.
+- [ ] **T6e** `todo` Blinks that grow into a blackout
+  - Why: The owner wants the wait for the car to build: each blink longer than the last, ending in a long dark stretch that drives the crew away from the lift, then a mad dash back with the Orderly after them
+  - To do: Owner's words (2026-11-16): 'The blinks should get longer and longer as the players wait for the elevator, like 15 seconds for a chase to get them away from the elevator and then the players have to make a mad dash back to the elevator with the orderly chasing them.'
+  - To do: First numbers to try (tune by simulation, in src/sim/run.ts): blinks during a wait run 1, 1.5, 2.5, 4, 6 s with shorter gaps each time; the last one before the car is the blackout, 12 to 15 s, timed to end as the car arrives. Today: every 5 to 9 s, always 1 s, wait 25 to 55 s.
+  - To do: Needs with it: (1) emergency floor strips so the crew can find their way in the long dark, while the Orderly stays unseen (heard, not shown: a watched Orderly never moves, so the dark must really hide it); (2) the announcer warns before the blackout so it is never a surprise death; (3) the car waits long enough for a dash back (boarding is 20 s plus holding the door 15 s; check it fits a 40 m run); (4) simulate hundreds of crews: a careful crew that runs, then looks back once the lights return, usually survives; a crew that stands by the lift through the blackout is usually caught; report both rates; (5) fair on every screen in a crew, like the short blinks.
+- [ ] **T6d** `todo` Even voice loudness and thirty more announcer lines
+  - Why: The owner found the voice much quieter after being caught than in the car, and the same lines get tiring
+  - To do: Cause found: recordings are all at the same loudness (-16 LUFS); the game plays the landing speaker at as little as a tenth of the in-car level when you are far from it (VOICE.farMin 0.08 x farLevel 0.75 vs closeLevel 0.6 in src/game/announcer.ts). Fix: floor the far level near 0.55, soften the far low-pass floor to about 1400 Hz, put a compressor on the voice bus, and play taken/wipe/banked lines at the close level wherever the listener is.
+  - To do: Thirty drafted lines wait in .local/voice-new-lines.json (3,086 characters per voice). Merge into assets_src/voice/lines.json with the usual settings, generate ONE take each for Bella and Brian if the script allows (else three takes: about 18,500 characters, total about 31,500 of the 50,000 cap), publish, check the announcer never repeats a line back to back.
 - [ ] **T7d** `todo` Playing across two home networks
   - Why: Friends at home need to join the host; some home routers block direct browser-to-browser links unless a relay helps
 - [ ] **T7b** `todo` Bot crewmates and the test panel (G14)
   - Why: So you can test a full crew alone on the live link.
 - [ ] **T8** `todo` Going down, cameras and the wipe (G8, G9)
   - Why: Being caught puts you on the cameras, and a full wipe ends the run.
+  - To do: Owner asked (2026-11-16): an animated being-caught sequence with noise. The Orderly's reach filling the view, the tape tearing, a loud burst; then the downed view. Later is fine, after more of the game is settled.
 - [ ] **T7e** `todo` Better-looking crewmates and readable name tags
   - Why: Crewmates are plain boxes and their names cannot be read from a few metres
 - [x] **T14a** `done` Shrink the downloaded props for the game
@@ -78,6 +90,8 @@
   - Why: Let the doors close early once everyone is aboard, a bell warning the logic knows about, doors that take real time to close, and the phone's call and hold buttons tested.
 - [ ] **T9** `todo` The shadow trigger (G11)
   - Why: A shadow crossing a doorway in a quiet moment: a scare trigger, never the monster.
+- [ ] **T9b** `todo` A second Orderly on deeper floors
+  - Why: The owner's idea: with two, nobody can watch both, so the crew has to split who looks where
 - [x] **T3b** `done` The Orderly, third pass
   - Why: After it moves and the tape look is on: real sewn lids instead of button-like discs, mottled skin, a stained gown that stands out from the walls, a narrower grin.
   - Evidence: The Orderly now wears a torn, stained gown: the hem hangs in strips that swing on their own bones, half a sleeve is gone, the eyelids are sewn. Seen in the running game in the watched and within-reach screenshots; all browser tests pass with it. Its own maker says the face is still a pale blob beyond about 3 m.
@@ -91,8 +105,15 @@
   - Why: Parked at your request. The phone reported a PowerVR D-Series graphics chip. Its browser threw the picture away on the very first frame, restored it, then lost it again about six seconds later while the Orderly was on screen; the game then switched itself to the lighter level. Next step when picked up: three test links (no Orderly, no tape look, lightest level) to find which part that chip's driver cannot take. Computers are unaffected.
 - [ ] **T1b** `todo` More than one floor skeleton
   - Why: Every Clinic floor shares one skeleton today, which will feel samey by the third floor.
+- [ ] **T15** `todo` A floor where you have to hide
+  - Why: The owner's idea for a later floor: when its entity is angry enough, a voice tells the crew to hide, the lights go out, music starts, and anyone found during the search dies
+  - To do: Owner's words (2026-11-16): 'if the entity is aggro'ed enough, it kicks off a voice that tells players to hide. If they're found before timer goes off, they're killed. Otherwise, the entity follows it's normal rules. (only move when looking etc) The level goes dark, creepy music starts playing, and players have to find a place. You'll have to research how to make a good ai bot that explores rooms so that the challenge is actually challenging. Staying visible and just running away kills you. Once count is finished, moving faster than creep drains health maybe?'
+  - To do: My reading, to confirm with the owner: (1) an anger level rises with noise (sprinting, calls, readings); (2) at the top, the announcer starts a count (about 20 s), lights go out, music starts; (3) when the count ends a search runs for a set time: the entity checks rooms and hiding places; anyone it finds is taken; moving faster than a creep costs health; (4) when the search time is up it goes back to its usual rule. Hiding places come from the props (lockers, under beds, cupboards, behind curtains).
+  - To do: Research before building (one agent, written up in docs): how games make a searcher that feels smart and fair. Start from occupancy / probability maps (the searcher keeps a belief of where players could be and checks the likeliest spots), last-known-position search, a director that nudges it toward players without telling it exactly (Alien: Isolation's two-part design), and hiding-spot checks with tells so a hidden player can hold their breath. Must stay deterministic from the seed and simulate hundreds of rounds: good hiders usually live, runners die, nobody dies to pure luck.
+  - To do: Fits the existing rules: the entity is heard before seen; the instrument could pay most for a reading taken from a hiding place while it searches nearby; a found player goes down rather than out, with something to do within seconds.
 - [ ] **S** `todo` Stretch: voice that fades with distance, a second trait, the Tenant, a second place
   - Why: Only if every gate is green with time left.
+  - To do: Owner (2026-11-16): 'multiple different types of entities once we program other levels'. Each new place brings its own entity with its own rule.
 
 ## Gates
 
@@ -117,9 +138,23 @@
 - 2026-11-16: Repository licence: none yet (question "license" on the hub).
 - 2026-11-16: The North Star design document stays out of the public repository (question "publish-design-doc").
 - 2026-11-16: The Orderly: kept as it is for now and moved on, relying on behaviour, sound and the tape look for fear (question "orderly-next").
+- 2026-11-16: Playing across home networks: until the owner answers the new question, the default is to build a connection test page first and no relay.
 
 ## Activity (newest first)
 
+- 2026-11-16 15:47Z Finished T7c: Sprint, creep and stamina.
+- 2026-11-16 15:45Z Added task T15: A floor where you have to hide.
+- 2026-11-16 15:33Z Added task T2w: Browser tests must not grab the owner's mouse.
+- 2026-11-16 15:31Z Progress page: the roadmap now shows what is happening now first, then finished work newest first; steps still to come are folded into one line you can open.
+- 2026-11-16 15:17Z Usage at 09:17: week's allowance 33% used across all models and 38% on Fable (it was 26% and 33% at 05:45). At this morning's pace that leaves roughly 30 more hours of this kind of work before Sunday's reset.
+- 2026-11-16 14:52Z Added task T9b: A second Orderly on deeper floors.
+- 2026-11-16 14:52Z Added task T6e: Blinks that grow into a blackout.
+- 2026-11-16 14:46Z Sprint and stamina passed my re-run of the logic tests, but one browser test failed about 1 time in 7: the Orderly did not move during a blink. I sent it back for the root cause; it is not accepted.
+- 2026-11-16 14:03Z Added task T6d: Even voice loudness and thirty more announcer lines.
+- 2026-11-16 13:48Z Sprint, creep and stamina are built but not yet accepted. The faster Orderly exposed a real fairness hole in multiplayer: a remote player could turn, see the Orderly frozen mid-reach, and still be taken a moment later. The agent is fixing it properly (the victim's own screen cuts to black at the instant the grab is decided) and was told not to loosen the test that caught it.
+- 2026-11-16 13:08Z Started T7c: Sprint, creep and stamina. An agent is adding sprint (Shift), creep (C) and stamina, and making the Orderly a little faster than a walk
+- 2026-11-16 13:07Z Took a default: Playing across home networks: until the owner answers the new question, the default is to build a connection test page first and no relay.
+- 2026-11-16 13:07Z Live build is now a117efd (tag good-11): playing together, the torn-gown Orderly, props and textures. Checked from the lab box on the game's port: the play page, the new model (1.4 MB) and the prop list all load, and the status page reports a117efd.
 - 2026-11-16 13:00Z Added task T7e: Better-looking crewmates and readable name tags.
 - 2026-11-16 13:00Z Added task T7d: Playing across two home networks.
 - 2026-11-16 13:00Z Finished T3b: The Orderly, third pass.
@@ -147,16 +182,3 @@
 - 2026-11-16 11:36Z Added task T7c: Sprint, creep and stamina.
 - 2026-11-16 11:36Z You played it. In your words: the sound is good and lessens around corners and with distance; the wait for the elevator has real tension; the Orderly is kind of scary already and the thrill rose a lot when it chased you through the blinks. Decisions from that: keep the Orderly and rely on timing; give it tattered clothes; add sprinting with stamina and make it faster than a walk.
 - 2026-11-16 11:36Z Applied the owner's new answers.
-- 2026-11-16 11:34Z Started T7: Playing together. The multiplayer logic is proven. An Opus agent is now building it into the game: a lobby with a link to share, crew members you can see, and four tabs sharing one building.
-- 2026-11-16 11:32Z Applied the owner's new answers.
-- 2026-11-16 11:32Z New pictures for T6b: The elevator voice.
-- 2026-11-16 11:32Z Brian is in the game as a second elevator voice, and there is a settings menu: press Esc on a computer, or the gear on a phone, to switch between Bella and Brian, play a sample, turn subtitles off, change the tape look, or set the volume. Brian's set cost 5,151 characters; the game has now used 12,984 of the 50,000 cap. No key or private path leaked. All 40 browser tests and 118 rule tests pass on the merged code. Nobody has heard Brian.
-- 2026-11-16 11:22Z CI failed on e34bdee.
-- 2026-11-16 11:14Z You said not to spend much energy on the phone crash, so it is parked as its own step with what your phone reported. Development continues on the main roadmap.
-- 2026-11-16 11:14Z Added task T13: Phone picture crash on your Pixel.
-- 2026-11-16 11:09Z Your phone's picture went blank a few seconds into a run: the browser threw the graphics context away. Fixed in the live build three ways. The game now restores the picture when that happens, and shows a notice while it does. Phones use a lighter 8-bit drawing path from the start. If the picture is lost twice the game switches to a lighter level by itself and reloads once. The phone also reports its graphics chip and what the game was doing to the hub, so the real cause can be read. Tested by taking the context away on purpose in a browser; NOT yet confirmed on your phone.
-- 2026-11-16 11:01Z New pictures for T6b: The elevator voice.
-- 2026-11-16 10:55Z You chose Brian and Bella as your top two voices. Recording Brian's full set now, about 5,150 characters, and adding a settings switch between them.
-- 2026-11-16 10:55Z Multiplayer is proven in logic. Over 200 simulated sessions with delays up to 250 ms, lost and reordered messages, every frame of every player's screen was checked: 76,782 moments when a player could see the Orderly in two frames running, and it was never drawn in two different places. When delay let the host move it after a player had already seen it, the host put it back where that player saw it (1,532 times, 2 metres at most). No catch ever landed on a player whose own screen showed it. Blinks are dark on every screen for the whole time the host lets it move. Fable's deliberate break: turning screens back on 0.2 seconds early left 21,367 lit frames and failed the blink test.
-- 2026-11-16 09:56Z Started T7: Playing together. An Opus agent is building the multiplayer layer as tested logic first: one player's browser hosts the run, the others send what they do and see, and the Orderly must never be seen to move on anyone's screen even with network delay.
-- 2026-11-16 09:55Z Finished T6b: The elevator voice.

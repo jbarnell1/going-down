@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 // The walk test drives the game through auto-walk. This one presses real keys, because the
 // owner tests by hand on the live link and nothing else proves the controls are wired up.
-test('W walks forward, Shift creeps, and a wall stops you', async ({ page }) => {
+test('W walks forward, C creeps, and a wall stops you', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto('/?seed=alpha&entity=0');
@@ -29,11 +29,11 @@ test('W walks forward, Shift creeps, and a wall stops you', async ({ page }) => 
   expect(dist(p2, await pos())).toBeLessThan(0.05);
 
   // Creeping covers clearly less ground in the same time.
-  await page.keyboard.down('ShiftLeft');
+  await page.keyboard.down('KeyC');
   await page.keyboard.down('KeyS');
   await page.waitForTimeout(700);
   await page.keyboard.up('KeyS');
-  await page.keyboard.up('ShiftLeft');
+  await page.keyboard.up('KeyC');
   const crept = dist(p2, await pos());
   expect(crept).toBeGreaterThan(0.3);
   expect(crept).toBeLessThan(walked * 0.75);

@@ -21,9 +21,25 @@
 // The local body is never taken from snapshots, except when the host moves the player (start,
 // rides, being pushed out of the car, joining): those come as a numbered placement, applied here
 // once and acknowledged in every input; the host ignores bodies until it is acknowledged.
+//
+// Being taken: a wind-up aimed at this player that its displayed timeline (the interpolated one it
+// draws) has followed to its end, without any frame of it showing the Orderly, latches "taken": from
+// that frame the screen is blind (Frame.dark, no Orderly drawn, nothing can be seen) and the input
+// that confirms it to the host goes out at once. So no later frame can show the moment before the
+// catch, however long the host takes to hear the confirmation. The latch fires only when the
+// buffered snapshots agree the wind-up ran to its end (still pending on the host, or the catch
+// happened); it is let go when the catch has been drawn up to (the game's caught sequence has the
+// screen by then), or when the snapshots show the host did not complete it (cancelled: another player
+// looked, or the floor changed), or after LATCH_MAX seconds of displayed time with nothing pending.
+//
+// The tank (sim/stamina.ts): the page steps its own copy every frame so a sprint answers at once;
+// the host owns the truth and sends it back in every snapshot, as it stood after input `ackIn`.
+// correctStamina() compares that with what this page's copy was when it sent that input and moves
+// the local copy by the difference, so the two agree without waiting out the round trip.
 
 import type { Body } from '../sim/move';
 import { BLINK_TIME, BLINK_WARNING, type RunEvent } from '../sim/run';
+import { WINDED_UNTIL, type Gait, type Stamina } from '../sim/stamina';
 import {
   decode,
   encode,
@@ -50,6 +66,9 @@ export interface LocalFrame extends Camera {
   call?: boolean;
   /** The pick-up key was pressed this frame. */
   pickUp?: boolean;
+  /** How the player is moving (default walk), and the page's own copy of their tank. */
+  gait?: Gait;
+  stamina?: Stamina;
 }
 
 export interface DrawnPlayer {
@@ -59,6 +78,7 @@ export interface DrawnPlayer {
   pitch: number;
   active: boolean;
   status: SnapPlayer['status'];
+  gait: Gait;
 }
 
 export interface Frame {
@@ -70,6 +90,8 @@ export interface Frame {
   held: boolean;
   /** The local player sees the drawn Orderly on this frame. */
   seeing: boolean;
+  /** Latched as taken: the screen is blind (also `dark`) until the catch is drawn or called off. */
+  taken: boolean;
   /** Depth of the floor drawn. */
   depth: number;
   players: DrawnPlayer[];
@@ -94,6 +116,9 @@ export interface ClientStats {
   releases: number;
   /** Releases with a jump over 0.25 m. */
   bigReleases: number;
+  /** Taken latches, and those let go because the host did not complete the catch. */
+  latches: number;
+  falseLatches: number;
 }
 
 /** A state as stored for drawing; snapshots also carry how far the host had got with our reports. */
@@ -114,6 +139,14 @@ export interface ClientOptions {
 
 const LAG_WINDOW = 60;
 const SNAP_KEEP = 3;
+/** Inputs whose tank is remembered for correctStamina(). */
+const TANK_KEEP = 120;
+/** Differences in the tank smaller than this are rounding (the snapshot carries it to 0.001). */
+const TANK_EPS = 0.004;
+/** A taken latch with nothing pending on the host is let go after this much displayed time (s)... */
+const LATCH_IDLE = 1;
+/** ...and any latch after this much (s), the host's own limit on waiting being CATCH_CONFIRM_MAX. */
+const LATCH_MAX = 2.5;
 
 export class NetClient {
   /** Assigned by the host's welcome. */
@@ -132,9 +165,11 @@ export class NetClient {
   /** Sequence number of this client's first event (1 unless it joined a run in progress). */
   firstEvent = 1;
   readonly clock = new HostClock();
-  readonly stats: ClientStats = { frames: 0, darkFrames: 0, guardDarkFrames: 0, reports: 0, inputs: 0, inputBytes: 0, maxInputBytes: 0, snapshots: 0, maxReleaseJump: 0, releases: 0, bigReleases: 0 };
+  readonly stats: ClientStats = { frames: 0, darkFrames: 0, guardDarkFrames: 0, reports: 0, inputs: 0, inputBytes: 0, maxInputBytes: 0, snapshots: 0, maxReleaseJump: 0, releases: 0, bigReleases: 0, latches: 0, falseLatches: 0 };
   /** Every input's size in bytes (tests read the bound). */
   readonly inputSizes: number[] = [];
+  /** The local player's tank as the host last said it was (the truth, a round trip old), or null. */
+  hostStamina: Stamina | null = null;
 
   private evNext = 1;
   private readonly evBuf = new Map<number, RunEvent>();
@@ -160,6 +195,26 @@ export class NetClient {
   private lastJoin = -Infinity;
   private readonly interpDelay: number;
   private readonly inputInterval: number;
+  /** The page's tank as it was when each recent input was sent. */
+  private readonly tankAt = new Map<number, Stamina>();
+  /** Input seq the newest host tank is about, and whether correctStamina() has used it. */
+  private hostTankSeq = 0;
+  private hostTankFresh = false;
+  /** The displayed wind-up aimed at this player: whether one is on, and whether a frame of it saw the Orderly. */
+  private windUpOn = false;
+  private windUpSaw = false;
+  /** Host time the displayed wind-up ends (from the first drawn snapshot of it on its last tick), or null. */
+  private armedEnd: number | null = null;
+  /** The end of the last wind-up a latch was made for (never latched twice). */
+  private latchedEnd = -Infinity;
+  /** The taken latch: displayed time it fired, the armed snapshot's time, and its floor. */
+  private latch: { rt: number; armed: number; depth: number } | null = null;
+  /** Host time of the newest catch of this player heard of. */
+  private caughtAt = -Infinity;
+  /** Snapshots up to this tick show an Orderly a test hook has since moved: it is not drawn from them. */
+  private orderlyFrom = -1;
+  /** A false latch was let go on the last frame (the game shows it as a drop-out). */
+  latchReleased = false;
 
   constructor(
     private readonly transport: Transport,
@@ -239,12 +294,19 @@ export class NetClient {
           if (n >= this.evNext && !this.evBuf.has(n)) this.evBuf.set(n, e);
         });
         while (this.evBuf.has(this.evNext)) {
-          this.events.push(this.evBuf.get(this.evNext) as RunEvent);
+          const ev = this.evBuf.get(this.evNext) as RunEvent;
+          if (ev.type === 'caught' && ev.playerId === this.id) this.caughtAt = Math.max(this.caughtAt, ev.t);
+          this.events.push(ev);
           this.evBuf.delete(this.evNext);
           this.evNext++;
         }
         this.unacked = this.unacked.filter((r) => r.id > m.ackSeen);
         if (m.place && m.place.seq > this.placeApplied && (!this.pendingPlace || m.place.seq > this.pendingPlace.seq)) this.pendingPlace = m.place;
+        if (m.stamina && m.ackIn >= this.hostTankSeq) {
+          this.hostStamina = m.stamina;
+          this.hostTankFresh = this.hostTankFresh || m.ackIn > this.hostTankSeq || this.hostTankSeq === 0;
+          this.hostTankSeq = m.ackIn;
+        }
         const world: Shown = { ...m };
         this.insert(world);
         if (!this.latest || m.tick > this.latest.tick) {
@@ -346,7 +408,8 @@ export class NetClient {
     this.stats.frames++;
     if (local.call) this.calls++;
     if (local.pickUp) this.pickUps++;
-    const empty = (placed: Body | null = null): Frame => ({ dark: false, orderly: null, held: false, seeing: false, depth: this.localDepth, players: [], renderTime: -1, placed });
+    this.latchReleased = false;
+    const empty = (placed: Body | null = null): Frame => ({ dark: false, orderly: null, held: false, seeing: false, taken: false, depth: this.localDepth, players: [], renderTime: -1, placed });
     if (this.id === null || this.seed === null) {
       if (now - this.lastJoin >= 0.5) this.sendJoin(now);
       return empty();
@@ -367,12 +430,15 @@ export class NetClient {
     const dk = this.isDark(hostNow, show);
     if (dk.dark) this.stats.darkFrames++;
     if (dk.byClockOnly) this.stats.guardDarkFrames++;
+    const latchedNow = this.updateLatch(show, rt);
+    const taken = this.latch !== null;
+    const blind = dk.dark || taken;
 
     // The Orderly.
     let seeingNow = false;
     let report: SeenReport | null = null;
     let orderly: Pose | null = null;
-    if (show && show.a.depth === this.localDepth) {
+    if (show && show.a.depth === this.localDepth && show.a.tick > this.orderlyFrom) {
       const { a, b, alpha } = show;
       // Pinned: until the snapshots drawn show the host has handled our last report, they are the
       // timeline it is about to abandon (it puts the Orderly back where we froze it), so keep that.
@@ -381,7 +447,7 @@ export class NetClient {
       const cand = this.pin ? this.pin.pose : lerpPose(a.orderly, b.orderly, alpha);
       const plan = planFor(this.seed, a.depth);
       const open = doorsOpenIn(a.phase) || doorsOpenIn(b.phase) || (this.latest !== null && doorsOpenIn(this.latest.phase));
-      const sees = (p: Pose): boolean => !dk.dark && cameraSees(plan, cam, p, open);
+      const sees = (p: Pose): boolean => !blind && cameraSees(plan, cam, p, open);
       const same = this.drawn !== null && this.drawnDepth === a.depth;
       if (this.frozen && same && sees(this.drawn as Pose)) {
         // Seen: held exactly where it is, whatever the snapshots say.
@@ -413,6 +479,7 @@ export class NetClient {
       this.frozen = false;
     }
     if (seeingNow) this.seeingLatch = true;
+    if (seeingNow && this.windUpOn) this.windUpSaw = true;
 
     // Everyone else.
     const players: DrawnPlayer[] = [];
@@ -435,13 +502,113 @@ export class NetClient {
           pitch: pa.pitch + (pb.pitch - pa.pitch) * k,
           active: pa.active,
           status: pa.status,
+          gait: (k < 0.5 ? pa.gait : pb.gait) ?? 'walk',
         });
       }
     }
 
     // The input: every INPUT_INTERVAL, and at once on a new sighting.
-    if (report || now - this.lastSend >= this.inputInterval - 1e-9) this.send(now, cam, local, rt);
-    return { dark: dk.dark, orderly, held: this.frozen, seeing: seeingNow, depth: show?.a.depth ?? this.localDepth, players, renderTime: rt, placed };
+    if (report || latchedNow || now - this.lastSend >= this.inputInterval - 1e-9) this.send(now, cam, local, rt);
+    return { dark: blind, orderly: taken ? null : orderly, held: this.frozen, seeing: seeingNow, taken, depth: show?.a.depth ?? this.localDepth, players, renderTime: rt, placed };
+  }
+
+  private endLatch(): void {
+    this.latch = null;
+    this.windUpOn = false;
+    this.windUpSaw = false;
+    this.armedEnd = null;
+  }
+
+  /**
+   * The taken latch, per frame, from the snapshots being drawn (`show`, at displayed time `rt`) and
+   * the newest one received. Returns true on the frame it fires (the confirming input goes at once).
+   */
+  private updateLatch(show: { a: Shown; b: Shown; alpha: number } | null, rt: number): boolean {
+    const newest = this.latest;
+    const mine = (w: WorldSnap | null): boolean => w !== null && w.orderly.mode === 'windUp' && w.orderly.windUp?.target === this.id;
+    if (this.latch) {
+      const l = this.latch;
+      if (this.caughtAt > l.armed) {
+        // The catch happened: blind until the frame drawn is past it.
+        if (rt >= this.caughtAt - 1e-9) this.endLatch();
+        return false;
+      }
+      const pending = newest !== null && newest.depth === l.depth && (mine(newest) || newest.orderly.mode === 'dormant');
+      const elapsed = rt - l.rt;
+      if (this.localDepth !== l.depth || !pending || (elapsed > LATCH_IDLE && !mine(newest)) || elapsed > LATCH_MAX) {
+        this.endLatch();
+        this.stats.falseLatches++;
+        this.latchReleased = true;
+      }
+      return false;
+    }
+    const reset = (): void => {
+      this.windUpOn = false;
+      this.windUpSaw = false;
+      this.armedEnd = null;
+    };
+    if (!show || show.a.depth !== this.localDepth) {
+      reset();
+      return false;
+    }
+    const a = show.a;
+    const onMe = mine(a);
+    if (onMe) {
+      if (!this.windUpOn) {
+        reset();
+        this.windUpOn = true;
+      }
+      const w = a.orderly.windUp as { target: string; left: number };
+      if (this.armedEnd === null && w.left <= TICK + 1e-6) this.armedEnd = a.ht + w.left;
+    }
+    const end = this.armedEnd;
+    // The displayed wind-up has reached its end unseen (the snapshot drawn may already be the one after
+    // the catch). Only if the host's snapshots agree it ran to its end: still pending (held for our
+    // confirmation), or the catch made.
+    const due = this.windUpOn && !this.windUpSaw && end !== null && end > this.latchedEnd + 1e-6 && rt >= end - 1e-6;
+    const ranToEnd = end !== null && (this.caughtAt >= end - 1e-6 || (newest !== null && newest.depth === a.depth && (mine(newest) || newest.orderly.mode === 'dormant')));
+    if (!onMe) reset();
+    if (!due || !ranToEnd || end === null) return false;
+    this.latch = { rt, armed: end - TICK, depth: a.depth };
+    this.latchedEnd = end;
+    this.stats.latches++;
+    return true;
+  }
+
+  /**
+   * Forgets the Orderly as drawn (and any pose held because it was in view): the next frame draws it
+   * from the snapshots. For a test hook's teleport, which is not a move the rule has to hide.
+   */
+  forgetOrderly(): void {
+    this.orderlyFrom = this.latest?.tick ?? -1;
+    this.drawn = null;
+    this.frozen = false;
+    this.pin = null;
+    this.drawnDepth = -1;
+  }
+
+  /**
+   * The page's own tank, corrected toward the host's: by how far the host's tank after input `ackIn`
+   * differs from what this page had when it sent that input. Call once a frame with the current copy.
+   */
+  correctStamina(local: Stamina): Stamina {
+    if (!this.hostTankFresh || !this.hostStamina) return local;
+    this.hostTankFresh = false;
+    const sent = this.tankAt.get(this.hostTankSeq);
+    if (!sent) return local;
+    const host = this.hostStamina;
+    const d = host.level - sent.level;
+    const windChange = host.winded !== sent.winded;
+    if (Math.abs(d) < TANK_EPS && !windChange) return local;
+    const fix = (st: Stamina): Stamina => {
+      const level = Math.max(0, Math.min(1, st.level + (Math.abs(d) < TANK_EPS ? 0 : d)));
+      let winded = st.winded;
+      if (windChange) winded = host.winded && level < WINDED_UNTIL;
+      return { level, winded };
+    };
+    // Later inputs were sent from the uncorrected copy: move them too, or the next snapshot corrects twice.
+    for (const [k, st] of this.tankAt) if (k >= this.hostTankSeq) this.tankAt.set(k, fix(st));
+    return fix(local);
   }
 
   private makeReport(a: WorldSnap, b: WorldSnap, alpha: number, pose: Pose): SeenReport {
@@ -465,6 +632,7 @@ export class NetClient {
       vFovDeg: cam.vFovDeg,
       raised: local.raised === true,
       holdDoors: local.holdDoors === true,
+      gait: local.gait ?? 'walk',
       seeing: this.seeingLatch,
       calls: this.calls,
       pickUps: this.pickUps,
@@ -474,6 +642,10 @@ export class NetClient {
       placeAck: this.placeApplied,
       seen: this.unacked.slice(-2),
     };
+    if (local.stamina) {
+      this.tankAt.set(m.seq, { ...local.stamina });
+      this.tankAt.delete(m.seq - TANK_KEEP);
+    }
     const text = encode(m);
     this.transport.send(this.hostId, text);
     this.lastSend = now;

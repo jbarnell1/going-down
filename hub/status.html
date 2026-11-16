@@ -36,6 +36,10 @@
   .step.blocked .dot { border-color: var(--warn); color: var(--warn); }
   .scard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; min-width: 0; }
   .step.todo .scard { opacity: .7; }
+  details.coming { margin: 2px 0 14px; }
+  details.coming > summary { cursor: pointer; padding: 10px 14px; border: 1px dashed var(--line); border-radius: 10px; color: var(--dim); font-size: 15px; }
+  details.coming[open] > summary { margin-bottom: 10px; }
+  h3.sub { margin: 6px 0 10px; font-size: 14px; font-weight: 400; color: var(--dim); }
   .step.doing .scard { border-color: var(--acc); }
   .scard h3 { margin: 0; font-size: 16px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
   .scard h3 span.id { color: var(--dim); font-weight: 400; font-size: 13px; }
@@ -175,7 +179,13 @@ function render(d) {
   $('latestNote').textContent = latest.length ? 'Anything the loop produces appears here by itself, newest first. Tap to enlarge.' : 'Nothing has been produced yet.';
   $('latest').replaceChildren(...latest.slice(0, 24).map(tile));
 
-  $('steps').replaceChildren(...s.tasks.map((t, i) => {
+  // Newest on top: what is happening now, then what was finished (latest first). What is still to
+  // come sits between them, folded away, in the order it will be done.
+  const fin = (t) => Date.parse(t.finishedAt || '') || 0;
+  const active = s.tasks.filter((t) => t.status === 'doing' || t.status === 'blocked');
+  const finished = s.tasks.filter((t) => t.status === 'done').sort((a, b) => fin(b) - fin(a));
+  const coming = s.tasks.filter((t) => t.status !== 'doing' && t.status !== 'blocked' && t.status !== 'done');
+  const step = (list) => (t, i) => {
     const mark = { done: '✓', doing: '', blocked: '!', todo: String(i + 1) }[t.status] ?? '';
     const dot = el('div', { class: 'dot' }, t.status === 'doing' ? el('span', { class: 'spin' }) : document.createTextNode(mark));
     const card = el('div', { class: 'scard' });
@@ -190,8 +200,18 @@ function render(d) {
         tile({ url: '/media/' + m.src, kind: m.kind, caption: m.caption, name: '', when: Date.parse(m.at) }))));
     }
     if (t.status === 'done' && t.finishedAt) card.append(el('p', { text: 'Finished ' + ago(Date.parse(t.finishedAt)) }));
-    return el('div', { class: 'step ' + t.status }, el('div', { class: 'rail' }, dot, i < s.tasks.length - 1 ? el('div', { class: 'line' }) : null), card);
-  }));
+    return el('div', { class: 'step ' + t.status }, el('div', { class: 'rail' }, dot, i < list.length - 1 ? el('div', { class: 'line' }) : null), card);
+  };
+  const wasOpen = document.getElementById('comingBox')?.open ?? false;
+  const comingBox = el('details', { id: 'comingBox', class: 'coming' },
+    el('summary', { text: `Coming next: ${coming.length} step${coming.length === 1 ? '' : 's'}` + (coming[0] ? `, starting with "${coming[0].title}"` : '') }),
+    ...coming.map(step(coming)));
+  comingBox.open = wasOpen;
+  $('steps').replaceChildren(
+    ...active.map(step(active)),
+    ...(coming.length ? [comingBox] : []),
+    ...(finished.length ? [el('h3', { class: 'sub', text: 'Finished, newest first' })] : []),
+    ...finished.map(step(finished)));
 
   $('gates').replaceChildren(...s.gates.map((g) => el('div', { class: 'gate ' + g.status },
     el('strong', { text: (g.status === 'passed' ? '✓ ' : '') + g.id + '  ' + g.title }),

@@ -3,15 +3,27 @@
 // sometimes stopping), and turns its head with a mix of looking where it goes, glancing behind and
 // looking around. `watchfulness` (0..1) sets how often it looks anywhere but ahead; an `oblivious`
 // bot never looks behind and only looks a little to the sides.
+//
+// Bots have the players' tank (stamina.ts) and, given where the Orderly is, use it as a person
+// would: a bot that glances behind and sees it within BOT_FLEE_RANGE is alarmed for BOT_ALARM_TIME
+// seconds, and while alarmed it sprints whenever the Orderly is close behind it (same level, in
+// range, behind its direction of travel) and the tank allows; otherwise it walks, creeps or stops as
+// before. So a watchful bot runs for it and an oblivious one (it never looks behind) never knows.
+// Deterministic: no extra random draws.
 
 import { findPath, isWalkable, posFromIndex, reachableFrom, type FloorPlan, type Pos } from './floor';
 import { pathDone, stepPathWalk, type PathWalk } from './follow';
 import { bodyAtCell, cellOf, type Body } from './move';
 import { makeRng, type Rng } from './rng';
 import type { PlayerView } from './entity';
+import { CREEP_SPEED, freshStamina, gaitFor, speedFor, stepStamina, WALK_SPEED, type Gait, type Stamina } from './stamina';
 
-export const BOT_WALK_SPEED = 3.0;
-export const BOT_CREEP_SPEED = 1.2;
+export const BOT_WALK_SPEED = WALK_SPEED;
+export const BOT_CREEP_SPEED = CREEP_SPEED;
+/** A bot flees (sprints) from an Orderly within this many metres behind it... */
+export const BOT_FLEE_RANGE = 10;
+/** ...for this many seconds after it last glanced back and saw it there. */
+export const BOT_ALARM_TIME = 5;
 export const BOT_RADIUS = 0.3;
 export const BOT_EYE = 1.65;
 /** The game camera: 70 degrees vertical at 16:9. */
@@ -51,6 +63,11 @@ export interface Bot {
   watchfulness: number;
   oblivious: boolean;
   rng: Rng;
+  stamina: Stamina;
+  /** The gait it actually moved with on the last step (what a player's input would say). */
+  moveGait: Gait;
+  /** Seconds of alarm left: it glanced back and saw the Orderly close. */
+  alarm: number;
 }
 
 const reachableCache = new WeakMap<FloorPlan, number[]>();
@@ -93,6 +110,9 @@ export function createBot(plan: FloorPlan, id: string, seed: string | number, op
     watchfulness: Math.max(0, Math.min(1, opts.watchfulness ?? 0.5)),
     oblivious: opts.oblivious ?? false,
     rng,
+    stamina: freshStamina(),
+    moveGait: 'walk',
+    alarm: 0,
   };
 }
 
@@ -148,10 +168,34 @@ function newLook(bot: Bot): void {
   bot.pitchWant = ((bot.rng.next() - 0.6) * 20 * Math.PI) / 180;
 }
 
-/** Advances a bot by dt seconds (mutates it). */
-export function stepBot(plan: FloorPlan, bot: Bot, dt: number): void {
+/** Whether a threat is close behind a bot: same level, in range, behind its direction of travel. */
+export function threatBehind(bot: Bot, threat: { x: number; z: number; level: number } | null | undefined): boolean {
+  if (!threat || threat.level !== bot.body.level) return false;
+  const dx = threat.x - bot.body.x;
+  const dz = threat.z - bot.body.z;
+  const d = Math.hypot(dx, dz);
+  if (d > BOT_FLEE_RANGE || d < 1e-6) return false;
+  // Forward is (-sin h, -cos h), three.js style.
+  return -Math.sin(bot.heading) * dx - Math.cos(bot.heading) * dz < 0;
+}
+
+/** A bot looking back over its shoulder at a threat close behind it notices it. */
+function noticesBehind(bot: Bot, threat: { x: number; z: number; level: number } | null | undefined): boolean {
+  return bot.look === 'behind' && threatBehind(bot, threat);
+}
+
+/**
+ * Advances a bot by dt seconds (mutates it). `threat` is where the Orderly is, if the bot knows: it
+ * sprints away while that is close behind and its tank allows. `cap` limits its pace (a raised
+ * instrument); a capped bot cannot sprint, like a player.
+ */
+export function stepBot(plan: FloorPlan, bot: Bot, dt: number, threat?: { x: number; z: number; level: number } | null, cap = Infinity): void {
   bot.gaitLeft -= dt;
   if (bot.gaitLeft <= 0) newGait(bot);
+  const before0 = bot.body;
+  bot.alarm = noticesBehind(bot, threat) ? BOT_ALARM_TIME : Math.max(0, bot.alarm - dt);
+  const flee = bot.gait !== 'stop' && bot.alarm > 0 && threatBehind(bot, threat);
+  bot.moveGait = bot.gait === 'stop' ? 'walk' : gaitFor(bot.stamina, { sprint: flee, creep: bot.gait === 'creep' && !flee, moving: true, cap });
 
   if (bot.gait !== 'stop') {
     if (!bot.walk || pathDone(plan, bot.walk, bot.body) || bot.stuck > 1) {
@@ -163,7 +207,7 @@ export function stepBot(plan: FloorPlan, bot: Bot, dt: number): void {
       }
     }
     if (bot.walk && bot.gait !== 'stop') {
-      const speed = bot.gait === 'creep' ? BOT_CREEP_SPEED : BOT_WALK_SPEED;
+      const speed = speedFor(bot.moveGait, cap);
       const before = bot.body;
       bot.body = stepPathWalk(plan, bot.walk, before, speed * dt, BOT_RADIUS);
       const mx = bot.body.x - before.x;
@@ -177,6 +221,9 @@ export function stepBot(plan: FloorPlan, bot: Bot, dt: number): void {
       }
     }
   }
+
+  const moved = Math.hypot(bot.body.x - before0.x, bot.body.z - before0.z);
+  bot.stamina = stepStamina(bot.stamina, bot.moveGait, dt > 0 ? moved / dt : 0, dt);
 
   bot.lookLeft -= dt;
   if (bot.lookLeft <= 0) newLook(bot);

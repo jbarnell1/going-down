@@ -74,15 +74,14 @@ describe('stamina', () => {
     expect(HUNT_SPEED).toBeLessThan(SPRINT_SPEED);
   });
 
-  // SKIPPED until the sprint step (T7c) raises the Orderly's HUNT_SPEED from 3.4 to 3.7 and wires the keys:
-  // changing its speed now would shift timings under the multiplayer work in progress.
-  it.skip('a tired player cycling run and walk only just outpaces it', () => {
+  it('a tired player cycling run and walk only just outpaces it', () => {
     const flee = sustainedFleeSpeed();
+    console.log(`sustained flee ${flee.toFixed(3)} m/s against the Orderly's ${HUNT_SPEED} m/s (lead ${(flee - HUNT_SPEED).toFixed(3)} m/s)`);
     expect(flee).toBeGreaterThan(HUNT_SPEED);
     expect(flee - HUNT_SPEED).toBeLessThan(0.3);
   });
 
-  it.skip('simulated: a fleeing player with good timing gains a little over a minute, a walker is caught up', () => {
+  it('simulated: a fleeing player with good timing gains a little over a minute, a walker is caught up', () => {
     // Player and Orderly on a straight line, the Orderly never seen (the worst case), 60 seconds.
     let st = freshStamina();
     let fled = 0;
@@ -93,6 +92,7 @@ describe('stamina', () => {
       st = stepStamina(st, gait, v, DT);
     }
     const hunted = HUNT_SPEED * 60;
+    console.log(`60 s: fled ${fled.toFixed(1)} m, the Orderly ${hunted.toFixed(1)} m, a walker ${(WALK_SPEED * 60).toFixed(1)} m (gain ${(fled - hunted).toFixed(1)} m)`);
     expect(fled).toBeGreaterThan(hunted);          // you can stay in front...
     expect(fled - hunted).toBeLessThan(25);        // ...but not by much over a whole minute
     expect(WALK_SPEED * 60).toBeLessThan(hunted);  // and walking alone loses

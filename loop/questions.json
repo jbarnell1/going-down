@@ -430,6 +430,32 @@
       ]
     },
     {
+      "id": "remote-relay",
+      "title": "Where will your friends be on game night?",
+      "context": "Playing together now works between browsers, tested on this PC only. Players connect straight to the host. Across two home networks that usually works, but some routers block it, and then that friend cannot join unless a relay service passes the traffic along. A relay needs a free account that only you can create. Tick all that apply; free text is welcome.",
+      "type": "multi",
+      "options": [
+        {
+          "id": "same-room",
+          "label": "Everyone in one room on the same wifi",
+          "note": "No relay needed. Nothing more to build."
+        },
+        {
+          "id": "try-first",
+          "label": "Some at home: try a test with one friend first",
+          "note": "I add a one-click connection test page you can send them. If it works, no relay is needed."
+        },
+        {
+          "id": "relay",
+          "label": "Some at home: set up a free relay so it works for everyone",
+          "note": "I prepare everything and give you the exact sign-up steps (about five minutes). The key stays on this PC and out of the public repo."
+        }
+      ],
+      "default": [
+        "try-first"
+      ]
+    },
+    {
       "id": "anything",
       "title": "Anything else for the loop?",
       "context": "Notes, ideas, things that felt wrong when you played. Update this as often as you like.",

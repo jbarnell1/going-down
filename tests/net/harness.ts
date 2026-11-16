@@ -179,7 +179,11 @@ export class Session {
       lf = m.script(m, this, FRAME);
     } else {
       const plan = planFor(this.seed, c.localDepth);
-      if (m.bot && m.botDepth === c.localDepth && c.playing && this.myStatus(m) === 'ok') stepBot(plan, m.bot, FRAME);
+      // The bot flees (sprints) from the Orderly where this machine last drew it, if it is close behind.
+      const seen = m.last?.orderly ?? null;
+      // Taken (the screen latched blind at the end of a wind-up on it): the game holds the player still.
+      const taken = m.last?.taken === true;
+      if (m.bot && !taken && m.botDepth === c.localDepth && c.playing && this.myStatus(m) === 'ok') stepBot(plan, m.bot, FRAME, seen);
       if (m.bot) m.body = m.bot.body;
       const v = m.bot ? botView(m.bot) : null;
       const body = m.body ?? carBody(carFor(plan), 0.8, 0);
@@ -194,8 +198,10 @@ export class Session {
         pitch: v?.pitch ?? 0,
         hFovDeg: v?.hFovDeg ?? 90,
         vFovDeg: v?.vFovDeg ?? 70,
-        raised: slot % 5 < 2,
+        // A sprinting bot has its instrument down (a raised instrument rules out a sprint).
+        raised: slot % 5 < 2 && m.bot?.moveGait !== 'sprint',
         call: nearDoor && m.frames % 120 === 7,
+        gait: m.bot?.moveGait ?? 'walk',
       };
     }
     const f = c.frame(local, lf);

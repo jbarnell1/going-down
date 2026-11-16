@@ -46,6 +46,12 @@ export interface SessionResult {
   disagreements: string[];
   eventsChecked: number;
   clamped: number;
+  /** Taken latches on the clients (see client.ts), those let go without a catch, and catches whose victim latched first. */
+  latches: number;
+  falseLatches: number;
+  latchedCatches: number;
+  /** Frames that were not taken between a victim's latch and its catch being drawn. */
+  latchGaps: string[];
 }
 
 interface Track {
@@ -53,6 +59,7 @@ interface Track {
   rt: number[];
   dark: boolean[];
   showed: boolean[];
+  taken: boolean[];
   prevVis: boolean;
   prevPose: Pose | null;
   prevDepth: number;
@@ -111,6 +118,10 @@ export function runRuleSession(i: number, net: NetConfig, seconds: number): Sess
     disagreements: [],
     eventsChecked: 0,
     clamped: 0,
+    latches: 0,
+    falseLatches: 0,
+    latchedCatches: 0,
+    latchGaps: [],
   };
   const tracks = new Map<string, Track>();
   let lastBody: { x: number; z: number } | null = null;
@@ -130,7 +141,7 @@ export function runRuleSession(i: number, net: NetConfig, seconds: number): Sess
     onFrame: (m, rec) => {
       let t = tracks.get(m.id);
       if (!t) {
-        t = { g: [], rt: [], dark: [], showed: [], prevVis: false, prevPose: null, prevDepth: -1 };
+        t = { g: [], rt: [], dark: [], showed: [], taken: [], prevVis: false, prevPose: null, prevDepth: -1 };
         tracks.set(m.id, t);
       }
       res.frames++;
@@ -161,6 +172,7 @@ export function runRuleSession(i: number, net: NetConfig, seconds: number): Sess
       t.rt.push(rec.rt);
       t.dark.push(rec.dark);
       t.showed.push(vis || rec.seeing);
+      t.taken.push(rec.frame.taken);
     },
   });
   s.run(seconds);
@@ -180,6 +192,8 @@ export function runRuleSession(i: number, net: NetConfig, seconds: number): Sess
     res.maxReleaseJump = Math.max(res.maxReleaseJump, m.client.stats.maxReleaseJump);
     res.releases += m.client.stats.releases;
     res.bigReleases += m.client.stats.bigReleases;
+    res.latches += m.client.stats.latches;
+    res.falseLatches += m.client.stats.falseLatches;
   }
 
   // 3. Looking saves you.
@@ -192,6 +206,15 @@ export function runRuleSession(i: number, net: NetConfig, seconds: number): Sess
     const t = tracks.get(e.playerId);
     if (w === undefined || !t) continue;
     const c = e.t;
+    // From the victim's latch on, every frame drawing a moment before the catch is a taken (blind) frame.
+    let latched = false;
+    for (let k = 0; k < t.g.length; k++) {
+      const rt = t.rt[k] as number;
+      if (rt < w || rt >= c) continue;
+      if (t.taken[k]) latched = true;
+      else if (latched) res.latchGaps.push(`${res.label} ${e.playerId} caught t=${c.toFixed(2)}: frame at t=${(t.g[k] as number).toFixed(3)} drawing t=${rt.toFixed(3)} not blind after the latch`);
+    }
+    if (latched) res.latchedCatches++;
     for (let k = 0; k < t.g.length; k++) {
       if (!t.showed[k]) continue;
       const g = t.g[k] as number;

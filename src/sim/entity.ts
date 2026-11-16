@@ -41,8 +41,8 @@ export const WAKE_SEEN_TIME = 1.0;
 export const WAKE_DISTANCE = 12;
 /** ...or this much time has passed (seconds). */
 export const WAKE_TIMEOUT = 60;
-/** Hunting speed in m/s (players walk 3.0 and creep 1.2). */
-export const HUNT_SPEED = 3.4;
+/** Hunting speed in m/s: faster than a walk (3.0), slower than a sprint (5.0); see stamina.ts. */
+export const HUNT_SPEED = 3.7;
 /**
  * It runs down prey that runs, and creeps up on prey that stands still. Within CREEP_DISTANCE of a
  * target moving slower than CREEP_PREY_SPEED it slows to CREEP_SPEED. This is what makes recording it

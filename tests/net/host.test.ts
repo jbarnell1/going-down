@@ -177,7 +177,7 @@ describe('policing bodies (friends, not strangers)', () => {
     r.tick();
     expect(r.host.stats.clampedInputs).toBe(1);
     expect(r.host.state.players[0]?.body).toEqual(start);
-    r.ct += 3; // three seconds later the same spot is reachable
+    r.ct += 4; // four seconds later the same spot is reachable at walking pace (3 m/s, plus the 0.75 m slack)
     r.input({ body: far });
     r.tick();
     expect(r.host.state.players[0]?.body).toEqual(far);

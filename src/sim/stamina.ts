@@ -73,6 +73,15 @@ export function stepStamina(st: Stamina, gait: Gait, groundSpeed: number, dt: nu
   return { level, winded };
 }
 
+/**
+ * How out of breath a player is: 0 on a full tank, rising as it empties, and from 0.7 up to 1 while
+ * winded. The game turns it into breathing and a darkening at the edge of the view (no meter).
+ */
+export function exertion(st: Stamina): number {
+  if (st.winded) return 0.7 + 0.3 * Math.max(0, 1 - st.level / WINDED_UNTIL);
+  return Math.max(0, Math.min(1, 1 - st.level));
+}
+
 /** Average speed of the best endless run-then-walk cycle: what a fleeing player can sustain. */
 export function sustainedFleeSpeed(): number {
   // Sprint from full to empty, walk until the winded mark is passed, sprint again from there.

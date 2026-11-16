@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
-  "iteration": 21,
+  "iteration": 24,
   "now": null,
   "nowText": "",
   "ci": {
     "status": "passed",
-    "commit": "e986ee5",
-    "at": "2026-11-16T11:55:11.291Z"
+    "commit": "a117efd",
+    "at": "2026-11-16T13:39:13.943Z"
   },
   "answersAppliedTo": "2026-11-16T12:10:00Z",
   "tasks": [
@@ -774,11 +774,64 @@
       "id": "T7c",
       "title": "Sprint, creep and stamina",
       "why": "Your request: Shift sprints, a creep key creeps, and the Orderly is faster than a walk. With limited stamina you can stay ahead by mixing running and walking, but not by much.",
+      "status": "done",
+      "gates": [],
+      "todo": [],
+      "startedAt": "2026-11-16T13:08:01.832Z",
+      "finishedAt": "2026-11-16T15:47:53.773Z",
+      "summary": "Shift sprints, C creeps, and the Orderly now hunts a little faster than you walk (3.7 against 3.0; sprint is 5.0 for five seconds). No meter: you breathe harder and the edges of the view darken as you tire. A player mixing running and walking stays ahead by about 10 m a minute; a walker is caught up. On a phone the stick's outer edge sprints. The host owns everyone's stamina, so nobody's browser can cheat it. It also closed a fairness hole: a remote player's screen now cuts to black at the instant a grab is decided, so nobody is taken after seeing the Orderly. I re-ran everything myself (137 logic tests, 49 browser tests) and broke the black-cut and the host's stamina check on purpose; both turned their tests red.",
+      "media": [
+        {
+          "src": "T7c/20261116T154753-110-sprinting.png",
+          "caption": "Sprinting down a corridor",
+          "kind": "image",
+          "at": "2026-11-16T15:47:53.776Z"
+        },
+        {
+          "src": "T7c/20261116T154753-111-winded-vignette.png",
+          "caption": "Winded: the edges of the view darken",
+          "kind": "image",
+          "at": "2026-11-16T15:47:53.778Z"
+        },
+        {
+          "src": "T7c/20261116T154753-112-phone-sprint.png",
+          "caption": "Phone: the stick pushed to its edge sprints; the new creep button sits above it",
+          "kind": "image",
+          "at": "2026-11-16T15:47:53.780Z"
+        }
+      ]
+    },
+    {
+      "id": "T2w",
+      "title": "Browser tests must not grab the owner's mouse",
+      "why": "While the tests ran, the real mouse was confined to a small corner of the left monitor",
       "status": "todo",
       "gates": [],
       "todo": [
-        "The speed rules are written and tested in src/sim/stamina.ts: walk 3.0, sprint 5.0 for 5 seconds, creep 1.2, winded until 35% recovered. Still to do: raise the Orderly's hunting speed from 3.4 to 3.7 (two tests are waiting on that, marked skipped), wire Shift to sprint and a creep key, show stamina without a meter if possible (breathing, a narrowing view), bots use it too, and the phone's stick gets a sprint zone.",
-        "Ctrl cannot be the creep key in a browser: Ctrl+W closes the tab and Ctrl+S, Ctrl+D do other things. Default is C to creep; Ctrl also works when the game is fullscreen and the browser lets it capture keys."
+        "Cause: the headless test browsers take pointer lock, and Chrome on Windows then confines the real cursor to the test window's rectangle (seen: 312 x 675 at the top-left). Fix so it cannot happen: in the Playwright setup replace requestPointerLock with a stand-in for tests (or give the game a test switch), keep one deliberate pointer-lock test out of the default run. Until then a watcher frees the cursor during test runs."
+      ]
+    },
+    {
+      "id": "T6e",
+      "title": "Blinks that grow into a blackout",
+      "why": "The owner wants the wait for the car to build: each blink longer than the last, ending in a long dark stretch that drives the crew away from the lift, then a mad dash back with the Orderly after them",
+      "status": "todo",
+      "gates": [],
+      "todo": [
+        "Owner's words (2026-11-16): 'The blinks should get longer and longer as the players wait for the elevator, like 15 seconds for a chase to get them away from the elevator and then the players have to make a mad dash back to the elevator with the orderly chasing them.'",
+        "First numbers to try (tune by simulation, in src/sim/run.ts): blinks during a wait run 1, 1.5, 2.5, 4, 6 s with shorter gaps each time; the last one before the car is the blackout, 12 to 15 s, timed to end as the car arrives. Today: every 5 to 9 s, always 1 s, wait 25 to 55 s.",
+        "Needs with it: (1) emergency floor strips so the crew can find their way in the long dark, while the Orderly stays unseen (heard, not shown: a watched Orderly never moves, so the dark must really hide it); (2) the announcer warns before the blackout so it is never a surprise death; (3) the car waits long enough for a dash back (boarding is 20 s plus holding the door 15 s; check it fits a 40 m run); (4) simulate hundreds of crews: a careful crew that runs, then looks back once the lights return, usually survives; a crew that stands by the lift through the blackout is usually caught; report both rates; (5) fair on every screen in a crew, like the short blinks."
+      ]
+    },
+    {
+      "id": "T6d",
+      "title": "Even voice loudness and thirty more announcer lines",
+      "why": "The owner found the voice much quieter after being caught than in the car, and the same lines get tiring",
+      "status": "todo",
+      "gates": [],
+      "todo": [
+        "Cause found: recordings are all at the same loudness (-16 LUFS); the game plays the landing speaker at as little as a tenth of the in-car level when you are far from it (VOICE.farMin 0.08 x farLevel 0.75 vs closeLevel 0.6 in src/game/announcer.ts). Fix: floor the far level near 0.55, soften the far low-pass floor to about 1400 Hz, put a compressor on the voice bus, and play taken/wipe/banked lines at the close level wherever the listener is.",
+        "Thirty drafted lines wait in .local/voice-new-lines.json (3,086 characters per voice). Merge into assets_src/voice/lines.json with the usual settings, generate ONE take each for Bella and Brian if the script allows (else three takes: about 18,500 characters, total about 31,500 of the 50,000 cap), publish, check the announcer never repeats a line back to back."
       ]
     },
     {
@@ -805,6 +858,9 @@
       "gates": [
         "G8",
         "G9"
+      ],
+      "todo": [
+        "Owner asked (2026-11-16): an animated being-caught sequence with noise. The Orderly's reach filling the view, the tape tearing, a loud burst; then the downed view. Later is fine, after more of the game is settled."
       ]
     },
     {
@@ -866,6 +922,13 @@
       "gates": [
         "G11"
       ]
+    },
+    {
+      "id": "T9b",
+      "title": "A second Orderly on deeper floors",
+      "why": "The owner's idea: with two, nobody can watch both, so the crew has to split who looks where",
+      "status": "todo",
+      "gates": []
     },
     {
       "id": "T3b",
@@ -981,11 +1044,27 @@
       "gates": []
     },
     {
+      "id": "T15",
+      "title": "A floor where you have to hide",
+      "why": "The owner's idea for a later floor: when its entity is angry enough, a voice tells the crew to hide, the lights go out, music starts, and anyone found during the search dies",
+      "status": "todo",
+      "gates": [],
+      "todo": [
+        "Owner's words (2026-11-16): 'if the entity is aggro'ed enough, it kicks off a voice that tells players to hide. If they're found before timer goes off, they're killed. Otherwise, the entity follows it's normal rules. (only move when looking etc) The level goes dark, creepy music starts playing, and players have to find a place. You'll have to research how to make a good ai bot that explores rooms so that the challenge is actually challenging. Staying visible and just running away kills you. Once count is finished, moving faster than creep drains health maybe?'",
+        "My reading, to confirm with the owner: (1) an anger level rises with noise (sprinting, calls, readings); (2) at the top, the announcer starts a count (about 20 s), lights go out, music starts; (3) when the count ends a search runs for a set time: the entity checks rooms and hiding places; anyone it finds is taken; moving faster than a creep costs health; (4) when the search time is up it goes back to its usual rule. Hiding places come from the props (lockers, under beds, cupboards, behind curtains).",
+        "Research before building (one agent, written up in docs): how games make a searcher that feels smart and fair. Start from occupancy / probability maps (the searcher keeps a belief of where players could be and checks the likeliest spots), last-known-position search, a director that nudges it toward players without telling it exactly (Alien: Isolation's two-part design), and hiding-spot checks with tells so a hidden player can hold their breath. Must stay deterministic from the seed and simulate hundreds of rounds: good hiders usually live, runners die, nobody dies to pure luck.",
+        "Fits the existing rules: the entity is heard before seen; the instrument could pay most for a reading taken from a hiding place while it searches nearby; a found player goes down rather than out, with something to do within seconds."
+      ]
+    },
+    {
       "id": "S",
       "title": "Stretch: voice that fades with distance, a second trait, the Tenant, a second place",
       "why": "Only if every gate is green with time left.",
       "status": "todo",
-      "gates": []
+      "gates": [],
+      "todo": [
+        "Owner (2026-11-16): 'multiple different types of entities once we program other levels'. Each new place brings its own entity with its own rule."
+      ]
     }
   ],
   "gates": [
@@ -1105,9 +1184,78 @@
     {
       "at": "2026-11-16T05:37:04.809Z",
       "text": "The Orderly: kept as it is for now and moved on, relying on behaviour, sound and the tape look for fear (question \"orderly-next\")."
+    },
+    {
+      "at": "2026-11-16T13:07:51.085Z",
+      "text": "Playing across home networks: until the owner answers the new question, the default is to build a connection test page first and no relay."
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T15:47:53.780Z",
+      "text": "Finished T7c: Sprint, creep and stamina.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T15:45:34.258Z",
+      "text": "Added task T15: A floor where you have to hide.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T15:33:01.958Z",
+      "text": "Added task T2w: Browser tests must not grab the owner's mouse.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T15:31:15.878Z",
+      "text": "Progress page: the roadmap now shows what is happening now first, then finished work newest first; steps still to come are folded into one line you can open.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T15:17:21.000Z",
+      "text": "Usage at 09:17: week's allowance 33% used across all models and 38% on Fable (it was 26% and 33% at 05:45). At this morning's pace that leaves roughly 30 more hours of this kind of work before Sunday's reset.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T14:52:39.833Z",
+      "text": "Added task T9b: A second Orderly on deeper floors.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T14:52:39.499Z",
+      "text": "Added task T6e: Blinks that grow into a blackout.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T14:46:23.627Z",
+      "text": "Sprint and stamina passed my re-run of the logic tests, but one browser test failed about 1 time in 7: the Orderly did not move during a blink. I sent it back for the root cause; it is not accepted.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T14:03:15.591Z",
+      "text": "Added task T6d: Even voice loudness and thirty more announcer lines.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T13:48:04.019Z",
+      "text": "Sprint, creep and stamina are built but not yet accepted. The faster Orderly exposed a real fairness hole in multiplayer: a remote player could turn, see the Orderly frozen mid-reach, and still be taken a moment later. The agent is fixing it properly (the victim's own screen cuts to black at the instant the grab is decided) and was told not to loosen the test that caught it.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T13:08:01.832Z",
+      "text": "Started T7c: Sprint, creep and stamina. An agent is adding sprint (Shift), creep (C) and stamina, and making the Orderly a little faster than a walk",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T13:07:51.085Z",
+      "text": "Took a default: Playing across home networks: until the owner answers the new question, the default is to build a connection test page first and no relay.",
+      "kind": "decision"
+    },
+    {
+      "at": "2026-11-16T13:07:37.311Z",
+      "text": "Live build is now a117efd (tag good-11): playing together, the torn-gown Orderly, props and textures. Checked from the lab box on the game's port: the play page, the new model (1.4 MB) and the prop list all load, and the status page reports a117efd.",
+      "kind": "note"
+    },
     {
       "at": "2026-11-16T13:00:14.971Z",
       "text": "Added task T7e: Better-looking crewmates and readable name tags.",

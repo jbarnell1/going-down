@@ -18,6 +18,7 @@ import { generateClinic } from '../sim/clinic';
 import type { FloorPlan } from '../sim/floor';
 import type { Body } from '../sim/move';
 import { carBody, carGeometry, carLocal, inCar, moveInRun, type CarGeometry, type RunPhase, type RunState } from '../sim/run';
+import { SPRINT_SPEED } from '../sim/stamina';
 import { poseBody, type Pose } from './protocol';
 
 /** Logic ticks per second on the host, and snapshots per second. */
@@ -35,8 +36,12 @@ export const PUT_BACK_MAX = 4;
 export const SEEING_TIMEOUT = 1;
 /** A catch whose victim has not confirmed their screen within this long is completed anyway (seconds). */
 export const CATCH_CONFIRM_MAX = 1.5;
-/** Fastest a player's body may move between inputs (m/s), plus a fixed allowance (m). Players walk 3. */
-export const MAX_PLAYER_SPEED = 6;
+/**
+ * Fastest a player's body may move (m/s): a sprint, and only while the host's copy of their tank
+ * allows it; otherwise walking pace (sim/stamina.ts). JUMP_SLACK is the most distance (m) the
+ * allowance banks, which absorbs the frames by which the client's tank and the host's disagree.
+ */
+export const MAX_PLAYER_SPEED = SPRINT_SPEED;
 export const JUMP_SLACK = 0.75;
 /** Events per snapshot are capped at roughly this many bytes (at least one event is always sent). */
 export const EVENT_BUDGET = 560;

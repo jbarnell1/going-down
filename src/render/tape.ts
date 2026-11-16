@@ -153,6 +153,7 @@ uniform vec3 uLift, uCast;
 uniform vec3 uRoll;     // band centre (0 bottom .. 1 top), strength, half-height
 uniform vec4 uDrop;     // row (0..1), x start, length, strength
 uniform float uGlitch;  // 0..1
+uniform float uTired;   // 0..1 darkening of the edge of the view when out of breath (0: no change)
 in vec2 vUv;
 out vec4 outColor;
 ${SRGB}
@@ -260,6 +261,8 @@ void main() {
   col *= 1.0 - uScan * smoothstep(1.8, 2.6, rowPx) * (0.5 + 0.5 * cos(6.2831853 * f));
 
   col *= 1.0 - uVignette * r2 / rMax * (0.6 + 0.4 * r2 / rMax);
+  // Out of breath: the edge of the view darkens and closes in. Exactly nothing on a full tank.
+  col *= 1.0 - uTired * smoothstep(0.04, 0.9, r2 / rMax);
 
   if (uLevels > 0.0) {
     float b = bayer4(gl_FragCoord.xy);
@@ -280,6 +283,9 @@ export function setLightGain(scene: THREE.Scene, gain: number): void {
   mesh.userData.baseColour = base;
   mat.color.copy(base).multiplyScalar(gain);
 }
+
+/** Darkening at the very corners of the view when completely out of breath (0..1). Kept subtle. */
+const TIRED_EDGE = 0.85;
 
 /** Most screens get one output pixel per CSS pixel; very large windows are capped. */
 const MAX_OUT_HEIGHT = 1080;
@@ -303,6 +309,8 @@ export class Tape {
   private frame = 0;
   /** 0..1: the lights have failed. Adds tape noise and lifts the blacks, at every fx level. */
   private dark = 0;
+  /** 0..1: how out of breath the player is (the edge of the view darkens), at every fx level. */
+  private tiredK = 0;
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
@@ -357,6 +365,7 @@ export class Tape {
         uRoll: { value: new THREE.Vector3(0, 0, 0.06) },
         uDrop: { value: new THREE.Vector4() },
         uGlitch: { value: 0 },
+        uTired: { value: 0 },
       },
     });
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.blit);
@@ -418,6 +427,19 @@ export class Tape {
   }
 
   /**
+   * How out of breath the player is, 0..1 (sim/stamina.ts exertion): the edge of the view darkens,
+   * at most TIRED_EDGE at the corners. 0 draws exactly as without it (the reference pictures).
+   */
+  setTired(k: number): void {
+    this.tiredK = Math.max(0, Math.min(1, k));
+  }
+
+  /** The edge darkening in force now (0 none .. TIRED_EDGE at the corners). */
+  get tired(): number {
+    return this.tiredK === 0 ? 0 : TIRED_EDGE * this.tiredK ** 1.4;
+  }
+
+  /**
    * Draws the scene into the small target, then the target to the screen. `overlay` (the instrument
    * in the hand) is drawn into the same target over the scene with the depth cleared, so it goes
    * through the tape look too and never sinks into a wall.
@@ -436,7 +458,7 @@ export class Tape {
     r.setRenderTarget(null);
     const now = this.now();
     const g = this.glitchAt(now);
-    if (this.level === 0 && g === 0 && this.dark === 0) {
+    if (this.level === 0 && g === 0 && this.dark === 0 && this.tiredK === 0) {
       this.quad.material = this.blit;
     } else {
       this.quad.material = this.tape;
@@ -494,6 +516,7 @@ export class Tape {
     (u.uLift!.value as THREE.Vector3).fromArray(s.lift).addScalar(this.dark * 0.025);
     (u.uCast!.value as THREE.Vector3).fromArray(s.cast);
     u.uGlitch!.value = g;
+    u.uTired!.value = this.tired;
 
     // Tracking roll: a band that climbs the picture from the bottom, strongest midway, then settles.
     if (motion && now >= this.nextRoll && this.roll.start < 0) {

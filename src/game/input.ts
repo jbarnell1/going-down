@@ -6,6 +6,12 @@
 // phone a round hold-button sits under the right thumb; a press on it raises the instrument AND
 // starts a look-drag with the same finger, so you can hold it up and still turn. A small latch
 // button beside it keeps it raised without holding, for anyone who cannot hold and drag at once.
+//
+// Gait: hold Shift to sprint (while there is breath for it), hold C to creep. Plain Ctrl is never a
+// game key, because Ctrl+W closes the tab; it creeps too only while the page is fullscreen AND the
+// browser granted a keyboard lock (then the page gets Ctrl+W instead of the browser). On a phone the
+// walk stick sprints when pushed to its rim (the outer 15% of its travel), and a small toggle button
+// above the stick creeps.
 
 /** How the player wants to move this frame, in their own frame of reference. */
 export interface MoveIntent {
@@ -15,14 +21,18 @@ export interface MoveIntent {
   r: number;
   /** 0 to 1: how hard the stick is pushed. Keys always give 1. */
   strength: number;
-  /** Shift held: creep at a fixed slow speed. */
+  /** C held (or the phone's creep toggle): creep at a fixed slow speed. */
   creep: boolean;
+  /** Shift held, or the phone's stick at its rim: sprint, if there is breath for it. */
+  sprint: boolean;
 }
 
 const STICK_RADIUS = 56; // px of thumb travel for full speed
 const STICK_DEADZONE = 0.12;
 const TOUCH_LOOK_SCALE = 2.8; // a thumb drags far fewer pixels than a mouse travels
 const STICK_ZONE = 0.45; // left share of the screen that starts a walk stick
+/** The stick sprints from this share of its travel out (its outer 15%). */
+export const STICK_SPRINT = 0.85;
 
 export class Input {
   private keys = new Set<string>();
@@ -52,6 +62,12 @@ export class Input {
   latched = false;
   readonly raiseBtn: HTMLDivElement;
   readonly latchBtn: HTMLDivElement;
+  /** The phone's creep toggle. */
+  readonly creepBtn: HTMLDivElement;
+  /** Creeping without holding a key (the phone's toggle). */
+  creepLatched = false;
+  /** Ctrl creeps too: only while fullscreen with a keyboard lock granted (see the header). */
+  ctrlCreep = false;
   /** The mouse was released after play had started (Esc): return true to keep the start overlay hidden (the settings panel opens instead). */
   onUnlock: (() => boolean) | null = null;
   /** Esc pressed while the mouse is not locked and the game has started. */
@@ -60,6 +76,8 @@ export class Input {
   constructor(private canvas: HTMLCanvasElement, private overlay: HTMLElement) {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Escape' && !e.repeat && !this.locked && this.overlay.hidden) this.onEscape?.();
+      // Under a keyboard lock the page receives Ctrl+W and the like: they must do nothing.
+      if (this.ctrlCreep && e.ctrlKey) e.preventDefault();
       this.keys.add(e.code);
       if (!e.repeat) this.pressed.add(e.code);
     });
@@ -68,6 +86,7 @@ export class Input {
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.releaseAll());
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.releaseAll(); });
+    document.addEventListener('fullscreenchange', () => this.fullscreenChanged());
 
     overlay.addEventListener('click', () => this.relock());
     document.addEventListener('pointerlockchange', () => {
@@ -95,7 +114,14 @@ export class Input {
 
     this.raiseBtn = touchButton('raise-btn', 'right:max(5vw,16px);bottom:max(16vh,28px);width:86px;height:86px;', meterIcon(), 4);
     this.latchBtn = touchButton('latch-btn', 'right:calc(max(5vw,16px) + 98px);bottom:calc(max(16vh,28px) + 50px);width:46px;height:46px;', latchIcon(), 3);
-    document.body.append(this.raiseBtn, this.latchBtn);
+    this.creepBtn = touchButton('creep-btn', 'left:max(5vw,16px);bottom:calc(max(16vh,28px) + 120px);width:46px;height:46px;', creepIcon(), 3);
+    document.body.append(this.raiseBtn, this.latchBtn, this.creepBtn);
+    this.creepBtn.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      this.creepLatched = !this.creepLatched;
+      this.drawButtons();
+    });
     this.raiseBtn.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       e.preventDefault();
@@ -122,6 +148,24 @@ export class Input {
     return this.rmb || this.down('KeyF') || this.raiseId !== null || this.latched;
   }
 
+  /** Asks for a keyboard lock when the page goes fullscreen; Ctrl creeps only once it is granted. */
+  private fullscreenChanged(): void {
+    this.ctrlCreep = false;
+    const kb = (navigator as unknown as { keyboard?: { lock?: () => Promise<void>; unlock?: () => void } }).keyboard;
+    if (!document.fullscreenElement) {
+      try {
+        kb?.unlock?.();
+      } catch { /* nothing locked */ }
+      return;
+    }
+    try {
+      const p = kb?.lock?.();
+      if (p) p.then(() => { this.ctrlCreep = document.fullscreenElement !== null; }).catch(() => { this.ctrlCreep = false; });
+    } catch {
+      this.ctrlCreep = false;
+    }
+  }
+
   /** Whether `code` was pressed since the last call for it. */
   takePress(code: string): boolean {
     const had = this.pressed.has(code);
@@ -133,6 +177,8 @@ export class Input {
     const on = this.touch && this.overlay.hidden;
     this.raiseBtn.hidden = !on;
     this.latchBtn.hidden = !on;
+    this.creepBtn.hidden = !on;
+    this.creepBtn.style.background = this.creepLatched ? 'rgba(240,245,242,0.55)' : 'rgba(240,245,242,0.12)';
     this.raiseBtn.style.background = this.raiseId !== null || this.latched ? 'rgba(240,245,242,0.38)' : 'rgba(240,245,242,0.12)';
     this.latchBtn.style.background = this.latched ? 'rgba(240,245,242,0.55)' : 'rgba(240,245,242,0.12)';
   }
@@ -235,8 +281,8 @@ export class Input {
       const oy = (this.stickY - this.stickY0) / STICK_RADIUS;
       const len = Math.hypot(ox, oy);
       if (len < STICK_DEADZONE) return null;
-      // Screen up is forward. Pushing gently walks slowly, which is how you creep on a phone.
-      return { f: -oy / len, r: ox / len, strength: Math.min(1, len), creep: false };
+      // Screen up is forward. Pushing gently walks slowly; the rim sprints.
+      return { f: -oy / len, r: ox / len, strength: Math.min(1, len), creep: this.creepLatched, sprint: len >= STICK_SPRINT };
     }
     let f = 0;
     let r = 0;
@@ -246,7 +292,14 @@ export class Input {
     if (this.down('KeyA') || this.down('ArrowLeft')) r -= 1;
     if (f === 0 && r === 0) return null;
     const len = Math.hypot(f, r);
-    return { f: f / len, r: r / len, strength: 1, creep: this.down('ShiftLeft') || this.down('ShiftRight') };
+    const ctrl = this.ctrlCreep && (this.down('ControlLeft') || this.down('ControlRight'));
+    return {
+      f: f / len,
+      r: r / len,
+      strength: 1,
+      creep: this.down('KeyC') || ctrl || this.creepLatched,
+      sprint: this.down('ShiftLeft') || this.down('ShiftRight'),
+    };
   }
 
   /** Look movement in mouse-pixel units since the last call. */
@@ -271,7 +324,7 @@ function touchButton(id: string, place: string, icon: HTMLCanvasElement, iconPx:
   return d;
 }
 
-/** Pixel icons, drawn in code: a needle meter (raise) and a padlock (latch). */
+/** Pixel icons, drawn in code: a needle meter (raise), a padlock (latch) and footprints (creep). */
 function pixelIcon(rows: string[]): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = rows[0]?.length ?? 1;
@@ -306,6 +359,19 @@ function latchIcon(): HTMLCanvasElement {
     '1110111',
     '1110111',
     '1111111',
+  ]);
+}
+
+/** Two footprints, small: creep. */
+function creepIcon(): HTMLCanvasElement {
+  return pixelIcon([
+    '0110000',
+    '1111000',
+    '1111000',
+    '0110110',
+    '0001111',
+    '0001111',
+    '0000110',
   ]);
 }
 

@@ -22,6 +22,9 @@
 //     falling hum with the room tone gone.
 //   - The blink: the warning is the chime stuttering and the lights' ballasts crackling; the dark is a
 //     relay clunk and the room tone cut; the lights coming back are a ballast ping and the hum returning.
+//   - The player's own breathing (BREATH below), the only sign of the sprint tank: silent on a full
+//     tank, then breaths of filtered noise that come faster and louder as it empties, and a ragged,
+//     rasping pant while winded. Not positional: it is your own head.
 //
 // NOTE: these sounds were designed from first principles and checked by numbers (gains over time,
 // cut-off time, oscillators running), not by ear. Nobody has listened to the elevator sounds.
@@ -35,7 +38,7 @@ const SQUEAK = {
   /** Squeaks per second at its creep (CREEP_SPEED): slow and deliberate, a long gap between steps. */
   cadenceCreepHz: 0.72,
   /** The speeds (m/s) those two cadences belong to; in between it is interpolated. */
-  runSpeed: 3.4,
+  runSpeed: 3.7,
   creepSpeed: 1.3,
   /** Note length multiplier at the creep: each squeak is drawn out into a slow, whining creak. */
   creepNoteStretch: 1.9,
@@ -215,6 +218,29 @@ const CAUGHT_HISS = { level: 0.22, seconds: 2.0 };
 /** Seconds of scheduling look-ahead. */
 const LOOKAHEAD = 0.15;
 
+const BREATH = {
+  /** Breaths per second just below a full tank and when winded (exertion 0 and 1). */
+  rateRest: 0.4,
+  rateWinded: 1.55,
+  /** Peak level of an exhale at exertion 0 and 1 (the ticking peaks at 0.85, the squeak near 0.2). */
+  levelLow: 0.012,
+  levelHigh: 0.16,
+  /** Below this exertion nothing new is breathed (a full tank is silent). */
+  threshold: 0.04,
+  /** Share of a breath that is the inhale, and the inhale's level relative to the exhale. */
+  inhaleShare: 0.4,
+  inhaleLevel: 0.55,
+  /** The airy part: noise through a band at this centre (Hz) and Q. */
+  airHz: 1250,
+  airQ: 0.8,
+  /** The rasp of a winded pant: a narrower, lower band (Hz, Q) at this level relative to the air. */
+  raspHz: 520,
+  raspQ: 5,
+  rasp: 0.9,
+  /** Timing randomness while winded (fraction of a breath): ragged, not a metronome. */
+  raggedJitter: 0.28,
+};
+
 // ------------------------------------------------------------------------------------------------
 
 type Ctx = AudioContext;
@@ -362,6 +388,13 @@ export class GameAudio {
   private rideNodes: AudioScheduledSourceNode[] = [];
   private rideGain: GainNode | null = null;
   private counts = { chimes: 0, dings: 0, doorSounds: 0, bells: 0, warnDings: 0, blinkWarnings: 0, blinkOuts: 0 };
+  // Breathing.
+  private breathEnv: GainNode | null = null;
+  private raspGain: GainNode | null = null;
+  private breathK = 0;
+  private breathWinded = false;
+  private nextBreath = 0;
+  private breaths = 0;
 
   constructor() {
     if (typeof window === 'undefined') return;
@@ -536,6 +569,83 @@ export class GameAudio {
     rattle.start(t);
     this.machineGain = mg;
     this.machinePanner = mp;
+
+    // Breathing: white noise through an airy band (and a rasp band for a winded pant) -> envelope -> out.
+    const breathNoise = ctx.createBufferSource();
+    breathNoise.buffer = noiseBuffer(ctx, 2.2, false);
+    breathNoise.loop = true;
+    const air = ctx.createBiquadFilter();
+    air.type = 'bandpass';
+    air.frequency.value = BREATH.airHz;
+    air.Q.value = BREATH.airQ;
+    const raspBp = ctx.createBiquadFilter();
+    raspBp.type = 'bandpass';
+    raspBp.frequency.value = BREATH.raspHz;
+    raspBp.Q.value = BREATH.raspQ;
+    const raspGain = ctx.createGain();
+    raspGain.gain.value = 0;
+    const env = ctx.createGain();
+    env.gain.value = 0;
+    breathNoise.connect(air).connect(env);
+    breathNoise.connect(raspBp).connect(raspGain).connect(env);
+    env.connect(this.out);
+    breathNoise.start(t);
+    this.breathEnv = env;
+    this.raspGain = raspGain;
+  }
+
+  /**
+   * Per frame: the player's breathing. `exertion` 0 (full tank: silent) to 1 (spent), from
+   * sim/stamina.ts exertion(); `winded` makes it a ragged, rasping pant. Breaths are scheduled a
+   * little ahead; a change of pace is heard from the next breath.
+   */
+  breathing(exertion: number, winded: boolean): void {
+    this.breathK = Math.max(0, Math.min(1, exertion));
+    this.breathWinded = winded;
+    const ctx = this.ctx;
+    const env = this.breathEnv;
+    if (!ctx || !env) return;
+    try {
+      const t = ctx.currentTime;
+      this.raspGain?.gain.setTargetAtTime(winded ? BREATH.rasp : BREATH.rasp * 0.25 * this.breathK, t, 0.2);
+      if (this.breathK < BREATH.threshold) {
+        this.nextBreath = 0;
+        return;
+      }
+      if (this.nextBreath < t) this.nextBreath = t + 0.02;
+      while (this.nextBreath < t + LOOKAHEAD) {
+        const at = this.nextBreath;
+        const period = 1 / this.breathRate();
+        const level = this.breathLevel();
+        const inhale = period * BREATH.inhaleShare;
+        const exhale = period - inhale;
+        const g = env.gain;
+        g.setValueAtTime(0, at);
+        g.linearRampToValueAtTime(level * BREATH.inhaleLevel, at + inhale * 0.55);
+        g.linearRampToValueAtTime(level * 0.05, at + inhale);
+        g.linearRampToValueAtTime(level, at + inhale + exhale * 0.25);
+        g.linearRampToValueAtTime(0, at + period * 0.97);
+        this.breaths++;
+        const jitter = winded ? (Math.random() * 2 - 1) * BREATH.raggedJitter : (Math.random() * 2 - 1) * 0.05;
+        this.nextBreath = at + period * (1 + jitter);
+      }
+    } catch {
+      /* audio must never break the game */
+    }
+  }
+
+  private breathRate(): number {
+    return BREATH.rateRest + (BREATH.rateWinded - BREATH.rateRest) * this.breathK;
+  }
+
+  private breathLevel(): number {
+    if (this.breathK < BREATH.threshold) return 0;
+    return (BREATH.levelLow + (BREATH.levelHigh - BREATH.levelLow) * this.breathK ** 1.5) * (this.breathWinded ? 1.15 : 1);
+  }
+
+  /** The breathing now (tests): exertion, winded, breaths per second, peak level, and breaths so far. */
+  breathState(): { exertion: number; winded: boolean; rate: number; level: number; breaths: number } {
+    return { exertion: this.breathK, winded: this.breathWinded, rate: this.breathK < BREATH.threshold ? 0 : this.breathRate(), level: this.breathLevel(), breaths: this.breaths };
   }
 
   /**

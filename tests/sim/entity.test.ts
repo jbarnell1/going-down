@@ -220,7 +220,8 @@ function runOne(i: number): RunResult {
   let lastSeenAt: number | null = null;
   const ticks = Math.round(RUN_SECONDS / DT);
   for (let tick = 0; tick < ticks; tick++) {
-    for (const b of bots) stepBot(p, b, DT);
+    // Bots sprint away when it is close behind them and their tank allows (stamina.ts).
+    for (const b of bots) stepBot(p, b, DT, state.body);
     const views = bots.map(botView);
     const before = state;
     const res = stepEntity(p, before, views, DT);

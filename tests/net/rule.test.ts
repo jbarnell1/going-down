@@ -40,7 +40,8 @@ describe('the rule under delay: 200 sessions of 60 s, every frame of every clien
       `     sessions where it moved > 5 m ${moved}/${SESSIONS}, was seen ${seen}/${SESSIONS}, caught someone ${caught}/${SESSIONS} (catches ${sum(lossy, (r) => r.catches)})`,
       `  3. catches ${sum(lossy, (r) => r.catches)}: victim's screen showed it during the wind-up (wall clock, natural 0.6 s) ${sum(lossy, (r) => r.catchViolations.natural.length)}, ` +
         `(wall clock, until the catch) ${sum(lossy, (r) => r.catchViolations.strict.length)}, (frames drawing the wind-up) ${sum(lossy, (r) => r.catchViolations.displayed.length)}; ` +
-        `catch-hold ticks ${sum(lossy, (r) => r.catchHoldTicks)}, forced ${sum(lossy, (r) => r.catchesForced)}`,
+        `catch-hold ticks ${sum(lossy, (r) => r.catchHoldTicks)}, forced ${sum(lossy, (r) => r.catchesForced)}; ` +
+        `taken latches ${sum(lossy, (r) => r.latches)} (false ${sum(lossy, (r) => r.falseLatches)}), catches latched first ${sum(lossy, (r) => r.latchedCatches)}, frames not blind after a latch ${sum(lossy, (r) => r.latchGaps.length)}`,
       `  4. blinks ${sum(lossy, (r) => r.blinks)}, blind frames checked ${sum(lossy, (r) => r.blinkFramesChecked)}, lit ${sum(lossy, (r) => r.blinkViolations.length)}, ` +
         `extra darkness per blink per client ${mean(extra).toFixed(2)} s (max ${Math.max(...extra).toFixed(2)} s) on a 1.0 s blink`,
       `  6. drawn players checked ${sum(lossy, (r) => r.posChecks)}, largest error ${Math.max(...lossy.map((r) => r.maxPosErr)).toFixed(3)} m; 5. events checked ${sum(lossy, (r) => r.eventsChecked)}, disagreements ${sum(lossy, (r) => r.disagreements.length)}`,
@@ -77,6 +78,19 @@ describe('the rule under delay: 200 sessions of 60 s, every frame of every clien
     expect(all(lossy, (r) => r.catchViolations.natural)).toEqual([]);
     expect(all(lossy, (r) => r.catchViolations.displayed)).toEqual([]);
     expect(sum(lossy, (r) => r.catches)).toBeGreaterThan(20);
+  });
+
+  it("3. being taken: the victim's screen commits to the catch at the end of the wind-up it drew, and rarely for nothing", () => {
+    const latches = sum(lossy, (r) => r.latches);
+    const falses = sum(lossy, (r) => r.falseLatches);
+    // From the latch until the catch is drawn, the screen stays blind: no frame in between.
+    expect(all(lossy, (r) => r.latchGaps)).toEqual([]);
+    // Nearly every catch was latched first on the victim's screen (the exceptions: a victim whose
+    // display never reached the wind-up's end before the catch was drawn, e.g. across a lost stretch).
+    expect(sum(lossy, (r) => r.latchedCatches)).toBeGreaterThanOrEqual(sum(lossy, (r) => r.catches) * 0.9);
+    // A latch the host then calls off (another player looked in time) is rare.
+    expect(latches).toBeGreaterThan(20);
+    expect(falses / latches).toBeLessThan(0.05); // measured: 1 false latch in 114
   });
 
   it('4. blinks: every frame on which the host treats players as blind is dark on every client', () => {
