@@ -2,11 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <title>Going Down</title>
     <style>
       html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
-      canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
+      /* A phone must not scroll, zoom, select text or open a menu while thumbs are on the screen. */
+      html, body { touch-action: none; overscroll-behavior: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+      canvas { display: block; width: 100vw; height: 100vh; height: 100dvh; image-rendering: pixelated; }
+      #start .touch { display: none; }
+      @media (pointer: coarse) { #start .mouse { display: none; } #start .touch { display: block; } }
+      #start .turn { display: none; }
+      @media (pointer: coarse) and (orientation: portrait) { #start .turn { display: block; } }
       #hud { position: fixed; left: 12px; bottom: 10px; color: #3d4a44; font: 12px ui-monospace, Consolas, monospace; opacity: 0.7; pointer-events: none; }
       #debug { position: fixed; left: 12px; top: 10px; color: #f2f5f3; background: rgba(0, 0, 0, 0.55); padding: 4px 8px; font: 12px ui-monospace, Consolas, monospace; white-space: pre; pointer-events: none; }
       #start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 16, 14, 0.55); color: #eef3f0; font: 600 20px ui-monospace, Consolas, monospace; letter-spacing: 0.08em; cursor: pointer; user-select: none; }
@@ -18,7 +24,10 @@
     <canvas id="view"></canvas>
     <div id="hud"></div>
     <div id="debug" hidden></div>
-    <div id="start"><div>CLICK TO START<small>WASD walk &middot; Shift creep &middot; mouse look &middot; Esc release</small></div></div>
+    <div id="start">
+      <div class="mouse">CLICK TO START<small>WASD walk &middot; Shift creep &middot; mouse look &middot; Esc release</small></div>
+      <div class="touch">TAP TO START<small>Left thumb walks, push gently to creep &middot; right thumb looks</small><small class="turn">Turn your phone sideways for a wider view</small></div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

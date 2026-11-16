@@ -45,20 +45,16 @@ export class Player {
     const [mx, my] = input.takeLook();
     this.yaw -= mx * MOUSE_SENSITIVITY;
     this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch - my * MOUSE_SENSITIVITY));
-    let f = 0;
-    let r = 0;
-    if (input.down('KeyW') || input.down('ArrowUp')) f += 1;
-    if (input.down('KeyS') || input.down('ArrowDown')) f -= 1;
-    if (input.down('KeyD') || input.down('ArrowRight')) r += 1;
-    if (input.down('KeyA') || input.down('ArrowLeft')) r -= 1;
-    if (f === 0 && r === 0) return;
-    const speed = input.down('ShiftLeft') || input.down('ShiftRight') ? CREEP_SPEED : WALK_SPEED;
-    const len = Math.hypot(f, r);
+    const want = input.move();
+    if (!want) return;
+    // Keys walk or creep. A phone's stick is analogue: push gently to go slowly.
+    const speed = want.creep ? CREEP_SPEED : WALK_SPEED * want.strength;
+    const { f, r } = want;
     const sin = Math.sin(this.yaw);
     const cos = Math.cos(this.yaw);
     // Forward is (-sin, -cos), right is (cos, -sin) on the (x, z) plane.
-    const dx = ((-sin * f + cos * r) / len) * speed * dt;
-    const dz = ((-cos * f - sin * r) / len) * speed * dt;
+    const dx = (-sin * f + cos * r) * speed * dt;
+    const dz = (-cos * f - sin * r) * speed * dt;
     this.body = moveWithCollision(plan, this.body, dx, dz, PLAYER_RADIUS);
   }
 

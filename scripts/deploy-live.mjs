@@ -8,9 +8,10 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dist = path.join(root, 'dist');
-const live = path.join(root, '.live');
-const next = path.join(root, '.live.next');
-const old = path.join(root, '.live.old');
+// GD_LIVE_DIR lets a second working copy deploy to the folder the hub serves.
+const live = process.env.GD_LIVE_DIR ? path.resolve(process.env.GD_LIVE_DIR) : path.join(root, '.live');
+const next = live + '.next';
+const old = live + '.old';
 const note = process.argv.slice(2).join(' ').trim();
 
 const sh = (cmd) => execSync(cmd, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] }).trim();
