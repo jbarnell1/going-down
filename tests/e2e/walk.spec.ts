@@ -28,7 +28,7 @@ test('one player walks the alpha clinic from the landing to the balcony', async 
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push(String(e)));
 
-  await page.goto('/?seed=alpha&depth=1');
+  await page.goto('/?seed=alpha&depth=1&entity=0');
   await page.waitForFunction(() => (window as any).__gd?.ready === true);
   await page.evaluate(() => (window as any).__gd.start());
   await settle(page, 10);

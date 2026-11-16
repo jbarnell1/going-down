@@ -1,7 +1,8 @@
 import { defineConfig } from '@playwright/test';
 
 // The real game, driven by a real browser. Screenshots land in test-results/shots/ so they can be
-// opened and looked at. The flags ask Chromium to use the graphics card when the machine has one.
+// opened and looked at. The flags ask Chromium to use the graphics card when the machine has one,
+// and let Web Audio run without a click so the tests can read the trolley squeak's levels.
 // GD_PORT lets a second working copy run its browser tests at the same time as the first.
 const PORT = Number(process.env.GD_PORT ?? 4317);
 
@@ -15,7 +16,7 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${PORT}`,
     viewport: { width: 1280, height: 720 },
     launchOptions: {
-      args: ['--use-angle=default', '--enable-gpu', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader'],
+      args: ['--use-angle=default', '--enable-gpu', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'],
     },
   },
   webServer: {

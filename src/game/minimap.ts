@@ -25,8 +25,11 @@ export class Minimap {
     this.canvas.height = plan.height * this.px;
   }
 
-  /** Draws level `level` with the player at (x, z) metres facing `yaw` (radians, 0 = north/-z). */
-  update(level: Level, x: number, z: number, yaw: number): void {
+  /**
+   * Draws level `level` with the player at (x, z) metres facing `yaw` (radians, 0 = north/-z), and
+   * the live entity if given: a square, filled white while the player can see it, red while unseen.
+   */
+  update(level: Level, x: number, z: number, yaw: number, entity?: { level: Level; x: number; z: number; seen: boolean } | null): void {
     const g = this.canvas.getContext('2d');
     if (!g) return;
     g.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -48,6 +51,16 @@ export class Minimap {
     g.closePath();
     g.fill();
     g.stroke();
+    if (entity) {
+      const ex = entity.x * k;
+      const ey = entity.z * k;
+      const er = Math.max(3, this.px);
+      g.globalAlpha = entity.level === level ? 1 : 0.4;
+      g.fillStyle = entity.seen ? '#ffffff' : '#ff2a1a';
+      g.fillRect(ex - er, ey - er, er * 2, er * 2);
+      g.strokeRect(ex - er, ey - er, er * 2, er * 2);
+      g.globalAlpha = 1;
+    }
   }
 
   private levelImage(level: Level): HTMLCanvasElement {

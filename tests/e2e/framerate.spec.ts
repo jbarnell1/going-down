@@ -15,7 +15,7 @@ async function settledFrameMs(page: import('@playwright/test').Page): Promise<nu
 }
 
 test('an empty corridor with the tape look stays inside the frame budget', async ({ page }) => {
-  await page.goto('/?seed=alpha');
+  await page.goto('/?seed=alpha&entity=0');
   const ms = await settledFrameMs(page);
   console.log(`budget corridor=${ms.toFixed(2)} ms`);
   expect(ms).toBeLessThan(BUDGET_MS);
@@ -26,6 +26,28 @@ test('the Orderly on screen with its shadow stays inside the frame budget', asyn
   await page.waitForFunction(() => (window as any).__gd?.entity?.loaded() === true, undefined, { timeout: 30_000 });
   const ms = await settledFrameMs(page);
   console.log(`budget orderly=${ms.toFixed(2)} ms`);
+  expect(ms).toBeLessThan(BUDGET_MS);
+});
+
+test('the live Orderly hunting, glanced at and away, stays inside the frame budget', async ({ page }) => {
+  await page.goto('/?seed=alpha');
+  await page.waitForFunction(() => (window as any).__gd?.orderly()?.loaded === true, undefined, { timeout: 30_000 });
+  // 40 m down the longest corridor, awake; the player looks at it and away every half second, so
+  // it is drawn frozen with its shadow, then walks (path planning, animation, squeak) unseen.
+  await page.evaluate(() => {
+    const g = (window as any).__gd;
+    const s = g.plan.sightlines.filter((l: any) => l.level === 0).sort((p: any, q: any) => q.length - p.length)[0];
+    const yaw = (Math.atan2(-(s.x2 - s.x1), -(s.y2 - s.y1)) * 180) / Math.PI;
+    g.teleport(0, s.x1, s.y1, yaw);
+    g.entityCtl.placeCell(0, s.x2, s.y2);
+    g.entityCtl.wake();
+    let k = 0;
+    setInterval(() => g.look(yaw + (k++ % 2 ? 180 : 0), 0), 500);
+  });
+  const ms = await settledFrameMs(page);
+  const o = await page.evaluate(() => (window as any).__gd.orderly());
+  console.log(`budget orderly hunting=${ms.toFixed(2)} ms (phase ${o.phase}, ${o.distance.toFixed(1)} m)`);
+  expect(o.phase).toBe('hunting');
   expect(ms).toBeLessThan(BUDGET_MS);
 });
 

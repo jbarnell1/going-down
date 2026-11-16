@@ -1,17 +1,23 @@
 import * as THREE from 'three';
+import { GameAudio } from './game/audio';
 import { AutoWalk } from './game/autoWalk';
+import { EntityHost } from './game/entityHost';
 import { Minimap } from './game/minimap';
 import { FrameStats } from './game/frameStats';
 import { Input } from './game/input';
 import { EYE_HEIGHT, Player, yawForDir, yawToward } from './game/player';
+import { CaughtFx, NOISE_MS } from './render/caughtFx';
 import { EntityPreview } from './render/entityPreview';
+import { blendPose, EntityView, exactPose, type DrawnPose } from './render/entityView';
 import { Osd } from './render/osd';
 import { setLightGain, Tape, type FxLevel } from './render/tape';
 import { buildWorld } from './render/world';
 import { generateClinic } from './sim/clinic';
+import { audibility, ORDERLY_HEIGHT, ORDERLY_RADIUS, REACH_RANGE, SQUEAK_HEIGHT, WIND_UP_TIME, type OrderlyAnim, type OrderlyEvent, type OrderlyState, type PlayerView } from './sim/entity';
 import type { Level } from './sim/floor';
 import { landingFacing } from './sim/landing';
-import { bodyAtCell, cellOf } from './sim/move';
+import { bodyAtCell, cellOf, LEVEL_HEIGHT, type Body } from './sim/move';
+import { canSee } from './sim/sight';
 
 declare const __BUILD__: string;
 
@@ -25,6 +31,9 @@ const previewName = params.get('preview');
 // ?fx=0 clean render, 1 the tape look (default), 2 heavy interference.
 const fxParam = Number(params.get('fx') ?? '1');
 const fxLevel: FxLevel = fxParam >= 2 ? 2 : fxParam === 0 ? 0 : 1;
+// The live Orderly is on every floor by default. ?entity=0 leaves the floor empty; ?preview=orderly
+// shows a static figure instead.
+const entityOn = params.get('entity') !== '0' && previewName !== 'orderly';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const hud = document.getElementById('hud') as HTMLDivElement;
@@ -55,6 +64,27 @@ if (previewName === 'orderly') {
   preview.place(b.x, b.y, b.z, line ? yawToward(far.x - s0.x, far.y - s0.y) : 0);
 }
 const stats = new FrameStats(120);
+
+// ---------------------------------------------------------------------------------------------
+// The live Orderly.
+const LOCAL_ID = 'local';
+let host: EntityHost | null = null;
+let orderlyView: EntityView | null = null;
+if (entityOn) {
+  renderer.shadowMap.enabled = true;
+  host = new EntityHost(plan);
+  orderlyView = new EntityView(scene, `${import.meta.env.BASE_URL}assets/entities/orderly.glb`);
+}
+const audio = new GameAudio();
+const caughtFx = new CaughtFx(document.body);
+let catches = 0;
+/** The local player's screen could show the figure this frame (any of the checks in frameSees). */
+let orderlyVisible = false;
+/** The logic's own judgement (radius ORDERLY_RADIUS) says the local view sees it this frame. */
+let orderlyLogicSeen = false;
+let squeak = { gain: 0, muffled: false };
+/** Per-frame record for tests: what was drawn against where the logic had it. */
+const trace: { f: number; vis: boolean; dx: number; dz: number; lx: number; lz: number; t: number; anim: string; clip: number }[] = [];
 
 // The scene is drawn at a low internal resolution, then put on screen through the tape pass.
 const INTERNAL_HEIGHT = 270;
@@ -136,6 +166,93 @@ function probePixels(n = 8): number[][] {
 }
 
 const DEG = Math.PI / 180;
+/** The model's cap reaches 2.82 m; the logic samples its figure up to ORDERLY_HEIGHT (2.6 m). */
+const MESH_EXTRA_HEIGHT = 0.22;
+
+/** The local player as the logic sees them: eye height ABOVE THE FEET, the real camera's field of view. */
+function localView(): PlayerView {
+  const vFov = camera.fov;
+  const hFov = (2 * Math.atan(Math.tan((vFov * DEG) / 2) * camera.aspect)) / DEG;
+  return { id: LOCAL_ID, active: true, body: { ...player.body }, eye: EYE_HEIGHT, yaw: player.yaw, pitch: player.pitch, hFovDeg: hFov, vFovDeg: vFov };
+}
+
+/**
+ * Whether this frame could show the figure: the logic's own test at the logic's position, the same
+ * test widened to the measured reach of the current clip (the mesh pokes out past the logic's 0.35 m
+ * body), and the widened test at the position drawn last frame.
+ */
+function frameSees(v: PlayerView, h: EntityHost, ev: EntityView): boolean {
+  if (canSee(plan, v, h.cur.body, { height: ORDERLY_HEIGHT, radius: ORDERLY_RADIUS })) return true;
+  const ext = (anim: OrderlyAnim): number => Math.max(ORDERLY_RADIUS, ev.extent(anim));
+  // The mesh is taller than the logic's figure too (cap at 2.82 m against 2.6 m).
+  const height = ORDERLY_HEIGHT + MESH_EXTRA_HEIGHT;
+  // Widest of the clip the logic asks for and the clip on screen (a held reach pose, say).
+  const reach = Math.max(ext(h.cur.anim), ev.drawn ? ext(ev.drawn.anim) : 0);
+  const seenWide = canSee(plan, v, h.cur.body, { height, radius: reach });
+  if (seenWide) {
+    // Only the overhang is in view. Hand the logic this view with the field of view widened by
+    // just the overhang's angle, so it holds the figure too (decided in the player's favour).
+    const dist = Math.max(0.2, Math.hypot(h.cur.body.x - v.body.x, h.cur.body.z - v.body.z));
+    const extra = (Math.atan2(reach - ORDERLY_RADIUS + MESH_EXTRA_HEIGHT, dist) / DEG + 1) * 2;
+    h.noteSeen({ ...v, hFovDeg: v.hFovDeg + extra, vFovDeg: v.vFovDeg + extra });
+    return true;
+  }
+  const d = ev.drawn;
+  if (!d) return false;
+  const body: Body = { x: d.x, y: d.y, z: d.z, level: d.y >= LEVEL_HEIGHT - 0.01 ? 1 : h.cur.body.level };
+  return canSee(plan, v, body, { height, radius: Math.max(ext(d.anim), ext(h.cur.anim)) });
+}
+
+/** The pose to hold when it is first seen: the logic's exact pose, reaching if it froze within reach of you. */
+function freezePose(s: OrderlyState): DrawnPose {
+  const p = exactPose(s);
+  const b = player.body;
+  const near = b.level === s.body.level && Math.hypot(b.x - s.body.x, b.z - s.body.z) <= REACH_RANGE;
+  if (near && p.anim !== 'reach' && (s.mode === 'hunting' || s.mode === 'windUp')) return { ...p, anim: 'reach', animTime: WIND_UP_TIME * 0.85 };
+  return p;
+}
+
+function onEntityEvents(evs: OrderlyEvent[], now: number): void {
+  for (const e of evs) {
+    if (e.type !== 'caught' || e.playerId !== LOCAL_ID) continue;
+    // Placeholder: interference, noise, and back to the landing (caughtFx decides when).
+    catches++;
+    tape.glitch(NOISE_MS + 500, 1);
+    caughtFx.start(now);
+    audio.caughtBurst();
+  }
+}
+
+function orderlyInfo() {
+  if (!host) return null;
+  const s = host.cur;
+  const c = cellOf(plan, s.body);
+  const b = player.body;
+  const d = orderlyView?.drawn;
+  return {
+    x: s.body.x,
+    y: s.body.y,
+    z: s.body.z,
+    level: s.body.level,
+    cx: c.x,
+    cy: c.y,
+    yaw: s.yaw / DEG,
+    phase: s.mode,
+    frozen: s.frozen,
+    held: s.held,
+    moving: s.moving,
+    /** The local player's screen could show it this frame. */
+    seen: orderlyVisible,
+    /** The logic's own sight test from the local view this frame. */
+    logicSeen: orderlyLogicSeen,
+    anim: s.anim,
+    animTime: s.animTime,
+    distance: Math.hypot(b.x - s.body.x, b.z - s.body.z),
+    t: s.t,
+    loaded: orderlyView?.loaded ?? false,
+    drawn: d ? { x: d.x, y: d.y, z: d.z, yaw: d.yaw / DEG, anim: d.anim, animTime: d.animTime, frozen: orderlyView?.isFrozen ?? false } : null,
+  };
+}
 
 // Test hooks. Yaw is in degrees: 0 faces north (-z), 90 west, 180 south, -90 east.
 const state = {
@@ -185,8 +302,44 @@ const state = {
     placeAt: (x: number, y: number, z: number, yawDegrees = 0) => preview?.place(x, y, z, yawDegrees * DEG),
     bone: (name: string) => preview?.bonePosition(name) ?? null,
   },
-  /** Hides the click-to-start overlay without a pointer lock. */
-  start: () => input.dismissOverlay(),
+  /** Hides the click-to-start overlay without a pointer lock (and starts audio where allowed). */
+  start: () => {
+    input.dismissOverlay();
+    audio.unlock();
+  },
+  /** The live Orderly's state, or null with ?entity=0. Positions in metres, yaw in degrees. */
+  orderly: orderlyInfo,
+  /** Everything the Orderly's logic has reported so far. */
+  events: (): OrderlyEvent[] => (host ? host.events.map((e) => ({ ...e })) : []),
+  catches: () => catches,
+  caught: () => ({ noise: caughtFx.noiseOn, line: caughtFx.lineOn }),
+  /** Test controls for the live Orderly (null with ?entity=0). */
+  entityCtl: host && {
+    placeCell: (level: Level, cx: number, cy: number, yawDegrees?: number) => {
+      if (!host) return;
+      const body = bodyAtCell(plan, { level, x: cx, y: cy });
+      host.replace({ ...host.cur, body, yaw: yawDegrees === undefined ? host.cur.yaw : yawDegrees * DEG, path: null, replanIn: 0 });
+    },
+    placeAt: (x: number, z: number, level: Level = 0, yawDegrees?: number) => {
+      if (!host) return;
+      const body = { x, z, level, y: level === 1 ? LEVEL_HEIGHT : 0 };
+      host.replace({ ...host.cur, body, yaw: yawDegrees === undefined ? host.cur.yaw : yawDegrees * DEG, path: null, replanIn: 0 });
+    },
+    /** Ends its waiting (or dormancy): it hunts on the next tick it is free to act. */
+    wake: () => {
+      if (!host) return;
+      if (host.cur.mode === 'waiting' || host.cur.mode === 'dormant') host.replace({ ...host.cur, mode: 'hunting', dormantLeft: 0, replanIn: 0, path: null });
+    },
+    setTimeScale: (k: number) => {
+      if (host) host.timeScale = Math.max(0, k);
+    },
+    /** Per-frame records: drawn position (dx, dz) against the logic's (lx, lz), and visibility. */
+    trace: () => trace.slice(),
+    /** Widest reach of the mesh from its feet axis per clip, metres (measured at load). */
+    extents: () => Object.fromEntries(['idle', 'walk', 'duck', 'reach', 'still'].map((n) => [n, orderlyView?.model.extent(n) ?? 0])),
+    ticks: () => host?.ticks ?? 0,
+  },
+  audio: { state: () => audio.state() },
 };
 (window as unknown as { __gd: typeof state }).__gd = state;
 hud.textContent = `Going Down  build ${__BUILD__}  seed ${seed}  depth ${depth}`;
@@ -199,6 +352,8 @@ if (debug) {
   debugBox.append(minimap.canvas);
 }
 
+const camForward = new THREE.Vector3();
+const camUp = new THREE.Vector3();
 let last = performance.now();
 renderer.setAnimationLoop(() => {
   const now = performance.now();
@@ -209,8 +364,40 @@ renderer.setAnimationLoop(() => {
 
   preview?.update(dt);
   if (autoWalk.active) autoWalk.tick(plan, player);
-  else player.control(plan, input, dt);
+  else if (!caughtFx.noiseOn) player.control(plan, input, dt);
+  if (caughtFx.update(now)) {
+    // Back at the elevator landing, facing out, as on arrival.
+    autoWalk.cancel('caught');
+    player.teleport(plan, plan.landing.level, plan.landing.x, plan.landing.y, yawForDir(landingFacing(plan)));
+    player.pitch = 0;
+  }
   player.toCamera(camera);
+
+  if (host && orderlyView) {
+    const v = localView();
+    // 1. A glance on this frame counts, even if no tick lands on it.
+    let vis = frameSees(v, host, orderlyView);
+    host.noteSeen(v);
+    onEntityEvents(host.advance(dt, [v]), now);
+    // 2. After the ticks: it may have stepped into view.
+    orderlyLogicSeen = host.sees(v);
+    if (orderlyLogicSeen) host.noteSeen(v);
+    vis = vis || frameSees(v, host, orderlyView);
+    orderlyVisible = vis;
+    // 3. Seen: exactly where the logic has it, clock stopped. Unseen: smoothed between ticks.
+    orderlyView.update(vis, blendPose(host.prev, host.cur, host.alpha), freezePose(host.cur));
+    const d = orderlyView.drawn;
+    if (d) {
+      trace.push({ f: state.frames + 1, vis, dx: d.x, dz: d.z, lx: host.cur.body.x, lz: host.cur.body.z, t: host.cur.t, anim: d.anim, clip: d.animTime });
+      if (trace.length > 600) trace.shift();
+    }
+    // Sound: silent the instant it is seen, whatever the next tick says.
+    squeak = vis || host.cur.held ? { gain: 0, muffled: false } : audibility(plan, host.cur, { body: player.body, eye: EYE_HEIGHT });
+    const src = d ?? exactPose(host.cur);
+    camForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+    audio.update(dt, squeak.gain, squeak.muffled, { x: src.x, y: src.y + SQUEAK_HEIGHT, z: src.z }, camera.position, camForward, camUp);
+  }
   tape.render(scene, camera);
   osd.update(!tape.motion || Math.floor(now / 700) % 2 === 0);
   state.frames++;
@@ -225,6 +412,15 @@ renderer.setAnimationLoop(() => {
       `tape fx${tape.fx}${tape.motion ? '' : ' (reduced motion)'}\n` +
       `pos ${b.x.toFixed(2)} ${b.y.toFixed(2)} ${b.z.toFixed(2)}\n` +
       `cell L${c.level} (${c.x},${c.y})  yaw ${(player.yaw / DEG).toFixed(0)}`;
-    minimap?.update(c.level, b.x, b.z, player.yaw);
+    let ent: { level: Level; x: number; z: number; seen: boolean } | null = null;
+    if (host) {
+      const o = host.cur;
+      const dist = Math.hypot(o.body.x - b.x, o.body.z - b.z);
+      debugText.textContent +=
+        `\norderly ${o.mode}${o.frozen ? ' frozen' : ''}  ${orderlyVisible ? 'SEEN' : 'unseen'}  ${dist.toFixed(1)} m\n` +
+        `squeak ${squeak.gain.toFixed(2)}${squeak.muffled ? ' muffled' : ''}  audio ${audio.state().running ? 'on' : 'off'}  catches ${catches}`;
+      ent = { level: o.body.level, x: o.body.x, z: o.body.z, seen: orderlyVisible };
+    }
+    minimap?.update(c.level, b.x, b.z, player.yaw, ent);
   }
 });

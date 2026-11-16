@@ -24,6 +24,15 @@ import { DOOR_WIDTH, northEdge, westEdge } from './walls';
 
 export const ORDERLY_HEIGHT = 2.6;
 export const ORDERLY_RADIUS = 0.35;
+/**
+ * How big it counts as being for the purpose of "can anyone see it". Larger than the body it
+ * collides with, on purpose: the drawn figure's cap reaches 2.82 m and its reaching arm 2.0 m from
+ * its centre, and an arm seen moving round a corner would break the rule as surely as the body.
+ */
+export const SEEN_HEIGHT = 2.9;
+export const SEEN_RADIUS = 2.1;
+/** The swinging arms in the walk reach about 1.05 m from its centre. */
+export const SEEN_RADIUS_WALK = 1.1;
 /** Seconds it stays frozen after the last tick anyone could see it. Absorbs network delay. */
 export const GRACE = 0.3;
 /** Waiting ends after it has been seen for this long in total (seconds)... */
@@ -222,7 +231,15 @@ export function createOrderly(plan: FloorPlan): OrderlyState {
 /** Whether any active player's screen could be showing it, and who (first in list order). */
 export function seenBy(plan: FloorPlan, body: Body, players: readonly PlayerView[]): PlayerView | null {
   for (const p of players) {
-    if (p.active && canSee(plan, p, body, { height: ORDERLY_HEIGHT, radius: ORDERLY_RADIUS })) return p;
+    if (!p.active) continue;
+    // The true body first, then the larger outlines the drawn figure can reach. Each extra pass can
+    // only add sightings: checking the big outline INSTEAD of the body moved the sample points above
+    // door frames and missed real ones, which the independent oracle caught.
+    if (
+      canSee(plan, p, body, { height: ORDERLY_HEIGHT, radius: ORDERLY_RADIUS }) ||
+      canSee(plan, p, body, { height: ORDERLY_HEIGHT, radius: SEEN_RADIUS_WALK }) ||
+      canSee(plan, p, body, { height: SEEN_HEIGHT, radius: SEEN_RADIUS })
+    ) return p;
   }
   return null;
 }

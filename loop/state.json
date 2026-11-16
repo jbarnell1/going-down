@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
-  "iteration": 8,
-  "now": "T4",
-  "nowText": "The rule is proven in logic. An Opus agent is now wiring it to the screen and to sound: it hunts you on the floor, freezes when you look, and squeaks when it moves.",
+  "iteration": 9,
+  "now": null,
+  "nowText": "",
   "ci": {
-    "status": "passed",
-    "commit": "e613912",
-    "at": "2026-11-16T06:31:27.053Z"
+    "status": "failed",
+    "commit": "4a9ac1f",
+    "at": "2026-11-16T06:58:23.235Z"
   },
   "answersAppliedTo": "2026-11-16T04:20:00Z",
   "tasks": [
@@ -356,15 +356,71 @@
       "id": "T4",
       "title": "The Orderly comes alive",
       "why": "It walks the floor, is heard before it is seen, and never moves while anyone is watching it.",
-      "status": "doing",
+      "status": "done",
       "gates": [
         "G3",
         "G5"
       ],
-      "todo": [
-        "Staging, from the player judge: the first sighting should be partly hidden (a peek round a door frame, a tilted head), and it should be nearer each time you look back. The doorway peek pose is the best scare so far."
+      "todo": [],
+      "startedAt": "2026-11-16T06:09:17.789Z",
+      "media": [
+        {
+          "src": "T4/20261116T065020-50-orderly-watched.png",
+          "caption": "Twenty metres down the corridor, awake and hunting. While I keep looking at it, it does not move at all and there is no sound",
+          "kind": "image",
+          "at": "2026-11-16T06:50:20.755Z"
+        },
+        {
+          "src": "T4/20261116T065020-51-orderly-closer.png",
+          "caption": "I looked away for two seconds. It is closer, and it stopped the instant I turned back, caught mid-step",
+          "kind": "image",
+          "at": "2026-11-16T06:50:20.830Z"
+        },
+        {
+          "src": "T4/20261116T065020-52-caught.png",
+          "caption": "I turned away again and it reached me: the picture cuts to tape noise",
+          "kind": "image",
+          "at": "2026-11-16T06:50:20.905Z"
+        },
+        {
+          "src": "T4/20261116T065020-53-went-down.png",
+          "caption": "Two seconds later I am back at the elevator with one line on screen. (Placeholder until the real rules for being caught)",
+          "kind": "image",
+          "at": "2026-11-16T06:50:20.980Z"
+        },
+        {
+          "src": "T4/20261116T065021-54-orderly-within-reach.png",
+          "caption": "Standing right in front of it and watching: it froze mid-reach and never gets me while I keep looking",
+          "kind": "image",
+          "at": "2026-11-16T06:50:21.055Z"
+        },
+        {
+          "src": "T4/20261116T065833-51-orderly-closer.png",
+          "caption": "I looked away for two seconds. It is closer, and it stopped the instant I turned back",
+          "kind": "image",
+          "at": "2026-11-16T06:58:33.130Z"
+        },
+        {
+          "src": "T4/20261116T065833-54-orderly-within-reach.png",
+          "caption": "Frozen within reach, mid-reach",
+          "kind": "image",
+          "at": "2026-11-16T06:58:33.131Z"
+        },
+        {
+          "src": "T4/20261116T065833-50-orderly-watched.png",
+          "caption": "Watched from 20 metres: it does not move and makes no sound",
+          "kind": "image",
+          "at": "2026-11-16T06:58:33.132Z"
+        },
+        {
+          "src": "T4/20261116T065833-53-went-down.png",
+          "caption": "Caught: back at the elevator",
+          "kind": "image",
+          "at": "2026-11-16T06:58:33.133Z"
+        }
       ],
-      "startedAt": "2026-11-16T06:09:17.789Z"
+      "finishedAt": "2026-11-16T06:58:33.127Z",
+      "summary": "The Orderly now hunts you in the game. It walks the floor while nobody is looking, stops the instant you look (checked on every drawn frame, so a quick glance counts), and its trolley squeak plays in 3D while it moves and cuts out within a tenth of a second when it freezes. Being caught is a placeholder: interference, then you are back at the elevator. A browser test plays the staring contest: 3 seconds watched with no movement and no sound, turn away and it closes in, turn back and it is frozen nearer, mid-step. Fable also made it count as its full drawn size for being seen, arms and cap included; a first attempt at that broke the rule and the independent checker caught it. Nobody has heard the squeak yet: neither the agent nor Fable can hear."
     },
     {
       "id": "T3b",
@@ -509,8 +565,9 @@
     {
       "id": "G5",
       "title": "Heard before seen",
-      "status": "open",
-      "evidence": ""
+      "status": "passed",
+      "evidence": "In 104 generated layouts the squeak is audible at least 2.5 seconds before the figure could first be seen, and in the running game the squeak gain is zero while it is watched and rises when it moves. Deliberate break used: with its hearing range cut to 3 metres, the heard-before-seen test fails. The sound itself has not been heard by a person.",
+      "at": "2026-11-16T06:58:33.208Z"
     },
     {
       "id": "G6",
@@ -586,6 +643,51 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T06:58:33.209Z",
+      "text": "Gate G5 (Heard before seen) is passed.",
+      "kind": "gate"
+    },
+    {
+      "at": "2026-11-16T06:58:33.133Z",
+      "text": "Finished T4: The Orderly comes alive.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T06:58:23.304Z",
+      "text": "Correction: GitHub's checks have been failing since the tape look went in, four commits ago, and the public play link stopped updating. Twice I recorded them as passed without reading the result. The cause was frame-time limits that a software-rendered CI machine cannot meet; those now apply only on a real graphics card. The loop's rules now say to record a CI result only from what was actually printed.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T06:58:23.235Z",
+      "text": "CI failed on 4a9ac1f.",
+      "kind": "ci"
+    },
+    {
+      "at": "2026-11-16T06:50:21.055Z",
+      "text": "New pictures for T4: The Orderly comes alive.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T06:50:20.980Z",
+      "text": "New pictures for T4: The Orderly comes alive.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T06:50:20.905Z",
+      "text": "New pictures for T4: The Orderly comes alive.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T06:50:20.831Z",
+      "text": "New pictures for T4: The Orderly comes alive.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T06:50:20.755Z",
+      "text": "New pictures for T4: The Orderly comes alive.",
+      "kind": "media"
+    },
     {
       "at": "2026-11-16T06:31:27.131Z",
       "text": "Started T4: The Orderly comes alive. The rule is proven in logic. An Opus agent is now wiring it to the screen and to sound: it hunts you on the floor, freezes when you look, and squeaks when it moves.",

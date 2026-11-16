@@ -12,7 +12,7 @@ test.skip(!!process.env.CI, 'reference pictures are specific to this graphics ca
 const OPTS = { maxDiffPixelRatio: 0.002, threshold: 0.01 };
 
 async function ready(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto('/?seed=alpha&fx=0');
+  await page.goto('/?seed=alpha&fx=0&entity=0');
   await page.waitForFunction(() => (window as any).__gd?.ready === true);
   await page.evaluate(() => (window as any).__gd.start());
   // The corner text carries the build number, which changes with every commit.

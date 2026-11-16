@@ -7,7 +7,7 @@ test.use({ viewport: { width: 844, height: 390 }, hasTouch: true });
 test('a phone can start, walk with the left thumb, creep, and look with the right', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
-  await page.goto('/?seed=alpha');
+  await page.goto('/?seed=alpha&entity=0');
   await page.waitForFunction(() => (window as any).__gd?.ready === true);
 
   const touch = (type: string, id: number, x: number, y: number) =>

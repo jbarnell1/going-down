@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
 test('W walks forward, Shift creeps, and a wall stops you', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
-  await page.goto('/?seed=alpha');
+  await page.goto('/?seed=alpha&entity=0');
   await page.waitForFunction(() => (window as any).__gd?.ready === true);
   await page.evaluate(() => (window as any).__gd.start());
 

@@ -4,10 +4,10 @@
 
 ## Status
 
-- **Gates passed:** 2 of 14. **Tasks done:** 9 of 22.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 8.
-- **Now:** T4 The Orderly comes alive. The rule is proven in logic. An Opus agent is now wiring it to the screen and to sound: it hunts you on the floor, freezes when you look, and squeaks when it moves.
-- **Last CI result seen:** passed on e613912
+- **Gates passed:** 3 of 14. **Tasks done:** 10 of 22.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 9.
+- **Now:** nothing in progress
+- **Last CI result seen:** failed on 4a9ac1f
 - **Answers applied up to:** 2026-11-16T04:20:00Z
 
 ## Tasks
@@ -39,9 +39,9 @@
 - [x] **T2v** `done` Stronger checks
   - Why: So a regression is caught by a machine, not by luck: reference screenshots that fail the test when the picture changes, a frame-time limit inside the browser test, a smoke test for the hub, and a deliberate-break check on every gate already passed.
   - Evidence: Four new safety nets. Reference pictures of three views fail the test if the scenery changes: after tightening, a 4% pink tint on the corridor walls and doors 10 cm taller are both caught, and unchanged scenery passes three runs in a row. A frame-time limit of 20 ms is enforced in three situations, including the Orderly on screen and the heavy tape level at 1080p. A hub smoke test checks its pages answer and ten path-escape attempts are refused, on every commit. The floor generator's tests were proven able to fail by removing its stairs. Reference pictures and the frame limit run on this PC only; CI draws in software and skips them.
-- [ ] **T4** `doing` The Orderly comes alive (G3, G5)
+- [x] **T4** `done` The Orderly comes alive (G3, G5)
   - Why: It walks the floor, is heard before it is seen, and never moves while anyone is watching it.
-  - To do: Staging, from the player judge: the first sighting should be partly hidden (a peek round a door frame, a tilted head), and it should be nearer each time you look back. The doorway peek pose is the best scare so far.
+  - Evidence: The Orderly now hunts you in the game. It walks the floor while nobody is looking, stops the instant you look (checked on every drawn frame, so a quick glance counts), and its trolley squeak plays in 3D while it moves and cuts out within a tenth of a second when it freezes. Being caught is a placeholder: interference, then you are back at the elevator. A browser test plays the staring contest: 3 seconds watched with no movement and no sound, turn away and it closes in, turn back and it is frozen nearer, mid-step. Fable also made it count as its full drawn size for being seen, arms and cap included; a first attempt at that broke the rule and the independent checker caught it. Nobody has heard the squeak yet: neither the agent nor Fable can hear.
 - [ ] **T3b** `todo` The Orderly, third pass
   - Why: After it moves and the tape look is on: real sewn lids instead of button-like discs, mottled skin, a stained gown that stands out from the walls, a narrower grin.
 - [ ] **T5** `todo` The instrument, the recording rule and tapes (G3)
@@ -73,7 +73,7 @@
 - [x] **G2** Floors are sound: passed. 800 floors checked by test; one printed map read by eye. Deliberate break used: with stairs removed from the generator, 2 of its 21 tests fail.
 - [ ] **G3** Rules hold over 500 simulated runs: open
 - [x] **G4** The Orderly is a real figure: passed. A re-runnable Blender script builds a rigged figure (7,380 triangles, 39 bones, 5 animations) that loads, animates and casts a shadow in the game; Fable looked at renders and in-game screenshots; five blind critics over three rounds, worst findings fixed each round. Deliberate break used: with the model file hidden, the Orderly browser test fails. Not claimed: that it is frightening. Blind fear scores stayed between 3 and 6 out of 10.
-- [ ] **G5** Heard before seen: open
+- [x] **G5** Heard before seen: passed. In 104 generated layouts the squeak is audible at least 2.5 seconds before the figure could first be seen, and in the running game the squeak gain is zero while it is watched and rises when it moves. Deliberate break used: with its hearing range cut to 3 metres, the heard-before-seen test fails. The sound itself has not been heard by a person.
 - [ ] **G6** One player can finish a run: open
 - [ ] **G7** Four players share one world: open
 - [ ] **G8** Going down works: open
@@ -93,6 +93,15 @@
 
 ## Activity (newest first)
 
+- 2026-11-16 06:58Z Gate G5 (Heard before seen) is passed.
+- 2026-11-16 06:58Z Finished T4: The Orderly comes alive.
+- 2026-11-16 06:58Z Correction: GitHub's checks have been failing since the tape look went in, four commits ago, and the public play link stopped updating. Twice I recorded them as passed without reading the result. The cause was frame-time limits that a software-rendered CI machine cannot meet; those now apply only on a real graphics card. The loop's rules now say to record a CI result only from what was actually printed.
+- 2026-11-16 06:58Z CI failed on 4a9ac1f.
+- 2026-11-16 06:50Z New pictures for T4: The Orderly comes alive.
+- 2026-11-16 06:50Z New pictures for T4: The Orderly comes alive.
+- 2026-11-16 06:50Z New pictures for T4: The Orderly comes alive.
+- 2026-11-16 06:50Z New pictures for T4: The Orderly comes alive.
+- 2026-11-16 06:50Z New pictures for T4: The Orderly comes alive.
 - 2026-11-16 06:31Z Started T4: The Orderly comes alive. The rule is proven in logic. An Opus agent is now wiring it to the screen and to sound: it hunts you on the floor, freezes when you look, and squeaks when it moves.
 - 2026-11-16 06:31Z The Orderly's rule is proven in logic: across 500 simulated runs an independent checker looked at 48,226 moments when a player could see it, and it had not moved in any of them. It moved in 498 runs and caught someone in 150, so the test is not empty. In 104 layouts its squeak could be heard at least 2.5 seconds before it could be seen. Fable broke the rule two ways on purpose (a too-narrow idea of 'seen', and no grace period) and the checker caught both.
 - 2026-11-16 06:09Z Started T4: The Orderly comes alive. An Opus agent is building the Orderly's behaviour: it walks the floor, squeaks before you see it, and never moves while anyone is looking.
@@ -124,12 +133,3 @@
 - 2026-11-16 05:04Z New pictures for T3: The Orderly, second pass.
 - 2026-11-16 05:04Z New pictures for T3: The Orderly, second pass.
 - 2026-11-16 05:04Z New pictures for T3: The Orderly, second pass.
-- 2026-11-16 04:56Z New pictures for T3: The Orderly, second pass.
-- 2026-11-16 04:56Z New pictures for T3: The Orderly, second pass.
-- 2026-11-16 04:56Z New pictures for T3: The Orderly, second pass.
-- 2026-11-16 04:56Z New pictures for T3: The Orderly, second pass.
-- 2026-11-16 04:46Z Started T3: The Orderly, second pass. An Opus agent is studying two Blender tutorials, then rebuilding the Orderly to your notes. Two judged revision rounds follow.
-- 2026-11-16 04:46Z You asked the loop to keep working through the night and will answer questions in the morning.
-- 2026-11-16 04:46Z Finished T0b: A public play link on GitHub Pages.
-- 2026-11-16 04:45Z Finished T2p: Playing on a phone.
-- 2026-11-16 04:45Z Added task T2p: Playing on a phone.
