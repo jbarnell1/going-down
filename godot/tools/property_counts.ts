@@ -20,6 +20,9 @@ import { makeRng, type Rng } from '../../src/sim/rng';
 import { BLACKOUT_WARNING, BLINK_GAPS, BLINK_WARNING, carBody, createRun, doorsOpen, LURE_ID, moveInRun, stepRun, type PlayerInput, type RunEvent, type RunPlayer, type RunState } from '../../src/sim/run';
 import type { OrderlyEvent } from '../../src/sim/entity';
 import { waitTable, tableLine } from '../../tests/sim/waits';
+import { LOSSY, ZERO } from '../../tests/net/harness';
+import { runRuleSession, type SessionResult } from '../../tests/net/rule';
+import { readFileSync } from 'node:fs';
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'tests', 'reference');
 const DT = 0.05;
@@ -811,6 +814,48 @@ function clinicCounts(seeds: number) {
   return { floors: 4 * seeds, walkable, missing, unreachableRooms };
 }
 
+
+// =============================================================================================
+// tests/net/rule.test.ts: the networked sessions (runRuleSession imported from tests/net/rule.ts),
+// counted. [lossy sessions, zero-delay sessions, seconds] per size; full is the Vitest run.
+
+export const NET_SIZES = { quick: [2, 1, 20], sub: [8, 2, 60], full: [200, 40, 60] } as const;
+
+function netAgg(rs: SessionResult[]) {
+  const c = {
+    sessions: rs.length, frames: 0, visibleFrames: 0, pairs: 0, violations: 0, putBacks: 0, reports: 0, bigPutBacks: 0, boundViolations: 0,
+    releases: 0, bigReleases: 0, catches: 0, natural: 0, strict: 0, displayed: 0, catchHoldTicks: 0, catchesForced: 0, latches: 0,
+    falseLatches: 0, latchedCatches: 0, latchGaps: 0, blinks: 0, blinkViolations: 0, blinkFramesChecked: 0, blackouts: 0, blackoutSessions: 0,
+    blackoutFramesChecked: 0, darkFrames: 0, darkDrawn: 0, posChecks: 0, posOver: 0, disagreements: 0, eventsChecked: 0, clamped: 0,
+    moved: 0, seen: 0, caught: 0, maxPutBack: 0, putBackSum: 0, maxReleaseJump: 0, maxPosErr: 0, extraDarkSum: 0, extraDarkMax: -Infinity, extraDarkN: 0,
+  };
+  for (const r of rs) {
+    c.frames += r.frames; c.visibleFrames += r.visibleFrames; c.pairs += r.pairs; c.violations += r.violations.length;
+    c.putBacks += r.putBacks; c.reports += r.reports;
+    for (const d of r.putBackDistances) { if (d > 0.6) c.bigPutBacks++; c.putBackSum += d; }
+    c.boundViolations += r.boundViolations; c.releases += r.releases; c.bigReleases += r.bigReleases; c.catches += r.catches;
+    c.natural += r.catchViolations.natural.length; c.strict += r.catchViolations.strict.length; c.displayed += r.catchViolations.displayed.length;
+    c.catchHoldTicks += r.catchHoldTicks; c.catchesForced += r.catchesForced; c.latches += r.latches; c.falseLatches += r.falseLatches;
+    c.latchedCatches += r.latchedCatches; c.latchGaps += r.latchGaps.length; c.blinks += r.blinks; c.blinkViolations += r.blinkViolations.length;
+    c.blinkFramesChecked += r.blinkFramesChecked; c.blackouts += r.blackouts; c.blackoutSessions += r.blackouts > 0 ? 1 : 0;
+    c.blackoutFramesChecked += r.blackoutFramesChecked; c.darkFrames += r.darkFrames; c.darkDrawn += r.darkDrawn.length; c.posChecks += r.posChecks;
+    c.posOver += r.posOver.length; c.disagreements += r.disagreements.length; c.eventsChecked += r.eventsChecked; c.clamped += r.clamped;
+    c.moved += r.travelled > 5 ? 1 : 0; c.seen += r.seenOnHost || r.reports > 0 ? 1 : 0; c.caught += r.catches > 0 ? 1 : 0;
+    c.maxPutBack = Math.max(c.maxPutBack, r.maxPutBack); c.maxReleaseJump = Math.max(c.maxReleaseJump, r.maxReleaseJump); c.maxPosErr = Math.max(c.maxPosErr, r.maxPosErr);
+    for (const x of r.extraDark) { c.extraDarkSum += x; c.extraDarkMax = Math.max(c.extraDarkMax, x); c.extraDarkN++; }
+  }
+  if (c.extraDarkN === 0) c.extraDarkMax = 0;
+  return c;
+}
+
+function netCounts([lossyN, zeroN, secs]: readonly [number, number, number]) {
+  const lossy: SessionResult[] = [];
+  for (let i = 0; i < lossyN; i++) lossy.push(runRuleSession(i, LOSSY, secs));
+  const zero: SessionResult[] = [];
+  for (let i = 0; i < zeroN; i++) zero.push(runRuleSession(i, ZERO, secs));
+  return { lossy: netAgg(lossy), zero: netAgg(zero) };
+}
+
 // =============================================================================================
 
 function blackoutCounts(waits: number) {
@@ -820,6 +865,21 @@ function blackoutCounts(waits: number) {
 }
 
 const t0 = performance.now();
+const enc = (_k: string, v: unknown) => (typeof v === 'number' && !Number.isInteger(v) ? `~${hexOf(v)}` : v);
+if (process.argv.includes('--net-only')) {
+  // Only the network counts, merged into the existing file (the rest takes minutes to recompute).
+  const path = join(OUT, 'properties.json');
+  const result = JSON.parse(readFileSync(path, 'utf8')) as Record<string, Record<string, unknown>>;
+  const which = process.argv.includes('--full') ? (['quick', 'sub', 'full'] as const) : (['quick', 'sub'] as const);
+  for (const k of which) {
+    const t1 = performance.now();
+    (result[k] as Record<string, unknown>).net = netCounts(NET_SIZES[k]);
+    console.log(`net ${k} in ${((performance.now() - t1) / 1000).toFixed(1)} s: ${JSON.stringify((result[k] as Record<string, unknown>).net)}`);
+  }
+  writeFileSync(path, JSON.stringify(result, enc));
+  console.log(`properties.json (net) written in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+  process.exit(0);
+}
 const result: Record<string, unknown> = {};
 const sizes = process.argv.includes('--sub-only') ? ([['quick', QUICK], ['sub', SUB]] as const) : ([['quick', QUICK], ['sub', SUB], ['full', FULL]] as const);
 result.clinic = clinicCounts(CLINIC_SEEDS);
@@ -832,11 +892,12 @@ for (const [name, n] of sizes) {
     safe: safeCounts(n.safe),
     hear: hearCounts(n.hear),
     blackout: blackoutCounts(n.waits),
+    net: netCounts(NET_SIZES[name]),
   };
   console.log(`${name}: ${JSON.stringify(result[name], (_k, v) => (typeof v === 'number' && !Number.isInteger(v) ? Number(v.toFixed(3)) : v))}`);
 }
 mkdirSync(OUT, { recursive: true });
-writeFileSync(join(OUT, 'properties.json'), JSON.stringify(result, (_k, v) => (typeof v === 'number' && !Number.isInteger(v) ? `~${hexOf(v)}` : v)));
+writeFileSync(join(OUT, 'properties.json'), JSON.stringify(result, enc));
 console.log(`properties.json written in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
 
 function hexOf(x: number): string {

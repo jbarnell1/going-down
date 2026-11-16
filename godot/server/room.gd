@@ -1,0 +1,192 @@
+# The one room the home server runs: a lobby until a player presses start, then a run (the authoritative
+# NetHost of net/host.gd, stepping the rules through net/host_rules.gd exactly as the game does), then
+# back to the lobby a few seconds after the run banks or is wiped (or at once if everyone has gone).
+#
+# On the wire (text WebSocket messages, after the hello that ws_server.gd checks):
+#   server -> client  m|{"t":"you","id":"c3"}                                       once, after the hello
+#                     m|{"t":"lobby","epoch":E,"running":true|false,"people":[[id,name],...]}
+#                                                                                   on every change and every 2 s
+#                     n<E>|<protocol text>                                           the run's messages (net/protocol.gd)
+#   client -> server  m|{"t":"start"}        start a run (in the lobby; ignored while one runs)
+#                     m|{"t":"name","name":"..."}
+#                     m|{"t":"ping"}         keeps a lobby connection alive (any message does)
+#                     n<E>|<protocol text>   input, join, leave or ping of run E; anything else, or a
+#                                            message that does not decode exactly (net/protocol.gd
+#                                            decode validates every field), closes the connection.
+# A client's run messages are passed to the host as coming from that connection's own id, so it can
+# only ever speak for its own player.
+extends RefCounted
+
+const Run = preload("res://sim/run.gd")
+const Protocol = preload("res://net/protocol.gd")
+const Transport = preload("res://net/transport.gd")
+const Host = preload("res://net/host.gd")
+const HostRules = preload("res://net/host_rules.gd")
+const WsServer = preload("res://net/ws_server.gd")
+
+## Seconds after a bank or a wipe before the room goes back to the lobby.
+const END_LINGER := 10.0
+const LOBBY_EVERY := 2.0
+
+## What NetHost talks through: the room pushes what arrives, sends go out framed with the run's epoch.
+class RoomTransport extends Transport.Transport:
+	var _room: WeakRef
+	var _inbox: Array[Dictionary] = []
+	var _events: Array[Dictionary] = []
+
+	func _init(room: Object) -> void:
+		_room = weakref(room)
+		self_id = "host"
+
+	func push(from: String, data: String) -> void:
+		_inbox.append({"from": from, "data": data})
+
+	func push_peer(e: Dictionary) -> void:
+		_events.append(e)
+
+	func send(to: String, data: String) -> void:
+		var r: Object = _room.get_ref()
+		if r != null:
+			r.call("send_run", to, data)
+
+	func receive() -> Array[Dictionary]:
+		var out := _inbox
+		_inbox = []
+		return out
+
+	func peer_events() -> Array[Dictionary]:
+		var out := _events
+		_events = []
+		return out
+
+var epoch := 0
+var host: Host = null
+var rules: HostRules = null
+var people := {}  # id -> name, in arrival order
+## Seed of the next run ("" draws one at random); tests set it.
+var fixed_seed := ""
+## Tick cost, for the log: total and worst microseconds, and ticks.
+var tick_us := 0
+var tick_max_us := 0
+var ticks := 0
+var _ws: WsServer
+var _transport: RoomTransport = null
+var _ended_at := -1.0
+var _last_lobby := -INF
+var _dirty := false
+var _log: Callable
+
+func _init(ws: WsServer, log: Callable) -> void:
+	_ws = ws
+	_log = log
+
+func running() -> bool:
+	return host != null
+
+func send_run(to: String, data: String) -> void:
+	_ws.send(to, "n%d|%s" % [epoch, data])
+
+func _lobby_text() -> String:
+	var list: Array = []
+	for id: String in people:
+		list.append([id, people[id]])
+	return "m|" + JSON.stringify({"t": "lobby", "epoch": epoch, "running": running(), "people": list})
+
+## Handles the door's events and runs the host. `now`: seconds.
+func update(now: float) -> void:
+	for e in _ws.events:
+		match String(e["kind"]):
+			"joined":
+				people[e["id"]] = e["name"]
+				_ws.send(e["id"], "m|" + JSON.stringify({"t": "you", "id": e["id"]}))
+				_dirty = true
+			"left":
+				people.erase(e["id"])
+				if _transport != null:
+					_transport.push_peer({"kind": "left", "peer": e["id"]})
+				_dirty = true
+			"message":
+				_on_message(e["id"], e["data"], now)
+	_ws.events.clear()
+	if host != null:
+		var tick0 := host.tick
+		var t0 := Time.get_ticks_usec()
+		host.update(now)
+		var dt := Time.get_ticks_usec() - t0
+		var n := host.tick - tick0
+		if n > 0:
+			ticks += n
+			tick_us += dt
+			tick_max_us = maxi(tick_max_us, dt / n)
+		if host.state.phase == &"ended" and _ended_at < 0.0:
+			_ended_at = now
+			var s := host.state.summary
+			_log.call("run %d ended: %s, depth %d, total %.2f" % [epoch, "wiped" if s != null and s.wiped else "banked", host.state.depth, s.total if s != null else 0.0])
+		if (_ended_at >= 0.0 and now - _ended_at >= END_LINGER) or people.is_empty():
+			_end_run()
+	if _dirty or now - _last_lobby >= LOBBY_EVERY:
+		_dirty = false
+		_last_lobby = now
+		var text := _lobby_text()
+		for id: String in people:
+			_ws.send(id, text)
+
+func _end_run() -> void:
+	_log.call("run %d over, back to the lobby" % epoch)
+	host.close()
+	host = null
+	rules = null
+	_transport = null
+	_ended_at = -1.0
+	_dirty = true
+
+func _start(now: float) -> void:
+	if host != null or people.is_empty():
+		return
+	epoch += 1
+	var seed := fixed_seed
+	if seed.is_empty():
+		seed = Crypto.new().generate_random_bytes(6).hex_encode()
+	var roster: Array[String] = []
+	for id: String in people:
+		roster.append(id)
+	rules = HostRules.new(true, 1)
+	_transport = RoomTransport.new(self)
+	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))
+	_dirty = true
+	_log.call("run %d started with %d players" % [epoch, roster.size()])
+
+func _on_message(id: String, data: String, now: float) -> void:
+	if data.begins_with("m|"):
+		var p: Variant = JSON.parse_string(data.substr(2))
+		if not p is Dictionary or not (p as Dictionary).get("t") is String:
+			_ws.kick(id, WsServer.CLOSE_PROTOCOL, "bad message")
+			return
+		match String(p["t"]):
+			"start":
+				_start(now)
+			"name":
+				if p.get("name") is String:
+					people[id] = WsServer._clean_name(p["name"])
+					_dirty = true
+			"ping":
+				pass
+			_:
+				_ws.kick(id, WsServer.CLOSE_PROTOCOL, "bad message")
+		return
+	if data.begins_with("n"):
+		var bar := data.find("|")
+		var e := data.substr(1, bar - 1)
+		if bar < 2 or not e.is_valid_int():
+			_ws.kick(id, WsServer.CLOSE_PROTOCOL, "bad message")
+			return
+		if int(e) != epoch or _transport == null:
+			return  # a late message of a finished run
+		var text := data.substr(bar + 1)
+		var m: Variant = Protocol.decode(text)
+		if m == null or not (String(m["type"]) in ["input", "join", "leave", "ping"]):
+			_ws.kick(id, WsServer.CLOSE_PROTOCOL, "bad message")
+			return
+		_transport.push(id, text)
+		return
+	_ws.kick(id, WsServer.CLOSE_PROTOCOL, "bad message")

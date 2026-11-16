@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 37,
+  "iteration": 39,
   "now": "P3",
   "nowText": "Moving the networking and its fairness rules to Godot, and building the small server that will run on the lab box behind a join passphrase",
   "ci": {
     "status": "passed",
-    "commit": "68a0b2e",
-    "at": "2026-11-16T21:40:47.675Z"
+    "commit": "f757a30",
+    "at": "2026-11-16T22:29:14.532Z"
   },
   "answersAppliedTo": "2026-11-16T20:44:47.437Z",
   "tasks": [
@@ -945,7 +945,9 @@
       ],
       "todo": [
         "Owner asked (2026-11-16): an animated being-caught sequence with noise. The Orderly's reach filling the view, the tape tearing, a loud burst; then the downed view. Later is fine, after more of the game is settled.",
-        "New from the owner (16 Nov): caught means downed first. A crewmate can heal you for about 10 seconds; only if nobody does do you go out to the security cameras. The camera drops when downed"
+        "New from the owner (16 Nov): caught means downed first. A crewmate can heal you for about 10 seconds; only if nobody does do you go out to the security cameras. The camera drops when downed",
+        "The Orderly's caught scene, as you described it: it turns you to face it, roars and bends down to your face; others see it bend down if they are looking; heal is holding F for 3 seconds; after ten seconds unhealed the player vanishes and a red spot is left. No dragging for the Orderly",
+        "Confirmed by you: the Orderly stays bent over a downed player for the ten seconds, so the healer has to step in right beside it"
       ],
       "ns": [
         "B6",
@@ -964,7 +966,8 @@
         "Owner asked what they must do for assets (2026-11-16). Answer given: nothing is required; the one useful thing is Mixamo clips for the crewmates (free Adobe account). Steps are in assets_src/inbox/README.md section 2. The upload file assets_src/inbox/convict-for-mixamo.fbx is being built; tell the owner when it is judged and ready. Then: import their clips, trim/loop, bake into public/assets/entities/convict.glb, replace the box figures in src/render/crewFigures.ts, keep per-player tint and number patches.",
         "Owner (2026-11-16): 'Don't forget to reference the North star, though, we talked about drawing faces on. Maybe keep the models the way they are but every person wears a mask with a screen on it that covers the full face and has whatever face they drew on it.' North Star H1 (Your face is everywhere): each player draws a face before the run; it appears on their avatar, the elevator monitor, the standee left where they fall (B6), and posters. The crewmate figure now wears a full-face screen mask with its own flat face_screen surface.",
         "Mesh is FINAL (2,216 triangles, one closed symmetric mesh, T-pose, 1.78 m) after two blind judging rounds and the owner's steer: 'we don't need a lot of those fixes because the filter makes everything so grainy we get a lot for free... Mittens are perfectly acceptable.' Upload file: assets_src/inbox/convict-for-mixamo.fbx (fallback .zip). Waiting on the owner's Mixamo clips in assets_src/inbox/mixamo/.",
-        "R opens a wheel of emotes (hold R, move the mouse to pick, let go): wave, the two dances, pray, look behind"
+        "R opens a wheel of emotes (hold R, move the mouse to pick, let go): wave, the two dances, pray, look behind",
+        "Put the crewmates into the real game once the networking is joined (other players drawn with crew_view), then watch walk, run and sneak in motion for foot sliding; sneak at creep speed plays at about half speed and may look like slow motion"
       ],
       "media": [
         {
@@ -1014,6 +1017,36 @@
           "caption": "A crew in a blackout: only the drawn faces glow",
           "kind": "image",
           "at": "2026-11-16T17:36:37.504Z"
+        },
+        {
+          "src": "T7e/20261116T215050-variants.png",
+          "caption": "Crewmates in the Godot build: four convicts with screen masks, drawn faces and numbers",
+          "kind": "image",
+          "at": "2026-11-16T21:50:50.105Z"
+        },
+        {
+          "src": "T7e/20261116T215050-corridor_walk_03m.png",
+          "caption": "A crewmate walking toward you at 3 m, with your Mixamo walk",
+          "kind": "image",
+          "at": "2026-11-16T21:50:50.106Z"
+        },
+        {
+          "src": "T7e/20261116T215050-clip_dance_snake_front.png",
+          "caption": "The snake dance, three at once",
+          "kind": "image",
+          "at": "2026-11-16T21:50:50.108Z"
+        },
+        {
+          "src": "T7e/20261116T215050-api_downed_crawl.png",
+          "caption": "A downed crewmate crawling",
+          "kind": "image",
+          "at": "2026-11-16T21:50:50.110Z"
+        },
+        {
+          "src": "T7e/20261116T215050-face_test_2m.png",
+          "caption": "Drawn faces and numbers at 2 m: the middle one is a test drawing",
+          "kind": "image",
+          "at": "2026-11-16T21:50:50.111Z"
         }
       ],
       "ns": [
@@ -1202,7 +1235,9 @@
       "why": "Creeping should feel like ducking, and what you can see over things should change with it",
       "status": "todo",
       "gates": [],
-      "ns": [],
+      "ns": [
+        "B12"
+      ],
       "nsWhy": "The design has no line on eye height; the owner asked for it in chat on 16 Nov, recorded in the amendments"
     },
     {
@@ -1212,7 +1247,7 @@
       "status": "todo",
       "gates": [],
       "ns": [
-        "C1",
+        "C9",
         "C5"
       ]
     },
@@ -1231,7 +1266,8 @@
       "todo": [
         "Public door: Tailscale Funnel, chosen by the owner. Funnel only works on ports 443, 8443 and 10000. On this PC 443 and 10000 are in use for tailnet-only pages and 8443 is already funnelled for another project by path. Cleanest: add ONE path for the game server on the existing funnelled port, with a command for the owner to run (path mount to the server's local port); the browser build then connects with wss to that path. The server runs on this PC for Friday (it is already the funnel node); the lab box later. Never touch the other paths on that port.",
         "Join secret: the owner sets a passphrase for the night on the server (never in the game file, never in git); friends type it or get it in the invite; the server refuses any connection without it before reading game traffic, with a limit on wrong tries, on connections and on message size",
-        "Isolation: run the server on the lab box inside a Docker container with no folders shared, a read-only filesystem, no extra privileges and CPU and memory caps, listening only on the lab box itself; Funnel points at that one port, so friends reach the game server and nothing else"
+        "Isolation: run the server on the lab box inside a Docker container with no folders shared, a read-only filesystem, no extra privileges and CPU and memory caps, listening only on the lab box itself; Funnel points at that one port, so friends reach the game server and nothing else",
+        "The one-minute test set did not notice the server ignoring what players see; only the 9-minute set did. Add a short watched-under-delay case to the quick set"
       ],
       "startedAt": "2026-11-16T21:26:09.607Z"
     },
@@ -1462,8 +1498,7 @@
         "Owner (2026-11-16, later): 'Clicking the elevator should trigger a hiding sequence, so you have to survive one last time before making it to freedom.' So on this floor calling the car always starts one last count-and-search; the car arrives when the search ends. It is this floor's version of the Clinic's blackout while waiting."
       ],
       "ns": [
-        "A2",
-        "B1"
+        "A11"
       ]
     },
     {
@@ -1643,6 +1678,41 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T22:54:57.123Z",
+      "text": "The networking and the home server are checked: 47 of 47 tests in my own runs, the end-to-end check with three players passed 10 of 10 including every refusal, and both of my deliberate breaks were caught (any passphrase accepted; the server ignoring what players see). The server is not on the lab box yet and the game is not joined to it yet.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T22:12:00.595Z",
+      "text": "The North Star is updated to draft 5: your 13 decisions from today are folded in with your words quoted, and a new first section says where the build stands.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T22:11:40.198Z",
+      "text": "Linked T15 to the North Star: A11.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T22:11:40.046Z",
+      "text": "Linked T5q to the North Star: C9, C5.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T22:11:39.878Z",
+      "text": "Linked T2c to the North Star: B12.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T21:50:50.222Z",
+      "text": "The crewmates move: your 13 Mixamo clips are baked onto the convict (walk, run, sneak, crawl, two dances, wave and more), with a drawn face on the screen mask, four skin tones, headwear and a number. I rebuilt the model myself and re-ran the picture run. Nobody has watched them in motion yet, and they are not in the game until the networking is joined to the client.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T21:50:50.112Z",
+      "text": "New pictures for T7e: Better-looking crewmates and readable name tags.",
+      "kind": "media"
+    },
     {
       "at": "2026-11-16T21:48:15.374Z",
       "text": "A checked Windows build now lives in one fixed place, C:\\new_game\\play\\GoingDown.exe, with BUILD.txt beside it saying when it was built. This one has your control scheme and the controls list on Esc.",
@@ -2606,41 +2676,6 @@
     {
       "at": "2026-11-16T05:51:23.335Z",
       "text": "New pictures for T2b: The tape-playback look and the debug overlay.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T05:48:04.285Z",
-      "text": "New pictures for T2b: The tape-playback look and the debug overlay.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T05:37:04.974Z",
-      "text": "Started T2b: The tape-playback look and the debug overlay. An Opus agent is building the tape-playback look as a screen filter, plus a debug overlay with a minimap.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T05:37:04.810Z",
-      "text": "Took a default: The Orderly: kept as it is for now and moved on, relying on behaviour, sound and the tape look for fear (question \"orderly-next\").",
-      "kind": "decision"
-    },
-    {
-      "at": "2026-11-16T05:37:04.732Z",
-      "text": "Added task T3b: The Orderly, third pass.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T05:37:04.658Z",
-      "text": "Gate G4 (The Orderly is a real figure) is passed.",
-      "kind": "gate"
-    },
-    {
-      "at": "2026-11-16T05:37:04.585Z",
-      "text": "Finished T3: The Orderly, second pass.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T05:36:26.482Z",
-      "text": "New pictures for T3: The Orderly, second pass.",
       "kind": "media"
     }
   ]

@@ -9,12 +9,16 @@ and no Node at run time. The Windows build is the main way to play; the browser 
 godot/
   project.godot       Compatibility renderer (runs in a browser); untyped declarations are compile errors;
                       the client's main scene, display, rendering and audio settings
-  export_presets.cfg  "Web" and "Windows" (tests/, tools/ and export/ are left out of the builds)
+  export_presets.cfg  "Web", "Windows" (tests/, tools/ and export/ are left out of the builds) and
+                      "Linux Server" (headless, feature "server": project.godot starts server/server.tscn)
   sim/                the rules, one file per src/sim module (rng, floor, clinic, walls, landing, move,
                       follow, sight, stamina, tape, entity, instrument, run, bot) plus jsmath.gd
-  client/             rules_bridge.gd (THE boundary: the only client script that calls sim/), host_rules.gd
-                      (src/game/runHost.ts HostRules), pose.gd (src/net lerpPose, samePose, cameraSees),
-                      and the client's scripts and shaders (main.gd, level.gd, lift.gd, sfx.gd, ...: synced)
+  client/             rules_bridge.gd (THE boundary: the only client script that calls sim/), and the
+                      client's scripts and shaders (main.gd, level.gd, lift.gd, sfx.gd, ...: synced)
+  net/                the network (port of src/net, see net/README.md): protocol, NetHost, NetClient,
+                      transports, the room client, the server's door; host_rules.gd (src/game/runHost.ts
+                      HostRules) and pose.gd (lerpPose, samePose, cameraSees), shared by bridge and server
+  server/             the dedicated server (one room; server.tscn), its Dockerfile and README.md
   assets/, data/      models, textures, recorded lines, pixel font (synced; all from public/assets)
   main.tscn, default_bus_layout.tres   the main scene and the Sfx, Squeak and Voice buses (synced)
   tests/              run_tests.gd (the runner), ref_*.gd (sameness), prop_*.gd (design rules),
@@ -38,6 +42,8 @@ npm run godot:test -- ref_rng prop_clinic  # only these test files
 npm run godot:test -- --full             # property tests at the Vitest sizes (slow: see Timing)
 npm run godot:reference                  # regenerate tests/reference/ from src/ (needs Node; installs tsx here)
 npm run godot:export                     # import, export export/web and export/windows/GoingDown.exe, precompress
+npm run godot:export -- server           # the Linux headless server: export/server/GoingDownServer.x86_64
+node godot/tools/net_local.mjs 4451      # the network end to end on this PC (server + 3 players + probes, ~2 min)
 node godot/tools/godot.mjs import        # only the import pass (assets, the client's class names)
 node godot/tools/sync_client.mjs         # copy the client in again from spikes/godot-client
 ```
@@ -130,7 +136,8 @@ bridge. Each frame it moves the body, runs the 20 Hz ticks that are due, decides
 this frame's camera may be shown, and returns one snapshot Dictionary with the TypeScript (camelCase)
 names. Values are native (ints, floats, Strings), not JSON-parsed.
 
-`tests/ref_bridge.gd` proves it is the same. `tools/bridge_script.ts` plays three runs through the
+`tests/ref_bridge.gd` proves it is the same. (`host_rules.gd` and `pose.gd` now live in `net/`: the
+server runs them too.) `tools/bridge_script.ts` plays three runs through the
 reference host (7833 requests): stepping out (walk, sprint, creep, strafe), both levels and the stair,
 recording near the Orderly while watching it and while looking away (the slip), a reading closing,
 the call, blinks, a soft catch in the blackout, the dropped tape picked up, boarding, holding the
@@ -141,6 +148,25 @@ and compares every reply's canonical digest with the pay fields masked (everythi
 event, every plan field by field, the full reply every 20 requests, and every reply's pay values
 within 1e-9. The script makes its choices from the TypeScript replies; only the requests are
 replayed, so the script itself is never ported.
+
+## The network and the server
+
+`net/` is the port of `src/net` (protocol, NetHost, NetClient, the in-memory test network) and
+`server/` the dedicated home server that runs the host for one room; see `net/README.md` (the client
+API for joining the real game to the network) and `server/README.md` (the passphrase, the limits,
+Docker). Proved the same as the TypeScript by:
+
+- `tests/ref_net.gd`: seven scripted sessions (`tools/net_script.ts`, `dump_reference.ts net`) run
+  through the real `NetHost`/`NetClient` over the seeded in-memory network (two to four players;
+  the Orderly watched and not at 0, 100 and 300 ms; jitter; a lossy link; a catch with the taken
+  latch; blinks and the blackout; boarding, the vote, banking; riding down; joining mid-wait;
+  leaving) and replayed here with the same LocalFrames: every message (length; the decoded message
+  with time, sender and receiver, pay masked), every client frame, every host tick and every counter
+  must match. Floats on the wire are written and read exactly as JavaScript does (`net/jsjson.gd`).
+- `tests/prop_net.gd`: the fairness tests of `tests/net/rule.test.ts` with their oracle, on bot
+  sessions over a lossy network (8 lossy and 2 zero-delay sessions of 60 s by default, 2 + 1 of 20 s
+  in the quick set, 200 + 40 with `--full`), every count equal to TypeScript's (`properties.json`
+  key `net`, written by `property_counts.ts`; `property_counts.ts --net-only` refreshes just those).
 
 ## How the sameness is proved
 
@@ -217,6 +243,9 @@ the same counts, besides asserting the design rules themselves.
 - `jsmath.gd` keeps one shared scratch buffer, so the rules are not safe to run on two threads at once.
 
 ## Timing
+
+With the network tests (2026-11-16): ref_net adds about 55 s (6 s in the quick set) and prop_net
+about 100 s (9 s quick).
 
 Measured on the development PC (2026-11-16): the default suite runs 34 tests in about 395 to 450 s
 (`npx vitest run tests/sim`: about 51 s, 61 s wall); the quick set (`--quick`) in about 68 s. The slowest parts are the 30 bot crews

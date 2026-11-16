@@ -11,8 +11,8 @@ extends SceneTree
 const T = preload("res://tests/t.gd")
 
 const FILES: Array[String] = [
-	"test_jsmath", "ref_rng", "ref_floors", "ref_move", "ref_sight", "ref_entity", "ref_instrument", "ref_run", "ref_bots", "ref_bridge",
-	"prop_stamina", "prop_clinic", "prop_entity", "prop_instrument", "prop_run", "prop_blackout",
+	"test_jsmath", "ref_rng", "ref_floors", "ref_move", "ref_sight", "ref_entity", "ref_instrument", "ref_run", "ref_bots", "ref_bridge", "ref_net",
+	"prop_stamina", "prop_clinic", "prop_entity", "prop_instrument", "prop_run", "prop_blackout", "prop_net",
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).

@@ -33,6 +33,8 @@ import { addReading, emptyTape, type Tape } from '../../src/sim/tape';
 import { edgeKind, northEdge, segmentsNear, westEdge } from '../../src/sim/walls';
 import { runWait } from '../../tests/sim/waits';
 import { bridgeScenes } from './bridge_script';
+import { decode as decodeNet } from '../../src/net/protocol';
+import { deltaRows, runNetScenes } from './net_script';
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'tests', 'reference');
 
@@ -1201,6 +1203,85 @@ function dumpBridge(): void {
   write('bridge.json', { scenes });
 }
 
+
+// ---------------------------------------------------------------------------------------------
+// 12. The network (job 'net'): the real NetHost and NetClients of src/net on the scripted scenes of
+// net_script.ts. Per scene: the machines (links, clocks), every machine's LocalFrame per frame (delta
+// coded integers), per frame a digest of what that client draws (and the whole record every 120
+// frames), per message on the network its length and three digests (the text; the decoded message
+// with sender, receiver and time, pay fields masked; the same unmasked), a sample of whole texts, the
+// host's state after every tick (a Recorder trace) and the host's and clients' counters.
+
+const NET_TAINT = new Set([...TAINT, 'open']);
+function canonNet(v: unknown, mask: boolean): string {
+  if (v === null || v === undefined) return 'null';
+  if (typeof v === 'boolean') return v ? 'true' : 'false';
+  if (typeof v === 'number') return isInt(v) ? String(Object.is(v, -0) ? 0 : v) : JSON.stringify(`h${hex(v)}`);
+  if (typeof v === 'string') return JSON.stringify(v);
+  if (Array.isArray(v)) return `[${v.map((x) => canonNet(x, mask)).join(',')}]`;
+  const o = v as Record<string, unknown>;
+  return `{${Object.keys(o)
+    .sort()
+    .map((k) => `${JSON.stringify(k)}:${mask && NET_TAINT.has(k) ? '"~"' : canonNet(o[k], mask)}`)
+    .join(',')}}`;
+}
+
+function dumpNet(): void {
+  const t0 = performance.now();
+  const recs = runNetScenes();
+  const scenes = recs.map((r) => {
+    const spec = r.spec;
+    const frames: Record<string, unknown> = {};
+    for (const [id, list] of Object.entries(r.frames)) {
+      let digests = '';
+      const full: Record<string, unknown> = {};
+      list.forEach((f, k) => {
+        digests += digest(f, false);
+        if (k % 120 === 0 || k === list.length - 1) full[String(k)] = J(f);
+      });
+      frames[id] = { n: list.length, digests, full };
+    }
+    let mask = '';
+    let fullD = '';
+    let text = '';
+    let route = '';
+    const lens: number[] = [];
+    const samples: Record<string, unknown> = {};
+    r.sends.forEach((m, i) => {
+      const dec = decodeNet(m.data);
+      const rec = { t: m.t, from: m.from, to: m.to, msg: dec };
+      mask += fnv(canonNet(rec, true));
+      fullD += fnv(canonNet(rec, false));
+      text += fnv(m.data);
+      route += fnv(`${hex(m.t)}|${m.from}|${m.to}`);
+      lens.push(m.data.length);
+      if (i % 250 === 0) samples[String(i)] = m.data;
+    });
+    const host = new Recorder(spec.name, 100);
+    for (const h of r.hostStates) host.tick(snapRun(h.state), h.events);
+    const types: Record<string, number> = {};
+    for (const l of r.host.log) types[l.e.type] = (types[l.e.type] ?? 0) + 1;
+    const cs: Record<string, unknown> = {};
+    for (const [id, c] of Object.entries(r.clients)) cs[id] = J({ ...c.stats });
+    console.log(`  ${spec.name}: ${r.sends.length} messages, ${Object.values(r.frames).reduce((n, l) => n + l.length, 0)} frames, host ticks ${r.host.tick}, phase ${r.host.state.phase} depth ${r.host.state.depth}, events ${JSON.stringify(types)}`);
+    console.log(`    host stats ${JSON.stringify({ ...r.host.stats, putBackDistances: r.host.stats.putBackDistances.length })}`);
+    for (const [id, c] of Object.entries(r.clients)) console.log(`    ${id}: ${JSON.stringify(c.stats)}`);
+    return {
+      name: spec.name, seed: spec.seed, setup: spec.setup, entity: spec.entity, roster: spec.roster, until: J(spec.until), quick: spec.quick, near: spec.near,
+      machines: J(spec.machines),
+      inputs: Object.fromEntries(Object.entries(r.inputs).map(([id, rows]) => [id, deltaRows(rows)])),
+      frames,
+      msgs: { n: r.sends.length, mask, full: fullD, text, route, lens, samples },
+      host: host.done(),
+      hostStats: J({ ...r.host.stats }),
+      clientStats: cs,
+      logLength: r.host.log.length,
+    };
+  });
+  write('net.json', { scenes });
+  console.log(`  net scenes in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+}
+
 const only = process.argv[2];
 const jobs: Record<string, () => void> = {
   literals: dumpLiterals,
@@ -1214,6 +1295,7 @@ const jobs: Record<string, () => void> = {
   run: dumpRun,
   bots: dumpBots,
   bridge: dumpBridge,
+  net: dumpNet,
 };
 for (const [name, job] of Object.entries(jobs)) {
   if (only && only !== name) continue;

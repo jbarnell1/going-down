@@ -32,8 +32,8 @@ const Stamina = preload("res://sim/stamina.gd")
 const TapeLib = preload("res://sim/tape.gd")
 const Walls = preload("res://sim/walls.gd")
 const M = preload("res://sim/jsmath.gd")
-const HostRules = preload("res://client/host_rules.gd")
-const PoseLib = preload("res://client/pose.gd")
+const HostRules = preload("res://net/host_rules.gd")
+const PoseLib = preload("res://net/pose.gd")
 
 const ME := "me"
 ## src/game/player.ts

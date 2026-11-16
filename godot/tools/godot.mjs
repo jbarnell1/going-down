@@ -1,6 +1,7 @@
 // npm run godot:reference  -> regenerate godot/tests/reference/*.json from the TypeScript rules
 // npm run godot:test       -> run the Godot test suite headless (extra args pass through, e.g. -- --full)
 // npm run godot:test -- --quick  -> the quick set (about a minute): every test file, smaller runs
+// npm run godot:export -- server -> the dedicated server: godot/export/server/GoingDownServer.x86_64 (Linux, headless)
 // npm run godot:export     -> import the assets, export godot/export/web and godot/export/windows/GoingDown.exe,
 //                             then precompress the web build for the hub (node hub/precompress.mjs)
 // node godot/tools/godot.mjs import   -> only the import pass (assets, the global class list)
@@ -78,9 +79,9 @@ if (command === 'reference') {
 } else if (command === 'import') {
   process.exit(importPass() ? 0 : 1);
 } else if (command === 'export') {
-  // Which builds: `web`, `windows` or both (default).
+  // Which builds: `web`, `windows`, `server` (the Linux headless server), or web and windows (default).
   const which = rest.filter((a) => !a.startsWith('--'));
-  const want = (k) => which.length === 0 || which.includes(k);
+  const want = (k) => (which.length === 0 ? k !== 'server' : which.includes(k));
   if (!importPass()) process.exit(1);
   const out = join(project, 'export');
   mkdirSync(out, { recursive: true });
@@ -89,6 +90,7 @@ if (command === 'reference') {
   const builds = [
     ['web', 'Web', join(out, 'web', 'index.html')],
     ['windows', 'Windows', join(out, 'windows', 'GoingDown.exe')],
+    ['server', 'Linux Server', join(out, 'server', 'GoingDownServer.x86_64')],
   ];
   let ok = true;
   for (const [key, preset, file] of builds) {
