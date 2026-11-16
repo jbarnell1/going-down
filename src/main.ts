@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Announcer } from './game/announcer';
 import { GameAudio } from './game/audio';
 import { AutoWalk } from './game/autoWalk';
 import { Minimap } from './game/minimap';
@@ -94,6 +95,10 @@ if (entityOn) {
   orderlyView = new EntityView(scene, `${import.meta.env.BASE_URL}assets/entities/orderly.glb`);
 }
 const audio = new GameAudio();
+// The elevator's voice (recorded lines through a speaker built in Web Audio). ?subs=0 hides its subtitles;
+// so does the clean render (?fx=0), which shows no on-screen display at all (the reference pictures use it).
+const announcer = new Announcer(() => audio.context, import.meta.env.BASE_URL, document.body, params.get('subs') !== '0' && fxLevel > 0);
+announcer.startRun();
 const caughtFx = new CaughtFx(document.body);
 const endScreen = new EndScreen(document.body);
 
@@ -304,6 +309,8 @@ function addLifetime(v: number): void {
 }
 /** Seconds of bell countdown at which the warning dings sound. */
 const BELL_WARNINGS = [5, 3];
+/** Seconds before the doors close that the announcer's bell line starts, so it ends near the bell. */
+const ANNOUNCE_BELL_AT = 7;
 let prevBellLeft = BOARD_TIME;
 /** Readings closed so far on each floor depth (tests: the depth multiplier). */
 let lastReadingDepth = 1;
@@ -388,6 +395,7 @@ function afterTick(events: readonly RunEvent[]): void {
   const s = run.state;
   if (s.phase === 'boarding') {
     for (const w of BELL_WARNINGS) if (prevBellLeft > w && s.bellLeft <= w) audio.bellWarning();
+    if (prevBellLeft > ANNOUNCE_BELL_AT && s.bellLeft <= ANNOUNCE_BELL_AT) announcer.bellSoon();
     prevBellLeft = s.bellLeft;
   }
   syncBodies(events);
@@ -449,6 +457,7 @@ function restartRun(): void {
   audio.resetLift();
   tape.setDarkness(0);
   prevBellLeft = BOARD_TIME;
+  announcer.startRun();
   runs++;
 }
 let runs = 1;
@@ -509,6 +518,7 @@ function present(events: readonly RunEvent[], now: number): void {
   const s = run.state;
   const orderlyEvs: OrderlyEvent[] = [];
   const crewEvs: CrewEvent[] = [];
+  announcer.onEvents(events, startDepth);
   for (const e of events) {
     if (isOrderlyEvent(e)) {
       orderlyEvs.push(e);
@@ -864,6 +874,8 @@ const state = {
     ticks: () => run.ticks,
   },
   audio: { state: () => audio.state() },
+  /** The announcer: what is playing, waiting and said this run; say(id) asks for a line (false if it cannot). */
+  announcer: { state: () => announcer.state(), say: (id: string) => announcer.say(id) },
   /** The local player's instrument: the logic's state and what is drawn. */
   instrument: () => {
     const m = run.member();
@@ -1064,6 +1076,16 @@ renderer.setAnimationLoop(() => {
   else if (blinkWarning()) light = Math.floor(now / 55) % 4 === 1 || Math.floor(now / 140) % 3 === 2 ? 0.18 : 0.6;
   setLights(light);
   tape.setDarkness(darkNow ? 1 : 0);
+  // The announcer: close in the car, from the speaker over the landing doors out on the floor.
+  camForward.set(0, 0, -1).applyQuaternion(camera.quaternion);
+  announcer.update({
+    depth: s.depth,
+    inCar: inCar(s.car, player.body),
+    ear: camera.position,
+    forward: camForward,
+    speaker: { x: s.car.doorX, y: s.car.floorY + 2.3, z: s.car.doorZ },
+    quiet: !darkNow && !blinkWarning() && !run.member()?.instrument.current && !caughtFx.noiseOn && !ended,
+  });
   elevator.update(dt, light, lightGain);
 
   // The instrument, its sound, the tapes on the floor and the tape count.

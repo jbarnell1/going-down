@@ -1,0 +1,199 @@
+{
+  "about": "The elevator announcer's lines. `text` is sent to ElevenLabs exactly as written (audio tags included); `plain` is the subtitle. See docs/VOICE.md.",
+  "model": "eleven_v4",
+  "outputFormat": "mp3_44100_128",
+  "takes": 3,
+  "voices": {
+    "shortlist": [
+      {
+        "id": "hpp4J3VqNfWAUOO0d1Us",
+        "name": "Bella",
+        "description": "ElevenLabs library voice 'Bella - Professional, Bright, Warm': American, middle-aged, professional; warm, bright and polished, medium-high pitch.",
+        "why": "Its own description is the default register: bright, warm, professional. Chosen as the default from the description alone (nobody has heard it)."
+      },
+      {
+        "id": "EXAVITQu4vr4xnSDxMaL",
+        "name": "Sarah",
+        "description": "ElevenLabs library voice 'Sarah - Mature, Reassuring, Confident': American, professional, labelled for entertainment and TV; warm and reassuring.",
+        "why": "A reassuring presenter: the 'everything is fine' side of the character."
+      },
+      {
+        "id": "nPczCjzI2devNBz1zQrb",
+        "name": "Brian",
+        "description": "ElevenLabs library voice 'Brian - Deep, Resonant and Comforting': American, middle-aged man; resonant and comforting, described as great for advertisements.",
+        "why": "An advertising voice, and a male alternative so the owner can compare."
+      }
+    ],
+    "default": { "id": "hpp4J3VqNfWAUOO0d1Us", "name": "Bella" }
+  },
+  "audition": ["arrived_1", "taken_1", "slip_1"],
+  "chosen": {},
+  "moments": {
+    "board": { "priority": 2, "when": "the start of a run, in the car before the doors open" },
+    "doors": { "priority": 2, "when": "the doors open on a new floor (not the run's first floor: the boarding line covers it)" },
+    "left": { "priority": 2, "when": "the car leaves the crew on the floor (unloaded, or the bell rang with nobody aboard)" },
+    "called": { "priority": 3, "when": "someone presses the call button" },
+    "arrived": { "priority": 3, "when": "the called car arrives and its doors open" },
+    "bell": { "priority": 3, "when": "seven seconds before the doors close while boarding" },
+    "ride": { "priority": 2, "when": "the car rides down to a deeper floor" },
+    "banked": { "priority": 4, "when": "the crew rides up and banks" },
+    "taken": { "priority": 4, "when": "someone is caught by the Orderly" },
+    "wipe": { "priority": 5, "when": "nobody is left: the run is wiped" },
+    "slip": { "priority": 1, "when": "at most once per run, floor 2 or deeper, at a quiet moment; then a pause and the resume line" },
+    "resume": { "priority": 1, "when": "straight after the slip and its pause, as if nothing happened" }
+  },
+  "lines": [
+    {
+      "id": "board_1",
+      "moment": "board",
+      "text": "[Bright, smiling announcer voice, unhurried] Good morning, and welcome aboard! [short pause] Your sentence begins on the way down.",
+      "plain": "Good morning, and welcome aboard! Your sentence begins on the way down.",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "Hotel-lobby warmth. 'Sentence' lands as good news."
+    },
+    {
+      "id": "board_2",
+      "moment": "board",
+      "text": "[warmly] Welcome aboard! Every floor you visit brings your freedom a little closer. [short pause] Statistically.",
+      "plain": "Welcome aboard! Every floor you visit brings your freedom a little closer. Statistically.",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "The last word is an afterthought, still smiling, not a joke it knows it made."
+    },
+    {
+      "id": "doors_1",
+      "moment": "doors",
+      "text": "[delighted] Doors opening! [short pause] This floor used to be a hospital. It may still think it is.",
+      "plain": "Doors opening! This floor used to be a hospital. It may still think it is.",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "Tour-guide trivia. The second sentence is fond, not ominous."
+    },
+    {
+      "id": "doors_2",
+      "moment": "doors",
+      "text": "[Bright, smiling announcer voice] Doors opening! Please collect your belongings, and anything else you find.",
+      "plain": "Doors opening! Please collect your belongings, and anything else you find.",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "Standard airline cadence; the end is said exactly like the start."
+    },
+    {
+      "id": "left_1",
+      "moment": "left",
+      "text": "[Bright, cheerful voice] The car is leaving now! [short pause] Call any time. It usually comes.",
+      "plain": "The car is leaving now! Call any time. It usually comes.",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "'Usually' is meant as reassurance."
+    },
+    {
+      "id": "left_2",
+      "moment": "left",
+      "text": "[warmly] We'll be just upstairs! [short pause] [delighted] Please enjoy the quiet.",
+      "plain": "We'll be just upstairs! Please enjoy the quiet.",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "A parent leaving a child at a party."
+    },
+    {
+      "id": "called_1",
+      "moment": "called",
+      "text": "[professional] Thank you for calling! Your car is on its way. [mischievously] Everyone on this floor now knows.",
+      "plain": "Thank you for calling! Your car is on its way. Everyone on this floor now knows.",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "Customer service, then a little conspiratorial twinkle, as if sharing good gossip."
+    },
+    {
+      "id": "called_2",
+      "moment": "called",
+      "text": "[delighted] Your call is important to us! [short pause] Please wait right there, exactly where you are.",
+      "plain": "Your call is important to us! Please wait right there, exactly where you are.",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "Hold-music brightness. 'Exactly' slightly slower."
+    },
+    {
+      "id": "arrived_1",
+      "moment": "arrived",
+      "text": "[delighted] Your car has arrived! [short pause] Please board promptly, and with everyone you came with.",
+      "plain": "Your car has arrived! Please board promptly, and with everyone you came with.",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "Audition: the normal read. Pleased to see you."
+    },
+    {
+      "id": "arrived_2",
+      "moment": "arrived",
+      "text": "[Bright, smiling announcer voice] Your car is here! [warmly] We missed you.",
+      "plain": "Your car is here! We missed you.",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "Short and sweet. 'We missed you' sincere."
+    },
+    {
+      "id": "bell_1",
+      "moment": "bell",
+      "text": "[Quick, light, playful pace] Doors closing! Please stand on the side of your choice. [short pause] Choose freely!",
+      "plain": "Doors closing! Please stand on the side of your choice. Choose freely!",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "Game-show host. 'Choose freely' is generous."
+    },
+    {
+      "id": "bell_2",
+      "moment": "bell",
+      "text": "[Quick, light, playful pace] Doors closing! Anyone still outside will be welcomed back... eventually.",
+      "plain": "Doors closing! Anyone still outside will be welcomed back... eventually.",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "The ellipsis is a happy search for the right word."
+    },
+    {
+      "id": "ride_1",
+      "moment": "ride",
+      "text": "[Bright, smiling announcer voice, unhurried] Going down! [short pause] Deeper floors pay more, for reasons we have chosen not to explore.",
+      "plain": "Going down! Deeper floors pay more, for reasons we have chosen not to explore.",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "Proud of the policy. No wink."
+    },
+    {
+      "id": "ride_2",
+      "moment": "ride",
+      "text": "[delighted] Next stop, further down! [short pause] Beneath the storage halls, you'll find more storage halls.",
+      "plain": "Next stop, further down! Beneath the storage halls, you'll find more storage halls.",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "Genuinely excited about storage."
+    },
+    {
+      "id": "banked_1",
+      "moment": "banked",
+      "text": "[ecstatic] Congratulations! [short pause] Your findings have been banked, and your freedom is now SLIGHTLY nearer.",
+      "plain": "Congratulations! Your findings have been banked, and your freedom is now slightly nearer.",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "Prize-giving. The capital word is emphasised with pride, not irony."
+    },
+    {
+      "id": "taken_1",
+      "moment": "taken",
+      "text": "[warmly] A member of your crew has been reassigned. [short pause] [delighted] Their sentence is complete!",
+      "plain": "A member of your crew has been reassigned. Their sentence is complete!",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "Audition: the bad-news read. Announcing a promotion."
+    },
+    {
+      "id": "wipe_1",
+      "moment": "wipe",
+      "text": "[Bright, smiling announcer voice] And that is everyone! [short pause] Thank you for your service. A new crew will be along shortly.",
+      "plain": "And that is everyone! Thank you for your service. A new crew will be along shortly.",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "End of a shift. Brisk, satisfied, already thinking about the next one."
+    },
+    {
+      "id": "slip_1",
+      "moment": "slip",
+      "text": "[Flat, quiet, no warmth, close to the microphone] Nobody has ever finished their sentence.",
+      "plain": "Nobody has ever finished their sentence.",
+      "settings": { "stability": 0.6, "similarity_boost": 0.75 },
+      "note": "Audition: the slip. No smile at all, as if someone else is holding the microphone. Followed in game by a pause and resume_1."
+    },
+    {
+      "id": "resume_1",
+      "moment": "resume",
+      "text": "[Bright, smiling announcer voice] Thank you for travelling down with us! Have a wonderful floor.",
+      "plain": "Thank you for travelling down with us! Have a wonderful floor.",
+      "settings": { "stability": 0.35, "similarity_boost": 0.75 },
+      "note": "Back to full cheer at once, as if nothing happened."
+    }
+  ]
+}

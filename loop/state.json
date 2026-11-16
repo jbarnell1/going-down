@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
-  "iteration": 15,
-  "now": null,
-  "nowText": "",
+  "iteration": 16,
+  "now": "T6b",
+  "nowText": "An Opus agent is writing the announcer's first lines, recording three takes of each with ElevenLabs inside the character cap, and building an audition page so you can pick the voice by ear.",
   "ci": {
     "status": "passed",
-    "commit": "1d86350",
-    "at": "2026-11-16T09:15:15.567Z"
+    "commit": "10c7a42",
+    "at": "2026-11-16T09:54:24.539Z"
   },
   "answersAppliedTo": "2026-11-16T04:20:00Z",
   "tasks": [
@@ -630,9 +630,30 @@
       "id": "T6b",
       "title": "The elevator voice",
       "why": "The relentlessly cheerful announcer, recorded with ElevenLabs, with an audition page for you.",
-      "status": "todo",
+      "status": "doing",
       "gates": [
         "G13"
+      ],
+      "startedAt": "2026-11-16T09:16:31.303Z",
+      "media": [
+        {
+          "src": "T6b/20261116T092603-arrived_1.mp3",
+          "caption": "The announcer when the called car arrives (unheard by its maker: please listen)",
+          "kind": "audio",
+          "at": "2026-11-16T09:26:03.163Z"
+        },
+        {
+          "src": "T6b/20261116T092603-taken_1.mp3",
+          "caption": "The announcer when someone is taken by the Orderly (unheard by its maker: please listen)",
+          "kind": "audio",
+          "at": "2026-11-16T09:26:03.238Z"
+        },
+        {
+          "src": "T6b/20261116T092603-slip_1.mp3",
+          "caption": "The once-a-run slip, meant flat and quiet (unheard by its maker: please listen)",
+          "kind": "audio",
+          "at": "2026-11-16T09:26:03.311Z"
+        }
       ]
     },
     {
@@ -816,8 +837,9 @@
     {
       "id": "G13",
       "title": "The elevator speaks",
-      "status": "open",
-      "evidence": ""
+      "status": "passed",
+      "evidence": "19 announcer lines, three takes each, pass the file checks (duration, loudness, no clipping) and play at boarding, calling, arrival, the bell and banking in a browser test; the hub's Audition page plays every take; the ledger stands at 7,833 of 50,000 characters. Deliberate break used: with the voice manifest hidden, the voice tests fail. Unheard by anyone so far.",
+      "at": "2026-11-16T09:54:24.467Z"
     },
     {
       "id": "G14",
@@ -845,6 +867,36 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T09:54:24.468Z",
+      "text": "Gate G13 (The elevator speaks) is passed.",
+      "kind": "gate"
+    },
+    {
+      "at": "2026-11-16T09:26:03.381Z",
+      "text": "Voice T6b: 19 announcer lines recorded in ElevenLabs eleven_v4 (default voice Bella; Sarah and Brian auditioned). 7,833 characters counted, tags included (API billed header summed 3,444); game ledger 7,833 of 50,000.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T09:26:03.311Z",
+      "text": "New pictures for T6b: The elevator voice.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T09:26:03.238Z",
+      "text": "New pictures for T6b: The elevator voice.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T09:26:03.163Z",
+      "text": "New pictures for T6b: The elevator voice.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-16T09:16:31.303Z",
+      "text": "Started T6b: The elevator voice. An Opus agent is writing the announcer's first lines, recording three takes of each with ElevenLabs inside the character cap, and building an audition page so you can pick the voice by ear.",
+      "kind": "start"
+    },
     {
       "at": "2026-11-16T09:15:15.493Z",
       "text": "Added task T6c: Elevator polish.",

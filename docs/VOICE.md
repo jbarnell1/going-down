@@ -73,11 +73,22 @@ All control on v4 is in the text. SSML, `<break>` and `<phoneme>` tags do not wo
 
 ## Files
 
-- `assets_src/voice/lines.json`: every line with an id, the tagged text, the moment it plays, and its settings.
-- `assets_src/voice/generate.mjs`: reads the key, checks the ledger and cap, generates missing takes into `assets_src/voice/takes/<id>/`, never regenerates a cached take.
-- `assets_src/voice/ledger.json`: characters spent.
-- `public/assets/voice/<id>.mp3`: the chosen take, loudness-normalised with ffmpeg to about -16 LUFS.
-- The takes folder is kept out of git if it grows large; the chosen files are committed.
+- `assets_src/voice/lines.json`: every line with an id, the moment it plays, the tagged text exactly as sent, the plain text (subtitles), its settings and a note on the read; also the shortlisted voices, the default voice, the audition line ids, each moment's priority, and `chosen` (line id to `{ "voice": name, "take": n }`; a line not listed uses take 1 of the default voice).
+- `assets_src/voice/generate.mjs`: `--voices`, `--audition`, `--all`, `--publish`, `--page`, with `--dry-run` (counts characters, sends nothing) and `--budget N`. It reads the key file named by the environment variable `GD_ELEVENLABS_ENV` (which file: see `.local/MACHINE.md`), checks the subscription, the 10% rule, the cap and the budget before every batch, and stops at the first API error.
+- `assets_src/voice/takes/<voice>/<id>/take-N.mp3`: every take (not in git). The hub serves them at `/files/assets_src/voice/takes/...`.
+- `assets_src/voice/audition.html`: the audition page, rewritten from `lines.json` by `--page` (and after every batch).
+- `assets_src/voice/ledger.json`: every request (line, voice, take, characters counted with tags, the API's billed figure, time, cache hash) and the running total.
+- `assets_src/voice/check.mjs`: the checks below; exits non-zero on failure.
+- `public/assets/voice/<id>.mp3`: the chosen take, loudness-normalised with ffmpeg to -16 LUFS (true peak -1.5 dBTP), mono 128 kb/s; and `manifest.json` (id, moment, subtitle, priorities) which the game reads.
+- In the game: `src/game/announcer.ts` maps run events to moments, plays one line at a time through the speaker chain, and draws the subtitles (`?subs=0` hides them, and so does the clean render `?fx=0`, like the rest of the on-screen display).
+
+## Learned on 2026-11-16 (first batch)
+
+- `eleven_v4` was accepted with `voice_settings` `{ stability, similarity_boost }`, a `seed`, and `output_format=mp3_44100_128`. No tag was read aloud as far as durations can tell (every line came out 0.8 to 1.2 times the estimate).
+- The response carries an `x-character-count` header. For these lines it was about 0.44 of the characters sent (tags included), so the account is charged less than the ledger counts. The ledger counts every character sent, which is the safe side; the account's own usage figure lags a few minutes behind.
+- The account's library voices include premade ones with clear labels (for example Bella "Professional, Bright, Warm", Sarah "Mature, Reassuring, Confident", Brian "Deep, Resonant and Comforting"); those three were shortlisted.
+- Duration estimate used by the check: words at 2.5 a second, plus 0.5 s per `[short pause]`, 1.6 s per `[pause]`, 2.5 s per `[long pause]`, 0.4 s per ellipsis.
+- ffmpeg's loudnorm on clips this short can land 0.5 to 1 LU low; the normaliser then falls back to a measured gain with a limiter and lands within 0.2 LU.
 
 ## Checks the loop can run
 

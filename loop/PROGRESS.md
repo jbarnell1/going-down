@@ -4,10 +4,10 @@
 
 ## Status
 
-- **Gates passed:** 5 of 14. **Tasks done:** 12 of 24.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 15.
-- **Now:** nothing in progress
-- **Last CI result seen:** passed on 1d86350
+- **Gates passed:** 6 of 14. **Tasks done:** 12 of 24.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 16.
+- **Now:** T6b The elevator voice. An Opus agent is writing the announcer's first lines, recording three takes of each with ElevenLabs inside the character cap, and building an audition page so you can pick the voice by ear.
+- **Last CI result seen:** passed on 10c7a42
 - **Answers applied up to:** 2026-11-16T04:20:00Z
 
 ## Tasks
@@ -48,7 +48,7 @@
 - [x] **T6** `done` The elevator (G6)
   - Why: The only safe place. Calling it, waiting out its loud arrival, then bank or ride down.
   - Evidence: A whole run is playable alone. You start in the elevator, step out, and it leaves. You earn, come back, and call it: an indicator counts its floors down for 25 to 55 seconds while the lights blink and the Orderly closes in. You board and stand on BANK or DOWN. DOWN rides to a larger floor where readings pay 35% more; BANK ends the run with a summary and a lifetime total that survives a restart. The scripted two-floor run banked 307. All 33 browser tests and 93 rule tests pass on Fable's own run, and letting players see during a blink fails the run test. Unheard: every elevator sound. Untested: the phone's call and hold buttons. Weak spots the agent found: 20 seconds in the car with nothing to do, and a warning too short to do more than brace.
-- [ ] **T6b** `todo` The elevator voice (G13)
+- [ ] **T6b** `doing` The elevator voice (G13)
   - Why: The relentlessly cheerful announcer, recorded with ElevenLabs, with an audition page for you.
 - [ ] **T7** `todo` Playing together (G7)
   - Why: Four players in one building over a peer-to-peer connection, with one player hosting.
@@ -87,7 +87,7 @@
 - [ ] **G10** The look, at a smooth frame rate: open
 - [ ] **G11** A shadow as a trigger: open
 - [ ] **G12** Final validation: open
-- [ ] **G13** The elevator speaks: open
+- [x] **G13** The elevator speaks: passed. 19 announcer lines, three takes each, pass the file checks (duration, loudness, no clipping) and play at boarding, calling, arrival, the bell and banking in a browser test; the hub's Audition page plays every take; the ledger stands at 7,833 of 50,000 characters. Deliberate break used: with the voice manifest hidden, the voice tests fail. Unheard by anyone so far.
 - [ ] **G14** Playable alone, and always live: open
 
 ## Decisions taken on defaults
@@ -99,6 +99,12 @@
 
 ## Activity (newest first)
 
+- 2026-11-16 09:54Z Gate G13 (The elevator speaks) is passed.
+- 2026-11-16 09:26Z Voice T6b: 19 announcer lines recorded in ElevenLabs eleven_v4 (default voice Bella; Sarah and Brian auditioned). 7,833 characters counted, tags included (API billed header summed 3,444); game ledger 7,833 of 50,000.
+- 2026-11-16 09:26Z New pictures for T6b: The elevator voice.
+- 2026-11-16 09:26Z New pictures for T6b: The elevator voice.
+- 2026-11-16 09:26Z New pictures for T6b: The elevator voice.
+- 2026-11-16 09:16Z Started T6b: The elevator voice. An Opus agent is writing the announcer's first lines, recording three takes of each with ElevenLabs inside the character cap, and building an audition page so you can pick the voice by ear.
 - 2026-11-16 09:15Z Added task T6c: Elevator polish.
 - 2026-11-16 09:15Z Gate G6 (One player can finish a run) is passed.
 - 2026-11-16 09:15Z Finished T6: The elevator.
@@ -133,9 +139,3 @@
 - 2026-11-16 06:31Z The Orderly's rule is proven in logic: across 500 simulated runs an independent checker looked at 48,226 moments when a player could see it, and it had not moved in any of them. It moved in 498 runs and caught someone in 150, so the test is not empty. In 104 layouts its squeak could be heard at least 2.5 seconds before it could be seen. Fable broke the rule two ways on purpose (a too-narrow idea of 'seen', and no grace period) and the checker caught both.
 - 2026-11-16 06:09Z Started T4: The Orderly comes alive. An Opus agent is building the Orderly's behaviour: it walks the floor, squeaks before you see it, and never moves while anyone is looking.
 - 2026-11-16 06:08Z Correction: the first version of the picture test let a deliberate wall tint through, and for a few minutes this page said it had been caught. The test was tightened twice until it really does catch it.
-- 2026-11-16 06:08Z Finished T2v: Stronger checks.
-- 2026-11-16 06:02Z Finished T2v: Stronger checks.
-- 2026-11-16 06:02Z Gate G2 (Floors are sound) is passed.
-- 2026-11-16 05:59Z Started T2v: Stronger checks. Fable is adding reference screenshots, a frame-time limit in the browser tests, a hub smoke test, and a deliberate-break check on the floor generator.
-- 2026-11-16 05:58Z Finished T2b: The tape-playback look and the debug overlay.
-- 2026-11-16 05:51Z New pictures for T2b: The tape-playback look and the debug overlay.

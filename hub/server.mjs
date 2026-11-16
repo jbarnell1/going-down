@@ -165,6 +165,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/hub.css') return (await serveFile(res, path.join(HERE, 'hub.css'))) || send(res, 404, '', 'text/plain');
     if (p === '/questions') return (await serveFile(res, path.join(HERE, 'questions.html'))) || send(res, 404, '', 'text/plain');
+    // The voice audition page: every take of every announcer line, for choosing by ear.
+    if (p === '/audition') return (await serveFile(res, path.join(ROOT, 'assets_src', 'voice', 'audition.html'))) || send(res, 404, 'No audition page yet', 'text/plain');
     if (p === '/api/questions') {
       const qs = await readJson(QUESTIONS, { questions: [] });
       return send(res, 200, JSON.stringify({ questions: qs.questions, answers: await readJson(ANSWERS, {}) }), MIME['.json']);

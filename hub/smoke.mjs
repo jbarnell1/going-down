@@ -28,7 +28,7 @@ try {
   for (let i = 0; i < 40; i++) {
     try { await get('/'); break; } catch { await new Promise((r) => setTimeout(r, 100)); }
   }
-  for (const p of ['/', '/status', '/questions', '/hub.css', '/play/']) {
+  for (const p of ['/', '/status', '/questions', '/audition', '/hub.css', '/play/']) {
     const r = await get(p);
     expect(`GET ${p}`, r.status === 200, `-> ${r.status}`);
   }

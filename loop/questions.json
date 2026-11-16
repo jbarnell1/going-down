@@ -2,6 +2,37 @@
   "about": "Open questions for the owner. type is single, multi or text. The loop adds questions here, proceeds on the default, and reads answers from .local/answers.json.",
   "questions": [
     {
+      "id": "voice-pick",
+      "title": "The elevator voice: which one, and which takes?",
+      "context": "Listen on the Audition page (the hub address followed by /audition). Three voices read the same three lines, then the full set is in the first voice with three takes of each line. Nobody has heard any of it: the agent and Claude cannot hear. Listen for a bright, slightly slow read, sincere cheer on bad news, a genuinely flat and cold slip line, and for any take that reads a direction aloud or breaks character. Use the box for takes to swap, lines to rewrite, or a different kind of voice.",
+      "type": "single",
+      "options": [
+        {
+          "id": "bella",
+          "label": "Bella",
+          "note": "Professional, bright, warm. In the game now."
+        },
+        {
+          "id": "sarah",
+          "label": "Sarah",
+          "note": "Mature, reassuring, confident."
+        },
+        {
+          "id": "brian",
+          "label": "Brian",
+          "note": "Deep, resonant, comforting."
+        },
+        {
+          "id": "none",
+          "label": "None of these",
+          "note": "Say what you want in the box."
+        }
+      ],
+      "default": [
+        "bella"
+      ]
+    },
+    {
       "id": "orderly-next",
       "title": "The Orderly after three judged rounds: what next?",
       "context": "Pictures are on the Progress page. It is now its own character and sits in the room, but five blind judges across three rounds scored it between 3 and 6 out of 10 for fear, and the scores did not rise. The last judge said the X-stitched eyes look like buttons and the pastel palette looks like a toy. Building figures entirely by script seems to have a ceiling for how frightening a still picture can be.",

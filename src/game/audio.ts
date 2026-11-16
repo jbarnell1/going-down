@@ -1,5 +1,6 @@
 // Sound, synthesised in code (no audio files). Web Audio starts on the first click, tap or key press,
-// as browsers require; with no Web Audio at all every call here quietly does nothing.
+// as browsers require; with no Web Audio at all every call here quietly does nothing. The one
+// exception, the announcer's recorded lines (announcer.ts), plays through this same context.
 //
 //   - The Orderly's trolley: a rhythmic two-note metal squeak at walking cadence over a faint wheel
 //     rumble, placed at the figure (HRTF panner) and heard from the camera. Its loudness and
@@ -362,6 +363,11 @@ export class GameAudio {
     if (typeof window === 'undefined') return;
     const go = (): void => this.unlock();
     for (const ev of ['pointerdown', 'keydown', 'touchstart', 'click']) window.addEventListener(ev, go, { capture: true });
+  }
+
+  /** The audio context, once the first gesture has made it (null before, or with no Web Audio). The announcer plays through it. */
+  get context(): AudioContext | null {
+    return this.ctx;
   }
 
   /** Creates (if needed) and resumes the context. Safe to call any number of times. */
