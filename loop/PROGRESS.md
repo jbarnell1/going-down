@@ -5,9 +5,9 @@
 ## Status
 
 - **Gates passed:** 3 of 14. **Tasks done:** 10 of 22.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 9.
-- **Now:** nothing in progress
-- **Last CI result seen:** failed on 4a9ac1f
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-17T09:38:00Z. **Iterations:** 10.
+- **Now:** T5 The instrument, the recording rule and tapes. An Opus agent is building the earning rule as tested logic: the instrument only records while the Orderly is moving near you, which means while nobody is looking at it.
+- **Last CI result seen:** passed on 5ec3ac8
 - **Answers applied up to:** 2026-11-16T04:20:00Z
 
 ## Tasks
@@ -42,9 +42,7 @@
 - [x] **T4** `done` The Orderly comes alive (G3, G5)
   - Why: It walks the floor, is heard before it is seen, and never moves while anyone is watching it.
   - Evidence: The Orderly now hunts you in the game. It walks the floor while nobody is looking, stops the instant you look (checked on every drawn frame, so a quick glance counts), and its trolley squeak plays in 3D while it moves and cuts out within a tenth of a second when it freezes. Being caught is a placeholder: interference, then you are back at the elevator. A browser test plays the staring contest: 3 seconds watched with no movement and no sound, turn away and it closes in, turn back and it is frozen nearer, mid-step. Fable also made it count as its full drawn size for being seen, arms and cap included; a first attempt at that broke the rule and the independent checker caught it. Nobody has heard the squeak yet: neither the agent nor Fable can hear.
-- [ ] **T3b** `todo` The Orderly, third pass
-  - Why: After it moves and the tape look is on: real sewn lids instead of button-like discs, mottled skin, a stained gown that stands out from the walls, a narrower grin.
-- [ ] **T5** `todo` The instrument, the recording rule and tapes (G3)
+- [ ] **T5** `doing` The instrument, the recording rule and tapes (G3)
   - Why: How the crew earns: readings only record the scary part, and the tape has to be carried out.
 - [ ] **T6** `todo` The elevator (G6)
   - Why: The only safe place. Calling it, waiting out its loud arrival, then bank or ride down.
@@ -58,6 +56,8 @@
   - Why: Being caught puts you on the cameras, and a full wipe ends the run.
 - [ ] **T9** `todo` The shadow trigger (G11)
   - Why: A shadow crossing a doorway in a quiet moment: a scare trigger, never the monster.
+- [ ] **T3b** `todo` The Orderly, third pass
+  - Why: After it moves and the tape look is on: real sewn lids instead of button-like discs, mottled skin, a stained gown that stands out from the walls, a narrower grin.
 - [ ] **T10** `todo` Frame rate (G10)
   - Why: Measured on this PC with four players, then fixed until it is smooth.
 - [ ] **T11** `todo` Final validation (G1, G12)
@@ -93,6 +93,7 @@
 
 ## Activity (newest first)
 
+- 2026-11-16 07:00Z Started T5: The instrument, the recording rule and tapes. An Opus agent is building the earning rule as tested logic: the instrument only records while the Orderly is moving near you, which means while nobody is looking at it.
 - 2026-11-16 06:58Z Gate G5 (Heard before seen) is passed.
 - 2026-11-16 06:58Z Finished T4: The Orderly comes alive.
 - 2026-11-16 06:58Z Correction: GitHub's checks have been failing since the tape look went in, four commits ago, and the public play link stopped updating. Twice I recorded them as passed without reading the result. The cause was frame-time limits that a software-rendered CI machine cannot meet; those now apply only on a real graphics card. The loop's rules now say to record a CI result only from what was actually printed.
@@ -130,6 +131,5 @@
 - 2026-11-16 05:21Z New pictures for T3: The Orderly, second pass.
 - 2026-11-16 05:07Z Orderly, revision round 1. A blind art-director judge scored it 4/10 frightening, 4/10 craft, 5/10 original. A blind player judge scored it 6/10 scary and 7/10 memorable, and said: "Why is he smiling? Why is he SMILING." Both said the smile reads as an emoji at game size, the legs are sticks, the gown reads as a dress, and it stands like a plank. Fixes are going back to the modeller.
 - 2026-11-16 05:06Z New pictures for T3: The Orderly, second pass.
-- 2026-11-16 05:04Z New pictures for T3: The Orderly, second pass.
 - 2026-11-16 05:04Z New pictures for T3: The Orderly, second pass.
 - 2026-11-16 05:04Z New pictures for T3: The Orderly, second pass.

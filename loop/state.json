@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-17T09:38:00Z",
-  "iteration": 9,
-  "now": null,
-  "nowText": "",
+  "iteration": 10,
+  "now": "T5",
+  "nowText": "An Opus agent is building the earning rule as tested logic: the instrument only records while the Orderly is moving near you, which means while nobody is looking at it.",
   "ci": {
-    "status": "failed",
-    "commit": "4a9ac1f",
-    "at": "2026-11-16T06:58:23.235Z"
+    "status": "passed",
+    "commit": "5ec3ac8",
+    "at": "2026-11-16T07:10:21.802Z"
   },
   "answersAppliedTo": "2026-11-16T04:20:00Z",
   "tasks": [
@@ -423,20 +423,14 @@
       "summary": "The Orderly now hunts you in the game. It walks the floor while nobody is looking, stops the instant you look (checked on every drawn frame, so a quick glance counts), and its trolley squeak plays in 3D while it moves and cuts out within a tenth of a second when it freezes. Being caught is a placeholder: interference, then you are back at the elevator. A browser test plays the staring contest: 3 seconds watched with no movement and no sound, turn away and it closes in, turn back and it is frozen nearer, mid-step. Fable also made it count as its full drawn size for being seen, arms and cap included; a first attempt at that broke the rule and the independent checker caught it. Nobody has heard the squeak yet: neither the agent nor Fable can hear."
     },
     {
-      "id": "T3b",
-      "title": "The Orderly, third pass",
-      "why": "After it moves and the tape look is on: real sewn lids instead of button-like discs, mottled skin, a stained gown that stands out from the walls, a narrower grin.",
-      "status": "todo",
-      "gates": []
-    },
-    {
       "id": "T5",
       "title": "The instrument, the recording rule and tapes",
       "why": "How the crew earns: readings only record the scary part, and the tape has to be carried out.",
-      "status": "todo",
+      "status": "doing",
       "gates": [
         "G3"
-      ]
+      ],
+      "startedAt": "2026-11-16T07:00:30.907Z"
     },
     {
       "id": "T6",
@@ -492,6 +486,13 @@
       "gates": [
         "G11"
       ]
+    },
+    {
+      "id": "T3b",
+      "title": "The Orderly, third pass",
+      "why": "After it moves and the tape look is on: real sewn lids instead of button-like discs, mottled skin, a stained gown that stands out from the walls, a narrower grin.",
+      "status": "todo",
+      "gates": []
     },
     {
       "id": "T10",
@@ -643,6 +644,11 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-16T07:00:30.908Z",
+      "text": "Started T5: The instrument, the recording rule and tapes. An Opus agent is building the earning rule as tested logic: the instrument only records while the Orderly is moving near you, which means while nobody is looking at it.",
+      "kind": "start"
+    },
     {
       "at": "2026-11-16T06:58:33.209Z",
       "text": "Gate G5 (Heard before seen) is passed.",
