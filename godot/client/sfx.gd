@@ -475,7 +475,9 @@ func world(delta: float, s: Dictionary, emergency: float) -> void:
 	_loop(monitor, "room", _clinic and _monitor_on and not blackout, BASE_DB)
 	_loop(drip, "room", _clinic and _drip_on, BASE_DB)
 	var o: Dictionary = s.get("orderly", {})
-	_orderly(delta, o)
+	# The Orderly's breathing, rattle, tray and shriek belong to the Clinic. Other places' residents bring
+	# their own sounds (the Temp's stapler in client/temp_view.gd, the Minder's music box in minder_view.gd).
+	_orderly(delta, o if _clinic else {})
 	_room_tones(float(s.get("t", 0.0)), o, dark)
 
 func _held(o: Dictionary) -> bool:
@@ -540,15 +542,18 @@ func _orderly(delta: float, o: Dictionary) -> void:
 
 ## Someone was taken. Mine: the roar in my face, then the chewing. Someone else's: heard from where it is.
 func caught(mine: bool, pos: Variant) -> void:
+	# The roar is the caught placeholder for every resident; the chewing after it is the Orderly's alone.
 	if mine or pos == null:
 		if recorded.has("roar"):
 			play("roar")
-			_later.append({"at": Time.get_ticks_msec() + 1300, "name": "chew", "pos": null, "gain": 0.0})
+			if _clinic:
+				_later.append({"at": Time.get_ticks_msec() + 1300, "name": "chew", "pos": null, "gain": 0.0})
 		else:
 			play("caught")
 	else:
 		play_at("roar", pos)
-		_later.append({"at": Time.get_ticks_msec() + 1300, "name": "chew", "pos": pos, "gain": 0.0})
+		if _clinic:
+			_later.append({"at": Time.get_ticks_msec() + 1300, "name": "chew", "pos": pos, "gain": 0.0})
 	_last["scare"] = Time.get_ticks_msec()
 
 func _run_later() -> void:
