@@ -1129,7 +1129,8 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		var hs := {}
 		for sp: Dictionary in (sk as Dictionary)["players"]:
 			hs[str(sp["id"])] = sp["health"]
-		_seek_hist.append([s["t"], hs])
+		# The tuned Playroom (T15m): the host's anger in that snapshot too, or null.
+		_seek_hist.append([s["t"], hs, (sk as Dictionary).get("anger")])
 		if _seek_hist.size() > 80:
 			_seek_hist.pop_front()
 	_show_end(now)

@@ -763,6 +763,12 @@ func _step(now: float) -> void:
 				_pending_catch = null
 		elif ty == "windUpCancelled" and _pending_catch != null and _pending_catch["victim"] == e["playerId"]:
 			_pending_catch = null
+	# The tuned Playroom (sim/seek.gd T15m): a grabbed player being dragged to the party table is placed where
+	# the rules hold them every tick, so their own screen goes along with it.
+	if st.seek != null and (st.seek as Seek.SeekState).tuned and (st.seek as Seek.SeekState).minder.mode == &"drag":
+		var dp := _find_run_player(st, (st.seek as Seek.SeekState).minder.victim)
+		if dp != null:
+			_place(dp.id, dp.body, st.depth, st)
 	if st.orderly.mode != &"windUp":
 		_pending_catch = null
 	var gone := {}

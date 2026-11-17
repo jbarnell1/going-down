@@ -316,13 +316,13 @@ func _draw_health(px: float) -> void:
 	if health_rates != "":
 		PixelFont.draw_shadowed(self, health_rates, Vector2(margin.x, y + 17 * px), px, Color("#d8ddd9"))
 
-## The anger bar (T15m), top right: ANGER and the number out of 100, the bar (amber, red and pulsing once nearly full or while it
+## The anger bar (T15m), top left (clear of the count's lines in the middle and the tape's PLAY): ANGER and the number out of 100, the bar (amber, red and pulsing once nearly full or while it
 ## counts), and what fills it under it.
 func _draw_anger(px: float) -> void:
 	var margin := Vector2(maxf(size.x * 0.06, 16.0), maxf(size.y * 0.06, 12.0))
 	var bar_w := 80.0 * px
-	var x := size.x - margin.x - bar_w
-	var y := margin.y + 14 * px   # under the tape's PLAY
+	var x := margin.x
+	var y := margin.y
 	var hot := anger >= 0.75
 	var label := "ANGER %d/100" % roundi(anger * 100.0)
 	PixelFont.draw_shadowed(self, label, Vector2(x, y), px, Color("#ff7a6a") if hot else Color("#f4f4ec"))
@@ -332,9 +332,9 @@ func _draw_anger(px: float) -> void:
 	if hot:
 		col.a = 0.75 + 0.25 * sin(Time.get_ticks_msec() / 120.0)
 	draw_rect(Rect2(bar.position, Vector2(bar_w * clampf(anger, 0.0, 1.0), bar.size.y)), col)
-	if anger_rates != "":
-		var rw := PixelFont.width(anger_rates) * px
-		PixelFont.draw_shadowed(self, anger_rates, Vector2(size.x - margin.x - rw, y + 17 * px), px, Color("#d8ddd9"))
+	# What fills it, while it can still fill (a full bar is a count: its own lines are under the count line).
+	if anger_rates != "" and anger < 1.0:
+		PixelFont.draw_shadowed(self, anger_rates, Vector2(x, y + 17 * px), px, Color("#d8ddd9"))
 
 ## The report board, crisp, down the left of the picture: a dark card, the title amber.
 func _draw_board(px: float) -> void:
