@@ -188,6 +188,9 @@ func _draw_eyes(px: float, now: int) -> void:
 	var gap := 7.0 * px
 	var total := need * w + (need - 1) * gap
 	var y := floorf(size.y * 0.84)
+	if subtitle != "":
+		# Above the subtitles, never over them.
+		y = minf(y, floorf(_subtitle_top() - h * 0.5 - 6.0 * px))
 	var x0 := floorf((size.x - total) * 0.5)
 	var amber := Color("#ffd27a")
 	var pale := Color(0.96, 0.96, 0.92, 0.55)
@@ -320,13 +323,27 @@ func _draw_menu() -> void:
 	if (Time.get_ticks_msec() / 600) % 2 == 0:
 		PixelFont.draw_shadowed(self, foot, origin + Vector2(floorf((w - PixelFont.width(foot)) / 2.0), 6 + (MENU_ROWS.size() + 3) * line) * sc, sc, amber)
 
-func _draw_subtitle(_px: float) -> void:
+## The subtitle's rows as drawn (upper case, only the font's characters, wrapped).
+func _subtitle_rows() -> PackedStringArray:
 	var text := subtitle.to_upper().replace("’", "'").replace("‘", "'").replace("…", "...")
 	var clean := ""
 	for ch: String in text:
 		if ch == " " or _known(ch):
 			clean += ch
-	var rows := PixelFont.wrap(clean, 38)
+	return PixelFont.wrap(clean, 38)
+
+## Where the subtitle box's top edge is (window pixels).
+func _subtitle_top() -> float:
+	var rows := _subtitle_rows()
+	var w := 10
+	for r in rows:
+		w = maxi(w, PixelFont.width(r))
+	w += 6
+	var sc := clampf(floor(size.x * 0.92 / w), 1.0, 4.0)
+	return size.y * 0.91 - (rows.size() * 10 + 4) * sc
+
+func _draw_subtitle(_px: float) -> void:
+	var rows := _subtitle_rows()
 	var w := 10
 	for r in rows:
 		w = maxi(w, PixelFont.width(r))
