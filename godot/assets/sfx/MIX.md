@@ -74,6 +74,20 @@ Raw = the owner's WAV as delivered; final = the committed Ogg. Rel = final loudn
 | clinic/intercom_2.ogg | room | -19.2 / -26.1 / 20.0 / -1.0 | -26.5 / -26.5 / 0.0 / -5.5 | -10.4 | volume | 0.0 | - | 0.9 s |
 | clinic/bed_roll.ogg | room | -31.7 / -32.6 / 4.7 / -9.0 | -26.4 / -27.2 / 1.8 / -2.7 | -10.3 | loudnorm-linear | 2.6 | - | 6.7 s |
 
+## Carrying across the floor (the owner, playing build 0833)
+
+"The shrieks and roars and raspy breathing are too quiet when far away near the elevator; that should be scary to hear, a distant wail. The raspy breathing needs to happen much further away, before you get caught." So the scares and the Orderly's breathing have their own curves (Sfx.far_db), panned in 3D, losing their top with distance (a low-pass from open at 8 m to 2.5 kHz at 60 m: far off is muffled, never silenced). The levels at the file stay as above, so the ceiling (V+4) and the true peak are untouched.
+
+| Sound | Before | After |
+|---|---|---|
+| Scares (roar heard from the Orderly, shrieks) | the engine's inverse distance from 6 m: -12.4 dB at 25 m, cut off at 45 m | full within 8 m, -20 log(d/8) beyond, never below -10 dB out to 90 m (reached at 25 m) |
+| Slow breathing | inverse distance from 1.5 m: -10.5 dB at 5 m, -16.5 dB at 10 m, gone past 10 m | heard from 28 m at -22 dB, building evenly in dB to full at 2 m (-15.2 at 20 m, -6.8 at 10 m, -2.5 at 5 m) |
+| Throat rattle | tried within 14 m, inverse distance from 2 m, gone past 18 m | tried within 26 m, on the breathing's curve |
+
+While the trolley sounds (the Orderly coming on unseen) the breathing steps back 9 dB (Sfx.BREATH_UNDER_TROLLEY_DB): the trolley is the warning then, and with the breathing at full the Entity bus went 0.8 LU over the voice in the busy minute (-6 dB under it still left only 0.3 LU of room).
+
+Measured (tools/mix_check.mjs, the far run: headless, behind you, no walls; V = -18.0): a roar at 25 m, short-term V-12.0 before, V-9.5 after; at 55 m (the lift from a far corner) silent before, V-9.3 after. The breathing (momentary against V) first heard at 8.8 m before, 26.8 m after; at 20 m silent before, V-18.4 after; at 10 m silent before, V-11.7 after; at 5 m V-21.0 before, V-4.6 after. The checks: the roar at 25 m at least V-11 and at 55 m at least V-20, both at most V+4; the breathing heard (momentary over V-35) from 20 m or further, louder at 5 m than at 20 m, never over the voice. `--break=far` puts the old curves back (Sfx.old_falloff) and turns three of them red.
+
 ## The second batch (17 Nov): the Annex, the Playroom and the crew
 
 The same method, the same V, the same buses; files in annex/, playroom/ and player/ (SOURCES.md). New categories and why:

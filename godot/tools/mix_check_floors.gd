@@ -14,7 +14,9 @@
 #   its huff at 2 m; the found-you sting; going down.
 #   The prison: the block's night; the voice; the call panel refusing, then the quota met; the ride up; a
 #   bunk creaking 2 m off and your own; lights out.
-# Usage: godot --headless --path godot -s res://tools/mix_check_floors.gd -- <out folder> <annex|playroom|prison> [break=office|sting]
+#   Far off: a roar at 25 m and at 55 m; the Orderly's slow breathing as it comes from 40 m.
+# Usage: godot --headless --path godot -s res://tools/mix_check_floors.gd -- <out folder> <annex|playroom|prison|far> [break=office|sting|far]
+#   break=far     the far curves as they were before build 0833's feedback (the mix check must fail)
 #   break=office  the Annex's office tone 12 dB up (the mix check must fail)
 #   break=sting   the found-you sting 8 dB up (the mix check must fail)
 extends SceneTree
@@ -148,6 +150,8 @@ func _run() -> void:
 		await _playroom()
 	elif floor_name == "prison":
 		await _prison()
+	elif floor_name == "far":
+		await _far()
 	else:
 		await _annex()
 	await _wait(1.0)
@@ -278,6 +282,34 @@ func _playroom() -> void:
 	await _wait(2.5, bed)
 	_mark("end")
 
+## Far off (the owner on build 0833): the roar at 25 m and at 55 m (the lift seen from a far corner), behind
+## you, then the Orderly's slow breathing as it comes from 40 m to 2 m at 2 m/s, unseen; `track` logs
+## [time, metres] each frame so tools/mix_check.mjs can find where the breathing is first heard.
+## break=far puts the curves back as they were (Sfx.old_falloff).
+var track: Array = []
+func _far() -> void:
+	Sfx.old_falloff = brk == "far"
+	sfx.set_floor({"place": "clinic", "depth": 1, "rooms": [], "doors": []}, "mix-far")
+	var quiet := func(_t: float) -> void:
+		sfx.update(1.0 / 60.0, {}, null, 0.0, 0.0, 0.0, false, 0.0, Vector3.ZERO)
+	await _speak(quiet)
+	await _wait(1.0, quiet)
+	# The far one first, so the near one's tail is never counted as the far one heard.
+	_mark("roar55")
+	sfx.play_at("roar", Vector3(0, 1.8, 55.0))
+	await _wait(8.0, quiet)
+	_mark("roar25")
+	sfx.play_at("roar", Vector3(0, 1.8, 25.0))
+	await _wait(8.0, quiet)
+	_mark("breath")
+	await _wait(19.5, func(t: float) -> void:
+		var d := maxf(2.0, 40.0 - 2.0 * t)
+		track.append([_t(), d])
+		var pose := {"x": 0.0, "y": 0.0, "z": d, "level": 0, "yaw": 0.0, "anim": "walk", "animTime": t}
+		sfx.world(1.0 / 60.0, {"t": 0.0, "orderly": {"pose": pose, "held": false, "seeing": false, "distance": d, "mode": "hunting", "moving": true, "taken": false}}, 0.0))
+	_mark("end")
+	Sfx.old_falloff = false
+
 ## The prison and the lift (the rest of the 17 Nov list): the block's night, the voice, the call panel
 ## refusing and then the quota met, the ride up, a bunk creaking near you and your own, lights out.
 func _prison() -> void:
@@ -317,7 +349,7 @@ func _save() -> void:
 		var f := FileAccess.open(out.path_join(b + ".f32"), FileAccess.WRITE)
 		f.store_buffer((data[b] as PackedFloat32Array).to_byte_array())
 		f.close()
-	var meta := {"rate": rate, "seconds": frames / rate, "floor": floor_name, "break": brk, "marks": marks, "played": sfx.played.map(func(p: Dictionary) -> String: return str(p["name"]))}
+	var meta := {"rate": rate, "seconds": frames / rate, "floor": floor_name, "break": brk, "marks": marks, "track": track, "played": sfx.played.map(func(p: Dictionary) -> String: return str(p["name"]))}
 	var j := FileAccess.open(out.path_join("timeline.json"), FileAccess.WRITE)
 	j.store_string(JSON.stringify(meta))
 	j.close()

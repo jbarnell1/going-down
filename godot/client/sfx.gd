@@ -136,6 +136,47 @@ const READY := {
 ## The count's call to hide from one recorded note: three strokes this far apart, at these pitches.
 const XYLO_PITCH: Array[float] = [1.0, 1.26, 1.5]
 const XYLO_STEP := 0.2
+## Carrying across the floor (the owner, playing build 0833: the shrieks, roars and raspy breathing were too
+## quiet from far off; a distant wail near the lift should be scary, and the breathing should start well
+## before a catch). Each has its own curve (far_db), panned in 3D, duller with distance (_far_cutoff, so a
+## far one is muffled rather than lost). Before: a scare fell by the engine's inverse distance from 6 m
+## (-12.4 dB at 25 m) and was cut off at 45 m; the slow breath from 1.5 m (-16.5 dB at 10 m), gone past
+## 10 m; the rattle from 2 m, gone past 18 m (and only tried within 14 m).
+const SCARE_NEAR := 8.0          # full level within this
+const SCARE_FLOOR_DB := -10.0    # never quieter than this within SCARE_FAR (reached at 25 m)
+const SCARE_FAR := 90.0
+const BREATH_NEAR := 2.0         # full level within this
+const BREATH_FAR := 28.0         # heard from here (the onset)
+const BREATH_FAR_DB := -22.0     # at the onset; a slow build in dB from there to BREATH_NEAR
+const RATTLE_FAR := 26.0         # the rattle is tried within this (was 14 m) and follows the breath curve
+const BREATH_UNDER_TROLLEY_DB := -9.0   # while the trolley sounds (it is moving unseen)
+const SILENT_DB := -79.0
+## Tests (mix_check_floors.gd break=far): the curves before the change.
+static var old_falloff := false
+
+## dB a sound loses at `d` metres on its curve ("scare", "breath", "rattle"); -80 for not heard.
+static func far_db(curve: String, d: float) -> float:
+	if old_falloff:
+		var unit := 6.0 if curve == "scare" else (1.5 if curve == "breath" else 2.0)
+		var far := 45.0 if curve == "scare" else (10.0 if curve == "breath" else 18.0)
+		return -80.0 if d > far else minf(0.0, 20.0 * log(unit / maxf(d, 0.01)) / log(10.0))
+	if curve == "scare":
+		if d > SCARE_FAR:
+			return -80.0
+		return maxf(minf(0.0, -20.0 * log(maxf(d, 0.01) / SCARE_NEAR) / log(10.0)), SCARE_FLOOR_DB)
+	var far_m := BREATH_FAR if curve == "breath" else RATTLE_FAR
+	if d > far_m:
+		return -80.0
+	return BREATH_FAR_DB * clampf((d - BREATH_NEAR) / (far_m - BREATH_NEAR), 0.0, 1.0)
+
+## Far sounds lose their top: a low-pass from open at 8 m to 2.5 kHz at 60 m and beyond.
+static func _far_cutoff(d: float) -> float:
+	return lerpf(20500.0, 2500.0, clampf((d - 8.0) / 52.0, 0.0, 1.0))
+
+func _ear_distance(pos: Vector3) -> float:
+	var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
+	return cam.global_position.distance_to(pos) if cam != null else 0.0
+
 ## The far-off phone on the Annex: from every direction at once, quieter than a near room tone.
 const PHONE_DB := -6.0
 ## The stapler going into you at the end of a catch on the Annex, this long after the roar.
@@ -285,7 +326,9 @@ func setup(world_parent: Node3D) -> void:
 	# the engine's distance filter took the squeal out of a far trolley entirely.
 	squeak.attenuation_filter_db = 0.0
 	roll.attenuation_filter_db = 0.0
-	orderly_breath = _player3d(world_parent, _rec("orderly/breath_slow", true), "Entity", 1.5, 10.0)
+	orderly_breath = _player3d(world_parent, _rec("orderly/breath_slow", true), "Entity", 1.5, 0.0)
+	# Its loudness is far_db("breath"), set every frame from the distance to the ear.
+	orderly_breath.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
 	machinery = _player3d(world_parent, _wav(_rumble(2.0, 55.0), true), "Effects", 2.0, 40.0)
 	breath = _player2d(_rec("player/breath_winded", true), "Effects")
 	if breath.stream == null:
@@ -487,6 +530,20 @@ func play_at(name: String, pos: Vector3, gain_db := 0.0) -> AudioStreamPlayer3D:
 	p.global_position = pos
 	p.volume_db = BASE_DB + gain_db
 	p.pitch_scale = 1.0
+	# Scares and the rattle carry across the floor on their own curve (far_db), duller with distance.
+	var curve := "scare" if cat == "scare" else ("rattle" if name == "rattle" else "")
+	if curve != "":
+		var d := _ear_distance(pos)
+		var fd := far_db(curve, d)
+		p.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
+		p.max_distance = 0.0
+		p.volume_db += fd
+		p.attenuation_filter_cutoff_hz = _far_cutoff(d)
+		if fd <= SILENT_DB:
+			return null
+	else:
+		p.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+		p.attenuation_filter_cutoff_hz = 5000.0
 	p.play()
 	_note(name)
 	return p
@@ -677,9 +734,16 @@ func _orderly(delta: float, o: Dictionary) -> void:
 	var at: Variant = _opos(o, 2.2)
 	var held := _held(o)
 	# A Stillness entity that is seen makes no sound at all: it breathes only while nobody looks.
+	var bdb := SILENT_DB - 1.0
 	if at != null:
 		orderly_breath.global_position = at
-	_loop(orderly_breath, "orderly", at != null and not held and not bool(o.get("taken", false)), BASE_DB)
+		var bd := _ear_distance(at)
+		bdb = far_db("breath", bd)
+		# Under the trolley (it is coming) the breath steps back, so the two together stay under the voice.
+		if not old_falloff and squeak.playing:
+			bdb += BREATH_UNDER_TROLLEY_DB
+		orderly_breath.attenuation_filter_cutoff_hz = _far_cutoff(bd)
+	_loop(orderly_breath, "orderly", at != null and not held and not bool(o.get("taken", false)) and bdb > SILENT_DB, BASE_DB + bdb)
 	if at == null:
 		_prev = {}
 		return
@@ -712,7 +776,7 @@ func _orderly(delta: float, o: Dictionary) -> void:
 	elif _shriek_pending_until > 0 and Time.get_ticks_msec() > _shriek_pending_until:
 		_shriek_pending_until = -1
 	# The rattle in its throat, now and then, only near it and only unseen.
-	if not held and near < 14.0:
+	if not held and near < (14.0 if old_falloff else RATTLE_FAR):
 		_rattle_in -= delta
 		if _rattle_in <= 0.0:
 			play_at("rattle", at)

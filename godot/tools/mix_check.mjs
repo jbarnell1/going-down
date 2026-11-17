@@ -15,8 +15,8 @@
 //   - Ambience at least 8 LU under V throughout (the beds are V - 14, a room tone V - 10 at 3 m);
 //   - the Playroom's count bell (on the Voice bus) never above V; Master's true peak at or under -1 dBTP;
 //   - the scripted sounds really played (the floor's own one-shots are in the log).
-// Usage: node godot/tools/mix_check.mjs [--keep=<dir>] [--reuse=<dir>] [--only=clinic|floors]
-//        [--break=office|sting]   (GODOT = the engine)
+// Usage: node godot/tools/mix_check.mjs [--keep=<dir>] [--reuse=<dir>] [--only=clinic|floors|far]
+//        [--break=office|sting|far]   (GODOT = the engine)
 //   --break=office  the Annex's office tone 12 dB up: must FAIL;  --break=sting  the found-you sting 8 dB up: must FAIL
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -166,8 +166,39 @@ function oneFloor(name) {
   check(`${Name}: the scripted sounds played`, missing.length === 0, missing.length ? `missing ${missing.join(', ')}` : `${meta.played.length} one-shots`);
 }
 
-if (only !== 'floors') clinic();
-if (only !== 'clinic') { oneFloor('annex'); oneFloor('playroom'); oneFloor('prison'); }
+// ---- Far off (the owner on build 0833: distant shrieks, roars and the raspy breathing were too quiet).
+// A roar at 55 m and at 25 m behind you must be heard (Scare short-term at least V-20 and V-11, never
+// over V+4); the Orderly's slow breathing, coming from 40 m unseen, must be heard (Entity momentary over
+// V-35) from 20 m or further out, and grow as it nears.
+function far() {
+  const fdir = join(dir, 'far');
+  if (!reuse) {
+    mkdirSync(fdir, { recursive: true });
+    const out = runGodot('res://tools/mix_check_floors.gd', [fdir, 'far', ...(brk ? [`break=${brk}`] : [])]);
+    if (out === null) { check('the far run ran', false, 'it did not'); return; }
+  }
+  const meta = JSON.parse(readFileSync(join(fdir, 'timeline.json'), 'utf8'));
+  const meter = measure(fdir, meta.rate);
+  const mk = (w) => meta.marks.find((m) => m.what === w)?.t;
+  const V = integrated(fdir, meta.rate, 'Voice', mk('voice'), mk('voice_end'));
+  const max = (b, k, from, to) => Math.max(-120, ...meter[b].rows.filter((r) => r.t >= from && r.t <= to).map((r) => r[k]));
+  const r55 = max('Scare', 'S', mk('roar55'), mk('roar25'));
+  const r25 = max('Scare', 'S', mk('roar25'), mk('breath'));
+  console.log(`== Far off${meta.break ? ` (break: ${meta.break})` : ''}: voice V = ${V.toFixed(1)} LUFS`);
+  check('Far: a roar 25 m behind you is heard (Scare at least V-11, at most V+4)', r25 >= V - 11 && r25 <= V + 4, `short-term max ${fmt(r25)}, ${(r25 - V).toFixed(1)} LU vs V`);
+  check('Far: a roar 55 m off, the lift from a far corner, is heard (Scare at least V-20)', r55 >= V - 20 && r55 <= V + 4, `short-term max ${fmt(r55)}, ${(r55 - V).toFixed(1)} LU vs V`);
+  const mAt = (t) => meter.Entity.rows[Math.min(meter.Entity.rows.length - 1, Math.max(0, Math.round(t * 10)))]?.M ?? -120;
+  let onset = 0;
+  for (const [t, d] of meta.track) if (mAt(t) > V - 35) { onset = d; break; }
+  const at = (dm) => { const row = meta.track.find(([, d]) => d <= dm); return row ? mAt(row[0]) : -120; };
+  console.log(`  the breathing, momentary loudness vs V: ${[30, 25, 20, 15, 10, 5, 2].map((dm) => `${dm} m ${(at(dm) - V).toFixed(1)}`).join(', ')}`);
+  check('Far: the Orderly\'s breathing is heard from 20 m or further out (Entity momentary over V-35)', onset >= 20, onset ? `first heard at ${onset.toFixed(1)} m` : 'never heard');
+  check('Far: the breathing builds as it nears (louder at 5 m than at 20 m), never over the voice', at(5) > at(20) && max('Entity', 'S', mk('breath'), mk('end')) <= V, `20 m ${(at(20) - V).toFixed(1)}, 5 m ${(at(5) - V).toFixed(1)} LU vs V`);
+}
+
+if (only !== 'floors' && only !== 'far') clinic();
+if (only !== 'clinic' && only !== 'far') { oneFloor('annex'); oneFloor('playroom'); oneFloor('prison'); }
+if (only !== 'clinic') far();
 if (!reuse && !arg('keep')) rmSync(dir, { recursive: true, force: true });
 const ok = results.every(Boolean);
 console.log(ok ? 'PASS the mix holds together' : 'FAIL the mix');
