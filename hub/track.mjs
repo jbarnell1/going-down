@@ -133,6 +133,7 @@ switch (cmd) {
   }
   case 'start': {
     const t = task(s, pos[0]);
+    if (t.status === 'done' && !flags.reopen) die(`${t.id} is done; pass --reopen to start it again`);
     if (!t.ns) die(`${t.id} has no North Star link. Look first:  node hub/ns.mjs find <words>   then:  node hub/track.mjs link ${t.id} <ids>   (or: link ${t.id} none --why "...")`);
     if (t.ns.length) spawnSync(process.execPath, [path.join(ROOT, 'hub', 'ns.mjs'), 'show', ...t.ns], { stdio: 'inherit' });
     t.status = 'doing'; t.startedAt ??= now(); delete t.blocked; delete t.waiting;
