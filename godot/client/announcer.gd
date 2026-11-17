@@ -79,9 +79,14 @@ func start_run() -> void:
 ## The run's events from a frame.
 func on_events(events: Array, first_depth := 1) -> void:
 	var wiped := false
+	# Down first, then out: a catch that puts its player down is not yet a loss (a crewmate may get them
+	# up), so the "taken" line waits for the "out".
+	var downed := {}
 	for e: Dictionary in events:
 		if e.type == "wiped":
 			wiped = true
+		elif e.type == "downed":
+			downed[str(e.get("playerId", ""))] = true
 	for e: Dictionary in events:
 		match str(e.type):
 			"doorsOpened":
@@ -112,6 +117,9 @@ func on_events(events: Array, first_depth := 1) -> void:
 			"wiped":
 				request("wipe", EXPIRE_LONG_MS)
 			"caught":
+				if not wiped and not downed.has(str(e.get("playerId", ""))):
+					request("taken")
+			"out":
 				if not wiped:
 					request("taken")
 			"quotaMet":

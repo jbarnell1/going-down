@@ -19,6 +19,9 @@ Annex floor's plan hash (`tests/golden/annex.json`, 800 floors; the quick set co
 these files also has a standalone runner (`tests/run_<name>.gd`) that runs it alone. `prop_downs` (down
 first, then out: 200 seeded bot runs against an oracle, the Playroom's down from health, and three clients
 on lossy links) keeps no counts either; run it alone with `npm run godot:test -- prop_downs`.
+`prop_down_view` checks what the screen says for the host's downs block (client/down_view.gd: the timer,
+the help prompt and its bar, the out screen) against the test's own reading of B6; the same on screen,
+with two real game windows over the network, is `node godot/tools/play_down.mjs`.
 
 The scenario inputs that are data rather than code (the bridge's requests, the network scripts, the
 maths samples, the literal table) are in `tests/inputs/` and never change when goldens are recorded.
