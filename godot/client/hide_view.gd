@@ -33,6 +33,10 @@
 # a bed, a cabinet, the meeting table (F) and a desk (Ctrl and walk in), the dark inside and the gap's
 # frame (the cabinet's slats, the bed's frame). No count, no tune, no health, and no odds printed.
 #
+# Sounds (client/sfx.gd plays them): the found-you sting when you are found; going down, yours or
+# another's where they fell; getting into and out of hides (each kind its own); the Minder's huff at an
+# empty hide; squeaker tiles and the ball pit underfoot (_step_sounds, from the rules' own lists).
+#
 # test_break "arrival" (play_hide's deliberate break): the count is timed from the moment its event
 # arrived on this screen's own clock instead of the host's t0, so two screens with different delays go
 # dark at different moments.
@@ -100,6 +104,8 @@ var catch_k := 0.0
 var _prev_total := 0.0
 var _rising_until := 0
 var _found_ids := {}
+## The feet heard (_step_sounds): player id -> [cell index, room id] last frame.
+var _feet := {}
 
 func setup(parent: Node, sub: SubViewport) -> void:
 	overlay = HideOverlay.new()
@@ -127,6 +133,7 @@ func reset() -> void:
 	catch_k = 0.0
 	_prev_total = 0.0
 	_found_ids.clear()
+	_feet.clear()
 	if overlay != null:
 		overlay.mode = ""
 		overlay.catch_k = 0.0
@@ -134,6 +141,57 @@ func reset() -> void:
 	for id: String in _hats.keys():
 		(_hats[id] as Node).queue_free()
 	_hats.clear()
+
+## Where another player is drawn (for their sounds), or null if not here.
+static func _where(others: Array, id: String) -> Variant:
+	for o: Dictionary in others:
+		if str(o.get("id", "")) == id:
+			return Vector3(float(o["x"]), float(o["y"]) + 0.3, float(o["z"]))
+	return null
+
+## The sounds of feet on the Playroom, from the same lists as the rules (sim/seek.gd step 3): a squeaker
+## tile stepped onto faster than a creep squeaks; walking into the ball pit off a walkway faster than a
+## creep jumps in (loud), at a creep wades. Everyone out of a hide, by the cell they are drawn in; your
+## own from where you stand.
+func _step_sounds(s: Dictionary, others: Array, my_id: String, sfx: Sfx, pv: Object) -> void:
+	if pv == null:
+		return
+	var fp: Floor.FloorPlan = pv.get("fp")
+	var sq: PackedInt32Array = pv.get("squeak")
+	if fp == null:
+		return
+	var bodies: Array = []
+	var me: Dictionary = s.get("me", {})
+	var row: Variant = s.get("mySeek")
+	if not me.is_empty() and (not row is Dictionary or (str(row["status"]) == "ok" and str(row["phase"]) == "out")):
+		bodies.append([my_id, me, null])
+	for o: Dictionary in others:
+		if bool(o.get("active", true)) and str(o.get("seekStatus", "ok")) == "ok" and str(o.get("seekPhase", "out")) == "out":
+			bodies.append([str(o["id"]), o, Vector3(float(o["x"]), float(o["y"]) + 0.1, float(o["z"]))])
+	var seen := {}
+	for b: Array in bodies:
+		var id: String = b[0]
+		var d: Dictionary = b[1]
+		seen[id] = true
+		var cx := int(floor(float(d["x"]) / fp.cell_size))
+		var cy := int(floor(float(d["z"]) / fp.cell_size))
+		var lvl := int(d.get("level", 0))
+		if cx < 0 or cy < 0 or cx >= fp.width or cy >= fp.height:
+			continue
+		var cell := Floor.pos_index(fp, Floor.Pos.make(lvl, cx, cy))
+		var room := Floor.room_id_at(fp, lvl, cx, cy)
+		var prev: Array = _feet.get(id, [])
+		_feet[id] = [cell, room]
+		if prev.is_empty() or int(prev[0]) == cell:
+			continue
+		var fast := str(d.get("gait", "walk")) != "creep"
+		if fast and sq.has(cell):
+			sfx.squeaker(b[2])
+		if room >= 0 and room != int(prev[1]) and fp.rooms[room].kind == &"ballpit":
+			sfx.ball_pit(fast, b[2])
+	for id: String in _feet.keys():
+		if not seen.has(id):
+			_feet.erase(id)
 
 ## The count's clock on this screen: from the event's own host t0 and the host clock (or, under the
 ## "arrival" break, from when the event arrived on this screen's clock).
@@ -266,18 +324,41 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 		elif count_phase == "over" and ht - (t0 + hide_len + float(ev["len"])) < 3.0:
 			if _once(n, "done"):
 				ann.say_count("done", "ALL DONE!", LINE_MS)
-	# Found, whoever it is.
+	# Found, whoever it is. And the sounds of the host's events: the found-you sting in your own ear, going
+	# down, hides got into and out of, the Minder's huff at an empty hide (client/sfx.gd).
+	var pv_hides: Array = pv.get("hides") if pv != null else []
 	for e: Dictionary in s.get("events", []):
-		match str(e.get("type", "")):
+		var ty := str(e.get("type", ""))
+		var who_id := str(e.get("playerId", ""))
+		var at: Variant = null if who_id == my_id else _where(others, who_id)
+		match ty:
+			"hideStart", "hideLeave":
+				if who_id == my_id or at != null:
+					var hk := ""
+					for h: Variant in pv_hides:
+						if int(h.get("id")) == int(e["hide"]):
+							hk = str(h.get("kind"))
+					sfx.hide_move(hk, ty == "hideStart", bool(e.get("fast", false)), at)
+			"emptyHide":
+				var mp: Variant = (s.get("orderly", {}) as Dictionary).get("pose")
+				if mp is Dictionary:
+					sfx.huff_at(Vector3(float(mp["x"]), float(mp["y"]) + Seek.MINDER_HEAD, float(mp["z"])))
+			"down":
+				if who_id == my_id or at != null:
+					sfx.went_down(at)
+		match ty:
 			"found":
 				var who := str(e["playerId"])
 				var key := "%d:%s" % [n, who]
 				if not _found_ids.has(key):
 					_found_ids[key] = true
 					ann.say_count("found", "FOUND YOU, %s!" % name_of.call(who), LINE_MS)
+					if who == my_id:
+						sfx.found_me()
 			"called":
 				if bool(e.get("last", false)):
 					ann.say_count("last_called", "YOUR CAR IS ON ITS WAY! ONE MORE ROUND BEFORE WE GO!", LINE_MS + 1800)
+	_step_sounds(s, others, my_id, sfx, pv)
 	# --- the HUD's count lines.
 	var top := ""
 	if count_phase == "hide":

@@ -22,8 +22,11 @@
 #
 # The stapler: one click per 1.2 m walked, and one each time its own clock passes a multiple of 4 s
 # while it stands (the clock stops while it is held, so a watched Temp is silent). Heard at its hand
-# out to 30 m, quieter and duller through walls. Its own player and its own click, made here; on the
-# "Entity" bus when the bus layout has one, otherwise on "Sfx".
+# out to 30 m, quieter and duller through walls. Its own player; the click is one of the owner's four
+# recorded staples (assets/sfx/annex/staple_*.ogg, dealt in turn, never the same twice running), or the
+# one made here when they are missing; on the "Entity" bus when the bus layout has one, otherwise on
+# "Sfx". Its shuffling steps on the carpet (annex/temp_steps.ogg) are heard only within STEPS_RANGE while
+# it walks: from further off the Annex's sound stays dots.
 class_name TempView
 extends Node3D
 
@@ -37,7 +40,14 @@ const CLICK_STEP := 1.2         # metres walked per click
 const STAND_CLICK := 4.0        # seconds of its own clock per click while standing
 const HEAR_RANGE := 30.0
 const MUFFLED_GAIN := 0.45      # through a wall (Entity.MUFFLED_GAIN)
-const CLICK_DB := 3.0
+const CLICK_DB := 3.0           # the made-in-code click
+## The recorded staples are normalised to the voice -9 LU (momentary max; MIX.md) and played here at
+## Sfx.BASE_DB + this: the voice -4 LU right at its hand, as the made-in-code click was.
+const CLICK_REC_DB := 5.0
+const STAPLES: Array[String] = ["res://assets/sfx/annex/staple_1.ogg", "res://assets/sfx/annex/staple_2.ogg",
+	"res://assets/sfx/annex/staple_3.ogg", "res://assets/sfx/annex/staple_4.ogg"]
+const STEPS_FILE := "res://assets/sfx/annex/temp_steps.ogg"
+const STEPS_RANGE := 8.0
 const HAND_HEIGHT := 1.0        # where the click comes from
 const CYCLE := 1.5              # metres per full walk cycle (two steps)
 const WIND_UP_TIME := 0.6       # src/sim/entity.ts: the reach is drawn out over it
@@ -101,6 +111,10 @@ var _parts := {}                # joint name -> SurfaceTool
 var _body_mat: ShaderMaterial
 var _paper_mat: ShaderMaterial
 var _player: AudioStreamPlayer3D
+var _staples: Array[AudioStream] = []   # the recorded clicks (empty: the made-in-code one)
+var _staple_next := 0
+var _steps: AudioStreamPlayer3D          # its shuffle on the carpet (null without the file)
+var _walking_until := 0
 var _plan: Floor.FloorPlan = null
 var _rng := RandomNumberGenerator.new()
 var _dist := 0.0                # metres the drawn pose has walked
@@ -123,14 +137,32 @@ func _init() -> void:
 	_player.max_polyphony = 3
 	_player.attenuation_filter_cutoff_hz = 20500.0
 	add_child(_player)
+	for f in STAPLES:
+		if ResourceLoader.exists(f):
+			_staples.append(load(f))
+	if ResourceLoader.exists(STEPS_FILE):
+		var st := load(STEPS_FILE) as AudioStreamOggVorbis
+		st.loop = true
+		_steps = AudioStreamPlayer3D.new()
+		_steps.name = "Steps"
+		_steps.stream = st
+		_steps.top_level = true
+		_steps.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
+		_steps.max_distance = STEPS_RANGE
+		_steps.attenuation_filter_cutoff_hz = 20500.0
+		add_child(_steps)
 	set_crew("", [])
 	_rng.seed = 7
 	visible = false
 
 func _ready() -> void:
 	_player.bus = &"Entity" if AudioServer.get_bus_index(&"Entity") != -1 else &"Sfx"
+	if _steps != null:
+		_steps.bus = _player.bus
 
 func reset() -> void:
+	if _steps != null:
+		_steps.stop()
 	_dist = 0.0
 	_last = Vector3.INF
 	_last_pose = null
@@ -201,6 +233,8 @@ func show_pose(pose: Variant, show: bool) -> void:
 	if pose == null:
 		visible = false
 		_last_pose = null
+		if _steps != null and _steps.playing:
+			_steps.stop()
 		return
 	var pd: Dictionary = pose
 	var p := Vector3(float(pd["x"]), float(pd["y"]), float(pd["z"]))
@@ -232,6 +266,7 @@ func show_pose(pose: Variant, show: bool) -> void:
 			_stand_k = sk
 	else:
 		_stand_k = -1
+	_shuffle(p, step)
 	visible = show
 	if not show:
 		return
@@ -405,10 +440,52 @@ func _click(why: String, feet: Vector3) -> void:
 	if gain <= 0.0 or not is_inside_tree():
 		return
 	_player.global_position = at
-	_player.volume_db = linear_to_db(gain) + CLICK_DB
 	_player.attenuation_filter_cutoff_hz = 1300.0 if muffled else 20500.0
-	_player.pitch_scale = 0.94 + 0.12 * _rng.randf()
+	if _staples.is_empty():
+		_player.volume_db = linear_to_db(gain) + CLICK_DB
+		_player.pitch_scale = 0.94 + 0.12 * _rng.randf()
+	else:
+		# The takes in turn from a random step, so the same take never comes twice running.
+		_player.stream = _staples[_staple_next % _staples.size()]
+		_staple_next += 1 + _rng.randi_range(0, _staples.size() - 2)
+		_player.volume_db = linear_to_db(gain) + Sfx.BASE_DB + CLICK_REC_DB
+		_player.pitch_scale = 0.97 + 0.06 * _rng.randf()
 	_player.play()
+
+## Its shuffle on the carpet: on while the drawn pose walks (and a moment after), only within
+## STEPS_RANGE of the ear, quieter through walls (checked a few times a second).
+var _steps_check := 0
+func _shuffle(feet: Vector3, step: float) -> void:
+	if _steps == null or not is_inside_tree():
+		return
+	var now := Time.get_ticks_msec()
+	if step > 0.0:
+		_walking_until = now + 300
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	var on := now < _walking_until and cam != null
+	var d := cam.global_position.distance_to(feet) if cam != null else 99.0
+	on = on and d < STEPS_RANGE
+	if not on:
+		if _steps.playing:
+			_steps.stop()
+		return
+	var g := pow(1.0 - d / STEPS_RANGE, 2.0)
+	if now >= _steps_check:
+		_steps_check = now + 250
+		var muffled := false
+		if _plan != null:
+			var ear := cam.global_position
+			var e := Sight.Point3.make(ear.x, ear.y, ear.z, 1 if ear.y >= Move.LEVEL_HEIGHT else 0)
+			var s := Sight.Point3.make(feet.x, feet.y + 0.2, feet.z, 1 if feet.y + 0.2 >= Move.LEVEL_HEIGHT else 0)
+			muffled = not Sight.has_line_of_sight(_plan, e, s)
+		_steps.attenuation_filter_cutoff_hz = 1300.0 if muffled else 20500.0
+		_steps.set_meta(&"muffled", muffled)
+	if bool(_steps.get_meta(&"muffled", false)):
+		g *= MUFFLED_GAIN
+	_steps.global_position = feet + Vector3(0, 0.1, 0)
+	_steps.volume_db = linear_to_db(maxf(g, 0.001)) + Sfx.BASE_DB
+	if not _steps.playing:
+		_steps.play()
 
 static var _click_cache: AudioStreamWAV = null
 

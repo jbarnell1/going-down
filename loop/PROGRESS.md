@@ -4,9 +4,9 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 62 of 104.
+- **Gates passed:** 7 of 14. **Tasks done:** 62 of 107.
 - **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 67.
-- **Now:** TB Your second batch of sounds in the game. The sound builder is back on the mix fix after the pause
+- **Now:** T23 The announcer's hints. An Opus builder is recording the 38 hints in both voices and wiring the ones whose moments exist in the game today
 - **Last CI result seen:** passed on cb7c7a0
 - **Answers applied up to:** 2026-11-17T15:39:30.665Z
 
@@ -221,11 +221,17 @@
   - To do: The under-desk view in the Annex reads as a window, not as hiding under a desk: add the desk edge to the view
 - [ ] **T19c** `doing` The Temp's own mechanic
   - Why: No two monsters share a rule: the Temp needs its own way to hunt and to be recorded
+- [ ] **T22** `doing` Live settings for the host
+  - Why: On game night the host can slow a monster that's too fast, lengthen the lift's return or the time you have down, and much more, from an in-game panel, while everyone plays
+- [ ] **T23** `doing` The announcer's hints
+  - Why: The lift's announcer teaches the game with snide, creepy hints: board on time or lose your pay, the quota, sneaking in the Playroom, instruments out
+- [ ] **T24** `doing` The story: the tape, the nightly tapes and the clues
+  - Why: A blue-and-yellow VCR orientation tape on joining, a new tape each night in the prison, and clues on every floor that the monsters were once crews like yours
 - [ ] **T19d** `todo` Traits re-roll per floor
   - Why: Recognising the monster never tells you how to survive it
 - [ ] **T19e** `todo` Monsters slip away and reappear out of view
   - Why: Every monster relocates out of everyone's sight in a way that fits its rule, so you can lose track of it
-- [ ] **T20a** `doing` The Orderly stays visible in the dark
+- [ ] **T20a** `todo` The Orderly stays visible in the dark
   - Why: When the lights go out you should still glimpse it moving, not have it vanish
 - [ ] **T20b** `todo` The Orderly pushes a real trolley
   - Why: Its squeak comes from a trolley you can see it roll
@@ -235,11 +241,11 @@
 - [ ] **T16k** `todo` The Temp as a proper Blender figure
   - Why: A real modelled office worker with the photocopied face sheet, stapler and notes, ready to animate in Mixamo
   - To do: Your direction: more dishevelled - a coffee stain, half the shirt tail untucked, the tie half undone, like he doesn't take care of himself
-- [ ] **T20c** `doing` Longer blackouts before the car comes
+- [ ] **T20c** `todo` Longer blackouts before the car comes
   - Why: Once the lights start dimming, the dark should hold longer while you wait for the lift
-- [ ] **T20h** `doing` A bit more stamina, monsters paced to match
+- [ ] **T20h** `todo` A bit more stamina, monsters paced to match
   - Why: You can run a little longer, and the monsters are retuned so they stay just as dangerous
-- [ ] **T15m** `todo` Playroom tuning from your play
+- [ ] **T15m** `doing` Playroom tuning from your play
   - Why: A warning line on arrival to sneak, more time to hide, the ball pit lowers your view so you can watch it search, an anger bar, and a reminder to get your instrument out
   - To do: Hide time is 6 s today (the 30-45 s is the seeking). Make it 30-45 s to hide, counted aloud
   - To do: Your Minder answer: it just wanders; within 1 m it grabs you and drags you to the party table; once angered it hunts actively, and the intercom says not to run while it hunts; relocation is on for it
@@ -247,9 +253,10 @@
   - Why: Beds, chairs, cabinets and desks block you, which hiding needs
 - [ ] **T20e** `todo` The day quota you can see, and no going home short
   - Why: You know how close you are to the day's target; BANK is refused until it is met, with a snide line from the announcer; in the prison you can only shop and sleep
-- [ ] **T20f** `doing` Controls card and a ready-up screen
+- [ ] **T20f** `todo` Controls card and a ready-up screen
   - Why: Everyone reads the controls and readies up, then drops into the lift together; the lift waits and never pushes anyone out
   - To do: Your car answer: the car waits as long as anyone is aboard; a returning car waits 30 s before its doors close; anyone left out then dies and wakes in the prison without the credits they earned
+  - To do: Your rule: holding the car open all game must never count. The only way off a floor is quota met, car gone, call, car comes back. Check it and test it
 - [ ] **T20g** `todo` Things to find: drawers, gurneys, credits, poem notes
   - Why: Searching furniture (F TO OPEN DRAWER) turns up credits, obscure poems about the monster's rule, and something to restore you
 - [ ] **T21a** `todo` A four-slot inventory
@@ -348,9 +355,26 @@
 - 2026-11-17: The Temp is Lonely: a player is lonely when out of sight of every other player and beyond a set distance. The Temp chases a lonely player it sees, slightly faster than them; once they reach someone it turns away, leaves out of view and reappears out of view near another player. Every monster gets out-of-view relocation that fits its trait, so players can lose track of them.
 - 2026-11-17: Day quota, ready-up and findables designed (docs/floors/findables-and-day.md). Six questions on the Questions page; building on the recommended defaults until you answer.
 - 2026-11-17: Your answers applied: Lonely as designed (solo Annex: Lonely but slower than one player); eye marks shown; F for cabinets; relocation as designed and on for the Minder (wanders, grabs within 1 m, hunts once angered, voice says don't run); day quota counts everything earned; a wipe is the missed day; juice carton AND a nerve bar; a 4-slot inventory; quick noisy search; ready-up as recommended; the car waits while anyone is aboard, and a returning car waits 30 s, then anyone left out dies and wakes in the prison without their credits.
+- 2026-11-17: Live settings designed (docs/floors/live-settings.md): 59 settings in six groups, F8 opens the host panel. Five questions on the Questions page; building on the recommended defaults.
 
 ## Activity (newest first)
 
+- 2026-11-17 20:49Z Started T23: The announcer's hints. An Opus builder is recording the 38 hints in both voices and wiring the ones whose moments exist in the game today
+- 2026-11-17 20:49Z Started T19c: The Temp's own mechanic. Built: the Temp now hunts whoever is alone (nobody within 8 m and nobody in sight within 20 m), chases at 3.9 m/s, breaks off the moment you have company and slips away to someone else, leaving a 'Gone to see' note. A Sonnet agent is re-running the checks
+- 2026-11-17 20:47Z Started T24: The story: the tape, the nightly tapes and the clues. Fable is writing the story bible, the orientation tape script and storyboard, the nightly tapes, the notes and the clues
+- 2026-11-17 20:47Z Added task T24: The story: the tape, the nightly tapes and the clues.
+- 2026-11-17 20:41Z Paused T23: waiting for Written: 38 snide hints with two takes each (e.g. 'Do not delay in boarding. Miss the car, and we keep your credits.'). Three questions on your Questions page. Recording and wiring wait for a free builder
+- 2026-11-17 20:40Z Paused T20f: waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build
+- 2026-11-17 20:40Z Paused T20h: waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build
+- 2026-11-17 20:40Z Paused T20c: waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build
+- 2026-11-17 20:40Z Paused T20a: waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build
+- 2026-11-17 20:34Z Started T15m: Playroom tuning from your play. An Opus builder is giving you 30-45 s to hide, a ball pit you can see out of, an anger bar, and a Minder that wanders and only grabs you within a metre until it's angry
+- 2026-11-17 20:34Z Started T23: The announcer's hints. Fable is writing the announcer's hints: snide, creepy lines that teach boarding, the quota, the BANK lock, sneaking in the Playroom, instruments out
+- 2026-11-17 20:34Z Started T22: Live settings for the host. Designed (59 settings in six groups, F8 opens the host panel). An Opus builder is making the settings list and wiring the first ten: each monster's speed, the lift's return, the down timer
+- 2026-11-17 20:33Z Added task T23: The announcer's hints.
+- 2026-11-17 20:33Z Took a default: Live settings designed (docs/floors/live-settings.md): 59 settings in six groups, F8 opens the host panel. Five questions on the Questions page; building on the recommended defaults.
+- 2026-11-17 20:23Z Started T22: Live settings for the host. Fable is designing the settings: which numbers, how they're grouped, how a change reaches every player safely mid-game
+- 2026-11-17 20:23Z Added task T22: Live settings for the host.
 - 2026-11-17 20:16Z Paused T19b: waiting for Merged into main and pushed (225 quick tests; relocation never lands on any of 6,204 hiding spots over 80 floors; network 10/10; down check 24/24). Goes into your next build
 - 2026-11-17 19:54Z Started TB: Your second batch of sounds in the game. The sound builder is back on the mix fix after the pause
 - 2026-11-17 19:54Z Started T19c: The Temp's own mechanic. The Opus builder is back on the Temp's Lonely rule after the pause
@@ -375,19 +399,3 @@
 - 2026-11-17 17:24Z Started T20f: Controls card and a ready-up screen. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks
 - 2026-11-17 17:24Z Started T20h: A bit more stamina, monsters paced to match. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks
 - 2026-11-17 17:24Z Started T20c: Longer blackouts before the car comes. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks
-- 2026-11-17 17:24Z Started T20a: The Orderly stays visible in the dark. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks
-- 2026-11-17 17:20Z Started T16k: The Temp as a proper Blender figure. Judging round 2 done (bright 3-4/10, dark 5-7/10). Second revision under way: a natural untucked shirt tail, a hunched, lopsided outline that reads wrong from far away, the sheet covering every edge
-- 2026-11-17 17:18Z Started T16k: The Temp as a proper Blender figure. Revised (sheet wrapped and stapled on, dishevelled as you asked: coffee stain, shirt tail out, tie half undone; arms deliberately too long). Judging round 2 running
-- 2026-11-17 17:18Z New pictures for T16k: The Temp as a proper Blender figure.
-- 2026-11-17 17:09Z Paused T19a: waiting for Checked: 210 quick tests, all 26 stored-result tests unchanged, both deliberate breaks red. Being merged into the main code now
-- 2026-11-17 17:02Z Started T16k: The Temp as a proper Blender figure. Judging round 1 done (bright corridor 3-4/10, dark 6-7/10; all three like the drawn face over a hidden head). The builder is now fixing the sheet so it looks worn and stapled on, the mannequin arms and neck, and the stapler and notes
-- 2026-11-17 17:01Z Started T16k: The Temp as a proper Blender figure. Judging round 1: Fable done; Opus judges now
-- 2026-11-17 17:01Z Started T19e: Monsters slip away and reappear out of view. Built: when nobody has seen the Orderly for a while, it slips away out of everyone's sight and reappears 12-20 m from a player, with a sound first. A Sonnet agent is re-running its checks
-- 2026-11-17 17:00Z Down and heal is merged into the main code and pushed. The three-player network check now allows the one move you decided watchers see (the Orderly bent over a downed player, working in place) and still goes red if it walks while watched (checked with a deliberate break).
-- 2026-11-17 16:58Z The Temp's first judge (shown only pictures): the face sheet over a real head and the tilted head work; in the dark it scores 6.5/10. Weak: the sheet looks like a flat board, thin tube arms with mitten hands, trousers too short. Two more judges, then the fixes.
-- 2026-11-17 16:57Z Started TB: Your second batch of sounds in the game. Back with its builder: make the breathing grow louder as it nears every time, and the beds' hum dip reliably under the voice
-- 2026-11-17 16:57Z Started T16k: The Temp as a proper Blender figure. Built in Blender (3,812 triangles, T-pose with spread fingers, stapler and notes separate). Judging round 1: Fable now, two Opus judges when builder slots free
-- 2026-11-17 16:57Z New pictures for T16k: The Temp as a proper Blender figure.
-- 2026-11-17 16:57Z New pictures for T16k: The Temp as a proper Blender figure.
-- 2026-11-17 16:56Z Paused TB: waiting for Checked: tests, export and the browser sound check all pass, and the far-carry breaks go red. But the mix check is unstable: the beds' duck under the voice misses by about 1 dB in 2 of 3 runs, and the 'breathing grows as it nears' check failed 2 of 3 (at 5 m it was sometimes quieter than at 20 m). Goes back to its builder when a builder slot frees
-- 2026-11-17 16:22Z Paused T8a: waiting for Merged into main with its screen (T8c); goes into your next build

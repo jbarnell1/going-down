@@ -47,8 +47,9 @@ class Resident:
 	var name: String
 	## Ruled by Stillness: it only moves while nobody is looking (entity.gd).
 	var stillness: bool
-	## What the instruments call its trait: "stillness" (while it moves unseen) or "hearing" (while it
-	## searches during a count; sim/run.gd says when, and for whom).
+	## What the instruments call its trait: "stillness" (while it moves unseen), "hearing" (while it
+	## searches during a count; sim/run.gd says when, and for whom) or "lonely" (while it chases someone
+	## alone, for that one only: resident_in).
 	var trait_name: StringName
 	## Its body numbers (entity.gd BodySettings: height, seen size, speeds, sound), or null where none is
 	## made yet (the Minder stands in with the Orderly's). create_resident gives it to the floor's state,
@@ -73,6 +74,14 @@ static func resident(place: StringName) -> Resident:
 		PLAYROOM:
 			return Resident.make("Minder", false, &"hearing")
 	return Resident.make("", false, &"")
+
+## The resident of a place in a run with Lonely on or off (sim/run.gd resident_of; T19c): with it on the Temp
+## carries Lonely (sim/lonely.gd), its own mechanic, and not Stillness; every other place is as resident() says.
+## Off, every stored result's Stillness Temp.
+static func resident_in(place: StringName, lonely: bool) -> Resident:
+	if lonely and place == ANNEX:
+		return Resident.make("Temp", false, &"lonely", Entity.temp_body())
+	return resident(place)
 
 ## The entity id of a floor's resident (the Clinic's stays "orderly-<depth>", as recorded).
 static func entity_id(place: StringName, depth: int) -> String:

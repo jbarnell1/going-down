@@ -25,6 +25,8 @@
 #  - The owner's 17 Nov changes (sim/run.gd long_dark, paced, car_waits) are the same once more: `owner_0833`
 #    true, false, or null to follow the game's deck. The game's client draws a Stillness resident in the dark
 #    too (net/client.gd draw_in_dark), on the same switch.
+#  - Lonely (sim/run.gd lonely, sim/lonely.gd: the Temp's own mechanic) is the same again: `lonely` true, false,
+#    or null to follow the game's deck. Alone you are always lonely, and it chases slower than you walk.
 #  - The tuned Playroom (sim/run.gd playroom_tuned, sim/seek.gd T15m: 30-45 s to hide, the anger bar, the
 #    grab at 1 m) is the same again: `playroom_tuned` true, false, or null to follow the game's deck.
 extends "res://net/room_client.gd"
@@ -56,6 +58,8 @@ var downs: Variant = null
 var relocation: Variant = null
 ## The owner's 17 Nov changes (the long dark, paced, the car waits): true, false, or null to follow the deck.
 var owner_0833: Variant = null
+## Lonely: true, false, or null to follow the game's deck (see the header).
+var lonely: Variant = null
 ## The Playroom tuned from the owner's first play (T15m): true, false, or null to follow the deck.
 var playroom_tuned: Variant = null
 ## Cost of the host's ticks on this machine (microseconds, summed), for the stats hook.
@@ -95,6 +99,12 @@ func downs_on() -> bool:
 		return bool(downs)
 	return Session.deck == Places.FULL
 
+## Whether the next run has Lonely.
+func lonely_on() -> bool:
+	if lonely != null:
+		return bool(lonely)
+	return Session.deck == Places.FULL
+
 ## Whether the next run has relocation.
 func relocation_on() -> bool:
 	if relocation != null:
@@ -124,7 +134,7 @@ func start_run() -> void:
 	runs += 1
 	epoch += 1
 	var o := owner_0833_on()
-	rules = HostRules.new(entity_on, 1, Session.deck, days_on(), quota_on(), downs_on(), false, relocation_on(), o, o, o, playroom_tuned_on())
+	rules = HostRules.new(entity_on, 1, Session.deck, days_on(), quota_on(), downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on())
 	# Method callables hold no reference to this object, so the pipes do not keep it alive.
 	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
 	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))

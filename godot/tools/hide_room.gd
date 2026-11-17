@@ -17,7 +17,7 @@ func _start(now: float) -> void:
 	var roster: Array[String] = []
 	for id: String in people:
 		roster.append(id)
-	rules = HostRules.new(true, start_depth, Places.FULL, days, false, false, false, false, false, false, false, tuned)
+	rules = HostRules.new(true, start_depth, Places.FULL, days, false, false, false, false, false, false, false, false, tuned)
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))

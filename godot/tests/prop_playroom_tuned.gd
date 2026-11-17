@@ -173,7 +173,7 @@ func test_t15m_time_to_hide(t: T) -> void:
 	t.check(Client.count_clock(ev, 135.1)["phase"] == "seek" and Client.count_clock(ev, 165.1)["phase"] == "over", "the screens' clock: the search, then over")
 	t.check(absf(HideView.dark_at(ev, 160.0) - 1.0) < 1e-9 and HideView.dark_at(ev, 170.0) < 1.0, "count dark lasts the hiding time and the search")
 	# Through the run: the game's rooms ask for it (HostRules), and the last count opens the doors at t0 + 30 + 30.
-	var rules := HostRules.new(true, 4, Places.FULL, false, false, false, false, false, false, false, false, true)
+	var rules := HostRules.new(true, 4, Places.FULL, false, false, false, false, false, false, false, false, false, true)
 	var st := rules.prepare(Run.create_run("tuned-run", ["p0"] as Array[String], Places.FULL))
 	t.check(st.playroom_tuned, "HostRules turns the tuned Playroom on")
 	t.check(not HostRules.new(true, 4, Places.FULL).prepare(Run.create_run("tuned-run", ["p0"] as Array[String], Places.FULL)).playroom_tuned, "off unless asked")
