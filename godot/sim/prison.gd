@@ -4,12 +4,17 @@
 # One level (level 0; level 1 is all void). A grid of 2 m cells, 16 wide by 14 tall. Facing east out of
 # the lift, from the top (north) of the map:
 #
-#   row 5..7   five cells, 2 wide and 3 deep, doors onto the hall at x = 4, 6, 8, 10, 12 (bunk numbers 1..5)
+#   row 7      five cells, 2 wide and 1 deep, doors onto the hall at x = 4, 6, 8, 10, 12 (bunk numbers 1..5)
 #   row 8      the hall: ten corridor cells (20 m), x = 4..13, mugshot wall at its east end
-#   row 9..12  the bank room (x = 4..7, first door on the right of the hall), then three more cells,
-#              2 wide and 3 deep, doors at x = 8, 10, 12 (bunk numbers 6..8)
+#   row 9..11  the bank room (x = 4..7, first door on the right of the hall), then three more cells,
+#              2 wide and 1 deep, doors at x = 8, 10, 12 (bunk numbers 6..8)
+#   row 12     behind the bank counter, x = 4..7: the tellers' side, void (no one walks there; the
+#              look draws it behind the glass)
 #   x = 3      the lift lobby, one cell, the landing; its door opens east onto the hall
 #   x = 1..2   the lift shaft zone (see SHAFT_*), kept void on both levels
+#
+# The cells are one cell (2 m) deep so the bunk, along each cell's back wall, is in the door cell: the
+# farthest bunk is then 20 m of walking from the lift. Three deep put it at 24 m.
 #
 # Room kinds are the ones floor.gd's text map already knows: the lobby is &"lobby", the bank room is
 # &"ward", each cell is &"closet". Every room is branch &"main"; nothing here is a side branch.
@@ -35,12 +40,18 @@ const HALL_X1 := 13
 ## on both levels. Rect2i position and size, in cells: x 1..2, y 7..8.
 const SHAFT_ZONE := Rect2i(1, 7, 2, 2)
 
-## The bank room: x 4..7, y 9..12, door on the hall at (5, 8) / (5, 9).
-const BANK_ROOM := Rect2i(4, 9, 4, 4)
+## The bank room: x 4..7, y 9..11, door on the hall at (5, 8) / (5, 9). Its south wall is the counter.
+const BANK_ROOM := Rect2i(4, 9, 4, 3)
 const BANK_DOOR_X := 5
+## The tellers' side of the counter, behind the glass: void, not walkable, drawn by the look only.
+const TELLER_SIDE := Rect2i(4, 12, 4, 1)
+## The way a player at a window faces: south, across the counter, toward the tellers' side.
+const COUNTER_FACING := Vector2i(0, 1)
 
-## The four teller windows: the cell you stand on to face each one. The glass is the south wall (row 12).
-const WINDOWS: Array[Vector2i] = [Vector2i(4, 11), Vector2i(5, 11), Vector2i(6, 11), Vector2i(7, 11)]
+## The four teller windows: the cell you stand on to face each one, numbered 1..4 left to right as you
+## face the counter. Facing south your left is east, so window 1 is the east end. The glass is the
+## room's south wall (between rows 11 and 12).
+const WINDOWS: Array[Vector2i] = [Vector2i(7, 11), Vector2i(6, 11), Vector2i(5, 11), Vector2i(4, 11)]
 ## The report board: the stand cell in front of it, on the bank room's east wall.
 const REPORT_BOARD := Vector2i(7, 9)
 ## The day board, beside the lift doors, and the mugshot wall at the hall's far end: both stand cells.
@@ -48,11 +59,11 @@ const DAY_BOARD := Vector2i(4, 8)
 const MUGSHOT_WALL := Vector2i(13, 8)
 
 ## Cells in bunk order 1..8: the door-side x of each, and which side of the hall.
-## North cells are rows 5..7 (door cell row 7). South cells are rows 9..11 (door cell row 9).
+## North cells are row 7, south cells row 9: one row deep, so the door cell is also the back row.
 const CELL_DOOR_X_NORTH: Array[int] = [4, 6, 8, 10, 12]
 const CELL_DOOR_X_SOUTH: Array[int] = [8, 10, 12]
-const NORTH_ROWS := Vector2i(5, 3)  # first row, depth
-const SOUTH_ROWS := Vector2i(9, 3)
+const NORTH_ROWS := Vector2i(7, 1)  # first row, depth
+const SOUTH_ROWS := Vector2i(9, 1)
 
 ## The longest walk from the lift to any bunk, in metres (the design: quick, bunks close to the lift).
 const MAX_BUNK_WALK_M := 20
@@ -75,17 +86,18 @@ static func _room(rooms: Array[Floor.Room], kind: StringName, x: int, y: int, w:
 	rooms.append(r)
 	return r
 
-## Where each bunk is, in bunk order 1..8 (index 0 is bunk 1): the cell just inside the cell's door,
-## where a player stands to climb in. The day rules (bed count, wake position) should use these.
+## Where each bunk is, in bunk order 1..8 (index 0 is bunk 1): the cell the bunk is drawn in, against
+## the cell's back wall (the wall facing its door) in the door's column, where a player stands to climb
+## in. The day rules (bed count, wake position) and the look (client/prison_view.gd) both use these.
 static func bunk_positions() -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
 	for x in CELL_DOOR_X_NORTH:
-		out.append(Vector2i(x, NORTH_ROWS.x + NORTH_ROWS.y - 1))
+		out.append(Vector2i(x, NORTH_ROWS.x))
 	for x in CELL_DOOR_X_SOUTH:
-		out.append(Vector2i(x, SOUTH_ROWS.x))
+		out.append(Vector2i(x, SOUTH_ROWS.x + SOUTH_ROWS.y - 1))
 	return out
 
-## The four teller window stand cells, left to right.
+## The four teller window stand cells, numbered left to right as the player faces the counter.
 static func window_positions() -> Array[Vector2i]:
 	return WINDOWS.duplicate()
 

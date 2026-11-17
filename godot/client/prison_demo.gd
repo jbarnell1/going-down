@@ -313,8 +313,10 @@ func _prison_pictures() -> void:
 	var wall_z := Prison.HALL_ROW * Level.S
 	_look(Vector3(dx + 0.15, 1.5, wall_z + 1.8), Vector3(dx + 0.05, 1.75, wall_z - 6.0))
 	var cell := await _shot("03_cell_from_hall")
-	# 4. Inside that cell, at the bunk.
-	_look(Vector3(dx + 0.9, EYE, wall_z - 2.6), Vector3(dx + 0.1, 0.7, wall_z - 5.6))
+	# 4. Inside that cell, just in from the door, looking at the bunk in its bunk cell.
+	var bunk := Prison.bunk_positions()[2]
+	var bc := Vector3((bunk.x + 0.5) * Level.S, 0, (bunk.y + 0.5) * Level.S)
+	_look(Vector3(dx + 1.7, EYE, wall_z - 0.4), Vector3(bc.x + 0.1, 0.55, bc.z - 0.45))
 	await _shot("04_cell_inside")
 	# 5. From the far end of the corridor back to the lift.
 	_look(Vector3(far_x + 0.6, EYE, hall_z), Vector3(door_x - 2.0, EYE - 0.2, hall_z))

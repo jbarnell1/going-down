@@ -50,8 +50,10 @@ var bank_lights: Array[Light3D] = []
 var bank_strip: MeshInstance3D
 ## One per cell, in bunk order 1..8.
 var night_lights: Array[OmniLight3D] = []
+## One per cell, in bunk order 1..8: the middle of the mattress, in the cell Prison.bunk_positions() names.
 var bunk_centres: Array[Vector3] = []
-## The four teller window panes' middles, in the plan's window order (Prison.WINDOWS, west to east).
+## The four teller window panes' middles, in the plan's window order (Prison.WINDOWS: window 1 first,
+## left to right for a player facing the counter).
 var window_centres: Array[Vector3] = []
 
 var _sts := {}                         # Material -> SurfaceTool, static boxes merged per material
@@ -97,15 +99,19 @@ func dress(level: Level) -> void:
 	lv = level
 	_make_materials()
 	lv._build_floors_and_ceilings()
-	lv._build_walls()
+	_teller_side_shell()
 	lv._commit_chunks()
 	_hall()
-	var n := 0
+	var bunks := Prison.bunk_positions()
+	for i in bunks.size():
+		bunk_centres.append(Vector3.ZERO)
+		night_lights.append(null)
 	for r: Dictionary in lv.plan.rooms:
 		match str(r.kind):
 			"closet":
-				n += 1
-				_cell(r, n)
+				for i in bunks.size():
+					if _in_room(r, bunks[i]):
+						_cell(r, i + 1, bunks[i])
 			"ward":
 				_bank_room(r)
 	_commit_boxes()
@@ -113,6 +119,30 @@ func dress(level: Level) -> void:
 		for i in mini(Level.SHADOW_LIGHTS, lv.main_lights.size()):
 			lv.main_lights[i].shadow_enabled = true
 	lv.set_meta(&"prison", self)
+
+# The walls, with the tellers' side behind the counter (Prison.TELLER_SIDE) drawn as part of the bank
+# room: in the rules it is void, so the counter line is a wall no one walks through; in the drawing that
+# wall is left out (the counter and glass stand there instead) and the void strip gets a floor, a
+# ceiling and walls of its own. Only the drawing's copy of the edges changes, and only while walls are
+# built.
+func _teller_side_shell() -> void:
+	var z := Prison.TELLER_SIDE
+	var w := lv.W
+	var saved: Dictionary = lv.edges[0]
+	var vertical: Array = (saved.vertical as Array).duplicate()
+	var horizontal: Array = (saved.horizontal as Array).duplicate()
+	for x in range(z.position.x, z.end.x):
+		horizontal[z.position.y * w + x] = "none"      # the counter line: glass, not wall
+		horizontal[z.end.y * w + x] = "wall"           # the tellers' back wall
+	for y in range(z.position.y, z.end.y):
+		vertical[y * (w + 1) + z.position.x] = "wall"
+		vertical[y * (w + 1) + z.end.x] = "wall"
+		for x in range(z.position.x, z.end.x):
+			lv._floor_quad(0, x, y, 0.0, true, "floor")
+			lv._floor_quad(0, x, y, Level.LH - 0.001, false, "ceiling")
+	lv.edges[0] = {"vertical": vertical, "horizontal": horizontal}
+	lv._build_walls()
+	lv.edges[0] = saved
 
 # --- materials --------------------------------------------------------------------------------
 
@@ -381,7 +411,9 @@ func _hall() -> void:
 
 # --- the cells --------------------------------------------------------------------------------
 
-func _cell(r: Dictionary, number: int) -> void:
+# One cell: its door, its number, and its bunk in `bunk` (the plan's bunk cell), against the far wall
+# of that cell from the door and along the cell's wall on the door side.
+func _cell(r: Dictionary, number: int, bunk: Vector2i) -> void:
 	var fr := _frame_of(r)
 	var mid: Vector3 = fr[0]
 	var side: Vector3 = fr[1]
@@ -389,9 +421,14 @@ func _cell(r: Dictionary, number: int) -> void:
 	var width: float = fr[3]
 	var depth: float = fr[4]
 	var sc: float = fr[5]
-	var s_lo := sc - width * 0.5 + T     # the inner face of the side wall nearer the door
-	var s_hi := sc + width * 0.5 - T
+	var s_hi := sc + width * 0.5 - T     # the inner face of the side wall away from the door
 	var back := depth - T                # the inner face of the back wall
+	# The bunk's cell in this frame: its middle along the wall and into the room.
+	var bc := lv.cell_center(0, bunk.x, bunk.y) - mid
+	var b_side := bc.dot(side)
+	var b_fwd := bc.dot(fwd)
+	var s_lo := b_side - S * 0.5 + T     # the bunk cell's edge on the door side, less the wall face
+	var b_back := b_fwd + S * 0.5 - T    # the bunk cell's far edge from the door, less the wall face
 	_doorway(mid, side, fwd, 1.0)
 	# The number over the door, on the hall side.
 	_plate("CellNumber_%d" % number, str(number), _w(mid, side, fwd, 0.0, -T - 0.012, PLATE_Y), -fwd, 0.28,
@@ -400,7 +437,7 @@ func _cell(r: Dictionary, number: int) -> void:
 	var bl := 2.0
 	var bd := 0.8
 	var bs := s_lo + 0.04 + bl * 0.5
-	var bf := back - 0.02 - bd * 0.5
+	var bf := b_back - 0.02 - bd * 0.5
 	for ls: float in [-1.0, 1.0]:
 		for lf: float in [-1.0, 1.0]:
 			_box(_steel, _w(mid, side, fwd, bs + ls * (bl * 0.5 - 0.04), bf + lf * (bd * 0.5 - 0.04), 0.19), _sz(side, fwd, 0.05, 0.05, 0.38))
@@ -408,25 +445,27 @@ func _cell(r: Dictionary, number: int) -> void:
 	_box(_mattress, _w(mid, side, fwd, bs, bf, 0.52), _sz(side, fwd, bl - 0.08, bd - 0.08, 0.12))
 	_box(_pillow, _w(mid, side, fwd, s_lo + 0.32, bf, 0.62), _sz(side, fwd, 0.42, bd - 0.2, 0.09))
 	_box(_blanket, _w(mid, side, fwd, bs + 0.3, bf + 0.02, 0.595), _sz(side, fwd, bl - 0.65, bd - 0.04, 0.03))
-	bunk_centres.append(_w(mid, side, fwd, bs, bf, 0.5))
+	bunk_centres[number - 1] = _w(mid, side, fwd, bs, bf, 0.5)
 	# The night light on the back wall over the bunk: a caged orange lamp, and its light.
-	var lp := _w(mid, side, fwd, bs, back - 0.07, NIGHT_LIGHT_Y)
-	_box(_steel_dark, _w(mid, side, fwd, bs, back - 0.015, NIGHT_LIGHT_Y), _sz(side, fwd, 0.34, 0.03, 0.24))
+	var lp := _w(mid, side, fwd, bs, b_back - 0.07, NIGHT_LIGHT_Y)
+	_box(_steel_dark, _w(mid, side, fwd, bs, b_back - 0.015, NIGHT_LIGHT_Y), _sz(side, fwd, 0.34, 0.03, 0.24))
 	_lamp("NightLamp_%d" % number, lp, _sz(side, fwd, 0.24, 0.1, 0.14), NIGHT, 3.0)
 	for k: float in [-0.08, 0.0, 0.08]:
-		_box(_steel_dark, _w(mid, side, fwd, bs + k, back - 0.13, NIGHT_LIGHT_Y), _sz(side, fwd, 0.012, 0.012, 0.18))
+		_box(_steel_dark, _w(mid, side, fwd, bs + k, b_back - 0.13, NIGHT_LIGHT_Y), _sz(side, fwd, 0.012, 0.012, 0.18))
 	var o := OmniLight3D.new()
 	o.name = "NightLight_%d" % number
-	o.position = _w(mid, side, fwd, bs, back - 0.45, NIGHT_LIGHT_Y - 0.1)
+	o.position = _w(mid, side, fwd, bs, b_back - 0.45, NIGHT_LIGHT_Y - 0.1)
 	o.light_color = NIGHT
 	o.light_energy = 1.8
-	o.omni_range = 6.5
+	# Reach the cell's far corner and not much more: the light has no shadow, so a longer reach
+	# shines through the front wall and turns the hall orange.
+	o.omni_range = 2.9
 	o.omni_attenuation = 1.1
 	o.distance_fade_enabled = true
 	o.distance_fade_begin = 20.0
 	o.distance_fade_length = 5.0
 	lv.add_child(o)
-	night_lights.append(o)
+	night_lights[number - 1] = o
 	# A steel toilet and basin in the other back corner.
 	var ts := s_hi - 0.3
 	_box(_steel, _w(mid, side, fwd, ts, back - 0.3, 0.21), _sz(side, fwd, 0.42, 0.55, 0.42))
@@ -438,7 +477,7 @@ func _cell(r: Dictionary, number: int) -> void:
 func _bank_room(r: Dictionary) -> void:
 	var x0 := int(r.x) * S + T
 	var x1 := (int(r.x) + int(r.w)) * S - T
-	var z_back := (int(r.y) + int(r.h)) * S - T
+	var z_back := Prison.TELLER_SIDE.end.y * S - T   # the tellers' back wall, behind the glass
 	var cx := (x0 + x1) * 0.5
 	# The glass line: the far edge of the window stand cells (the plan's window row).
 	var gz := (Prison.WINDOWS[0].y + 1) * S
@@ -463,7 +502,8 @@ func _bank_room(r: Dictionary) -> void:
 		var mx := x0 + pane * i
 		_box(_brass, Vector3(mx, (gy0 + gy1) * 0.5, gz + 0.3), Vector3(0.07, gy1 - gy0, 0.07))
 	for i in n_win:
-		var px := x0 + pane * (i + 0.5)
+		# Window i (number i + 1) is the pane in front of its stand cell, Prison.WINDOWS[i].
+		var px := x0 + pane * (Prison.WINDOWS[i].x - int(r.x) + 0.5)
 		_box(_glass, Vector3(px, (gy0 + 0.09 + gy1) * 0.5, gz + 0.3), Vector3(pane - 0.07, gy1 - gy0 - 0.09, 0.012))
 		# The speaking grille, a steel disc in the glass.
 		_box(_steel_dark, Vector3(px, 1.58, gz + 0.3), Vector3(0.16, 0.16, 0.02))
