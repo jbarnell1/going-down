@@ -1,5 +1,7 @@
 # The Orderly: a 2.6 m figure pushing a squeaking trolley. Its trait is Stillness: it only moves
-# while nobody is looking at it. Pure, deterministic logic; the renderer plays `anim` and `yaw`,
+# while too few are looking at it: with one or two up players any one look stops it, with three or more
+# it takes two (see "Watchers" below; docs/floors/traits-and-hiding.md section 1). Below, "seen" means
+# seen by enough watchers. Pure, deterministic logic; the renderer plays `anim` and `yaw`,
 # the audio plays audibility(). Port of src/sim/entity.ts.
 #
 # The fairness contract: entities always obey their traits, and anything that depends on looking
@@ -10,8 +12,15 @@
 #      tick in which it is seen, nor for GRACE seconds after the last tick it was seen (so a player
 #      whose view reaches the server late never sees it move);
 #   3. looking at it during a wind-up always cancels the wind-up.
+# The first promise has one exception, "except while it has someone" (North Star B6, down first then out):
+# while it is bent over a downed player (mode "bending", which only sim/run.gd puts it in, with the down
+# rule on) its bend is the one movement it makes while watched: the "bend" pose and its clock go on
+# whether anyone looks or not. It never moves, turns or reaches while bending, and it goes after nobody.
+# When the run lets it go (stand_off) it is dormant, still bent: it straightens up only on a tick nobody
+# sees it, and while held it keeps the bend.
 #
 # Modes: waiting (standing at plan.entity_start) -> hunting -> windUp -> dormant -> hunting ...
+# With the down rule: windUp -> (caught) bending -> dormant (a heal: HEAL_QUIET s; out: 0 s) -> hunting.
 #
 # Bodies. The trait logic above is shared; what differs between residents is a body setting
 # (BodySettings): its height, collision radius, the outline that counts as "seen", its speeds and its
@@ -251,11 +260,26 @@ class OrderlyState:
 	var click_walk: float = 0.0
 	var click_wait: float = 0.0
 	var clicks: int = 0
+	## Bending: the downed player it is bent over (sim/run.gd), else null.
+	var bend_target: Variant = null
+
+	## Two-watcher Stillness (see "Watchers" below). How many watchers hold it this tick (1 or 2, from the
+	## up players: watch_need); who the tick counted, with grace, in the order given; the host time of each
+	## player's last looking tick (never written to once made: replaced); the last tick the count was met.
+	var need: int = 1
+	var watchers: Array[String] = []
+	var looked_at: Dictionary = {}
+	var last_met_at: Variant = null
 
 	## TypeScript: { ...state }.
 	func copy() -> OrderlyState:
 		var s := OrderlyState.new()
+		s.need = need
+		s.watchers = watchers
+		s.looked_at = looked_at
+		s.last_met_at = last_met_at
 		s.kind = kind
+		s.bend_target = bend_target
 		s.click_walk = click_walk
 		s.click_wait = click_wait
 		s.clicks = clicks
@@ -390,6 +414,34 @@ static func create_orderly(plan: Floor.FloorPlan, kind: BodySettings = null) -> 
 	st.yaw = yaw_toward((plan.landing.x + 0.5) * s - body.x, (plan.landing.y + 0.5) * s - body.z)
 	return st
 
+## The down rule (sim/run.gd): right after it caught `target`, it bends over them where it stands. It holds
+## the bend (mode "bending") until the run lets it go with stand_off. Never mutates `o`.
+static func bend_over(o: OrderlyState, target: String) -> OrderlyState:
+	var s := o.copy()
+	s.mode = &"bending"
+	s.bend_target = target
+	s.dormant_left = 0.0
+	s.wind_up_target = null
+	s.wind_up_left = 0.0
+	s.target_id = null
+	s.path = []
+	s.moving = false
+	s.speed = 0.0
+	s.frozen = false
+	s.anim = &"bend"
+	s.anim_time = 0.0
+	return s
+
+## Lets a bending resident go: dormant for `quiet` seconds (a heal sends it off quiet for a spell; when its
+## player goes out, 0: it hunts from the next tick), still bent until a tick nobody sees it. Never mutates `o`.
+static func stand_off(o: OrderlyState, quiet: float) -> OrderlyState:
+	var s := o.copy()
+	s.mode = &"dormant"
+	s.dormant_left = quiet
+	s.bend_target = null
+	s.replan_in = 0.0
+	return s
+
 ## Whether any active player's screen could be showing it, and who (first in list order). `kind` is
 ## its body (null: the Orderly).
 static func seen_by(plan: Floor.FloorPlan, body: Move.Body, players: Array[PlayerView], kind: BodySettings = null) -> PlayerView:
@@ -408,10 +460,11 @@ static func seen_by(plan: Floor.FloorPlan, body: Move.Body, players: Array[Playe
 	return null
 
 ## Advances the resident by dt seconds. Never mutates `prev`. (TypeScript HuntOptions: speed, creep.)
-## `hunt_speed` below 0 means its body's own.
-static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float = -1.0, creep: bool = true) -> StepResult:
+## `hunt_speed` below 0 means its body's own. `need`: watchers needed to hold it this tick (watch_need of
+## the up players; 1, the default, is the rule every stored result was made with).
+static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float = -1.0, creep: bool = true, need: int = 1) -> StepResult:
 	var k := kind_of(prev)
-	var res := _step_rules(plan, prev, players, dt, k.hunt_speed if hunt_speed < 0.0 else hunt_speed, creep, k)
+	var res := _step_rules(plan, prev, players, dt, k.hunt_speed if hunt_speed < 0.0 else hunt_speed, creep, k, need)
 	if k.clicks():
 		_stapler(prev, res, dt, k)
 	return res
@@ -420,7 +473,7 @@ static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 static func _stapler(prev: OrderlyState, res: StepResult, dt: float, k: BodySettings) -> void:
 	var s := res.state
 	s.clicks = 0
-	if s.held:
+	if s.held or s.mode == &"bending":
 		return
 	if s.moving:
 		s.click_wait = 0.0
@@ -436,7 +489,7 @@ static func _stapler(prev: OrderlyState, res: StepResult, dt: float, k: BodySett
 			s.clicks += 1
 			res.events.append({"type": "click", "t": s.t, "why": "wait"})
 
-static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool, k: BodySettings) -> StepResult:
+static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool, k: BodySettings, need: int = 1) -> StepResult:
 	var t := prev.t + dt
 	var s := prev.copy()
 	s.t = t
@@ -453,8 +506,8 @@ static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 	if seen:
 		s.last_seen_at = t
 	# Held: seen now, or the time since it was last seen, measured from the start of this tick's
-	# movement interval, is still under GRACE.
-	var held := seen or (prev.last_seen_at != null and t - dt - float(prev.last_seen_at) < GRACE - EPS)
+	# movement interval, is still under GRACE. With two watchers needed, by the count (see "Watchers").
+	var held := _count_watchers(plan, prev, s, players, seer, dt, need, k)
 	s.held = held
 	if seer != null and not prev.ever_seen:
 		s.ever_seen = true
@@ -477,8 +530,8 @@ static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 			s.mode = &"hunting"
 			s.replan_in = 0.0
 			events.append({"type": "startedHunting", "t": t})
-	elif s.mode == &"windUp" and seer != null:
-		# Looking at it always saves you.
+	elif s.mode == &"windUp" and (seer != null if s.need <= 1 else _met(s)):
+		# Looking at it always saves you (enough eyes, when two are needed).
 		events.append({"type": "windUpCancelled", "t": t, "playerId": s.wind_up_target if s.wind_up_target != null else ""})
 		s.mode = &"hunting"
 		s.wind_up_target = null
@@ -490,9 +543,17 @@ static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 	if not s.frozen and prev.frozen and (s.mode == &"hunting" or s.mode == &"windUp"):
 		events.append({"type": "released", "t": t})
 
+	# Bent over a downed player (the documented exception, see the header): the bend goes on, seen or
+	# not, and nothing else happens. The run decides when it ends.
+	if s.mode == &"bending":
+		s.anim = &"bend"
+		s.anim_time += dt
+		return res
+
 	# 3. Held: nothing else changes. Position, facing, animation hint and clock all stay as they are.
+	# Let go from a bend (stand_off), it keeps the bend until a tick nobody sees it.
 	if held:
-		if s.mode == &"waiting" or s.mode == &"dormant":
+		if s.mode == &"waiting" or (s.mode == &"dormant" and s.anim != &"bend"):
 			s.anim = &"idle"
 		return res
 	s.anim_time += dt
@@ -619,6 +680,101 @@ static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerV
 		s.anim = &"duck" if k.ducks and near_door(plan, s.body, k.radius) else &"walk"
 	else:
 		s.anim = &"idle"
+
+# ---------------------------------------------------------------------------------------------
+# Watchers: two-watcher Stillness (docs/floors/traits-and-hiding.md section 1, T19a).
+#
+# It is held when enough up players look at it: watch_need(up) of them, 1 with one or two up players and
+# 2 with three or more (sim/run.gd counts the up players every tick, so a crew of three with one down needs
+# one). A watcher is a player the view list gives as active (sim/run.gd: up; never a down, taken or
+# left-behind player) whose view passes seen_by's test this tick (so never one who is blind), or did
+# within GRACE: each watcher keeps counting for GRACE after their own last looking tick, so two glances
+# that overlap by less than a frame still hold it. One player is one watcher, however long or well they look.
+#   - Two needed: held while the count is met, and for GRACE after the last tick it was met. A lone
+#     watcher does not hold it; a wind-up is cancelled the tick the count is met.
+#   - One needed: exactly the old rule (held while anyone looks, and for GRACE after), so every one- and
+#     two-player result is what it was. The count is kept all the same, for the screen.
+# The host's holds (net/host.gd) reach the count through note_look (a player whose own screen says it sees
+# it) and hold_met (a seen report it honours, a catch waiting for its victim's screen).
+
+## Up players from which two watchers are needed.
+const WATCH_CREW := 3
+
+## Watchers needed to hold it with `up` up players on the floor: 1, 1, then 2.
+static func watch_need(up: int) -> int:
+	return 2 if up >= WATCH_CREW else 1
+
+## The count this tick (s.watchers, s.need) is met.
+static func _met(s: OrderlyState) -> bool:
+	return s.watchers.size() >= s.need
+
+## Counts this tick's watchers into `s` (need, watchers, looked_at, last_met_at) and returns whether it is
+## held. `seer`: seen_by's answer this tick (the first player looking, in list order).
+static func _count_watchers(plan: Floor.FloorPlan, prev: OrderlyState, s: OrderlyState, players: Array[PlayerView], seer: PlayerView, dt: float, need: int, k: BodySettings) -> bool:
+	var t := s.t
+	s.need = maxi(1, need)
+	var looked := prev.looked_at
+	var copied := false
+	var watchers: Array[String] = []
+	var after := false
+	for p in players:
+		if not p.active:
+			continue
+		var looks := false
+		if seer != null:
+			if p == seer:
+				looks = true
+				after = true
+			elif after and not p.blind:
+				# seen_by stopped at the first; the ones before it did not look.
+				var one: Array[PlayerView] = [p]
+				looks = seen_by(plan, prev.body, one, k) != null
+		if looks:
+			if not copied:
+				looked = looked.duplicate()
+				copied = true
+			looked[p.id] = t
+			watchers.append(p.id)
+		elif looked.has(p.id) and t - dt - float(looked[p.id]) < GRACE - EPS:
+			watchers.append(p.id)
+	s.looked_at = looked
+	s.watchers = watchers
+	if watchers.size() >= s.need:
+		s.last_met_at = t
+	if s.need <= 1:
+		return s.seen or (prev.last_seen_at != null and t - dt - float(prev.last_seen_at) < GRACE - EPS)
+	return watchers.size() >= s.need or (prev.last_met_at != null and t - dt - float(prev.last_met_at) < GRACE - EPS)
+
+## The host's hold: the count met at host time `at` (it is held then and for GRACE after). Never mutates `o`.
+static func hold_met(o: OrderlyState, at: float) -> OrderlyState:
+	if o.last_met_at != null and float(o.last_met_at) >= at:
+		return o
+	var s := o.copy()
+	s.last_met_at = at
+	return s
+
+## Player `id` looked at it at host time `at` (their own screen says so): a watcher for GRACE after. Never
+## mutates `o`.
+static func note_look(o: OrderlyState, id: String, at: float) -> OrderlyState:
+	if o.looked_at.has(id) and float(o.looked_at[id]) >= at:
+		return o
+	var s := o.copy()
+	var l := o.looked_at.duplicate()
+	l[id] = at
+	s.looked_at = l
+	return s
+
+## Held by grace alone on the tick after `o`, whatever anyone does then.
+static func held_by_grace(o: OrderlyState) -> bool:
+	var last: Variant = o.last_seen_at if o.need <= 1 else o.last_met_at
+	return last != null and o.t - float(last) < GRACE - EPS
+
+## Keeps `from`'s count on `o` (a state rebuilt from an older one, the host's put-back). Mutates `o`.
+static func keep_count(o: OrderlyState, from: OrderlyState) -> void:
+	o.need = from.need
+	o.watchers = from.watchers
+	o.looked_at = from.looked_at
+	o.last_met_at = from.last_met_at
 
 # ---------------------------------------------------------------------------------------------
 # Sound.

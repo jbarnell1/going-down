@@ -9,6 +9,10 @@
 #                               for none)
 #   set_floor(plan, level)      the floor (to be heard duller through walls) and its Level (so the
 #                               figure dims with the lights, as the Annex's own surfaces do)
+#   set_watched(at)             the watched walk (two-watcher Stillness, T19a): the eye point [x, y, z] of
+#                               the one watcher it walks at while it needs two, or null. Call before
+#                               show_pose. Walking, its head turns to them and the stapler comes up to face
+#                               height. Never while it is held (the frame gives no watcher then).
 #   reset()
 #
 # The pose-hold rule (a Stillness resident): what is drawn is a pure function of the pose and of the
@@ -41,6 +45,11 @@ const SQUEEZE_M := 0.22         # metres of walk one squeeze of the stapler last
 const SQUEEZE_S := 0.2          # seconds one idle squeeze lasts
 ## The break (tests only): the walk cycle also runs on the local clock at this speed, held or not.
 const BREAK_RATE := 1.5
+## The watched walk: how far the head turns from the body at most (radians), and the stapler arm held up
+## before the face (shoulder and elbow, radians about x).
+const WATCH_TURN_MAX := 1.3
+const WATCH_SHOULDER := -1.75
+const WATCH_ELBOW := -1.45
 
 ## sRGB, as vertex colours.
 const SKIN := Color(0.88, 0.81, 0.74)
@@ -82,6 +91,8 @@ var paper_image: Image = null
 var clicks: Array[Dictionary] = []
 ## Tests only: advance the walk on the local clock, as a broken view would (the pose-hold check must catch it).
 var break_walk_while_seen := false
+## The watched walk: the one watcher's eye point (world), or null (set_watched).
+var watched_at: Variant = null
 var drawn: Variant = null
 
 var _joints := {}               # name -> Node3D
@@ -126,7 +137,17 @@ func reset() -> void:
 	_walk_k = 0
 	_stand_k = -1
 	drawn = null
+	watched_at = null
 	visible = false
+
+## The watched walk: the one watcher's eye point ([x, y, z]), or null for none.
+func set_watched(at: Variant) -> void:
+	if at is Array and (at as Array).size() == 3:
+		watched_at = Vector3(float(at[0]), float(at[1]), float(at[2]))
+	elif at is Vector3:
+		watched_at = at
+	else:
+		watched_at = null
 
 static func _shade(self_light: float, vcol: bool) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
@@ -264,6 +285,15 @@ func _pose_figure(anim: String, t: float, dist: float) -> void:
 			el_r.x -= 0.05 * s
 			el_l.x += 0.05 * s
 			squeeze = _pulse(fmod(dist, CLICK_STEP) / SQUEEZE_M)
+			if watched_at is Vector3:
+				# The watched walk: head locked on its one watcher, the stapler up at face height.
+				var local := transform.affine_inverse() * (watched_at as Vector3)
+				var turn := clampf(atan2(local.x, local.z), -WATCH_TURN_MAX, WATCH_TURN_MAX)
+				neck.y = turn * 0.35
+				head.y = turn * 0.65 - hips.y - spine.y
+				head.x += 0.04
+				sh_r = Vector3(WATCH_SHOULDER, 0, -0.18)
+				el_r = Vector3(WATCH_ELBOW, 0, 0)
 		"reach":
 			var k := clampf(t / WIND_UP_TIME, 0.0, 1.0)
 			var e := k * k * (3.0 - 2.0 * k)

@@ -936,7 +936,13 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 
 	# The Orderly: drawn exactly as the frame says, never in the dark, never while taken.
 	var o: Dictionary = s["orderly"]
+	# Two-watcher Stillness (T19a): the watched walk (set before the pose), and the eye marks. A run without a
+	# count (solo, the rules bridge) has one mark, lit while it is seen.
+	if orderly.has_method(&"set_watched"):
+		orderly.call(&"set_watched", o.get("watchedAt"))
 	orderly.call(&"show_pose", o.get("pose"), bool(o.get("visible", false)) and not _noise_on() and not _no_resident)
+	var seen := bool(o.get("seeing", false)) and _resident_kind != "minder"
+	hud.eyes = o.get("eyes", {"on": seen, "need": 1, "lit": 1, "all": true}) if not _noise_on() and not _no_resident else {}
 
 	# Everyone else, and their name tags (not through walls, fading with distance, not in the dark).
 	var dark: bool = s["dark"]

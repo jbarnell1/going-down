@@ -50,6 +50,33 @@
 # {earned, needed} in whole credits (null when the run has no quota), for the call panel. The host's
 # "callRefused" {playerId, earned, needed} and "quotaMet" {depth, earned, needed, top} arrive in `events` like
 # any other. Nothing is predicted here: the call is pressed as always and the host decides.
+#
+# The Annex (sim/run.gd annex; docs/floors/annex.md sections 2 and 4; T16h). LocalFrame.mark (Q pressed) and
+# LocalFrame.peel (the id of a mark F has been held on for Marks.PEEL_SECONDS) are counted, and the counts
+# ride in every input, so no press is lost with a packet. Nothing is predicted: marks(), mark_pad() and
+# notes() are the host's, the same on every screen. marks() and mark_pad() come from the newest snapshot's
+# annex block; notes() are the floor's notes from the welcome and the "note" events (each exactly once),
+# in the order posted. The events "markStart", "markPlaced", "markPeeled", "markRefused" and "note" arrive
+# in `events` like any other (for the sounds: the slap, the stapler's click where the note is).
+#
+# Down first, then out (sim/run.gd downs; North Star B6; T8a). Nothing is predicted: downs(), down_of() and
+# spots() are the newest snapshot's downs block, the host's, the same on every screen, with host times for
+# the ten seconds and the three (use clock.host_time(now) to count them). A downed player keeps sending
+# inputs: the host takes only their body (the crawl) and view. F held (LocalFrame.use) goes in every input
+# and heals a downed crewmate within reach. The events "downed", "healStart", "healStop", "healed" and "out"
+# arrive in `events` like any other, and the host places a player where they go down and where they get up.
+# The resident bent over a downed player ("bending") is drawn as the snapshots say even while it is seen: its
+# bend is the one movement it makes while watched. The taken latch treats "bending" as it treats "dormant"
+# (the catch was made).
+#
+# Two-watcher Stillness (sim/entity.gd "Watchers"; docs/floors/traits-and-hiding.md section 1; T19a). The newest
+# snapshot's watch block says how many watchers hold it (need) and whom the host counts; without one, one look
+# is enough, as always. Rule 2 above applies only when this player's look would complete the count: one
+# needed, or another player listed. Then it lights every eye mark, holds at once and reports, as always (the
+# host honours the report against what this player had been sent: net/host.gd). Otherwise its look is one
+# mark of two: the figure is drawn as the snapshots say (it walks at a lone watcher; the "seeing" flag tells
+# the host it is one watcher), nothing is reported, and a hold already made is let go, in view, on the frame
+# the marks drop. So the figure never moves on a frame that shows every mark lit (Frame.eyes_all).
 extends RefCounted
 
 const Move = preload("res://sim/move.gd")
@@ -100,6 +127,10 @@ class LocalFrame:
 	var hide := false
 	var hide_fast := false
 	var peek := false
+	## The Annex: Q pressed this frame (place a mark at your feet, pointing where you face), and the id of a
+	## mark to peel (F held on it for Marks.PEEL_SECONDS ended this frame) or -1.
+	var mark := false
+	var peel := -1
 
 ## One rendered frame: what to draw.
 class Frame:
@@ -117,6 +148,16 @@ class Frame:
 	var seeing := false
 	## Latched as taken: the screen is blind (also `dark`) until the catch is drawn or called off.
 	var taken := false
+	## Two-watcher Stillness (see the header): the eye marks. Shown only while the local player sees the
+	## figure (eyes_on, a Stillness resident); `eyes_need` marks (1 or 2), `eyes_lit` of them lit (this
+	## player's own the frame they look, then one per other watcher the host counts); `eyes_all`: every
+	## mark lit, and the drawing held.
+	var eyes_on := false
+	var eyes_need := 1
+	var eyes_lit := 0
+	var eyes_all := false
+	## The one watcher it walks at while it needs two and has one (the watched walk), else "".
+	var watched_by := ""
 	## Depth of the floor drawn.
 	var depth := 1
 	## Everyone else, interpolated: {id, body (Move.Body), yaw, pitch, active, status, gait}.
@@ -206,6 +247,11 @@ var _calls := 0
 var _pick_ups := 0
 var _hides := 0
 var _fast_hides := 0
+var _marks := 0
+var _peels := 0
+var _peel_id := -1
+## The Annex's notes this client has, by id (the welcome's and the "note" events).
+var _notes := {}
 var _ack_ht := -INF
 var _place_applied := 0
 var _pending_place: Variant = null
@@ -223,6 +269,8 @@ var _latched_end := -INF
 var _latch: Variant = null  # {rt, armed, depth}
 var _caught_at := -INF
 var _orderly_from := -1
+## This frame's eye marks: [shown, need, lit, watched by] (_set_eyes).
+var _eyes_frame: Array = [false, 1, 0, ""]
 
 ## `interp_delay` (default INTERP_DELAY) and `input_interval` (default INPUT_INTERVAL; 0 sends every frame).
 ## `face`: the player's drawn face (FaceCodec text) to send in the join, or "" for none.
@@ -314,6 +362,67 @@ func quota() -> Variant:
 		return null
 	return latest.get("quota")
 
+## Down first, then out: who is down as the newest snapshot has it, [{id, at, until, by, healer, healFrom}]
+## (host times: out at `until` unless healed; a heal is done at healFrom + Run.HEAL_TIME). Empty when nobody
+## is down or the run has no down rule.
+func downs() -> Array:
+	if latest == null or latest.get("downs") == null:
+		return []
+	return latest["downs"]["down"]
+
+## One player's down as downs() has it, or null when they are not down.
+func down_of(player: String) -> Variant:
+	for d: Dictionary in downs():
+		if d["id"] == player:
+			return d
+	return null
+
+## This floor's red spots as the newest snapshot has them, [{playerId, x, z, level, y, t}]: where each
+## player who went out lay and their tape fell.
+func spots() -> Array:
+	if latest == null or latest.get("downs") == null:
+		return []
+	return latest["downs"]["spots"]
+
+## The Annex's marks as the newest snapshot has them: [{id, x, z, level, dir (0..7: Marks.dir_vector),
+## player, placedAt (host time)}], in the order placed. Empty off the Annex.
+func marks() -> Array:
+	if latest == null or latest.get("annex") == null:
+		return []
+	return latest["annex"]["marks"]
+
+## The crew's pad as the newest snapshot has it: {pad (marks left), size}, or null off the Annex.
+func mark_pad() -> Variant:
+	if latest == null or latest.get("annex") == null:
+		return null
+	var a: Dictionary = latest["annex"]
+	return {"pad": a["pad"], "size": a["padSize"]}
+
+## This floor's sticky notes, in the order posted: [{id, n, trigger, template, text, x, z, level, yaw, t}].
+## Empty off the Annex. A note posted this tick may come with a later snapshot.
+func notes() -> Array:
+	if latest == null or latest.get("annex") == null:
+		return []
+	var a: Dictionary = latest["annex"]
+	var from := int(a["notesFrom"])
+	var out: Array = []
+	for i in range(from + 1, from + int(a["noteCount"]) + 1):
+		if _notes.has(i):
+			out.append(_notes[i])
+	return out
+
+## Keeps a note (the welcome's or an event's), plain: {id, n, trigger, template, text, x, z, level, yaw, t}.
+func _keep_note(n: Dictionary) -> void:
+	var id := int(n["id"])
+	if _notes.has(id):
+		return
+	_notes[id] = {"id": id, "n": int(n["n"]), "trigger": str(n["trigger"]), "template": int(n["template"]), "text": str(n["text"]),
+		"x": float(n["x"]), "z": float(n["z"]), "level": int(n["level"]), "yaw": float(n["yaw"]), "t": float(n["t"])}
+	# Notes of floors left behind are dropped.
+	for k: int in _notes.keys():
+		if k < id - 256:
+			_notes.erase(k)
+
 ## The Playroom's newest count as its host event ({n, t0, len, last, by, why}), or {} before any (or on
 ## another floor): from the events, else from the newest snapshot's seek block (a player who joined
 ## during it never got its event).
@@ -370,6 +479,9 @@ func receive(now: float) -> void:
 				local_depth = w["depth"]
 				if w.get("day") != null:
 					_set_day(int(w["day"]["index"]))
+				if w.get("annex") != null and w["annex"].get("notes") != null:
+					for n: Dictionary in w["annex"]["notes"]:
+						_keep_note(n)
 				_insert(w)
 				_learn_blink(w)
 			"snap":
@@ -392,6 +504,8 @@ func receive(now: float) -> void:
 					var ev: Dictionary = _ev_buf[_ev_next]
 					if ev.get("type") == "caught" and ev.get("playerId") == id:
 						_caught_at = maxf(_caught_at, float(ev["t"]))
+					if ev.get("type") == "note":
+						_keep_note(ev)
 					events.append(ev)
 					_ev_buf.erase(_ev_next)
 					_ev_next += 1
@@ -549,6 +663,11 @@ func frame(now: float, local: LocalFrame) -> Frame:
 		_hides += 1
 		if local.hide_fast:
 			_fast_hides += 1
+	if local.mark:
+		_marks += 1
+	if local.peel >= 0:
+		_peels += 1
+		_peel_id = local.peel
 	latch_released = false
 	if id == null or seed == null:
 		if now - _last_join >= 0.5:
@@ -586,6 +705,7 @@ func frame(now: float, local: LocalFrame) -> Frame:
 	var blind: bool = dk[0] or taken
 
 	# The Orderly.
+	_eyes_frame = [false, 1, 0, ""]
 	var seeing_now := false
 	var report: Variant = null
 	var orderly: Variant = null
@@ -594,6 +714,8 @@ func frame(now: float, local: LocalFrame) -> Frame:
 		var b: Dictionary = show[1]
 		var alpha: float = show[2]
 		var a_depth: int = a["depth"]
+		var eyes := _eyes()
+		var enough: bool = eyes[0] <= 1 or eyes[1].size() >= eyes[0] - 1
 		# Pinned: until the snapshots drawn show the host has handled our last report, they are the
 		# timeline it is about to abandon (it puts the Orderly back where we froze it), so keep that.
 		if _pin != null and (int(_pin["depth"]) != a_depth or int(a.get("ackSeen", 0)) >= int(_pin["id"])):
@@ -610,10 +732,18 @@ func frame(now: float, local: LocalFrame) -> Frame:
 			_pin = null
 			if _drawn == null or not Pose.same_pose(_drawn, cand):
 				_drawn = cand
-		elif _frozen and same and _sees(plan, cam, _drawn, open, blind):
+		elif not pinned and _bending(a, b) and (not _frozen or not same or _same_spot(_drawn, cand)):
+			# Bent over a downed player: its bend is the one movement it makes while watched (sim/entity.gd,
+			# "except while it has someone"), so it is drawn as the snapshots say, seen or not. It stands
+			# where it caught them; a held pose somewhere else keeps the usual rule below.
+			seeing_now = _sees(plan, cam, cand, open, blind)
+			_frozen = false
+			if _drawn == null or not Pose.same_pose(_drawn, cand):
+				_drawn = cand
+		elif _frozen and same and enough and _sees(plan, cam, _drawn, open, blind):
 			# Seen: held exactly where it is, whatever the snapshots say.
 			seeing_now = true
-		elif _frozen and same and _sees(plan, cam, cand, open, blind):
+		elif _frozen and same and enough and _sees(plan, cam, cand, open, blind):
 			# The held pose has left the view but the snapshots' pose is in it: keep holding until
 			# neither is, so the jump between them never happens on screen.
 			pass
@@ -625,23 +755,30 @@ func frame(now: float, local: LocalFrame) -> Frame:
 				stats.max_release_jump = maxf(stats.max_release_jump, jump)
 				if jump > 0.25:
 					stats.big_releases += 1
-			if _sees(plan, cam, cand, open, blind):
+			if _sees(plan, cam, cand, open, blind) and enough:
 				_frozen = true
 				seeing_now = true
 				if not pinned:
 					report = _make_report(a, b, alpha, cand)
+			elif _sees(plan, cam, cand, open, blind):
+				# One mark of two: it walks on (at this player, perhaps), and this player is one watcher.
+				_frozen = false
+				seeing_now = true
 			else:
 				_frozen = false
 			if _drawn == null or not Pose.same_pose(_drawn, cand):
 				_drawn = cand
 		_drawn_depth = a_depth
 		orderly = _drawn
+		if Places.resident(plan.place).stillness:
+			_set_eyes(eyes, seeing_now, not pinned and not _bending(a, b))
 	else:
 		_drawn = null
 		_frozen = false
 	if seeing_now:
 		_seeing_latch = true
-	if seeing_now and _wind_up_on:
+	# A lone watcher of two saves nobody by looking: only a frame with every mark lit counts as seeing it.
+	if seeing_now and _wind_up_on and int(_eyes_frame[2]) >= int(_eyes_frame[1]):
 		_wind_up_saw = true
 
 	# Everyone else.
@@ -686,11 +823,52 @@ func frame(now: float, local: LocalFrame) -> Frame:
 	f.held = _frozen
 	f.seeing = seeing_now
 	f.taken = taken
+	f.eyes_on = bool(_eyes_frame[0]) and not blind
+	f.eyes_need = int(_eyes_frame[1])
+	f.eyes_lit = int(_eyes_frame[2]) if f.eyes_on else 0
+	f.eyes_all = f.eyes_on and f.eyes_lit >= f.eyes_need
+	f.watched_by = str(_eyes_frame[3]) if not blind else ""
 	f.depth = int(show[0]["depth"]) if not show.is_empty() else local_depth
 	f.players = players
 	f.render_time = rt
 	f.placed = placed
 	return f
+
+## Two-watcher Stillness: [need, the other players the newest snapshot counts as watchers, every one it
+## counts], from its watch block (none: [1, [], []]).
+func _eyes() -> Array:
+	var wb: Variant = latest.get("watch") if latest != null else null
+	if wb == null:
+		return [1, [], []]
+	var others: Array = []
+	for w: Variant in wb["watchers"]:
+		if str(w) != str(id):
+			others.append(str(w))
+	return [int(wb["need"]), others, wb["watchers"]]
+
+## This frame's eye marks ([shown, need, lit, watched by]) from the count (`eyes`, _eyes()) and the local look.
+## `free`: the figure may be walking (not pinned to a report, not bent over someone), for the watched walk.
+func _set_eyes(eyes: Array, seeing_now: bool, free: bool) -> void:
+	var need: int = eyes[0]
+	var others: Array = eyes[1]
+	var lit := mini(need, others.size() + (1 if seeing_now else 0))
+	var by := ""
+	if need >= 2 and free and lit < need:
+		var all: Array = eyes[2]
+		if all.size() == 1:
+			by = str(all[0])
+		elif all.is_empty() and seeing_now:
+			by = str(id)
+	_eyes_frame = [seeing_now, need, lit, by]
+
+## Both snapshots drawn have the resident bent over a downed player.
+static func _bending(a: Dictionary, b: Dictionary) -> bool:
+	return a["orderly"]["mode"] == "bending" and b["orderly"]["mode"] == "bending"
+
+## Two poses stand on the same spot, facing the same way (the animation aside).
+static func _same_spot(p: Dictionary, q: Dictionary) -> bool:
+	return int(p["level"]) == int(q["level"]) and absf(float(p["x"]) - float(q["x"])) < 0.011 and absf(float(p["z"]) - float(q["z"])) < 0.011 \
+		and absf(float(p["y"]) - float(q["y"])) < 0.011 and absf(_angle_diff(float(p["yaw"]), float(q["yaw"]))) < 0.002
 
 static func _sees(plan: Variant, cam: Pose.Camera, p: Dictionary, open: bool, blind: bool) -> bool:
 	return not blind and Session.camera_sees(plan, cam, p, open)
@@ -700,6 +878,12 @@ func _end_latch() -> void:
 	_wind_up_on = false
 	_wind_up_saw = false
 	_armed_end = null
+
+## The resident as a snapshot has it is past a catch: dormant (a catch without the down rule), or bent over
+## the one it caught (with it).
+static func _after_catch(w: Dictionary) -> bool:
+	var mode: String = w["orderly"]["mode"]
+	return mode == "dormant" or mode == "bending"
 
 func _mine(w: Variant) -> bool:
 	if w == null:
@@ -718,7 +902,7 @@ func _update_latch(show: Array, rt: float) -> bool:
 			if rt >= _caught_at - 1e-9:
 				_end_latch()
 			return false
-		var pending: bool = newest != null and int(newest["depth"]) == int(l["depth"]) and (_mine(newest) or newest["orderly"]["mode"] == "dormant")
+		var pending: bool = newest != null and int(newest["depth"]) == int(l["depth"]) and (_mine(newest) or _after_catch(newest))
 		var elapsed := rt - float(l["rt"])
 		if local_depth != int(l["depth"]) or not pending or (elapsed > LATCH_IDLE and not _mine(newest)) or elapsed > LATCH_MAX:
 			_end_latch()
@@ -745,7 +929,7 @@ func _update_latch(show: Array, rt: float) -> bool:
 	# The displayed wind-up has reached its end unseen. Only if the host's snapshots agree it ran to
 	# its end: still pending (held for our confirmation), or the catch made.
 	var due: bool = _wind_up_on and not _wind_up_saw and end != null and float(end) > _latched_end + 1e-6 and rt >= float(end) - 1e-6
-	var ran_to_end: bool = end != null and (_caught_at >= float(end) - 1e-6 or (newest != null and int(newest["depth"]) == int(a["depth"]) and (_mine(newest) or newest["orderly"]["mode"] == "dormant")))
+	var ran_to_end: bool = end != null and (_caught_at >= float(end) - 1e-6 or (newest != null and int(newest["depth"]) == int(a["depth"]) and (_mine(newest) or _after_catch(newest))))
 	if not on_me:
 		_wind_up_on = false
 		_wind_up_saw = false
@@ -817,6 +1001,10 @@ func _send(now: float, cam: Pose.Camera, local: LocalFrame, rt: float) -> void:
 	if _hides > 0:
 		m["hides"] = _hides
 		m["fastHides"] = _fast_hides
+	if _marks > 0 or _peels > 0:
+		m["marks"] = _marks
+		m["peels"] = _peels
+		m["peelId"] = _peel_id
 	if local.stamina != null:
 		var copy := Stamina.Stamina.new()
 		copy.level = local.stamina.level

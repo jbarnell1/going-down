@@ -37,17 +37,24 @@ const PROTOCOL_VERSION := 1
 const PHASES: Array[String] = ["arriving", "unloading", "away", "coming", "boarding", "riding", "ended", "night"]
 ## The Orderly's poses and modes first (their codes are as they were), then the Playroom's Minder's
 ## (sim/seek.gd MinderState: anim and mode).
+## Then the bend over a downed player (sim/entity.gd "bending" / "bend").
 const ANIMS: Array[String] = ["idle", "walk", "duck", "reach",
-	"stand", "straighten", "cover", "prowl", "sweep", "look", "slump", "run", "catch"]
+	"stand", "straighten", "cover", "prowl", "sweep", "look", "slump", "run", "catch",
+	"bend"]
 const MODES: Array[String] = ["waiting", "hunting", "windUp", "dormant",
-	"wander", "cover", "search", "sweep", "look", "slump", "run", "catch"]
+	"wander", "cover", "search", "sweep", "look", "slump", "run", "catch",
+	"bending"]
 ## The Playroom's per-player states (sim/seek.gd SeekPlayer), for the seek block.
 const SEEK_STATUSES: Array[String] = ["ok", "found", "taken", "down"]
 const SEEK_PHASES: Array[String] = ["out", "entering", "inside", "leaving"]
 ## Emotes that play a sound: on the Playroom, a noise that starts a count (playarea.md section 3).
 const SOUND_EMOTES: Array[String] = ["button"]
 const NEEDLES: Array[String] = ["off", "idle", "dormant", "recording", "contaminated"]
-const STATUSES: Array[String] = ["ok", "caught", "leftBehind"]
+## A player's status (sim/run.gd RunPlayer.status). Its code rides in a player row's flags: the low two bits
+## at bit 5, the third at bit 9 ("out" is the first code that needs it), so the old codes are as they were.
+const STATUSES: Array[String] = ["ok", "caught", "leftBehind", "down", "out"]
+## How a player went down (the downs block).
+const DOWN_BY: Array[String] = ["catch", "health"]
 const GAITS: Array[String] = ["walk", "creep", "sprint"]
 ## The emote wheel's emotes (client/crew_view.gd plays them). Not in protocol.ts: the emote messages
 ## ("E" client -> host, "M" host -> the other clients) are new in the Godot game. They change nothing
@@ -111,6 +118,38 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##  - events "callRefused" {playerId, earned, needed} (the call button was pressed below the quota and
 ##    did nothing) and "quotaMet" {depth, earned, needed, top} (once per floor, the tick it is met; top:
 ##    the player who recorded the most on the floor).
+## The Annex (sim/run.gd annex; docs/floors/annex.md sections 2 and 4; T16h). New in the Godot game, and only
+## ever sent on an Annex floor (or by a player who marks or peels), so a run that never reaches one sends
+## exactly what it did before:
+##  - the input may carry three more elements after the hides, [..., hides, fastHides, marks, peels,
+##    peelId] (the hides then 0 when there were none): how many times this player has pressed Q to place
+##    a mark, how many peels it has asked for, and the mark id of the newest peel (-1 before any).
+##    Counters, so a press is never lost with an input. Sent only once marks or peels > 0; decoded as
+##    "marks", "peels" and "peelId" (no keys when absent: read them as 0, 0, -1);
+##  - the world gains a 19th element, the annex block (enc_annex / "annex" decoded), with the 16th to 18th
+##    the day, seek and quota blocks or null: [pad (marks left on the crew's one pad), pad size, [[mark id,
+##    x, z, level, dir (0..7, Marks.dir_vector), player id, host time placed], ...], notesFrom (this
+##    floor's note ids are notesFrom + 1 on), noteCount] and, in the welcome only, a 6th element: every
+##    note of the floor so far, [[id, n, trigger, template, text, x, z, level, yaw, t], ...]. Notes are
+##    otherwise only events (each arrives exactly once), so a snapshot carries how many there are, not
+##    their text;
+##  - events "markStart" {playerId, x, z, level, dir}, "markPlaced" {playerId, mark {id, x, z, level, dir,
+##    player, placedAt}, pad, radius (the slap carries this far)}, "markPeeled" {playerId, id, owner, pad},
+##    "markRefused" {playerId, reason, peel (only for a peel)} and "note" {id, n, trigger, template, text,
+##    x, z, level, yaw} (the Temp's stapler: one loud click where the note is).
+## Down first, then out (sim/run.gd downs; North Star B6; T8a). New in the Godot game, and only ever sent when
+## the run has the down rule on, so a run without it sends exactly what it did before:
+##  - player statuses "down" (code 3) and "out" (code 4: the flags' bit 9 is the code's third bit);
+##  - the resident's mode "bending" and pose "bend" (appended to MODES and ANIMS): bent over a downed player,
+##    the one movement it makes while watched (sim/entity.gd);
+##  - the world gains a 20th element, the downs block (enc_downs / "downs" decoded), with the 16th to 19th the
+##    day, seek, quota and annex blocks or null: [[[player id, host time down, host time out unless healed,
+##    DOWN_BY index, healer id or "", host time the heal hold began or null], ...], [[player id, x, z, level,
+##    y, host time], ...] (this floor's red spots, where each tape fell)]. Times are host times, never
+##    durations: a heal is done at healFrom + Run.HEAL_TIME, the timer runs out at the second time;
+##  - events "downed" {playerId, until, by, at}, "healStart" {playerId (the healer), target, from, done},
+##    "healStop" {playerId, target}, "healed" {playerId, by, at} and "out" {playerId, at, spot (null when the
+##    car left without them)}. The resident's own "caught" still comes first, as before.
 
 ## Limits on what a client may send (the server refuses anything outside them).
 const MAX_NAME := 32
@@ -224,8 +263,9 @@ static func enc_world(w: Dictionary) -> Array:
 	var players: Array = []
 	for p: Dictionary in w["players"]:
 		var side: Variant = p["side"]
+		var sc := STATUSES.find(String(p["status"]))
 		var flags := (1 if p["active"] else 0) | (2 if p["aboard"] else 0) | (4 if p["connected"] else 0) \
-			| (8 if side == "bank" else (16 if side == "down" else 0)) | (STATUSES.find(String(p["status"])) << 5) | (GAITS.find(String(p["gait"])) << 7)
+			| (8 if side == "bank" else (16 if side == "down" else 0)) | ((sc & 3) << 5) | (GAITS.find(String(p["gait"])) << 7) | ((sc >> 2) << 9)
 		var row: Array = [p["id"]]
 		row.append_array(_enc_body(p["body"]))
 		row.append(q3(p["yaw"]))
@@ -255,6 +295,105 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < 17:
 			out.append(null)
 		out.append(enc_quota(w["quota"]))
+	if w.get("annex") != null:
+		while out.size() < 18:
+			out.append(null)
+		out.append(enc_annex(w["annex"]))
+	if w.get("downs") != null:
+		while out.size() < 19:
+			out.append(null)
+		out.append(enc_downs(w["downs"]))
+	if w.get("watch") != null:
+		while out.size() < 20:
+			out.append(null)
+		out.append(enc_watch(w["watch"]))
+	return out
+
+## The watch block (see the header) from its readable form {need, watchers: [ids]}.
+static func enc_watch(k: Dictionary) -> Array:
+	var ids: Array = []
+	for id: Variant in k["watchers"]:
+		ids.append(String(id))
+	return [k["need"], ids]
+
+static func dec_watch(c: _V, w: Variant) -> Dictionary:
+	var a := _a(c, w, 2, 2)
+	if c.bad:
+		return {}
+	var ids: Array = []
+	for id: Variant in _a(c, a[1], 0, 64):
+		ids.append(_s(c, id))
+	return {"need": _i(c, a[0], 1, 2), "watchers": ids}
+
+## The downs block (see the header) from its readable form {down: [{id, at, until, by, healer, healFrom}],
+## spots: [{playerId, x, z, level, y, t}]}.
+static func enc_downs(k: Dictionary) -> Array:
+	var down: Array = []
+	for d: Dictionary in k["down"]:
+		down.append([d["id"], q3(d["at"]), q3(d["until"]), DOWN_BY.find(String(d["by"])), d["healer"], null if d["healFrom"] == null else q3(d["healFrom"])])
+	var spots: Array = []
+	for p: Dictionary in k["spots"]:
+		spots.append([p["playerId"], q2(p["x"]), q2(p["z"]), p["level"], q2(p["y"]), q3(p["t"])])
+	return [down, spots]
+
+static func dec_downs(c: _V, w: Variant) -> Dictionary:
+	var a := _a(c, w, 2, 2)
+	if c.bad:
+		return {}
+	var down: Array = []
+	for dw: Variant in _a(c, a[0], 0, 64):
+		var d := _a(c, dw, 6, 6)
+		if c.bad:
+			return {}
+		down.append({"id": _s(c, d[0]), "at": _f(c, d[1]), "until": _f(c, d[2]), "by": _code(c, DOWN_BY, d[3]), "healer": _s(c, d[4]),
+			"healFrom": _opt_num(c, d[5])})
+	var spots: Array = []
+	for pw: Variant in _a(c, a[1], 0, 256):
+		var p := _a(c, pw, 6, 6)
+		if c.bad:
+			return {}
+		spots.append({"playerId": _s(c, p[0]), "x": _f(c, p[1], -MAX_COORD, MAX_COORD), "z": _f(c, p[2], -MAX_COORD, MAX_COORD), "level": _i(c, p[3], 0, 1),
+			"y": _f(c, p[4], -MAX_COORD, MAX_COORD), "t": _f(c, p[5])})
+	return {"down": down, "spots": spots}
+
+## The annex block (see the header) from its readable form {pad, padSize, marks: [{id, x, z, level, dir,
+## player, placedAt}], notesFrom, noteCount} and, in the welcome, notes: [{id, n, trigger, template, text,
+## x, z, level, yaw, t}].
+static func enc_annex(k: Dictionary) -> Array:
+	var marks: Array = []
+	for m: Dictionary in k["marks"]:
+		marks.append([m["id"], q2(m["x"]), q2(m["z"]), m["level"], m["dir"], m["player"], q3(m["placedAt"])])
+	var out: Array = [k["pad"], k["padSize"], marks, k["notesFrom"], k["noteCount"]]
+	if k.get("notes") != null:
+		var notes: Array = []
+		for n: Dictionary in k["notes"]:
+			notes.append([n["id"], n["n"], n["trigger"], n["template"], n["text"], q2(n["x"]), q2(n["z"]), n["level"], q3(n["yaw"]), q3(n["t"])])
+		out.append(notes)
+	return out
+
+static func dec_annex(c: _V, w: Variant) -> Dictionary:
+	var a := _a(c, w, 5, 6)
+	if c.bad:
+		return {}
+	var marks: Array = []
+	for mw: Variant in _a(c, a[2], 0, 256):
+		var m := _a(c, mw, 7, 7)
+		if c.bad:
+			return {}
+		marks.append({"id": _i(c, m[0], 0, MAX_COUNT), "x": _f(c, m[1], -MAX_COORD, MAX_COORD), "z": _f(c, m[2], -MAX_COORD, MAX_COORD),
+			"level": _i(c, m[3], 0, 1), "dir": _i(c, m[4], 0, 7), "player": _s(c, m[5]), "placedAt": _f(c, m[6])})
+	var out := {"pad": _i(c, a[0], 0, MAX_COUNT), "padSize": _i(c, a[1], 0, MAX_COUNT), "marks": marks, "notesFrom": _i(c, a[3], 0, MAX_COUNT),
+		"noteCount": _i(c, a[4], 0, MAX_COUNT)}
+	if a.size() > 5:
+		var notes: Array = []
+		for nw: Variant in _a(c, a[5], 0, 256):
+			var n := _a(c, nw, 10, 10)
+			if c.bad:
+				return {}
+			notes.append({"id": _i(c, n[0], 1, MAX_COUNT), "n": _i(c, n[1], 1, MAX_COUNT), "trigger": _s(c, n[2], 16), "template": _i(c, n[3], 0, MAX_COUNT),
+				"text": _s(c, n[4], 512), "x": _f(c, n[5], -MAX_COORD, MAX_COORD), "z": _f(c, n[6], -MAX_COORD, MAX_COORD), "level": _i(c, n[7], 0, 1),
+				"yaw": _f(c, n[8], -MAX_COORD, MAX_COORD), "t": _f(c, n[9])})
+		out["notes"] = notes
 	return out
 
 ## The quota block (see the header) from its readable form {earned, needed}.
@@ -358,9 +497,15 @@ static func encode(m: Dictionary) -> String:
 				| (32 if m.get("use", false) == true else 0) | (64 if m.get("peek", false) == true else 0)
 			var inp: Array = [PROTOCOL_VERSION, "I", m["seq"], floor3(m["ct"]), _enc_body(m["body"]), q2(m["eye"]), q3(m["yaw"]), q3(m["pitch"]),
 				q2(m["hFovDeg"]), q2(m["vFovDeg"]), flags, m["calls"], m["pickUps"], m["ackEvent"], m["ackHt"], floor3(m["renderTime"]), m["placeAck"], seen]
-			if int(m.get("hides", 0)) > 0:
-				inp.append(int(m["hides"]))
+			var marks := int(m.get("marks", 0))
+			var peels := int(m.get("peels", 0))
+			if int(m.get("hides", 0)) > 0 or marks > 0 or peels > 0:
+				inp.append(int(m.get("hides", 0)))
 				inp.append(int(m.get("fastHides", 0)))
+			if marks > 0 or peels > 0:
+				inp.append(marks)
+				inp.append(peels)
+				inp.append(int(m.get("peelId", -1)))
 			return JsJson.stringify(inp)
 		"join":
 			var j: Array = [PROTOCOL_VERSION, "J", m["name"], m["ct"]]
@@ -456,7 +601,7 @@ static func _opt_num(c: _V, v: Variant) -> Variant:
 	return null if v == null else _f(c, v)
 
 static func dec_world(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 15, 18)
+	var a := _a(c, w, 15, 21)
 	if c.bad:
 		return {}
 	var blink: Variant = null
@@ -485,7 +630,7 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 			"id": _s(c, p[0]), "body": _dec_body(c, p.slice(1, 5)), "yaw": _f(c, p[5]), "pitch": _f(c, p[6]),
 			"active": (f & 1) != 0, "aboard": (f & 2) != 0, "connected": (f & 4) != 0,
 			"side": "bank" if f & 8 else ("down" if f & 16 else null),
-			"status": _code(c, STATUSES, (f >> 5) & 3), "gait": _code(c, GAITS, (f >> 7) & 3),
+			"status": _code(c, STATUSES, ((f >> 5) & 3) | (((f >> 9) & 1) << 2)), "gait": _code(c, GAITS, (f >> 7) & 3),
 		})
 	var crew: Array = []
 	for mw: Variant in _a(c, a[12], 0, 64):
@@ -518,8 +663,14 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 		out["day"] = dec_day(c, a[15])
 	if a.size() > 16 and (a[16] != null or a.size() == 17):
 		out["seek"] = dec_seek(c, a[16])
-	if a.size() > 17:
+	if a.size() > 17 and (a[17] != null or a.size() == 18):
 		out["quota"] = dec_quota(c, a[17])
+	if a.size() > 18 and (a[18] != null or a.size() == 19):
+		out["annex"] = dec_annex(c, a[18])
+	if a.size() > 19 and (a[19] != null or a.size() == 20):
+		out["downs"] = dec_downs(c, a[19])
+	if a.size() > 20:
+		out["watch"] = dec_watch(c, a[20])
 	return out
 
 static func _dec_report(c: _V, w: Variant) -> Dictionary:
@@ -580,7 +731,7 @@ static func decode(text: String) -> Variant:
 					st.winded = _f(c, sa[1]) == 1.0
 					out["stamina"] = st
 		"I":
-			if a.size() != 18 and a.size() != 20:
+			if a.size() != 18 and a.size() != 20 and a.size() != 23:
 				return null
 			var f := _i(c, a[10], 0, 127)
 			var gait := (f >> 3) & 3
@@ -601,9 +752,15 @@ static func decode(text: String) -> Variant:
 				out["use"] = true
 			if f & 64:
 				out["peek"] = true
-			if a.size() == 20:
+			if a.size() == 20 or (a.size() == 23 and not (_is_num(a[18]) and float(a[18]) == 0.0)):
 				out["hides"] = _i(c, a[18], 1, MAX_COUNT)
 				out["fastHides"] = _i(c, a[19], 0, out["hides"])
+			elif a.size() == 23 and not (_is_num(a[19]) and float(a[19]) == 0.0):
+				return null
+			if a.size() == 23:
+				out["marks"] = _i(c, a[20], 0, MAX_COUNT)
+				out["peels"] = _i(c, a[21], 0, MAX_COUNT)
+				out["peelId"] = _i(c, a[22], -1, MAX_COUNT)
 		"J":
 			# [1, "J", name, ct] or [1, "J", name, ct, face]; a face that is not valid is no face.
 			if a.size() != 4 and a.size() != 5:
