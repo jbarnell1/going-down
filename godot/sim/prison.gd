@@ -52,6 +52,19 @@ const COUNTER_FACING := Vector2i(0, 1)
 ## face the counter. Facing south your left is east, so window 1 is the east end. The glass is the
 ## room's south wall (between rows 11 and 12).
 const WINDOWS: Array[Vector2i] = [Vector2i(7, 11), Vector2i(6, 11), Vector2i(5, 11), Vector2i(4, 11)]
+## What each teller window sells (owner, 17 November): windows 1-2 are the SHOP (one-day items: flares,
+## batteries, spare tape, extra marks), windows 3-4 the SKILL TREE (the permanent upgrades). Numbers as
+## in WINDOWS (1 is the first).
+const SHOP_WINDOWS: Array[int] = [1, 2]
+const SKILLS_WINDOWS: Array[int] = [3, 4]
+## The face kiosk (owner, 17 November: "a kiosk in the prison that can enable players to change their
+## faces, separate from the shop and skill tree"): the stand cell in the hall in front of it, between
+## cell 3 (north) and cell 6 (south), on the way from the lift to the farthest bunks. The kiosk stands
+## against the hall's wall on the KIOSK_FACING side (the wall of cell 3, beside its door), and stands
+## KIOSK_DEPTH_M out from that wall. It is drawn only: no rule collides with it.
+const KIOSK := Vector2i(9, 8)
+const KIOSK_FACING := Vector2i(0, -1)
+const KIOSK_DEPTH_M := 0.4
 ## The report board: the stand cell in front of it, on the bank room's east wall.
 const REPORT_BOARD := Vector2i(7, 9)
 ## The day board, beside the lift doors, and the mugshot wall at the hall's far end: both stand cells.
@@ -100,6 +113,24 @@ static func bunk_positions() -> Array[Vector2i]:
 ## The four teller window stand cells, numbered left to right as the player faces the counter.
 static func window_positions() -> Array[Vector2i]:
 	return WINDOWS.duplicate()
+
+## The face kiosk's stand cell (see KIOSK).
+static func kiosk_position() -> Vector2i:
+	return KIOSK
+
+## What a player standing on `cell` can use with F: &"shop" or &"skills" at a teller window, &"kiosk"
+## at the face kiosk, &"" anywhere else.
+static func station_at(cell: Vector2i) -> StringName:
+	if cell == KIOSK:
+		return &"kiosk"
+	var i := WINDOWS.find(cell)
+	if i < 0:
+		return &""
+	if SHOP_WINDOWS.has(i + 1):
+		return &"shop"
+	if SKILLS_WINDOWS.has(i + 1):
+		return &"skills"
+	return &""
 
 ## The hand-laid plan. Same every call.
 static func prison_plan() -> Floor.FloorPlan:

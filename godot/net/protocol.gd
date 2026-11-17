@@ -49,6 +49,10 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    face decodes exactly as before (no "face" key);
 ##  - the host passes each face on to the other players in the run, once: [1, "F", player id, face]
 ##    (host -> client only; the room server refuses it from a client). Never in the 20 Hz snapshot.
+##  - a player who changes their face during the run (the prison's face kiosk) sends it: [1, "C", face]
+##    (client -> host). A "C" whose face is not valid still decodes, as {"type": "setFace", "face": ""},
+##    so the room server passes it on and the host ignores it: a bad face never kicks anyone. The host
+##    takes at most one change per player every Host.FACE_GAP seconds and passes it on with "F".
 ## The face goes only to the other players in the same run: nothing else stores or logs it.
 
 ## Limits on what a client may send (the server refuses anything outside them).
@@ -57,6 +61,10 @@ const MAX_SEEN := 8
 const MAX_COORD := 10000.0
 const MAX_CLOCK := 1e9
 const MAX_COUNT := 2147483647
+## The host takes at most one face change ("C") per player every FACE_GAP seconds (net/host.gd); the
+## client holds back a newer face until the gap (and FACE_SEND_SLACK more, for the link) has passed.
+const FACE_GAP := 5.0
+const FACE_SEND_SLACK := 0.5
 
 # ---------------------------------------------------------------------------------------------
 # Numbers.
@@ -201,7 +209,8 @@ static func snapshot_text(head: Dictionary, event_texts: PackedStringArray, worl
 	])
 	return "[%d,\"S\",[%s],%s]" % [PROTOCOL_VERSION, ",".join(parts), world]
 
-## Serialises a message (input, join, welcome, leave, ping, pong, emote, emoted, face) to its wire text.
+## Serialises a message (input, join, welcome, leave, ping, pong, emote, emoted, face, setFace) to its
+## wire text.
 static func encode(m: Dictionary) -> String:
 	match String(m["type"]):
 		"input":
@@ -219,6 +228,8 @@ static func encode(m: Dictionary) -> String:
 			return JsJson.stringify(j)
 		"face":
 			return JsJson.stringify([PROTOCOL_VERSION, "F", m["player"], m["face"]])
+		"setFace":
+			return JsJson.stringify([PROTOCOL_VERSION, "C", m["face"]])
 		"welcome":
 			return JsJson.stringify([PROTOCOL_VERSION, "W", m["you"], m["seed"], 1 if m["playing"] else 0, m["evFrom"], enc_world(m["world"])])
 		"leave":
@@ -452,6 +463,11 @@ static func decode(text: String) -> Variant:
 			if ff == "":
 				return null
 			out = {"type": "face", "player": _s(c, a[2]), "face": ff}
+		"C":
+			# A player's new face: [1, "C", face]. A face that is not valid is "" (ignored by the host).
+			if a.size() != 3:
+				return null
+			out = {"type": "setFace", "face": valid_face(a[2])}
 		"W":
 			if a.size() != 7:
 				return null

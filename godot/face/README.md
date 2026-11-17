@@ -150,6 +150,11 @@ back wall inside the car, `set_faces`). Under automation the game saves to
 `tools/play_net.mjs` (each player sees the other's face on the mask; the monitor shows both). Steps 5
 to 7 are left.
 
+Changing your face mid-run: the prison's face kiosk (`sim/prison.gd` `kiosk_position()`, drawn by
+`client/prison_view.gd` with your face on its screen) opens this editor over the game
+(`client/face_kiosk.gd`, title CHANGE YOUR FACE, on your current face); Done sends the new face
+(protocol "C", at most one change every 5 s, `net/README.md` Faces), Cancel keeps the old one.
+
 1. **Start screen, before the run.** Add a "draw your face" step to the start screen (or the lobby)
    before the elevator: instance `face_editor.tscn`, full rect, with `remember = true`; it opens on
    the player's last face, so returning players can press Enter at once. Keep the resulting `code`

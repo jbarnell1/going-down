@@ -8,6 +8,8 @@
 //   - the lobby lists both names; Start (pressed by one) starts the run for both;
 //   - each sees the OTHER player's drawn face on that crewmate's mask (the picture on the mask, hashed,
 //     against the face the other drew), and the lift's monitor shows both faces;
+//   - B changes face mid-run at the face kiosk (the kiosk's own editor, opened by the test hook as F
+//     at the prison's kiosk opens it): A sees B's new face on B's mask and on the lift's monitor;
 //   - each sees the other as a crewmate where the other really stands (the drawn figure's position
 //     against the other's own body), drawn, with a readable name tag; a picture from each;
 //   - the emote wheel: one aims and lets go, the other sees the emote on that figure;
@@ -19,7 +21,7 @@
 // Pictures in export/shots/net/. Prints `N passed, M failed`; exit code 1 on any failure.
 //   node godot/tools/play_net.mjs [--port=4460] [--web=4464|0] [--keep]
 // The game windows' test channels are on port+1..port+3. Start .local/guard-mouse.ps1 beside it.
-// Ports 4460-4479 only; every process it starts is stopped.
+// Ports 4460-4489 only; every process it starts is stopped.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
@@ -38,7 +40,7 @@ const shots = resolve(here, '../export/shots/net');
 const SECRET = 'test-passphrase';
 const url = `ws://127.0.0.1:${port}`;
 const testPorts = [port + 1, port + 2, port + 3];
-for (const p of [port, ...testPorts, ...(webPort ? [webPort] : [])]) if (!(p >= 4460 && p <= 4479)) throw new Error(`port ${p} is outside 4460-4479`);
+for (const p of [port, ...testPorts, ...(webPort ? [webPort] : [])]) if (!(p >= 4460 && p <= 4489)) throw new Error(`port ${p} is outside 4460-4489`);
 if (webPort && [port, ...testPorts].includes(webPort)) throw new Error(`the web port ${webPort} is one of the game's ports`);
 if (!existsSync(exe)) throw new Error(`no Windows build at ${exe}: npm run godot:export first`);
 mkdirSync(shots, { recursive: true });
@@ -230,6 +232,24 @@ try {
     `on A's screen B's mask shows ${facesA.masks[b.me.id]} (B drew ${facesB.own}); on B's screen A's mask shows ${facesB.masks[a.me.id]} (A drew ${facesA.own}); default face ${facesA.default}; ${apart.toFixed(2)} m apart`);
   check("faces came once each from the host (each received exactly the other's)", facesA.received === 1 && facesB.received === 1, `A received ${facesA.received}, B ${facesB.received}`);
   await A.shot('13-ann-sees-bobs-face.png');
+
+  // ---- 5b. Bob changes his face mid-run at the face kiosk: the kiosk's editor opens on his face, he
+  // starts from the smile and adds yellow cheeks, Done. Ann sees the new face on his mask and the monitor.
+  const opened = await B.cmd('kiosk open');
+  const kf = JSON.parse(await B.cmd('faces'));
+  check('the face kiosk opens mid-run on Bob\'s screen', opened === 'ok' && kf.kioskOpen === true, `kiosk open: ${opened}`);
+  for (const st of ['press starter:smile', 'press colour:5', 'press brush:2', 'line 5 19 8 19', 'line 24 19 27 19']) await B.cmd(`kiosk ${st}`);
+  await sleep(150);
+  await B.shot('15-bob-at-the-face-kiosk.png');
+  const doneK = await B.cmd('kiosk done');
+  const fB2 = JSON.parse(await B.cmd('faces'));
+  const fA2 = await until(async () => JSON.parse(await A.cmd('faces')), (f) => f.masks[b.me.id] === fB2.own && f.monitor.includes(fB2.own), 8000, 100);
+  check("Bob's new face reaches Ann: on his mask and on the lift's monitor", doneK === 'ok' && !fB2.kioskOpen && fB2.own !== facesB.own
+    && fA2.masks[b.me.id] === fB2.own && fA2.monitor.includes(fB2.own) && !fA2.monitor.includes(facesB.own) && fB2.monitor.includes(fB2.own),
+    `Bob drew ${facesB.own}, now ${fB2.own}; on Ann's screen his mask shows ${fA2.masks[b.me.id]}, her monitor ${JSON.stringify(fA2.monitor)}; Bob's monitor ${JSON.stringify(fB2.monitor)}`);
+  check('the change came as one face message (Ann still holds one face: Bob\'s)', fA2.received === 1, `Ann received ${fA2.received}`);
+  await sleep(300);
+  await A.shot('16-ann-sees-bobs-new-face.png');
 
   // ---- 6. The emote wheel: A holds R, aims at WAVE (the top), lets go; B sees it on A's figure.
   await A.cmd('wheel open');

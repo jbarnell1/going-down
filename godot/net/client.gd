@@ -142,6 +142,8 @@ var emotes: Array[Dictionary] = []
 ## the host passed them on: player id -> FaceCodec text (only valid faces get this far).
 var face := ""
 var faces := {}
+var _face_pending := false
+var _last_face_send := -INF
 
 var host_id: String
 var name: String
@@ -198,6 +200,33 @@ func _send_join(now: float) -> void:
 	if face != "":
 		m["face"] = face
 	_transport.send(host_id, Protocol.encode(m))
+
+## Changes this player's face during the run (the face kiosk): `face` shows at once on this screen
+## (crew_faces in play_link.gd) and goes to the host, which passes it to the others. The host takes one
+## change every Protocol.FACE_GAP seconds, so a change sooner than that after the last one sent waits
+## and goes out with a later frame (only the newest waiting face is sent). Not a valid face: refused,
+## false. Before the welcome the face just rides in the repeated join.
+func change_face(face_: String, now: float) -> bool:
+	var f := Protocol.valid_face(face_)
+	if f == "":
+		return false
+	face = f
+	_face_pending = id != null
+	_flush_face(now)
+	return true
+
+func _flush_face(now: float) -> void:
+	if not _face_pending or ended or id == null:
+		return
+	if now - _last_face_send < Protocol.FACE_GAP + Protocol.FACE_SEND_SLACK:
+		return
+	_face_pending = false
+	_last_face_send = now
+	_transport.send(host_id, Protocol.encode({"type": "setFace", "face": face}))
+
+## A face change is waiting for the host's gap (tests).
+func face_change_waiting() -> bool:
+	return _face_pending
 
 ## Plays an emote for the others (one of Protocol.EMOTES; the host passes it on, rate limited).
 func emote(which: String) -> void:
@@ -435,6 +464,7 @@ func frame(now: float, local: LocalFrame) -> Frame:
 		var e := Frame.new()
 		e.depth = local_depth
 		return e
+	_flush_face(now)
 	var placed: Move.Body = null
 	if _pending_place != null and int(_pending_place["seq"]) > _place_applied:
 		placed = _pending_place["body"]

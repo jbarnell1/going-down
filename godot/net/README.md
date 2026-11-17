@@ -56,6 +56,14 @@ players in the same run, and nothing stores or logs it on the way:
   other player's face (so a late joiner has everyone's), and the others get the joiner's once (when it
   is new or changed). Never in the 20 Hz snapshot. The client keeps them in `client.faces` (player id
   -> text); its own is `client.face`. `server/room.gd` refuses "F" from a client.
+- `[1, "C", face]` client to host (decoded type `setFace`): this player changed their face during the
+  run (the prison's face kiosk, `client/face_kiosk.gd`). A face that is not valid decodes as `""`, so
+  the room server passes it and the host ignores it: nobody is kicked for a bad face. The host takes
+  at most one change per player every `Protocol.FACE_GAP` (5 s), keeps it (a late joiner gets the new
+  one) and passes it on once with "F"; the rest are dropped (`face_changes`, `face_changes_ignored`).
+  `Client.change_face(face, now)` shows it at once on this screen and holds a change made sooner than
+  the gap (plus `FACE_SEND_SLACK`) after the last one sent until a later frame, sending only the newest;
+  `RoomClient.set_face(face)` also puts it in every later run's join. Worst case 525 bytes.
 
 `NetHost.faces_sent` counts the face messages (outside `HostStats`); `relay_faces = false` stops
 them (tests use it to show the checks can fail). `tests/prop_face_net.gd` (run alone with

@@ -34,7 +34,10 @@
 #
 # Faces: a join may carry the player's drawn face (protocol "J", fifth element). The host keeps it and
 # passes it to the other players once ("F"); a joiner (also a late one) gets everyone else's faces after
-# its welcome. Faces never go in the snapshot and never touch the run.
+# its welcome. A player may change their face during the run (protocol "C", the prison's face kiosk): a
+# valid new face is kept and passed to the others with "F", at most one change per player every
+# FACE_GAP seconds; a face that is not valid, or one too soon, is ignored (nobody is kicked for it).
+# Faces never go in the snapshot and never touch the run.
 #
 # Events are numbered and kept; each snapshot carries the events after the ones its client has
 # acknowledged (up to EVENT_BUDGET bytes), so they arrive exactly once and in order.
@@ -61,6 +64,10 @@ const HISTORY_TICKS := 60  # ceil(HISTORY_SECONDS / TICK)
 const STATE_TICKS := 200
 ## A player's emotes are passed on at most once per this many seconds; the rest are dropped.
 const EMOTE_GAP := 0.4
+## A player's face changes ("C") are taken at most once per this many seconds (host time); the rest
+## are dropped. Each change is passed on to every other player, so this caps what one player can make
+## the host send.
+const FACE_GAP := Protocol.FACE_GAP
 
 class HostPlayer:
 	var id: String
@@ -100,6 +107,8 @@ class HostPlayer:
 	var last_emote := -INF
 	## The face this player drew (FaceCodec text, already validated by the protocol), or "".
 	var face := ""
+	## Host time of the newest face change taken (the face change rate limit).
+	var last_face_change := -INF
 
 class History:
 	var o: Entity.OrderlyState
@@ -161,6 +170,9 @@ var emotes_dropped := 0
 ## show the check that would catch it).
 var faces_sent := 0
 var relay_faces := true
+## Face changes ("C") taken, and ignored (not a valid face, or within FACE_GAP of the last one).
+var face_changes := 0
+var face_changes_ignored := 0
 var _transport: Transport.Transport
 var _start_local: float
 var _players := {}  # id -> HostPlayer, in arrival order
@@ -353,6 +365,31 @@ func _on_message(from: String, data: String, now: float) -> void:
 			var p: HostPlayer = _players.get(id) if id != null else null
 			if p != null and p.connected and not p.left and p.joined:
 				_relay_emote(p, m["emote"], ht)
+		"setFace":
+			var id: Variant = _by_peer.get(from)
+			var p: HostPlayer = _players.get(id) if id != null else null
+			if p != null and p.connected and not p.left and p.joined:
+				_change_face(p, str(m["face"]), ht)
+
+## A player's new face (the face kiosk): kept and passed on to every other player, once, with "F".
+## Ignored when it is not a valid face (the protocol made it ""), when it is the face already kept, or
+## within FACE_GAP seconds of the last change taken.
+func _change_face(p: HostPlayer, face: String, ht: float) -> void:
+	if face == "" or ht - p.last_face_change < FACE_GAP:
+		face_changes_ignored += 1
+		return
+	p.last_face_change = ht
+	if face == p.face:
+		return
+	p.face = face
+	face_changes += 1
+	if not relay_faces:
+		return
+	var text := Protocol.encode({"type": "face", "player": p.id, "face": face})
+	for q: HostPlayer in _players.values():
+		if q != p and q.connected and not q.left and q.joined:
+			_transport.send(q.peer, text)
+			faces_sent += 1
 
 ## An emote: passed on to every other player in the room (not back to its sender), rate limited.
 func _relay_emote(p: HostPlayer, emote: String, ht: float) -> void:

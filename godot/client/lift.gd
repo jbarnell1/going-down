@@ -75,9 +75,10 @@ func build(car: Dictionary) -> void:
 	_box(Vector3(-DOOR_HALF - fw * 0.5, CAR_H * 0.5, -FRONT - 0.01), Vector3(fw, CAR_H, 0.02), steel)
 	_box(Vector3(DOOR_HALF + fw * 0.5, CAR_H * 0.5, -FRONT - 0.01), Vector3(fw, CAR_H, 0.02), steel)
 	_box(Vector3(0, (DOOR_H + CAR_H) * 0.5, -FRONT - 0.01), Vector3(DOOR_HALF * 2, CAR_H - DOOR_H, 0.02), steel)
-	# A dark frame around the doors on the landing side.
-	_box(Vector3(-DOOR_HALF - 0.06, DOOR_H * 0.5, LAND + 0.02), Vector3(0.12, DOOR_H + 0.12, 0.04), dark)
-	_box(Vector3(DOOR_HALF + 0.06, DOOR_H * 0.5, LAND + 0.02), Vector3(0.12, DOOR_H + 0.12, 0.04), dark)
+	# A dark frame around the doors on the landing side. The jambs stop under the header: overlapping
+	# it, their faces shared its planes and flickered (z-fighting).
+	_box(Vector3(-DOOR_HALF - 0.06, DOOR_H * 0.5, LAND + 0.02), Vector3(0.12, DOOR_H, 0.04), dark)
+	_box(Vector3(DOOR_HALF + 0.06, DOOR_H * 0.5, LAND + 0.02), Vector3(0.12, DOOR_H, 0.04), dark)
 	_box(Vector3(0, DOOR_H + 0.06, LAND + 0.02), Vector3(DOOR_HALF * 2 + 0.24, 0.12, 0.04), dark)
 	# Doors.
 	_left = Node3D.new()

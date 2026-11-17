@@ -2,7 +2,9 @@
 # no entity; every walkable cell reachable from the lift; eight bunks, one per cell; four teller
 # windows in the bank room; no bunk more than 20 m of walking from the lift; the same plan on every
 # call; the lift's shaft zone clear; the tellers' side of the counter out of reach; the windows
-# numbered left to right as you face them; each bunk standing where the look draws it. Oracles are
+# numbered left to right as you face them; each bunk standing where the look draws it; the face kiosk in
+# the hall by the cells, on the way to bed, blocking no door or walk, its screen showing the face it is
+# given; SHOP over windows 1-2 and SKILLS over windows 3-4, readable from the bank door. Oracles are
 # written here from floor.gd's step rule only, and the look is built from the same plan to check it.
 extends RefCounted
 
@@ -11,6 +13,7 @@ const Floor = preload("res://sim/floor.gd")
 const Prison = preload("res://sim/prison.gd")
 const PrisonView = preload("res://client/prison_view.gd")
 const LevelScript = preload("res://client/level.gd")
+const Walls = preload("res://sim/walls.gd")
 
 ## Every position reachable from the landing, as pos_index keys (a flood fill over can_step).
 func _flood(p: Floor.FloorPlan) -> Dictionary:
@@ -41,6 +44,8 @@ func _map(p: Floor.FloorPlan) -> String:
 		grid[b.y] = _put(grid[b.y], b.x, "B")
 	for w in Prison.window_positions():
 		grid[w.y] = _put(grid[w.y], w.x, "w")
+	var k := Prison.kiosk_position()
+	grid[k.y] = _put(grid[k.y], k.x, "K")
 	return "\n".join(PackedStringArray(grid))
 
 func _put(row: String, x: int, ch: String) -> String:
@@ -63,7 +68,7 @@ func test_every_walkable_cell_and_room_reachable_from_the_landing(t: T) -> void:
 		t.check(seen.has(Floor.pos_index(p, Floor.Pos.make(r.level, r.x, r.y))), "room %d (%s) not reachable" % [r.id, r.kind])
 	t.check(Floor.is_walkable(p, p.landing.level, p.landing.x, p.landing.y), "the landing is not walkable")
 	t.note("%d walkable cells, %d rooms, %d doors" % [walkable, p.rooms.size(), p.doors.size()])
-	t.note("map (B bunk, w teller window stand cell, E lift landing, + door, . hall, # void):")
+	t.note("map (B bunk, w teller window stand cell, K face kiosk stand cell, X lift landing, + door, . hall, # void):")
 	for line in _map(p).split("\n"):
 		t.note("  " + line)
 
@@ -257,4 +262,246 @@ func test_each_bunk_stands_where_it_is_drawn(t: T) -> void:
 		var far_edge := Vector2((bunks[i].x + 0.5 + fwd.x * 0.5) * 2.0, (bunks[i].y + 0.5 + fwd.y * 0.5) * 2.0)
 		var gap := absf((far_edge - Vector2(c.x, c.z)).dot(Vector2(fwd)))
 		t.check(gap < 0.6, "bunk %d is %.2f m off its back wall" % [i + 1, gap])
+	(built[0] as Node).free()
+
+## Every triangle drawn under `root` (Level space): [a, b, c, normal, plane offset, mesh name].
+static func _triangles(root: Node3D) -> Array:
+	var out: Array = []
+	for n: Node in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		if mi.mesh == null or not mi.visible:
+			continue
+		var xf := Transform3D.IDENTITY
+		var up: Node = mi
+		while up != null and up != root:
+			if up is Node3D:
+				xf = (up as Node3D).transform * xf
+			up = up.get_parent()
+		for s in mi.mesh.get_surface_count():
+			var arrays := mi.mesh.surface_get_arrays(s)
+			var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+			var count := idx.size() if idx.size() > 0 else verts.size()
+			for i in range(0, count - 2, 3):
+				var a := xf * verts[idx[i] if idx.size() > 0 else i]
+				var b := xf * verts[idx[i + 1] if idx.size() > 0 else i + 1]
+				var c := xf * verts[idx[i + 2] if idx.size() > 0 else i + 2]
+				var nn := (b - a).cross(c - a)
+				if nn.length() < 1e-8:
+					continue
+				nn = nn.normalized()
+				out.append([a, b, c, nn, nn.dot(a), String(mi.name)])
+	return out
+
+## How far two triangles in one plane overlap: the smallest overlap of their shadows on the six edge
+## normals (separating axes). Zero or less: apart or only touching along an edge or at a corner.
+static func _overlap_in_plane(p: Array, q: Array, n: Vector3) -> float:
+	var u := n.cross(Vector3.UP if absf(n.y) < 0.9 else Vector3.RIGHT).normalized()
+	var v := n.cross(u)
+	var pa: Array[Vector2] = []
+	var qa: Array[Vector2] = []
+	for i in 3:
+		pa.append(Vector2((p[i] as Vector3).dot(u), (p[i] as Vector3).dot(v)))
+		qa.append(Vector2((q[i] as Vector3).dot(u), (q[i] as Vector3).dot(v)))
+	var least := INF
+	for tri: Array[Vector2] in [pa, qa]:
+		for i in 3:
+			var e := tri[(i + 1) % 3] - tri[i]
+			var ax := Vector2(-e.y, e.x).normalized()
+			var lo1 := INF
+			var hi1 := -INF
+			var lo2 := INF
+			var hi2 := -INF
+			for w in pa:
+				lo1 = minf(lo1, w.dot(ax))
+				hi1 = maxf(hi1, w.dot(ax))
+			for w in qa:
+				lo2 = minf(lo2, w.dot(ax))
+				hi2 = maxf(hi2, w.dot(ax))
+			least = minf(least, minf(hi1, hi2) - maxf(lo1, lo2))
+	return least
+
+## Pairs of faces drawn in the same plane (within `tol` metres), facing the same way and overlapping by
+## more than 2 mm: these fight for the same pixels and flicker as the camera moves (z-fighting).
+static func _fighting_faces(root: Node3D, tol: float) -> Array[String]:
+	var buckets := {}
+	var tris := _triangles(root)
+	for tr: Array in tris:
+		var nn: Vector3 = tr[3]
+		var key := "%d,%d,%d|%d" % [roundi(nn.x * 1000), roundi(nn.y * 1000), roundi(nn.z * 1000), roundi(float(tr[4]) * 1000.0)]
+		if not buckets.has(key):
+			buckets[key] = []
+		(buckets[key] as Array).append(tr)
+	var out: Array[String] = []
+	var keys := buckets.keys()
+	for key: String in keys:
+		var nk := key.get_slice("|", 0)
+		var d := int(key.get_slice("|", 1))
+		var mine: Array = buckets[key]
+		# The same bucket (each pair once), then the buckets up to `tol` above it.
+		var others: Array = []
+		for dd in range(d + 1, d + roundi(tol * 1000.0) + 1):
+			others.append_array(buckets.get("%s|%d" % [nk, dd], []))
+		for i in mine.size():
+			var p: Array = mine[i]
+			var cands: Array = mine.slice(i + 1)
+			cands.append_array(others)
+			for q: Array in cands:
+				if absf(float(p[4]) - float(q[4])) > tol or (p[3] as Vector3).dot(q[3]) < 0.999:
+					continue
+				# Undersides at floor level face down into the floor and are never seen. (Godot's front
+				# faces wind clockwise, so the face looks along minus the winding normal computed here.)
+				if (p[3] as Vector3).y > 0.999 and absf(float(p[4])) < 0.002:
+					continue
+				var ov := _overlap_in_plane(p, q, p[3])
+				if ov > 0.002:
+					var cp := ((p[0] as Vector3) + (p[1] as Vector3) + (p[2] as Vector3)) / 3.0
+					out.append("%s / %s near (%.2f, %.2f, %.2f), plane normal %s" % [p[5], q[5], cp.x, cp.y, cp.z, str(-(p[3] as Vector3))])
+	return out
+
+func test_no_two_faces_share_a_plane(t: T) -> void:
+	# The owner: "the doorframes in the prison are incredibly janky, flickering like crazy". Faces in one
+	# plane facing the same way flicker; none may be drawn within 1 mm of another and overlap it: walls,
+	# the cell and bank door frames, every prop, and the lift in the lobby's opening.
+	var built := _drawn()
+	var lv: Node3D = built[0]
+	var lift := Lift.new()
+	lv.add_child(lift)
+	lift.build(PrisonView.plain_plan()["car"])
+	lift.set_doors(true, true)
+	lift.update(0.1)
+	var tris := _triangles(lv).size()
+	var fights := _fighting_faces(lv, 0.001)
+	t.check(fights.is_empty(), "%d pairs of faces drawn in one plane, e.g. %s" % [fights.size(), "; ".join(PackedStringArray(fights.slice(0, 4)))])
+	t.note("%d triangles in the drawn prison, %d pairs in one plane" % [tris, fights.size()])
+	for f: String in fights.slice(0, 80):
+		t.note("  " + f)
+	lv.free()
+
+## The edge between two neighbouring cells, as Walls has it.
+static func _edge_between(p: Floor.FloorPlan, a: Vector2i, b: Vector2i) -> StringName:
+	var d := b - a
+	if d == Vector2i(0, -1):
+		return Walls.north_edge(p, 0, a.x, a.y)
+	if d == Vector2i(0, 1):
+		return Walls.north_edge(p, 0, b.x, b.y)
+	if d == Vector2i(-1, 0):
+		return Walls.west_edge(p, 0, a.x, a.y)
+	return Walls.west_edge(p, 0, b.x, b.y)
+
+func test_the_face_kiosk_stands_in_the_hall_by_the_cells(t: T) -> void:
+	var p := Prison.prison_plan()
+	var k := Prison.kiosk_position()
+	var f := Prison.KIOSK_FACING
+	t.eq(absi(f.x) + absi(f.y), 1, "the kiosk faces one of the four ways")
+	# Walkable, reachable, on the hall.
+	t.check(Floor.is_walkable(p, 0, k.x, k.y), "the kiosk's stand cell %s is not walkable" % str(k))
+	t.check(_flood(p).has(Floor.pos_index(p, Floor.Pos.make(0, k.x, k.y))), "the kiosk's stand cell is not reachable from the lift")
+	t.check(k.y == Prison.HALL_ROW and k.x >= Prison.HALL_X0 and k.x <= Prison.HALL_X1, "the kiosk %s is not on the hall" % str(k))
+	t.eq(Floor.room_id_at(p, 0, k.x, k.y), -1, "the kiosk's stand cell is in a room, not the hall")
+	# Beside the cells: it stands against a solid wall with a cell behind it.
+	var behind := k + f
+	var rid := Floor.room_id_at(p, 0, behind.x, behind.y)
+	t.check(rid >= 0 and p.rooms[rid].kind == &"closet", "the wall the kiosk stands against (%s) is not a cell's" % str(behind))
+	t.eq(_edge_between(p, k, behind), Walls.WALL, "the kiosk's wall")
+	# It blocks no doorway: no door opens from or onto its stand cell, so whoever stands at it is not in a
+	# cell's doorway; and the lift, boards, mugshot wall, windows and bunks are elsewhere.
+	for d in p.doors:
+		for e: Vector2i in [Vector2i(d.ax, d.ay), Vector2i(d.bx, d.by)]:
+			t.check(e != k, "a door opens at the kiosk's stand cell %s" % str(k))
+	for other: Vector2i in [Prison.LANDING_CELL, Prison.DAY_BOARD, Prison.MUGSHOT_WALL, Prison.REPORT_BOARD]:
+		t.check(other != k, "the kiosk shares its stand cell with another station at %s" % str(other))
+	t.check(not Prison.window_positions().has(k), "the kiosk stands at a teller window")
+	t.check(not Prison.bunk_positions().has(k), "the kiosk stands at a bunk")
+	# On the way to bed: the walk from the lift to the farthest bunk goes past it.
+	var dist := Floor.distances_from(p, p.landing)
+	var far := Prison.bunk_positions()[0]
+	for b in Prison.bunk_positions():
+		if dist[Floor.pos_index(p, Floor.Pos.make(0, b.x, b.y))] > dist[Floor.pos_index(p, Floor.Pos.make(0, far.x, far.y))]:
+			far = b
+	var path := Floor.find_path(p, p.landing, Floor.Pos.make(0, far.x, far.y))
+	var on_path := false
+	for q in path:
+		on_path = on_path or (q.level == 0 and q.x == k.x and q.y == k.y)
+	t.check(on_path, "the walk from the lift to the farthest bunk %s does not pass the kiosk" % str(far))
+	# It does not block that walk: a body walking down the middle of the hall clears the prop (it stands
+	# KIOSK_DEPTH_M out from the wall's face), with room to spare.
+	var half := p.cell_size * 0.5
+	var gap := half - RulesBridge.PLAYER_RADIUS - (Prison.KIOSK_DEPTH_M + LevelScript.WALL_T * 0.5)
+	t.check(gap >= 0.2, "a body down the middle of the hall passes the kiosk %.2f m clear (needs 0.2)" % gap)
+	var free := p.cell_size - LevelScript.WALL_T - Prison.KIOSK_DEPTH_M
+	t.check(free >= 2.0 * RulesBridge.PLAYER_RADIUS + 0.5, "the hall beside the kiosk is %.2f m wide" % free)
+	# The look stands it there: the screen in the stand cell, against its wall, facing the hall.
+	var built := _drawn()
+	var view: Object = built[1]
+	var kc: Vector3 = view.get("kiosk_centre")
+	t.eq(Vector2i(int(floor(kc.x / 2.0)), int(floor(kc.z / 2.0))), k, "the kiosk is drawn in another cell")
+	var wall_line := Vector2((k.x + 0.5 + f.x * 0.5) * 2.0, (k.y + 0.5 + f.y * 0.5) * 2.0)
+	var off := absf((wall_line - Vector2(kc.x, kc.z)).dot(Vector2(f)))
+	t.check(off <= Prison.KIOSK_DEPTH_M, "the kiosk's screen is %.2f m off its wall (deeper than the kiosk)" % off)
+	t.check(kc.y > 1.2 and kc.y < 1.8, "the kiosk's screen is at %.2f m, not about eye height" % kc.y)
+	(built[0] as Node).free()
+	t.note("face kiosk at %s, against the wall of the cell at %s; on the walk to bunk %s; %.2f m clear of a body in the hall" % [str(k), str(behind), str(far), gap])
+
+func test_the_kiosk_screen_shows_the_face_it_is_given(t: T) -> void:
+	var built := _drawn()
+	var view: Object = built[1]
+	var smile := FaceCodec.encode(FacePaint.starter("smile"))
+	var shock := FaceCodec.encode(FacePaint.starter("shock"))
+	var def_img := CrewView.default_face().get_image()
+	def_img.resize(FaceCodec.SIZE, FaceCodec.SIZE, Image.INTERPOLATE_NEAREST)
+	var def_hash := CrewView.image_hash(def_img)
+	t.eq(view.call("kiosk_face_hash"), def_hash, "with no face the kiosk shows the default face")
+	view.call("set_kiosk_face", smile)
+	t.eq(view.call("kiosk_face_hash"), CrewView.texture_hash(FaceCodec.decode(smile)), "the kiosk shows the smile")
+	view.call("set_kiosk_face", shock)
+	t.eq(view.call("kiosk_face_hash"), CrewView.texture_hash(FaceCodec.decode(shock)), "then the shock")
+	view.call("set_kiosk_face", "F1Rnot-a-face")
+	t.eq(view.call("kiosk_face_hash"), def_hash, "a face that does not decode shows the default face")
+	t.eq(view.get("kiosk_face"), "", "and is not kept")
+	(built[0] as Node).free()
+
+func test_shop_over_windows_one_and_two_skills_over_three_and_four(t: T) -> void:
+	var p := Prison.prison_plan()
+	t.eq(Prison.SHOP_WINDOWS, [1, 2] as Array[int], "shop windows")
+	t.eq(Prison.SKILLS_WINDOWS, [3, 4] as Array[int], "skill tree windows")
+	var w := Prison.window_positions()
+	var want: Array[StringName] = [&"shop", &"shop", &"skills", &"skills"]
+	for i in w.size():
+		t.eq(Prison.station_at(w[i]), want[i], "window %d" % (i + 1))
+	t.eq(Prison.station_at(Prison.kiosk_position()), &"kiosk", "the kiosk")
+	# Nowhere else has anything to press F at.
+	var stations := 0
+	for y in p.height:
+		for x in p.width:
+			if Prison.station_at(Vector2i(x, y)) != &"":
+				stations += 1
+	t.eq(stations, 5, "cells with something to use")
+	t.eq(PrisonView.prompt_for(w[0]), "F  SHOP", "the prompt at window 1")
+	t.eq(PrisonView.prompt_for(w[3]), "F  SKILL TREE", "the prompt at window 4")
+	t.eq(PrisonView.prompt_for(Prison.kiosk_position()), "F  CHANGE YOUR FACE", "the prompt at the kiosk")
+	t.eq(PrisonView.prompt_for(Prison.LANDING_CELL), "", "no prompt on the landing")
+	# The look: each sign over its two panes, above the glass, on the hall side, readable from the bank
+	# room's doorway (its letters at least 7 of the game's 270 picture rows tall from there).
+	var built := _drawn()
+	var view: Object = built[1]
+	var centres: Array[Vector3] = view.get("window_centres")
+	var signs: Dictionary = view.get("sign_centres")
+	var door := Vector3((Prison.BANK_DOOR_X + 0.5) * 2.0, 1.65, Prison.BANK_ROOM.position.y * 2.0)
+	for key: String in ["shop", "skills"]:
+		t.check(signs.has(key), "no %s sign" % key)
+		if not signs.has(key) or centres.size() < 4:
+			continue
+		var c: Vector3 = signs[key]
+		var nums := Prison.SHOP_WINDOWS if key == "shop" else Prison.SKILLS_WINDOWS
+		var a := centres[nums[0] - 1]
+		var b := centres[nums[1] - 1]
+		t.check(c.x >= minf(a.x, b.x) and c.x <= maxf(a.x, b.x), "the %s sign (x %.2f) is not over windows %s (x %.2f, %.2f)" % [key, c.x, str(nums), a.x, b.x])
+		t.check(c.y > 2.45 and c.y < LevelScript.LH, "the %s sign is at %.2f m, not over the glass" % [key, c.y])
+		t.check(c.z < a.z, "the %s sign is behind the glass" % key)
+		# The plate is 20 texels tall with 14 of them letters (prison_view.gd _plate).
+		var dd := door.distance_to(c)
+		var rows := PrisonView.SIGN_H * (14.0 / 20.0) / (2.0 * dd * tan(deg_to_rad(35.0))) * 270.0
+		t.check(rows >= 7.0, "the %s sign's letters are %.1f picture rows tall from the bank door (%.1f m)" % [key, rows, dd])
+		t.note("%s sign over windows %s: letters %.1f rows tall from the bank doorway, %.1f m away" % [key, str(nums), rows, dd])
 	(built[0] as Node).free()

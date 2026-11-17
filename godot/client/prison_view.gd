@@ -17,6 +17,7 @@ const Prison = preload("res://sim/prison.gd")
 const S := 2.0                         # Level.S, the cell size
 const T := 0.07                        # half of Level.WALL_T: a wall face stands this far off the wall line
 const DOOR_HALF := 0.55                # half of Level.DOOR_W
+const FRAME_LAP := 0.005             # how far a door frame overlaps the wall's opening (no shared planes)
 const LOW_PAINT := Color(0.33, 0.42, 0.37)
 const HIGH_PAINT := Color(0.83, 0.79, 0.64)
 const STEEL := Color(0.44, 0.48, 0.49)
@@ -30,6 +31,8 @@ const BANK_LAMP := Color(0.93, 0.97, 1.0)
 const SCREEN := Color(0.05, 0.08, 0.065)
 const NIGHT_LIGHT_Y := 2.45
 const PLATE_Y := 2.48
+## The SHOP and SKILLS signs' height (m): their letters are 14 of the plate's 20 texel rows.
+const SIGN_H := 0.4
 
 const FACES := [
 	[Vector3.RIGHT, Vector3.BACK, Vector3.UP], [Vector3.LEFT, Vector3.BACK, Vector3.UP],
@@ -55,6 +58,16 @@ var bunk_centres: Array[Vector3] = []
 ## The four teller window panes' middles, in the plan's window order (Prison.WINDOWS: window 1 first,
 ## left to right for a player facing the counter).
 var window_centres: Array[Vector3] = []
+## The window signs' middles: "shop" over windows 1-2, "skills" over windows 3-4 (Prison.SHOP_WINDOWS,
+## Prison.SKILLS_WINDOWS).
+var sign_centres := {}
+## The face kiosk in the hall (Prison.KIOSK): the middle of its screen, the screen, and the face on it
+## (FaceCodec text, "" for the default face). set_kiosk_face shows another.
+var kiosk_centre := Vector3.ZERO
+var kiosk_screen: MeshInstance3D
+var kiosk_face := ""
+var _kiosk_img: Image
+var _kiosk_tex: ImageTexture
 
 var _sts := {}                         # Material -> SurfaceTool, static boxes merged per material
 var _steel: ShaderMaterial
@@ -102,6 +115,7 @@ func dress(level: Level) -> void:
 	_teller_side_shell()
 	lv._commit_chunks()
 	_hall()
+	_kiosk()
 	var bunks := Prison.bunk_positions()
 	for i in bunks.size():
 		bunk_centres.append(Vector3.ZERO)
@@ -326,11 +340,18 @@ func _board(name: String, centre: Vector3, n: Vector3, size: Vector2, frame_mat:
 # A steel door frame round an opening, and the steel door swung open into the room beyond, with a
 # wire-glass window. `hinge` is -1 or 1: which jamb carries the door (the room must have wall there).
 func _doorway(mid: Vector3, side: Vector3, fwd: Vector3, hinge: float) -> void:
+	# No face of the frame may lie in the plane of a wall face or of another frame face, or the two
+	# flicker as the camera moves (z-fighting). So the jambs stand FRAME_LAP into the opening (covering
+	# the wall's reveal instead of sharing its plane) and stop at the header's underside; the header
+	# hangs FRAME_LAP below the lintel, reaches past the jambs and stands prouder than they do.
 	var dh := Level.DOOR_H
 	var depth := Level.WALL_T + 0.04
+	var j0 := DOOR_HALF - FRAME_LAP
+	var j1 := DOOR_HALF + 0.06
+	var top := dh - FRAME_LAP
 	for sgn: float in [-1.0, 1.0]:
-		_box(_steel_dark, _w(mid, side, fwd, sgn * (DOOR_HALF + 0.03), 0.0, (dh + 0.06) * 0.5), _sz(side, fwd, 0.06, depth, dh + 0.06))
-	_box(_steel_dark, _w(mid, side, fwd, 0.0, 0.0, dh + 0.03), _sz(side, fwd, Level.DOOR_W + 0.12, depth, 0.06))
+		_box(_steel_dark, _w(mid, side, fwd, sgn * (j0 + j1) * 0.5, 0.0, top * 0.5), _sz(side, fwd, j1 - j0, depth, top))
+	_box(_steel_dark, _w(mid, side, fwd, 0.0, 0.0, (top + dh + 0.06) * 0.5), _sz(side, fwd, (j1 + 0.005) * 2.0, depth + 0.01, dh + 0.06 - top))
 	# The leaf, swung all the way open and standing flat against the inside of the wall, so the
 	# doorway shows the room beyond: steel, with a wire-glass window.
 	var f := T + 0.035
@@ -342,7 +363,7 @@ func _doorway(mid: Vector3, side: Vector3, fwd: Vector3, hinge: float) -> void:
 	var g1 := s0 + 0.76
 	var y0 := 1.25
 	var y1 := 1.8
-	var top := dh - 0.03
+	top = dh - 0.03
 	var th := 0.05
 	_box(_steel, _w(mid, side, fwd, (s0 + s1) * 0.5, f, (0.02 + y0) * 0.5), _sz(side, fwd, s1 - s0, th, y0 - 0.02))
 	_box(_steel, _w(mid, side, fwd, (s0 + s1) * 0.5, f, (y1 + top) * 0.5), _sz(side, fwd, s1 - s0, th, top - y1))
@@ -409,6 +430,83 @@ func _hall() -> void:
 	day_board_texture = b[2]
 	_plate("DayBoardTitle", "TODAY", Vector3(db.x, 2.2, wall_z - 0.012), n, 0.14, Color(0.82, 0.8, 0.7), Color(0.1, 0.1, 0.1))
 
+# --- the face kiosk ---------------------------------------------------------------------------
+
+## What F does where a player stands (Prison.station_at), as the prompt line says it; "" for nothing.
+static func prompt_for(cell: Vector2i) -> String:
+	match Prison.station_at(cell):
+		&"shop":
+			return "F  SHOP"
+		&"skills":
+			return "F  SKILL TREE"
+		&"kiosk":
+			return "F  CHANGE YOUR FACE"
+	return ""
+
+# The face kiosk against the hall wall on Prison.KIOSK_FACING's side of its stand cell: a steel cabinet
+# with a brass ledge, an upper housing with a lit screen showing your face and a camera lens over it,
+# and a plate on the wall above. Stands Prison.KIOSK_DEPTH_M out from the wall.
+func _kiosk() -> void:
+	var k := Prison.KIOSK
+	var c := lv.cell_center(0, k.x, k.y)
+	var f := Vector3(Prison.KIOSK_FACING.x, 0, Prison.KIOSK_FACING.y)
+	var out := -f
+	var along := Vector3(-f.z, 0, f.x)
+	var wall := Vector3(c.x, 0, c.z) + f * (S * 0.5 - T)
+	var d := Prison.KIOSK_DEPTH_M
+	var wd := 0.72
+	_box(_steel_dark, wall + out * (d * 0.5) + Vector3(0, 0.5, 0), _sz(along, f, wd, d, 1.0))
+	_box(_brass, wall + out * (d * 0.5 + 0.01) + Vector3(0, 1.02, 0), _sz(along, f, wd + 0.04, d + 0.02, 0.04))
+	_box(_steel, wall + out * 0.08 + Vector3(0, 1.48, 0), _sz(along, f, wd, 0.16, 0.88))
+	# The screen's bezel, the screen, and the camera lens over it.
+	_box(_steel_dark, wall + out * 0.165 + Vector3(0, 1.47, 0), _sz(along, f, 0.52, 0.012, 0.52))
+	_box(_steel_dark, wall + out * 0.17 + Vector3(0, 1.82, 0), _sz(along, f, 0.07, 0.03, 0.07))
+	_kiosk_img = Image.create(FaceCodec.SIZE, FaceCodec.SIZE, false, Image.FORMAT_RGB8)
+	_kiosk_tex = ImageTexture.create_from_image(_kiosk_img)
+	var q := QuadMesh.new()
+	q.size = Vector2(0.44, 0.44)
+	kiosk_screen = MeshInstance3D.new()
+	kiosk_screen.name = "KioskScreen"
+	kiosk_screen.mesh = q
+	kiosk_screen.material_override = Level.glow_material(Color.WHITE, 0.95, _kiosk_tex)
+	kiosk_screen.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	kiosk_centre = wall + out * 0.173 + Vector3(0, 1.47, 0)
+	_face(kiosk_screen, kiosk_centre, out)
+	lv.add_child(kiosk_screen)
+	set_kiosk_face("")
+	_plate("KioskSign", "YOUR FACE", wall + out * 0.012 + Vector3(0, 2.12, 0), out, 0.16, Color(0.86, 0.84, 0.74), Color(0.08, 0.08, 0.08), 0.15)
+
+## Shows `code` (FaceCodec text) on the kiosk's screen; "" or a face that does not decode shows the
+## default face.
+func set_kiosk_face(code: String) -> void:
+	if _kiosk_tex == null:
+		return
+	var px := FaceCodec.decode_indices(code)
+	kiosk_face = code if not px.is_empty() else ""
+	var img: Image
+	if px.is_empty():
+		img = CrewView.default_face().get_image()
+		img.resize(FaceCodec.SIZE, FaceCodec.SIZE, Image.INTERPOLATE_NEAREST)
+	else:
+		img = FaceCodec.to_image(px)
+	img.convert(Image.FORMAT_RGB8)
+	_kiosk_img = img
+	_kiosk_tex.set_image(img)
+
+## Tests: a short hash of the picture on the kiosk's screen (comparable with CrewView.texture_hash of
+## the decoded face).
+func kiosk_face_hash() -> String:
+	return CrewView.image_hash(_kiosk_img) if _kiosk_img != null else ""
+
+# A sign over a group of teller windows (numbers as in Prison.WINDOWS), on the fascia's front.
+func _window_sign(key: String, text: String, numbers: Array[int], gz: float, bg: Color, ink: Color) -> void:
+	var sx := 0.0
+	for n in numbers:
+		sx += window_centres[n - 1].x
+	var centre := Vector3(sx / numbers.size(), 2.98, gz + 0.3 - 0.062)
+	_plate("WindowSign_%s" % key, text, centre, Vector3(0, 0, -1), SIGN_H, bg, ink, 0.3)
+	sign_centres[key] = centre
+
 # --- the cells --------------------------------------------------------------------------------
 
 # One cell: its door, its number, and its bunk in `bunk` (the plan's bunk cell), against the far wall
@@ -470,7 +568,7 @@ func _cell(r: Dictionary, number: int, bunk: Vector2i) -> void:
 	var ts := s_hi - 0.3
 	_box(_steel, _w(mid, side, fwd, ts, back - 0.3, 0.21), _sz(side, fwd, 0.42, 0.55, 0.42))
 	_box(_steel, _w(mid, side, fwd, ts, back - 0.17, 0.86), _sz(side, fwd, 0.4, 0.3, 0.12))
-	_box(_steel_dark, _w(mid, side, fwd, ts, back - 0.04, 0.6), _sz(side, fwd, 0.4, 0.06, 0.6))
+	_box(_steel_dark, _w(mid, side, fwd, ts, back - 0.04, 0.6), _sz(side, fwd, 0.36, 0.06, 0.6))
 
 # --- the bank room ----------------------------------------------------------------------------
 
@@ -491,8 +589,10 @@ func _bank_room(r: Dictionary) -> void:
 	var ch := 1.0
 	_box(_brass_dark, Vector3(cx, ch * 0.5, gz + 0.3), Vector3(x1 - x0, ch, 0.6))
 	_box(_brass, Vector3(cx, ch + 0.03, gz + 0.26), Vector3(x1 - x0, 0.06, 0.72))
-	_box(_brass, Vector3(cx, 0.55, gz - 0.005), Vector3(x1 - x0, 0.04, 0.02))
-	_box(_steel_dark, Vector3(cx, 0.06, gz - 0.005), Vector3(x1 - x0, 0.12, 0.02))
+	# The rail and the kick plate stop short of the counter's ends and the kick plate clears the floor,
+	# so none of their faces shares a plane with the counter's (z-fighting).
+	_box(_brass, Vector3(cx, 0.55, gz - 0.005), Vector3(x1 - x0 - 0.02, 0.04, 0.02))
+	_box(_steel_dark, Vector3(cx, 0.063, gz - 0.005), Vector3(x1 - x0 - 0.02, 0.12, 0.02))
 	# Four windows: brass mullions, glass with a slot at the bottom, a fascia over them with numbers.
 	var gy0 := ch + 0.06
 	var gy1 := 2.42
@@ -508,9 +608,12 @@ func _bank_room(r: Dictionary) -> void:
 		# The speaking grille, a steel disc in the glass.
 		_box(_steel_dark, Vector3(px, 1.58, gz + 0.3), Vector3(0.16, 0.16, 0.02))
 		window_centres.append(Vector3(px, 1.6, gz + 0.3))
-		_plate("WindowNumber_%d" % (i + 1), str(i + 1), Vector3(px, 2.8, gz + 0.3 - 0.06), Vector3(0, 0, -1), 0.34, BRASS, Color(0.12, 0.08, 0.03), 0.2)
+		_plate("WindowNumber_%d" % (i + 1), str(i + 1), Vector3(px, 2.64, gz + 0.3 - 0.06), Vector3(0, 0, -1), 0.24, BRASS, Color(0.12, 0.08, 0.03), 0.2)
 	_box(_brass, Vector3(cx, gy1 + 0.03, gz + 0.3), Vector3(x1 - x0, 0.06, 0.08))
 	_box(_wood, Vector3(cx, (gy1 + 0.06 + Level.LH) * 0.5, gz + 0.3), Vector3(x1 - x0, Level.LH - gy1 - 0.06, 0.1))
+	# What the windows are for, on the fascia over them: SHOP over windows 1-2, SKILLS over 3-4.
+	_window_sign("shop", "SHOP", Prison.SHOP_WINDOWS, gz, BRASS, Color(0.12, 0.08, 0.03))
+	_window_sign("skills", "SKILLS", Prison.SKILLS_WINDOWS, gz, Color(0.86, 0.84, 0.74), Color(0.1, 0.12, 0.1))
 	# Behind the glass: the tellers' side, booths parted by dark wood, a stool in each, a dim lamp.
 	for i in range(1, n_win):
 		var bx := x0 + pane * i
