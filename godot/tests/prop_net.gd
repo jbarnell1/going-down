@@ -117,6 +117,8 @@ class Result:
 	var blackout_frames_checked := 0
 	var dark_drawn: Array[String] = []
 	var dark_frames := 0
+	## With draw_in_dark (T20a): dark frames that drew the Orderly.
+	var dark_shown := 0
 	var max_release_jump := 0.0
 	var releases := 0
 	var big_releases := 0
@@ -169,7 +171,10 @@ static func _body_of(s: Harness, k: int, id: String) -> Move.Body:
 static func _fx(x: float, d: int) -> String:
 	return M.to_fixed(x, d)
 
-static func run_session(i: int, cfg: Harness.NetConfig, seconds: float) -> Result:
+## `draw_in_dark` (T20a, net/client.gd): every client draws the Orderly on dark frames too; then a dark frame
+## must draw it whenever it has a pose (not taken), and never hold or see it ("dark_drawn" lists the frames
+## that break that instead).
+static func run_session(i: int, cfg: Harness.NetConfig, seconds: float, draw_in_dark: bool = false) -> Result:
 	var seed := "net-%d" % i
 	var remotes := 1 + (i % 3)
 	var res := Result.new()
@@ -177,6 +182,8 @@ static func run_session(i: int, cfg: Harness.NetConfig, seconds: float) -> Resul
 	var tracks := {}
 	var last := {"body": null, "depth": 1}
 	var s := Harness.new(seed, remotes, cfg)
+	for m in s.machines:
+		m.client.draw_in_dark = draw_in_dark
 	s.on_tick = func(ss: Harness) -> void:
 		var st := ss.host.state
 		var b := st.orderly.body
@@ -196,7 +203,12 @@ static func run_session(i: int, cfg: Harness.NetConfig, seconds: float) -> Resul
 		var g: float = rec["g"]
 		if rec["dark"]:
 			res.dark_frames += 1
-			if f.visible:
+			if draw_in_dark:
+				if f.visible:
+					res.dark_shown += 1
+				if f.visible != (f.orderly != null and not f.taken) or f.seeing or f.held:
+					res.dark_drawn.append("%s %s on a dark frame at t=%s: visible %s with a pose %s, seeing %s, held %s" % [res.label, m.id, _fx(g, 3), f.visible, f.orderly != null, f.seeing, f.held])
+			elif f.visible:
 				res.dark_drawn.append("%s %s drew the Orderly on a dark frame at t=%s" % [res.label, m.id, _fx(g, 3)])
 		var pose: Variant = rec["pose"]
 		var depth: int = rec["depth"]

@@ -1,7 +1,8 @@
 # The Orderly on screen: the model (assets/entities/orderly.glb, from Blender) posed every frame
-# exactly as rules_bridge says to draw it: feet position, facing, clip and clip time. Never drawn in
-# the dark. Like src/render/entityView.ts: walking clips run on the distance walked (so a creep is a
-# slow stride), the reach is stretched over the wind-up. It casts shadows and stands on the floor. Bent
+# exactly as the frame says to draw it: feet position, facing, clip and clip time. In the dark it is
+# drawn as it is, with nothing added (net/client.gd draw_in_dark, T20a): the dark lighting hides it.
+# Like src/render/entityView.ts: walking clips run on the distance walked (so a creep is a slow stride),
+# the reach is stretched over the wind-up. It casts shadows and stands on the floor. Bent
 # over a downed player (pose "bend") it folds down over them, arms out, its head working (_show_bend).
 #
 # The watched walk (two-watcher Stillness, docs/floors/traits-and-hiding.md section 1; T19a): while it needs

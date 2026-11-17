@@ -62,10 +62,11 @@ func update(dt: float, others: Array, cam: Vector3) -> void:
 		view.set_gait(GAITS.get(gait, &"walk"), sp)
 		view.set_raised(bool(o["raised"]))
 		# Down (or caught, without the down rule): lying where they fell, crawling as they crawl. Out: gone;
-		# a red spot is left where they lay (client/down_view.gd).
+		# a red spot is left where they lay (client/down_view.gd). Left behind (gone, or left out by the car for the
+		# day: sim/run.gd car_waits): not drawn.
 		var st := str(o["status"])
 		view.set_downed(st == "caught" or st == "down")
-		view.visible = st != "out" and (Vector2(pos.x - cam.x, pos.z - cam.z).length() > NEAR_CAMERA or absf(pos.y - cam.y) > 2.5)
+		view.visible = st != "out" and st != "leftBehind" and (Vector2(pos.x - cam.x, pos.z - cam.z).length() > NEAR_CAMERA or absf(pos.y - cam.y) > 2.5)
 		# Footsteps, from where they are.
 		if sp > CrewView.MOVING and str(o["status"]) == "ok" and sfx != null:
 			var steps := float(fig["steps"]) + sp * dt / float(STEP_LEN.get(gait, 0.75))

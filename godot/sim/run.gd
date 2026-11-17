@@ -186,6 +186,25 @@
 #    catches everyone inside ("caught", pulled out onto the front spot first); without one it stands where
 #    it lost them, then hunts someone else.
 #
+# The owner's 17 Nov changes (build 0833), each on only for a run made with it (with_long_dark, with_paced,
+# with_car_waits: net/host_rules.gd turns them on for the game's rooms; tests and every stored result leave
+# them off, and then nothing below happens):
+#  - The long dark (T20c, `long_dark`): the blackout before the car arrives lasts LONG_BLACKOUT_MIN..MAX
+#    seconds (LONG_BLACKOUT_FIRST_MIN..MAX on the first floor) instead of BLACKOUT_MIN..MAX, but never so
+#    long that the first blink of the ladder no longer fits before its warning (dark_schedule).
+#  - Paced (T20h, `paced`): every player's tank holds Stamina.PACED_SPRINT_SECONDS of sprinting (the host
+#    steps it with sprint_seconds(state)), and the Stillness residents hunt at PACED_HUNT_SPEED (in the
+#    blackout PACED_BLACKOUT_HUNT_SPEED) so the chase is paced as before. The Playroom's Minder is unchanged.
+#  - The car waits (FD4, `car_waits`; docs/floors/findables-and-day.md section 2): on arrival the doors stay
+#    open until the car has been empty of active players for UNLOAD_EMPTY_CLOSE seconds, however long that
+#    takes (no UNLOAD_TIME, nobody active is ever pushed out). A player aboard records nothing (their
+#    instrument is not live in the car). When the car comes back for the crew, boarding lasts
+#    BOARD_TIME_WAITS seconds before the bell. Anyone on their feet the car leaves on the floor (a ride down
+#    or a BANK) is left out for the rest of the day (`left_out`): status "leftBehind", not brought back on the
+#    next floor (they stand on its landing, out of the run), no share of the day's bank (the summary and
+#    Day.end_day leave them out), and they wake on their bunk in the prison when the crew gets home (or after
+#    a wipe), as everyone does.
+#
 # Events are Dictionaries with the TypeScript shapes (see RunEvent in run.ts), carrying Move.Body,
 # TapeLib.Reading and RunSummary objects where TypeScript carries those objects.
 extends RefCounted
@@ -208,6 +227,7 @@ const Marks = preload("res://sim/marks.gd")
 const Notes = preload("res://sim/notes.gd")
 const Walls = preload("res://sim/walls.gd")
 const Relocate = preload("res://sim/relocate.gd")
+const Stamina = preload("res://sim/stamina.gd")
 
 # ---------------------------------------------------------------------------------------------
 # Tuning.
@@ -265,10 +285,28 @@ const BLACKOUT_FIRST_MIN := 9.0
 const BLACKOUT_FIRST_MAX := 10.0
 ## ...and its warning, long and unmistakable (seconds).
 const BLACKOUT_WARNING := 3.0
+## The long dark (T20c, a run made with it: see the header): the blackout's length instead, and on the first
+## floor. Owner, 17 Nov: "Once the lights dim, we should have them borrow the lights for longer before the
+## elevator comes." About two thirds longer than BLACKOUT_MIN..MAX; capped so the first blink still fits.
+const LONG_BLACKOUT_MIN := 20.0
+const LONG_BLACKOUT_MAX := 24.0
+const LONG_BLACKOUT_FIRST_MIN := 14.0
+const LONG_BLACKOUT_FIRST_MAX := 16.0
 ## The Orderly's hunting speed while the blackout is on (m/s; see entity.gd HUNT_SPEED).
 const BLACKOUT_HUNT_SPEED := Entity.HUNT_SPEED
 ## The boarding window: seconds from the doors opening to the bell, not counting holds.
 const BOARD_TIME := 20.0
+## The same when the car waits (FD4, a run made with it): owner, 17 Nov, "we want to extend to 30 second wait
+## before doors close and elevator leaves once it comes".
+const BOARD_TIME_WAITS := 30.0
+## Paced (T20h, a run made with it: see the header): the Stillness residents' hunting speed, and in the
+## blackout (m/s). Measured with the bot runs in godot/tools/pace_check.gd (200 crews x 180 s): the bigger
+## tank alone hardly changes how often bots are caught (they sprint only when they see it close behind), and
+## each 0.05 m/s more adds about 3 % catches to crews that flee. 3.8 keeps a fleeing player's best run-and-walk
+## (Stamina.sustained_flee_speed, 3.93 m/s on the paced tank) a little further ahead of it than today (3.77
+## against 3.7), and costs fleeing crews about 8 % more catches; crews recording, about 4 %.
+const PACED_HUNT_SPEED := 3.8
+const PACED_BLACKOUT_HUNT_SPEED := PACED_HUNT_SPEED
 ## Total seconds the doors can be held per stop.
 const HOLD_LIMIT := 15.0
 ## Seconds the ride down takes, doors shut.
@@ -472,7 +510,7 @@ class CallPlan:
 
 ## The schedule of the `index`-th call of a run (0-based) at `depth`. Never starts from `prev_floors`
 ## floors away (pass -1 for none: TypeScript null).
-static func call_plan(seed: String, index: int, prev_floors: int, depth: int = 1) -> CallPlan:
+static func call_plan(seed: String, index: int, prev_floors: int, depth: int = 1, long_dark: bool = false) -> CallPlan:
 	var rng := Rng.make_rng(seed).fork("call:%d" % index)
 	var p := CallPlan.new()
 	p.delay = CALL_START_DELAY_MIN + rng.next() * (CALL_START_DELAY_MAX - CALL_START_DELAY_MIN)
@@ -483,7 +521,7 @@ static func call_plan(seed: String, index: int, prev_floors: int, depth: int = 1
 	p.false_stop = rng.chance(FALSE_STOP_CHANCE)
 	p.extra = FALSE_STOP_EXTRA_MIN + rng.next() * (FALSE_STOP_EXTRA_MAX - FALSE_STOP_EXTRA_MIN) if p.false_stop else 0.0
 	p.wait = p.delay + floors * FLOOR_TIME + p.extra
-	p.darks = dark_schedule(seed, index, p.wait, depth)
+	p.darks = dark_schedule(seed, index, p.wait, depth, long_dark)
 	return p
 
 static func _need(gaps: Array[float], n: int) -> float:
@@ -498,11 +536,15 @@ static func _need(gaps: Array[float], n: int) -> float:
 ## than the last, with lit gaps that shrink toward the blackout. As many blinks as fit after
 ## BLINK_FIRST_AFTER (a short wait gets fewer, never no blackout); spare time stretches the gaps
 ## and delays the first blink.
-## Every wait draws the same seven numbers, whatever fits.
-static func dark_schedule(seed: String, index: int, wait: float, depth: int) -> Array[DarkStretch]:
+## Every wait draws the same seven numbers, whatever fits. `long_dark` (see the header): the blackout is
+## LONG_BLACKOUT_* seconds instead, but never longer than leaves room for the ladder's first blink.
+static func dark_schedule(seed: String, index: int, wait: float, depth: int, long_dark: bool = false) -> Array[DarkStretch]:
 	var rng := Rng.make_rng(seed).fork("call:%d:dark" % index)
 	var lo := BLACKOUT_FIRST_MIN if depth <= 1 else BLACKOUT_MIN
 	var hi := BLACKOUT_FIRST_MAX if depth <= 1 else BLACKOUT_MAX
+	if long_dark:
+		lo = LONG_BLACKOUT_FIRST_MIN if depth <= 1 else LONG_BLACKOUT_MIN
+		hi = LONG_BLACKOUT_FIRST_MAX if depth <= 1 else LONG_BLACKOUT_MAX
 	var black := minf(lo + rng.next() * (hi - lo), maxf(1.0, wait - BLACKOUT_WARNING))
 	var gaps: Array[float] = []
 	for g: Array in BLINK_GAPS:
@@ -511,6 +553,10 @@ static func dark_schedule(seed: String, index: int, wait: float, depth: int) -> 
 		gaps.append(a + rng.next() * (b - a))
 	# Of any spare time, this share (up to half) goes before the first blink, the rest into the gaps.
 	var lead := rng.next() * 0.5
+	if long_dark:
+		# The long dark never eats the whole wait: the first blink, its warning and its gap still fit after
+		# BLINK_FIRST_AFTER (the shortest wait, 25 s, keeps a blackout of about 14 s and one blink).
+		black = minf(black, maxf(1.0, wait - BLACKOUT_WARNING - BLINK_FIRST_AFTER - _need(gaps, 1)))
 	var black_at := wait - black
 	var room := black_at - BLACKOUT_WARNING - BLINK_FIRST_AFTER
 	var n := BLINK_LADDER.size()
@@ -798,6 +844,12 @@ class RunState:
 	## Relocation (T19e, with_relocation; sim/relocate.gd): the resident may leave where nobody can see it and
 	## arrive where nobody can. Off: it never does, as every stored result has it.
 	var relocation: bool = false
+	## The owner's 17 Nov changes (see the header). Off: nothing below is ever read.
+	var long_dark: bool = false
+	var paced: bool = false
+	var car_waits: bool = false
+	## The car waits: who the car left on a floor today, {id: true}, until the crew gets home. Replaced, never edited.
+	var left_out: Dictionary = {}
 
 	func copy() -> RunState:
 		var s := RunState.new()
@@ -853,6 +905,10 @@ class RunState:
 		s.downs = downs
 		s.down = down
 		s.spots = spots
+		s.long_dark = long_dark
+		s.paced = paced
+		s.car_waits = car_waits
+		s.left_out = left_out
 		return s
 
 class PlayerInput:
@@ -1039,6 +1095,43 @@ static func with_relocation(s0: RunState) -> RunState:
 	var s := s0.copy()
 	s.relocation = true
 	return s
+
+## Turns the long dark on (T20c, see the header): every call from now on has the longer blackout.
+static func with_long_dark(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.long_dark = true
+	return s
+
+## Turns paced on (T20h, see the header): the bigger tank and the faster residents.
+static func with_paced(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.paced = true
+	return s
+
+## Turns the car waits on (FD4, see the header): nobody left out yet.
+static func with_car_waits(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.car_waits = true
+	s.left_out = {}
+	return s
+
+## Seconds of sprinting a player's tank holds in this run (Stamina.Stamina.tank): more when paced.
+static func sprint_seconds(s: RunState) -> float:
+	return Stamina.PACED_SPRINT_SECONDS if s != null and s.paced else Stamina.SPRINT_SECONDS
+
+## The boarding window of this run (seconds from the doors opening to the bell).
+static func board_time(s: RunState) -> float:
+	return BOARD_TIME_WAITS if s.car_waits else BOARD_TIME
+
+## The car waits: everyone on their feet who is not in `aboard` as the car leaves is left out for the day.
+static func _leave_out(s: RunState, players: Array[RunPlayer], aboard: Dictionary) -> void:
+	if not s.car_waits:
+		return
+	var out := s.left_out.duplicate()
+	for p in players:
+		if p.status == &"ok" and not aboard.has(p.id):
+			out[p.id] = true
+	s.left_out = out
 
 static func _create_run(seed: String, player_ids: Array[String], deck: Array = []) -> RunState:
 	assert(not player_ids.is_empty(), "a run needs at least one player")
@@ -1238,12 +1331,19 @@ static func _summarize(s: RunState, tapes: Array[TapeLib.Tape], wiped: bool) -> 
 	r.depth = s.depth
 	r.total = 0.0 if wiped else TapeLib.tape_value(tapes)
 	var share := r.total / s.players.size()
+	if s.car_waits and not s.left_out.is_empty():
+		# The car waits: whoever it left out today has no share (see the header).
+		var kept := 0
+		for p in s.players:
+			if not s.left_out.has(p.id):
+				kept += 1
+		share = r.total / maxi(1, kept)
 	var n := 0
 	for tp in tapes:
 		n += tp.readings.size()
 	r.readings = 0 if wiped else n
 	for p in s.players:
-		r.shares[p.id] = share
+		r.shares[p.id] = 0.0 if (s.car_waits and s.left_out.has(p.id)) else share
 	if not wiped:
 		for tp in tapes:
 			r.tapes.append(tp.id)
@@ -1456,7 +1556,7 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 	for e in r.events:
 		if e["type"] == "countEnd" and bool(e["last"]) and s.phase == &"coming":
 			s.phase = &"boarding"
-			s.bell_left = BOARD_TIME
+			s.bell_left = board_time(s)
 			s.hold_left = HOLD_LIMIT
 			s.held = false
 			s.call = null
@@ -2040,9 +2140,11 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				s.empty_for = 0.0
 				events.append({"type": "doorsOpened", "t": t, "depth": s.depth, "reason": "arrival"})
 		&"unloading":
-			s.timer -= dt
+			# The car waits (see the header): no clock, only the car being empty closes the doors.
+			if not s.car_waits:
+				s.timer -= dt
 			s.empty_for = s.empty_for + dt if _active_aboard(players, input_of).is_empty() else 0.0
-			if s.empty_for >= UNLOAD_EMPTY_CLOSE - EPS or s.timer <= EPS:
+			if s.empty_for >= UNLOAD_EMPTY_CLOSE - EPS or (not s.car_waits and s.timer <= EPS):
 				var pushed_out := {}
 				var k := 0
 				for i in players.size():
@@ -2086,7 +2188,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				events.append({"type": "called", "t": t, "playerId": caller.id, "floorsAway": 0, "at": caller.body, "last": true})
 			elif caller != null:
 				var index := s.calls
-				var plan := call_plan(s.seed, index, s.last_floors, s.depth)
+				var plan := call_plan(s.seed, index, s.last_floors, s.depth, s.long_dark)
 				s.calls = index + 1
 				s.last_floors = plan.floors
 				var c := CallState.new()
@@ -2148,7 +2250,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				if c.floors_away <= 0:
 					s.phase = &"boarding"
 					s.lure = false
-					s.bell_left = BOARD_TIME
+					s.bell_left = board_time(s)
 					s.hold_left = HOLD_LIMIT
 					s.held = false
 					events.append({"type": "carArrived", "t": t, "wait": t - c.at})
@@ -2214,8 +2316,12 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	if departing == &"bank":
 		# Flush open readings of those aboard onto their tapes, then bank everything aboard.
 		var aboard_ids: Array[String] = []
+		var aboard_set := {}
 		for p in _active_aboard(players, input_of):
 			aboard_ids.append(p.id)
+			aboard_set[p.id] = true
+		# The car waits: whoever it leaves on the floor has no share of this bank (see the header).
+		_leave_out(s, players, aboard_set)
 		var crew := s.crew
 		for p in players:
 			crew = Instr.set_raised(crew, p.id, false)
@@ -2284,6 +2390,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		nc.next_tape = next_tape
 		s.crew = nc
 		_leave_downs(s, players, t, events)
+		_leave_out(s, players, aboard_ids)
 		for i in players.size():
 			var p := players[i]
 			if aboard_ids.has(p.id):
@@ -2347,8 +2454,11 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		# and nobody can see to time a turn in the dark), at BLACKOUT_HUNT_SPEED.
 		var er: Entity.StepResult
 		var need := Entity.watch_need(stillness_up_count(players, input_of)) if s.two_watchers else 1
+		# Paced (see the header): both Stillness residents hunt at HUNT_SPEED, so both at the paced speeds.
 		if blacked_out(s):
-			er = Entity.step_entity(s.plan, before, views, dt, BLACKOUT_HUNT_SPEED, false, need)
+			er = Entity.step_entity(s.plan, before, views, dt, PACED_BLACKOUT_HUNT_SPEED if s.paced else BLACKOUT_HUNT_SPEED, false, need)
+		elif s.paced:
+			er = Entity.step_entity(s.plan, before, views, dt, PACED_HUNT_SPEED, true, need)
 		else:
 			er = Entity.step_entity(s.plan, before, views, dt, -1.0, true, need)
 		var next := er.state
@@ -2425,7 +2535,8 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	s.crew = crew
 	var crew_players: Array[Instr.CrewPlayer] = []
 	for p in players:
-		crew_players.append(Instr.CrewPlayer.make(p.id, p.body, _is_active(p, input_of)))
+		# The car waits (see the header): a player aboard records nothing, so the open car is safe but unpaid.
+		crew_players.append(Instr.CrewPlayer.make(p.id, p.body, _is_active(p, input_of) and not (s.car_waits and p.aboard)))
 	var out := _crew_tick(s, crew_players, entity_ticks, dt)
 	s.crew = out.crew
 	for e in out.events:
@@ -2481,9 +2592,22 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		var depth := s.depth + 1
 		var f := _floor_for(s.seed, depth, s.deck)
 		var bodies := {}
+		var outside := 0
 		for i in players.size():
 			var p := players[i]
 			var body: Move.Body
+			if s.car_waits and s.left_out.has(p.id):
+				# Left out today (the car waits): not brought back. They stand on the new landing, out of the run.
+				body = _landing_slot(f.car, outside)
+				outside += 1
+				bodies[p.id] = body
+				var lp := p.copy()
+				lp.body = body
+				lp.status = &"leftBehind"
+				lp.aboard = false
+				lp.side = null
+				players[i] = lp
+				continue
 			if p.status == &"ok" and in_car(car, p.body):
 				var l := car_local(car, p.body.x, p.body.z)
 				body = car_body(f.car, l[0], l[1])
@@ -2551,7 +2675,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 static func _settle_day(s: RunState, t: float, banked: int, events: Array[Dictionary]) -> void:
 	var crew: Array[String] = []
 	for p in s.players:
-		crew.append(p.id)
+		# The car waits: whoever it left out today is paid nothing today (see the header).
+		if not (s.car_waits and s.left_out.has(p.id)):
+			crew.append(p.id)
 	var r := Day.end_day(s.day_state, banked, crew, s.wallets, DAY_FLOOR_QUOTA, s.seed)
 	s.wallets = r.wallets
 	s.day_next = r.state
@@ -2677,6 +2803,8 @@ static func _arrive_home(s: RunState, players: Array[RunPlayer], t: float, event
 	s.going_up = false
 	s.phase = &"arriving"
 	s.timer = ARRIVE_DOOR_DELAY
+	if not s.left_out.is_empty():
+		s.left_out = {}
 	s.bed = Day.BedState.make(ids)
 	s.bed_hold = {}
 	s.use_prev = {}
@@ -2796,6 +2924,8 @@ static func _morning(s: RunState, players: Array[RunPlayer], t: float, events: A
 	s.bed_hold = {}
 	s.use_prev = {}
 	s.lights_out_t = -1.0
+	if not s.left_out.is_empty():
+		s.left_out = {}
 	_new_quota_floor(s, players)
 	_new_down_floor(s)
 	events.append({"type": "newDay", "t": t, "day": s.day_state.day, "dayIndex": s.day_index, "depth": 1, "bodies": bodies})

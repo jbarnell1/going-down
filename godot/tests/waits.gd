@@ -10,6 +10,7 @@ const Bot = preload("res://sim/bot.gd")
 const Clinic = preload("res://sim/clinic.gd")
 const Rng = preload("res://sim/rng.gd")
 const M = preload("res://sim/jsmath.gd")
+const Stamina = preload("res://sim/stamina.gd")
 
 const WAIT_DT := 0.05
 ## Where the Orderly starts, hunting: this many cells' walk from the landing (drawn per wait).
@@ -69,13 +70,20 @@ static func wait_start(seed: String, depth: int, n: int) -> Run.RunState:
 		st.players.append(np)
 	return st
 
-static func run_wait(style: StringName, depth: int, i: int) -> WaitResult:
+## `flags`: the owner's 17 Nov rules for the measurements (godot/tools/pace_check.gd): "long_dark" and "paced"
+## (true turns each on; paced also gives every bot the paced tank). Empty: the waits every stored result has.
+static func run_wait(style: StringName, depth: int, i: int, flags: Dictionary = {}) -> WaitResult:
 	var seed := "wait-%d-%d" % [depth, i]
 	var n := 1 + (i % 4)
 	var st := wait_start(seed, depth, n)
+	if flags.get("long_dark", false):
+		st = Run.with_long_dark(st)
+	if flags.get("paced", false):
+		st = Run.with_paced(st)
 	var bots: Array[Bot.WaitBot] = []
 	for k in st.players.size():
 		bots.append(Bot.create_wait_bot(st, st.players[k].id, k, style))
+		bots[k].stamina = Stamina.fresh_stamina(Run.sprint_seconds(st))
 	var st2 := st.copy()
 	st2.players = []
 	for k in st.players.size():
@@ -175,14 +183,14 @@ class WaitTable:
 	## Median of the farthest anyone got from the car in the blackout (m).
 	var median_farthest := 0.0
 
-static func wait_table(style: StringName, depth: int, waits: int) -> WaitTable:
+static func wait_table(style: StringName, depth: int, waits: int, flags: Dictionary = {}) -> WaitTable:
 	var t := WaitTable.new()
 	t.style = style
 	t.depth = depth
 	t.waits = waits
 	var far: Array[float] = []
 	for i in waits:
-		var r := run_wait(style, depth, i)
+		var r := run_wait(style, depth, i, flags)
 		if r.caught > 0:
 			t.lost += 1
 		if r.boarded:

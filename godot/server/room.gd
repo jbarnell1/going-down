@@ -108,6 +108,11 @@ var downs := true
 var watchers := true
 ## Relocation in the next run (the game's; tests may turn it off: sim/run.gd relocation, sim/relocate.gd).
 var relocation := true
+## The owner's 17 Nov changes in the next run (the game's; tests may turn them off): the long dark, paced (a
+## bigger tank, faster residents) and the car waits (sim/run.gd long_dark, paced, car_waits).
+var long_dark := true
+var paced := true
+var car_waits := true
 ## Tick cost, for the log: total and worst microseconds, and ticks.
 var tick_us := 0
 var tick_max_us := 0
@@ -198,7 +203,7 @@ func _start(now: float) -> void:
 	for id: String in people:
 		roster.append(id)
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
-	rules = HostRules.new(true, 1, Places.FULL, days, quota and not HostRules.quota_off_by_arg(false), downs, watchers and not HostRules.watchers_off_by_arg(), relocation)
+	rules = HostRules.new(true, 1, Places.FULL, days, quota and not HostRules.quota_off_by_arg(false), downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits)
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))

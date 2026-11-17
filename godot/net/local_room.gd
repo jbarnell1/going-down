@@ -22,6 +22,9 @@
 #    then out, then (with nobody left standing) the wipe.
 #  - Relocation (sim/run.gd relocation, sim/relocate.gd: the resident may leave where nobody can see it and
 #    arrive where nobody can) is the same again: `relocation` true, false, or null to follow the game's deck.
+#  - The owner's 17 Nov changes (sim/run.gd long_dark, paced, car_waits) are the same once more: `owner_0833`
+#    true, false, or null to follow the game's deck. The game's client draws a Stillness resident in the dark
+#    too (net/client.gd draw_in_dark), on the same switch.
 extends "res://net/room_client.gd"
 
 const Host = preload("res://net/host.gd")
@@ -49,6 +52,8 @@ var quota: Variant = null
 var downs: Variant = null
 ## Relocation: true, false, or null to follow the game's deck (see the header).
 var relocation: Variant = null
+## The owner's 17 Nov changes (the long dark, paced, the car waits): true, false, or null to follow the deck.
+var owner_0833: Variant = null
 ## Cost of the host's ticks on this machine (microseconds, summed), for the stats hook.
 var host_us := 0
 var _vt := 0.0
@@ -92,6 +97,12 @@ func relocation_on() -> bool:
 		return bool(relocation)
 	return Session.deck == Places.FULL
 
+## Whether the next run has the owner's 17 Nov changes (the long dark, paced, the car waits).
+func owner_0833_on() -> bool:
+	if owner_0833 != null:
+		return bool(owner_0833)
+	return Session.deck == Places.FULL
+
 ## The room's clock: local seconds, scaled by time_scale.
 func room_time() -> float:
 	return _vt
@@ -102,7 +113,8 @@ func start_run() -> void:
 	run_seed = seed if runs == 0 else "%s-%d" % [seed, runs]
 	runs += 1
 	epoch += 1
-	rules = HostRules.new(entity_on, 1, Session.deck, days_on(), quota_on(), downs_on(), false, relocation_on())
+	var o := owner_0833_on()
+	rules = HostRules.new(entity_on, 1, Session.deck, days_on(), quota_on(), downs_on(), false, relocation_on(), o, o, o)
 	# Method callables hold no reference to this object, so the pipes do not keep it alive.
 	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
 	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))
@@ -114,6 +126,7 @@ func start_run() -> void:
 		if p.id == ME:
 			host.place_player(ME, p.body)
 	client = Client.new(_client_pipe, "host", _name, _vt, Session.INTERP_DELAY, Session.INPUT_INTERVAL, _face)
+	client.draw_in_dark = o
 	run_on = true
 	status = "running"
 

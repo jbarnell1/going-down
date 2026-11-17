@@ -38,6 +38,10 @@
 #  - Relocation (sim/run.gd relocation, sim/relocate.gd, T19e): off unless asked (`relocation`); the game's rooms
 #    ask for it (the server's always, playing alone with the game's deck), so a resident may leave where nobody
 #    can see it and arrive where nobody can, near a player. prepare() turns it on before the first tick.
+#  - The owner's 17 Nov changes (sim/run.gd long_dark, paced, car_waits): off unless asked (`long_dark`,
+#    `paced`, `car_waits`); the game's rooms ask for all three, so the blackout is longer, the tank is bigger
+#    and the residents hunt faster to match, and the car waits for whoever is aboard, boards for 30 s and
+#    leaves anyone out for the day. prepare() turns them on before the first tick.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -72,8 +76,13 @@ var downs: bool
 var watchers: bool
 ## Relocation (off unless asked).
 var relocation: bool
+## The owner's 17 Nov changes (off unless asked): the long dark, paced, the car waits.
+var long_dark: bool
+var paced: bool
+var car_waits: bool
 
-func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false, watchers_: bool = false, relocation_: bool = false) -> void:
+func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false,
+		watchers_: bool = false, relocation_: bool = false, long_dark_: bool = false, paced_: bool = false, car_waits_: bool = false) -> void:
 	relocation = relocation_
 	_entity_on = entity_on
 	_depth = depth
@@ -83,6 +92,9 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 	_quota_cap = quota_cap_by_arg() if quota_ else 0
 	downs = downs_
 	watchers = watchers_
+	long_dark = long_dark_
+	paced = paced_
+	car_waits = car_waits_
 
 ## Where player `i` of `n` stands in the car at the start (car-local u, v).
 static func start_spot(i: int, n: int) -> PackedFloat64Array:
@@ -157,6 +169,12 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_two_watchers(s)
 	if relocation and not s.relocation:
 		s = Run.with_relocation(s)
+	if long_dark and not s.long_dark:
+		s = Run.with_long_dark(s)
+	if paced and not s.paced:
+		s = Run.with_paced(s)
+	if car_waits and not s.car_waits:
+		s = Run.with_car_waits(s)
 	return _capped(s)
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web

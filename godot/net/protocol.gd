@@ -485,9 +485,17 @@ static func snapshot_text(head: Dictionary, event_texts: PackedStringArray, worl
 		str(head["ackSeen"]), str(head["evFrom"]),
 		"[" + ",".join(event_texts) + "]",
 		JsJson.stringify(_enc_place(place)) if place != null else "0",
-		JsJson.stringify([q3(st.level), 1 if st.winded else 0]) if st != null else "0",
+		JsJson.stringify(_enc_tank(st)) if st != null else "0",
 	])
 	return "[%d,\"S\",[%s],%s]" % [PROTOCOL_VERSION, ",".join(parts), world]
+
+## A player's tank in a snapshot: [level, winded], and its size in seconds when it is not
+## Stamina.SPRINT_SECONDS (a paced run's, sim/run.gd paced), so a run without pace sends what it did before.
+static func _enc_tank(st: Stamina.Stamina) -> Array:
+	var a: Array = [q3(st.level), 1 if st.winded else 0]
+	if st.tank != Stamina.SPRINT_SECONDS:
+		a.append(q3(st.tank))
+	return a
 
 ## A placement: [seq, depth, body], and the day index when the run has days.
 static func _enc_place(place: Dictionary) -> Array:
@@ -737,11 +745,13 @@ static func decode(text: String) -> Variant:
 					out["place"]["day"] = _i(c, pl[3], 1, MAX_COUNT)
 			out["stamina"] = null
 			if h.size() > 7 and not (_is_num(h[7]) and float(h[7]) == 0.0):
-				var sa := _a(c, h[7], 2, 2)
+				var sa := _a(c, h[7], 2, 3)
 				if not c.bad:
 					var st := Stamina.Stamina.new()
 					st.level = maxf(0.0, minf(1.0, _f(c, sa[0])))
 					st.winded = _f(c, sa[1]) == 1.0
+					if sa.size() > 2:
+						st.tank = _f(c, sa[2], 1.0, 60.0)
 					out["stamina"] = st
 		"I":
 			if a.size() != 18 and a.size() != 20 and a.size() != 23:

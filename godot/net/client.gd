@@ -30,7 +30,13 @@
 #
 # The tank: the game steps its own copy every frame so a sprint answers at once; the host owns the
 # truth and sends it back in every snapshot, as it stood after input `ackIn`. correct_stamina()
-# moves the local copy by the difference.
+# moves the local copy by the difference, and gives it the host's tank size (a paced run's is bigger:
+# sim/run.gd paced).
+#
+# In the dark (T20a, owner 17 Nov: "If the lights are off, don't make a silhouette, just don't hide it"):
+# with `draw_in_dark` (the game's clients; tests leave it off) a Stillness resident is drawn on a dark
+# frame too, where the snapshots say, with nothing added: the dark lighting is all that hides it. Looking
+# in the dark still never counts (nothing is held, frozen or reported), exactly as before.
 #
 # The day loop (when the host's run has days, sim/run.gd): `seed` is the seed of the day this player is
 # on (Run.day_seed(base_seed, day_index)), so Session.plan_for(seed, local_depth) is always the floor
@@ -213,6 +219,8 @@ var keep_sizes := false
 var input_sizes: Array[int] = []
 ## The local player's tank as the host last said it was (the truth, a round trip old), or null.
 var host_stamina: Stamina.Stamina = null
+## Draw the resident on a dark frame too (see the header). Off unless the game turns it on.
+var draw_in_dark := false
 ## A false latch was let go on the last frame (the game shows it as a drop-out).
 var latch_released := false
 ## Other players' emotes as the host passed them on, in arrival order: {player, emote, t (host time)}.
@@ -824,7 +832,8 @@ func frame(now: float, local: LocalFrame) -> Frame:
 	var f := Frame.new()
 	f.dark = blind
 	f.orderly = shown
-	f.visible = shown != null and not blind
+	# Dark: drawn only with draw_in_dark (never while taken: `shown` is null then), and never seen.
+	f.visible = shown != null and (not blind or (draw_in_dark and not taken))
 	f.held = _frozen
 	f.seeing = seeing_now
 	f.taken = taken
@@ -961,7 +970,11 @@ func forget_orderly() -> void:
 
 ## The game's own tank, corrected toward the host's: by how far the host's tank after input `ackIn`
 ## differs from what this game had when it sent that input. Call once a frame with the current copy.
-func correct_stamina(local: Stamina.Stamina) -> Stamina.Stamina:
+func correct_stamina(local_: Stamina.Stamina) -> Stamina.Stamina:
+	var local := local_
+	if host_stamina != null and local.tank != host_stamina.tank:
+		# The host's tank size first (a paced run's is bigger: sim/run.gd sprint_seconds).
+		local = Stamina.Stamina.make(local.level, local.winded, host_stamina.tank)
 	if not _host_tank_fresh or host_stamina == null:
 		return local
 	_host_tank_fresh = false
@@ -977,6 +990,7 @@ func correct_stamina(local: Stamina.Stamina) -> Stamina.Stamina:
 		var out := Stamina.Stamina.new()
 		out.level = maxf(0.0, minf(1.0, st.level + (0.0 if absf(d) < TANK_EPS else d)))
 		out.winded = st.winded
+		out.tank = host.tank
 		if wind_change:
 			out.winded = host.winded and out.level < Stamina.WINDED_UNTIL
 		return out
@@ -1018,6 +1032,7 @@ func _send(now: float, cam: Pose.Camera, local: LocalFrame, rt: float) -> void:
 		var copy := Stamina.Stamina.new()
 		copy.level = local.stamina.level
 		copy.winded = local.stamina.winded
+		copy.tank = local.stamina.tank
 		_tank_at[_seq] = copy
 		_tank_at.erase(_seq - TANK_KEEP)
 	var text := Protocol.encode(m)
