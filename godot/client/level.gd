@@ -103,6 +103,9 @@ func build(p: Dictionary, seed_text: String) -> void:
 	for d in dist:
 		max_dist = maxi(max_dist, d)
 	_index_rooms()
+	if str(p.get("place", "clinic")) == "annex":
+		preload("res://client/annex_view.gd").dress(self)
+		return
 	_make_materials()
 	_build_floors_and_ceilings()
 	_build_walls()

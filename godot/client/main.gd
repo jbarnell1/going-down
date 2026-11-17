@@ -140,6 +140,10 @@ var _stats_t0 := 0.0
 var _stats_bytes := [0, 0]
 
 func _ready() -> void:
+	if OS.get_cmdline_user_args().has("scene=annex_demo"):
+		process_mode = Node.PROCESS_MODE_DISABLED
+		get_tree().change_scene_to_file.call_deferred("res://client/annex_demo.tscn")
+		return
 	# The Windows build doubles as the dedicated server: `GoingDown.exe --headless -- server port=N`.
 	if "server" in OS.get_cmdline_user_args():
 		get_tree().change_scene_to_file.call_deferred("res://server/server.tscn")
