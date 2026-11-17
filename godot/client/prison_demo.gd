@@ -158,7 +158,7 @@ func _build_place() -> bool:
 	lift = Lift.new()
 	lift.name = "Lift"
 	world.add_child(lift)
-	lift.build(plan["car"])
+	lift.build(plan["car"], level.lift_left_wall())
 	lift.set_doors(true, true)
 	level.set_emergency(0.0)
 	level.set_light_level(1.0)

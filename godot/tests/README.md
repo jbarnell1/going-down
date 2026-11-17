@@ -12,6 +12,12 @@ The tests check the rules in `godot/sim/` and the network in `godot/net/` two wa
   the same seeds (`tests/golden/properties.json`), so a change that keeps the rules but changes how
   often things happen is noticed too.
 
+Some design-rule files check only their rules and keep no counts: `prop_prison`, `prop_notes`,
+`prop_marks`, `prop_upgrades`, `prop_report`, `prop_day`, `prop_save` and `prop_face_net` (pure rules
+over seeded inputs, compared with oracles written in the test). `prop_annex` keeps one golden, every
+Annex floor's plan hash (`tests/golden/annex.json`, 800 floors; the quick set compares its 40). Each of
+these files also has a standalone runner (`tests/run_<name>.gd`) that runs it alone.
+
 The scenario inputs that are data rather than code (the bridge's requests, the network scripts, the
 maths samples, the literal table) are in `tests/inputs/` and never change when goldens are recorded.
 
@@ -99,6 +105,7 @@ t.gd                what a test gets: check, eq, expect (record or compare a gol
 golden.gd           reading and writing tests/golden/ and tests/inputs/ (floats as "~" + 16 hex digits)
 trace.gd            a scene tick by tick: state digests, events, full states every N ticks
 snap.gd             rule objects to plain data, digests, exact comparison
-golden/             the expected results (written only by npm run godot:golden)
+golden/             the expected results (written only by npm run godot:golden); annex.json holds the
+                    Annex plan hashes (prop_annex)
 inputs/             the scenario inputs (never rewritten)
 ```

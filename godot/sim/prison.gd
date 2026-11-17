@@ -11,7 +11,7 @@
 #   row 12     behind the bank counter, x = 4..7: the tellers' side, void (no one walks there; the
 #              look draws it behind the glass)
 #   x = 3      the lift lobby, one cell, the landing; its door opens east onto the hall
-#   x = 1..2   the lift shaft zone (see SHAFT_*), kept void on both levels
+#   x = 1..2   the lift shaft zone (see SHAFT_ZONE), rows 7..9, kept void on both levels
 #
 # The cells are one cell (2 m) deep so the bunk, along each cell's back wall, is in the door cell: the
 # farthest bunk is then 20 m of walking from the lift. Three deep put it at 24 m.
@@ -35,10 +35,12 @@ const HALL_ROW := 8
 const HALL_X0 := 4
 const HALL_X1 := 13
 
-## The shaft zone reserved for the lift (owner decision V9: the car becomes about 4 m square, so a
-## 2 by 2 cell block). It lies directly west of the landing, behind the lobby's west wall, and is void
-## on both levels. Rect2i position and size, in cells: x 1..2, y 7..8.
-const SHAFT_ZONE := Rect2i(1, 7, 2, 2)
+## The shaft zone reserved for the lift (owner decision V9: the car is 4 m by 4 m). It lies directly west
+## of the landing, behind the lobby's west wall, and is void on both levels. The car is centred on the
+## landing cell's wall (run.gd car_geometry: the door, and so the line between BANK and DOWN, is in the
+## middle of the landing cell), so its 4 m width covers the landing's row and half of each row beside it:
+## the zone is 2 cells deep and 3 along the wall. Rect2i position and size, in cells: x 1..2, y 7..9.
+const SHAFT_ZONE := Rect2i(1, 7, 2, 3)
 
 ## The bank room: x 4..7, y 9..11, door on the hall at (5, 8) / (5, 9). Its south wall is the counter.
 const BANK_ROOM := Rect2i(4, 9, 4, 3)

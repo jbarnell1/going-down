@@ -283,8 +283,8 @@ static func create_wait_bot(st: Run.RunState, id: String, k: int, style: StringN
 	b.stamina = Stamina.fresh_stamina()
 	b.gait = &"walk"
 	b.mode = &"hold"
-	b.seat_u = 0.7 + 0.6 * floorf(k / 2.0)
-	b.seat_v = 0.5 if k % 2 != 0 else -0.5
+	b.seat_u = 1.0 + 0.8 * floorf(k / 2.0)
+	b.seat_v = 1.0 if k % 2 != 0 else -1.0
 	b.walk = null
 	b.route = []
 	b.heard = null

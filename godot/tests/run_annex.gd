@@ -1,4 +1,4 @@
-# Runs tests/prop_annex.gd on its own, the way run_tests.gd runs a file, until it is registered there.
+# Runs tests/prop_annex.gd on its own, the way run_tests.gd runs it (it is also in run_tests.gd's list).
 #   "$GODOT" --headless --path godot --script res://tests/run_annex.gd            (800 floors)
 #   "$GODOT" --headless --path godot --script res://tests/run_annex.gd -- --quick (40 floors)
 # One line per test, then `N passed, M failed in S s`. Exit code 0 only if all pass. Any engine or

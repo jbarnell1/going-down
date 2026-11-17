@@ -14,6 +14,7 @@ const Prison = preload("res://sim/prison.gd")
 const PrisonView = preload("res://client/prison_view.gd")
 const LevelScript = preload("res://client/level.gd")
 const Walls = preload("res://sim/walls.gd")
+const Run = preload("res://sim/run.gd")
 
 ## Every position reachable from the landing, as pos_index keys (a flood fill over can_step).
 func _flood(p: Floor.FloorPlan) -> Dictionary:
@@ -142,7 +143,7 @@ func test_same_plan_on_every_call(t: T) -> void:
 func test_the_lift_shaft_zone_is_clear(t: T) -> void:
 	var p := Prison.prison_plan()
 	var z := Prison.SHAFT_ZONE
-	t.check(z.size.x >= 2 and z.size.y >= 2, "shaft zone smaller than 2 by 2 cells")
+	t.check(z.size.x >= 2 and z.size.y >= 3, "shaft zone smaller than 2 deep by 3 along the wall")
 	for level in 2:
 		for y in range(z.position.y, z.position.y + z.size.y):
 			for x in range(z.position.x, z.position.x + z.size.x):
@@ -155,6 +156,12 @@ func test_the_lift_shaft_zone_is_clear(t: T) -> void:
 	t.check(z.position.x + z.size.x == p.landing.x, "the shaft zone does not end at the landing's west side")
 	t.check(p.landing.y >= z.position.y and p.landing.y < z.position.y + z.size.y, "the shaft zone is not level with the landing")
 	t.check(z.position.x >= 1 and z.position.y >= 1, "the shaft zone touches the grid edge")
+	# It holds the rules' car (run.gd car_geometry: 4 m by 4 m, centred on the landing cell's wall).
+	var c := Run.car_geometry(p)
+	var s := float(p.cell_size)
+	var zone := Rect2(Vector2(z.position) * s, Vector2(z.size) * s)
+	t.check(zone.encloses(Rect2(c.rect.x0, c.rect.z0, c.rect.x1 - c.rect.x0, c.rect.z1 - c.rect.z0)),
+		"the shaft zone %s (m) does not hold the car %s..%s, %s..%s" % [zone, c.rect.x0, c.rect.x1, c.rect.z0, c.rect.z1])
 
 ## The prison as the client draws it: a Level built from the plan, and its dressing. Free the Level after.
 func _drawn() -> Array:
@@ -367,7 +374,7 @@ func test_no_two_faces_share_a_plane(t: T) -> void:
 	var lv: Node3D = built[0]
 	var lift := Lift.new()
 	lv.add_child(lift)
-	lift.build(PrisonView.plain_plan()["car"])
+	lift.build(PrisonView.plain_plan()["car"], lv.call("lift_left_wall"))
 	lift.set_doors(true, true)
 	lift.update(0.1)
 	var tris := _triangles(lv).size()

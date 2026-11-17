@@ -1,6 +1,6 @@
 # The Annex's eight guarantees (docs/floors/annex.md section 3) on 800 floors (seed-0..199 at depths
 # 1 to 4; 40 in the quick set, seed-0..9 at each depth). The Annex has no TypeScript twin, so these
-# oracles and the stored hash list (tests/annex_hashes.json) are its proof. Oracles are written here
+# oracles and the golden hash list (tests/golden/annex.json) are its proof. Oracles are written here
 # from floor.gd's step rule only; the lattice is found from the plan itself (its corner junctions can
 # never be pruned, so the bounding box of level 0's corridors is the lattice).
 extends RefCounted
@@ -18,7 +18,8 @@ const BLOCK := 6
 ## 2 by 6 closet, no back corridor) put their far corners at least 9 steps from the corridor wherever
 ## the door goes (|5 - door| + 5 + 1 >= 9). So 9, the tightest bound those templates allow.
 const ROOM_STEPS_MAX := 9
-const HASHES_PATH := "res://tests/annex_hashes.json"
+## The golden file holding every floor's plan hash (key "hashes", then "seed-N/depth").
+const HASHES_FILE := "annex.json"
 const STEPS: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
 
 static var _cache := {}
@@ -257,13 +258,10 @@ func test_loops_are_real(t: T) -> void:
 	t.note("%d floors: %d segment middles blocked one at a time, %d stairs blocked one at a time" % [ps.size(), segments_checked, stairs_checked])
 
 ## 4. Nobody gets a different plan: generating twice gives the same hash, and every hash matches the
-## stored list (written by tools/annex_tool.gd -- hashes).
+## golden list (tests/golden/annex.json "hashes", recorded by npm run godot:golden; the quick set
+## compares its 40 floors with the same list).
 func test_same_plan_for_everyone(t: T) -> void:
-	var text := FileAccess.get_file_as_string(HASHES_PATH)
-	var stored: Variant = JSON.parse_string(text)
-	if not t.check(stored is Dictionary, "cannot read %s" % HASHES_PATH):
-		return
-	var want: Dictionary = stored
+	var want: Variant = t.golden(HASHES_FILE, "hashes")
 	var ps := plans(t.quick)
 	var differ := 0
 	var mismatched := 0
@@ -275,14 +273,16 @@ func test_same_plan_for_everyone(t: T) -> void:
 			if differ <= 3:
 				t.check(false, "%s: generated twice, hashes %s and %s" % [_key(p), h, again])
 		var key := "%s/%d" % [p.seed, p.depth]
-		if String(want.get(key, "")) != h:
+		if t.recording:
+			t.expect(HASHES_FILE, "hashes." + key, h, "")
+		elif not (want is Dictionary) or String((want as Dictionary).get(key, "")) != h:
 			mismatched += 1
 			if mismatched <= 3:
-				t.check(false, "%s: hash %s, stored %s" % [_key(p), h, want.get(key, "(none)")])
+				t.check(false, "%s: hash %s, golden %s" % [_key(p), h, (want as Dictionary).get(key, "(none)") if want is Dictionary else "(no golden)"])
 		t.check(p.place == &"annex", "%s: place %s" % [_key(p), p.place])
 	t.eq(differ, 0, "floors whose two generations differ")
-	t.eq(mismatched, 0, "floors whose hash differs from the stored list")
-	t.note("%d floors generated twice, same hash; all match %s (%d stored)" % [ps.size(), HASHES_PATH.get_file(), want.size()])
+	t.eq(mismatched, 0, "floors whose hash differs from the golden list")
+	t.note("%d floors generated twice, same hash; all match tests/golden/%s" % [ps.size(), HASHES_FILE])
 
 ## 5. Dead ends are shallow: every corridor cell has two ways out; at least two side branches per
 ## floor, each one door in and at most two rooms deep; no room cell more than ROOM_STEPS_MAX steps

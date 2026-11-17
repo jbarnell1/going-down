@@ -1,6 +1,6 @@
 # The Annex: an endless yellow office. Rooms repeat and corridors loop back on themselves.
 # Design: docs/floors/annex.md section 3 (kept off the public repository). No TypeScript twin: its
-# tests (tests/prop_annex.gd) and its stored hashes (tests/annex_hashes.json) are its proof.
+# tests (tests/prop_annex.gd) and its golden hashes (tests/golden/annex.json) are its proof.
 #
 # Constructive, cannot fail. In a canonical orientation (the lattice against the north margin), it:
 #   1. lays a lattice of one-cell corridors, a line every 7 cells, with 6 by 6 blocks between them
@@ -40,8 +40,8 @@ const MAX_ROOMS := 80
 const LOBBY_W := 5
 const LOBBY_D := 3
 ## The car zone kept void beyond the lobby's outer wall, on both levels: SHAFT_W cells along the wall,
-## centred on the landing, by SHAFT_D cells away from it. The car today is one cell (run.gd CAR_WIDTH,
-## CAR_DEPTH = 2 m); the planned car is about 4 m square, which a centred 3 by 2 cell zone holds.
+## centred on the landing, by SHAFT_D cells away from it. It holds the car (run.gd CAR_WIDTH by CAR_DEPTH,
+## 4 m square, centred on the landing cell, so it reaches half a cell into each neighbouring column).
 const SHAFT_W := 3
 const SHAFT_D := 2
 

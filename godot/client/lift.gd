@@ -1,23 +1,29 @@
 # The lift at the landing, drawn where the rules' car is (plan.car from src/sim/run.ts carGeometry):
-# a small steel room with its own light, two sliding doors, the floor split into a BANK half (left as
-# you walk in) and a DOWN half, a door-hold button inside, and on the landing a call button and the
-# indicator above the doors. Built in the car's frame: origin at the middle of the doorway on the wall
-# line at floor height, x to the right walking in, z OUT of the car (the car is z = -2 .. 0), y up.
+# a steel room (the rules' size: 4 m by 4 m, run.gd CAR_WIDTH by CAR_DEPTH, read from plan.car) with its
+# own light, two sliding doors as wide as the rules' door, the floor split into a BANK half (left as you
+# walk in) and a DOWN half, a door-hold button inside, and on the landing a call button and the indicator
+# above the doors. Built in the car's frame: origin at the middle of the doorway on the wall line at floor
+# height, x to the right walking in, z OUT of the car (the car is z = -depth .. 0), y up.
 # Like src/render/elevator.ts. It only shows what the rules say (doors open, indicator, votes), and on
 # a monitor on the back wall every crewmate's drawn face (set_faces).
 class_name Lift
 extends Node3D
 
 const CAR_H := 2.5
-const HALF := 1.0
-const DEPTH := 2.0
-const DOOR_HALF := 0.6
 const DOOR_H := 2.25
 const FRONT := 0.09
-const PANEL_SLIDE := 0.57
 const DOOR_SECONDS := 0.9
-const HOLD_BUTTON := Vector2(0.84, 1.15)
-const CALL_BUTTON := Vector2(-0.9, 1.12)
+## The door-hold button inside, on the front wall right of the doorway: car-local v (right walking in)
+## and height. client/play_link.gd offers the button within reach of this spot.
+const HOLD_BUTTON := Vector2(1.25, 1.15)
+## The call button on the landing wall left of the doorway, beyond the door frame (a landing in a wider
+## lobby): v and height.
+const CALL_BUTTON := Vector2(-1.3, 1.12)
+## The call button on the landing cell's own left wall (a one-cell lobby, whose side walls meet the door
+## frame): distance out from the elevator wall line, and height.
+const CALL_SIDE := Vector2(0.35, 1.12)
+## How far short of fully open each door panel stops (m).
+const PANEL_TUCK := 0.03
 ## The landing's wall face (the wall is drawn Level.WALL_T thick, centred on the wall line).
 const LAND := Level.WALL_T * 0.5
 ## The monitor on the back wall inside the car: every crewmate's drawn face side by side (North Star
@@ -25,10 +31,18 @@ const LAND := Level.WALL_T * 0.5
 ## (64 x 64 for one or two players) with a 2-pixel gap, four to a row, drawn with nearest filtering.
 const MON_W := 138
 const MON_H := 70
-const MON_SIZE := Vector2(0.9, 0.9 * MON_H / MON_W)
+const MON_SIZE := Vector2(1.6, 1.6 * MON_H / MON_W)
 const MON_Y := 1.98
 const MON_BG := Color("#0b0f0e")
+## The car's light, at full.
+const LAMP_ENERGY := 0.8
 
+## The car as the rules give it (plan.car): half its width, its depth, half its door.
+var half := 2.0
+var depth := 4.0
+var door_half := 0.9
+## Where the call button's light is drawn, in the car's frame (tests: within the rules' call reach).
+var call_at := Vector3.ZERO
 var doors := 0.0          # 0 shut .. 1 open, as drawn
 var doors_target := 0.0
 var indicator_text := ""
@@ -54,7 +68,12 @@ var _mon_tex: ImageTexture
 var _mon_key := "-"
 var _mon_slots: Array[Rect2i] = []
 
-func build(car: Dictionary) -> void:
+## Builds the lift for the rules' car (plan.car). `left_wall`: the landing cell has a wall on its left as
+## you face the lift (Level.lift_left_wall), so the call button goes on it.
+func build(car: Dictionary, left_wall := false) -> void:
+	half = float(car.width) * 0.5
+	depth = float(car.depth)
+	door_half = float(car.doorWidth) * 0.5
 	position = Vector3(float(car.doorX), float(car.floorY), float(car.doorZ))
 	var right := Vector3(float(car.rightX), 0, float(car.rightZ))
 	var inv := Vector3(float(car.inX), 0, float(car.inZ))
@@ -64,42 +83,42 @@ func build(car: Dictionary) -> void:
 	var door_mat := Level.prop_material(Color(0.66, 0.71, 0.73))
 	var ceil := Level.prop_material(Color(0.17, 0.2, 0.21))
 	# Walls, ceiling.
-	_box(Vector3(0, CAR_H * 0.5, -DEPTH - 0.02), Vector3(HALF * 2, CAR_H, 0.04), steel)
-	_box(Vector3(-HALF - 0.02, CAR_H * 0.5, -DEPTH * 0.5), Vector3(0.04, CAR_H, DEPTH), steel)
-	_box(Vector3(HALF + 0.02, CAR_H * 0.5, -DEPTH * 0.5), Vector3(0.04, CAR_H, DEPTH), steel)
-	_box(Vector3(0, CAR_H + 0.02, -DEPTH * 0.5), Vector3(HALF * 2, 0.04, DEPTH), ceil)
+	_box(Vector3(0, CAR_H * 0.5, -depth - 0.02), Vector3(half * 2, CAR_H, 0.04), steel)
+	_box(Vector3(-half - 0.02, CAR_H * 0.5, -depth * 0.5), Vector3(0.04, CAR_H, depth), steel)
+	_box(Vector3(half + 0.02, CAR_H * 0.5, -depth * 0.5), Vector3(0.04, CAR_H, depth), steel)
+	_box(Vector3(0, CAR_H + 0.02, -depth * 0.5), Vector3(half * 2, 0.04, depth), ceil)
 	# Handrail at the back.
-	_box(Vector3(0, 0.95, -DEPTH + 0.06), Vector3(HALF * 1.8, 0.05, 0.05), dark)
+	_box(Vector3(0, 0.95, -depth + 0.06), Vector3(half * 1.8, 0.05, 0.05), dark)
 	# Front wall inside face, around the door opening.
-	var fw := HALF - DOOR_HALF
-	_box(Vector3(-DOOR_HALF - fw * 0.5, CAR_H * 0.5, -FRONT - 0.01), Vector3(fw, CAR_H, 0.02), steel)
-	_box(Vector3(DOOR_HALF + fw * 0.5, CAR_H * 0.5, -FRONT - 0.01), Vector3(fw, CAR_H, 0.02), steel)
-	_box(Vector3(0, (DOOR_H + CAR_H) * 0.5, -FRONT - 0.01), Vector3(DOOR_HALF * 2, CAR_H - DOOR_H, 0.02), steel)
+	var fw := half - door_half
+	_box(Vector3(-door_half - fw * 0.5, CAR_H * 0.5, -FRONT - 0.01), Vector3(fw, CAR_H, 0.02), steel).name = "FrontLeft"
+	_box(Vector3(door_half + fw * 0.5, CAR_H * 0.5, -FRONT - 0.01), Vector3(fw, CAR_H, 0.02), steel).name = "FrontRight"
+	_box(Vector3(0, (DOOR_H + CAR_H) * 0.5, -FRONT - 0.01), Vector3(door_half * 2, CAR_H - DOOR_H, 0.02), steel)
 	# A dark frame around the doors on the landing side. The jambs stop under the header: overlapping
 	# it, their faces shared its planes and flickered (z-fighting).
-	_box(Vector3(-DOOR_HALF - 0.06, DOOR_H * 0.5, LAND + 0.02), Vector3(0.12, DOOR_H, 0.04), dark)
-	_box(Vector3(DOOR_HALF + 0.06, DOOR_H * 0.5, LAND + 0.02), Vector3(0.12, DOOR_H, 0.04), dark)
-	_box(Vector3(0, DOOR_H + 0.06, LAND + 0.02), Vector3(DOOR_HALF * 2 + 0.24, 0.12, 0.04), dark)
+	_box(Vector3(-door_half - 0.06, DOOR_H * 0.5, LAND + 0.02), Vector3(0.12, DOOR_H, 0.04), dark)
+	_box(Vector3(door_half + 0.06, DOOR_H * 0.5, LAND + 0.02), Vector3(0.12, DOOR_H, 0.04), dark)
+	_box(Vector3(0, DOOR_H + 0.06, LAND + 0.02), Vector3(door_half * 2 + 0.24, 0.12, 0.04), dark)
 	# Doors.
 	_left = Node3D.new()
 	_right = Node3D.new()
 	add_child(_left)
 	add_child(_right)
-	_box(Vector3(-DOOR_HALF * 0.5, DOOR_H * 0.5, -0.0475), Vector3(DOOR_HALF, DOOR_H, 0.035), door_mat, _left)
-	_box(Vector3(DOOR_HALF * 0.5, DOOR_H * 0.5, -0.0475), Vector3(DOOR_HALF, DOOR_H, 0.035), door_mat, _right)
+	_box(Vector3(-door_half * 0.5, DOOR_H * 0.5, -0.0475), Vector3(door_half, DOOR_H, 0.035), door_mat, _left)
+	_box(Vector3(door_half * 0.5, DOOR_H * 0.5, -0.0475), Vector3(door_half, DOOR_H, 0.035), door_mat, _right)
 	# Floor: BANK on the left walking in (x < 0), DOWN on the right.
 	_bank_mat = Level.prop_material(Color.WHITE, _paint("BANK", Color("#e8a21c"), Color("#2a1a05"), false))
 	_down_mat = Level.prop_material(Color.WHITE, _paint("DOWN", Color("#b8231c"), Color("#f6efe6"), true))
-	_floor_half(-0.5, _bank_mat)
-	_floor_half(0.5, _down_mat)
+	_floor_half(-1.0, _bank_mat)
+	_floor_half(1.0, _down_mat)
 	# The car's light.
 	_lamp_panel = Level.glow_material(Color(0.9, 0.95, 1.0), 1.0)
-	_box(Vector3(0, CAR_H - 0.01, -DEPTH * 0.5), Vector3(0.9, 0.02, 0.9), _lamp_panel)
+	_box(Vector3(0, CAR_H - 0.01, -depth * 0.5), Vector3(1.4, 0.02, 1.4), _lamp_panel)
 	_lamp = OmniLight3D.new()
-	_lamp.position = Vector3(0, CAR_H - 0.25, -DEPTH * 0.5)
+	_lamp.position = Vector3(0, CAR_H - 0.25, -depth * 0.5)
 	_lamp.light_color = Color(0.9, 0.95, 1.0)
-	_lamp.light_energy = 0.55
-	_lamp.omni_range = 3.2
+	_lamp.light_energy = LAMP_ENERGY
+	_lamp.omni_range = 4.6
 	_lamp.omni_attenuation = 1.6
 	add_child(_lamp)
 	# Indicator above the doors, landing side.
@@ -126,24 +145,71 @@ func build(car: Dictionary) -> void:
 	_mon_img = Image.create(MON_W, MON_H, false, Image.FORMAT_RGB8)
 	_mon_img.fill(MON_BG)
 	_mon_tex = ImageTexture.create_from_image(_mon_img)
-	_box(Vector3(0, MON_Y, -DEPTH + 0.015), Vector3(MON_SIZE.x + 0.08, MON_SIZE.y + 0.08, 0.03), dark)
+	_box(Vector3(0, MON_Y, -depth + 0.015), Vector3(MON_SIZE.x + 0.08, MON_SIZE.y + 0.08, 0.03), dark)
 	var mq := QuadMesh.new()
 	mq.size = MON_SIZE
 	var mon := MeshInstance3D.new()
 	mon.name = "Monitor"
 	mon.mesh = mq
 	mon.material_override = Level.glow_material(Color.WHITE, 0.95, _mon_tex)
-	mon.position = Vector3(0, MON_Y, -DEPTH + 0.032)
+	mon.position = Vector3(0, MON_Y, -depth + 0.032)
 	add_child(mon)
 	var none: Array[String] = []
 	set_faces(none)
-	# Call button on the landing wall, hold button inside.
-	_box(Vector3(CALL_BUTTON.x, CALL_BUTTON.y, LAND + 0.02), Vector3(0.14, 0.26, 0.03), dark)
+	# The call button, left of the doors: on the landing wall beyond the landing cell when the lobby is
+	# wider than it, else on the landing cell's own left wall, near the doors. Hold button inside.
 	_call_mat = Level.glow_material(Color(1.0, 0.55, 0.15), 0.25)
-	_box(Vector3(CALL_BUTTON.x, CALL_BUTTON.y, LAND + 0.04), Vector3(0.06, 0.06, 0.02), _call_mat)
+	if left_wall:
+		var wx := -(Level.S * 0.5 - Level.WALL_T * 0.5)
+		call_at = Vector3(wx + 0.035, CALL_SIDE.y, CALL_SIDE.x)
+		_box(Vector3(wx + 0.015, CALL_SIDE.y, CALL_SIDE.x), Vector3(0.03, 0.26, 0.14), dark)
+		_box(Vector3(wx + 0.035, CALL_SIDE.y, CALL_SIDE.x), Vector3(0.02, 0.06, 0.06), _call_mat)
+	else:
+		call_at = Vector3(CALL_BUTTON.x, CALL_BUTTON.y, LAND + 0.04)
+		_box(Vector3(CALL_BUTTON.x, CALL_BUTTON.y, LAND + 0.02), Vector3(0.14, 0.26, 0.03), dark)
+		_box(Vector3(CALL_BUTTON.x, CALL_BUTTON.y, LAND + 0.04), Vector3(0.06, 0.06, 0.02), _call_mat)
 	_box(Vector3(HOLD_BUTTON.x, HOLD_BUTTON.y, -FRONT - 0.03), Vector3(0.14, 0.2, 0.03), dark)
 	_hold_mat = Level.glow_material(Color(0.4, 1.0, 0.5), 0.25)
 	_box(Vector3(HOLD_BUTTON.x, HOLD_BUTTON.y, -FRONT - 0.05), Vector3(0.06, 0.06, 0.02), _hold_mat)
+
+## Tests: the car as DRAWN, measured from its meshes in the car's frame (x to the right walking in, z out
+## of the car): "box" the AABB of everything inside the car (walls, ceiling, floor, monitor), "bank" and
+## "down" the painted floor halves, "doorway" the gap the front wall leaves, "panels" the width the two
+## door panels cover when shut. Compared with the rules' car by tests/prop_lift.gd.
+func drawn_car() -> Dictionary:
+	var parts: Array = []
+	_collect_meshes(self, Transform3D.IDENTITY, parts)
+	var box := AABB()
+	var first := true
+	var named := {}
+	var panels := AABB()
+	var panels_first := true
+	for pr: Array in parts:
+		var mi: MeshInstance3D = pr[0]
+		var bb: AABB = (pr[1] as Transform3D) * mi.mesh.get_aabb()
+		named[String(mi.name)] = bb
+		var holder := mi.get_parent()
+		if holder == _left or holder == _right:
+			var shut: AABB = (holder as Node3D).transform.affine_inverse() * bb
+			panels = shut if panels_first else panels.merge(shut)
+			panels_first = false
+			continue
+		if bb.get_center().z < -FRONT:
+			box = bb if first else box.merge(bb)
+			first = false
+	var fl: AABB = named.get("FrontLeft", AABB())
+	var fr: AABB = named.get("FrontRight", AABB())
+	return {"box": box, "bank": named.get("FloorBank", AABB()), "down": named.get("FloorDown", AABB()),
+		"doorway": fr.position.x - (fl.position.x + fl.size.x), "panels": panels.size.x}
+
+func _collect_meshes(node: Node, xf: Transform3D, out: Array) -> void:
+	for c in node.get_children():
+		if not (c is Node3D):
+			continue
+		var cx := xf * (c as Node3D).transform
+		if c is MeshInstance3D and (c as MeshInstance3D).mesh != null:
+			out.append([c, cx])
+		_collect_meshes(c, cx, out)
 
 func _box(pos: Vector3, size: Vector3, mat: Material, parent: Node3D = null) -> MeshInstance3D:
 	var b := BoxMesh.new()
@@ -155,13 +221,15 @@ func _box(pos: Vector3, size: Vector3, mat: Material, parent: Node3D = null) -> 
 	(parent if parent else self).add_child(mi)
 	return mi
 
-func _floor_half(x: float, mat: ShaderMaterial) -> void:
+## One painted half of the car's floor: `side` -1 is BANK (left walking in), 1 is DOWN.
+func _floor_half(side: float, mat: ShaderMaterial) -> void:
 	var q := PlaneMesh.new()
-	q.size = Vector2(1.0, 1.9)
+	q.size = Vector2(half, depth - 0.1)
 	var mi := MeshInstance3D.new()
+	mi.name = "FloorBank" if side < 0.0 else "FloorDown"
 	mi.mesh = q
 	mi.material_override = mat
-	mi.position = Vector3(x, 0.006, -DEPTH * 0.5)
+	mi.position = Vector3(side * half * 0.5, 0.006, -depth * 0.5)
 	add_child(mi)
 
 # The floor paint (src/render/elevator.ts paintHalf): the word twice, stretched along the car, against
@@ -266,12 +334,12 @@ func update(delta: float) -> void:
 	_t += delta
 	doors = move_toward(doors, doors_target, delta / DOOR_SECONDS)
 	var e := doors * doors * (3.0 - 2.0 * doors)
-	_left.position.x = -PANEL_SLIDE * e
-	_right.position.x = PANEL_SLIDE * e
+	_left.position.x = -(door_half - PANEL_TUCK) * e
+	_right.position.x = (door_half - PANEL_TUCK) * e
 	var pulse := 0.42 + (0.68 - 0.42) * (0.5 + 0.5 * sin(_t * 5.0))
 	_bank_mat.set_shader_parameter("emit", pulse if _vote == "bank" else 0.16)
 	_down_mat.set_shader_parameter("emit", pulse if _vote == "down" else 0.16)
 	_bank_mat.set_shader_parameter("albedo", Color.WHITE * (1.0 if _vote == "bank" else (0.5 if _vote != "" else 0.85)))
 	_down_mat.set_shader_parameter("albedo", Color.WHITE * (1.0 if _vote == "down" else (0.5 if _vote != "" else 0.85)))
-	_lamp.light_energy = 0.55 * _light
+	_lamp.light_energy = LAMP_ENERGY * _light
 	_lamp_panel.set_shader_parameter("energy", _light)
