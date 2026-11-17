@@ -201,6 +201,14 @@ class PlayerView extends Sight.Viewer:
 	## Present and huntable (it can target, reach for and catch them) but seeing nothing this tick,
 	## e.g. during a light blink. Never counts as looking. Default false.
 	var blind: bool = false
+	## Inside a hide (T19b, sim/hiding.gd; see "Hidden players" below): never hunted or reached for. Their
+	## hide's id, whether it has a reason, its front and inside spots, and where they were last seen out.
+	var hidden: bool = false
+	var hide: int = -1
+	var hide_reason: bool = false
+	var hide_front: Move.Body = null
+	var hide_at: Move.Body = null
+	var hide_spot: Move.Body = null
 
 	static func make(id_: String, body_: Move.Body, eye_: float, yaw_: float, pitch_: float, h_fov: float, v_fov: float, active_: bool, blind_: bool = false) -> PlayerView:
 		var v := PlayerView.new()
@@ -262,6 +270,13 @@ class OrderlyState:
 	var clicks: int = 0
 	## Bending: the downed player it is bent over (sim/run.gd), else null.
 	var bend_target: Variant = null
+	## Hidden players (see "Hidden players" below). Mode "look": the hide it goes to and the seconds of
+	## looking left. Mode "search": where it stands, the seconds of standing left, the player it lost.
+	var look_hide: int = -1
+	var look_left: float = 0.0
+	var search_spot: Move.Body = null
+	var search_left: float = 0.0
+	var search_lost: Variant = null
 
 	## Two-watcher Stillness (see "Watchers" below). How many watchers hold it this tick (1 or 2, from the
 	## up players: watch_need); who the tick counted, with grace, in the order given; the host time of each
@@ -302,6 +317,11 @@ class OrderlyState:
 		s.last_met_at = last_met_at
 		s.kind = kind
 		s.bend_target = bend_target
+		s.look_hide = look_hide
+		s.look_left = look_left
+		s.search_spot = search_spot
+		s.search_left = search_left
+		s.search_lost = search_lost
 		s.click_walk = click_walk
 		s.click_wait = click_wait
 		s.clicks = clicks
@@ -381,7 +401,7 @@ static func _nearest_by_walk(plan: Floor.FloorPlan, body: Move.Body, players: Ar
 	var dist := _distances_cached(plan, Move.cell_of(plan, body))
 	var best: Nearest = null
 	for p in players:
-		if not p.active:
+		if not p.active or p.hidden:
 			continue
 		var steps := dist[Floor.pos_index(plan, Move.cell_of(plan, p.body))]
 		if steps < 0:
@@ -597,9 +617,14 @@ static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 		s.anim = &"idle"
 		return res
 
+	# Hidden players: going to look into a hide, or standing where it lost someone (see below).
+	if s.mode == &"look" or s.mode == &"search":
+		_step_hidden(plan, s, players, dt, hunt_speed, k, events)
+		return res
+
 	if s.mode == &"windUp":
 		var target := _find_player(players, s.wind_up_target)
-		var ok := target != null and target.active and target.body.level == s.body.level \
+		var ok := target != null and target.active and not target.hidden and target.body.level == s.body.level \
 			and M.hypot2(target.body.x - s.body.x, target.body.z - s.body.z) <= REACH_RANGE
 		if not ok:
 			events.append({"type": "windUpCancelled", "t": t, "playerId": s.wind_up_target if s.wind_up_target != null else ""})
@@ -625,7 +650,7 @@ static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 	var victim: PlayerView = null
 	var victim_dist := INF
 	for p in players:
-		if not p.active or p.body.level != s.body.level:
+		if not p.active or p.hidden or p.body.level != s.body.level:
 			continue
 		var d := M.hypot2(p.body.x - s.body.x, p.body.z - s.body.z)
 		if d <= CATCH_RANGE and d < victim_dist:
@@ -641,6 +666,9 @@ static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 		events.append({"type": "windUp", "t": t, "playerId": victim.id})
 		return res
 
+	if _turn_to_hides(plan, s, players, events):
+		_step_hidden(plan, s, players, dt, hunt_speed, k, events)
+		return res
 	_hunt(plan, s, players, dt, hunt_speed, creep, k)
 	return res
 
@@ -658,7 +686,7 @@ static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerV
 		s.path_next = 1 if s.path.size() > 1 else 0
 	var target: PlayerView = null
 	for p in players:
-		if s.target_id != null and p.id == s.target_id and p.active:
+		if s.target_id != null and p.id == s.target_id and p.active and not p.hidden:
 			target = p
 			break
 	if target == null or s.path.is_empty():
@@ -872,6 +900,198 @@ static func keep_relocation(o: OrderlyState, from: OrderlyState) -> void:
 	o.hidden_for = 0.0
 	o.unwatched_for = 0.0
 	o.reloc_wish = from.reloc_wish
+
+# ---------------------------------------------------------------------------------------------
+# Hidden players (docs/floors/traits-and-hiding.md section 4, T19b; sim/hiding.gd, stepped by sim/run.gd
+# off the Playroom). One rule: it never sees into a hide and never takes a player out of one without a
+# reason. A player inside a hide (PlayerView.hidden) is never hunted, reached for or a wake-up; sitting
+# back they see nothing (the run makes them blind), peeking they look out of the gap (the run's view).
+#   - A hide with a reason and someone in it (PlayerView.hide_reason): when it is free to hunt and that
+#     hide's front is no further by walking than the nearest player it can hunt, it goes to the front
+#     spot ("look" {hide}) and looks in for LOOK_TIME (mode "look", pose "reach"); then everyone in the
+#     hide is caught by its own catch ("caught" for each, "lookDone" {hide, found}) and it is dormant as
+#     after any catch. If the hide is empty, or has lost its reason, when it gets there: "emptyHide".
+#   - Its target got into a hide without a reason: it walks to where it last saw them (where they began
+#     getting in), stands there STAND_TIME ("search" mode; "lostTrack" {playerId}), then hunts someone else.
+#     The lost player coming out ends the stand at once.
+# Both are moving, so Stillness rules them: held, the walk, the look and the stand all stop. A player it
+# can hunt within CATCH_RANGE is reached for as always. Nothing here happens while nobody is hidden.
+
+## Looking into a hide takes this long; it looks from no further than LOOK_REACH from the front spot.
+const LOOK_TIME := 2.0
+const LOOK_REACH := 0.5
+## Standing where it lost someone, seconds; it has arrived within SEARCH_ARRIVE metres.
+const STAND_TIME := 4.0
+const SEARCH_ARRIVE := 0.3
+
+## The tests' deliberate break (tests/prop_hides.gd): "no_reason" looks into any hide with someone in it.
+static var hide_break := ""
+
+## While hunting, free to act and with nobody in reach: turns to a hide with a reason, or to standing where
+## its target hid. Returns whether it did (mode "look" or "search"). Mutates the (already copied) state.
+static func _turn_to_hides(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerView], events: Array[Dictionary]) -> bool:
+	var any := false
+	for p in players:
+		if p.active and p.hidden:
+			any = true
+			break
+	if not any:
+		return false
+	var best := -1
+	var best_steps := 1 << 30
+	var dist := PackedInt32Array()
+	for p in players:
+		if not p.active or not p.hidden or p.hide_front == null or (not p.hide_reason and hide_break != "no_reason"):
+			continue
+		if dist.is_empty():
+			dist = _distances_cached(plan, Move.cell_of(plan, s.body))
+		var steps := dist[Floor.pos_index(plan, Move.cell_of(plan, p.hide_front))]
+		if steps >= 0 and steps < best_steps:
+			best = p.hide
+			best_steps = steps
+	if best >= 0:
+		var near := _nearest_by_walk(plan, s.body, players)
+		if near == null or best_steps <= near.steps:
+			s.mode = &"look"
+			s.look_hide = best
+			s.look_left = LOOK_TIME
+			s.path = []
+			s.replan_in = 0.0
+			s.target_id = null
+			events.append({"type": "look", "t": s.t, "hide": best})
+			return true
+	if s.target_id != null:
+		var tp := _find_player(players, s.target_id)
+		if tp != null and tp.active and tp.hidden and not tp.hide_reason:
+			s.mode = &"search"
+			s.search_spot = tp.hide_spot if tp.hide_spot != null else tp.hide_front
+			s.search_left = STAND_TIME
+			s.search_lost = tp.id
+			s.path = []
+			s.replan_in = 0.0
+			s.target_id = null
+			events.append({"type": "lostTrack", "t": s.t, "playerId": tp.id})
+			return s.search_spot != null or _end_hidden(s)
+	return false
+
+## Back to hunting from "look" or "search". Returns false (for the caller's convenience).
+static func _end_hidden(s: OrderlyState) -> bool:
+	s.mode = &"hunting"
+	s.look_hide = -1
+	s.look_left = 0.0
+	s.search_spot = null
+	s.search_left = 0.0
+	s.search_lost = null
+	s.path = []
+	s.replan_in = 0.0
+	s.target_id = null
+	return false
+
+## One tick of "look" or "search", free to act. Mutates the (already copied) state.
+static func _step_hidden(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, k: BodySettings, events: Array[Dictionary]) -> void:
+	# Someone it can hunt within reach: reached for as always.
+	var victim: PlayerView = null
+	var victim_dist := INF
+	for p in players:
+		if not p.active or p.hidden or p.body.level != s.body.level:
+			continue
+		var d := M.hypot2(p.body.x - s.body.x, p.body.z - s.body.z)
+		if d <= CATCH_RANGE and d < victim_dist:
+			victim = p
+			victim_dist = d
+	if victim != null:
+		_end_hidden(s)
+		s.mode = &"windUp"
+		s.wind_up_target = victim.id
+		s.wind_up_left = WIND_UP_TIME
+		s.anim = &"reach"
+		s.anim_time = 0.0
+		events.append({"type": "windUp", "t": s.t, "playerId": victim.id})
+		return
+	if s.mode == &"look":
+		var found: Array = []
+		var front: Move.Body = null
+		var at: Move.Body = null
+		var reason := false
+		for p in players:
+			if p.active and p.hidden and p.hide == s.look_hide:
+				found.append(p.id)
+				front = p.hide_front
+				at = p.hide_at
+				reason = reason or p.hide_reason
+		if found.is_empty() or front == null or (not reason and hide_break != "no_reason"):
+			events.append({"type": "emptyHide", "t": s.t, "hide": s.look_hide})
+			_end_hidden(s)
+			s.anim = &"idle"
+			return
+		if M.hypot2(front.x - s.body.x, front.z - s.body.z) > LOOK_REACH or front.level != s.body.level:
+			_walk_to(plan, s, front, hunt_speed, dt, k)
+			return
+		if at != null:
+			s.yaw = _turn_toward(s.yaw, yaw_toward(at.x - s.body.x, at.z - s.body.z), TURN_RATE * dt)
+		s.anim = &"reach"
+		s.look_left -= dt
+		if s.look_left <= EPS:
+			for id: String in found:
+				events.append({"type": "caught", "t": s.t, "playerId": id})
+			events.append({"type": "lookDone", "t": s.t, "hide": s.look_hide, "found": found})
+			_end_hidden(s)
+			s.mode = &"dormant"
+			s.dormant_left = DORMANT_TIME
+			s.anim = &"idle"
+		return
+	# "search": the lost player came out, or nothing to stand at.
+	var lost := _find_player(players, s.search_lost)
+	if s.search_spot == null or (lost != null and lost.active and not lost.hidden):
+		_end_hidden(s)
+		s.anim = &"idle"
+		return
+	var spot := s.search_spot
+	if s.search_left >= STAND_TIME - EPS and (M.hypot2(spot.x - s.body.x, spot.z - s.body.z) > SEARCH_ARRIVE or spot.level != s.body.level):
+		if _walk_to(plan, s, spot, hunt_speed, dt, k):
+			return
+	# There (or as near as it can get): it stands.
+	s.anim = &"idle"
+	s.search_left -= dt
+	if s.search_left <= EPS:
+		events.append({"type": "searchEnd", "t": s.t, "playerId": str(s.search_lost)})
+		_end_hidden(s)
+
+## Walks toward a point at `speed` along the floor's paths (straight within its cell). Returns whether it
+## moved. Mutates the (already copied) state.
+static func _walk_to(plan: Floor.FloorPlan, s: OrderlyState, goal: Move.Body, speed: float, dt: float, k: BodySettings) -> bool:
+	var before := s.body
+	var here := Move.cell_of(plan, before)
+	var there := Move.cell_of(plan, goal)
+	s.replan_in -= dt
+	if s.replan_in <= EPS or s.path.is_empty():
+		s.replan_in = REPLAN_INTERVAL
+		s.path = Floor.find_path(plan, here, there)
+		s.path_next = 1 if s.path.size() > 1 else 0
+	if _same_cell(here, there):
+		var dx := goal.x - before.x
+		var dz := goal.z - before.z
+		var d := M.hypot2(dx, dz)
+		var step := minf(speed * dt, d)
+		if step > 1e-6:
+			s.body = Move.move_with_collision(plan, before, (dx / d) * step, (dz / d) * step, k.radius)
+	elif not s.path.is_empty():
+		var walk := Follow.PathWalk.make(s.path, s.path_next)
+		s.body = Follow.step_path_walk(plan, walk, before, speed * dt, k.radius)
+		s.path_next = walk.next
+	var mx := s.body.x - before.x
+	var mz := s.body.z - before.z
+	var moved := M.hypot2(mx, mz)
+	s.speed = moved / maxf(dt, EPS)
+	s.moving = moved > 1e-9
+	if moved < 1e-4:
+		s.replan_in = 0.0
+	if s.moving:
+		s.yaw = _turn_toward(s.yaw, yaw_toward(mx, mz), TURN_RATE * dt)
+		s.anim = &"duck" if k.ducks and near_door(plan, s.body, k.radius) else &"walk"
+	else:
+		s.anim = &"idle"
+	return moved >= 1e-4
 
 # ---------------------------------------------------------------------------------------------
 # Sound.

@@ -49,6 +49,7 @@ const Prison = preload("res://sim/prison.gd")
 const Places = preload("res://sim/places.gd")
 const Playroom = preload("res://sim/playroom.gd")
 const Seek = preload("res://sim/seek.gd")
+const Hides = preload("res://sim/hides.gd")
 
 const PLAYER_RADIUS := 0.3
 ## The eyes of a player lying on their bunk (whole centimetres: it goes to the host as the frame's eye).
@@ -297,10 +298,13 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	lf.stamina = tank if body != null else null
 	# The Playroom: F for a hide (into the one in reach, or out of the one you are in), quick and loud
 	# with sprint held; W held inside is a peek. The body waits for the host's answer before it moves.
+	# Off the Playroom (the Clinic and the Annex, sim/hiding.gd) the floor's hides are there before anyone
+	# has hidden (the host sends the seek block from the first press on).
+	var hides_here := seek_row != null or (not hides.is_empty() and status == "ok")
 	var near_hide := -1
-	if seek_row != null and body != null and s_status == "ok" and s_phase == "out":
+	if hides_here and body != null and s_status == "ok" and s_phase == "out":
 		near_hide = hide_in_reach(body)
-	if seek_row != null and playing and inp.get("hide") == true and s_status == "ok" and (s_phase == "inside" or near_hide >= 0):
+	if hides_here and playing and inp.get("hide") == true and s_status == "ok" and (s_phase == "inside" or near_hide >= 0):
 		lf.hide = true
 		lf.hide_fast = inp.get("hideFast") == true
 		_hide_wait = HIDE_WAIT
@@ -411,8 +415,9 @@ func _use_floor(seed: String, depth: int) -> void:
 	hides = []
 	seats = []
 	if p.place == Places.PLAYROOM:
-		hides = Playroom.hides(p, p.seed)
 		seats = Playroom.seats(p)
+	# The floor's hides (sim/hides.gd): the Playroom's own list, the Clinic's and the Annex's; none at home.
+	hides = Hides.hides_for(p, p.seed)
 
 func _idle_frame() -> Client.LocalFrame:
 	var lf := Client.LocalFrame.new()
@@ -770,10 +775,12 @@ func hide_camera(row: Dictionary, latest: Dictionary, id: String, want_yaw: floa
 	var z := ins.z + off.y
 	var y := ins.y + eye_h
 	if not peek:
-		# Sat back: lower, and back from the gap (in the pit, down among the balls).
+		# Sat back: lower, and back from the gap (in the pit, down among the balls; in a cabinet or under a
+		# desk only as far as its back panel allows).
 		y = ins.y + (0.3 if h.kind == &"pit" else maxf(0.25, eye_h - SAT_DROP))
-		x -= gx * SAT_BACK * (0.0 if h.kind == &"pit" else 1.0)
-		z -= gz * SAT_BACK * (0.0 if h.kind == &"pit" else 1.0)
+		var back := 0.0 if h.kind == &"pit" else (0.12 if h.kind == &"cabinet" else (0.2 if h.kind == &"desk" else SAT_BACK))
+		x -= gx * back
+		z -= gz * back
 	return {"x": x, "y": y, "z": z, "yaw": yaw, "pitch": pitch, "peek": peek, "hide": hid, "kind": String(h.kind), "gapYaw": gy, "gapHalf": half}
 
 ## Where the camera is drawn from, for a snapshot's `me`: the feet raised by this frame's eye height.

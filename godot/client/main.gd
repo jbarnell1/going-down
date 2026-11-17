@@ -140,6 +140,8 @@ var pending_pick := false
 ## F pressed for a hide (the Playroom); tests: W held in a hide (peek), or null for the keyboard.
 var pending_hide := false
 var pending_hide_fast := false
+## Whether S was held in a desk last frame (a new press of S crawls out).
+var _desk_back := false
 var t_peek: Variant = null
 ## Tests: seconds of delay on the link to the server (delay=); bus peaks logged every frame (peaklog).
 var delay_arg := 0.0
@@ -906,6 +908,18 @@ func _game_input(dt: float) -> Dictionary:
 	var in_hide := my_seek is Dictionary and str((my_seek as Dictionary)["phase"]) == "inside"
 	var hide: bool = pending_hide and not call and (int(snap.get("nearHide", -1)) >= 0 or in_hide)
 	var hide_fast: bool = pending_hide_fast or sprint
+	# A desk (the Annex, sim/hiding.gd): no key press. Ctrl held and walking forward at its kneehole crawls
+	# under; inside one, S (a new press of it) or F crawls back out. Never fast: Ctrl is a creep.
+	var hcam: Dictionary = snap.get("hideCam", {})
+	var desk_out := in_hide and str(hcam.get("kind", "")) == "desk" and f < 0.0 and not _desk_back
+	_desk_back = in_hide and f < 0.0
+	if not in_hide and creep and f > 0.0 and str(snap.get("nearHideKind", "")) == "desk" and not (my_seek is Dictionary and str((my_seek as Dictionary)["phase"]) != "out"):
+		hide = true
+		hide_fast = false
+	elif desk_out:
+		hide = true
+		hide_fast = false
+		f = 0.0
 	var pick: bool = pending_pick and not call and not hide
 	pending_call = false
 	pending_pick = false

@@ -29,6 +29,10 @@ const SIGN_COLOR := Color(0.95, 0.08, 0.03)
 ## How many lights nearest the camera cast shadows at the "full" quality level.
 const SHADOW_LIGHTS := 4
 const PRISON_VIEW := preload("res://client/prison_view.gd")
+const ANNEX_VIEW := preload("res://client/annex_view.gd")
+const Hides = preload("res://sim/hides.gd")
+const ClinicPlan = preload("res://sim/clinic.gd")
+const PlayroomLib = preload("res://sim/playroom.gd")
 
 var plan: Dictionary
 var W: int
@@ -67,6 +71,10 @@ var props_placed := 0
 var props_overturned := 0
 ## Where each prop went (tests): room, cell, the wall it stands against, its floor footprint (x, z, w, d).
 var prop_spots: Array[Dictionary] = []
+## The Clinic's hiding places (sim/hides.gd, T19b): beds in the wards and exam rooms, cabinets in the
+## closets and the nurses' station (and wherever the rules topped one up), drawn from the rules' list.
+var hides: Array[PlayroomLib.Hide] = []
+var mat_hide: ShaderMaterial
 
 static var _shared := {}
 
@@ -128,6 +136,7 @@ func build(p: Dictionary, seed_text: String) -> void:
 	_build_floors_and_ceilings()
 	_build_walls()
 	_build_stairs()
+	_build_hides()
 	_commit_chunks()
 	_build_lights()
 	_build_signs_and_decals()
@@ -206,6 +215,7 @@ func _make_materials() -> void:
 	mat_ceiling.set_shader_parameter("stain_amount", 0.8)
 	mat_ceiling.set_shader_parameter("self_light", 0.22)
 	mat_rail = prop_material(Color(0.55, 0.6, 0.58))
+	mat_hide = prop_material(Color.WHITE, null, true)
 	mat_glow = glow_material(Color.WHITE, 1.0)
 
 # --- geometry accumulation --------------------------------------------------------------------
@@ -479,6 +489,7 @@ func _commit_chunks() -> void:
 			"floor": mi.material_override = mat_floor
 			"ceiling": mi.material_override = mat_ceiling
 			"rail": mi.material_override = mat_rail
+			"hidef": mi.material_override = mat_hide
 			"glow":
 				mi.material_override = mat_glow
 				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -718,11 +729,25 @@ func _build_signs_and_decals() -> void:
 			m2.rotate_object_local(Vector3.FORWARD, _rng.randf_range(-0.5, 0.5) if is_hand else 0.0)
 			add_child(m2)
 
+# --- hiding places ----------------------------------------------------------------------------
+
+## The rules' hides for this Clinic (sim/hides.gd), each piece of furniture at its inside spot, open
+## towards its gap (client/annex_view.gd hide_boxes, in the Clinic's white and steel).
+func _build_hides() -> void:
+	var fp := ClinicPlan.generate_clinic(str(plan.seed), int(plan.depth))
+	if fp.width != W or fp.height != H:
+		push_error("level: the Clinic plan for %s/%d does not match the one being drawn" % [plan.seed, plan.depth])
+		return
+	hides = Hides.hides_for(fp, str(plan.seed))
+	for h in hides:
+		ANNEX_VIEW.draw_hide_into(self, h, true, "hidef")
+
 # --- props ------------------------------------------------------------------------------------
 
 # Which props go in which room kind, and roughly how many per cell of floor.
+## The wards' beds are their hiding places (_build_hides), so no other beds stand there.
 const ROOM_PROPS := {
-	"ward": ["bed_hospital", "bed_hospital", "side_table", "wheelchair", "cabinet_tall", "chair_waiting"],
+	"ward": ["side_table", "wheelchair", "cabinet_tall", "chair_waiting", "side_table"],
 	"exam": ["gurney", "drawers_low", "chair_desk", "cabinet_tall", "side_table"],
 	"station": ["chair_desk", "drawers_low", "cabinet_tall", "chair_waiting"],
 	"closet": ["cabinet_tall", "drawers_low"],
@@ -810,6 +835,10 @@ func _place_props() -> void:
 		var inner := Rect2(rx * S + inset, ry * S + inset, rw * S - 2.0 * inset, rh * S - 2.0 * inset)
 		var keep_out := _door_zones(level, rid)
 		var taken: Array[Rect2] = []
+		# Clear of the hiding places' furniture.
+		for hd in hides:
+			if hd.level == level:
+				taken.append(ANNEX_VIEW.hide_foot(hd).grow(0.1))
 		for i in count:
 			for tries in 12:
 				var cx := rx + _rng.randi_range(0, rw - 1)
