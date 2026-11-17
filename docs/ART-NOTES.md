@@ -420,3 +420,180 @@ Rules learned:
     stays the source of materials and UVs.
 25. **Sample the deformed mesh against the floor every frame.** Clips made for another body sink
     (the crawl by 16 cm); a per-frame lift fixes it without touching the clips that were right.
+
+## The Minder (Playroom resident): two more tutorials (2026-11-17)
+
+The Minder is gaunt, too long, eyeless, and moves both upright and on all fours, so the study was a
+low-detail horror creature with long multi-jointed limbs and a rig for a body that is not a person.
+About twenty frames were sampled from each video (plus denser sheets of the modelling part), then the
+downloads were deleted. YouTube refused the first video's captions every time (HTTP 429), so it was
+studied from frames alone; the second was read from its captions in full.
+
+### 5. "How to make a lowpoly PS1 Monster for a INDIE HORROR GAME", Stark Crafts
+
+https://www.youtube.com/watch?v=BnBkSO6Jmuc (about 8 minutes)
+
+A long-limbed monster made from an ordinary low-poly person.
+
+- **Start from bones, not from monsters.** The video opens in a natural history museum on animal
+  skeletons (an elk, a dinosaur, a horned skull) before any modelling. *Used:* the Minder's head is a
+  long narrow skull with a crest and a keel underneath, built from a table of cross-sections along the
+  snout, not from a human head. The skull sells "animal" before anything else does.
+- **Lengthen by adding a segment, then put a joint ring at the new bend.** The arms and legs are
+  pulled out of a human base mesh and given an extra bend; every bend keeps one tight loop so the
+  low-poly limb folds cleanly. *Script: yes.* The Minder's legs have an extra segment (a long raised
+  foot from the heel to the ball), and the arms are human-jointed but longer, reaching past the knees.
+- **Thin straight tubes between knobbed joints read as wrong.** The frames show long limbs that are
+  almost straight prisms with a sharp knee or elbow. *Script: yes.* Limbs taper between joints and
+  swell at the knee, elbow, wrist and every knuckle (rule 6 again).
+- **Hanging cloth is a plane, carried by the body.** Its rags are a flat textured sheet hung off the
+  hips. *Script: yes, with bones.* The tabard's strips are single sheets that hang from the panels.
+- **Pose with IK handles on the hands and feet.** The rig places a circle control at each hand and
+  foot and drags the limbs onto the floor. *Script: yes, as maths.* See below.
+
+### 6. "The Easiest Way To Rig Creatures In Blender (For Beginners)", richstubbsanimation
+
+https://www.youtube.com/watch?v=rOcNY00Mv1I (about 8.5 minutes)
+
+Rigging bodies that are not human by building the rig from Rigify's separate parts.
+
+- **Look at the body and list its parts before choosing a rig.** "Analyse your model and identify all
+  the key body parts." A human preset does not fit a creature. *Used:* the Minder's 43 bones are a
+  list made for it: a spine of four, a neck of two, a head and a jaw, two arms, four-part legs, and
+  five cloth bones.
+- **The "paw" limb is a leg with one more segment.** For creature legs he swaps the human leg for the
+  paw module: thigh, shin, a long foot and the toes. *Used:* `thigh`, `shin`, `foot`, `toe`, with the
+  foot standing steep so the heel stays off the floor; a crouch then bends the leg the wrong way.
+- **Two-knuckle fingers are a two-bone chain.** A finger with two knuckles gets a chain of two, the
+  third joint deleted. *Used:* each long finger is drawn with three knobs but carried by two bones, and
+  the little finger rides on the ring finger's bones.
+- **Extra small bones for things that should jiggle.** He parents a few loose bones to the neck to
+  shake soft parts on their own. *Used:* the tabard strips and the lanyard each hang from one bone
+  that is levelled to hang plumb whatever the body does, then swung late (rule 16).
+- **Automatic weights, then fix them.** *Not used.* The script writes every weight itself, ring by
+  ring, so nothing depends on Blender's heat solver.
+
+### How the Minder is built
+
+`assets_src/blender/minder/build_minder.py` makes everything from an empty scene: 6,291 triangles,
+43 bones, a 512 px body atlas (colour, normal and roughness) painted in numpy and a 256 px mask with its own glow
+map, ten actions.
+`render_minder.py` re-imports the glb and renders the turnaround, the poses and the dark picture.
+
+- **The skull** is a loft of eleven cross-sections from the back of the head to the end of the snout:
+  flat on top with a crest, narrowing to a keel underneath, with shallow sealed hollows where eyes
+  would be. They are shaped, not painted: a dark patch there reads as sunglasses (the Orderly's lesson).
+- **The jaw** is its own loft, hinged under the back of the skull and built already hanging open
+  (38 degrees since round one). Its teeth are three-sided hooks, some missing, all on the front half, so the
+  mouth shows under the mask's lower edge and never as a grin across the face.
+- **The mask** is two sheets: a printed front with its own material (base colour plus an emission
+  map, so the bare card glows and the ink does not) and a plain card back 2 mm behind it on the body
+  material. The front is back-face culled. From behind there is card and skull and a thin elastic,
+  and nothing else. `godot/tools/minder_check.gd` proves every mask vertex is in front of the skull and
+  every mask face looks forward.
+- **Posing is plain maths, not constraints.** Each pose is a dict of bone ops, as for the Orderly,
+  plus a two-bone solver: the arms and legs get a target (a wrist on the floor, a ball of the foot on
+  the floor, a wrist on the mask) and a pole (elbows back and out, knees forward and out), and the
+  solver writes the two rotations directly, keeping each limb's rest bend plane so the twist never
+  flips. Hands and feet are then aimed in world space (palm flat, fingers fanned; the long foot steep).
+  Nothing has to be baked and the keys are exact.
+- **Gaits** are phase tables: each limb's touch-down phase, a duty factor and a stride. The upright
+  walk is a slow two-beat stride (stepped at 8 poses a second, like the Orderly); the prowl is a
+  lateral walk, left hind, left fore, right hind, right fore (12 a second); the run is a bound, the
+  hind feet landing together and the fore feet reaching far out, sampled every frame.
+- **One-shots are as long as the rules hold the pose** (straighten 3 s, look 2 s, slump 1 s, catch
+  3 s from `sim/seek.gd`) and end on the held pose; loops end on their first pose. Loops are exported
+  as `walk-loop` and so on: Godot's scene importer loops a clip named that way and drops the suffix, so
+  the game sees the exact pose names with the loops already looping (setting the loop mode in the
+  `.import` file instead made Godot write a 680 KB import file).
+
+Rules learned:
+
+26. **Solve contacts, never guess them.** A hand on the floor or on the face is a target for a
+    two-bone solve with a pole, written straight into the keys. Report how far each target was
+    missed: a reach error is a pose that asks the body to be longer than it is.
+27. **Cloth that hangs plumb must have somewhere to hang.** Plumb strips are right on the chest of a
+    body on all fours (they dangle under it) and wrong on its back (they would hang through it), so
+    back strips follow the body and are pressed down onto it instead.
+28. **A glow belongs to the bare surface, not the print.** Give the mask an emission map with the ink
+    cut out, keep the emission low (0.35) so the card still reads as card in light, and in the dark
+    the face is drawn by what does not glow.
+
+### Round one of blind judging on the Minder, and what changed
+
+Three judges saw only the renders: 6, 4 and 4 out of 10 lit, about 7 in the dark. Kept, because all
+three named them: the glowing face floating in the dark at the wrong height, the flat mask on the end
+of a long snout with the real jaw hanging open under it, the drop to all fours, the hands-over-the-face
+crouch, the ID badge. What they caught, and the fix:
+
+- **Glossy plastic, a mannequin.** The material is matte now: a roughness map (skin 0.86, the wet
+  mouth 0.2, teeth 0.35), low specular, and a normal map of skin grain and wrinkles. The skin is
+  mottled (low-frequency blotches of bruise and of pale, fine grain), pale grey-yellow only on small
+  bone points, bruised purple-brown in the rib gaps, behind the knees and on the hands and feet.
+- **Tube limbs with seam rings and ball joints.** Each segment now tapers from its upper end to about
+  0.6 of that at its lower end, and the bones show at the ends on one side only (the point of the
+  elbow, the knob of the wrist, the kneecap, the ankle bones), never as a ring all round. Every vertex
+  of a limb is pushed in or out a little, so the outline is not a straight cylinder.
+- **A bean-shaped pelvis.** The hip crests stand out at the sides and run forward to two points, the
+  pubic bone is a ridge low at the front, the lower belly is sunk in and the sacrum is flat.
+- **Symmetrical.** The right shoulder and arm hang 6.5 cm lower and the left arm is 10% longer. This
+  is done once, after the mesh and bones are built, by moving each vertex by its own arm weights, so
+  every pose and the two-bone solver inherit it.
+- **Wire hands, toy feet.** Fingers are a third thicker with small dark claws; the feet are longer
+  and the toes thicker, each with a thick claw.
+- **Party bunting.** The vinyl is faded to maroon, mustard-brown and slate, dirty toward the hem; a
+  third of the strips are gone, the rest differ in width and length by up to 40% and end in three
+  ragged points; the panels sit darker than the strips. The badge is grimy and hangs crooked.
+- **A friendly cartoon from the front, and a well-known mask.** A pale disc with two dots and a neat
+  curve is too close to a mask a well-known video maker wears. Ours now has two eyes that do not match
+  (one higher and smaller) and a wobbly smile far too wide, nearly edge to edge. The mask is 1.3 times
+  bigger, a little taller than wide, shaped like a paper plate (a gently curved middle, a rim that
+  curls back and is fluted), crumpled, stained, torn in two places, and bent forward at one corner.
+- **A hairdryer head.** The cranium is a quarter smaller, with a heavy brow, a cheek ridge along each
+  side and sunken temples. The jaw hangs open 38 degrees at rest, the teeth are three to four times
+  longer, crooked and off-white going yellow, still only on the front half, and the corners of the
+  mouth are dark wet skin stretched from the snout to the jaw. Standing, the neck cranes forward and
+  the head hangs over to one side.
+
+Rules learned:
+
+29. **Matte first, then colour.** A plastic sheen turns any creature into a figurine; skin wants a
+    roughness map and a grain in the normals before anything is painted.
+30. **Colour by small patches, never by rings.** A region given to a whole ring of a limb reads as a
+    sock, a cuff or a joint of a doll. Pale or bruised colour goes on a few faces facing one way.
+31. **Check a simple face against well-known ones.** Two dots and a curve on a pale disc is someone
+    else's mask. Make the eyes disagree and the smile wrong.
+
+### Round two on the Minder, and the final pass
+
+Three fresh judges: 6, 5 and 5 lit (up from 6, 4, 4), 7 to 8 in the dark, side-on or crawling. Kept:
+the lone glowing face in the dark, the mask as a lie over a fanged mouth, the crawl, the crouch holding
+the mask on, the badge. What they caught, and the fix:
+
+- **The mask still read as an emoji, a frog sticker, a lollipop.** It is dirty bone now, and green only
+  comes from the glow (emission 0.26, which reads in the dark and not in light). The eyes are holes cut
+  right through the card (alpha, on the printed front and on the plain back alike), uneven and torn, one
+  lower; behind them is a small dark plate of skin, so the holes show head, never the room. The mouth is
+  a thin flat printed line 85% of the width, ends not turned up, cracked through once. And the mask is
+  now a little too small for the skull, so from the front the cranium shows round it and the open jaw
+  hangs below: it can no longer read as a ball on a stick.
+- **A blockout.** The pelvis is narrow and tapered with two crest bumps, and the thighs begin inside it
+  and widen downward, so there is no ledge. The shoulders slope about 22 degrees from the neck. Limb
+  outlines are rough by half as much, and the pale and tan patches at the knees, ankles, feet and elbows
+  are gone. The skin noise is three times finer along each limb than round it, because a limb's texture
+  is stretched a metre along v: the old noise ran in long streaks that read as wood grain. Darker, wetter
+  patches (lower roughness) sit in the rib gaps and the crooks of the joints.
+- **A toy crocodile.** The lower jaw is a U-shaped bar of real thickness, from hinge round the chin to
+  hinge. It carries 26 thin needle teeth (18 below, 8 above), lengths 0.4 to 1.6 times a base, leaning
+  up to 15 degrees either way, bone-grey, front half only. A near-black floor sags between the two sides
+  of the jaw and a near-black wall closes the throat, so the open mouth has depth.
+- **The vest is still the brightest thing.** Faded a further half toward grey and darkened with grime;
+  the music box's star is a faded, dirty pink-beige.
+
+Rules learned:
+
+32. **A mask must be smaller than the head it is on.** If the face covers the whole silhouette from
+    the front, the figure is a face on a stick; let the skull and jaw show round it.
+33. **Holes beat paint for eyes.** Painted dots read as a sticker at any size; a hole with darkness
+    behind it reads as a mask with something wearing it.
+34. **Noise must be square on the body, not in the texture.** Scale it by how far the UVs stretch.
