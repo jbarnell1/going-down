@@ -95,6 +95,10 @@ var _test_bufs: Array[String] = []
 var _welcome_pending := false
 
 func _ready() -> void:
+	if OS.get_cmdline_user_args().has("scene=prison_demo"):  # the Prison hub look, no day loop (client/prison_demo.gd)
+		process_mode = Node.PROCESS_MODE_DISABLED
+		get_tree().change_scene_to_file.call_deferred("res://client/prison_demo.tscn")
+		return
 	var t0 := Time.get_ticks_msec()
 	_read_options()
 	_add_actions()
