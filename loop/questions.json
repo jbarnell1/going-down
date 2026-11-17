@@ -1020,6 +1020,256 @@
       "type": "text",
       "options": [],
       "default": []
+    },
+    {
+      "id": "hide-look",
+      "title": "The hide floor: what place is it?",
+      "context": "Tonight's new floor comes after the Annex (floor 4). Its rule is hide and seek: when the monster is provoked, a voice tells the crew to hide and starts a count, the floor goes dark, anyone found before the count ends is taken. Which place should it be?",
+      "type": "single",
+      "options": [
+        {
+          "id": "hotel",
+          "label": "A hotel corridor: guest rooms with wardrobes, beds, bathtubs, a laundry room",
+          "note": "Recommended. Lots of natural hiding places, and long corridors to cross between them."
+        },
+        {
+          "id": "playarea",
+          "label": "A children's play area: ball pits, tube slides, soft-play towers, a party room",
+          "note": "Funnier and stranger; hiding in a ball pit."
+        },
+        {
+          "id": "store",
+          "label": "A department store after hours: clothing racks, changing rooms, mannequins",
+          "note": "Mannequins that are only mannequins."
+        },
+        {
+          "id": "archive",
+          "label": "Archive stacks: tall shelving, rolling stacks, filing rooms",
+          "note": "Tight and maze-like."
+        }
+      ],
+      "default": [
+        "hotel"
+      ]
+    },
+    {
+      "id": "hide-seeker",
+      "title": "The hide floor: who comes looking?",
+      "context": "The seeker has to search rooms well enough to be a real threat.",
+      "type": "single",
+      "options": [
+        {
+          "id": "orderly",
+          "label": "The Orderly, already built, comes up to search",
+          "note": "Recommended for tonight: it is modelled, animated and tested. It still freezes when someone sees it, so peeking out of a hiding place can save the crew."
+        },
+        {
+          "id": "new",
+          "label": "A new resident made for this floor",
+          "note": "Needs its own model and animation pass overnight; riskier for the morning."
+        },
+        {
+          "id": "new-later",
+          "label": "The Orderly tonight, a new resident later",
+          "note": ""
+        }
+      ],
+      "default": [
+        "orderly"
+      ]
+    },
+    {
+      "id": "hide-spots",
+      "title": "The hide floor: how do you hide?",
+      "context": "",
+      "type": "single",
+      "options": [
+        {
+          "id": "both",
+          "label": "Climb into furniture (wardrobe, locker, under a bed) and look out through a gap, OR just stay out of sight anywhere",
+          "note": "Recommended."
+        },
+        {
+          "id": "furniture",
+          "label": "Only inside hiding furniture",
+          "note": "Clearer rules; fights over the good spots."
+        },
+        {
+          "id": "anywhere",
+          "label": "Anywhere out of sight, no special furniture",
+          "note": "Simplest to build."
+        }
+      ],
+      "default": [
+        "both"
+      ]
+    },
+    {
+      "id": "hide-trigger",
+      "title": "The hide floor: what starts a count?",
+      "context": "The design says the count starts when the monster is provoked enough, and calling the lift starts one last count before you can leave.",
+      "type": "single",
+      "options": [
+        {
+          "id": "provoke",
+          "label": "Provoking it: noise, sprinting near it, shining a light on it",
+          "note": "Recommended; what the design says."
+        },
+        {
+          "id": "timer",
+          "label": "A count every few minutes no matter what",
+          "note": ""
+        },
+        {
+          "id": "both",
+          "label": "Provoking it, or a timer if the crew is too careful",
+          "note": ""
+        }
+      ],
+      "default": [
+        "provoke"
+      ]
+    },
+    {
+      "id": "hide-health",
+      "title": "The hide floor: after a count, does running hurt?",
+      "context": "The design left this open: after the count, moving faster than a creep may drain your health.",
+      "type": "single",
+      "options": [
+        {
+          "id": "no",
+          "label": "No, keep it simple",
+          "note": "Recommended for the first build."
+        },
+        {
+          "id": "sprint",
+          "label": "Only sprinting drains health",
+          "note": ""
+        },
+        {
+          "id": "yes",
+          "label": "Anything faster than a creep drains health slowly",
+          "note": ""
+        }
+      ],
+      "default": [
+        "no"
+      ]
+    },
+    {
+      "id": "night-priority",
+      "title": "Tonight: if time runs short, what matters most by morning?",
+      "context": "",
+      "type": "single",
+      "options": [
+        {
+          "id": "full-run",
+          "label": "A whole run playable end to end: Clinic, Clinic, Annex with the Temp, the hide floor, back up to the prison and through the day",
+          "note": "Recommended. Rough edges are fine."
+        },
+        {
+          "id": "hide-polish",
+          "label": "The hide floor done well, even if the prison day loop waits",
+          "note": ""
+        },
+        {
+          "id": "downed",
+          "label": "Going down and being healed by a crewmate",
+          "note": ""
+        }
+      ],
+      "default": [
+        "full-run"
+      ]
+    },
+    {
+      "id": "minder-look",
+      "title": "The Playroom's seeker: the Minder",
+      "context": "Fable designed our own figure for the hide floor: the Minder, a 2.3 m play attendant in padded soft-play vinyl with a party balloon for a head. A face is drawn on ONE side of the balloon only, so you can always tell which way it faces, and the balloon glows in the dark. A music box plays as it walks. It hunts by hearing (not a freeze-when-seen monster) and never takes anyone outside a count.",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "label": "Yes, build the Minder like that",
+          "note": "Recommended."
+        },
+        {
+          "id": "change",
+          "label": "Change something (write what below)",
+          "note": ""
+        }
+      ],
+      "default": [
+        "yes"
+      ]
+    },
+    {
+      "id": "walk-noise",
+      "title": "The Playroom: is plain walking a noise?",
+      "context": "You said any noise at all starts a count. If footsteps from walking counted, a count would start in the first second of every visit.",
+      "type": "single",
+      "options": [
+        {
+          "id": "no",
+          "label": "Walking is quiet; sprinting and real noises start a count (squeaky tiles, flaps, the ball pit at speed, bumping it, a dropped tape, sound emotes)",
+          "note": "Recommended."
+        },
+        {
+          "id": "yes",
+          "label": "Walking counts too; you must creep everywhere",
+          "note": ""
+        }
+      ],
+      "default": [
+        "no"
+      ]
+    },
+    {
+      "id": "party-horn",
+      "title": "The Playroom: the party table horn",
+      "context": "Players who are found sit at the party table in a paper hat until a friend fetches them (hold F for three seconds, outside a count). They get a party horn. Blowing it outside a count starts a new count for everyone still playing.",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "label": "Keep the horn; it's funny and mean",
+          "note": "Recommended."
+        },
+        {
+          "id": "harmless",
+          "label": "Horn makes a sound but never starts a count",
+          "note": ""
+        },
+        {
+          "id": "none",
+          "label": "No horn",
+          "note": ""
+        }
+      ],
+      "default": [
+        "yes"
+      ]
+    },
+    {
+      "id": "deck-after-4",
+      "title": "Floors 5 and deeper",
+      "context": "Floors go Clinic, Clinic, Annex, Playroom. After that the seed draws Clinic, Annex or Playroom, never the same place twice in a row.",
+      "type": "single",
+      "options": [
+        {
+          "id": "random",
+          "label": "Yes, seeded draw, never the same twice running",
+          "note": "Recommended."
+        },
+        {
+          "id": "cycle",
+          "label": "Repeat the same order of four",
+          "note": ""
+        }
+      ],
+      "default": [
+        "random"
+      ]
     }
   ]
 }

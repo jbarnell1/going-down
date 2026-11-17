@@ -54,7 +54,6 @@ Raw = the owner's WAV as delivered; final = the committed Ogg. Rel = final loudn
 | orderly/shriek_1.ogg | scare | -12.3 / -15.4 / 6.1 / -3.0 | -13.3 / -13.3 / 0.0 / -1.9 | +2.8 | volume | 1.9 | - | 2.93 s |
 | orderly/shriek_2.ogg | scare | -10.7 / -13.2 / 7.0 / -0.8 | -14.7 / -14.7 / 0.0 / -1.8 | +1.4 | volume +encoder trim | 3.3 | - | 2.5 s |
 | orderly/shriek_3.ogg | scare | -12.7 / -13.0 / 2.6 / -0.8 | -13.0 / -13.8 / 20.1 / -1.6 | +2.3 | gain (loudnorm refused linear) +encoder trim | 4.6 | - | 3.35 s |
-| player/breath_winded.ogg | player | -27.6 / -26.4 / 2.1 / -11.2 | -23.9 / -22.7 / 1.7 / -4.2 | -7.8 | loudnorm-linear | 0.0 | 0.17 | 7.08 s |
 | player/step_1.ogg | step | -42.1 / -40.6 / 4.3 / -13.3 | -24.2 / -24.2 / 0.0 / -2.9 | -8.1 | volume | 5.6 | - | 0.42 s |
 | player/step_2.ogg | step | -42.1 / -40.6 / 4.3 / -13.3 | -24.3 / -24.3 / 0.0 / -3.9 | -8.2 | volume | 3.4 | - | 0.42 s |
 | player/step_3.ogg | step | -42.1 / -40.6 / 4.3 / -13.3 | -24.1 / -24.1 / 0.0 / -3.5 | -8.0 | volume | 0.0 | - | 0.42 s |

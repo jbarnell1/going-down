@@ -4,11 +4,11 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 44 of 64.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 49.
-- **Now:** nothing in progress
-- **Last CI result seen:** passed on 88efc2d
-- **Answers applied up to:** 2026-11-17T02:33:36.042Z
+- **Gates passed:** 7 of 14. **Tasks done:** 44 of 78.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 50.
+- **Now:** T15a The Playroom floor generator. An Opus builder is writing the Playroom floor generator (hides, squeaky tiles, zones, party-table seats)
+- **Last CI result seen:** passed on 9a66bfa
+- **Answers applied up to:** 2026-11-17T05:04:17.919Z
 
 ## Tasks
 
@@ -162,6 +162,34 @@
   - To do: Research before building (one agent, written up in docs): how games make a searcher that feels smart and fair. Start from occupancy / probability maps (the searcher keeps a belief of where players could be and checks the likeliest spots), last-known-position search, a director that nudges it toward players without telling it exactly (Alien: Isolation's two-part design), and hiding-spot checks with tells so a hidden player can hold their breath. Must stay deterministic from the seed and simulate hundreds of rounds: good hiders usually live, runners die, nobody dies to pure luck.
   - To do: Fits the existing rules: the entity is heard before seen; the instrument could pay most for a reading taken from a hiding place while it searches nearby; a found player goes down rather than out, with something to do within seconds.
   - To do: Owner (2026-11-16, later): 'Clicking the elevator should trigger a hiding sequence, so you have to survive one last time before making it to freedom.' So on this floor calling the car always starts one last count-and-search; the car arrives when the search ends. It is this floor's version of the Clinic's blackout while waiting.
+- [ ] **T16e** `todo` The place deck: the third floor down is the Annex
+  - Why: Floors stop being all Clinic; the yellow office arrives at floor 3 and the Playroom at floor 4
+- [ ] **T15a** `doing` The Playroom floor generator
+  - Why: Floor 4 becomes a soft-play centre with ball pits, crawl dens, a party room and places to hide
+- [ ] **T16g** `todo` The Temp's figure and its stapler
+  - Why: Something actually lives in the Annex: an office worker with a crewmate's drawing for a face
+- [ ] **T16f** `todo` The Temp's body in the rules
+  - Why: The Temp is shorter, clicks a stapler, and stops the moment you look
+- [ ] **T18j** `todo` The day in the run: bank, ride up, sleep, day 2
+  - Why: Vote BANK and you ride up to the prison, go to bed, and wake to a new day going down
+- [ ] **T15b** `todo` The count, the Minder and health, as rules
+  - Why: What makes the seeker fair and a real threat
+- [ ] **T15c** `todo` The Playroom's look and a stand-in Minder
+  - Why: Padded primary colours, a ball pit, netting and signs that print the hiding odds
+- [ ] **T15d** `todo` The count in the run and over the network
+  - Why: Somebody sprints, the lights die, and the ball pit actually saves you, the same for every player
+- [ ] **T15e** `todo` The count on screen
+  - Why: HIDE, the dark, climbing into hiding places and peeking at a glowing balloon
+- [ ] **T18k** `todo` Bed and the day board on screen
+  - Why: The prison shows what the crew banked and HOLD F TO SLEEP works
+- [ ] **T15g** `todo` The Minder, modelled, rigged and animated in Blender
+  - Why: The stand-in becomes a tall padded attendant with a bobbing balloon head
+- [ ] **T15h** `todo` The party table for found players
+  - Why: Found players sit in paper hats with a horn until a friend fetches them
+- [ ] **T8a** `todo` Down first, then out
+  - Why: Being caught drops you; a friend holding F puts you back up
+- [ ] **T11a** `todo` A whole run with bots, headless
+  - Why: Proof the build plays end to end, from the Clinic to day 2
 - [ ] **T16** `todo` The Annex, the second place
   - Why: The first playable has three places and two residents; the Annex and the Temp are next, so the crew meets a different kind of floor after the Clinic
 - [x] **T16a** `done` The Annex floor generator
@@ -244,9 +272,35 @@
 - 2026-11-16: Owner, 2026-11-16: on Friday we play 'Whatever Godot has'. All effort goes into the Godot build; the frozen browser game stays up but is not the plan for game night.
 - 2026-11-16: Owner, 2026-11-16: friends reach the home game server through Tailscale Funnel ('Let's do the funnel with tailscale'). Nothing is opened until the server exists; the owner runs the one admin command.
 - 2026-11-17: Until you answer: the shop sells one-day items (flares, batteries, tape, extra marks) and the skill tree keeps the permanent upgrades; windows 1-2 the shop, 3-4 the skill tree, the face kiosk in the corridor by the cells.
+- 2026-11-17: Hide floor: a children's play area with a new seeker of our own design (owner's mood note: the entity from the subliminal game); any sprint, noise or light on it starts the count; after a count, faster than a creep drains health; build the whole thing even if it is not ready by morning.
+- 2026-11-17: The Minder: more animalistic and moves on all fours (owner's picture as direction, design kept original: a gaunt eyeless thing in tabard rags with a printed smiley party mask). Walking is quiet; the party horn never starts a count; floors 5+ are drawn by the seed.
 
 ## Activity (newest first)
 
+- 2026-11-17 05:05Z Took a default: The Minder: more animalistic and moves on all fours (owner's picture as direction, design kept original: a gaunt eyeless thing in tabard rags with a printed smiley party mask). Walking is quiet; the party horn never starts a count; floors 5+ are drawn by the seed.
+- 2026-11-17 05:05Z Applied the owner's new answers.
+- 2026-11-17 04:55Z Started T15a: The Playroom floor generator. An Opus builder is writing the Playroom floor generator (hides, squeaky tiles, zones, party-table seats)
+- 2026-11-17 04:55Z Paused T15: waiting for its pieces T15a to T15h; Fable's design is docs/floors/playarea.md
+- 2026-11-17 04:55Z Added task T11a: A whole run with bots, headless.
+- 2026-11-17 04:55Z Added task T8a: Down first, then out.
+- 2026-11-17 04:55Z Added task T15h: The party table for found players.
+- 2026-11-17 04:55Z Added task T15g: The Minder, modelled, rigged and animated in Blender.
+- 2026-11-17 04:55Z Added task T18k: Bed and the day board on screen.
+- 2026-11-17 04:55Z Added task T15e: The count on screen.
+- 2026-11-17 04:55Z Added task T15d: The count in the run and over the network.
+- 2026-11-17 04:55Z Added task T15c: The Playroom's look and a stand-in Minder.
+- 2026-11-17 04:55Z Added task T15b: The count, the Minder and health, as rules.
+- 2026-11-17 04:55Z Added task T18j: The day in the run: bank, ride up, sleep, day 2.
+- 2026-11-17 04:55Z Added task T16f: The Temp's body in the rules.
+- 2026-11-17 04:55Z Added task T16g: The Temp's figure and its stapler.
+- 2026-11-17 04:55Z Added task T15a: The Playroom floor generator.
+- 2026-11-17 04:55Z Added task T16e: The place deck: the third floor down is the Annex.
+- 2026-11-17 04:48Z Took a default: Hide floor: a children's play area with a new seeker of our own design (owner's mood note: the entity from the subliminal game); any sprint, noise or light on it starts the count; after a count, faster than a creep drains health; build the whole thing even if it is not ready by morning.
+- 2026-11-17 04:48Z Applied the owner's new answers.
+- 2026-11-17 04:41Z Started T15: A floor where you have to hide. Fable is designing the hide-and-seek floor (the floor after the Annex) and tonight's build order
+- 2026-11-17 04:40Z Overnight: Fable is planning tonight's build order and designing the floor after the Annex, so the builders can work through the night.
+- 2026-11-17 04:38Z Owner: the players' winded breath must not use the wet entity breaths. It goes back to the made-in-code breathing until a clean, dry panting is recorded; added to the sound list.
+- 2026-11-17 04:31Z Started TA: Real sounds, and comedy sounds. A Sonnet agent is checking the recorded sounds and the mix, merged onto the current game (commit 92c77ee)
 - 2026-11-17 04:09Z Combined build checked (play_web 34/34, desktop 38, net 33, quick 56) and promoted: play/GoingDown-2026-11-16-2151.zip has the face kiosk, the Annex look and the lower camera when you creep. Lab-box server updated to the same code; a two-player game over the public address passed.
 - 2026-11-17 04:03Z GitHub's checks pass on the new Godot-recorded tests on Linux too (88efc2d), so the recordings agree across Windows and Linux. An independent checker is running the full combined build (kiosk, Annex look, camera drop) before it becomes the game you run.
 - 2026-11-17 03:51Z Finished T2c: The camera drops when you creep.
@@ -263,27 +317,3 @@
 - 2026-11-17 03:12Z Started T0g: Godot tests stand on their own results. An independent checker is re-running the reworked tests in a separate copy, with three breaks, so it can be merged; the author keeps recording the large sizes.
 - 2026-11-17 03:12Z T0g
 - 2026-11-17 03:11Z Started T2c: The camera drops when you creep. Opus is making the camera drop when you creep or go down, in its own copy; the eye height the rules use for 'what counts as looking' always equals what your screen shows
-- 2026-11-17 03:08Z Paused T16d: waiting for the kiosk check to finish (one checker opening game windows at a time while you use this PC); then its own independent check, then the merge.
-- 2026-11-17 03:08Z T16d
-- 2026-11-17 03:08Z Started T18i: A face kiosk in the prison, and a window each for the shop and the skill tree. Built in its own copy: SHOP and SKILLS signs, the face kiosk (F to redraw, everyone sees the new face, at most one change per 5 s), and the door-frame flicker fixed at the cause (630 overlapping surfaces found, now 0). An independent checker is re-running everything with two breaks.
-- 2026-11-17 03:08Z New pictures for T18i: A face kiosk in the prison, and a window each for the shop and the skill tree.
-- 2026-11-17 02:55Z Finished T18g: The prison's look: the corridor, the bank room and the cells you come home to.
-- 2026-11-17 02:55Z Finished T7f: Draw your face.
-- 2026-11-17 02:50Z Started T16d: The Annex's look: the endless yellow office, built and pictured. Opus is fixing two loose ends in its copy: fewer real lights (316 is over Godot's limit of 256) without a darker floor, and no red tint in the Annex's blackout
-- 2026-11-17 02:49Z Paused T16d: waiting for the combined face-and-prison build's check to finish; then I merge the Annex branch into the main game.
-- 2026-11-17 02:49Z T16d
-- 2026-11-17 02:45Z Started T16d: The Annex's look: the endless yellow office, built and pictured. Built in its own copy: identical dressing for same-shaped rooms (2,169 rooms compared), green emergency lights in blackouts, faster than the Clinic. An independent checker is re-running it with a deliberate break.
-- 2026-11-17 02:45Z New pictures for T16d: The Annex's look: the endless yellow office, built and pictured.
-- 2026-11-17 02:39Z Started T18i: A face kiosk in the prison, and a window each for the shop and the skill tree. Opus is building, in its own copy: SHOP signs over windows 1-2, SKILLS over 3-4, and a face kiosk in the corridor by the cells where you redraw your face and the crew sees the new one
-- 2026-11-17 02:38Z Started T18g: The prison's look: the corridor, the bank room and the cells you come home to. Merged into the main game with the face work; the combined build is being checked before it is promoted.
-- 2026-11-17 02:38Z Started T7f: Draw your face. Committed and merged with the prison look. An independent checker is re-running every playthrough on the combined build before it becomes the game you run.
-- 2026-11-17 02:33Z Paused T18i: waiting for the prison merge (right after the face work lands). Decided with you: windows 1-2 the shop (one-day items), 3-4 the skill tree, the face kiosk in the corridor by the cells.
-- 2026-11-17 02:33Z Applied the owner's new answers.
-- 2026-11-17 02:23Z P3
-- 2026-11-17 02:21Z Took a default: Until you answer: the shop sells one-day items (flares, batteries, tape, extra marks) and the skill tree keeps the permanent upgrades; windows 1-2 the shop, 3-4 the skill tree, the face kiosk in the corridor by the cells.
-- 2026-11-17 02:21Z Paused T18i: waiting for the prison merge and your answer on what the shop sells (Questions page).
-- 2026-11-17 02:21Z Added task T18i: A face kiosk in the prison, and a window each for the shop and the skill tree.
-- 2026-11-17 02:18Z Started T7f: Draw your face. Built: draw your face on the start screen, it is sent when you join, shown on your mask and the lift monitor. Two-player check 27/27. An independent checker is re-running every playthrough and a break.
-- 2026-11-17 02:18Z New pictures for T7f: Draw your face.
-- 2026-11-17 02:16Z Started T16d: The Annex's look: the endless yellow office, built and pictured. Opus is building the Annex's look in its own copy: yellowed walls, mustard carpet, even pale light, props chosen by room shape so repeated rooms match, repeating signs
-- 2026-11-17 02:16Z Added task T16d: The Annex's look: the endless yellow office, built and pictured.

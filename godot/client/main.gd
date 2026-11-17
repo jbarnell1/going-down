@@ -65,7 +65,9 @@ var cam: Camera3D
 var world: Node3D
 var level: Level
 var lift: Lift
-var orderly: OrderlyView
+## The resident's view on this floor: an OrderlyView, or a TempView in the Annex (_use_resident).
+var orderly: Node3D
+var _resident_kind := "orderly"
 var others: OthersView
 var sfx: Sfx
 var announcer: Announcer
@@ -496,7 +498,7 @@ func _clear_world() -> void:
 	level = null
 	lift = null
 	built_depth = -1
-	orderly.reset()
+	orderly.call(&"reset")
 	others.clear()
 	snap = {}
 	sfx.ride(false)
@@ -550,11 +552,31 @@ func _build_floor(plan: Dictionary) -> void:
 	lift.build(plan["car"])
 	lift.set_doors(false, true)
 	lift.set_faces(link.crew_faces())
-	orderly.reset()
+	_use_resident(plan)
 	built_depth = int(plan["depth"])
 	level.set_emergency(0.0)
 	level.set_light_level(1.0)
 	print("floor %d built: %d lights, %d flickering, %d emergency, %d props (%d overturned)" % [built_depth, level.main_lights.size(), level.flickers.size(), level.emergency_lights.size(), level.props_placed, level.props_overturned])
+
+## THE one place the resident's view is chosen, by the plan's place: the Annex's is the Temp
+## (client/temp_view.gd, with its own stapler click, so the trolley squeak stays the Orderly's), anywhere
+## else the Orderly. The Playroom's Minder gets its own line here.
+func _use_resident(plan: Dictionary) -> void:
+	var kind := "orderly"
+	match str(plan.get("place", "")):
+		"annex":
+			kind = "temp"
+	if kind != _resident_kind:
+		var view: Node3D = TempView.new() if kind == "temp" else OrderlyView.new()
+		view.name = kind.capitalize()
+		orderly.queue_free()
+		orderly = view
+		sub.add_child(view)
+		_resident_kind = kind
+	orderly.call(&"reset")
+	if orderly is TempView:
+		(orderly as TempView).set_crew(str(snap.get("seed", seed)), link.crew_faces())
+		(orderly as TempView).set_floor(link.plan, level)
 
 # --- input --------------------------------------------------------------------------------------
 
@@ -832,7 +854,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 
 	# The Orderly: drawn exactly as the frame says, never in the dark, never while taken.
 	var o: Dictionary = s["orderly"]
-	orderly.show_pose(o.get("pose"), bool(o.get("visible", false)) and not _noise_on())
+	orderly.call(&"show_pose", o.get("pose"), bool(o.get("visible", false)) and not _noise_on())
 
 	# Everyone else, and their name tags (not through walls, fading with distance, not in the dark).
 	var dark: bool = s["dark"]
@@ -908,7 +930,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		var cd: Dictionary = cl
 		machine = (1.0 - float(cd["floorsAway"]) / maxf(1.0, float(cd["floors"]))) * (0.5 if bool(cd["falseStop"]) else 1.0) + 0.05
 	var car: Dictionary = link.plan_dict["car"]
-	sfx.update(dt, o["squeak"], o.get("pose"), tick_hz, loud, float(me["exertion"]) if not still else 0.0, bool(me["winded"]), machine,
+	sfx.update(dt, o["squeak"] if _resident_kind == "orderly" else {}, o.get("pose"), tick_hz, loud, float(me["exertion"]) if not still else 0.0, bool(me["winded"]), machine,
 		Vector3(float(car["doorX"]), float(car["floorY"]) + 1.5, float(car["doorZ"])), float(o.get("speed", 0.0)))
 	announcer.update()
 	sfx.duck(announcer.player.playing, dt)
