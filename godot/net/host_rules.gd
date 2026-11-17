@@ -11,6 +11,10 @@
 #    (the dropped tape, the dormant Orderly), and the players are put back on their feet ('ok').
 #  - entity off: the run always has an Orderly. The host parks it, dormant for ever, where it starts.
 #  - A test may press the call button "from the landing" wherever the player stands (force_call).
+#  - The day loop (sim/run.gd, docs/floors/prison.md P7): off unless asked (`days`); the game's rooms
+#    (server/room.gd, net/local_room.gd) ask for it, so BANK rides up to the prison and bed starts the
+#    next day. prepare() turns it on before the first tick. With the resident off, every new day's
+#    resident is parked too.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -33,11 +37,14 @@ var _entity_on: bool
 var _depth: int
 ## The places the run's floors are drawn from.
 var deck: Array[StringName]
+## The day loop (off unless asked).
+var days: bool
 
-func _init(entity_on: bool, depth: int, deck_: Array = []) -> void:
+func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false) -> void:
 	_entity_on = entity_on
 	_depth = depth
 	deck = Run.deck_of(deck_)
+	days = days_
 
 ## Where player `i` of `n` stands in the car at the start (car-local u, v).
 static func start_spot(i: int, n: int) -> PackedFloat64Array:
@@ -67,6 +74,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 	if s.deck != deck:
 		s = s.copy()
 		s.deck = deck
+	if days and not s.days:
+		s = Run.with_days(s)
 	if _depth > 1:
 		var plan := Places.generate(s.seed, _depth, deck)
 		s = s.copy()
@@ -167,7 +176,7 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 	var state := r.state
 	if not _entity_on:
 		for e in events:
-			if e["type"] == "rodeDown":
+			if e["type"] == "rodeDown" or e["type"] == "newDay":
 				state = state.copy()
 				state.orderly = parked_orderly(state)
 				break
@@ -183,4 +192,5 @@ static func _copy_input(i: Run.PlayerInput) -> Run.PlayerInput:
 	n.raised = i.raised
 	n.pick_up = i.pick_up
 	n.blind = i.blind
+	n.use = i.use
 	return n

@@ -32,7 +32,9 @@ const Face = preload("res://face/face_codec.gd")
 
 const PROTOCOL_VERSION := 1
 
-const PHASES: Array[String] = ["arriving", "unloading", "away", "coming", "boarding", "riding", "ended"]
+## "night" (the day loop: in the prison once the car's doors have closed) is last, so the codes of the
+## others are as they were.
+const PHASES: Array[String] = ["arriving", "unloading", "away", "coming", "boarding", "riding", "ended", "night"]
 const ANIMS: Array[String] = ["idle", "walk", "duck", "reach"]
 const MODES: Array[String] = ["waiting", "hunting", "windUp", "dormant"]
 const NEEDLES: Array[String] = ["off", "idle", "dormant", "recording", "contaminated"]
@@ -54,6 +56,18 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    so the room server passes it on and the host ignores it: a bad face never kicks anyone. The host
 ##    takes at most one change per player every Host.FACE_GAP seconds and passes it on with "F".
 ## The face goes only to the other players in the same run: nothing else stores or logs it.
+## The day loop (sim/run.gd days, docs/floors/prison.md P7). New in the Godot game, and only ever sent
+## when the run has days on, so a run without them sends exactly what it did before:
+##  - the input's flags gain bit 32, "use": F is held (in the prison, held on a bunk it lies you down).
+##    Decoded as "use": true only when set (no key otherwise);
+##  - the world (snapshot and welcome) gains a 16th element, the day block (enc_day / "day" decoded):
+##    [day index (every day of the run, from 1: the day's seed is Run.day_seed(seed, index)), day number,
+##    day quota, streak, misses, [ids in bed], host time the bedtime count started or null, host time of
+##    lights out or null, the settled day's result or null, how many are in the bedtime count];
+##  - a placement gains a 4th element, the day index of the floor it is on ("day");
+##  - phase "night"; events "dayEnded" {result}, "rodeUp" {depth, day, bodies}, "bed" {playerId, inBed,
+##    count}, "bedCount" {lightsOutAt}, "lightsOut" {assisted, morningAt}, "newDay" {day, dayIndex,
+##    depth, bodies}; "carLeft" reason "up".
 
 ## Limits on what a client may send (the server refuses anything outside them).
 const MAX_NAME := 32
@@ -186,8 +200,33 @@ static func enc_world(w: Dictionary) -> Array:
 		var row := _enc_tape(f)
 		row.append(_enc_body(f["at"]))
 		fl.append(row)
-	return [w["tick"], w["ht"], PHASES.find(String(w["phase"])), w["depth"], q2(w["timer"]), w["floorsAway"], q2(w["bellLeft"]), q2(w["holdLeft"]),
+	var out: Array = [w["tick"], w["ht"], PHASES.find(String(w["phase"])), w["depth"], q2(w["timer"]), w["floorsAway"], q2(w["bellLeft"]), q2(w["holdLeft"]),
 		1 if w["held"] else 0, blink, ow, players, crew, fl, w["summary"]]
+	if w.get("day") != null:
+		out.append(enc_day(w["day"]))
+	return out
+
+## The day block (see the header): {index, day, quota, streak, misses, inBed, countFrom, lightsOutAt,
+## result, crew} as an array.
+static func enc_day(d: Dictionary) -> Array:
+	var in_bed: Array = []
+	for id: Variant in d["inBed"]:
+		in_bed.append(String(id))
+	return [d["index"], d["day"], d["quota"], d["streak"], d["misses"], in_bed, d["countFrom"], d["lightsOutAt"], d["result"], d["crew"]]
+
+static func dec_day(c: _V, w: Variant) -> Dictionary:
+	var a := _a(c, w, 10, 10)
+	if c.bad:
+		return {}
+	var in_bed: Array = []
+	for id: Variant in _a(c, a[5], 0, 64):
+		in_bed.append(_s(c, id))
+	var result: Variant = a[8]
+	if result != null and not result is Dictionary:
+		c.bad = true
+	return {"index": _i(c, a[0], 1, MAX_COUNT), "day": _i(c, a[1], 1, MAX_COUNT), "quota": _i(c, a[2], 0, MAX_COUNT), "streak": _i(c, a[3], 0, MAX_COUNT),
+		"misses": _i(c, a[4], 0, MAX_COUNT), "inBed": in_bed, "countFrom": _opt_num(c, a[6]), "lightsOutAt": _opt_num(c, a[7]), "result": result,
+		"crew": _i(c, a[9], 0, 64)}
 
 ## The JSON text of a world snapshot (computed once per tick, shared by every client's snapshot).
 static func world_json(w: Dictionary) -> String:
@@ -204,10 +243,17 @@ static func snapshot_text(head: Dictionary, event_texts: PackedStringArray, worl
 		JsJson.stringify(echo) if echo != null else "0",
 		str(head["ackSeen"]), str(head["evFrom"]),
 		"[" + ",".join(event_texts) + "]",
-		JsJson.stringify([place["seq"], place["depth"], _enc_body(place["body"])]) if place != null else "0",
+		JsJson.stringify(_enc_place(place)) if place != null else "0",
 		JsJson.stringify([q3(st.level), 1 if st.winded else 0]) if st != null else "0",
 	])
 	return "[%d,\"S\",[%s],%s]" % [PROTOCOL_VERSION, ",".join(parts), world]
+
+## A placement: [seq, depth, body], and the day index when the run has days.
+static func _enc_place(place: Dictionary) -> Array:
+	var a: Array = [place["seq"], place["depth"], _enc_body(place["body"])]
+	if place.get("day") != null:
+		a.append(place["day"])
+	return a
 
 ## Serialises a message (input, join, welcome, leave, ping, pong, emote, emoted, face, setFace) to its
 ## wire text.
@@ -217,7 +263,8 @@ static func encode(m: Dictionary) -> String:
 			var seen: Array = []
 			for r: Dictionary in m["seen"]:
 				seen.append([r["id"], r["depth"], r["a"], r["b"], q3(r["alpha"]), _enc_pose(r["pose"])])
-			var flags := (1 if m["raised"] else 0) | (2 if m["holdDoors"] else 0) | (4 if m["seeing"] else 0) | (GAITS.find(String(m.get("gait", "walk"))) << 3)
+			var flags := (1 if m["raised"] else 0) | (2 if m["holdDoors"] else 0) | (4 if m["seeing"] else 0) | (GAITS.find(String(m.get("gait", "walk"))) << 3) \
+				| (32 if m.get("use", false) == true else 0)
 			return JsJson.stringify([PROTOCOL_VERSION, "I", m["seq"], floor3(m["ct"]), _enc_body(m["body"]), q2(m["eye"]), q3(m["yaw"]), q3(m["pitch"]),
 				q2(m["hFovDeg"]), q2(m["vFovDeg"]), flags, m["calls"], m["pickUps"], m["ackEvent"], m["ackHt"], floor3(m["renderTime"]), m["placeAck"], seen])
 		"join":
@@ -314,7 +361,7 @@ static func _opt_num(c: _V, v: Variant) -> Variant:
 	return null if v == null else _f(c, v)
 
 static func dec_world(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 15, 15)
+	var a := _a(c, w, 15, 16)
 	if c.bad:
 		return {}
 	var blink: Variant = null
@@ -366,12 +413,15 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 	var summary: Variant = a[14]
 	if summary != null and not summary is Dictionary:
 		c.bad = true
-	return {
+	var out := {
 		"tick": _i(c, a[0], 0, MAX_COUNT), "ht": _f(c, a[1]), "phase": _code(c, PHASES, a[2]), "depth": _i(c, a[3], 0, 100000),
 		"timer": _f(c, a[4]), "floorsAway": null if a[5] == null else _i(c, a[5], -100000, 100000), "bellLeft": _f(c, a[6]),
 		"holdLeft": _f(c, a[7]), "held": _f(c, a[8]) == 1.0, "blink": blink, "orderly": orderly, "players": players, "crew": crew,
 		"floor": fl, "summary": summary,
 	}
+	if a.size() > 15:
+		out["day"] = dec_day(c, a[15])
+	return out
 
 static func _dec_report(c: _V, w: Variant) -> Dictionary:
 	var a := _a(c, w, 6, 6)
@@ -418,8 +468,10 @@ static func decode(text: String) -> Variant:
 			if _is_num(h[6]) and float(h[6]) == 0.0:
 				out["place"] = null
 			else:
-				var pl := _a(c, h[6], 3, 3)
+				var pl := _a(c, h[6], 3, 4)
 				out["place"] = {"seq": _i(c, pl[0], 0, MAX_COUNT), "depth": _i(c, pl[1], 0, 100000), "body": _dec_body(c, pl[2])} if not c.bad else null
+				if not c.bad and pl.size() > 3:
+					out["place"]["day"] = _i(c, pl[3], 1, MAX_COUNT)
 			out["stamina"] = null
 			if h.size() > 7 and not (_is_num(h[7]) and float(h[7]) == 0.0):
 				var sa := _a(c, h[7], 2, 2)
@@ -431,7 +483,7 @@ static func decode(text: String) -> Variant:
 		"I":
 			if a.size() != 18:
 				return null
-			var f := _i(c, a[10], 0, 31)
+			var f := _i(c, a[10], 0, 63)
 			var gait := (f >> 3) & 3
 			if gait > 2:
 				return null
@@ -446,6 +498,8 @@ static func decode(text: String) -> Variant:
 				"calls": _i(c, a[11], 0, MAX_COUNT), "pickUps": _i(c, a[12], 0, MAX_COUNT), "ackEvent": _i(c, a[13], 0, MAX_COUNT),
 				"ackHt": _f(c, a[14]), "renderTime": _f(c, a[15]), "placeAck": _i(c, a[16], 0, MAX_COUNT), "seen": seen,
 			}
+			if f & 32:
+				out["use"] = true
 		"J":
 			# [1, "J", name, ct] or [1, "J", name, ct, face]; a face that is not valid is no face.
 			if a.size() != 4 and a.size() != 5:

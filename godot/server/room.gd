@@ -22,6 +22,10 @@
 #                                            decode validates every field), closes the connection.
 # A client's run messages are passed to the host as coming from that connection's own id, so it can
 # only ever speak for its own player.
+#
+# The run has the day loop (`days`, on unless a test turns it off: sim/run.gd): BANK rides up to the
+# prison and bed starts the next day, so the run does not end on a bank or a wipe; the room goes back to
+# the lobby when everyone has gone. A run without days ends as before.
 extends RefCounted
 
 const Run = preload("res://sim/run.gd")
@@ -75,6 +79,8 @@ var rules: HostRules = null
 var people := {}  # id -> name, in arrival order
 ## Seed of the next run ("" draws one at random); tests set it.
 var fixed_seed := ""
+## The day loop in the next run (the game's; tests may turn it off).
+var days := true
 ## Tick cost, for the log: total and worst microseconds, and ticks.
 var tick_us := 0
 var tick_max_us := 0
@@ -85,6 +91,7 @@ var _ended_at := -1.0
 var _last_lobby := -INF
 var _dirty := false
 var _log: Callable
+var _day_logged := 1
 
 func _init(ws: WsServer, log: Callable) -> void:
 	_ws = ws
@@ -128,6 +135,9 @@ func update(now: float) -> void:
 			ticks += n
 			tick_us += dt
 			tick_max_us = maxi(tick_max_us, dt / n)
+		if host.state.days and host.state.day_index != _day_logged:
+			_day_logged = host.state.day_index
+			_log.call("run %d: day %d begins (day %d of this run)" % [epoch, host.state.day_state.day, host.state.day_index])
 		if host.state.phase == &"ended" and _ended_at < 0.0:
 			_ended_at = now
 			var s := host.state.summary
@@ -161,8 +171,9 @@ func _start(now: float) -> void:
 	for id: String in people:
 		roster.append(id)
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
-	rules = HostRules.new(true, 1, Places.FULL)
+	rules = HostRules.new(true, 1, Places.FULL, days)
 	_transport = RoomTransport.new(self)
+	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))
 	_dirty = true
 	_log.call("run %d started with %d players" % [epoch, roster.size()])
