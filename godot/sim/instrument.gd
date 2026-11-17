@@ -76,7 +76,7 @@ const INSTRUMENT_HEIGHT := 1.2
 ## Height above the entity's feet that line of sight across levels aims at.
 const ENTITY_CHEST := 1.7
 ## What the slip says, per trait. Printed the first time a trait is recorded in a run.
-const SLIP_TEXT := {&"stillness": "recorded while: subject moving"}
+const SLIP_TEXT := {&"stillness": "recorded while: subject moving", &"hearing": "recorded while: subject searching"}
 
 const EPS := 1e-9
 
@@ -149,6 +149,12 @@ class EntityTick:
 	var prev: Entity.OrderlyState
 	var next: Entity.OrderlyState
 	var events: Array[Dictionary] = []
+	## Hearing (the Playroom's Minder, sim/seek.gd): its rule is being tested this tick (a count, after
+	## the 6 s). The run says so; nothing here can tell from the poses. Unused by Stillness.
+	var acting: bool = false
+	## The holders who may record it this tick ({player id: true}), or null for every holder. The run
+	## gates Hearing per player (docs/floors/playarea.md section 11). Stillness leaves it null.
+	var holders: Variant = null
 
 	static func make(id_: String, trait_: StringName, prev_: Entity.OrderlyState, next_: Entity.OrderlyState, events_: Array[Dictionary]) -> EntityTick:
 		var e := EntityTick.new()
@@ -274,7 +280,13 @@ static func trait_acting(e: EntityTick) -> bool:
 	match e.trait_name:
 		&"stillness":
 			return stillness_acting(e.prev, e.next)
+		&"hearing":
+			return e.acting
 	return false
+
+## Whether this holder may record the entity this tick (EntityTick.holders).
+static func may_record(e: EntityTick, holder_id: String) -> bool:
+	return e.holders == null or (e.holders as Dictionary).has(holder_id)
 
 ## In recording range: within RECORD_RANGE, and with line of sight if on different levels.
 static func in_record_range(plan: Floor.FloorPlan, holder: Move.Body, entity: Move.Body, distance: float) -> bool:
@@ -302,8 +314,9 @@ class InstrumentStep:
 	var closed: Array[OpenReading] = []
 
 ## Advances one instrument by dt. Call after the entities have been stepped for this tick.
-## `factor_for(entity_id, trait)` gives the current repeat factor for an entity and trait.
-static func step_instrument(plan: Floor.FloorPlan, prev: Instrument, holder_body: Move.Body, holder_active: bool, entities: Array[EntityTick], factor_for: Callable, dt: float) -> InstrumentStep:
+## `factor_for(entity_id, trait)` gives the current repeat factor for an entity and trait. `holder_id`:
+## whose instrument it is (an entity tick may name the holders who can record it).
+static func step_instrument(plan: Floor.FloorPlan, prev: Instrument, holder_body: Move.Body, holder_active: bool, entities: Array[EntityTick], factor_for: Callable, dt: float, holder_id: String = "") -> InstrumentStep:
 	var inst := prev.copy()
 	inst.rate = 0.0
 	inst.factor = 1.0
@@ -324,7 +337,7 @@ static func step_instrument(plan: Floor.FloorPlan, prev: Instrument, holder_body
 			sensed = true
 		if not live:
 			continue
-		if trait_acting(e) and in_record_range(plan, holder_body, e.next.body, d) and (best == null or d < best_d):
+		if trait_acting(e) and may_record(e, holder_id) and in_record_range(plan, holder_body, e.next.body, d) and (best == null or d < best_d):
 			best = e
 			best_d = d
 
@@ -489,7 +502,7 @@ static func step_crew(plan: Floor.FloorPlan, crew: CrewState, players: Array[Cre
 		if m.body == null:
 			members.append(m)
 			continue
-		var r := step_instrument(plan, m.instrument, m.body, m.active, entities, factor_for, dt)
+		var r := step_instrument(plan, m.instrument, m.body, m.active, entities, factor_for, dt, m.id)
 		m.instrument = r.instrument
 		if r.recorded and not slips.has(r.recorded_trait):
 			slips.append(r.recorded_trait)

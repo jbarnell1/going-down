@@ -10,7 +10,18 @@
 #    recover the run's own phase, call and blink; the Orderly and crew are kept from the real tick
 #    (the dropped tape, the dormant Orderly), and the players are put back on their feet ('ok').
 #  - entity off: the run always has an Orderly. The host parks it, dormant for ever, where it starts.
+#    On the Playroom the Minder's rules are off too (sim/run.gd seek_off): no count ever starts.
+#  - The soft catch above is the Orderly's. A Playroom's found, taken and down players are not "caught"
+#    events (sim/run.gd), so there a crew all found or down is a wipe, as playarea.md 12 says.
 #  - A test may press the call button "from the landing" wherever the player stands (force_call).
+#  - The day loop (sim/run.gd, docs/floors/prison.md P7): off unless asked (`days`); the game's rooms
+#    (server/room.gd, net/local_room.gd) ask for it, so BANK rides up to the prison and bed starts the
+#    next day. prepare() turns it on before the first tick. With the resident off, every new day's
+#    resident is parked too.
+#  - The floor quota (sim/run.gd quota, North Star C9): off unless asked (`quota`); the game's rooms ask
+#    for it, so the call button does nothing until the crew has recorded enough on the floor. prepare()
+#    turns it on before the first tick, after any depth above 1, so it is that floor's quota. With the
+#    resident off nothing can ever be recorded, so the quota would lock the lift for good: it stays off.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -33,11 +44,17 @@ var _entity_on: bool
 var _depth: int
 ## The places the run's floors are drawn from.
 var deck: Array[StringName]
+## The day loop (off unless asked).
+var days: bool
+## The floor quota (off unless asked; never with the resident off).
+var quota: bool
 
-func _init(entity_on: bool, depth: int, deck_: Array = []) -> void:
+func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false) -> void:
 	_entity_on = entity_on
 	_depth = depth
 	deck = Run.deck_of(deck_)
+	days = days_
+	quota = quota_
 
 ## Where player `i` of `n` stands in the car at the start (car-local u, v).
 static func start_spot(i: int, n: int) -> PackedFloat64Array:
@@ -67,6 +84,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 	if s.deck != deck:
 		s = s.copy()
 		s.deck = deck
+	if days and not s.days:
+		s = Run.with_days(s)
 	if _depth > 1:
 		var plan := Places.generate(s.seed, _depth, deck)
 		s = s.copy()
@@ -100,6 +119,10 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 	if not _entity_on:
 		s = s.copy()
 		s.orderly = parked_orderly(s)
+		# The Playroom's Minder too: no count, no search (sim/run.gd seek_off).
+		s.seek_off = true
+	if quota and _entity_on and not s.quota:
+		s = Run.with_quota(s)
 	return s
 
 ## Tests: the next tick presses the call button for `id` from `body`.
@@ -151,6 +174,11 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 		var st := alt.state.copy()
 		st.orderly = r.state.orderly
 		st.crew = r.state.crew
+		# The floor quota goes with the crew: the victim's reading closed as they were caught counts.
+		st.floor_earned = r.state.floor_earned
+		st.floor_by = r.state.floor_by
+		st.floor_needed = r.state.floor_needed
+		st.quota_met = r.state.quota_met
 		st.players = players
 		st.summary = null
 		var kept_events: Array[Dictionary] = []
@@ -167,7 +195,7 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 	var state := r.state
 	if not _entity_on:
 		for e in events:
-			if e["type"] == "rodeDown":
+			if e["type"] == "rodeDown" or e["type"] == "newDay":
 				state = state.copy()
 				state.orderly = parked_orderly(state)
 				break
@@ -183,4 +211,13 @@ static func _copy_input(i: Run.PlayerInput) -> Run.PlayerInput:
 	n.raised = i.raised
 	n.pick_up = i.pick_up
 	n.blind = i.blind
+	n.use = i.use
+	n.gait = i.gait
+	n.hide_use = i.hide_use
+	n.hide_fast = i.hide_fast
+	n.peek = i.peek
+	n.emote_sound = i.emote_sound
+	n.voice = i.voice
+	n.horn = i.horn
+	n.light = i.light
 	return n

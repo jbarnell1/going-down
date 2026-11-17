@@ -10,11 +10,18 @@
 #  - A run starts at once when asked (no lobby, nobody to wait for), and the next run's seed is the
 #    seed with "-1", "-2", ... appended (as the single-player game always did).
 #  - `time_scale` runs the room's clock (host and client together) faster or slower: tests only.
+#  - The day loop (sim/run.gd days: BANK rides up to the prison, bed starts the next day) is on in the
+#    game and off in tests: `days` true or false says so; left null it follows the game's deck (on when
+#    Session.deck is Places.FULL, as client/main.gd sets it; tests leave Clinic only).
+#  - The floor quota (sim/run.gd quota: the call button does nothing until the crew has recorded enough on
+#    the floor) is the same: `quota` true, false, or null to follow the game's deck. With the resident off
+#    (`entity_on` false) it is always off (net/host_rules.gd): nothing could ever be recorded.
 extends "res://net/room_client.gd"
 
 const Host = preload("res://net/host.gd")
 const HostRules = preload("res://net/host_rules.gd")
 const Move = preload("res://sim/move.gd")
+const Places = preload("res://sim/places.gd")
 
 ## The local player's id in every run (events say "playerId": "me").
 const ME := "me"
@@ -28,6 +35,10 @@ var run_seed := ""
 var runs := 0
 var entity_on := true
 var time_scale := 1.0
+## The day loop: true, false, or null to follow the game's deck (see the header).
+var days: Variant = null
+## The floor quota: true, false, or null to follow the game's deck (see the header).
+var quota: Variant = null
 ## Cost of the host's ticks on this machine (microseconds, summed), for the stats hook.
 var host_us := 0
 var _vt := 0.0
@@ -45,6 +56,18 @@ func open_local(seed_: String, player_name: String, entity: bool, face: String =
 	people = [[ME, player_name]]
 	status = "lobby"
 
+## Whether the next run has the day loop.
+func days_on() -> bool:
+	if days != null:
+		return bool(days)
+	return Session.deck == Places.FULL
+
+## Whether the next run has the floor quota (with the resident on).
+func quota_on() -> bool:
+	if quota != null:
+		return bool(quota)
+	return Session.deck == Places.FULL
+
 ## The room's clock: local seconds, scaled by time_scale.
 func room_time() -> float:
 	return _vt
@@ -55,7 +78,7 @@ func start_run() -> void:
 	run_seed = seed if runs == 0 else "%s-%d" % [seed, runs]
 	runs += 1
 	epoch += 1
-	rules = HostRules.new(entity_on, 1, Session.deck)
+	rules = HostRules.new(entity_on, 1, Session.deck, days_on(), quota_on())
 	# Method callables hold no reference to this object, so the pipes do not keep it alive.
 	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
 	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))

@@ -32,9 +32,20 @@ const Face = preload("res://face/face_codec.gd")
 
 const PROTOCOL_VERSION := 1
 
-const PHASES: Array[String] = ["arriving", "unloading", "away", "coming", "boarding", "riding", "ended"]
-const ANIMS: Array[String] = ["idle", "walk", "duck", "reach"]
-const MODES: Array[String] = ["waiting", "hunting", "windUp", "dormant"]
+## "night" (the day loop: in the prison once the car's doors have closed) is last, so the codes of the
+## others are as they were.
+const PHASES: Array[String] = ["arriving", "unloading", "away", "coming", "boarding", "riding", "ended", "night"]
+## The Orderly's poses and modes first (their codes are as they were), then the Playroom's Minder's
+## (sim/seek.gd MinderState: anim and mode).
+const ANIMS: Array[String] = ["idle", "walk", "duck", "reach",
+	"stand", "straighten", "cover", "prowl", "sweep", "look", "slump", "run", "catch"]
+const MODES: Array[String] = ["waiting", "hunting", "windUp", "dormant",
+	"wander", "cover", "search", "sweep", "look", "slump", "run", "catch"]
+## The Playroom's per-player states (sim/seek.gd SeekPlayer), for the seek block.
+const SEEK_STATUSES: Array[String] = ["ok", "found", "taken", "down"]
+const SEEK_PHASES: Array[String] = ["out", "entering", "inside", "leaving"]
+## Emotes that play a sound: on the Playroom, a noise that starts a count (playarea.md section 3).
+const SOUND_EMOTES: Array[String] = ["button"]
 const NEEDLES: Array[String] = ["off", "idle", "dormant", "recording", "contaminated"]
 const STATUSES: Array[String] = ["ok", "caught", "leftBehind"]
 const GAITS: Array[String] = ["walk", "creep", "sprint"]
@@ -54,6 +65,52 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    so the room server passes it on and the host ignores it: a bad face never kicks anyone. The host
 ##    takes at most one change per player every Host.FACE_GAP seconds and passes it on with "F".
 ## The face goes only to the other players in the same run: nothing else stores or logs it.
+## The day loop (sim/run.gd days, docs/floors/prison.md P7). New in the Godot game, and only ever sent
+## when the run has days on, so a run without them sends exactly what it did before:
+##  - the input's flags gain bit 32, "use": F is held (in the prison, held on a bunk it lies you down).
+##    Decoded as "use": true only when set (no key otherwise);
+##  - the world (snapshot and welcome) gains a 16th element, the day block (enc_day / "day" decoded):
+##    [day index (every day of the run, from 1: the day's seed is Run.day_seed(seed, index)), day number,
+##    day quota, streak, misses, [ids in bed], host time the bedtime count started or null, host time of
+##    lights out or null, the settled day's result or null, how many are in the bedtime count];
+##  - a placement gains a 4th element, the day index of the floor it is on ("day");
+##  - phase "night"; events "dayEnded" {result}, "rodeUp" {depth, day, bodies}, "bed" {playerId, inBed,
+##    count}, "bedCount" {lightsOutAt}, "lightsOut" {assisted, morningAt}, "newDay" {day, dayIndex,
+##    depth, bodies}; "carLeft" reason "up".
+## The Playroom (sim/run.gd and sim/seek.gd; docs/floors/playarea.md; loop/NIGHT-PLAN.md A3). New in the
+## Godot game, and only ever sent on a Playroom (or by a player who hides or peeks), so a run that never
+## reaches one sends exactly what it did before:
+##  - the input's flags gain bit 64, "peek": W held inside a hide. Decoded as "peek": true only when set;
+##  - the input may carry two more elements, [..., seen, hides, fastHides]: how many times this player has
+##    pressed F for a hide, and how many of those with sprint held (the quick, noisy way). Counters, like
+##    "calls", so a press is never lost with an input. Sent only once hides > 0; decoded as "hides" and
+##    "fastHides" (no keys when absent: read them as 0);
+##  - the world gains a 17th element, the seek block (enc_seek / "seek" decoded), with the 16th the day
+##    block or null: [noise (the crew's loudest this tick, 0 to 1, the instrument's needle outside a
+##    count), flags (1 counting, 2 the running count is the last, 4 the lift was called, 8 the last count
+##    is over), count number n, t0 (host time the count began: the 6 s to hide start then), len (seconds
+##    of count after the 6 s), by (player id), why, counts ended, calm until (host time; nothing provokes
+##    before), last at (host time a pending last count starts, or null), [[player id, hide id or -1,
+##    flags (1 peeking, SEEK_PHASES index << 1, SEEK_STATUSES index << 3), health, sight total, gap
+##    total, party-table seat or -1], ...]]. Times are host times, never durations;
+##  - the Minder rides in the Orderly's place (pose, speed, mode) with its own pose and mode names
+##    (ANIMS and MODES, appended);
+##  - events, all at host time: "count" {n, t0, len, last, by, why} (why: sprint, squeaker, ballpit,
+##    flap, tape, emote, bump, light, voice, call), "countEnd" {n, last}, "hideStart"/"hideLeave"
+##    {playerId, hide, fast}, "hideIn"/"hideOut"/"hideFull" {playerId, hide}, "flap" {playerId, hide},
+##    "reason" {hide, why, playerId}, "sweep" {zone}, "draw" {zone, n, hide, k}, "look" {hide},
+##    "lookDone" {hide, found}, "emptyHide" {hide}, "found" {playerId, cause, hide}, "taken" {playerId,
+##    seat}, "down" {playerId}; and "called" gains "last": true (floorsAway 0) when the call starts the
+##    last count.
+## The floor quota (sim/run.gd quota; North Star C9). New in the Godot game, and only ever sent when the
+## run has the quota on, so a run without it sends exactly what it did before:
+##  - the world gains an 18th element, the quota block (enc_quota / "quota" decoded), with the 16th and
+##    17th the day and seek blocks or null: [earned (whole credits recorded on this floor: every reading
+##    closed here, dropped tapes included), needed (this floor's quota, 0 at home)]. The call panel shows
+##    earned against needed; the call works once earned >= needed;
+##  - events "callRefused" {playerId, earned, needed} (the call button was pressed below the quota and
+##    did nothing) and "quotaMet" {depth, earned, needed, top} (once per floor, the tick it is met; top:
+##    the player who recorded the most on the floor).
 
 ## Limits on what a client may send (the server refuses anything outside them).
 const MAX_NAME := 32
@@ -186,8 +243,81 @@ static func enc_world(w: Dictionary) -> Array:
 		var row := _enc_tape(f)
 		row.append(_enc_body(f["at"]))
 		fl.append(row)
-	return [w["tick"], w["ht"], PHASES.find(String(w["phase"])), w["depth"], q2(w["timer"]), w["floorsAway"], q2(w["bellLeft"]), q2(w["holdLeft"]),
+	var out: Array = [w["tick"], w["ht"], PHASES.find(String(w["phase"])), w["depth"], q2(w["timer"]), w["floorsAway"], q2(w["bellLeft"]), q2(w["holdLeft"]),
 		1 if w["held"] else 0, blink, ow, players, crew, fl, w["summary"]]
+	if w.get("day") != null:
+		out.append(enc_day(w["day"]))
+	if w.get("seek") != null:
+		if out.size() == 15:
+			out.append(null)
+		out.append(enc_seek(w["seek"]))
+	if w.get("quota") != null:
+		while out.size() < 17:
+			out.append(null)
+		out.append(enc_quota(w["quota"]))
+	return out
+
+## The quota block (see the header) from its readable form {earned, needed}.
+static func enc_quota(q: Dictionary) -> Array:
+	return [q["earned"], q["needed"]]
+
+static func dec_quota(c: _V, w: Variant) -> Dictionary:
+	var a := _a(c, w, 2, 2)
+	if c.bad:
+		return {}
+	return {"earned": _i(c, a[0], 0, MAX_COUNT), "needed": _i(c, a[1], 0, MAX_COUNT)}
+
+## The seek block (see the header) from its readable form {noise, counting, last, called, done, n, t0,
+## len, by, why, ended, calmUntil, lastAt, players: [{id, hide, peek, phase, status, health, sight, gap,
+## seat}]}.
+static func enc_seek(k: Dictionary) -> Array:
+	var flags := (1 if k["counting"] else 0) | (2 if k["last"] else 0) | (4 if k["called"] else 0) | (8 if k["done"] else 0)
+	var players: Array = []
+	for p: Dictionary in k["players"]:
+		var pf := (1 if p["peek"] else 0) | (SEEK_PHASES.find(String(p["phase"])) << 1) | (SEEK_STATUSES.find(String(p["status"])) << 3)
+		players.append([p["id"], p["hide"], pf, q2(p["health"]), q3(p["sight"]), q3(p["gap"]), p["seat"]])
+	return [q2(k["noise"]), flags, k["n"], q3(k["t0"]), q3(k["len"]), k["by"], k["why"], k["ended"], q3(k["calmUntil"]),
+		null if k["lastAt"] == null else q3(k["lastAt"]), players]
+
+static func dec_seek(c: _V, w: Variant) -> Dictionary:
+	var a := _a(c, w, 11, 11)
+	if c.bad:
+		return {}
+	var f := _i(c, a[1], 0, 15)
+	var players: Array = []
+	for pw: Variant in _a(c, a[10], 0, 64):
+		var p := _a(c, pw, 7, 7)
+		if c.bad:
+			return {}
+		var pf := _i(c, p[2], 0, 31)
+		players.append({"id": _s(c, p[0]), "hide": _i(c, p[1], -1, MAX_COUNT), "peek": (pf & 1) != 0, "phase": _code(c, SEEK_PHASES, (pf >> 1) & 3),
+			"status": _code(c, SEEK_STATUSES, (pf >> 3) & 3), "health": _f(c, p[3], 0.0, 100.0), "sight": _f(c, p[4], 0.0, MAX_CLOCK),
+			"gap": _f(c, p[5], 0.0, MAX_CLOCK), "seat": _i(c, p[6], -1, 64)})
+	return {"noise": _f(c, a[0], 0.0, 1.0), "counting": (f & 1) != 0, "last": (f & 2) != 0, "called": (f & 4) != 0, "done": (f & 8) != 0,
+		"n": _i(c, a[2], 0, MAX_COUNT), "t0": _f(c, a[3]), "len": _f(c, a[4], 0.0, MAX_CLOCK), "by": _s(c, a[5]), "why": _s(c, a[6]),
+		"ended": _i(c, a[7], 0, MAX_COUNT), "calmUntil": _f(c, a[8]), "lastAt": _opt_num(c, a[9]), "players": players}
+
+## The day block (see the header): {index, day, quota, streak, misses, inBed, countFrom, lightsOutAt,
+## result, crew} as an array.
+static func enc_day(d: Dictionary) -> Array:
+	var in_bed: Array = []
+	for id: Variant in d["inBed"]:
+		in_bed.append(String(id))
+	return [d["index"], d["day"], d["quota"], d["streak"], d["misses"], in_bed, d["countFrom"], d["lightsOutAt"], d["result"], d["crew"]]
+
+static func dec_day(c: _V, w: Variant) -> Dictionary:
+	var a := _a(c, w, 10, 10)
+	if c.bad:
+		return {}
+	var in_bed: Array = []
+	for id: Variant in _a(c, a[5], 0, 64):
+		in_bed.append(_s(c, id))
+	var result: Variant = a[8]
+	if result != null and not result is Dictionary:
+		c.bad = true
+	return {"index": _i(c, a[0], 1, MAX_COUNT), "day": _i(c, a[1], 1, MAX_COUNT), "quota": _i(c, a[2], 0, MAX_COUNT), "streak": _i(c, a[3], 0, MAX_COUNT),
+		"misses": _i(c, a[4], 0, MAX_COUNT), "inBed": in_bed, "countFrom": _opt_num(c, a[6]), "lightsOutAt": _opt_num(c, a[7]), "result": result,
+		"crew": _i(c, a[9], 0, 64)}
 
 ## The JSON text of a world snapshot (computed once per tick, shared by every client's snapshot).
 static func world_json(w: Dictionary) -> String:
@@ -204,10 +334,17 @@ static func snapshot_text(head: Dictionary, event_texts: PackedStringArray, worl
 		JsJson.stringify(echo) if echo != null else "0",
 		str(head["ackSeen"]), str(head["evFrom"]),
 		"[" + ",".join(event_texts) + "]",
-		JsJson.stringify([place["seq"], place["depth"], _enc_body(place["body"])]) if place != null else "0",
+		JsJson.stringify(_enc_place(place)) if place != null else "0",
 		JsJson.stringify([q3(st.level), 1 if st.winded else 0]) if st != null else "0",
 	])
 	return "[%d,\"S\",[%s],%s]" % [PROTOCOL_VERSION, ",".join(parts), world]
+
+## A placement: [seq, depth, body], and the day index when the run has days.
+static func _enc_place(place: Dictionary) -> Array:
+	var a: Array = [place["seq"], place["depth"], _enc_body(place["body"])]
+	if place.get("day") != null:
+		a.append(place["day"])
+	return a
 
 ## Serialises a message (input, join, welcome, leave, ping, pong, emote, emoted, face, setFace) to its
 ## wire text.
@@ -217,9 +354,14 @@ static func encode(m: Dictionary) -> String:
 			var seen: Array = []
 			for r: Dictionary in m["seen"]:
 				seen.append([r["id"], r["depth"], r["a"], r["b"], q3(r["alpha"]), _enc_pose(r["pose"])])
-			var flags := (1 if m["raised"] else 0) | (2 if m["holdDoors"] else 0) | (4 if m["seeing"] else 0) | (GAITS.find(String(m.get("gait", "walk"))) << 3)
-			return JsJson.stringify([PROTOCOL_VERSION, "I", m["seq"], floor3(m["ct"]), _enc_body(m["body"]), q2(m["eye"]), q3(m["yaw"]), q3(m["pitch"]),
-				q2(m["hFovDeg"]), q2(m["vFovDeg"]), flags, m["calls"], m["pickUps"], m["ackEvent"], m["ackHt"], floor3(m["renderTime"]), m["placeAck"], seen])
+			var flags := (1 if m["raised"] else 0) | (2 if m["holdDoors"] else 0) | (4 if m["seeing"] else 0) | (GAITS.find(String(m.get("gait", "walk"))) << 3) \
+				| (32 if m.get("use", false) == true else 0) | (64 if m.get("peek", false) == true else 0)
+			var inp: Array = [PROTOCOL_VERSION, "I", m["seq"], floor3(m["ct"]), _enc_body(m["body"]), q2(m["eye"]), q3(m["yaw"]), q3(m["pitch"]),
+				q2(m["hFovDeg"]), q2(m["vFovDeg"]), flags, m["calls"], m["pickUps"], m["ackEvent"], m["ackHt"], floor3(m["renderTime"]), m["placeAck"], seen]
+			if int(m.get("hides", 0)) > 0:
+				inp.append(int(m["hides"]))
+				inp.append(int(m.get("fastHides", 0)))
+			return JsJson.stringify(inp)
 		"join":
 			var j: Array = [PROTOCOL_VERSION, "J", m["name"], m["ct"]]
 			var jf: Variant = m.get("face", "")
@@ -314,7 +456,7 @@ static func _opt_num(c: _V, v: Variant) -> Variant:
 	return null if v == null else _f(c, v)
 
 static func dec_world(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 15, 15)
+	var a := _a(c, w, 15, 18)
 	if c.bad:
 		return {}
 	var blink: Variant = null
@@ -366,12 +508,19 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 	var summary: Variant = a[14]
 	if summary != null and not summary is Dictionary:
 		c.bad = true
-	return {
+	var out := {
 		"tick": _i(c, a[0], 0, MAX_COUNT), "ht": _f(c, a[1]), "phase": _code(c, PHASES, a[2]), "depth": _i(c, a[3], 0, 100000),
 		"timer": _f(c, a[4]), "floorsAway": null if a[5] == null else _i(c, a[5], -100000, 100000), "bellLeft": _f(c, a[6]),
 		"holdLeft": _f(c, a[7]), "held": _f(c, a[8]) == 1.0, "blink": blink, "orderly": orderly, "players": players, "crew": crew,
 		"floor": fl, "summary": summary,
 	}
+	if a.size() > 15 and a[15] != null:
+		out["day"] = dec_day(c, a[15])
+	if a.size() > 16 and (a[16] != null or a.size() == 17):
+		out["seek"] = dec_seek(c, a[16])
+	if a.size() > 17:
+		out["quota"] = dec_quota(c, a[17])
+	return out
 
 static func _dec_report(c: _V, w: Variant) -> Dictionary:
 	var a := _a(c, w, 6, 6)
@@ -418,8 +567,10 @@ static func decode(text: String) -> Variant:
 			if _is_num(h[6]) and float(h[6]) == 0.0:
 				out["place"] = null
 			else:
-				var pl := _a(c, h[6], 3, 3)
+				var pl := _a(c, h[6], 3, 4)
 				out["place"] = {"seq": _i(c, pl[0], 0, MAX_COUNT), "depth": _i(c, pl[1], 0, 100000), "body": _dec_body(c, pl[2])} if not c.bad else null
+				if not c.bad and pl.size() > 3:
+					out["place"]["day"] = _i(c, pl[3], 1, MAX_COUNT)
 			out["stamina"] = null
 			if h.size() > 7 and not (_is_num(h[7]) and float(h[7]) == 0.0):
 				var sa := _a(c, h[7], 2, 2)
@@ -429,9 +580,9 @@ static func decode(text: String) -> Variant:
 					st.winded = _f(c, sa[1]) == 1.0
 					out["stamina"] = st
 		"I":
-			if a.size() != 18:
+			if a.size() != 18 and a.size() != 20:
 				return null
-			var f := _i(c, a[10], 0, 31)
+			var f := _i(c, a[10], 0, 127)
 			var gait := (f >> 3) & 3
 			if gait > 2:
 				return null
@@ -446,6 +597,13 @@ static func decode(text: String) -> Variant:
 				"calls": _i(c, a[11], 0, MAX_COUNT), "pickUps": _i(c, a[12], 0, MAX_COUNT), "ackEvent": _i(c, a[13], 0, MAX_COUNT),
 				"ackHt": _f(c, a[14]), "renderTime": _f(c, a[15]), "placeAck": _i(c, a[16], 0, MAX_COUNT), "seen": seen,
 			}
+			if f & 32:
+				out["use"] = true
+			if f & 64:
+				out["peek"] = true
+			if a.size() == 20:
+				out["hides"] = _i(c, a[18], 1, MAX_COUNT)
+				out["fastHides"] = _i(c, a[19], 0, out["hides"])
 		"J":
 			# [1, "J", name, ct] or [1, "J", name, ct, face]; a face that is not valid is no face.
 			if a.size() != 4 and a.size() != 5:

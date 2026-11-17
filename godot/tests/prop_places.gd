@@ -341,6 +341,7 @@ func test_the_minder_wanders_and_never_takes_anyone(t: T) -> void:
 	var n := 3 if t.quick else 12
 	var moved_seen := 0
 	var ticks := 0
+	var counts := 0
 	for i in n:
 		var s := _floor_run("minder-%d" % i, 4)
 		t.eq(s.plan.place, &"playroom", "depth 4 is the Playroom")
@@ -350,13 +351,22 @@ func test_the_minder_wanders_and_never_takes_anyone(t: T) -> void:
 		var me := _beside(s.plan, s.plan.entity_start)
 		var caught := 0
 		var path := 0.0
+		var floor_counts := 0
 		for _k in roundi(60.0 / STEP):
 			var before := s.orderly.body
+			var counting_before: bool = s.seek != null and s.seek.counting
 			var inp := _watcher(s, me)
 			var inputs: Array[Run.PlayerInput] = [inp]
 			var r := Run.step_run(s, inputs, STEP)
 			for e in r.events:
 				if e["type"] in ["caught", "windUp", "froze"]:
+					caught += 1
+				# Since T15d it runs the Playroom's real rules (sim/seek.gd): it walking into the watcher
+				# is a bump, which starts a count. Outside a count it never takes anyone.
+				if e["type"] == "count":
+					counts += 1
+					floor_counts += 1
+				if e["type"] in ["found", "taken"] and not counting_before:
 					caught += 1
 			s = r.state
 			ticks += 1
@@ -364,12 +374,17 @@ func test_the_minder_wanders_and_never_takes_anyone(t: T) -> void:
 			path += step
 			if step > 1e-6 and Entity.seen_by(s.plan, before, [Entity.PlayerView.make("w", me, 1.65, inp.yaw, 0.0, 90.0, 70.0, true, false)] as Array[Entity.PlayerView]) != null:
 				moved_seen += 1
-			t.check(step <= Places.WANDER_SPEED * STEP + 1e-6, "minder-%d: it moved %.3f m in a tick" % [i, step])
-		t.eq(caught, 0, "minder-%d: it froze, reached or caught" % i)
-		t.eq(s.players[0].status, &"ok", "minder-%d: the watcher is still ok" % i)
-		t.check(path > 10.0, "minder-%d: it only walked %.1f m in a minute" % [i, path])
+			# A stroll outside a count: seek.gd walks WANDER_SPEED, and the walls' slide at a corner can add a
+			# few millimetres.
+			if not counting_before and not (s.seek != null and s.seek.counting):
+				t.check(step <= Places.WANDER_SPEED * STEP * 1.02, "minder-%d: it moved %.4f m in a tick outside a count" % [i, step])
+		t.eq(caught, 0, "minder-%d: it froze, reached, caught or took someone outside a count" % i)
+		# A bump that starts a count ends this one-player floor: the watcher, beside it, is found.
+		if floor_counts == 0:
+			t.eq(s.players[0].status, &"ok", "minder-%d: the watcher is still ok" % i)
+			t.check(path > 10.0, "minder-%d: it only walked %.1f m in a minute" % [i, path])
 	t.check(moved_seen > 0, "it never moved while watched (it is not a Stillness resident)")
-	t.note("%d Playrooms, %d ticks beside it: it moved in %d ticks while watched, never froze, reached or caught" % [n, ticks, moved_seen])
+	t.note("%d Playrooms, %d ticks beside it: it moved in %d ticks while watched, never froze, reached or took anyone outside a count (%d counts, from bumps)" % [n, ticks, moved_seen, counts])
 
 func test_the_temp_keeps_the_orderlys_stillness(t: T) -> void:
 	var n := 2 if t.quick else 8

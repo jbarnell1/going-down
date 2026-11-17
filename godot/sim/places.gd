@@ -9,7 +9,9 @@
 #                                seeded draw from the deck, never the place of the floor above.
 #   generate(seed, depth, deck)  THE way a plan is made: the generator of place_at's place.
 #   resident(place)              who lives there: name, whether Stillness rules it, its instrument trait.
-#   wander_step(...)             the Minder's harmless wander while its count is not wired (T15d).
+#
+# The Playroom's Minder is stepped by sim/seek.gd from sim/run.gd (T15d): its wander, the count, the
+# search. Its instrument trait is "hearing" (instrument.gd records it only while it searches).
 #
 # A deck is the list of places a run may draw. Runs default to CLINIC_ONLY (every floor a Clinic, as
 # every stored run result was recorded); the game passes FULL. With a deck that lacks a fixed floor's
@@ -22,10 +24,7 @@ const Annex = preload("res://sim/annex.gd")
 const Playroom = preload("res://sim/playroom.gd")
 const Prison = preload("res://sim/prison.gd")
 const Entity = preload("res://sim/entity.gd")
-const Follow = preload("res://sim/follow.gd")
-const Move = preload("res://sim/move.gd")
 const Rng = preload("res://sim/rng.gd")
-const M = preload("res://sim/jsmath.gd")
 
 const PRISON := &"prison"
 const CLINIC := &"clinic"
@@ -39,11 +38,8 @@ const FULL: Array[StringName] = [&"clinic", &"annex", &"playroom"]
 ## The fixed floors, by depth (index 0 is the prison, which is never drawn).
 const FIXED: Array[StringName] = [&"prison", &"clinic", &"clinic", &"annex", &"playroom"]
 
-## The Minder's wander (seek.gd WANDER_SPEED, a stroll) and its pause at each stop (seek.gd STRAIGHTEN_TIME).
+## The Minder's stroll outside a count (seek.gd WANDER_SPEED).
 const WANDER_SPEED := 1.2
-const WANDER_PAUSE := 3.0
-## A wander stop is this many cells or more (by walking) from where it stands, when the floor allows.
-const WANDER_MIN_STEPS := 6
 
 ## Who lives in a place.
 class Resident:
@@ -51,7 +47,8 @@ class Resident:
 	var name: String
 	## Ruled by Stillness: it only moves while nobody is looking (entity.gd).
 	var stillness: bool
-	## What the instruments call its trait (instrument.gd records only "stillness" so far).
+	## What the instruments call its trait: "stillness" (while it moves unseen) or "hearing" (while it
+	## searches during a count; sim/run.gd says when, and for whom).
 	var trait_name: StringName
 	## Its body numbers (entity.gd BodySettings: height, seen size, speeds, sound), or null where none is
 	## made yet (the Minder stands in with the Orderly's). create_resident gives it to the floor's state,
@@ -128,82 +125,3 @@ static func generate(seed: String, depth: int, deck: Array = FULL) -> Floor.Floo
 ## resident is made (run.gd, net/host_rules.gd).
 static func create_resident(plan: Floor.FloorPlan) -> Entity.OrderlyState:
 	return Entity.create_orderly(plan, resident(plan.place).body)
-
-# ---------------------------------------------------------------------------------------------
-# The Minder's wander. seek.gd holds the Playroom's real rules (the count, the search, being found);
-# wiring them into the run is a later piece (T15d). Until then the Minder strolls from stop to stop,
-# pauses, and goes on: it never sees, freezes, reaches or catches. It keeps the Orderly's state shape so
-# the snapshot and the views carry it unchanged ("hunting" while it walks, "dormant" while it pauses).
-
-## One tick of the wander. `key` seeds its choice of stops (the run passes the entity id and seed).
-static func wander_step(plan: Floor.FloorPlan, prev: Entity.OrderlyState, dt: float, key: String) -> Entity.OrderlyState:
-	var s := prev.copy()
-	s.t = prev.t + dt
-	s.moving = false
-	s.speed = 0.0
-	s.seen = false
-	s.held = false
-	s.frozen = false
-	s.wind_up_left = 0.0
-	s.wind_up_target = null
-	s.target_id = null
-	s.anim_time += dt
-	if s.mode == &"dormant":
-		s.anim = &"idle"
-		s.dormant_left -= dt
-		if s.dormant_left > 1e-9:
-			return s
-		s.dormant_left = 0.0
-		s.path = []
-	s.mode = &"hunting"
-	if s.path.is_empty():
-		s.path = _wander_route(plan, s.body, "%s:%d" % [key, roundi(s.t * 20.0)])
-		s.path_next = 1 if s.path.size() > 1 else 0
-		if s.path.is_empty():
-			s.anim = &"idle"
-			return s
-	var walk := Follow.PathWalk.make(s.path, s.path_next)
-	var before := s.body
-	if Follow.path_done(plan, walk, before):
-		s.mode = &"dormant"
-		s.dormant_left = WANDER_PAUSE
-		s.anim = &"idle"
-		return s
-	s.body = Follow.step_path_walk(plan, walk, before, WANDER_SPEED * dt, Entity.ORDERLY_RADIUS)
-	s.path_next = walk.next
-	var mx := s.body.x - before.x
-	var mz := s.body.z - before.z
-	var moved := M.hypot2(mx, mz)
-	s.moving = moved > 1e-9
-	s.speed = moved / maxf(dt, 1e-9)
-	if s.moving:
-		s.yaw = Entity._turn_toward(s.yaw, Entity.yaw_toward(mx, mz), Entity.TURN_RATE * dt)
-		s.anim = &"walk"
-	else:
-		# Stuck on a corner: pause, then choose again.
-		s.anim = &"idle"
-		s.mode = &"dormant"
-		s.dormant_left = WANDER_PAUSE
-	return s
-
-## A route from `body` to a seeded walkable cell some way off (any level the stairs reach).
-static func _wander_route(plan: Floor.FloorPlan, body: Move.Body, key: String) -> Array[Floor.Pos]:
-	var here := Move.cell_of(plan, body)
-	if not Floor.is_walkable(plan, here.level, here.x, here.y):
-		return []
-	var dist := Floor.distances_from(plan, here)
-	var far: Array = []
-	var near: Array = []
-	for i in dist.size():
-		var d := dist[i]
-		if d <= 0:
-			continue
-		if d >= WANDER_MIN_STEPS:
-			far.append(i)
-		else:
-			near.append(i)
-	var pool := far if not far.is_empty() else near
-	if pool.is_empty():
-		return []
-	var to := Floor.pos_from_index(plan, int(Rng.make_rng("wander:%s" % key).pick(pool)))
-	return Floor.find_path(plan, here, to)
