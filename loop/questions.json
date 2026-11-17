@@ -1270,6 +1270,142 @@
       "default": [
         "random"
       ]
+    },
+    {
+      "id": "eye-marks",
+      "title": "The Orderly: show how many watchers it needs?",
+      "context": "New rule: with 3 or more players it takes TWO people looking to freeze it (one is enough with 1 or 2 players). The design suggests small eye marks on screen, one per watcher needed, lit for each watcher counted, so a lone watcher knows it is not enough. The North Star says the game never names a monster's rule on screen.",
+      "type": "single",
+      "options": [
+        {
+          "id": "show",
+          "label": "Show the eye marks",
+          "note": "Recommended: fair and readable; you learn by seeing one mark lit."
+        },
+        {
+          "id": "hide",
+          "label": "No marks: learn it by playing",
+          "note": "Scarier, but a lone watcher may think it is a bug."
+        }
+      ],
+      "default": [
+        "show"
+      ]
+    },
+    {
+      "id": "lonely-numbers",
+      "title": "The Temp: how lonely is lonely, and how fast?",
+      "context": "Lonely = every other player more than 8 m away AND no clear line of sight to you within 20 m. It chases a lonely player it can see within 16 m at 3.9 m/s, just faster than you can average running and walking. From 12 m away you have about 13 s walking, about 24 s with a sprint, to reach a friend.",
+      "type": "single",
+      "options": [
+        {
+          "id": "as-designed",
+          "label": "These numbers; tune after one play",
+          "note": "Recommended."
+        },
+        {
+          "id": "harsher",
+          "label": "Harsher: lonely at 6 m, faster",
+          "note": ""
+        },
+        {
+          "id": "kinder",
+          "label": "Kinder: lonely at 12 m, slower",
+          "note": ""
+        }
+      ],
+      "default": [
+        "as-designed"
+      ]
+    },
+    {
+      "id": "cabinet-key",
+      "title": "Getting into a cabinet: E or F?",
+      "context": "You suggested E to enter a cabinet, but E already raises the instrument. F is already the use key (hiding in the Playroom, the call button, sleeping).",
+      "type": "single",
+      "options": [
+        {
+          "id": "f",
+          "label": "F for cabinets, like every other hiding place",
+          "note": "Recommended: one key for everything you climb into."
+        },
+        {
+          "id": "e",
+          "label": "E for cabinets; move the instrument to another key",
+          "note": "Say which key in the box."
+        }
+      ],
+      "default": [
+        "f"
+      ]
+    },
+    {
+      "id": "solo-annex",
+      "title": "Playing alone in the Annex",
+      "context": "Alone, you are always lonely, so the Lonely Temp would always chase you. The design gives a solo player's Temp the Orderly's freeze-when-seen rule instead.",
+      "type": "single",
+      "options": [
+        {
+          "id": "stillness",
+          "label": "Alone, the Temp freezes when seen instead",
+          "note": "Recommended."
+        },
+        {
+          "id": "lonely",
+          "label": "Keep it Lonely even alone (very hard)",
+          "note": ""
+        }
+      ],
+      "default": [
+        "stillness"
+      ]
+    },
+    {
+      "id": "relocate-numbers",
+      "title": "Monsters slipping away: how often?",
+      "context": "A monster only relocates after 1 s out of everyone's sight and at least 20 s since it last arrived. It reappears 12-20 m (walking) from a player, never in sight, and is heard for 3 s before it moves again.",
+      "type": "single",
+      "options": [
+        {
+          "id": "as-designed",
+          "label": "These numbers; tune after a play",
+          "note": "Recommended."
+        },
+        {
+          "id": "more",
+          "label": "More often (every 10 s)",
+          "note": ""
+        },
+        {
+          "id": "less",
+          "label": "Less often (every 40 s)",
+          "note": ""
+        }
+      ],
+      "default": [
+        "as-designed"
+      ]
+    },
+    {
+      "id": "minder-relocate",
+      "title": "Should the Minder also slip away?",
+      "context": "The relocation is designed for the Minder too, but switched off until you have played the Playroom as it is.",
+      "type": "single",
+      "options": [
+        {
+          "id": "off",
+          "label": "Leave it off until I play the Playroom",
+          "note": "Recommended."
+        },
+        {
+          "id": "on",
+          "label": "Turn it on now",
+          "note": ""
+        }
+      ],
+      "default": [
+        "off"
+      ]
     }
   ]
 }
