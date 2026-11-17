@@ -4,10 +4,10 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 57 of 84.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 60.
-- **Now:** nothing in progress
-- **Last CI result seen:** passed on 72f1526
+- **Gates passed:** 7 of 14. **Tasks done:** 62 of 91.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 64.
+- **Now:** T19b Hiding places on every floor. A Sonnet agent is checking hiding places in the Clinic and the Annex
+- **Last CI result seen:** passed on edfa232
 - **Answers applied up to:** 2026-11-17T05:04:17.919Z
 
 ## Tasks
@@ -114,10 +114,12 @@
 - [x] **T2c** `done` The camera drops when you creep
   - Why: Creeping should feel like ducking, and what you can see over things should change with it
   - Evidence: The camera drops when you creep (1.13 m, where teammates see your head) and when down (0.45 m), easing over 0.2 s. The eye height the rules judge 'looking' from equals the camera on every frame: 0 of 3,040 inputs off. Teammates see a creeping crewmate crouched with the mask at that eye. Independently checked; both breaks red. Merged 88efc2d.
-- [ ] **T5q** `doing` A quota before the lift can be called
+- [x] **T5q** `done` A quota before the lift can be called
   - Why: You cannot just ride straight back up: the crew has to earn a set amount on the instrument on each floor before the call button works
-- [ ] **T5r** `todo` The quota on screen
+  - Evidence: In the build you play (play/GoingDown-2026-11-17-0833.zip): the call button does nothing until the crew has recorded enough on this floor (400 per player on floor 1, 45% more each floor down); dropped tapes still count; a solo reader meets floor 1 in about 2 minutes. Also fixed: a step beside the lift car could snap you inside it. A two-player game over the public address saw the call refused on both screens.
+- [x] **T5r** `done` The quota on screen
   - Why: The call panel shows RECORDED 640 OF 1200, a refused press says NOT YET, and the announcer says when the quota is met
+  - Evidence: In the build you play: RECORDED n OF m above the call button and under the prompt, a buzz and NOT YET on a refused press, QUOTA MET. CALL THE CAR. and an announcer line when it's met. Checked 14/14, the panel always showing the host's numbers.
 - [ ] **T16h** `todo` Crew marks and the Temp's sticky notes in the run
   - Why: In the Annex the crew's three marks are the only directions you can trust, and the Temp leaves notes about you by name
   - To do: The 14-notes cap is only caught because templates run out at 21; assert 14 directly
@@ -180,18 +182,18 @@
 - [x] **T18j** `done` The day in the run: bank, ride up, sleep, day 2
   - Why: Vote BANK and you ride up to the prison, go to bed, and wake to a new day going down
   - Evidence: In the build you play (play/GoingDown-2026-11-17-0602.zip): BANK rides up to the prison, holding F at your bunk lies you down, the bedtime count can't be stopped, and day 2 starts at floor 1 on its own seed. Three bots over a link that lost 1,960 messages agreed with the host at every stop; four deliberate breaks red; a two-player game over the public address banked and rode up.
-- [ ] **T15b** `todo` The count, the Minder and health, as rules
+- [x] **T15b** `done` The count, the Minder and health, as rules
   - Why: What makes the seeker fair and a real threat
-  - To do: On the biggest floors the Minder sometimes can't walk to a far area before the count ends (47 of 320 draws at depth 4): tune the search speed, walks or floor size after a play
-  - To do: The health test should also put a player inside a hiding place after a count (today only the whole-floor bot test guards 'resting in a hide restores')
+  - Evidence: In the build you play: the count, the Minder's search, the four ways of being found and health run in the game (see T15d/T15e).
 - [x] **T15c** `done` The Playroom's look and a stand-in Minder
   - Why: Padded primary colours, a ball pit, netting and signs that print the hiding odds
   - Evidence: In the build you play: the Playroom's look (padded primaries, ball pits, netting, signs printing each area's hiding odds, real count dark) with a stand-in Minder that never freezes when seen; the Blender Minder replaces it next.
-- [ ] **T15d** `todo` The count in the run and over the network
+- [x] **T15d** `done` The count in the run and over the network
   - Why: Somebody sprints, the lights die, and the ball pit actually saves you, the same for every player
-  - To do: No test pins that the Playroom's rules stay still during the lift ride (the deliberate break of the riding guard stayed green; the rules may already ignore the crew while riding). Add one.
-- [ ] **T15e** `doing` The count on screen
+  - Evidence: In the build you play (play/GoingDown-2026-11-17-0642.zip): on floor 4 any sprint, noise or light starts a count, the Minder searches with printed odds, the four ways of being found, health after a count, and the last count when you call the lift. Three clients on lossy links agreed on every count; breaks red.
+- [x] **T15e** `done` The count on screen
   - Why: HIDE, the dark, climbing into hiding places and peeking at a glowing balloon
+  - Evidence: In the build you play: HIDE, the lights going bank by bank, STARTED BY, hiding places with F, peeking with W, the bell and the announcer's countdown, the health bar, FOUND, and the party table. Two screens 0.3 s apart in delay went dark within 0.003 s; found at 1.0 s on both; health equal to the host's. A public-address game passed after promoting.
 - [x] **T18k** `done` Bed and the day board on screen
   - Why: The prison shows what the crew banked and HOLD F TO SLEEP works
   - Evidence: In the build you play: the ride up, the report board (owed, banked, short by, streak, misses left, the roll's odds, each share), HOLD F TO SLEEP, IN BED n OF m, lights out on host time, and waking on day 2. Two players read the host's total on their boards and woke together; a board drawn from the client's own sum went red.
@@ -208,6 +210,21 @@
   - Why: Found players sit in paper hats with a horn until a friend fetches them
 - [ ] **T8a** `todo` Down first, then out
   - Why: Being caught drops you; a friend holding F puts you back up
+  - To do: Add a test that walks a body through the open doorway into the car (today it is covered only by reading the code and the passing movement tests)
+- [ ] **T8c** `todo` Down and healed on screen
+  - Why: When you go down you crawl with a 10-second timer; a friend sees HOLD F TO HELP and a fill bar; out leaves a red spot
+- [ ] **T19a** `doing` Freeze takes two watchers
+  - Why: The Orderly keeps moving if only one of you is looking: it takes two (or, with two players, either of you) to hold it
+- [ ] **T19b** `doing` Hiding places on every floor
+  - Why: Under hospital beds, inside cabinets (E), under desks (Ctrl) - so a re-rolled monster on any floor can be survived
+- [ ] **T19c** `todo` The Temp's own mechanic
+  - Why: No two monsters share a rule: the Temp needs its own way to hunt and to be recorded
+- [ ] **T19d** `todo` Traits re-roll per floor
+  - Why: Recognising the monster never tells you how to survive it
+- [ ] **T19e** `todo` Monsters slip away and reappear out of view
+  - Why: Every monster relocates out of everyone's sight in a way that fits its rule, so you can lose track of it
+- [ ] **TB** `doing` Your second batch of sounds in the game
+  - Why: The Annex, the Playroom and the crew get their own recorded sounds: staplers, office tone, the music box, squeaky tiles, the ball pit, the Minder's wheeze, breathing that isn't wet
 - [ ] **T11a** `todo` A whole run with bots, headless
   - Why: Proof the build plays end to end, from the Clinic to day 2
 - [ ] **T16** `todo` The Annex, the second place
@@ -294,9 +311,41 @@
 - 2026-11-17: Until you answer: the shop sells one-day items (flares, batteries, tape, extra marks) and the skill tree keeps the permanent upgrades; windows 1-2 the shop, 3-4 the skill tree, the face kiosk in the corridor by the cells.
 - 2026-11-17: Hide floor: a children's play area with a new seeker of our own design (owner's mood note: the entity from the subliminal game); any sprint, noise or light on it starts the count; after a count, faster than a creep drains health; build the whole thing even if it is not ready by morning.
 - 2026-11-17: The Minder: more animalistic and moves on all fours (owner's picture as direction, design kept original: a gaunt eyeless thing in tabard rags with a printed smiley party mask). Walking is quiet; the party horn never starts a count; floors 5+ are drawn by the seed.
+- 2026-11-17: Owner: no two residents share a mechanic. The Orderly's freeze-when-seen becomes: one watcher is not enough, two or more watchers stop it (with two players, either one stops it; alone, you stop it). Every floor gets hiding places (under hospital beds, cabinets with E, under desks with Ctrl). The Playroom stays as built until played.
+- 2026-11-17: The Temp is Lonely: a player is lonely when out of sight of every other player and beyond a set distance. The Temp chases a lonely player it sees, slightly faster than them; once they reach someone it turns away, leaves out of view and reappears out of view near another player. Every monster gets out-of-view relocation that fits its trait, so players can lose track of them.
 
 ## Activity (newest first)
 
+- 2026-11-17 14:53Z Started T19b: Hiding places on every floor. A Sonnet agent is checking hiding places in the Clinic and the Annex
+- 2026-11-17 14:53Z New build in play/ (play/GoingDown-2026-11-17-0833.zip): the floor quota and its call panel, and the fix for a step beside the lift snapping you inside. Lab-box server updated; a two-player game over the public address passed.
+- 2026-11-17 14:53Z Finished T5r: The quota on screen.
+- 2026-11-17 14:53Z Finished T5q: A quota before the lift can be called.
+- 2026-11-17 13:55Z Paused T8a: waiting for checked (200 bot runs, all four deliberate breaks red, no golden changed); goes into your build with its screen (T8c)
+- 2026-11-17 13:49Z Started TB: Your second batch of sounds in the game. An Opus builder is mixing your 41 new recordings into the game, with the found-you sting made from both takes
+- 2026-11-17 13:49Z Added task TB: Your second batch of sounds in the game.
+- 2026-11-17 13:45Z New pictures for T5r: The quota on screen.
+- 2026-11-17 13:45Z Started T5r: The quota on screen. A Sonnet agent is checking the quota on screen: the panel must always show the host's numbers
+- 2026-11-17 13:31Z Started T19b: Hiding places on every floor. An Opus builder is adding hiding places to the Clinic and the Annex: under beds, in cabinets, under desks and meeting tables
+- 2026-11-17 13:31Z Started T19a: Freeze takes two watchers. An Opus builder is making the two-watcher rule: one person looking isn't enough with three or more players
+- 2026-11-17 13:31Z Paused T19d: waiting for design written (docs/floors/traits-and-hiding.md); built after T19a, T19b, T19e and T19c
+- 2026-11-17 13:28Z Added task T8c: Down and healed on screen.
+- 2026-11-17 13:28Z Started T8a: Down first, then out. A Sonnet agent is checking down first, then out: 200 bot runs, heals only within reach, out at 10 s, every client the same
+- 2026-11-17 13:25Z Added task T19e: Monsters slip away and reappear out of view.
+- 2026-11-17 13:25Z Took a default: The Temp is Lonely: a player is lonely when out of sight of every other player and beyond a set distance. The Temp chases a lonely player it sees, slightly faster than them; once they reach someone it turns away, leaves out of view and reappears out of view near another player. Every monster gets out-of-view relocation that fits its trait, so players can lose track of them.
+- 2026-11-17 13:25Z Started T19d: Traits re-roll per floor. Fable is designing re-rolled traits, the new two-watcher Stillness, the Temp's own rule and hiding places on every floor
+- 2026-11-17 13:12Z Added task T19d: Traits re-roll per floor.
+- 2026-11-17 13:12Z Added task T19c: The Temp's own mechanic.
+- 2026-11-17 13:12Z Added task T19b: Hiding places on every floor.
+- 2026-11-17 13:12Z Added task T19a: Freeze takes two watchers.
+- 2026-11-17 13:12Z Took a default: Owner: no two residents share a mechanic. The Orderly's freeze-when-seen becomes: one watcher is not enough, two or more watchers stop it (with two players, either one stops it; alone, you stop it). Every floor gets hiding places (under hospital beds, cabinets with E, under desks with Ctrl). The Playroom stays as built until played.
+- 2026-11-17 13:00Z Paused T5q: waiting for re-checked (solo meets floor 1 every time, worst 2:16; the lift-car snap bug fixed and tested; the quota never grows mid-floor); goes into your build with its call panel (T5r)
+- 2026-11-17 12:47Z Started T5r: The quota on screen. An Opus builder is putting the quota on screen: RECORDED n OF m on the call panel, NOT YET on a refused press, the announcer when it's met
+- 2026-11-17 12:47Z New build in play/ (play/GoingDown-2026-11-17-0642.zip): the Playroom's hide and seek is playable. Sprint or make a noise on floor 4 and HIDE. starts: lights out, the bell and the countdown voice, hide with F, peek with W. Lab-box server updated; public-address game passed.
+- 2026-11-17 12:47Z Started T5q: A quota before the lift can be called. A Sonnet agent is re-checking the quota fixes, including a real bug the builder found: a step beside the lift car could snap you into it
+- 2026-11-17 12:47Z Finished T15b: The count, the Minder and health, as rules.
+- 2026-11-17 12:47Z Finished T15e: The count on screen.
+- 2026-11-17 12:47Z Finished T15d: The count in the run and over the network.
+- 2026-11-17 12:32Z Started T8a: Down first, then out. An Opus builder is making going down and being healed: caught drops you where you stood, and a friend holding F for three seconds puts you back up
 - 2026-11-17 12:25Z Sample notes from the Temp's test run: 'Welcome, Cy. Your desk is ready. It has always been ready.' / 'Bo and Cy: you are standing very close. HR has been informed.' / 'Ana is furthest from the lift. Somebody has to be.'
 - 2026-11-17 12:25Z Paused T16h: waiting for checked (four players, 837 lost messages, identical marks and notes; marks never move; no note while the Temp is watched; four breaks red); goes into your build with the marks screen (T16j)
 - 2026-11-17 12:14Z Added task T16j: Marks, notes and the pad on screen.
@@ -307,33 +356,3 @@
 - 2026-11-17 12:06Z Finished T18k: Bed and the day board on screen.
 - 2026-11-17 12:06Z Finished T18j: The day in the run: bank, ride up, sleep, day 2.
 - 2026-11-17 12:01Z New pictures for T15e: The count on screen.
-- 2026-11-17 12:01Z New pictures for T15e: The count on screen.
-- 2026-11-17 12:01Z New pictures for T15e: The count on screen.
-- 2026-11-17 12:01Z Started T15e: The count on screen. A Sonnet agent is checking the count on screen: two players' screens must agree on the dark, the bell and who was found
-- 2026-11-17 12:01Z Started T5q: A quota before the lift can be called. Back with its builder: a solo player sometimes can't meet floor 1's quota, a no-grow test is missing, and the test playthroughs need updating
-- 2026-11-17 11:39Z Started T16h: Crew marks and the Temp's sticky notes in the run. An Opus builder is putting the Annex's crew marks and the Temp's sticky notes into the run, the same for every player
-- 2026-11-17 11:39Z Added task T16h: Crew marks and the Temp's sticky notes in the run.
-- 2026-11-17 11:39Z Added task T5r: The quota on screen.
-- 2026-11-17 11:39Z Started T5q: A quota before the lift can be called. A Sonnet agent is checking the floor quota: every client sees the same refusals, dropped tapes still count
-- 2026-11-17 11:01Z Finished T15i: The count's voice lines.
-- 2026-11-17 11:01Z Paused T15d: waiting for checked (all three clients agreed on every count over a link that lost 2,550 messages; walking never starts a count); goes into your build with its screens (T15e)
-- 2026-11-17 10:50Z The count's announcer lines are recorded in both voices (2,148 characters; the voice budget is at 22,560 of 50,000): 'Hide.', forty, thirty, twenty, then ten to one, 'Coming, ready or not!', 'Found you!', 'All done!', and 'Your car is on its way! One more round before we go!'. Takes are on the audition page for you to pick.
-- 2026-11-17 10:50Z Started T15i: The count's voice lines. A Sonnet agent is checking the count's voice lines: budget, loudness, no key anywhere
-- 2026-11-17 10:47Z Started T5q: A quota before the lift can be called. An Opus builder is adding the floor quota: the call button is dead until the crew has recorded enough
-- 2026-11-17 10:47Z Linked T5q to the North Star: C9.
-- 2026-11-17 10:46Z Started T15e: The count on screen. An Opus builder is putting the count on screen: HIDE, the dark, climbing into hiding places, peeking, the health bar, being found
-- 2026-11-17 10:46Z Paused T15k: waiting for checked and merged (7dc9958); marked done once it's in the build you play, with the day screens
-- 2026-11-17 10:46Z Started T15k: The Blender Minder in the game. reopened
-- 2026-11-17 10:46Z Finished T15k: The Blender Minder in the game.
-- 2026-11-17 10:46Z Started T15d: The count in the run and over the network. A Sonnet agent is checking the count in the run: three clients on lossy links must agree on every count
-- 2026-11-17 10:46Z Started T18k: Bed and the day board on screen. A Sonnet agent is running the combined check of the day screens with everything else (floors, sounds, crewmates, the Blender Minder)
-- 2026-11-17 10:15Z New build in play/ (GoingDown-2026-11-17-0344.zip): ride down to the Annex with the Temp on floor 3 and the Playroom on floor 4; your recorded sounds; the bigger lift. The lab-box server is updated, and a two-player game over the public address passed.
-- 2026-11-17 10:14Z Started T15i: The count's voice lines. An Opus builder is recording the count's announcer lines (Hide, the countdown, Coming ready or not, All done) within the voice budget
-- 2026-11-17 10:14Z Added task T15i: The count's voice lines.
-- 2026-11-17 10:10Z Finished T16e: The place deck: the third floor down is the Annex.
-- 2026-11-17 10:10Z Finished T15c: The Playroom's look and a stand-in Minder.
-- 2026-11-17 10:10Z Finished T15a: The Playroom floor generator.
-- 2026-11-17 10:10Z Finished T16f: The Temp's body in the rules.
-- 2026-11-17 10:10Z Finished T16g: The Temp's figure and its stapler.
-- 2026-11-17 10:10Z Finished TA: Real sounds, and comedy sounds.
-- 2026-11-17 10:10Z Finished T6f: A bigger elevator.

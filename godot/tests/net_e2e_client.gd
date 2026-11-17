@@ -163,11 +163,16 @@ func _player(t: float) -> void:
 
 var _call_next := false
 
+## Over when the run banks or wipes, or (against a server with the floor quota on, which scripted players
+## who never record cannot meet) once the call has been refused.
 func _settled(c: Client) -> bool:
+	var refused := 0
 	for e: Dictionary in c.events:
 		if e.get("type") == "banked" or e.get("type") == "wiped":
 			return true
-	return false
+		if e.get("type") == "callRefused":
+			refused += 1
+	return refused >= 1
 
 static func M_hyp(a: float, b: float) -> float:
 	return sqrt(a * a + b * b)
@@ -202,6 +207,9 @@ func _report(c: Client) -> void:
 		if e.get("type") == "banked":
 			res["banked"] = true
 			res["total"] = e["summary"]["total"]
+		if e.get("type") == "callRefused":
+			res["refused"] = int(res.get("refused", 0)) + 1
+			res["quota"] = [e.get("earned"), e.get("needed")]
 	res["phase"] = c.latest["phase"]
 	res["events"] = c.events.size()
 	res["latches"] = c.stats.latches

@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 60,
-  "now": null,
-  "nowText": "",
+  "iteration": 64,
+  "now": "T19b",
+  "nowText": "A Sonnet agent is checking hiding places in the Clinic and the Annex",
   "ci": {
     "status": "passed",
-    "commit": "72f1526",
-    "at": "2026-11-17T12:06:53.165Z"
+    "commit": "edfa232",
+    "at": "2026-11-17T13:51:14.119Z"
   },
   "answersAppliedTo": "2026-11-17T05:04:17.919Z",
   "tasks": [
@@ -1355,24 +1355,48 @@
       "id": "T5q",
       "title": "A quota before the lift can be called",
       "why": "You cannot just ride straight back up: the crew has to earn a set amount on the instrument on each floor before the call button works",
-      "status": "doing",
+      "status": "done",
       "gates": [],
       "ns": [
         "C9"
       ],
       "startedAt": "2026-11-17T03:42:21.993Z",
-      "doingText": "Back with its builder: a solo player sometimes can't meet floor 1's quota, a no-grow test is missing, and the test playthroughs need updating",
-      "doingAt": "2026-11-17T12:01:23.148Z"
+      "waiting": "re-checked (solo meets floor 1 every time, worst 2:16; the lift-car snap bug fixed and tested; the quota never grows mid-floor); goes into your build with its call panel (T5r)",
+      "todo": [],
+      "nsCheck": "C9: the call button does nothing until enough is earned on this floor",
+      "finishedAt": "2026-11-17T14:53:10.602Z",
+      "summary": "In the build you play (play/GoingDown-2026-11-17-0833.zip): the call button does nothing until the crew has recorded enough on this floor (400 per player on floor 1, 45% more each floor down); dropped tapes still count; a solo reader meets floor 1 in about 2 minutes. Also fixed: a step beside the lift car could snap you inside it. A two-player game over the public address saw the call refused on both screens."
     },
     {
       "id": "T5r",
       "title": "The quota on screen",
       "why": "The call panel shows RECORDED 640 OF 1200, a refused press says NOT YET, and the announcer says when the quota is met",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [
         "C9"
-      ]
+      ],
+      "startedAt": "2026-11-17T12:47:02.926Z",
+      "doingText": "A Sonnet agent is checking the quota on screen: the panel must always show the host's numbers",
+      "doingAt": "2026-11-17T13:45:31.417Z",
+      "media": [
+        {
+          "src": "T5r/20261117T134531-2-not-yet-flash.png",
+          "caption": "Pressing call too early: NOT YET, with a buzz",
+          "kind": "image",
+          "at": "2026-11-17T13:45:31.541Z"
+        },
+        {
+          "src": "T5r/20261117T145313-2-not-yet-flash.png",
+          "caption": "NOT YET",
+          "kind": "image",
+          "at": "2026-11-17T14:53:13.742Z"
+        }
+      ],
+      "nsCheck": "C9: the call panel shows earned against needed; the announcer says when it is met",
+      "finishedAt": "2026-11-17T14:53:13.737Z",
+      "summary": "In the build you play: RECORDED n OF m above the call button and under the prompt, a buzz and NOT YET on a refused press, QUOTA MET. CALL THE CAR. and an announcer line when it's met. Checked 14/14, the panel always showing the host's numbers.",
+      "todo": []
     },
     {
       "id": "T16h",
@@ -1826,17 +1850,17 @@
       "id": "T15b",
       "title": "The count, the Minder and health, as rules",
       "why": "What makes the seeker fair and a real threat",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [
         "A11"
       ],
       "startedAt": "2026-11-17T06:29:56.970Z",
-      "todo": [
-        "On the biggest floors the Minder sometimes can't walk to a far area before the count ends (47 of 320 draws at depth 4): tune the search speed, walks or floor size after a play",
-        "The health test should also put a player inside a hiding place after a count (today only the whole-floor bot test guards 'resting in a hide restores')"
-      ],
-      "waiting": "checked and merged; it runs in a game once the count is wired into the run (T15d)"
+      "todo": [],
+      "waiting": "checked and merged; it runs in a game once the count is wired into the run (T15d)",
+      "nsCheck": "A11",
+      "finishedAt": "2026-11-17T12:47:02.463Z",
+      "summary": "In the build you play: the count, the Minder's search, the four ways of being found and health run in the game (see T15d/T15e)."
     },
     {
       "id": "T15c",
@@ -1890,22 +1914,23 @@
       "id": "T15d",
       "title": "The count in the run and over the network",
       "why": "Somebody sprints, the lights die, and the ball pit actually saves you, the same for every player",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [
         "A11"
       ],
       "startedAt": "2026-11-17T09:44:50.098Z",
       "waiting": "checked (all three clients agreed on every count over a link that lost 2,550 messages; walking never starts a count); goes into your build with its screens (T15e)",
-      "todo": [
-        "No test pins that the Playroom's rules stay still during the lift ride (the deliberate break of the riding guard stayed green; the rules may already ignore the crew while riding). Add one."
-      ]
+      "todo": [],
+      "nsCheck": "A11 with the owner's rules: any sprint/noise/light; walking quiet; running hurts after a count; harmless horn",
+      "finishedAt": "2026-11-17T12:47:02.254Z",
+      "summary": "In the build you play (play/GoingDown-2026-11-17-0642.zip): on floor 4 any sprint, noise or light starts a count, the Minder searches with printed odds, the four ways of being found, health after a count, and the last count when you call the lift. Three clients on lossy links agreed on every count; breaks red."
     },
     {
       "id": "T15e",
       "title": "The count on screen",
       "why": "HIDE, the dark, climbing into hiding places and peeking at a glowing balloon",
-      "status": "doing",
+      "status": "done",
       "gates": [],
       "ns": [
         "A11"
@@ -1931,8 +1956,30 @@
           "caption": "Found players wait at the party table",
           "kind": "image",
           "at": "2026-11-17T12:01:44.757Z"
+        },
+        {
+          "src": "T15e/20261117T124702-01-hide-the-lights-going.png",
+          "caption": "HIDE. Started by Bob, sprinting",
+          "kind": "image",
+          "at": "2026-11-17T12:47:02.358Z"
+        },
+        {
+          "src": "T15e/20261117T124702-02-sat-back-in-the-ball-pit.png",
+          "caption": "Hiding in the ball pit",
+          "kind": "image",
+          "at": "2026-11-17T12:47:02.360Z"
+        },
+        {
+          "src": "T15e/20261117T124702-06-the-party-table.png",
+          "caption": "Taken players watch from the party table",
+          "kind": "image",
+          "at": "2026-11-17T12:47:02.361Z"
         }
-      ]
+      ],
+      "nsCheck": "A11; network delay never makes a rule look broken (count dark from host time)",
+      "finishedAt": "2026-11-17T12:47:02.354Z",
+      "summary": "In the build you play: HIDE, the lights going bank by bank, STARTED BY, hiding places with F, peeking with W, the bell and the announcer's countdown, the health bar, FOUND, and the party table. Two screens 0.3 s apart in delay went dark within 0.003 s; found at 1.0 s on both; health equal to the host's. A public-address game passed after promoting.",
+      "todo": []
     },
     {
       "id": "T18k",
@@ -2079,7 +2126,98 @@
       "gates": [],
       "ns": [
         "B6"
+      ],
+      "startedAt": "2026-11-17T12:32:19.658Z",
+      "waiting": "checked (200 bot runs, all four deliberate breaks red, no golden changed); goes into your build with its screen (T8c)",
+      "todo": [
+        "Add a test that walks a body through the open doorway into the car (today it is covered only by reading the code and the passing movement tests)"
       ]
+    },
+    {
+      "id": "T8c",
+      "title": "Down and healed on screen",
+      "why": "When you go down you crawl with a 10-second timer; a friend sees HOLD F TO HELP and a fill bar; out leaves a red spot",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "B6"
+      ]
+    },
+    {
+      "id": "T19a",
+      "title": "Freeze takes two watchers",
+      "why": "The Orderly keeps moving if only one of you is looking: it takes two (or, with two players, either of you) to hold it",
+      "status": "doing",
+      "gates": [],
+      "ns": [
+        "B1",
+        "C2"
+      ],
+      "startedAt": "2026-11-17T13:31:58.984Z",
+      "doingText": "An Opus builder is making the two-watcher rule: one person looking isn't enough with three or more players",
+      "doingAt": "2026-11-17T13:31:58.984Z"
+    },
+    {
+      "id": "T19b",
+      "title": "Hiding places on every floor",
+      "why": "Under hospital beds, inside cabinets (E), under desks (Ctrl) - so a re-rolled monster on any floor can be survived",
+      "status": "doing",
+      "gates": [],
+      "ns": [
+        "A2",
+        "B1"
+      ],
+      "startedAt": "2026-11-17T13:31:59.156Z",
+      "doingText": "A Sonnet agent is checking hiding places in the Clinic and the Annex",
+      "doingAt": "2026-11-17T14:53:19.234Z"
+    },
+    {
+      "id": "T19c",
+      "title": "The Temp's own mechanic",
+      "why": "No two monsters share a rule: the Temp needs its own way to hunt and to be recorded",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "B1",
+        "B11"
+      ]
+    },
+    {
+      "id": "T19d",
+      "title": "Traits re-roll per floor",
+      "why": "Recognising the monster never tells you how to survive it",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "B1"
+      ],
+      "startedAt": "2026-11-17T13:25:00.178Z",
+      "waiting": "design written (docs/floors/traits-and-hiding.md); built after T19a, T19b, T19e and T19c"
+    },
+    {
+      "id": "T19e",
+      "title": "Monsters slip away and reappear out of view",
+      "why": "Every monster relocates out of everyone's sight in a way that fits its rule, so you can lose track of it",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "B1",
+        "B11"
+      ]
+    },
+    {
+      "id": "TB",
+      "title": "Your second batch of sounds in the game",
+      "why": "The Annex, the Playroom and the crew get their own recorded sounds: staplers, office tone, the music box, squeaky tiles, the ball pit, the Minder's wheeze, breathing that isn't wet",
+      "status": "doing",
+      "gates": [],
+      "ns": [
+        "B11",
+        "A11"
+      ],
+      "startedAt": "2026-11-17T13:49:58.420Z",
+      "doingText": "An Opus builder is mixing your 41 new recordings into the game, with the found-you sting made from both takes",
+      "doingAt": "2026-11-17T13:49:58.421Z"
     },
     {
       "id": "T11a",
@@ -2615,9 +2753,167 @@
     {
       "at": "2026-11-17T05:05:41.202Z",
       "text": "The Minder: more animalistic and moves on all fours (owner's picture as direction, design kept original: a gaunt eyeless thing in tabard rags with a printed smiley party mask). Walking is quiet; the party horn never starts a count; floors 5+ are drawn by the seed."
+    },
+    {
+      "at": "2026-11-17T13:12:27.402Z",
+      "text": "Owner: no two residents share a mechanic. The Orderly's freeze-when-seen becomes: one watcher is not enough, two or more watchers stop it (with two players, either one stops it; alone, you stop it). Every floor gets hiding places (under hospital beds, cabinets with E, under desks with Ctrl). The Playroom stays as built until played."
+    },
+    {
+      "at": "2026-11-17T13:25:31.953Z",
+      "text": "The Temp is Lonely: a player is lonely when out of sight of every other player and beyond a set distance. The Temp chases a lonely player it sees, slightly faster than them; once they reach someone it turns away, leaves out of view and reappears out of view near another player. Every monster gets out-of-view relocation that fits its trait, so players can lose track of them."
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-17T14:53:19.236Z",
+      "text": "Started T19b: Hiding places on every floor. A Sonnet agent is checking hiding places in the Clinic and the Annex",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T14:53:15.698Z",
+      "text": "New build in play/ (play/GoingDown-2026-11-17-0833.zip): the floor quota and its call panel, and the fix for a step beside the lift snapping you inside. Lab-box server updated; a two-player game over the public address passed.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T14:53:13.742Z",
+      "text": "Finished T5r: The quota on screen.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-17T14:53:10.603Z",
+      "text": "Finished T5q: A quota before the lift can be called.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-17T13:55:49.017Z",
+      "text": "Paused T8a: waiting for checked (200 bot runs, all four deliberate breaks red, no golden changed); goes into your build with its screen (T8c)",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T13:49:58.421Z",
+      "text": "Started TB: Your second batch of sounds in the game. An Opus builder is mixing your 41 new recordings into the game, with the found-you sting made from both takes",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T13:49:58.224Z",
+      "text": "Added task TB: Your second batch of sounds in the game.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T13:45:31.541Z",
+      "text": "New pictures for T5r: The quota on screen.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T13:45:31.418Z",
+      "text": "Started T5r: The quota on screen. A Sonnet agent is checking the quota on screen: the panel must always show the host's numbers",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T13:31:59.157Z",
+      "text": "Started T19b: Hiding places on every floor. An Opus builder is adding hiding places to the Clinic and the Annex: under beds, in cabinets, under desks and meeting tables",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T13:31:58.985Z",
+      "text": "Started T19a: Freeze takes two watchers. An Opus builder is making the two-watcher rule: one person looking isn't enough with three or more players",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T13:31:21.123Z",
+      "text": "Paused T19d: waiting for design written (docs/floors/traits-and-hiding.md); built after T19a, T19b, T19e and T19c",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T13:28:49.260Z",
+      "text": "Added task T8c: Down and healed on screen.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T13:28:49.095Z",
+      "text": "Started T8a: Down first, then out. A Sonnet agent is checking down first, then out: 200 bot runs, heals only within reach, out at 10 s, every client the same",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T13:25:32.339Z",
+      "text": "Added task T19e: Monsters slip away and reappear out of view.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T13:25:31.955Z",
+      "text": "Took a default: The Temp is Lonely: a player is lonely when out of sight of every other player and beyond a set distance. The Temp chases a lonely player it sees, slightly faster than them; once they reach someone it turns away, leaves out of view and reappears out of view near another player. Every monster gets out-of-view relocation that fits its trait, so players can lose track of them.",
+      "kind": "decision"
+    },
+    {
+      "at": "2026-11-17T13:25:00.179Z",
+      "text": "Started T19d: Traits re-roll per floor. Fable is designing re-rolled traits, the new two-watcher Stillness, the Temp's own rule and hiding places on every floor",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T13:12:36.541Z",
+      "text": "Added task T19d: Traits re-roll per floor.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T13:12:36.360Z",
+      "text": "Added task T19c: The Temp's own mechanic.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T13:12:36.174Z",
+      "text": "Added task T19b: Hiding places on every floor.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T13:12:35.964Z",
+      "text": "Added task T19a: Freeze takes two watchers.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T13:12:27.403Z",
+      "text": "Took a default: Owner: no two residents share a mechanic. The Orderly's freeze-when-seen becomes: one watcher is not enough, two or more watchers stop it (with two players, either one stops it; alone, you stop it). Every floor gets hiding places (under hospital beds, cabinets with E, under desks with Ctrl). The Playroom stays as built until played.",
+      "kind": "decision"
+    },
+    {
+      "at": "2026-11-17T13:00:26.337Z",
+      "text": "Paused T5q: waiting for re-checked (solo meets floor 1 every time, worst 2:16; the lift-car snap bug fixed and tested; the quota never grows mid-floor); goes into your build with its call panel (T5r)",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T12:47:02.927Z",
+      "text": "Started T5r: The quota on screen. An Opus builder is putting the quota on screen: RECORDED n OF m on the call panel, NOT YET on a refused press, the announcer when it's met",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T12:47:02.779Z",
+      "text": "New build in play/ (play/GoingDown-2026-11-17-0642.zip): the Playroom's hide and seek is playable. Sprint or make a noise on floor 4 and HIDE. starts: lights out, the bell and the countdown voice, hide with F, peek with W. Lab-box server updated; public-address game passed.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T12:47:02.670Z",
+      "text": "Started T5q: A quota before the lift can be called. A Sonnet agent is re-checking the quota fixes, including a real bug the builder found: a step beside the lift car could snap you into it",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T12:47:02.464Z",
+      "text": "Finished T15b: The count, the Minder and health, as rules.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-17T12:47:02.362Z",
+      "text": "Finished T15e: The count on screen.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-17T12:47:02.255Z",
+      "text": "Finished T15d: The count in the run and over the network.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-17T12:32:19.659Z",
+      "text": "Started T8a: Down first, then out. An Opus builder is making going down and being healed: caught drops you where you stood, and a friend holding F for three seconds puts you back up",
+      "kind": "start"
+    },
     {
       "at": "2026-11-17T12:25:59.657Z",
       "text": "Sample notes from the Temp's test run: 'Welcome, Cy. Your desk is ready. It has always been ready.' / 'Bo and Cy: you are standing very close. HR has been informed.' / 'Ana is furthest from the lift. Somebody has to be.'",
@@ -3467,156 +3763,6 @@
       "at": "2026-11-17T02:38:58.775Z",
       "text": "Started T18g: The prison's look: the corridor, the bank room and the cells you come home to. Merged into the main game with the face work; the combined build is being checked before it is promoted.",
       "kind": "start"
-    },
-    {
-      "at": "2026-11-17T02:38:58.583Z",
-      "text": "Started T7f: Draw your face. Committed and merged with the prison look. An independent checker is re-running every playthrough on the combined build before it becomes the game you run.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T02:33:36.269Z",
-      "text": "Paused T18i: waiting for the prison merge (right after the face work lands). Decided with you: windows 1-2 the shop (one-day items), 3-4 the skill tree, the face kiosk in the corridor by the cells.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T02:33:36.177Z",
-      "text": "Applied the owner's new answers.",
-      "kind": "answers"
-    },
-    {
-      "at": "2026-11-17T02:23:57.055Z",
-      "text": "P3",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T02:21:59.753Z",
-      "text": "Took a default: Until you answer: the shop sells one-day items (flares, batteries, tape, extra marks) and the skill tree keeps the permanent upgrades; windows 1-2 the shop, 3-4 the skill tree, the face kiosk in the corridor by the cells.",
-      "kind": "decision"
-    },
-    {
-      "at": "2026-11-17T02:21:48.838Z",
-      "text": "Paused T18i: waiting for the prison merge and your answer on what the shop sells (Questions page).",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T02:21:48.746Z",
-      "text": "Added task T18i: A face kiosk in the prison, and a window each for the shop and the skill tree.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T02:18:55.694Z",
-      "text": "Started T7f: Draw your face. Built: draw your face on the start screen, it is sent when you join, shown on your mask and the lift monitor. Two-player check 27/27. An independent checker is re-running every playthrough and a break.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T02:18:55.536Z",
-      "text": "New pictures for T7f: Draw your face.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T02:16:43.467Z",
-      "text": "Started T16d: The Annex's look: the endless yellow office, built and pictured. Opus is building the Annex's look in its own copy: yellowed walls, mustard carpet, even pale light, props chosen by room shape so repeated rooms match, repeating signs",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T02:16:43.304Z",
-      "text": "Added task T16d: The Annex's look: the endless yellow office, built and pictured.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T02:16:27.348Z",
-      "text": "Paused T18g: waiting for the face work to land; then I merge the prison branch (two commits) into the main game and make a new build.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T02:16:27.179Z",
-      "text": "T18g",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T02:13:02.089Z",
-      "text": "Started T18g: The prison's look: the corridor, the bank room and the cells you come home to. An independent checker is re-running the prison's tests, walk and three deliberate breaks",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T02:13:01.887Z",
-      "text": "T18g",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T02:07:26.765Z",
-      "text": "Finished T18h: The day rules: a test for when nobody owns an upgrade.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T02:04:48.247Z",
-      "text": "Started T18h: The day rules: a test for when nobody owns an upgrade. Sonnet is adding the missing test and breaking it on purpose",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T02:04:48.082Z",
-      "text": "Added task T18h: The day rules: a test for when nobody owns an upgrade.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T02:04:34.413Z",
-      "text": "North Star republished (version 11): your three answers of tonight folded in as V20, and its 'where the build stands' section rewritten for tonight.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T02:03:19.264Z",
-      "text": "P3",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T01:57:19.186Z",
-      "text": "Started T18g: The prison's look: the corridor, the bank room and the cells you come home to. Opus is fixing three things in the prison's floor plan in the same copy: no walking through the teller counter, windows numbered 1 to 4 left to right, and each bunk's spot where the bunk is drawn.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T01:56:57.744Z",
-      "text": "Paused T18g: waiting for the face work to finish, then I merge it into the main copy (both changed the game's main script) and make a new build.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T01:56:57.640Z",
-      "text": "T18g",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T01:52:01.694Z",
-      "text": "Started T18g: The prison's look: the corridor, the bank room and the cells you come home to. Built in its own copy: walk from lift to farthest bunk 7.3 s, frame time half the Clinic's. An independent checker is re-running the walk, the tests and a break that unlights the bank room.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T01:52:01.486Z",
-      "text": "New pictures for T18g: The prison's look: the corridor, the bank room and the cells you come home to.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T01:49:36.883Z",
-      "text": "Paused T7e: waiting for a free agent to watch the crewmates walk, run and sneak in the real game for foot sliding. They are already in the game as your friends' figures (committed 3d13505).",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T01:49:08.560Z",
-      "text": "Finished P4: Light browser build and a download for friends.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T01:48:59.902Z",
-      "text": "Paused P4: waiting for nothing; done",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T01:48:59.796Z",
-      "text": "Started T7f: Draw your face. Opus is putting your drawn face into the game: a draw-your-face step on the start screen, the face sent to the others when you join, shown on your crewmate's mask and on the lift's monitor",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T01:48:44.832Z",
-      "text": "Finished P4: Light browser build and a download for friends.",
-      "kind": "done"
     }
   ]
 }
