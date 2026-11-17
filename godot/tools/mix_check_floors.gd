@@ -12,7 +12,9 @@
 #   box, then stands wheezing; the count (the three notes, the bell once a second rising in the last five,
 #   the tune sagging); the Minder scrambling past at 3 m on all fours; squeaker tiles, the ball pit, hides;
 #   its huff at 2 m; the found-you sting; going down.
-# Usage: godot --headless --path godot -s res://tools/mix_check_floors.gd -- <out folder> <annex|playroom> [break=office|sting]
+#   The prison: the block's night; the voice; the call panel refusing, then the quota met; the ride up; a
+#   bunk creaking 2 m off and your own; lights out.
+# Usage: godot --headless --path godot -s res://tools/mix_check_floors.gd -- <out folder> <annex|playroom|prison> [break=office|sting]
 #   break=office  the Annex's office tone 12 dB up (the mix check must fail)
 #   break=sting   the found-you sting 8 dB up (the mix check must fail)
 extends SceneTree
@@ -144,6 +146,8 @@ func _run() -> void:
 		await process_frame
 	if floor_name == "playroom":
 		await _playroom()
+	elif floor_name == "prison":
+		await _prison()
 	else:
 		await _annex()
 	await _wait(1.0)
@@ -272,6 +276,39 @@ func _playroom() -> void:
 	_mark("down")
 	sfx.went_down(null)
 	await _wait(2.5, bed)
+	_mark("end")
+
+## The prison and the lift (the rest of the 17 Nov list): the block's night, the voice, the call panel
+## refusing and then the quota met, the ride up, a bunk creaking near you and your own, lights out.
+func _prison() -> void:
+	sfx.set_floor({"place": "prison", "depth": 0, "rooms": [], "doors": []}, "mix-prison")
+	var bed := func(_t: float) -> void:
+		sfx.set_hum(1.0, false)
+		sfx.world(1.0 / 60.0, {"t": 0.0}, 0.0)
+	_mark("bed")
+	await _wait(4.0, bed)
+	await _speak(bed)
+	_mark("panel")
+	sfx.play("refused")
+	await _wait(1.5, bed)
+	sfx.play("quota_met")
+	await _wait(2.5, bed)
+	_mark("up")
+	sfx.world(1.0 / 60.0, {"t": 0.0, "events": [{"type": "carLeft", "t": 1.0, "reason": "up"}]}, 0.0)
+	sfx.ride(true)
+	await _wait(8.5, bed)
+	sfx.ride(false)
+	_mark("bunks")
+	sfx.world(1.0 / 60.0, {"t": 0.0, "me": {"id": "me"}, "others": [{"id": "b", "x": 2.0, "y": 0.0, "z": -1.0}],
+		"events": [{"type": "bed", "t": 2.0, "playerId": "b", "inBed": true}]}, 0.0)
+	await _wait(2.0, bed)
+	sfx.world(1.0 / 60.0, {"t": 0.0, "me": {"id": "me"}, "events": [{"type": "bed", "t": 3.0, "playerId": "me", "inBed": true}]}, 0.0)
+	await _wait(2.5, bed)
+	_mark("lights_out")
+	sfx.world(1.0 / 60.0, {"t": 0.0, "events": [{"type": "lightsOut", "t": 4.0}]}, 0.0)
+	await _wait(7.5, func(t: float) -> void:
+		sfx.set_hum(0.0, false)
+		sfx.world(1.0 / 60.0, {"t": 0.0}, 0.0))
 	_mark("end")
 
 func _save() -> void:

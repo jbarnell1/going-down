@@ -89,7 +89,12 @@ The same method, the same V, the same buses; files in annex/, playroom/ and play
 | The music box, the Minder scrambling | I = V-3 (the box), V-8 (the scramble, peaky: 8.4 dB of limiting was the most it took) | The box is the Minder's heard-before-seen sound: played at BASE_DB +6 (minder_view.gd BOX_DB) for the 3D panning, about V-4 right at it, falling as (1 - d/30)^2. |
 | The Minder near: wheeze, huff | I = V-3 | As the Orderly's slow breath; 3D. |
 | The count bell (Voice bus) | momentary max V-5.7 | The made-in-code bell's own level (measured with tools/sfx_levels.gd), so the count sits where it did: never buried, never over the voice, +0.8 dB a stroke in the last five. |
-| The xylophone note (#19, still to come) | momentary max V-5.3 | The made-in-code three notes' level; one note played three times at pitch 1, 1.26, 1.5, 0.2 s apart (Sfx.XYLO_PITCH). |
+| The count's note (#19) | momentary max V-5.3 | The made-in-code three notes' level; one note played three times at pitch 1, 1.26, 1.5, 0.2 s apart (Sfx.XYLO_PITCH). |
+| The call panel: refused buzz, quota met; the teller's ding | momentary max V-8 | The UI level (the made-in-code buzz was V-8). |
+| The ride up (the freight lift straining) | I = V-10 | Machinery, on the Effects bus as the call's made-in-code motor is, over the ride's rumble (V-10 on Ambience): on Ambience the two with the prison's bed reached V-5.9 in the mix check, over the beds' V-8 line. |
+| The prison's night | I = V-14 | A bed, in the hum's place; it stays through lights out. |
+| Lights out, a cell door, a teller window | I = V-6 | Effects. |
+| A bunk creaking, sliding under the table | I = V-8, V-6 | Crew. |
 | Toys: squeaker tiles, net and flap | momentary max V-5 | A noise you made: plain, under the voice. |
 | The ball pit | jumping in: momentary max V-3 (it is a provocation); wading: I = V-8 | |
 | Crew one-shots: down, healed, into a hide, slide | I = V-6 | Yours, close, an event. |
@@ -108,6 +113,8 @@ The same method, the same V, the same buses; files in annex/, playroom/ and play
 - Squeaky toy: #1, #2 and #4's second squeak, three takes for the tiles (each one squeak).
 - Party blower: all three, as takes (the horn will be blown a lot).
 - Wheeze: #2. It starts and ends near silence (two whole breaths), so the loop's join is clean (seam 0.01); #1 starts mid-breath.
+- The count's note (#19, three candidates): single_note_struck_o #4. The cleanest: one steady pitch from strike to end (its zero-crossing rate never moves), the strongest strike (momentary max 7 dB over the glockenspiel's and 16 over the toy piano's), a clean 0.8 s decay, and mono-safe (L/R correlation 0.76; the glockenspiel's is -0.06, so folding it to mono would hollow it out; the toy piano is noisy and wavers).
+- Sliding under (#6): layered: the jacket-and-jeans slide #2 from 0, #3 4 dB under it from 0.15 s (more cloth), and the shoulder bump #3 at 1.25 s as the slide stops.
 - The found-you sting (the owner: "combine both noises"): **layered**, both at once from 0: #1 (the music-box note bending, lifted 4 dB so it is not lost) strikes first, and #2's deep breath swells in under it 0.2 s later (its own lead-in), 2.2 s in all, normalised as one scare to short-term V+2.6 (4.5 dB of limiting).
 - The out-of-breath file: the crew's own clean breath, so your winded breathing now uses it (the earlier wet breaths are the Orderly's); played at pitch 1, not sped up when winded as the made-in-code one is.
 
@@ -153,6 +160,17 @@ Columns as above; Rel = final loudness against V by the category's measure (I, M
 | playroom/wheeze.ogg | entity | -31 / -30.5 / 1.6 / -16.4 | -19.2 / -19 / 0.5 / -1.7 | -14.8 | -3.1 (I) | gain +limit +loop xfade | 1.3 | 0.01 | 3.58 s |
 | playroom/huff.ogg | entity | -30.1 / -31.3 / 1.2 / -18.4 | -19.1 / -20.7 / 1.3 / -4.7 | -14.1 | -3 (I) | gain | 0 | - | 3.88 s |
 | playroom/found.ogg | scare | -18.4 / -20.1 / 0 / -5.2 (the layered pair) | -11.9 / -13.5 / 0 / -1.7 | -10.5 | +2.6 (S) | gain +limit +encoder trim | 4.5 | - | 2.20 s |
+| player/slide_under.ogg | crew | -39.3 / -41.9 / 0 / -16 (the layers) | -22.5 / -25.4 / 0 / -1.9 | -19.1 | -6.4 (I) | gain +limit | 3.6 | - | 1.90 s |
+| playroom/xylo_note.ogg | xylo | -22.1 / -26.9 / 0 / -2 | -25.6 / -30.3 / 0 / -2.5 | -21.6 | -5.5 (M) | gain | 0 | - | 0.85 s |
+| lift/up.ogg | room | -32.7 / -31.5 / 3.6 / -17 | -26.2 / -25.1 / 3.5 / -7.6 | -21.1 | -10.1 (I) | gain | 0 | - | 8.00 s |
+| lift/refused.ogg | ui | -31.6 / -40.3 / 0 / -13.7 | -24.3 / -33 / 0 / -5.1 | -24.3 | -8.2 (M) | gain | 0 | - | 0.45 s |
+| lift/quota_met.ogg | ui | -12.9 / -16.4 / 0 / -2.5 | -26.6 / -30.1 / 0 / -13.3 | -24.1 | -8 (M) | gain | 0 | - | 1.62 s |
+| prison/night.ogg | bed | -39.9 / -39 / 1.4 / -26.5 | -30.2 / -28.7 / 2.8 / -13.2 | -25.8 | -14.1 (I) | gain +loop xfade | 0 | 0.13 | 18.60 s |
+| prison/bunk.ogg | player | -40.1 / -43.2 / 0 / -26.1 | -24.3 / -27.5 / 0 / -7.2 | -20.2 | -8.2 (I) | gain | 0 | - | 1.68 s |
+| prison/lights_out.ogg | effect | -16.5 / -15.1 / 22 / 0.4 | -22.5 / -21.3 / 19.9 / -1.6 | -15.3 | -6.4 (I) | gain +limit +encoder trim | 0.2 | - | 6.80 s |
+| prison/cell_door.ogg | effect | -18.5 / -23.7 / 0 / -2.9 | -22.3 / -27.9 / 0 / -3.8 | -19.7 | -6.2 (I) | gain | 0 | - | 1.80 s |
+| prison/teller_window.ogg | effect | -20 / -25 / 0 / -5.8 | -22.3 / -27.3 / 0 / -6.1 | -19.5 | -6.2 (I) | gain | 0 | - | 1.30 s |
+| prison/teller_ding.ogg | ui | -19.7 / -25.8 / 0 / -4.5 | -28.1 / -32.9 / 0 / -8.8 | -24.2 | -8.1 (M) | gain | 0 | - | 1.28 s |
 
 Method as the first batch, with two differences: every file is a plain linear gain from ebur128 (to I, M or S as the category says, corrected until within 0.2 LU or the limiting cap), with a sample-peak limiter (ffmpeg alimiter at -1.8 dBFS) after the gain where the gain pushes peaks past it, at most 9 dB of it (where that is not enough the file stays short of its target: the clicks, the note slap, the scramble); and short files are padded with silence to be measured, so their momentary and short-term windows are whole. An -I of -70 means the file is too short for ebur128 to gate (a click).
 
@@ -160,15 +178,15 @@ Method as the first batch, with two differences: every file is a plain linear ga
 
 Headless, no walls, V = -18.0 LUFS on both (the Voice bus over four lines). Short-term max per bus against it, and where:
 
-| Bus | The Annex | The Playroom |
-|---|---|---|
-| Scare | +3.4 LU (the catch's roar) | +2.5 LU (the found-you sting) |
-| Entity | -13.1 (the stapler going in; the clicks are dots, short-term never sees them) | -4.3 (scrambling past at 3 m); the music box rises from about V-26 at 20 m to V-5 at 2 m; the wheeze at 2 m V-12 |
-| Effects | -5.6 (the blackout's sagging buzz) | -8.2 (the ball pit jumped into, here) |
-| Ambience | -11.0 (the bed with the phone over it) | -12.4 (the bed and the tune) |
-| UI | -14.0 (the lift's bell) | -12.8 (the count's three notes) |
-| Voice, the count bell | | -4.1 |
-| Master true peak | -1.9 dBTP | -4.3 dBTP |
+| Bus | The Annex | The Playroom | The prison and the lift's panel |
+|---|---|---|---|
+| Scare | +3.4 LU (the catch's roar) | +2.5 LU (the found-you sting) | silent |
+| Entity | -13.1 (the stapler going in; the clicks are dots, short-term never sees them) | -4.3 (scrambling past at 3 m); the music box rises from about V-26 at 20 m to V-5 at 2 m; the wheeze at 2 m V-12 | silent |
+| Effects | -5.6 to -5.9 (the blackout's sagging buzz) | -8.2 (the ball pit jumped into, here) | -5.1 (lights out) |
+| Ambience | -11.0 (the bed with the phone over it) | -12.3 (the bed and the tune) | -8.2 (the night bed under the ride's rumble) |
+| UI | -14.0 (the lift's bell) | -10.3 (the count's recorded note, three times) | -12.3 (refused, quota met) |
+| Voice, the count bell | | -4.0 | |
+| Master true peak | -1.9 to -2.4 dBTP | -4.3 to -4.6 dBTP | -4.9 dBTP |
 
 Breaks that turn it red: the office tone 12 dB up (`--break=office`: Ambience -1.7 LU under the voice, the "at least 8 LU under" check fails); the found-you sting 8 dB up (`--break=sting`: the Scare bus +10.5 LU over the voice, and Master's true peak -0.3 dBTP).
 

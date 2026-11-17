@@ -7,7 +7,7 @@
 //   - while the Orderly has been moving unseen within hearing for 3 s, Entity is no more than 12 LU under V;
 //   - while the voice has been speaking for 3 s, Ambience is at least 14 LU under V (the beds duck);
 //   - the busy minute really happened (the voice spoke, the Orderly came on unseen, a blink, the blackout).
-// Then the Annex and the Playroom (tools/mix_check_floors.gd: each floor's loudest moments through the real
+// Then the Annex, the Playroom and the prison with the lift's panel (tools/mix_check_floors.gd: each one's loudest moments through the real
 // sound code, headless, no walls), each judged against the voice heard in that same run (V = the Voice
 // bus, integrated over the four lines):
 //   - Entity, Effects, Ambience and UI never above V short-term; the Scare bus at most V + 4 and at least V
@@ -120,7 +120,8 @@ function clinic() {
 // ---- The Annex and the Playroom.
 const WANT = {
   annex: ['phone', 'copier', 'blink_warn', 'blackout_warn', 'roar', 'staple_soft', 'chime'],
-  playroom: ['xylo', 'count_bell', 'squeak', 'pit_jump', 'hide_in', 'net_flap', 'huff', 'found', 'down'],
+  playroom: ['xylo', 'xylo_note', 'count_bell', 'squeak', 'pit_jump', 'hide_in', 'net_flap', 'huff', 'found', 'down'],
+  prison: ['refused', 'quota_met', 'lift_up', 'bunk', 'lights_out'],
 };
 function oneFloor(name) {
   const fdir = join(dir, name);
@@ -152,7 +153,8 @@ function oneFloor(name) {
     check(`${Name}: ${b} never louder than the voice`, l.S <= V, `short-term max ${fmt(l.S)}, ${(l.S - V).toFixed(1)} LU vs V, at ${moment(l.t)}`);
   }
   const sc = loudest('Scare');
-  check(`${Name}: the scare louder than the voice, at most 4 LU over it`, sc.S <= V + 4 && sc.S >= V, `short-term max ${fmt(sc.S)}, ${(sc.S - V).toFixed(1)} LU vs V, at ${moment(sc.t)}`);
+  if (name === 'prison') check('Prison: no scare at home (the Scare bus silent)', sc.S <= -100, `short-term max ${fmt(sc.S)}`);
+  else check(`${Name}: the scare louder than the voice, at most 4 LU over it`, sc.S <= V + 4 && sc.S >= V, `short-term max ${fmt(sc.S)}, ${(sc.S - V).toFixed(1)} LU vs V, at ${moment(sc.t)}`);
   const amb = loudest('Ambience');
   check(`${Name}: the beds and room tones sit under the voice (Ambience at least 8 LU under V)`, amb.S <= V - 8, `short-term max ${fmt(amb.S)}, ${(amb.S - V).toFixed(1)} LU vs V, at ${moment(amb.t)}`);
   if (name === 'playroom') {
@@ -165,7 +167,7 @@ function oneFloor(name) {
 }
 
 if (only !== 'floors') clinic();
-if (only !== 'clinic') { oneFloor('annex'); oneFloor('playroom'); }
+if (only !== 'clinic') { oneFloor('annex'); oneFloor('playroom'); oneFloor('prison'); }
 if (!reuse && !arg('keep')) rmSync(dir, { recursive: true, force: true });
 const ok = results.every(Boolean);
 console.log(ok ? 'PASS the mix holds together' : 'FAIL the mix');

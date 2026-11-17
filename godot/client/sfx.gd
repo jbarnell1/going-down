@@ -33,7 +33,10 @@
 # events): the found-you sting, going down, getting into and out of hides, squeaker tiles, wading or
 # jumping into the ball pit, the Minder's disappointed huff at an empty hide, the recorded count bell, and
 # the count's three rising notes from one recorded note when there is one. Your winded breathing is the
-# crew's own clean breath. Ready but with nothing in the game to trigger it yet: READY.
+# crew's own clean breath. The rest of that list: the call panel's refused buzz and quota chime, the lift
+# straining on the ride up, the prison's night (its bed, through lights out), a bunk creaking as someone
+# lies down, the lights-out switch, and the count's one recorded note (_events, from the host's events).
+# Ready but with nothing in the game to trigger it yet: READY.
 class_name Sfx
 extends Node
 
@@ -85,6 +88,17 @@ const RECORDED := {
 	"down": ["effect", "player/down"],
 	"healed": ["effect", "player/healed"],
 	"hide_in": ["effect", "player/hide_in"],
+	"slide_under": ["effect", "player/slide_under"],
+	# The lift and the call panel.
+	"lift_up": ["effect", "lift/up"],   # machinery, as the call's made-in-code motor: on Effects, over the ride's rumble
+	"refused": ["ui", "lift/refused"],
+	"quota_met": ["ui", "lift/quota_met"],
+	# The prison.
+	"bunk": ["effect", "prison/bunk"],
+	"lights_out": ["effect", "prison/lights_out"],
+	"cell_door": ["effect", "prison/cell_door"],
+	"teller_window": ["effect", "prison/teller_window"],
+	"teller_ding": ["ui", "prison/teller_ding"],
 	# The Annex.
 	"buzz": ["effect", "annex/buzz"],
 	"phone": ["room", "annex/phone"],
@@ -102,8 +116,8 @@ const RECORDED := {
 	"net_flap": ["effect", "playroom/net_flap"],
 	"horn": ["effect", "playroom/horn_1", "playroom/horn_2", "playroom/horn_3"],
 	"huff": ["entity", "playroom/huff"],
-	## Still to come from the owner (#19): one toy note; the count's call to hide plays it three times
-	## rising (XYLO_PITCH). Until then the made-in-code three notes.
+	## One struck toy note (#19); the count's call to hide plays it three times rising (XYLO_PITCH). The
+	## made-in-code three notes when the file is missing.
 	"xylo_note": ["ui", "playroom/xylo_note"],
 }
 ## Recorded and loaded, but nothing in the game triggers them yet: name -> the event each needs.
@@ -115,6 +129,9 @@ const READY := {
 	"note_slap": "a sticky note posted (T7, notes.gd): play_at('note_slap') where it is stuck",
 	"note_peel": "a sticky note taken down (no such action yet)",
 	"horn": "the party horn blown (T15h, inp.horn reaches the host but no event comes back to the screens)",
+	"cell_door": "a cell door sliding shut (no cell doors in the rules yet)",
+	"teller_window": "a teller window's shutter rolling up as a player steps up to it (F at a window: no event comes back to the screens)",
+	"teller_ding": "the counter bell when a purchase or a skill is taken at a window (no such event yet)",
 }
 ## The count's call to hide from one recorded note: three strokes this far apart, at these pitches.
 const XYLO_PITCH: Array[float] = [1.0, 1.26, 1.5]
@@ -278,7 +295,7 @@ func setup(world_parent: Node3D) -> void:
 		hum.stream = _wav(_hum(), true)
 	# The Annex's and the Playroom's beds in the hum's place (the Clinic's hum where a file is missing).
 	_hum_by_place = {"": hum.stream}
-	for k: Array in [["annex", "annex/office"], ["playroom", "playroom/room"]]:
+	for k: Array in [["annex", "annex/office"], ["playroom", "playroom/room"], ["prison", "prison/night"]]:
 		var st := _rec(str(k[1]), true)
 		_hum_by_place[k[0]] = st if st != null else hum.stream
 	crawl_loop = _player2d(_rec("player/crawl", true), "Effects")
@@ -536,6 +553,11 @@ func step_at(pos: Vector3, gain_db: float) -> void:
 ## The tubes' hum follows the lights (1 as built), and is gone whenever it is dark (a blink or the
 ## blackout cuts it at once).
 func set_hum(light: float, dark := false) -> void:
+	# The prison's night (pipes, snoring, a low hum) is the block's own, not its tubes': it stays through
+	# lights out.
+	if _place == "prison" and hum.stream != _hum_by_place.get("", null):
+		_loop(hum, "hum", true, BASE_DB)
+		return
 	var db := BASE_DB + linear_to_db(clampf(light, 0.05, 1.0)) + (float(SYNTH_DB["hum"]) if hum.stream is AudioStreamWAV else 0.0)
 	_loop(hum, "hum", not dark and light >= 0.05, db)
 
@@ -624,9 +646,10 @@ static func _room_point(r: Dictionary, up: float) -> Vector3:
 func world(delta: float, s: Dictionary, emergency: float) -> void:
 	var dark := bool(s.get("dark", false))
 	var blackout := bool(s.get("blackout", false))
-	# The vent is the Clinic's (and the lift's and prison's): the office and the play centre beds carry
-	# their own air.
-	_loop(vent, "vent", _place != "annex" and _place != "playroom", BASE_DB - 4.0)
+	# The vent is the Clinic's (and the lift's): the office, play centre and prison night beds carry their
+	# own air (the vent comes back where a bed's file is missing).
+	_loop(vent, "vent", not (_place in ["annex", "playroom", "prison"]) or _hum_by_place.get(_place) == _hum_by_place.get(""), BASE_DB - 4.0)
+	_events(s)
 	_loop(drone, "drone", blackout and emergency > 0.0, BASE_DB + linear_to_db(clampf(emergency, 0.05, 1.0)))
 	_loop(monitor, "room", _clinic and _monitor_on and not blackout, BASE_DB)
 	_loop(drip, "room", _clinic and _drip_on, BASE_DB)
@@ -837,6 +860,50 @@ func trill(total: float, delta: float) -> void:
 	trill_player.play()
 	_note("trill")
 
+## The host's events this frame that have a recording and no other player of them (main.gd plays the
+## lift's own): the ride up (the freight lift straining), someone getting into a bunk (yours here, another's
+## from their bunk), lights out (the big switch, the power dropping), the floor quota met (the panel's
+## chime; the refused buzz is quota_view.gd's play("refused"), the recording when there is one). Each event
+## once, however many frames carry it.
+var _heard := {}
+func _events(s: Dictionary) -> void:
+	var evs: Array = s.get("events", [])
+	if evs.is_empty():
+		return
+	var me := str((s.get("me", {}) as Dictionary).get("id", ""))
+	for e: Dictionary in evs:
+		var ty := str(e.get("type", ""))
+		if not ty in ["carLeft", "bed", "lightsOut", "quotaMet"]:
+			continue
+		var key := "%s:%s:%s" % [ty, str(e.get("t", "")), str(e.get("playerId", ""))]
+		if _heard.has(key):
+			continue
+		_heard[key] = Time.get_ticks_msec()
+		match ty:
+			"carLeft":
+				if str(e.get("reason", "")) == "up" and recorded.has("lift_up"):
+					play("lift_up")
+			"bed":
+				if bool(e.get("inBed", false)):
+					var who := str(e.get("playerId", ""))
+					var at: Variant = null
+					if who != me:
+						for o: Dictionary in s.get("others", []):
+							if str(o.get("id", "")) == who:
+								at = Vector3(float(o["x"]), float(o["y"]) + 0.5, float(o["z"]))
+						if at == null:
+							continue
+					_here_or_at("bunk", at)
+			"lightsOut":
+				play("lights_out")
+			"quotaMet":
+				play("quota_met")
+	if _heard.size() > 64:
+		var now := Time.get_ticks_msec()
+		for k: String in _heard.keys():
+			if now - int(_heard[k]) > 30000:
+				_heard.erase(k)
+
 ## A one-shot here (pos null: this player's own) or at a place in the world.
 func _here_or_at(name: String, pos: Variant, gain_db := 0.0) -> void:
 	if pos == null:
@@ -855,8 +922,8 @@ func went_down(pos: Variant) -> void:
 	_here_or_at("down", pos)
 
 ## Getting into (or out of) a hide of `kind` (Playroom.Hide.kind): the ball pit waded (or jumped, the
-## quick way in), the tube slide, the netting and flaps of a den or playhouse, squeezing into a chest,
-## cubby or under the table. The quick way is louder; getting out a little quieter than getting in.
+## quick way in), the tube slide, the netting and flaps of a den or playhouse, squeezing into a chest or
+## cubby, sliding under the table (cloth on the floor and a shoulder against the frame). The quick way is louder; getting out a little quieter than getting in.
 func hide_move(kind: String, entering: bool, fast: bool, pos: Variant) -> void:
 	var name := "hide_in"
 	match kind:
@@ -866,6 +933,8 @@ func hide_move(kind: String, entering: bool, fast: bool, pos: Variant) -> void:
 			name = "slide"
 		"den", "playhouse":
 			name = "net_flap"
+		"table":
+			name = "slide_under" if recorded.has("slide_under") else "hide_in"
 	_here_or_at(name, pos, (0.0 if fast else -6.0) - (0.0 if entering else 3.0))
 
 ## A squeaker tile stepped on faster than a creep.
