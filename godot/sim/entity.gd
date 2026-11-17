@@ -10,8 +10,15 @@
 #      tick in which it is seen, nor for GRACE seconds after the last tick it was seen (so a player
 #      whose view reaches the server late never sees it move);
 #   3. looking at it during a wind-up always cancels the wind-up.
+# The first promise has one exception, "except while it has someone" (North Star B6, down first then out):
+# while it is bent over a downed player (mode "bending", which only sim/run.gd puts it in, with the down
+# rule on) its bend is the one movement it makes while watched: the "bend" pose and its clock go on
+# whether anyone looks or not. It never moves, turns or reaches while bending, and it goes after nobody.
+# When the run lets it go (stand_off) it is dormant, still bent: it straightens up only on a tick nobody
+# sees it, and while held it keeps the bend.
 #
 # Modes: waiting (standing at plan.entity_start) -> hunting -> windUp -> dormant -> hunting ...
+# With the down rule: windUp -> (caught) bending -> dormant (a heal: HEAL_QUIET s; out: 0 s) -> hunting.
 #
 # Bodies. The trait logic above is shared; what differs between residents is a body setting
 # (BodySettings): its height, collision radius, the outline that counts as "seen", its speeds and its
@@ -251,11 +258,14 @@ class OrderlyState:
 	var click_walk: float = 0.0
 	var click_wait: float = 0.0
 	var clicks: int = 0
+	## Bending: the downed player it is bent over (sim/run.gd), else null.
+	var bend_target: Variant = null
 
 	## TypeScript: { ...state }.
 	func copy() -> OrderlyState:
 		var s := OrderlyState.new()
 		s.kind = kind
+		s.bend_target = bend_target
 		s.click_walk = click_walk
 		s.click_wait = click_wait
 		s.clicks = clicks
@@ -390,6 +400,34 @@ static func create_orderly(plan: Floor.FloorPlan, kind: BodySettings = null) -> 
 	st.yaw = yaw_toward((plan.landing.x + 0.5) * s - body.x, (plan.landing.y + 0.5) * s - body.z)
 	return st
 
+## The down rule (sim/run.gd): right after it caught `target`, it bends over them where it stands. It holds
+## the bend (mode "bending") until the run lets it go with stand_off. Never mutates `o`.
+static func bend_over(o: OrderlyState, target: String) -> OrderlyState:
+	var s := o.copy()
+	s.mode = &"bending"
+	s.bend_target = target
+	s.dormant_left = 0.0
+	s.wind_up_target = null
+	s.wind_up_left = 0.0
+	s.target_id = null
+	s.path = []
+	s.moving = false
+	s.speed = 0.0
+	s.frozen = false
+	s.anim = &"bend"
+	s.anim_time = 0.0
+	return s
+
+## Lets a bending resident go: dormant for `quiet` seconds (a heal sends it off quiet for a spell; when its
+## player goes out, 0: it hunts from the next tick), still bent until a tick nobody sees it. Never mutates `o`.
+static func stand_off(o: OrderlyState, quiet: float) -> OrderlyState:
+	var s := o.copy()
+	s.mode = &"dormant"
+	s.dormant_left = quiet
+	s.bend_target = null
+	s.replan_in = 0.0
+	return s
+
 ## Whether any active player's screen could be showing it, and who (first in list order). `kind` is
 ## its body (null: the Orderly).
 static func seen_by(plan: Floor.FloorPlan, body: Move.Body, players: Array[PlayerView], kind: BodySettings = null) -> PlayerView:
@@ -420,7 +458,7 @@ static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 static func _stapler(prev: OrderlyState, res: StepResult, dt: float, k: BodySettings) -> void:
 	var s := res.state
 	s.clicks = 0
-	if s.held:
+	if s.held or s.mode == &"bending":
 		return
 	if s.moving:
 		s.click_wait = 0.0
@@ -490,9 +528,17 @@ static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 	if not s.frozen and prev.frozen and (s.mode == &"hunting" or s.mode == &"windUp"):
 		events.append({"type": "released", "t": t})
 
+	# Bent over a downed player (the documented exception, see the header): the bend goes on, seen or
+	# not, and nothing else happens. The run decides when it ends.
+	if s.mode == &"bending":
+		s.anim = &"bend"
+		s.anim_time += dt
+		return res
+
 	# 3. Held: nothing else changes. Position, facing, animation hint and clock all stay as they are.
+	# Let go from a bend (stand_off), it keeps the bend until a tick nobody sees it.
 	if held:
-		if s.mode == &"waiting" or s.mode == &"dormant":
+		if s.mode == &"waiting" or (s.mode == &"dormant" and s.anim != &"bend"):
 			s.anim = &"idle"
 		return res
 	s.anim_time += dt

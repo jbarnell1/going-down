@@ -24,6 +24,14 @@
 #    resident off nothing can ever be recorded, so the quota would lock the lift for good: it stays off.
 #    Test-only: `quota=N` with `auto=1` caps every floor's quota at N (quota_cap_by_arg), so a scripted
 #    playthrough (tools/play_quota.mjs) meets it with a reading or two.
+#  - The Annex's marks and notes (sim/run.gd annex) are the run's own: the soft catch keeps them from the
+#    real tick (the catch's note), and a forced call passes the mark and peel keys on like the rest.
+#  - Down first, then out (sim/run.gd downs, North Star B6): off unless asked (`downs`); the game's rooms ask
+#    for it, so a catch puts the player down where they stood for ten seconds, a crewmate holding F beside
+#    them for three puts them back up, and otherwise they are out until the car next rides down. prepare()
+#    turns it on before the first tick. With it on the run's own down replaces the soft catch above (a catch
+#    is never a wipe on its own tick, so the soft catch never fires): a crew all out is a wipe, wherever the
+#    car is, because nobody is left to board it.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -52,14 +60,17 @@ var days: bool
 var quota: bool
 ## Test-only: every floor's quota is at most this (0: no cap). See quota_cap_by_arg.
 var _quota_cap := 0
+## Down first, then out (off unless asked).
+var downs: bool
 
-func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false) -> void:
+func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false) -> void:
 	_entity_on = entity_on
 	_depth = depth
 	deck = Run.deck_of(deck_)
 	days = days_
 	quota = quota_
 	_quota_cap = quota_cap_by_arg() if quota_ else 0
+	downs = downs_
 
 ## Where player `i` of `n` stands in the car at the start (car-local u, v).
 static func start_spot(i: int, n: int) -> PackedFloat64Array:
@@ -128,6 +139,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s.seek_off = true
 	if quota and _entity_on and not s.quota:
 		s = Run.with_quota(s)
+	if downs and not s.downs:
+		s = Run.with_downs(s)
 	return _capped(s)
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web
@@ -230,6 +243,9 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 		st.floor_by = r.state.floor_by
 		st.floor_needed = r.state.floor_needed
 		st.quota_met = r.state.quota_met
+		# The Annex's marks and notes too: the catch's note was triggered by the real tick.
+		st.annex = r.state.annex
+		st.note_seq = r.state.note_seq
 		st.players = players
 		st.summary = null
 		var kept_events: Array[Dictionary] = []
@@ -271,4 +287,6 @@ static func _copy_input(i: Run.PlayerInput) -> Run.PlayerInput:
 	n.voice = i.voice
 	n.horn = i.horn
 	n.light = i.light
+	n.mark = i.mark
+	n.peel = i.peel
 	return n
