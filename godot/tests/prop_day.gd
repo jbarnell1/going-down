@@ -1,11 +1,16 @@
-# The day's guarantees over seeded random days (sim/day.gd): shares always sum to what was banked;
-# a made day never takes an upgrade; a missed day takes exactly one of their OWN upgrades from EVERY
-# player who owns any (nothing from those who own none) and every player computes the same ones; the third miss of a night is game over and resets
-# to a fresh Day 1 with empty wallets; the quota is deterministic, ignores the seed, grows only on
-# made days and stops at day 8; the BANK preview always agrees with what BANK then does; no call
-# edits what it was given; and lights go out exactly 20 s after more than half the crew is in bed,
-# never before, and at once when everyone is in; once the count has started it cannot be stopped by
-# climbing out or leaving.
+# The day's guarantees over seeded random days (sim/day.gd): shares always sum to what was banked
+# (what was aboard), also when that is less than what was earned; BANK is locked exactly while earned is
+# under the quota, at every level and crew size, and a BANK that is not locked is always made and pays
+# what was aboard (FD1, docs/floors/findables-and-day.md section 1); a made day never takes an upgrade; a
+# wipe is the missed day: it never raises the level, always adds one miss, and takes exactly one of their
+# OWN upgrades from EVERY player who owns any (nothing from those who own none), and every player
+# computes the same ones; the third miss of a night is game over and resets to a fresh Day 1 with empty
+# wallets; the quota is deterministic, ignores the seed, grows only on made days and stops at day 8; the
+# BANK preview (the monitor's three rows) always agrees with what BANK or a wipe then does; no call edits
+# what it was given; and lights go out exactly 20 s after more than half the crew is in bed, never
+# before, and at once when everyone is in; once the count has started it cannot be stopped by climbing
+# out or leaving. A run without the lock passes earned = banked: a short BANK is then a missed day, as
+# before FD1.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -125,13 +130,21 @@ func test_shares_sum_to_the_banked_total(t: T) -> void:
 			if int(sh[p]) == 2:
 				got[p] = int(got.get(p, 0)) + 1
 	t.eq(got.size(), 4, "the remainder credit rotates through all four over four days")
-	# Through end_day: every wallet gains exactly its share, made or missed.
+	# Through end_day: every wallet gains exactly its share of what was aboard, made or missed, also when
+	# aboard is less than earned (tapes dropped or left behind after they were recorded); a wipe pays nothing.
+	var under := 0
 	for i in (100 if t.quick else 600):
 		var crew := _crew(rng, rng.int_in(1, 6))
 		var w := _wallets(rng, crew, 0.3)
 		var s := _random_state(rng, crew.size())
 		var fq := rng.int_in(1, 300)
-		var r := Day.end_day(s, _banked(rng, Day.day_quota(s, fq)), crew, w, fq, "seed-%d" % i)
+		var q := Day.day_quota(s, fq)
+		var earned := _banked(rng, q)
+		var aboard := rng.int_in(0, earned) if rng.chance(0.6) else _banked(rng, q)
+		var wiped := rng.chance(0.2)
+		if aboard < earned and not wiped:
+			under += 1
+		var r := Day.end_day(s, aboard, earned, crew, w, fq, "seed-%d" % i, wiped)
 		var sum := 0
 		for p in crew:
 			sum += int(r.shares[p])
@@ -139,7 +152,57 @@ func test_shares_sum_to_the_banked_total(t: T) -> void:
 				var before: Upgrades.UpgradeState = w[p]
 				var after: Upgrades.UpgradeState = r.wallets[p]
 				t.eq(after.credits - before.credits, int(r.shares[p]), "day %d: %s paid their share" % [i, p])
+		t.eq(r.banked, 0 if wiped else aboard, "day %d: what was aboard is what is paid (nothing at a wipe)" % i)
 		t.eq(sum, r.banked, "day %d: end_day shares sum to the banked total" % i)
+	t.check(under > 10, "not vacuous: %d days banked less than they earned" % under)
+
+func test_locked_exactly_while_earned_is_under_the_quota(t: T) -> void:
+	# Every level and crew size, at the edges: locked is false exactly when earned is at or over the quota.
+	var w := {}
+	var cases := 0
+	for lv in range(0, Day.MAX_LEVEL + 3):
+		for n in range(1, 9):
+			var crew := NAMES.slice(0, n)
+			for fq: int in [1, 7, 100, 333, 400]:
+				var s := _state(1 + lv, lv, 0, lv, n)
+				var q := Day.day_quota(s, fq)
+				for earned: int in [0, maxi(0, q - 1), q, q + 1, q * 3]:
+					cases += 1
+					var tag := "level %d crew %d fq %d earned %d of %d" % [lv, n, fq, earned, q]
+					t.eq(Day.is_locked(earned, q), earned < q, tag + ": is_locked")
+					# Aboard is anything: a crew that dropped its tapes after earning enough is not locked.
+					for aboard: int in [0, earned / 3, earned]:
+						var p := Day.bank_preview(s, aboard, earned, crew, w, fq)
+						t.eq(p.locked, earned < q, tag + " aboard %d: locked" % aboard)
+						t.eq(p.made, earned >= q, tag + " aboard %d: BANK now makes the day" % aboard)
+						t.eq(p.short_by, maxi(0, q - earned), tag + ": to go")
+						t.eq(p.rows[1], ("BANK LOCKED. %d TO GO." % (q - earned)) if earned < q else ("BANK OPEN. ABOARD %d. EACH GETS %d." % [aboard, aboard / n]), tag + ": row 2")
+	t.note("%d (level, crew, quota, earned) cases: locked exactly while earned < quota, whatever was aboard" % cases)
+	# The owner's case: the crew earned the quota, then lost most of it (a dropped tape, a friend left
+	# behind). BANK is open, the day is made, and it pays what came back.
+	var crew3: Array[String] = ["ann", "bo", "cy"]
+	var s3 := _state(2, 1, 0, 1, 3)
+	var q3 := Day.day_quota(s3, 400)
+	var r := Day.end_day(s3, 90, q3 + 50, crew3, {}, 400, "dropped")
+	t.check(r.made and r.outcome == &"made", "earned enough, then dropped a tape: still made (%s)" % r.outcome)
+	t.eq(r.banked, 90, "it pays what was aboard")
+	t.eq(r.state.level, s3.level + 1, "a made day raises the level")
+
+func test_without_the_lock_a_short_bank_is_the_missed_day_it_was(t: T) -> void:
+	# A run without the lock passes earned = banked: the rule before FD1, unchanged.
+	var rng := Rng.make_rng("day-nolock")
+	for i in (100 if t.quick else 500):
+		var crew := _crew(rng, rng.int_in(1, 6))
+		var w := _wallets(rng, crew, 0.4)
+		var s := _state(rng.int_in(1, 12), rng.int_in(0, 5), rng.int_in(0, 1), rng.int_in(0, Day.MAX_LEVEL), crew.size())
+		var fq := rng.int_in(1, 300)
+		var q := Day.day_quota(s, fq)
+		var banked := _banked(rng, q)
+		var r := Day.end_day(s, banked, banked, crew, w, fq, "nolock-%d" % i)
+		t.eq(r.made, banked >= q, "case %d: banked %d of %d: made exactly when banked reaches the quota" % [i, banked, q])
+		t.eq(r.banked, banked, "case %d: a short BANK still pays what was banked" % i)
+		t.eq(r.short_by, maxi(0, q - banked), "case %d: short by" % i)
+		t.eq(r.state.misses, s.misses + (0 if r.made else 1), "case %d: a short BANK is a miss" % i)
 
 func test_a_made_day_never_takes_an_upgrade(t: T) -> void:
 	var rng := Rng.make_rng("day-made")
@@ -151,8 +214,10 @@ func test_a_made_day_never_takes_an_upgrade(t: T) -> void:
 		var s := _random_state(rng, crew.size())
 		var fq := rng.int_in(1, 300)
 		var q := Day.day_quota(s, fq)
-		var r := Day.end_day(s, q + rng.int_in(0, q), crew, w, fq, "made-%d" % i)
-		t.check(r.made and r.outcome == &"made" and not r.game_over, "day %d: banked at least the quota" % i)
+		# Earned at least the quota; aboard anything (even short of the quota): a BANK the lock lets
+		# through is always made.
+		var r := Day.end_day(s, rng.int_in(0, 2 * q), q + rng.int_in(0, q), crew, w, fq, "made-%d" % i)
+		t.check(r.made and r.outcome == &"made" and not r.game_over, "day %d: earned at least the quota" % i)
 		t.check(r.taken.is_empty(), "day %d: a made day took %s" % [i, str(r.taken)])
 		t.eq(_owned_count(r.wallets), _owned_count(w), "day %d: upgrades owned" % i)
 		t.check(r.state.misses == s.misses and r.state.streak == s.streak + 1 and r.state.day == s.day + 1, "day %d: streak up, misses kept" % i)
@@ -177,8 +242,13 @@ func test_a_missed_day_takes_one_upgrade_from_each_owner_the_same_for_everyone(t
 		var fq := rng.int_in(1, 300)
 		var q := Day.day_quota(s, fq)
 		var seed_text := "miss-%d" % i
-		var r := Day.end_day(s, rng.int_in(0, q - 1), crew, w, fq, seed_text)
-		t.check(not r.made and r.outcome == &"missed", "day %d: short of the quota" % i)
+		# A wipe: nobody came back. Earned anything (even over the quota): the day is missed all the same.
+		var earned := rng.int_in(0, 2 * q)
+		var r := Day.end_day(s, rng.int_in(0, q), earned, crew, w, fq, seed_text, true)
+		t.check(not r.made and r.outcome == &"missed", "day %d: a wipe is a missed day" % i)
+		t.eq(r.banked, 0, "day %d: a wipe pays nothing" % i)
+		for p in crew:
+			t.eq(int(r.shares[p]), 0, "day %d: %s is paid nothing at a wipe" % [i, p])
 		var owners := 0
 		var taken_by := {}
 		for k: Dictionary in r.taken:
@@ -214,7 +284,7 @@ func test_a_missed_day_takes_one_upgrade_from_each_owner_the_same_for_everyone(t
 			var c := src.copy()
 			_shuffle(rng, c.owned)
 			other[p] = c
-		var again := Day.end_day(s, r.banked, order, other, fq, seed_text)
+		var again := Day.end_day(s, r.banked, earned, order, other, fq, seed_text, true)
 		t.check(str(again.taken) == str(r.taken), "day %d: the roll differs by order: %s vs %s" % [i, str(again.taken), str(r.taken)])
 		t.eq(_fp_wallets(again.wallets), _fp_wallets(r.wallets), "day %d: the same wallets after" % i)
 	t.check(took > runs / 2 and several > runs / 5 and empty > 0, "not vacuous: %d took, %d took from several players, %d had nothing" % [took, several, empty])
@@ -228,8 +298,8 @@ func test_the_third_miss_is_game_over_and_resets_but_deletes_nothing(t: T) -> vo
 		var w := _wallets(rng, crew, 0.5)
 		var s := _state(rng.int_in(3, 12), rng.int_in(0, 3), 2, rng.int_in(0, Day.MAX_LEVEL), crew.size())
 		var fq := rng.int_in(1, 300)
-		var r := Day.end_day(s, rng.int_in(0, Day.day_quota(s, fq) - 1), crew, w, fq, "over-%d" % i)
-		t.check(r.game_over and r.outcome == &"game_over", "case %d: the third miss is game over" % i)
+		var r := Day.end_day(s, 0, rng.int_in(0, 2 * Day.day_quota(s, fq)), crew, w, fq, "over-%d" % i, true)
+		t.check(r.game_over and r.outcome == &"game_over", "case %d: the third miss (a wipe) is game over" % i)
 		t.eq(_fp_state(r.state), _fp_state(Day.start_night()), "case %d: the next state is a fresh Day 1" % i)
 		t.check(r.taken.is_empty(), "case %d: no roll on game over" % i)
 		t.eq(r.wallets.size(), crew.size(), "case %d: every player still has a wallet (nothing deleted)" % i)
@@ -247,7 +317,8 @@ func test_the_third_miss_is_game_over_and_resets_but_deletes_nothing(t: T) -> vo
 		for d in 30:
 			var q := Day.day_quota(s, fq)
 			var short := rng.chance(0.35)
-			var r := Day.end_day(s, rng.int_in(0, q - 1) if short else q + rng.int_in(0, 50), crew, w, fq, "night-%d-%d" % [i, d])
+			# A wipe or a BANK the lock let through (earned at least the quota, aboard anything).
+			var r := Day.end_day(s, rng.int_in(0, 2 * q), q + rng.int_in(0, 50), crew, w, fq, "night-%d-%d" % [i, d], short)
 			if short:
 				misses += 1
 			t.eq(r.game_over, misses == 3, "night %d day %d: game over exactly on the third miss" % [i, d])
@@ -290,14 +361,17 @@ func test_the_quota_is_set_by_rule_grows_only_on_made_days_and_stops_at_day_8(t:
 			var q := Day.day_quota(s, fq)
 			t.eq(q, Day.quota_for(mini(made_days, 7), crew.size(), fq), "run %d day %d: quota from made days only" % [i, d])
 			var miss := rng.chance(0.25) and s.misses < 2
-			var banked := rng.int_in(0, q - 1) if miss else q + rng.int_in(0, 40)
-			var r := Day.end_day(s, banked, crew, w, fq, "q-%d-%d" % [i, d])
-			var r2 := Day.end_day(s, banked, crew, w, fq, "a different seed %d" % d)
+			var banked := rng.int_in(0, 2 * q)
+			var earned := q + rng.int_in(0, 40) if not miss or rng.chance(0.5) else rng.int_in(0, q - 1)
+			var r := Day.end_day(s, banked, earned, crew, w, fq, "q-%d-%d" % [i, d], miss)
+			var r2 := Day.end_day(s, banked, earned, crew, w, fq, "a different seed %d" % d, miss)
 			t.eq(_fp_state(r2.state), _fp_state(r.state), "run %d day %d: the seed does not change the day's numbers" % [i, d])
 			t.eq(r2.quota, r.quota, "run %d day %d: no dice in the quota" % [i, d])
 			var next_q := Day.day_quota(Day.morning(r.state, crew.size()), fq)
 			if miss:
-				t.eq(next_q, q, "run %d day %d: a missed day does not raise it" % [i, d])
+				t.eq(next_q, q, "run %d day %d: a wipe does not raise it" % [i, d])
+				t.eq(r.state.level, s.level, "run %d day %d: a wipe never raises the level" % [i, d])
+				t.eq(r.state.misses, s.misses + 1, "run %d day %d: a wipe adds one miss" % [i, d])
 			else:
 				made_days += 1
 				if made_days <= 7:
@@ -316,19 +390,40 @@ func test_bank_preview_agrees_with_end_day(t: T) -> void:
 		var w := _wallets(rng, crew, 0.0 if rng.chance(0.1) else rng.next() * 0.7)
 		var s := _random_state(rng, crew.size())
 		var fq := rng.int_in(1, 400)
-		var banked := _banked(rng, Day.day_quota(s, fq))
-		var p := Day.bank_preview(s, banked, w, fq)
-		var r := Day.end_day(s, banked, crew, w, fq, "pv-%d" % i)
-		var tag := "day %d (banked %d of %d, misses %d)" % [i, banked, r.quota, s.misses]
+		var q := Day.day_quota(s, fq)
+		var earned := _banked(rng, q)
+		# Aboard: what earned left after drops, or (a run without the lock) the same as earned.
+		var banked := earned if rng.chance(0.3) else rng.int_in(0, earned)
+		var wiped := rng.chance(0.3)
+		var p := Day.bank_preview(s, banked, earned, crew, w, fq)
+		var r := Day.end_day(s, banked, earned, crew, w, fq, "pv-%d" % i, wiped)
+		var tag := "day %d (earned %d, aboard %d of %d, misses %d, %s)" % [i, earned, banked, r.quota, s.misses, "wipe" if wiped else "BANK"]
 		t.eq(p.quota, r.quota, tag + ": quota")
-		t.eq(p.made, r.made, tag + ": made")
-		t.eq(p.short_by, r.short_by, tag + ": short by")
-		t.eq(p.game_over, r.game_over, tag + ": game over")
-		t.eq(p.odds, r.odds, tag + ": odds")
-		t.eq(p.short_by, maxi(0, r.quota - r.banked), tag + ": short by is the real shortfall")
-		if not r.game_over:
-			t.eq(p.misses_after, r.state.misses, tag + ": misses after")
-		if not p.made and not p.game_over:
+		t.eq(p.earned, r.earned, tag + ": earned")
+		t.eq(p.locked, earned < q, tag + ": locked")
+		t.eq(r.made, p.made and not wiped, tag + ": made: a BANK the preview shows open, and never a wipe")
+		if not r.made:
+			t.eq(p.game_over, r.game_over, tag + ": game over")
+			t.eq(p.odds, r.odds, tag + ": odds")
+			t.eq(r.short_by, maxi(0, q - earned), tag + ": short by is the real shortfall")
+			if not r.game_over:
+				t.eq(p.misses_after, r.state.misses, tag + ": misses after")
+		else:
+			t.eq(r.short_by, 0, tag + ": a made day is short of nothing")
+			# The shares are the even split the monitor printed: each gets EACH GETS, or one credit more.
+			for id in crew:
+				var got := int(r.shares[id])
+				t.check(got == p.each or got == p.each + 1, tag + ": %s got %d, the monitor said %d each" % [id, got, p.each])
+		# The monitor's rows.
+		t.eq(p.rows.size(), 3, tag + ": three rows")
+		t.eq(p.rows[0], "DAY %d. EARNED %d OF %d." % [s.day, earned, q], tag + ": row 1")
+		t.check(p.rows[2].begins_with("IF NOBODY COMES BACK: "), tag + ": row 3: " + p.rows[2])
+		if p.game_over:
+			t.eq(p.rows[2], "IF NOBODY COMES BACK: THIRD MISS: GAME OVER.", tag + ": row 3 on the last miss")
+		else:
+			t.check(p.rows[2].ends_with("MISS %d OF %d." % [s.misses + 1, Day.MISSES_FOR_GAME_OVER]), tag + ": row 3's miss count: " + p.rows[2])
+		t.eq(Day.monitor_rows(s.day, earned, q, banked, p.each, p.rows[2]), p.rows, tag + ": the rows from the numbers are the preview's")
+		if not r.made and not p.game_over:
 			shorts += 1
 			var owners: Array[String] = []
 			for id in crew:
@@ -353,14 +448,13 @@ func test_bank_preview_agrees_with_end_day(t: T) -> void:
 					t.check(p.text.contains(p.odds.to_upper()), tag + ": the odds are on the monitor: " + p.text)
 				t.check(("EACH OF YOU" if p.at_stake >= crew.size() else "EACH OWNER") in p.text, tag + ": who loses: " + p.text)
 		else:
-			t.check(r.taken.is_empty() and p.at_stake == 0, tag + ": nothing at stake, nothing taken")
-		if p.game_over:
+			t.check(r.taken.is_empty(), tag + ": a made day or game over takes nothing")
+			if p.game_over:
+				t.eq(p.at_stake, 0, tag + ": nothing at stake on the last miss")
+		if p.game_over and not r.made:
 			overs += 1
-		if not p.made:
-			t.check(p.text.contains("SHORT %d." % r.short_by), tag + ": the monitor line's shortfall: " + p.text)
-		t.check(p.text.begins_with("BANK NOW: %d OF %d." % [r.banked, r.quota]), tag + ": the monitor line: " + p.text)
-	t.check(shorts > runs / 5 and overs > 0, "not vacuous: %d short days, %d game overs" % [shorts, overs])
-	t.note("%d random days, preview matched end_day every time (%d short, %d game over)" % [runs, shorts, overs])
+	t.check(shorts > runs / 5 and overs > 0, "not vacuous: %d missed days, %d game overs" % [shorts, overs])
+	t.note("%d random days, preview matched end_day every time (%d missed, %d game over)" % [runs, shorts, overs])
 
 func test_a_missed_day_with_nothing_owned_says_nothing_to_take_and_players_without_upgrades_lose_nothing(t: T) -> void:
 	var crew: Array[String] = ["ann", "bo", "cy"]
@@ -375,13 +469,13 @@ func test_a_missed_day_with_nothing_owned_says_nothing_to_take_and_players_witho
 	t.eq(int(o["count"]), 0, "nobody owns anything: loss_odds counts none at stake")
 	t.eq(String(o["text"]), "nothing to take", "nobody owns anything: loss_odds text")
 	t.check((o.get("players", []) as Array).is_empty(), "nobody owns anything: loss_odds lists no players")
-	var pv := Day.bank_preview(s, q - 1, empty, fq)
+	var pv := Day.bank_preview(s, q - 1, q - 1, crew, empty, fq)
 	t.check(not pv.made and not pv.game_over, "short of the quota, not the third miss")
 	t.eq(pv.at_stake, 0, "preview: nothing at stake")
 	t.check(pv.per_player.is_empty(), "preview: per_player is empty")
 	t.eq(pv.odds, "nothing to take", "preview: odds say nothing to take")
 	t.check(pv.text.contains("NOTHING TO TAKE") and not pv.text.contains("LOSES ONE UPGRADE"), "the monitor says NOTHING TO TAKE: " + pv.text)
-	var r := Day.end_day(s, q - 1, crew, empty, fq, "nothing-owned")
+	var r := Day.end_day(s, 0, q - 1, crew, empty, fq, "nothing-owned", true)
 	t.check(r.taken.is_empty() and r.facts["taken"].is_empty(), "end_day took nothing and told the narrator nothing")
 	t.check(r.outcome == &"missed" and not r.made and not r.game_over, "it still counts as a missed day")
 	t.eq(r.state.misses, s.misses + 1, "the miss is counted")
@@ -396,14 +490,14 @@ func test_a_missed_day_with_nothing_owned_says_nothing_to_take_and_players_witho
 	ann.owned.append(ids[1])
 	ann.owned.append(ids[2])
 	mixed["ann"] = ann
-	var mp := Day.bank_preview(s, q - 1, mixed, fq)
+	var mp := Day.bank_preview(s, q - 1, q - 1, crew, mixed, fq)
 	t.eq(mp.at_stake, 1, "mixed: one owner at stake")
 	t.eq(mp.per_player.size(), 1, "mixed: only the owner is listed")
 	t.eq(String(mp.per_player[0]["player"]), "ann", "mixed: ann is the one listed")
 	t.eq(mp.odds, "ann 1 in 3", "mixed: the printed odds")
-	t.check(mp.text.contains("EACH OWNER") and not mp.text.contains("NOTHING TO TAKE") and not mp.text.contains("BO") and not mp.text.contains("CY"), "mixed: the monitor names only the owner: " + mp.text)
+	t.check(mp.text.contains("EACH OWNER") and not mp.text.contains("NOTHING TO TAKE") and not mp.text.contains("BO 1") and not mp.text.contains("CY 1"),"mixed: the monitor names only the owner: " + mp.text)
 	for i in (20 if t.quick else 100):
-		var mr := Day.end_day(s, q - 1, crew, mixed, fq, "mixed-%d" % i)
+		var mr := Day.end_day(s, 0, q - 1, crew, mixed, fq, "mixed-%d" % i, true)
 		t.eq(mr.taken.size(), 1, "mixed %d: exactly one loss" % i)
 		t.eq(String(mr.taken[0]["player"]), "ann", "mixed %d: ann lost it" % i)
 		t.check(ann.owned.has(String(mr.taken[0]["node"])), "mixed %d: it was one of ann's own" % i)
@@ -423,8 +517,9 @@ func test_no_call_edits_what_it_was_given(t: T) -> void:
 		var fw := _fp_wallets(w)
 		var crew_before := str(crew)
 		var banked := _banked(rng, Day.day_quota(s, fq))
-		Day.bank_preview(s, banked, w, fq)
-		var r := Day.end_day(s, banked, crew, w, fq, "pure-%d" % i)
+		var earned := _banked(rng, Day.day_quota(s, fq))
+		Day.bank_preview(s, banked, earned, crew, w, fq)
+		var r := Day.end_day(s, banked, earned, crew, w, fq, "pure-%d" % i, rng.chance(0.3))
 		t.eq(_fp_state(s), fs, "case %d: the day state was edited" % i)
 		t.eq(_fp_wallets(w), fw, "case %d: the wallets were edited" % i)
 		t.eq(str(crew), crew_before, "case %d: the crew list was edited" % i)

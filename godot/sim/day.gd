@@ -42,14 +42,26 @@
 #   loss_odds(wallets) -> Dictionary             {"count": upgrades about to go, "text": "ann 1 in 3, bo 1 in 2" |
 #       "nothing to take", "players": [{"player", "owned", "odds"}] (EACH_PLAYER_ONE: one per owner)}
 #   take_by_roll(seed, day, wallets) -> Array[Dictionary]  [{"player": id, "node": id}], by LOSS_RULE
-#   bank_preview(s, banked, wallets, floor_quota_per_player) -> Preview
-#       What BANK would do right now, for the lift monitor and the quota board (promise 2: the
-#       stakes and the odds are printed before the vote). end_day() always agrees with it.
-#   end_day(s, banked, crew, wallets, floor_quota_per_player, seed) -> DayResult
-#       Settles the day at BANK (or a wipe, banked 0). Pays every crew member their share into their
-#       wallet. Made: streak + 1, level + 1 (capped). Missed: streak 0, misses + 1, one upgrade taken
-#       from each player who owns any, by the seeded roll (none when nobody owns one); the third miss is game over: wallets reset to
-#       empty and the state is start_night(). The returned state describes the NEXT day.
+#   is_locked(earned, quota) -> bool              earned < quota: BANK is locked (FD1)
+#   bank_preview(s, banked, earned, crew, wallets, floor_quota_per_player) -> Preview
+#       What BANK would do right now, and what a missed day would cost, for the lift monitor and the
+#       quota board (promise 2: the stakes and the odds are printed before the vote). end_day() always
+#       agrees with it. Its rows are the monitor's three (monitor_rows, stakes_row).
+#   end_day(s, banked, earned, crew, wallets, floor_quota_per_player, seed, wiped = false) -> DayResult
+#       Settles the day at BANK or at a wipe. Pays every crew member their share of `banked` (what was
+#       aboard; 0 at a wipe) into their wallet. Made: streak + 1, level + 1 (capped). Missed: streak 0,
+#       misses + 1, one upgrade taken from each player who owns any, by the seeded roll (none when nobody
+#       owns one); the third miss is game over: wallets reset to empty and the state is start_night().
+#       The returned state describes the NEXT day.
+#
+# The day quota's lock (docs/floors/findables-and-day.md section 1, the owner's answers of 17 Nov):
+#   - `earned` is everything the crew recorded today (it never falls: a dropped tape, a player left behind
+#     or a drop-out cannot take it back); `banked` is what was aboard at BANK, and that is what is paid.
+#   - BANK is locked while earned < quota (is_locked). A run with the lock (sim/run.gd day_lock) refuses a
+#     locked BANK, so every BANK it settles is made, whatever was aboard. A wipe (`wiped`) is the missed
+#     day: nothing paid, the roll, the third of a night game over.
+#   - A run without the lock passes earned = banked, which is the rule before FD1 exactly: a short BANK is
+#     a missed day (and pays what was banked), a long one is made.
 #   bunk_of(crew, player) -> Vector2i            the player's bunk cell (sim/prison.gd), sorted order
 #
 # Bedtime (section 6 and the owner's answer):
@@ -112,27 +124,38 @@ class DayState:
 		s.crew_size = crew_size
 		return s
 
-## What BANK would do now.
+## What BANK would do now, and what a missed day (nobody comes back) would cost.
 class Preview:
 	var day: int
 	var quota: int
+	## What is aboard: what BANK would pay.
 	var banked: int
+	## Everything recorded today: what opens BANK.
+	var earned: int
+	## earned < quota: BANK is locked.
+	var locked: bool
+	## BANK now would make the day (not locked).
 	var made: bool
-	## quota - banked when short, else 0.
+	## quota - earned while locked, else 0 ("750 TO GO").
 	var short_by: int
-	## Missed days this night if BANK now (misses + 1 when short).
+	## What each crew member would be paid at BANK now (banked / crew size, the odd credits aside).
+	var each: int
+	## Missed days this night if the day is missed now (misses + 1).
 	var misses_after: int
-	## True when BANK now would be the third miss.
+	## True when missing the day now would be the third miss.
 	var game_over: bool
-	## How many upgrades BANK would take now: one per owner (EACH_PLAYER_ONE), or the pool size under
-	## CREW_ONE (0 when made or game over).
+	## How many upgrades a missed day would take now: one per owner (EACH_PLAYER_ONE), or the pool size
+	## under CREW_ONE (0 when it would be game over).
 	var at_stake: int
-	## "ann 1 in 4, bo 1 in 2" (or "1 in 4" under CREW_ONE), "nothing to take", or "" when made or game over.
+	## "ann 1 in 4, bo 1 in 2" (or "1 in 4" under CREW_ONE), "nothing to take", or "" when game over.
 	var odds: String
 	## Per owner, [{"player", "owned", "odds"}], sorted by player: each loses one of their own owned
-	## upgrades at these odds. Empty when made, game over or nothing is owned (EACH_PLAYER_ONE only).
+	## upgrades at these odds. Empty when game over or nothing is owned (EACH_PLAYER_ONE only).
 	var per_player: Array[Dictionary] = []
-	## The monitor line, e.g. "BANK NOW: 640 OF 900. SHORT 260. EACH OWNER LOSES ONE UPGRADE: ANN 1 IN 4, BO 1 IN 2. MISS 1 OF 3."
+	## The lift monitor's three rows (monitor_rows): "DAY 2. EARNED 1650 OF 2400.", "BANK LOCKED. 750 TO
+	## GO." (or "BANK OPEN. ABOARD 2380. EACH GETS 595."), "IF NOBODY COMES BACK: ... MISS 1 OF 3."
+	var rows: PackedStringArray = PackedStringArray()
+	## The rows joined by newlines.
 	var text: String
 
 class DayResult:
@@ -147,6 +170,11 @@ class DayResult:
 	var day: int
 	var quota: int
 	var banked: int
+	## Everything recorded today (the lock's number; equal to banked in a run without the lock).
+	var earned: int
+	## The day ended in a wipe (nobody came back).
+	var wiped: bool
+	## quota - earned when missed, else 0.
 	var short_by: int
 	## {player: int}, summing to banked.
 	var shares: Dictionary = {}
@@ -301,34 +329,58 @@ static func take_by_roll(seed_text: String, day: int, wallets: Dictionary) -> Ar
 
 # ---------------------------------------------------------------- BANK
 
-static func bank_preview(s: DayState, banked: int, wallets: Dictionary, floor_quota_per_player: int) -> Preview:
+## THE lock: BANK is locked while what the crew has earned today is under the day quota.
+static func is_locked(earned: int, quota: int) -> bool:
+	return earned < quota
+
+static func bank_preview(s: DayState, banked: int, earned: int, crew: Array[String], wallets: Dictionary, floor_quota_per_player: int) -> Preview:
 	var p := Preview.new()
 	p.day = s.day
 	p.quota = day_quota(s, floor_quota_per_player)
 	p.banked = maxi(0, banked)
-	p.made = p.banked >= p.quota
-	p.short_by = 0 if p.made else p.quota - p.banked
-	p.misses_after = s.misses if p.made else s.misses + 1
-	p.game_over = not p.made and p.misses_after >= MISSES_FOR_GAME_OVER
+	p.earned = maxi(0, earned)
+	p.locked = is_locked(p.earned, p.quota)
+	p.made = not p.locked
+	p.short_by = p.quota - p.earned if p.locked else 0
+	var n := _sorted_unique(crew).size()
+	p.each = 0 if n == 0 else p.banked / n
+	p.misses_after = s.misses + 1
+	p.game_over = p.misses_after >= MISSES_FOR_GAME_OVER
 	p.at_stake = 0
 	p.odds = ""
-	if not p.made and not p.game_over:
+	if not p.game_over:
 		var o := loss_odds(wallets)
 		p.at_stake = int(o["count"])
 		p.odds = String(o["text"])
 		for k: Dictionary in o.get("players", []):
 			p.per_player.append(k)
-	var line := "BANK NOW: %d OF %d." % [p.banked, p.quota]
-	if p.made:
-		line += " MADE."
-	elif p.game_over:
-		line += " SHORT %d. THIRD MISS: GAME OVER." % p.short_by
-	elif p.at_stake == 0:
-		line += " SHORT %d. NOTHING TO TAKE. MISS %d OF %d." % [p.short_by, p.misses_after, MISSES_FOR_GAME_OVER]
-	else:
-		line += " SHORT %d. %s MISS %d OF %d." % [p.short_by, _stake_text(p, wallets.size()), p.misses_after, MISSES_FOR_GAME_OVER]
-	p.text = line
+	p.rows = monitor_rows(p.day, p.earned, p.quota, p.banked, p.each, stakes_row(p, wallets.size()))
+	p.text = "\n".join(p.rows)
 	return p
+
+## The lift monitor's three rows from the host's numbers (a client calls this with its snapshot's day
+## block: it sums nothing). `stakes` is row 3, stakes_row() of the host's preview.
+static func monitor_rows(day: int, earned: int, quota: int, aboard: int, each: int, stakes: String) -> PackedStringArray:
+	var rows := PackedStringArray()
+	rows.append("DAY %d. EARNED %d OF %d." % [day, earned, quota])
+	if is_locked(earned, quota):
+		rows.append("BANK LOCKED. %d TO GO." % (quota - earned))
+	else:
+		rows.append("BANK OPEN. ABOARD %d. EACH GETS %d." % [aboard, each])
+	rows.append(stakes)
+	return rows
+
+## Row 3 of the monitor: what a day nobody comes back from costs, e.g. "IF NOBODY COMES BACK: EACH OWNER
+## LOSES ONE UPGRADE: ANN 1 IN 4, BO 1 IN 2. MISS 1 OF 3."
+static func stakes_row(p: Preview, player_count: int) -> String:
+	var line := "IF NOBODY COMES BACK: "
+	if p.game_over:
+		return line + "THIRD MISS: GAME OVER."
+	if p.at_stake == 0:
+		line += "NOTHING TO TAKE."
+	else:
+		line += _stake_text(p, player_count)
+	return line + " MISS %d OF %d." % [p.misses_after, MISSES_FOR_GAME_OVER]
 
 ## The stakes sentence on the lift monitor. Short: the odds are listed when three or fewer players
 ## stand to lose one; the full per-player odds are in Preview.per_player for the quota board.
@@ -341,16 +393,19 @@ static func _stake_text(p: Preview, player_count: int) -> String:
 		return "%s: %s." % [text, p.odds.to_upper()]
 	return text + "."
 
-static func end_day(s: DayState, banked: int, crew: Array[String], wallets: Dictionary, floor_quota_per_player: int, seed_text: String) -> DayResult:
-	var pv := bank_preview(s, banked, wallets, floor_quota_per_player)
+static func end_day(s: DayState, banked: int, earned: int, crew: Array[String], wallets: Dictionary, floor_quota_per_player: int, seed_text: String, wiped: bool = false) -> DayResult:
+	# A wipe banks nothing: nothing came back.
+	var pv := bank_preview(s, 0 if wiped else banked, earned, crew, wallets, floor_quota_per_player)
 	var r := DayResult.new()
 	r.day = s.day
 	r.quota = pv.quota
 	r.banked = pv.banked
-	r.made = pv.made
-	r.short_by = pv.short_by
-	r.game_over = pv.game_over
-	r.odds = pv.odds
+	r.earned = pv.earned
+	r.wiped = wiped
+	r.made = pv.made and not wiped
+	r.short_by = 0 if r.made else maxi(0, pv.quota - pv.earned)
+	r.game_over = not r.made and pv.game_over
+	r.odds = "" if r.made else pv.odds
 	var crew_ids := _sorted_unique(crew)
 	r.shares = split_shares(pv.banked, crew_ids, s.day)
 	r.share = 0 if crew_ids.is_empty() else pv.banked / crew_ids.size()
@@ -366,13 +421,13 @@ static func end_day(s: DayState, banked: int, crew: Array[String], wallets: Dict
 		paid[id] = Upgrades.add_credits(_wallet(wallets, id), int(r.shares.get(id, 0)))
 
 	var t := s.copy()
-	if pv.made:
+	if r.made:
 		r.outcome = &"made"
 		t.day += 1
 		t.streak += 1
 		t.level = mini(t.level + 1, MAX_LEVEL)
 		r.wallets = paid
-	elif pv.game_over:
+	elif r.game_over:
 		r.outcome = &"game_over"
 		t = start_night()
 		var reset := {}
@@ -402,6 +457,8 @@ static func _facts(s: DayState, r: DayResult) -> Dictionary:
 		"day": r.day,
 		"quota": r.quota,
 		"banked": r.banked,
+		"earned": r.earned,
+		"wiped": r.wiped,
 		"short_by": r.short_by,
 		"streak": r.state.streak if r.made else 0,
 		"misses": s.misses + (0 if r.made else 1),

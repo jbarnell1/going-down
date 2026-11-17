@@ -1206,9 +1206,18 @@ static func day_block(s: Run.RunState) -> Dictionary:
 		var at := Day.lights_out_at(b)
 		if not is_inf(at):
 			lights = at
-	return {"index": s.day_index, "day": s.day_state.day, "quota": Day.day_quota(s.day_state, Run.DAY_FLOOR_QUOTA), "streak": s.day_state.streak,
+	var out := {"index": s.day_index, "day": s.day_state.day, "quota": Day.day_quota(s.day_state, Run.DAY_FLOOR_QUOTA), "streak": s.day_state.streak,
 		"misses": s.day_state.misses, "inBed": in_bed, "countFrom": count_from, "lightsOutAt": lights,
 		"result": Protocol.plain(s.day_result) if s.day_result != null else null, "crew": crew}
+	if s.day_lock:
+		# The day quota's lock (FD2): the host's numbers for the HUD line and the lift monitor.
+		var pv: Day.Preview = Run.day_preview(s)
+		out["earned"] = pv.earned
+		out["locked"] = pv.locked
+		out["aboard"] = pv.banked
+		out["each"] = pv.each
+		out["stakes"] = pv.rows[2]
+	return out
 
 func _send_snapshots(ht: float) -> void:
 	var w := world()

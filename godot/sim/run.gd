@@ -104,6 +104,24 @@
 # The day loop's DAY_FLOOR_QUOTA is floor 1's quota per player, so the day quota is a whole number of
 # floor 1 quotas for the morning's crew (docs/floors/prison.md section 2: one and a half on day 1).
 #
+# The day quota's lock (FD2; docs/floors/findables-and-day.md section 1, "What counts" and "The lock"), on
+# only for a run made with it (with_day_lock(), and only with days: net/host_rules.gd turns it on for the
+# game's rooms whenever the floor quota is on; tests and every stored result leave it off, and then nothing
+# below happens and a short BANK is a missed day as before):
+#  - Earned (`day_earned`): every reading closed today, on any floor (its "readingClosed" value, depth pay
+#    included; the bell's flush of open readings too), whatever happens to its tape afterwards. It never
+#    falls within a day: a dropped tape, a player left behind or a drop-out cannot take it back. 0 every
+#    morning ("newDay"); kept through the ride home and the night for the prison's board.
+#  - BANK is locked while floor(earned) < the day quota (day_locked; Day.is_locked). At the bell, if BANK
+#    has more feet than DOWN and BANK is locked, the vote is refused: "bell" {outcome "ride", refused true},
+#    then "bankRefused" {bank, down, day, earned, quota}, and the car rides down exactly as if DOWN had won
+#    (tapes stay with their holders, those not aboard are left behind, out players rejoin on the next
+#    floor). A tie rides, as always.
+#  - The tick floor(earned) first reaches the quota (not at home): "dayMet" {day, earned, quota}, once a day.
+#  - So every BANK is made: Day.end_day pays what was aboard. A wipe is the missed day (Day.end_day wiped).
+#  - day_preview() is Day.bank_preview for the run now: the lift monitor's three rows (aboard is the tapes
+#    held by those on their feet in the car).
+#
 # The Annex (docs/floors/annex.md sections 2 and 4; loop/NIGHT-PLAN.md A6, T16h). On a floor whose place is
 # the Annex the run holds `annex` (an AnnexFloor: the crew's marks and the Temp's sticky notes), made when
 # the crew reaches the floor and dropped on the next; on any other floor it is null and nothing below
@@ -871,10 +889,21 @@ class RunState:
 	## Lonely (T19c, with_lonely; sim/lonely.gd): the Temp carries its own mechanic. Off: Stillness, as every
 	## stored result has it.
 	var lonely: bool = false
+	## The day quota's lock (FD2, with_day_lock; see the header). Off: nothing below is ever read, and a short
+	## BANK is a missed day as before.
+	var day_lock: bool = false
+	## Everything the crew has recorded today (every reading closed, depth pay included), whatever became of
+	## its tape. Only rises within a day; 0 every morning.
+	var day_earned: float = 0.0
+	## "dayMet" has been said today.
+	var day_met: bool = false
 
 	func copy() -> RunState:
 		var s := RunState.new()
 		s.lonely = lonely
+		s.day_lock = day_lock
+		s.day_earned = day_earned
+		s.day_met = day_met
 		s.two_watchers = two_watchers
 		s.relocation = relocation
 		s.seed = seed
@@ -1136,6 +1165,54 @@ static func with_car_waits(s0: RunState) -> RunState:
 	s.car_waits = true
 	s.left_out = {}
 	return s
+
+## Turns the day quota's lock on (FD2, see the header) for a run with days: nothing earned yet today.
+## A run without days is returned as it is (there is no day to lock).
+static func with_day_lock(s0: RunState) -> RunState:
+	if not s0.days:
+		return s0
+	var s := s0.copy()
+	s.day_lock = true
+	s.day_earned = 0.0
+	s.day_met = false
+	return s
+
+## Today's day quota (Day.day_quota for the morning's crew), 0 without days.
+static func day_quota_now(s: RunState) -> int:
+	return Day.day_quota(s.day_state, DAY_FLOOR_QUOTA) if s.days and s.day_state != null else 0
+
+## Whether BANK is locked now: the lock is on and today's earned (whole credits) is under the day quota.
+static func day_locked(s: RunState) -> bool:
+	return s.day_lock and s.days and Day.is_locked(floori(s.day_earned), day_quota_now(s))
+
+## The crew BANK pays today: everyone in the run but those the car left out (the car waits).
+static func day_crew(s: RunState) -> Array[String]:
+	var crew: Array[String] = []
+	for p in s.players:
+		if not (s.car_waits and s.left_out.has(p.id)):
+			crew.append(p.id)
+	return crew
+
+## What is aboard now, in whole credits: the tapes held by every player on their feet in the car (what
+## BANK would pay, before the bell's flush of open readings).
+static func day_aboard(s: RunState) -> int:
+	var total := 0.0
+	for p in s.players:
+		if p.status != &"ok" or not p.aboard:
+			continue
+		var m := Instr.member(s.crew, p.id)
+		if m != null:
+			total += TapeLib.tape_value(_held_tapes(m))
+	return floori(total)
+
+## What BANK would do now and what a missed day would cost (Day.bank_preview, the lift monitor's rows), for
+## a run with days; null without. Earned is today's (the lock's) with the lock on, else what is aboard.
+static func day_preview(s: RunState) -> Variant:
+	if not s.days or s.day_state == null:
+		return null
+	var aboard := day_aboard(s)
+	var earned := floori(s.day_earned) if s.day_lock else aboard
+	return Day.bank_preview(s.day_state, aboard, earned, day_crew(s), s.wallets, DAY_FLOOR_QUOTA)
 
 ## Seconds of sprinting a player's tank holds in this run (Stamina.Stamina.tank): more when paced.
 static func sprint_seconds(s: RunState) -> float:
@@ -2351,7 +2428,16 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			elif p.side == &"down":
 				down += 1
 		var outcome := "empty" if aboard.is_empty() else ("bank" if bank > down else "ride")
-		events.append({"type": "bell", "t": t, "bank": bank, "down": down, "outcome": outcome})
+		# The day quota's lock (FD2): BANK won but today's quota is not met. The vote is refused and the car
+		# rides down exactly as if DOWN had won.
+		var refused := outcome == "bank" and day_locked(s)
+		if refused:
+			outcome = "ride"
+			events.append({"type": "bell", "t": t, "bank": bank, "down": down, "outcome": outcome, "refused": true})
+			events.append({"type": "bankRefused", "t": t, "bank": bank, "down": down, "day": s.day_state.day,
+				"earned": floori(s.day_earned), "quota": day_quota_now(s)})
+		else:
+			events.append({"type": "bell", "t": t, "bank": bank, "down": down, "outcome": outcome})
 		var ids: Array = []
 		for p in aboard:
 			ids.append(p.id)
@@ -2386,6 +2472,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			flush_state.crew = out.crew
 			for e in out.events:
 				events.append(_with_t(e, t))
+				# Recorded today: the day's earned counts the readings closed as the car leaves too.
+				if s.day_lock and e["type"] == "readingClosed":
+					s.day_earned += float(e["value"])
 		s.crew = flush_state.crew
 		var dep := Instr.leave_floor(s.crew, aboard_ids)
 		s.players = players
@@ -2394,8 +2483,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		s.blink = null
 		events.append({"type": "banked", "t": t, "summary": summary})
 		if s.days:
-			# The day: settled on what got home, then the car rides up with whoever is aboard.
-			_settle_day(s, t, floori(summary.total), events)
+			# The day: settled on what got home (made, with the lock: a locked BANK never gets here), then the
+			# car rides up with whoever is aboard.
+			_settle_day(s, t, floori(summary.total), events, false)
 			_leave_downs(s, players, t, events)
 			_ride_up(s, players, aboard_ids, true)
 			events.append({"type": "carLeft", "t": t, "reason": "up"})
@@ -2600,6 +2690,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			var by := s.floor_by.duplicate()
 			by[e["playerId"]] = float(by.get(e["playerId"], 0.0)) + float(e["value"])
 			s.floor_by = by
+		# The day's earned (FD2): the same, over the whole day.
+		if s.day_lock and e["type"] == "readingClosed":
+			s.day_earned += float(e["value"])
 	for p in players:
 		var given: PlayerInput = input_of.get(p.id)
 		if given == null or given.pick_up == null or not _is_active(p, input_of):
@@ -2628,6 +2721,10 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	if s.quota and not s.quota_met and not at_home(s) and s.phase != &"riding" and s.floor_needed > 0 and quota_reached(s):
 		s.quota_met = true
 		events.append({"type": "quotaMet", "t": t, "depth": s.depth, "earned": floori(s.floor_earned), "needed": s.floor_needed, "top": quota_top(s)})
+	# ---- The day quota met (FD2): said once a day, the tick it becomes true. BANK is open from now on.
+	if s.day_lock and not s.day_met and not at_home(s) and not day_locked(s):
+		s.day_met = true
+		events.append({"type": "dayMet", "t": t, "day": s.day_state.day, "earned": floori(s.day_earned), "quota": day_quota_now(s)})
 
 	# ---- The Annex: the crew's marks and the Temp's notes (see the header).
 	_step_annex(s, players, input_of, t, dt, events)
@@ -2710,8 +2807,8 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		s.blink = null
 		events.append({"type": "wiped", "t": t, "summary": summary})
 		if s.days:
-			# The day: settled with nothing banked; the empty car rides up and everyone wakes on a bunk.
-			_settle_day(s, t, 0, events)
+			# The day: a wipe is the missed day, nothing banked; the empty car rides up and everyone wakes on a bunk.
+			_settle_day(s, t, 0, events, true)
 			# The tapes are kept as they are this tick (net/host_rules.gd's soft catch reads them back);
 			# they are lost on arrival.
 			var nobody: Array[String] = []
@@ -2724,14 +2821,14 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 # The day loop (days on only; see the header).
 
 ## Settles today with `banked` whole credits (Day.end_day): wallets paid, any loss rolled, the next day's
-## state kept for the morning, the facts kept for the snapshot ("dayEnded").
-static func _settle_day(s: RunState, t: float, banked: int, events: Array[Dictionary]) -> void:
-	var crew: Array[String] = []
-	for p in s.players:
-		# The car waits: whoever it left out today is paid nothing today (see the header).
-		if not (s.car_waits and s.left_out.has(p.id)):
-			crew.append(p.id)
-	var r := Day.end_day(s.day_state, banked, crew, s.wallets, DAY_FLOOR_QUOTA, s.seed)
+## state kept for the morning, the facts kept for the snapshot ("dayEnded"). `wiped`: nobody came back,
+## the missed day. With the lock the day's earned opens BANK; without it earned is what was banked (a
+## short BANK is a missed day, as before FD1).
+static func _settle_day(s: RunState, t: float, banked: int, events: Array[Dictionary], wiped: bool) -> void:
+	# The car waits: whoever it left out today is paid nothing today (see the header).
+	var crew := day_crew(s)
+	var earned := floori(s.day_earned) if s.day_lock else banked
+	var r := Day.end_day(s.day_state, banked, earned, crew, s.wallets, DAY_FLOOR_QUOTA, s.seed, wiped)
 	s.wallets = r.wallets
 	s.day_next = r.state
 	var result: Dictionary = r.facts.duplicate(true)
@@ -2942,6 +3039,9 @@ static func _morning(s: RunState, players: Array[RunPlayer], t: float, events: A
 	s.day_next = null
 	s.day_result = null
 	s.summary = null
+	if s.day_lock:
+		s.day_earned = 0.0
+		s.day_met = false
 	var f := _floor_for(s.seed, 1, s.deck)
 	var bodies := {}
 	for i in players.size():

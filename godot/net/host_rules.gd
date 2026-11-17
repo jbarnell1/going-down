@@ -45,6 +45,11 @@
 #  - Lonely (sim/run.gd lonely, sim/lonely.gd, T19c): off unless asked (`lonely`); the game's rooms ask for it
 #    (the server's always, playing alone with the game's deck), so the Annex's Temp carries its own mechanic
 #    instead of Stillness. prepare() turns it on before the first tick.
+#  - The day quota's lock (sim/run.gd day_lock, FD2): off unless asked (`day_lock`, the last parameter); the
+#    game's rooms ask for it together with the floor quota, so BANK is refused until the crew has earned the
+#    day quota. prepare() turns it on before the first tick, and only when the run has days and the floor
+#    quota (with nothing to record, or the test switch quota=0, it stays off and a short BANK is a missed
+#    day as before). The soft catch keeps the day's earned from the real tick, like the floor's.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -85,12 +90,15 @@ var paced: bool
 var car_waits: bool
 ## Lonely, the Temp's own mechanic (off unless asked).
 var lonely: bool
+## The day quota's lock (off unless asked; only with days and the floor quota both on).
+var day_lock: bool
 
 func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false,
 		watchers_: bool = false, relocation_: bool = false, long_dark_: bool = false, paced_: bool = false, car_waits_: bool = false,
-		lonely_: bool = false) -> void:
+		lonely_: bool = false, day_lock_: bool = false) -> void:
 	relocation = relocation_
 	lonely = lonely_
+	day_lock = day_lock_
 	_entity_on = entity_on
 	_depth = depth
 	deck = Run.deck_of(deck_)
@@ -184,6 +192,10 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_car_waits(s)
 	if lonely and not s.lonely:
 		s = Run.with_lonely(s)
+	# The day lock needs something to earn: only with days and the floor quota on (so never with the
+	# resident off, and never with the test switch quota=0).
+	if day_lock and s.days and s.quota and not s.day_lock:
+		s = Run.with_day_lock(s)
 	return _capped(s)
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web
@@ -294,6 +306,9 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 		st.floor_by = r.state.floor_by
 		st.floor_needed = r.state.floor_needed
 		st.quota_met = r.state.quota_met
+		# The day's earned likewise (FD2), and whether "dayMet" was said.
+		st.day_earned = r.state.day_earned
+		st.day_met = r.state.day_met
 		# The Annex's marks and notes too: the catch's note was triggered by the real tick.
 		st.annex = r.state.annex
 		st.note_seq = r.state.note_seq

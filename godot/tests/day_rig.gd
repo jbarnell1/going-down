@@ -42,6 +42,37 @@ static func give(st: Run.RunState, id: String, value: float, rid: String) -> Run
 	s.crew = c
 	return s
 
+## give(), counted as recorded: the floor quota's earned (with the quota on) and the day's (with the day
+## lock on) rise by `value`, as a reading closing on this floor would make them.
+static func record(st: Run.RunState, id: String, value: float, rid: String) -> Run.RunState:
+	var s := give(st, id, value, rid)
+	if s.quota:
+		s.floor_earned += value
+	if s.day_lock:
+		s.day_earned += value
+	return s
+
+## A copy of the run in which player `id` has dropped their own tape where they stand (the instrument's
+## "caught" drop): it lies on the floor, and they carry a fresh empty one.
+static func drop_own(st: Run.RunState, id: String) -> Run.RunState:
+	var s := st.copy()
+	var c := st.crew.copy()
+	var members: Array[Instr.CrewMember] = []
+	var fl: Array[Instr.FloorTape] = st.crew.floor.duplicate()
+	for m in st.crew.members:
+		if m.id == id and not m.tape.readings.is_empty():
+			var nm := m.copy()
+			fl.append(Instr.FloorTape.make(m.tape, m.body))
+			nm.tape = TapeLib.empty_tape("tape-%d" % c.next_tape, id)
+			c.next_tape += 1
+			members.append(nm)
+		else:
+			members.append(m)
+	c.members = members
+	c.floor = fl
+	s.crew = c
+	return s
+
 ## A copy of the run with a tape (one reading worth `value`, id `tape_id`) lying on the floor at `at`.
 static func drop(st: Run.RunState, tape_id: String, value: float, at: Move.Body) -> Run.RunState:
 	var s := st.copy()

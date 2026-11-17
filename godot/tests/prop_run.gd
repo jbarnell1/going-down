@@ -849,3 +849,231 @@ func test_no_tape_is_banked_twice_or_from_the_floor(t: T) -> void:
 		t.eq(rig.st.seed, Run.day_seed("day-tapes", d + 2), "day %d: the next day's seed" % d)
 	t.check(t.quick or (banks > 0 and wipes > 0), "not vacuous: %d banks, %d wipes" % [banks, wipes])
 	t.note("%d days: %d banks (%d tapes, %d credits in all), %d wipes, %d tapes left on floors, none banked" % [days, banks, banked_ever.size(), total, wipes, floor_ever.size()])
+
+# ---------------------------------------------------------------------------------------------
+# FD2: the day quota's lock (sim/run.gd day_lock; docs/floors/findables-and-day.md section 1, "What counts"
+# and "The lock"). A crew of bots plays whole days with days, the floor quota and the lock on; the readings
+# are recorded by fixture (DayRigLib.record: the floor's and the day's earned rise as a closed reading
+# makes them). The oracles are the design's words and sim/day.gd's quota, not run.gd's lock.
+
+## The ids aboard at this tick's bell (its doorsClosed), or [].
+static func _aboard_at_bell(events: Array[Dictionary]) -> Array:
+	for e in events:
+		if e["type"] == "doorsClosed":
+			return e["aboard"]
+	return []
+
+static func _held_by(held: Dictionary, ids: Array) -> Dictionary:
+	var out := {}
+	for tid: String in held:
+		if ids.has(held[tid]):
+			out[tid] = held[tid]
+	return out
+
+func test_fd2_the_lock_is_on_only_when_asked(t: T) -> void:
+	var ids := _ids(2)
+	t.check(not Run.create_run("lk", ids, [], true, true).day_lock, "a run made with days and the quota has no lock unless asked")
+	t.check(not Run.with_day_lock(Run.create_run("lk", ids)).day_lock, "no lock without days")
+	t.check(not HostRules.new(true, 1, [], true, true).prepare(Run.create_run("lk", ids)).day_lock, "host rules made as before add no lock")
+	var on := HostRules.new(true, 1, [], true, true, false, false, false, false, false, false, false, true).prepare(Run.create_run("lk", ids))
+	t.check(on.day_lock and on.day_earned == 0.0 and not on.day_met, "host rules asked for the lock turn it on, nothing earned")
+	t.check(not HostRules.new(false, 1, [], true, true, false, false, false, false, false, false, false, true).prepare(Run.create_run("lk", ids)).day_lock,
+		"with the resident off (nothing can be recorded) the lock stays off")
+	t.check(not HostRules.new(true, 1, [], true, false, false, false, false, false, false, false, false, true).prepare(Run.create_run("lk", ids)).day_lock,
+		"without the floor quota (the test switch quota=0) the lock stays off")
+	t.check(not HostRules.new(true, 1, [], false, true, false, false, false, false, false, false, false, true).prepare(Run.create_run("lk", ids)).day_lock,
+		"without days the lock stays off")
+
+func test_fd2_the_day_lock_over_bot_days(t: T) -> void:
+	var days := 6 if t.quick else (200 if t.full else 40)
+	var ids := _ids(3)
+	var rig := DayRigLib.DayRig.new("day-lock", ids)
+	rig.st = Run.with_day_lock(Run.with_quota(rig.st))
+	if not t.check(rig.st.day_lock and rig.st.quota, "the lock and the quota are on"):
+		return
+	var rng := Rng.make_rng("day-lock")
+	var fixed := {}
+	var c := {"banks": 0, "refused": 0, "wipes": 0, "met": 0, "drops": 0, "left": 0, "dropouts": 0}
+	var met_on := {}
+	var done := 0
+	var k := 0
+	var fails := 0
+	var max_ticks := roundi(float(days) * 1500.0 / DayRigLib.DT)
+	while done < days and rig.ticks < max_ticks and fails < 10:
+		var key := "%d/%d" % [rig.st.day_index, rig.st.depth]
+		if not Run.at_home(rig.st) and rig.st.phase == &"away" and not fixed.has(key):
+			fixed[key] = true
+			var s := rig.st
+			for id in ids:
+				var roll := rng.next()
+				rig.vote[id] = "bank" if roll < 0.55 else ("down" if roll < 0.87 else "out")
+			rig.vote["p0"] = "bank" if rng.chance(0.6) else "down"
+			# Recorded here: enough for the floor quota (so the call works), and a random extra.
+			var need := maxf(0.0, float(s.floor_needed) - s.floor_earned)
+			for id in ids:
+				k += 1
+				s = DayRigLib.record(s, id, need / 3.0 + 1.0 + rng.next() * 400.0, "lk-%d" % k)
+			# A tape dropped after it was recorded, a friend who leaves the game: earned keeps both.
+			if rng.chance(0.35):
+				s = DayRigLib.drop_own(s, ids[rng.int_in(0, 2)])
+				c["drops"] += 1
+			if rng.chance(0.1):
+				var who := rng.int_in(1, 2)
+				var ps := s.players.duplicate()
+				var np: Run.RunPlayer = ps[who].copy()
+				np.status = &"leftBehind"
+				ps[who] = np
+				s.players = ps
+				c["dropouts"] += 1
+			if rng.chance(0.12):
+				s = _all_caught(s)
+				c["wipes"] += 1
+			for id in ids:
+				if rig.vote[id] == "out":
+					c["left"] += 1
+			rig.st = s
+		var before := rig.st
+		var r := rig.step()
+		var after := rig.st
+		var q := Run.day_quota_now(before)
+		var tag := "day %d depth %d t %.2f" % [before.day_index, before.depth, after.t]
+		var types := {}
+		for e in r.events:
+			types[String(e["type"])] = e
+		var ok := true
+		if types.has("newDay"):
+			done += 1
+			ok = t.eq(after.day_earned, 0.0, tag + ": earned is 0 every morning") and ok
+			ok = t.check(not after.day_met, tag + ": not met in the morning") and ok
+		else:
+			ok = t.check(after.day_earned >= before.day_earned, tag + ": earned fell from %.2f to %.2f" % [before.day_earned, after.day_earned]) and ok
+		# dayMet: once a day, on the tick it becomes true.
+		var becomes := not before.day_met and not Run.at_home(after) and floori(after.day_earned) >= Run.day_quota_now(after) and not types.has("newDay")
+		ok = t.eq(types.has("dayMet"), becomes, tag + ": dayMet on the tick earned reaches %d (earned %.2f)" % [q, after.day_earned]) and ok
+		if types.has("dayMet"):
+			c["met"] += 1
+			met_on[before.day_index] = int(met_on.get(before.day_index, 0)) + 1
+			ok = t.eq(int(types["dayMet"]["quota"]), q, tag + ": dayMet's quota") and ok
+		if types.has("banked"):
+			c["banks"] += 1
+			ok = t.check(floori(before.day_earned) >= q, tag + ": BANK with earned %d under the quota %d" % [floori(before.day_earned), q]) and ok
+			ok = t.eq(String(types.get("dayEnded", {}).get("result", {}).get("kind", "")), "made", tag + ": every BANK is a made day") and ok
+		if types.has("wiped"):
+			var kind := String(types.get("dayEnded", {}).get("result", {}).get("kind", ""))
+			ok = t.check(kind == "missed" or kind == "game_over", tag + ": a wipe is the missed day, not %s" % kind) and ok
+		if types.has("bankRefused"):
+			c["refused"] += 1
+			var e: Dictionary = types["bankRefused"]
+			ok = t.check(floori(before.day_earned) < q and int(e["earned"]) == floori(before.day_earned) and int(e["quota"]) == q, tag + ": refused at %d of %d" % [floori(before.day_earned), q]) and ok
+			ok = t.check(int(e["bank"]) > int(e["down"]), tag + ": refused only when BANK won the bell") and ok
+			ok = t.check(not types.has("banked") and not types.has("dayEnded"), tag + ": a refused vote banked") and ok
+			ok = t.check(types.has("carLeft") and types["carLeft"]["reason"] == "ride", tag + ": a refused vote rides down") and ok
+			ok = t.check(after.phase == &"riding" and not after.going_up, tag + ": riding down") and ok
+			var aboard := _aboard_at_bell(r.events)
+			ok = t.eq(_held_by(DayRigLib.held(after), aboard), _held_by(DayRigLib.held(before), aboard), tag + ": the same tapes in the same hands") and ok
+		if not ok:
+			fails += 1
+	t.eq(done, days, "days played")
+	for d: int in met_on:
+		t.check(int(met_on[d]) <= 1, "day %d: dayMet %d times" % [d, int(met_on[d])])
+	t.check(int(c["refused"]) > 0 and int(c["banks"]) > 0 and int(c["drops"]) > 0, "not vacuous: %s" % str(c))
+	t.note("%d days (%d ticks): %s" % [done, rig.ticks, str(c)])
+
+# T20f (owed): holding the car open never counts as an ending. With days, the floor quota, the lock and the
+# car waits on: two players step in and out of the open, waiting car (one always aboard on the BANK half) for
+# two minutes, then leave it, press the call below the quota, and only then record the quota and call. No
+# bell, bank, settled day or ride home ever comes from a car that was not called: every boarding is preceded
+# by the car leaving and a call the quota allowed, and the BANK comes only after that.
+func test_t20f_holding_the_car_open_is_never_an_ending(t: T) -> void:
+	var ids := _ids(2)
+	var st := Run.create_run("t20f", ids, [], true, true)
+	st = st.copy()
+	st.orderly = HostRules.parked_orderly(st)
+	st = Run.with_day_lock(Run.with_car_waits(st))
+	var events: Array[Dictionary] = []
+	var states: Array[Run.RunState] = []
+	# The lambda below steps the run held here (a lambda cannot reassign the test's own locals).
+	var h := {"st": st}
+	var step := func(b0: Move.Body, b1: Move.Body, call: bool) -> Array[Dictionary]:
+		var inputs: Array[Run.PlayerInput] = []
+		for id in ids:
+			var inp := Run.PlayerInput.make(id, b0 if id == "p0" else b1, 1.65, 0.0, 0.0, 90.0, 70.0)
+			inp.call = call and id == "p0"
+			inputs.append(inp)
+		var r := Run.step_run(h["st"] as Run.RunState, inputs, DT)
+		h["st"] = r.state
+		events.append_array(r.events)
+		states.append(r.state)
+		return r.events
+	var inside_bank := Run.car_body(st.car, 2.0, -1.0)
+	var inside_two := Run.car_body(st.car, 1.5, -1.0)
+	var landing := Run.car_body(st.car, -1.0, 0.0)
+	var forbidden: Array[String] = ["bell", "banked", "dayEnded", "rodeUp", "wiped", "bankRefused", "called"]
+	# The car arrives; p0 stands aboard on BANK, p1 steps in and out every second, for 120 s.
+	var second := roundi(1.0 / DT)
+	for k in roundi(120.0 / DT):
+		var p1_in := posmod(floori(float(k) / float(second)), 2) == 0
+		step.call(inside_bank, inside_two if p1_in else landing, false)
+	st = h["st"]
+	var seen := {}
+	for e in events:
+		seen[String(e["type"])] = true
+	for f in forbidden:
+		t.check(not seen.has(f), "a waiting car with nobody calling it: %s" % f)
+	t.eq(st.phase, &"unloading", "the car is still waiting, doors open")
+	# Both step out: the doors close and the car leaves. A call below the quota does nothing.
+	for _k in roundi(4.0 / DT):
+		step.call(landing, landing, false)
+	st = h["st"]
+	t.eq(st.phase, &"away", "the empty car left")
+	for _k in roundi(5.0 / DT):
+		step.call(landing, landing, true)
+	st = h["st"]
+	t.eq(st.phase, &"away", "a call below the floor quota does nothing")
+	seen = {}
+	for e in events:
+		seen[String(e["type"])] = true
+	t.check(seen.has("callRefused") and not seen.has("called"), "the call was refused")
+	# Recorded: the floor's quota and the day's. Then the call works; board on BANK; the day is made.
+	h["st"] = DayRigLib.record(st, "p0", float(maxi(st.floor_needed, Run.day_quota_now(st))) + 10.0, "t20f-r")
+	var bank_at := -1
+	for _k in roundi(150.0 / DT):
+		st = h["st"]
+		var boarding := st.phase == &"boarding"
+		var r_events: Array[Dictionary] = step.call(inside_bank if boarding else landing, inside_two if boarding else landing, st.phase == &"away")
+		for e in r_events:
+			if e["type"] == "banked":
+				bank_at = states.size() - 1
+		if bank_at >= 0:
+			break
+	if not t.check(bank_at >= 0, "the called car never banked"):
+		return
+	# The ordering, over every event: a boarding opens only after the car left and a call the quota allowed;
+	# a bell only while boarding; a BANK only at a bell.
+	var left := false
+	var called := false
+	var boarding_open := false
+	var bells := 0
+	for i in events.size():
+		var e := events[i]
+		match String(e["type"]):
+			"carLeft":
+				left = true
+				called = false
+				boarding_open = false
+			"called":
+				t.check(left, "called before the car had left")
+				called = true
+			"doorsOpened":
+				if String(e["reason"]) == "boarding":
+					t.check(left and called, "a boarding opened without the car leaving and being called")
+					boarding_open = true
+				else:
+					boarding_open = false
+			"bell":
+				bells += 1
+				t.check(boarding_open, "a bell outside a called boarding")
+			"banked":
+				t.check(boarding_open and bells > 0, "a BANK without a called boarding's bell")
+	t.eq(bells, 1, "one bell: the called car's")
+	t.eq(String(_last(events, "dayEnded").get("result", {}).get("kind", "")), "made", "the day is made")

@@ -118,6 +118,17 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##  - events "callRefused" {playerId, earned, needed} (the call button was pressed below the quota and
 ##    did nothing) and "quotaMet" {depth, earned, needed, top} (once per floor, the tick it is met; top:
 ##    the player who recorded the most on the floor).
+## The day quota's lock (sim/run.gd day_lock; FD2, docs/floors/findables-and-day.md section 1). New in the
+## Godot game, and only ever sent when the run has the lock on, so a run without it sends exactly what it did
+## before:
+##  - the day block gains five elements after the crew, [..., earned (whole credits recorded today, every
+##    reading closed on any floor, dropped tapes included), locked (1 while earned < the day quota, else 0),
+##    aboard (whole credits held by those on their feet in the car: what BANK would pay), each (aboard split
+##    over today's crew, the odd credits aside), stakes (the lift monitor's third row, sim/day.gd
+##    stakes_row)], decoded as "earned", "locked" (a bool), "aboard", "each" and "stakes";
+##  - events "bankRefused" {bank, down, day, earned, quota} (BANK won the bell while locked: the car rides
+##    down; the "bell" before it has outcome "ride" and "refused": true) and "dayMet" {day, earned, quota}
+##    (once a day, the tick earned reaches the quota).
 ## The Annex (sim/run.gd annex; docs/floors/annex.md sections 2 and 4; T16h). New in the Godot game, and only
 ## ever sent on an Annex floor (or by a player who marks or peels), so a run that never reaches one sends
 ## exactly what it did before:
@@ -462,11 +473,18 @@ static func enc_day(d: Dictionary) -> Array:
 	var in_bed: Array = []
 	for id: Variant in d["inBed"]:
 		in_bed.append(String(id))
-	return [d["index"], d["day"], d["quota"], d["streak"], d["misses"], in_bed, d["countFrom"], d["lightsOutAt"], d["result"], d["crew"]]
+	var out := [d["index"], d["day"], d["quota"], d["streak"], d["misses"], in_bed, d["countFrom"], d["lightsOutAt"], d["result"], d["crew"]]
+	if d.has("earned"):
+		# The day quota's lock (see the header): only with the lock on.
+		out.append_array([d["earned"], 1 if bool(d["locked"]) else 0, d["aboard"], d["each"], d["stakes"]])
+	return out
 
 static func dec_day(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 10, 10)
+	var a := _a(c, w, 10, 15)
 	if c.bad:
+		return {}
+	if a.size() != 10 and a.size() != 15:
+		c.bad = true
 		return {}
 	var in_bed: Array = []
 	for id: Variant in _a(c, a[5], 0, 64):
@@ -474,9 +492,16 @@ static func dec_day(c: _V, w: Variant) -> Dictionary:
 	var result: Variant = a[8]
 	if result != null and not result is Dictionary:
 		c.bad = true
-	return {"index": _i(c, a[0], 1, MAX_COUNT), "day": _i(c, a[1], 1, MAX_COUNT), "quota": _i(c, a[2], 0, MAX_COUNT), "streak": _i(c, a[3], 0, MAX_COUNT),
+	var out := {"index": _i(c, a[0], 1, MAX_COUNT), "day": _i(c, a[1], 1, MAX_COUNT), "quota": _i(c, a[2], 0, MAX_COUNT), "streak": _i(c, a[3], 0, MAX_COUNT),
 		"misses": _i(c, a[4], 0, MAX_COUNT), "inBed": in_bed, "countFrom": _opt_num(c, a[6]), "lightsOutAt": _opt_num(c, a[7]), "result": result,
 		"crew": _i(c, a[9], 0, 64)}
+	if a.size() == 15:
+		out["earned"] = _i(c, a[10], 0, MAX_COUNT)
+		out["locked"] = _i(c, a[11], 0, 1) == 1
+		out["aboard"] = _i(c, a[12], 0, MAX_COUNT)
+		out["each"] = _i(c, a[13], 0, MAX_COUNT)
+		out["stakes"] = _s(c, a[14], 400)
+	return out
 
 ## The JSON text of a world snapshot (computed once per tick, shared by every client's snapshot).
 static func world_json(w: Dictionary) -> String:

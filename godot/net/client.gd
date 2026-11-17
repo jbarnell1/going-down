@@ -44,6 +44,9 @@
 # placement carries the day index, as it carries the depth) and with the welcome. LocalFrame.use (F
 # held) goes to the host in every input. The newest snapshot's "day" block (latest["day"]) is the day
 # number, the quota, who is in bed, the count and lights out in host time, and the settled day's facts.
+# With the day quota's lock (sim/run.gd day_lock, FD2) the block also has the day's earned, locked, aboard,
+# each and the monitor's stakes row: day_lock() returns them. The host's "dayMet" {day, earned, quota} and
+# "bankRefused" {bank, down, day, earned, quota} arrive in `events` like any other.
 #
 # The Playroom (sim/seek.gd; loop/NIGHT-PLAN.md A3): LocalFrame.hide (F pressed for a hide, hide_fast
 # with sprint held) is counted and the counts ride in every input, so no press is lost with a packet;
@@ -379,6 +382,18 @@ func quota() -> Variant:
 	if latest == null:
 		return null
 	return latest.get("quota")
+
+## The day quota's lock (FD2) as the newest snapshot has it: {day, earned, quota, locked, aboard, each,
+## stakes}, every number the host's (the client sums nothing), or null when the run has no lock. The lift
+## monitor's rows are Day.monitor_rows(day, earned, quota, aboard, each, stakes).
+func day_lock() -> Variant:
+	if latest == null or latest.get("day") == null:
+		return null
+	var d: Dictionary = latest["day"]
+	if not d.has("earned"):
+		return null
+	return {"day": d["day"], "earned": d["earned"], "quota": d["quota"], "locked": d["locked"], "aboard": d["aboard"],
+		"each": d["each"], "stakes": d["stakes"]}
 
 ## Down first, then out: who is down as the newest snapshot has it, [{id, at, until, by, healer, healFrom}]
 ## (host times: out at `until` unless healed; a heal is done at healFrom + Run.HEAL_TIME). Empty when nobody
