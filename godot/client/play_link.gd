@@ -20,6 +20,11 @@
 # and turns only within the gap (`hideCam`). The snapshot carries the seek block, this player's row in
 # it, the newest count event, the hide in reach; other players in hides are drawn in them (crouched,
 # sunk to the hide's eye, side by side in a hide that holds several), and those at the party table sit.
+#
+# Down first, then out (sim/run.gd downs; T8a): down, the player's own body crawls at CRAWL_PACE (the
+# rules' crawl, a little under) and nothing else they press counts; the eyes are on the floor
+# (eye_height.gd). F held goes to the host for a player on their feet whenever the run has days or downs.
+# The snapshot carries the host's downs block ("downs") for client/down_view.gd.
 extends RefCounted
 
 const RoomClient = preload("res://net/room_client.gd")
@@ -69,6 +74,9 @@ const PIT_PEEK_EYE := 0.47
 const PEEK_PITCH := 0.35
 ## After F for a hide, the body waits this long at most for the host's answer before it may move.
 const HIDE_WAIT := 1.0
+## A downed player crawls this fast (m/s): a little under the rules' crawl speed, so the run's body follows
+## the screen's exactly (sim/run.gd CRAWL_SPEED).
+const CRAWL_PACE := Run.CRAWL_SPEED * 0.95
 
 var rc: RoomClient
 var local := false
@@ -143,11 +151,13 @@ func names() -> Dictionary:
 # --- the frame ------------------------------------------------------------------------------------
 
 ## One frame. `inp` as the bridge took it: dt, f, r, sprint, creep, yaw, pitch, hfov, vfov, raised,
-## call, hold, pickUp, still, use (F held: on a prison bunk it lies you down). Returns {} while there is
+## call, hold, pickUp, still, use (F held: on a prison bunk it lies you down; beside a downed crewmate it
+## heals them). Down, the player crawls (f and r at CRAWL_PACE) and nothing else counts. Returns {} while there is
 ## no run (lobby, connecting, closed), {"waiting": true} until the run's welcome has come, else the
 ## snapshot (see the file header). With days the snapshot also has "day" (the host's day block),
 ## "hostNow" (the host clock as estimated here), "goingUp" (riding up to the prison) and "bed" (in bed,
-## at a bunk, the hold prompt's fill 0..1, this player's bunk cell).
+## at a bunk, the hold prompt's fill 0..1, this player's bunk cell). With the down rule it has "downs"
+## (the host's downs block: client/down_view.gd).
 func step(now: float, inp: Dictionary) -> Dictionary:
 	var t0 := Time.get_ticks_usec()
 	rc.poll(now)
@@ -170,6 +180,11 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	var dt := clampf(float(inp.get("dt", 0.0)), 0.0, 0.1)
 	var still: bool = inp.get("still") == true
 	var playing := c.playing and body != null and not still and phase != "ended" and status == "ok"
+	# Down first, then out: a downed player crawls (the run follows their body at its crawl speed) and does
+	# nothing else; F held goes to the host for everyone on their feet (held beside a downed crewmate, it
+	# heals them).
+	var downs_on: bool = latest.get("downs") != null
+	var crawling := downs_on and c.playing and body != null and not still and phase != "ended" and status == "down"
 	# The day loop: lying on your bunk you stay put (F gets you up: the host's call).
 	var day: Variant = latest.get("day")
 	var in_bed := day != null and int(latest["depth"]) == 0 and ((day as Dictionary)["inBed"] as Array).has(str(c.id))
@@ -185,7 +200,7 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 		_hide_wait -= clampf(float(inp.get("dt", 0.0)), 0.0, 0.1)
 		if s_phase != _hide_wait_phase:
 			_hide_wait = 0.0
-	var held_here := seek_row != null and (s_phase != "out" or s_status != "ok" or _hide_wait > 0.0)
+	var held_here := seek_row != null and (s_phase != "out" or s_status != "ok" or _hide_wait > 0.0) and not crawling
 
 	# 1. The player's own body (src/game/player.ts control), or the test's auto-walk.
 	tank = c.correct_stamina(tank)
@@ -214,17 +229,19 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 		gait = _auto_gait
 		speed = M.hypot2(body.x - b0.x, body.z - b0.z) / dt if dt > 0.0 else 0.0
 	elif body != null:
-		var free := playing and not in_bed and not held_here
+		var free := (playing and not in_bed and not held_here) or crawling
 		var fw := clampf(float(inp.get("f", 0.0)), -1.0, 1.0) if free else 0.0
 		var rt := clampf(float(inp.get("r", 0.0)), -1.0, 1.0) if free else 0.0
 		var moving := fw != 0.0 or rt != 0.0
 		var cap := Instr.max_walk_speed(true, Stamina.WALK_SPEED) if want_raised else INF
-		gait = Stamina.gait_for(tank, inp.get("sprint") == true, inp.get("creep") == true, moving, cap)
+		gait = Stamina.gait_for(tank, inp.get("sprint") == true and not crawling, inp.get("creep") == true or crawling, moving, cap)
 		if moving:
 			var wl := M.hypot2(fw, rt)
 			var nf := fw / maxf(1.0, wl)
 			var nr := rt / maxf(1.0, wl)
 			var sp := Stamina.speed_for(&"sprint", cap) if gait == &"sprint" else minf(cap, Stamina.speed_for(gait))
+			if crawling:
+				sp = CRAWL_PACE
 			var sn := M.sin_js(in_yaw)
 			var cs := M.cos_js(in_yaw)
 			body = Session.move_local(plan, phase, body, (-sn * nf + cs * nr) * sp * dt, (-cs * nf - sn * nr) * sp * dt, PLAYER_RADIUS)
@@ -247,8 +264,8 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 				in_yaw = float(hide_cam["yaw"])
 				in_pitch = float(hide_cam["pitch"])
 	eye = _eye.update(BED_EYE if in_bed else want_eye, dt)
-	# F held (the bunk): only sent when the run has days, as the protocol says.
-	var use: bool = day != null and playing and inp.get("use") == true
+	# F held (the bunk; beside a downed crewmate, the heal): only sent when the run has days or downs.
+	var use: bool = (day != null or downs_on) and playing and inp.get("use") == true
 	var at_bunk := day != null and int(latest["depth"]) == 0 and body != null and Run.at_bunk(plan, body)
 	if not use or in_bed:
 		_bed_hold = 0.0
@@ -344,6 +361,9 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	snap["nearHide"] = near_hide
 	snap["nearHideKind"] = String(hides[near_hide].kind) if near_hide >= 0 and near_hide < hides.size() else ""
 	snap["hideCam"] = hide_cam
+	# Down first, then out (null in a run without it): the host's downs block, as client.gd downs() and
+	# spots() read it; its times are host times, counted against "hostNow" (client/down_view.gd).
+	snap["downs"] = latest.get("downs")
 	if plan_dict.has("_new"):
 		plan_dict.erase("_new")
 		snap["plan"] = plan_dict

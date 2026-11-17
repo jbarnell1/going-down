@@ -17,6 +17,9 @@
 #    the floor) is the same: `quota` true, false, or null to follow the game's deck. With the resident off
 #    (`entity_on` false) it is always off (net/host_rules.gd): nothing could ever be recorded. The
 #    scripted playthroughs start the game with `auto=1 quota=0` to turn it off (HostRules.quota_off_by_arg).
+#  - Down first, then out (sim/run.gd downs: a catch puts the player down for ten seconds, then out) is the
+#    same again: `downs` true, false, or null to follow the game's deck. Alone nobody can heal you: down,
+#    then out, then (with nobody left standing) the wipe.
 extends "res://net/room_client.gd"
 
 const Host = preload("res://net/host.gd")
@@ -40,6 +43,8 @@ var time_scale := 1.0
 var days: Variant = null
 ## The floor quota: true, false, or null to follow the game's deck (see the header).
 var quota: Variant = null
+## Down first, then out: true, false, or null to follow the game's deck (see the header).
+var downs: Variant = null
 ## Cost of the host's ticks on this machine (microseconds, summed), for the stats hook.
 var host_us := 0
 var _vt := 0.0
@@ -71,6 +76,12 @@ func quota_on() -> bool:
 		return false
 	return Session.deck == Places.FULL
 
+## Whether the next run has down first, then out.
+func downs_on() -> bool:
+	if downs != null:
+		return bool(downs)
+	return Session.deck == Places.FULL
+
 ## The room's clock: local seconds, scaled by time_scale.
 func room_time() -> float:
 	return _vt
@@ -81,7 +92,7 @@ func start_run() -> void:
 	run_seed = seed if runs == 0 else "%s-%d" % [seed, runs]
 	runs += 1
 	epoch += 1
-	rules = HostRules.new(entity_on, 1, Session.deck, days_on(), quota_on())
+	rules = HostRules.new(entity_on, 1, Session.deck, days_on(), quota_on(), downs_on())
 	# Method callables hold no reference to this object, so the pipes do not keep it alive.
 	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
 	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))

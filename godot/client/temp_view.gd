@@ -276,6 +276,20 @@ func _pose_figure(anim: String, t: float, dist: float) -> void:
 			sh_l = sh_l.lerp(Vector3(-0.05, 0, 0.18), e)
 			el_l = el_l.lerp(Vector3(-0.85, 0, 0), e)
 			top = lerpf(top, -0.55, e)
+		"bend":
+			# Bent over a downed player (sim/entity.gd "bending"): folded down over them, the stapler held
+			# out, the head working down and up on the pose's own clock.
+			var k := clampf(t / 0.8, 0.0, 1.0)
+			var e := k * k * (3.0 - 2.0 * k)
+			var chew := 0.5 - 0.5 * cos(t * TAU * 1.4)
+			spine.x += (0.95 + 0.06 * chew) * e
+			neck.x += (0.25 + 0.12 * chew) * e
+			head.x += (0.10 + 0.20 * chew) * e
+			head.z *= 1.0 - e
+			sh_r = sh_r.lerp(Vector3(-1.35, 0, -0.05), e)
+			el_r = el_r.lerp(Vector3(-0.40, 0, 0), e)
+			sh_l = sh_l.lerp(Vector3(-1.20, 0, 0.12), e)
+			el_l = el_l.lerp(Vector3(-0.50, 0, 0), e)
 		_:
 			# Idle: it squeezes the stapler as its clock passes each 4 s (when it clicks), looks down at
 			# it in between, breathes, and its head lolls a little.
