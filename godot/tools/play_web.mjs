@@ -22,7 +22,8 @@ const consoleLines = [];
 page.on('console', (m) => consoleLines.push(`${m.type()}: ${m.text()}`));
 page.on('pageerror', (e) => consoleLines.push(`pageerror: ${e.message}`));
 const t0 = Date.now();
-await page.goto(`http://127.0.0.1:${port}/index.html?auto=1${query}`);
+// quota=0 (with auto=1): no floor quota, so the playthrough's one reading is enough to call the lift.
+await page.goto(`http://127.0.0.1:${port}/index.html?auto=1&quota=0${query}`);
 await page.waitForFunction(() => window.gdReady === true, null, { timeout: 180000 });
 const firstFrameMs = await page.evaluate(() => window.gdFirstFrameMs);
 console.log(`first frame ${Math.round(firstFrameMs)} ms (page ${Date.now() - t0} ms)`);

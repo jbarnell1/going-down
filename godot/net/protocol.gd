@@ -102,6 +102,15 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    "lookDone" {hide, found}, "emptyHide" {hide}, "found" {playerId, cause, hide}, "taken" {playerId,
 ##    seat}, "down" {playerId}; and "called" gains "last": true (floorsAway 0) when the call starts the
 ##    last count.
+## The floor quota (sim/run.gd quota; North Star C9). New in the Godot game, and only ever sent when the
+## run has the quota on, so a run without it sends exactly what it did before:
+##  - the world gains an 18th element, the quota block (enc_quota / "quota" decoded), with the 16th and
+##    17th the day and seek blocks or null: [earned (whole credits recorded on this floor: every reading
+##    closed here, dropped tapes included), needed (this floor's quota, 0 at home)]. The call panel shows
+##    earned against needed; the call works once earned >= needed;
+##  - events "callRefused" {playerId, earned, needed} (the call button was pressed below the quota and
+##    did nothing) and "quotaMet" {depth, earned, needed, top} (once per floor, the tick it is met; top:
+##    the player who recorded the most on the floor).
 
 ## Limits on what a client may send (the server refuses anything outside them).
 const MAX_NAME := 32
@@ -242,7 +251,21 @@ static func enc_world(w: Dictionary) -> Array:
 		if out.size() == 15:
 			out.append(null)
 		out.append(enc_seek(w["seek"]))
+	if w.get("quota") != null:
+		while out.size() < 17:
+			out.append(null)
+		out.append(enc_quota(w["quota"]))
 	return out
+
+## The quota block (see the header) from its readable form {earned, needed}.
+static func enc_quota(q: Dictionary) -> Array:
+	return [q["earned"], q["needed"]]
+
+static func dec_quota(c: _V, w: Variant) -> Dictionary:
+	var a := _a(c, w, 2, 2)
+	if c.bad:
+		return {}
+	return {"earned": _i(c, a[0], 0, MAX_COUNT), "needed": _i(c, a[1], 0, MAX_COUNT)}
 
 ## The seek block (see the header) from its readable form {noise, counting, last, called, done, n, t0,
 ## len, by, why, ended, calmUntil, lastAt, players: [{id, hide, peek, phase, status, health, sight, gap,
@@ -433,7 +456,7 @@ static func _opt_num(c: _V, v: Variant) -> Variant:
 	return null if v == null else _f(c, v)
 
 static func dec_world(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 15, 17)
+	var a := _a(c, w, 15, 18)
 	if c.bad:
 		return {}
 	var blink: Variant = null
@@ -493,8 +516,10 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 	}
 	if a.size() > 15 and a[15] != null:
 		out["day"] = dec_day(c, a[15])
-	if a.size() > 16:
+	if a.size() > 16 and (a[16] != null or a.size() == 17):
 		out["seek"] = dec_seek(c, a[16])
+	if a.size() > 17:
+		out["quota"] = dec_quota(c, a[17])
 	return out
 
 static func _dec_report(c: _V, w: Variant) -> Dictionary:

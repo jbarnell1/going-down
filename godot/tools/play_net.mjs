@@ -106,7 +106,9 @@ async function drawFace(c, steps, shot = '') {
 }
 
 // ---- The server.
-const server = launch(['--headless', '--', 'server', `port=${port}`, 'bind=127.0.0.1', 'seed=alpha', 'stats=10'], { env: { GD_JOIN_SECRET: SECRET }, echo: 'server' });
+// quota=0: no floor quota (North Star C9), so the scripted call works without recording first; the quota
+// itself is proved headless in godot/tests/prop_quota_net.gd.
+const server = launch(['--headless', '--', 'server', `port=${port}`, 'bind=127.0.0.1', 'seed=alpha', 'stats=10', 'quota=0'], { env: { GD_JOIN_SECRET: SECRET }, echo: 'server' });
 await until(async () => server.lines.join('\n'), (t) => t.includes('listening on') || server.exited, 20000);
 if (!server.lines.join('\n').includes('listening on')) { console.log('the server did not start'); process.exit(1); }
 
