@@ -1,7 +1,7 @@
 {
   "about": "Every ElevenLabs request the game has made. Never edit by hand.",
   "cap": 50000,
-  "total": 22560,
+  "total": 23036,
   "entries": [
     {
       "id": "arrived_1",
@@ -3027,6 +3027,72 @@
       "time": "2026-11-17T10:23:35.019Z",
       "hash": "8aba76554b495bcf24f40f0a",
       "file": "assets_src/voice/takes/brian/count_1/take-2.mp3"
+    },
+    {
+      "id": "quota_1",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 65,
+      "billed": 29,
+      "time": "2026-11-17T12:54:45.390Z",
+      "hash": "631037d5508297a1632cc809",
+      "file": "assets_src/voice/takes/bella/quota_1/take-1.mp3"
+    },
+    {
+      "id": "quota_2",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 79,
+      "billed": 35,
+      "time": "2026-11-17T12:54:47.210Z",
+      "hash": "6a6cb665990044064a3e01bf",
+      "file": "assets_src/voice/takes/bella/quota_2/take-1.mp3"
+    },
+    {
+      "id": "quota_3",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 94,
+      "billed": 41,
+      "time": "2026-11-17T12:54:48.884Z",
+      "hash": "cc504114dbdda347e937b7d7",
+      "file": "assets_src/voice/takes/bella/quota_3/take-1.mp3"
+    },
+    {
+      "id": "quota_1",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 65,
+      "billed": 29,
+      "time": "2026-11-17T12:57:43.504Z",
+      "hash": "28ac958260c66ee6c7d5066b",
+      "file": "assets_src/voice/takes/brian/quota_1/take-1.mp3"
+    },
+    {
+      "id": "quota_2",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 79,
+      "billed": 35,
+      "time": "2026-11-17T12:57:45.253Z",
+      "hash": "e1d37d101ff5163594952596",
+      "file": "assets_src/voice/takes/brian/quota_2/take-1.mp3"
+    },
+    {
+      "id": "quota_3",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 94,
+      "billed": 41,
+      "time": "2026-11-17T12:57:47.390Z",
+      "hash": "d4c236baf3e6e8c89d8569a8",
+      "file": "assets_src/voice/takes/brian/quota_3/take-1.mp3"
     }
   ]
 }

@@ -22,6 +22,8 @@
 #    for it, so the call button does nothing until the crew has recorded enough on the floor. prepare()
 #    turns it on before the first tick, after any depth above 1, so it is that floor's quota. With the
 #    resident off nothing can ever be recorded, so the quota would lock the lift for good: it stays off.
+#    Test-only: `quota=N` with `auto=1` caps every floor's quota at N (quota_cap_by_arg), so a scripted
+#    playthrough (tools/play_quota.mjs) meets it with a reading or two.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -48,6 +50,8 @@ var deck: Array[StringName]
 var days: bool
 ## The floor quota (off unless asked; never with the resident off).
 var quota: bool
+## Test-only: every floor's quota is at most this (0: no cap). See quota_cap_by_arg.
+var _quota_cap := 0
 
 func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false) -> void:
 	_entity_on = entity_on
@@ -55,6 +59,7 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 	deck = Run.deck_of(deck_)
 	days = days_
 	quota = quota_
+	_quota_cap = quota_cap_by_arg() if quota_ else 0
 
 ## Where player `i` of `n` stands in the car at the start (car-local u, v).
 static func start_spot(i: int, n: int) -> PackedFloat64Array:
@@ -123,7 +128,34 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s.seek_off = true
 	if quota and _entity_on and not s.quota:
 		s = Run.with_quota(s)
-	return s
+	return _capped(s)
+
+## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web
+## page's ?quota=N), honoured only together with `auto=1`: every floor's quota is at most N credits, so a
+## scripted playthrough (tools/play_quota.mjs) can meet it with a reading or two. 0 when not asked.
+static func quota_cap_by_arg() -> int:
+	var cap := 0
+	var auto := false
+	for raw in OS.get_cmdline_user_args():
+		var a := raw.trim_prefix("--")
+		if a.begins_with("quota=") and a.substr(6).is_valid_int():
+			cap = int(a.substr(6))
+		auto = auto or a == "auto=1"
+	if OS.has_feature("web"):
+		var q := str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('quota') ?? ''", true))
+		var au := str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('auto') ?? ''", true))
+		if q.is_valid_int():
+			cap = int(q)
+		auto = auto or au == "1"
+	return cap if auto and cap > 0 else 0
+
+## The state with this floor's quota at most the test cap (unchanged without one).
+func _capped(s: Run.RunState) -> Run.RunState:
+	if _quota_cap <= 0 or not s.quota or s.floor_needed <= _quota_cap:
+		return s
+	var c := s.copy()
+	c.floor_needed = _quota_cap
+	return c
 
 ## Test-only: whether this process was started with the floor quota turned off, `quota=0` (a desktop or
 ## server argument after `--`, or the web page's ?quota=0). The scripted playthroughs (tools/play_*.mjs)
@@ -219,7 +251,7 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 				state.orderly = parked_orderly(state)
 				break
 	var out := Run.RunStep.new()
-	out.state = state
+	out.state = _capped(state)
 	out.events = events
 	return out
 

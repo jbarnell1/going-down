@@ -7,6 +7,8 @@
 # every line as a caption in the pixel font and plays its recording by id (client/count_lines.gd, T15i),
 # not through request() (that deals a random line of a moment). The lines go on their own player; the
 # numbers on another, each stopping the one before. Both are on the Voice bus, like this player.
+#
+# The floor quota met ("quotaMet", North Star C9): the moment "quota" (quota_1 to quota_3).
 class_name Announcer
 extends Node
 
@@ -16,6 +18,8 @@ const EXPIRE_MS := 4000
 const EXPIRE_LONG_MS := 9000
 const EXPIRE_BOARD_MS := 12000
 const GAP_MS := 450
+## The floor quota met, when no "quota" line is recorded.
+const QUOTA_CAPTION := "Quota met! The car may now be called."
 
 var voice := "bella"
 var lines := {}          # id -> {moment, plain}
@@ -110,6 +114,13 @@ func on_events(events: Array, first_depth := 1) -> void:
 			"caught":
 				if not wiped:
 					request("taken")
+			"quotaMet":
+				# The floor quota (North Star C9): the call button now works. Without a recording, a caption.
+				if by_moment.has("quota"):
+					request("quota", EXPIRE_LONG_MS)
+				else:
+					caption = QUOTA_CAPTION
+					caption_until = Time.get_ticks_msec() + EXPIRE_MS
 
 ## One of the count's lines: `line` is a key of CountLines.LINES ("hide", "search", "found", "done",
 ## "last_called"), or "number" with `number` the seconds left; `text` the caption. The recording plays

@@ -54,6 +54,9 @@
     "lights": {
       "priority": 4
     },
+    "quota": {
+      "priority": 3
+    },
     "count_last": {
       "priority": 4
     },
@@ -343,6 +346,21 @@
       "id": "lights_2",
       "moment": "lights",
       "plain": "Lights restored! Please make your way to the car. It is exactly where you left it."
+    },
+    {
+      "id": "quota_1",
+      "moment": "quota",
+      "plain": "Quota met! The call button is now at your service."
+    },
+    {
+      "id": "quota_2",
+      "moment": "quota",
+      "plain": "Quota met! Management is so proud of you. You may now call the car."
+    },
+    {
+      "id": "quota_3",
+      "moment": "quota",
+      "plain": "That is quota, everyone! Please call the car before anything else does."
     },
     {
       "id": "count_last_1",

@@ -66,7 +66,8 @@ await page.addInitScript(() => {
     return { peak, db: peak > 0 ? 20 * Math.log10(peak) : -Infinity, states, taps: taps.length, sampleStarts: window.__starts, contextsMade: window.__ctxMade };
   };
 });
-await page.goto(`http://127.0.0.1:${port}/index.html?auto=1${query}`);
+// quota=0 (with auto=1): no floor quota, so the call brings the car for the blinks and the blackout.
+await page.goto(`http://127.0.0.1:${port}/index.html?auto=1&quota=0${query}`);
 await page.waitForFunction(() => window.gdReady === true, null, { timeout: 180000 });
 const before = await page.evaluate(() => window.__peak());
 // A person's first gestures: a click on the picture, a key.
