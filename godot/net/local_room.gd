@@ -28,6 +28,8 @@
 #    too (net/client.gd draw_in_dark), on the same switch.
 #  - Lonely (sim/run.gd lonely, sim/lonely.gd: the Temp's own mechanic) is the same again: `lonely` true, false,
 #    or null to follow the game's deck. Alone you are always lonely, and it chases slower than you walk.
+#  - The tuned Playroom (sim/run.gd playroom_tuned, sim/seek.gd T15m: 30-45 s to hide, the anger bar, the
+#    grab at 1 m) is the same again: `playroom_tuned` true, false, or null to follow the game's deck.
 extends "res://net/room_client.gd"
 
 const Host = preload("res://net/host.gd")
@@ -59,6 +61,8 @@ var relocation: Variant = null
 var owner_0833: Variant = null
 ## Lonely: true, false, or null to follow the game's deck (see the header).
 var lonely: Variant = null
+## The Playroom tuned from the owner's first play (T15m): true, false, or null to follow the deck.
+var playroom_tuned: Variant = null
 ## Cost of the host's ticks on this machine (microseconds, summed), for the stats hook.
 var host_us := 0
 var _vt := 0.0
@@ -114,6 +118,12 @@ func owner_0833_on() -> bool:
 		return bool(owner_0833)
 	return Session.deck == Places.FULL
 
+## Whether the next run has the tuned Playroom (sim/run.gd playroom_tuned, sim/seek.gd T15m).
+func playroom_tuned_on() -> bool:
+	if playroom_tuned != null:
+		return bool(playroom_tuned)
+	return Session.deck == Places.FULL
+
 ## The room's clock: local seconds, scaled by time_scale.
 func room_time() -> float:
 	return _vt
@@ -127,7 +137,7 @@ func start_run() -> void:
 	var o := owner_0833_on()
 	# The day quota's lock goes with the floor quota (net/host_rules.gd turns it on only with days too).
 	var q := quota_on()
-	rules = HostRules.new(entity_on, 1, Session.deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), q)
+	rules = HostRules.new(entity_on, 1, Session.deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q)
 	# Method callables hold no reference to this object, so the pipes do not keep it alive.
 	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
 	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))

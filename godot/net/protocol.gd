@@ -43,7 +43,8 @@ const ANIMS: Array[String] = ["idle", "walk", "duck", "reach",
 	"bend"]
 const MODES: Array[String] = ["waiting", "hunting", "windUp", "dormant",
 	"wander", "cover", "search", "sweep", "look", "slump", "run", "catch",
-	"bending"]
+	"bending",
+	"grab", "drag"]
 ## The Playroom's per-player states (sim/seek.gd SeekPlayer), for the seek block.
 const SEEK_STATUSES: Array[String] = ["ok", "found", "taken", "down"]
 const SEEK_PHASES: Array[String] = ["out", "entering", "inside", "leaving"]
@@ -99,7 +100,9 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    of count after the 6 s), by (player id), why, counts ended, calm until (host time; nothing provokes
 ##    before), last at (host time a pending last count starts, or null), [[player id, hide id or -1,
 ##    flags (1 peeking, SEEK_PHASES index << 1, SEEK_STATUSES index << 3), health, sight total, gap
-##    total, party-table seat or -1], ...]]. Times are host times, never durations;
+##    total, party-table seat or -1], ...]] and, only with the tuned Playroom (sim/seek.gd T15m), two more:
+##    [..., anger (0 to 1, the HUD's bar), hide (the running count's seconds to hide)]. Times are host
+##    times, never durations;
 ##  - the Minder rides in the Orderly's place (pose, speed, mode) with its own pose and mode names
 ##    (ANIMS and MODES, appended);
 ##  - events, all at host time: "count" {n, t0, len, last, by, why} (why: sprint, squeaker, ballpit,
@@ -108,7 +111,9 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    "reason" {hide, why, playerId}, "sweep" {zone}, "draw" {zone, n, hide, k}, "look" {hide},
 ##    "lookDone" {hide, found}, "emptyHide" {hide}, "found" {playerId, cause, hide}, "taken" {playerId,
 ##    seat}, "down" {playerId}; and "called" gains "last": true (floorsAway 0) when the call starts the
-##    last count.
+##    last count. With the tuned Playroom (T15m): "count" gains "hide" (its seconds to hide), "found" may be
+##    cause "grab" (outside a count, within 1 m), the Minder's modes "grab" and "drag" (appended to MODES),
+##    and the hint events "playroomArrived" {depth} and "sprintDuringHunt" {playerId, n}.
 ## The floor quota (sim/run.gd quota; North Star C9). New in the Godot game, and only ever sent when the
 ## run has the quota on, so a run without it sends exactly what it did before:
 ##  - the world gains an 18th element, the quota block (enc_quota / "quota" decoded), with the 16th and
@@ -446,11 +451,16 @@ static func enc_seek(k: Dictionary) -> Array:
 	for p: Dictionary in k["players"]:
 		var pf := (1 if p["peek"] else 0) | (SEEK_PHASES.find(String(p["phase"])) << 1) | (SEEK_STATUSES.find(String(p["status"])) << 3)
 		players.append([p["id"], p["hide"], pf, q2(p["health"]), q3(p["sight"]), q3(p["gap"]), p["seat"]])
-	return [q2(k["noise"]), flags, k["n"], q3(k["t0"]), q3(k["len"]), k["by"], k["why"], k["ended"], q3(k["calmUntil"]),
+	var out := [q2(k["noise"]), flags, k["n"], q3(k["t0"]), q3(k["len"]), k["by"], k["why"], k["ended"], q3(k["calmUntil"]),
 		null if k["lastAt"] == null else q3(k["lastAt"]), players]
+	# T15m (sim/seek.gd tune): the anger bar and the running count's seconds to hide.
+	if k.has("anger"):
+		out.append(q3(k["anger"]))
+		out.append(q3(k["hide"]))
+	return out
 
 static func dec_seek(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 11, 11)
+	var a := _a(c, w, 11, 13)
 	if c.bad:
 		return {}
 	var f := _i(c, a[1], 0, 15)
@@ -463,9 +473,15 @@ static func dec_seek(c: _V, w: Variant) -> Dictionary:
 		players.append({"id": _s(c, p[0]), "hide": _i(c, p[1], -1, MAX_COUNT), "peek": (pf & 1) != 0, "phase": _code(c, SEEK_PHASES, (pf >> 1) & 3),
 			"status": _code(c, SEEK_STATUSES, (pf >> 3) & 3), "health": _f(c, p[3], 0.0, 100.0), "sight": _f(c, p[4], 0.0, MAX_CLOCK),
 			"gap": _f(c, p[5], 0.0, MAX_CLOCK), "seat": _i(c, p[6], -1, 64)})
-	return {"noise": _f(c, a[0], 0.0, 1.0), "counting": (f & 1) != 0, "last": (f & 2) != 0, "called": (f & 4) != 0, "done": (f & 8) != 0,
+	var out := {"noise": _f(c, a[0], 0.0, 1.0), "counting": (f & 1) != 0, "last": (f & 2) != 0, "called": (f & 4) != 0, "done": (f & 8) != 0,
 		"n": _i(c, a[2], 0, MAX_COUNT), "t0": _f(c, a[3]), "len": _f(c, a[4], 0.0, MAX_CLOCK), "by": _s(c, a[5]), "why": _s(c, a[6]),
 		"ended": _i(c, a[7], 0, MAX_COUNT), "calmUntil": _f(c, a[8]), "lastAt": _opt_num(c, a[9]), "players": players}
+	if a.size() == 13:
+		out["anger"] = _f(c, a[11], 0.0, 1.0)
+		out["hide"] = _f(c, a[12], 0.0, MAX_CLOCK)
+	elif a.size() != 11:
+		c.bad = true
+	return out
 
 ## The day block (see the header): {index, day, quota, streak, misses, inBed, countFrom, lightsOutAt,
 ## result, crew} as an array.

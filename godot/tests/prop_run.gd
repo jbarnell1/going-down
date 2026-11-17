@@ -875,13 +875,13 @@ func test_fd2_the_lock_is_on_only_when_asked(t: T) -> void:
 	t.check(not Run.create_run("lk", ids, [], true, true).day_lock, "a run made with days and the quota has no lock unless asked")
 	t.check(not Run.with_day_lock(Run.create_run("lk", ids)).day_lock, "no lock without days")
 	t.check(not HostRules.new(true, 1, [], true, true).prepare(Run.create_run("lk", ids)).day_lock, "host rules made as before add no lock")
-	var on := HostRules.new(true, 1, [], true, true, false, false, false, false, false, false, false, true).prepare(Run.create_run("lk", ids))
+	var on := HostRules.new(true, 1, [], true, true, false, false, false, false, false, false, false, false, true).prepare(Run.create_run("lk", ids))
 	t.check(on.day_lock and on.day_earned == 0.0 and not on.day_met, "host rules asked for the lock turn it on, nothing earned")
-	t.check(not HostRules.new(false, 1, [], true, true, false, false, false, false, false, false, false, true).prepare(Run.create_run("lk", ids)).day_lock,
+	t.check(not HostRules.new(false, 1, [], true, true, false, false, false, false, false, false, false, false, true).prepare(Run.create_run("lk", ids)).day_lock,
 		"with the resident off (nothing can be recorded) the lock stays off")
-	t.check(not HostRules.new(true, 1, [], true, false, false, false, false, false, false, false, false, true).prepare(Run.create_run("lk", ids)).day_lock,
+	t.check(not HostRules.new(true, 1, [], true, false, false, false, false, false, false, false, false, false, true).prepare(Run.create_run("lk", ids)).day_lock,
 		"without the floor quota (the test switch quota=0) the lock stays off")
-	t.check(not HostRules.new(true, 1, [], false, true, false, false, false, false, false, false, false, true).prepare(Run.create_run("lk", ids)).day_lock,
+	t.check(not HostRules.new(true, 1, [], false, true, false, false, false, false, false, false, false, false, true).prepare(Run.create_run("lk", ids)).day_lock,
 		"without days the lock stays off")
 
 func test_fd2_the_day_lock_over_bot_days(t: T) -> void:

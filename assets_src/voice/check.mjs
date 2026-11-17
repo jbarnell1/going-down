@@ -46,6 +46,9 @@ const fails = [];
 const ids = new Set();
 const slug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const ship = (cfg.voices.ship ?? []).map(slug);
+/** A group may name the voices its lines are read in (lines.json groups.<g>.voices: the tape is Bella's only). */
+const voicesOf = (line) => line.voices ?? cfg.groups?.[line.group]?.voices ?? null;
+const readBy = (line, voice) => !voicesOf(line) || voicesOf(line).map(slug).includes(voice);
 if (ship.length === 0) fails.push('lines.json ships no voices (voices.ship)');
 if (JSON.stringify((manifest.voices ?? []).map((v) => v.id)) !== JSON.stringify(ship)) fails.push(`manifest.json voices ${JSON.stringify((manifest.voices ?? []).map((v) => v.id))} do not match voices.ship (run --publish)`);
 if (!ship.includes(manifest.default)) fails.push(`manifest.json default voice ${manifest.default} is not shipped`);
@@ -56,6 +59,7 @@ for (const line of cfg.lines) {
   if (!manifest.lines.some((l) => l.id === line.id && l.plain === line.plain)) fails.push(`${line.id}: missing or stale in manifest.json (run --publish)`);
 }
 for (const voice of ship) for (const line of cfg.lines) {
+  if (!readBy(line, voice)) continue;
   const name = `${voice}/${line.id}`;
   const file = path.join(PUBLIC, voice, `${line.id}.mp3`);
   if (!existsSync(file)) {
@@ -85,6 +89,7 @@ let godotFiles = 0;
 for (const voice of ship) {
   if (!existsSync(path.join(GODOT, voice))) continue;
   for (const line of cfg.lines) {
+    if (!readBy(line, voice)) continue;
     const g = path.join(GODOT, voice, `${line.id}.mp3`);
     const p = path.join(PUBLIC, voice, `${line.id}.mp3`);
     if (!existsSync(g)) fails.push(`godot/assets/voice/${voice}/${line.id}.mp3 is missing (run --publish)`);
@@ -95,6 +100,11 @@ for (const voice of ship) {
 console.log(`godot copy: manifest and ${godotFiles} files match`);
 const sum = ledger.entries.reduce((n, e) => n + e.characters, 0);
 if (sum !== ledger.total) fails.push(`ledger total ${ledger.total} does not match its entries (${sum})`);
+// A line whose group names its voices is never paid for in another (the tape: Bella only).
+for (const e of ledger.entries) {
+  const line = cfg.lines.find((l) => l.id === e.id);
+  if (line && !readBy(line, slug(e.voice))) fails.push(`ledger: ${e.id} was recorded in ${e.voice}, which its group does not read it in`);
+}
 if (ledger.total > CAP) fails.push(`ledger ${ledger.total} is over the cap ${CAP}`);
 console.log(`ledger: ${ledger.total} of ${CAP} characters`);
 

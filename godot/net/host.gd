@@ -769,6 +769,12 @@ func _step(now: float) -> void:
 				_pending_catch = null
 		elif ty == "windUpCancelled" and _pending_catch != null and _pending_catch["victim"] == e["playerId"]:
 			_pending_catch = null
+	# The tuned Playroom (sim/seek.gd T15m): a grabbed player being dragged to the party table is placed where
+	# the rules hold them every tick, so their own screen goes along with it.
+	if st.seek != null and (st.seek as Seek.SeekState).tuned and (st.seek as Seek.SeekState).minder.mode == &"drag":
+		var dp := _find_run_player(st, (st.seek as Seek.SeekState).minder.victim)
+		if dp != null:
+			_place(dp.id, dp.body, st.depth, st)
 	if st.orderly.mode != &"windUp":
 		_pending_catch = null
 	var gone := {}
@@ -1170,9 +1176,14 @@ static func seek_block(s: Run.RunState) -> Variant:
 	for sp in ss.players:
 		players.append({"id": sp.id, "hide": sp.hide, "peek": sp.peeking, "phase": String(sp.phase), "status": String(sp.status),
 			"health": sp.health, "sight": sp.sight, "gap": sp.gap, "seat": sp.seat})
-	return {"noise": ss.noise, "counting": ss.counting, "last": ss.last, "called": ss.called, "done": ss.done, "n": ss.counts,
+	var k := {"noise": ss.noise, "counting": ss.counting, "last": ss.last, "called": ss.called, "done": ss.done, "n": ss.counts,
 		"t0": ss.t0, "len": ss.len, "by": ss.by, "why": String(ss.why), "ended": ss.ended, "calmUntil": ss.calm_until,
 		"lastAt": ss.last_at, "players": players}
+	# T15m (sim/seek.gd tune): the anger bar and the count's seconds to hide, the host's own numbers.
+	if ss.tuned:
+		k["anger"] = ss.anger
+		k["hide"] = ss.hide_len
+	return k
 
 ## Hiding off the Playroom (sim/hiding.gd, T19b) in the seek block's shape (Protocol.enc_seek, no new
 ## field): each player's hide, peek and phase, everyone "ok"; no count, nothing found, no health. Sent from

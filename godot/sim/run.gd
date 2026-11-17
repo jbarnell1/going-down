@@ -237,6 +237,19 @@
 #    Day.end_day leave them out), and they wake on their bunk in the prison when the crew gets home (or after
 #    a wipe), as everyone does.
 #
+# The Playroom tuned from the owner's first play (T15m, `playroom_tuned`, with_playroom_tuned: net/host_rules.gd
+# turns it on for the game's rooms; tests and every stored result leave it off, and then nothing below happens).
+# The run only hands it to sim/seek.gd (Seek.tune on the floor's seek state); the rules are seek.gd's "T15m"
+# section: 30-45 s to hide, then a 30 s search; an anger bar the provocations fill, a count when it is full; the
+# Minder grabs anyone within 1 m outside a count and drags them to the party table; and the hint events
+# ("playroomArrived", "sprintDuringHunt") for the announcer.
+# Live settings (docs/floors/live-settings.md, sim/settings.gd): `tuning` is null unless the host's desk put one
+# there (with_tuning). The rules read the host's numbers through Settings.f with today's constant as the
+# fallback, so a run without one computes exactly as before. Read so far (LS1): the Stillness residents' hunt
+# speeds, lit and in the blackout, by body (_tuned_hunt); the call's fewest and most floors and seconds a floor
+# (call_plan, stamped in the plan at the call); the down timer (stamped in Downed.until); the Minder's search
+# and run speeds (sim/seek.gd).
+#
 # Events are Dictionaries with the TypeScript shapes (see RunEvent in run.ts), carrying Move.Body,
 # TapeLib.Reading and RunSummary objects where TypeScript carries those objects.
 extends RefCounted
@@ -261,6 +274,7 @@ const Walls = preload("res://sim/walls.gd")
 const Relocate = preload("res://sim/relocate.gd")
 const Stamina = preload("res://sim/stamina.gd")
 const Lonely = preload("res://sim/lonely.gd")
+const Settings = preload("res://sim/settings.gd")
 
 # ---------------------------------------------------------------------------------------------
 # Tuning.
@@ -538,22 +552,29 @@ class CallPlan:
 	var extra: float
 	## Total seconds from the call to the car arriving.
 	var wait: float
+	## Seconds each floor on the indicator takes, stamped at the call (FLOOR_TIME, or the host's
+	## lift.floor_time then: live settings, sim/settings.gd). The indicator steps by it till the car is here.
+	var floor_time: float = FLOOR_TIME
 	## The dark stretches of this wait, in order; the last is the blackout.
 	var darks: Array[DarkStretch] = []
 
 ## The schedule of the `index`-th call of a run (0-based) at `depth`. Never starts from `prev_floors`
-## floors away (pass -1 for none: TypeScript null).
-static func call_plan(seed: String, index: int, prev_floors: int, depth: int = 1, long_dark: bool = false) -> CallPlan:
+## floors away (pass -1 for none: TypeScript null). `tuning` (live settings, sim/settings.gd; null: none):
+## the host's fewest and most floors and seconds a floor, stamped into the plan; the same draws either way.
+static func call_plan(seed: String, index: int, prev_floors: int, depth: int = 1, long_dark: bool = false, tuning: Settings.Values = null) -> CallPlan:
 	var rng := Rng.make_rng(seed).fork("call:%d" % index)
 	var p := CallPlan.new()
 	p.delay = CALL_START_DELAY_MIN + rng.next() * (CALL_START_DELAY_MAX - CALL_START_DELAY_MIN)
-	var floors := rng.int_in(CALL_FLOORS_MIN, CALL_FLOORS_MAX)
+	var fewest := Settings.i(tuning, &"lift.floors_min", CALL_FLOORS_MIN)
+	var most := Settings.i(tuning, &"lift.floors_max", CALL_FLOORS_MAX)
+	var floors := rng.int_in(fewest, most)
 	if floors == prev_floors:
-		floors = CALL_FLOORS_MIN if floors == CALL_FLOORS_MAX else floors + 1
+		floors = fewest if floors == most else floors + 1
 	p.floors = floors
 	p.false_stop = rng.chance(FALSE_STOP_CHANCE)
 	p.extra = FALSE_STOP_EXTRA_MIN + rng.next() * (FALSE_STOP_EXTRA_MAX - FALSE_STOP_EXTRA_MIN) if p.false_stop else 0.0
-	p.wait = p.delay + floors * FLOOR_TIME + p.extra
+	p.floor_time = Settings.f(tuning, &"lift.floor_time", FLOOR_TIME)
+	p.wait = p.delay + floors * p.floor_time + p.extra
 	p.darks = dark_schedule(seed, index, p.wait, depth, long_dark)
 	return p
 
@@ -897,13 +918,23 @@ class RunState:
 	var day_earned: float = 0.0
 	## "dayMet" has been said today.
 	var day_met: bool = false
+	## The Playroom tuned from the owner's first play (T15m, with_playroom_tuned; sim/seek.gd "T15m"). Off: the
+	## Playroom's rules are exactly as every stored result has them.
+	var playroom_tuned: bool = false
+
+	## Live settings (sim/settings.gd): the host's numbers in force in this run, or null for none (every test
+	## and stored result). The rules read it with Settings.f, falling back to today's constant. Replaced,
+	## never edited (with_tuning).
+	var tuning: Settings.Values = null
 
 	func copy() -> RunState:
 		var s := RunState.new()
+		s.tuning = tuning
 		s.lonely = lonely
 		s.day_lock = day_lock
 		s.day_earned = day_earned
 		s.day_met = day_met
+		s.playroom_tuned = playroom_tuned
 		s.two_watchers = two_watchers
 		s.relocation = relocation
 		s.seed = seed
@@ -1213,6 +1244,30 @@ static func day_preview(s: RunState) -> Variant:
 	var aboard := day_aboard(s)
 	var earned := floori(s.day_earned) if s.day_lock else aboard
 	return Day.bank_preview(s.day_state, aboard, earned, day_crew(s), s.wallets, DAY_FLOOR_QUOTA)
+## Turns the tuned Playroom on (T15m, see the header): every Playroom from now on (and one already reached)
+## has the long hiding time, the anger bar, the grab at 1 m and the hint events (sim/seek.gd "T15m").
+static func with_playroom_tuned(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.playroom_tuned = true
+	if s.seek != null:
+		s.seek = Seek.tune(s.seek as Seek.SeekState)
+	return s
+
+## The run with this tuning in force (live settings, sim/settings.gd): `given` is {id: number}, checked by
+## the caller with Settings.check. An empty set reads exactly like none.
+static func with_tuning(s0: RunState, given: Dictionary) -> RunState:
+	var s := s0.copy()
+	s.tuning = Settings.make(given)
+	return s
+
+## The hunting speed of this floor's Stillness resident, by its body (live settings: orderly.* or temp.*),
+## or `fallback`, today's, when the host has not set it.
+static func _tuned_hunt(s: RunState, dark: bool, fallback: float) -> float:
+	if s.tuning == null:
+		return fallback
+	if Entity.kind_of(s.orderly).name == &"temp":
+		return Settings.f(s.tuning, &"temp.dark_speed" if dark else &"temp.speed", fallback)
+	return Settings.f(s.tuning, &"orderly.dark_speed" if dark else &"orderly.speed", fallback)
 
 ## Seconds of sprinting a player's tank holds in this run (Stamina.Stamina.tank): more when paced.
 static func sprint_seconds(s: RunState) -> float:
@@ -1530,6 +1585,8 @@ static func _sync_seek(s: RunState) -> void:
 		ids.append(p.id)
 	s.seek = Seek.create_seek(s.plan, ids)
 	(s.seek as Seek.SeekState).t = s.t
+	if s.playroom_tuned:
+		s.seek = Seek.tune(s.seek as Seek.SeekState)
 	s.seek_drops = []
 	s.seek_call_at = -1.0
 
@@ -1582,7 +1639,7 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 	# The seek runs on the run's own clock: every time in its events and state is host time.
 	var base := ss.copy()
 	base.t = t_prev
-	var r := Seek.step_seek(base, inputs, dt, fl)
+	var r := Seek.step_seek(base, inputs, dt, fl, s.tuning)
 	var ns := r.state
 	s.seek = ns
 	events.append_array(r.events)
@@ -2075,7 +2132,7 @@ static func _go_down(s: RunState, players: Array[RunPlayer], k: int, t: float, b
 	var d := Downed.new()
 	d.id = np.id
 	d.at = t
-	d.until = t + DOWN_TIME
+	d.until = t + Settings.f(s.tuning, &"down.time", DOWN_TIME)
 	d.by = by
 	var down := s.down.duplicate()
 	down[np.id] = d
@@ -2315,7 +2372,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				events.append({"type": "called", "t": t, "playerId": caller.id, "floorsAway": 0, "at": caller.body, "last": true})
 			elif caller != null:
 				var index := s.calls
-				var plan := call_plan(s.seed, index, s.last_floors, s.depth, s.long_dark)
+				var plan := call_plan(s.seed, index, s.last_floors, s.depth, s.long_dark, s.tuning)
 				s.calls = index + 1
 				s.last_floors = plan.floors
 				var c := CallState.new()
@@ -2323,7 +2380,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				c.at = t
 				c.plan = plan
 				c.floors_away = plan.floors
-				c.next_at = t + plan.delay + FLOOR_TIME
+				c.next_at = t + plan.delay + plan.floor_time
 				s.call = c
 				s.phase = &"coming"
 				s.lure = true
@@ -2355,7 +2412,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 						if t < stop - EPS:
 							break
 						c = c.copy()
-						c.next_at = stop + FLOOR_TIME
+						c.next_at = stop + c.plan.floor_time
 						c.stop_until = null
 						continue
 					if t < c.next_at - EPS:
@@ -2370,7 +2427,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 						continue
 					c = c.copy()
 					c.floors_away = floors_away
-					c.next_at = c.next_at + FLOOR_TIME
+					c.next_at = c.next_at + c.plan.floor_time
 					if floors_away <= 0:
 						break
 				s.call = c
@@ -2598,12 +2655,13 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		var er: Entity.StepResult
 		var need := Entity.watch_need(stillness_up_count(players, input_of)) if s.two_watchers else 1
 		# Paced (see the header): both Stillness residents hunt at HUNT_SPEED, so both at the paced speeds.
+		# Live settings: the host's speeds for this body (_tuned_hunt), else these.
 		if blacked_out(s):
-			er = Entity.step_entity(s.plan, before, views, dt, PACED_BLACKOUT_HUNT_SPEED if s.paced else BLACKOUT_HUNT_SPEED, false, need)
+			er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, true, PACED_BLACKOUT_HUNT_SPEED if s.paced else BLACKOUT_HUNT_SPEED), false, need)
 		elif s.paced:
-			er = Entity.step_entity(s.plan, before, views, dt, PACED_HUNT_SPEED, true, need)
+			er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, false, PACED_HUNT_SPEED), true, need)
 		else:
-			er = Entity.step_entity(s.plan, before, views, dt, -1.0, true, need)
+			er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, false, -1.0), true, need)
 		var next := er.state
 		# Belt and braces: it can never end a tick in (or overlapping) the car.
 		if rect_distance(car.rect, next.body.x, next.body.z) < Entity.ORDERLY_RADIUS - 1e-3 and next.body.level == car.level:

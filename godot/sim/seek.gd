@@ -28,6 +28,21 @@
 # Health (from the end of the first count, outside counts and their 6 s, until the ride): walking
 # drains 3/s, sprinting 8/s; standing, creeping or being in a hide restores 1/s; 0 is down.
 #
+# T15m, the owner's first play (on only for a state made with tune(): sim/run.gd playroom_tuned, which the
+# game's rooms turn on; every stored result has it off, and then none of this happens). See the "T15m"
+# section at the end for the rules and their numbers:
+#   - the time to hide is TUNED_HIDE_LENGTHS (30, 35, 40, 45 s, 45 after that; the last count TUNED_LAST_HIDE),
+#     and every search after it lasts TUNED_SEARCH; the count event carries "hide" (its hiding seconds);
+#   - anger (0 to 1, the HUD's bar): each provocation adds to it (ANGER_RATES a second while it lasts,
+#     ANGER_LUMPS once), it cools by ANGER_COOL a second while nobody provokes, and a count starts the tick
+#     it is full ("by" and "why" are the provocation that filled it). Full through a count, draining to
+#     empty over the CALM_TIME after it;
+#   - outside a count, anyone out of a hide within GRAB_RANGE of the Minder is grabbed ("found" cause
+#     "grab"): it holds them GRAB_TIME, then drags them to the party table at DRAG_SPEED, where they are
+#     "taken". A count starting meanwhile seats them at once;
+#   - hint events for the announcer: "playroomArrived" (the first tick on the floor) and "sprintDuringHunt"
+#     (a player starts sprinting while it searches).
+#
 # Units: Move.Body metres; hides from playroom.gd are whole centimetres. Maths through jsmath.gd.
 # State is treated as immutable: step_seek copies and never edits what it was given.
 extends RefCounted
@@ -39,6 +54,7 @@ const Sight = preload("res://sim/sight.gd")
 const Rng = preload("res://sim/rng.gd")
 const Playroom = preload("res://sim/playroom.gd")
 const M = preload("res://sim/jsmath.gd")
+const Settings = preload("res://sim/settings.gd")
 
 # ---------------------------------------------------------------------------------------------
 # Tuning (playarea.md).
@@ -316,6 +332,7 @@ class MinderState:
 	## Facing, radians, three.js style (0 faces -z): the way its drawn face points.
 	var yaw: float = 0.0
 	## &"wander" | &"cover" (the 6 s) | &"search" | &"sweep" | &"look" | &"slump" | &"run" | &"catch"
+	## (T15m, outside a count: &"grab" holding a grabbed player, &"drag" taking them to the party table)
 	var mode: StringName = &"wander"
 	## The pose: &"stand" | &"walk" | &"straighten" | &"cover" | &"prowl" | &"sweep" | &"look" | &"slump" | &"run" | &"catch"
 	var anim: StringName = &"stand"
@@ -400,9 +417,29 @@ class SeekState:
 	var visits: Dictionary = {}
 	## The crew's loudest noise this tick, 0 to 1 (the instrument's needle outside a count).
 	var noise: float = 0.0
+	## T15m (tune(); see the section at the end). Off: hide_len stays HIDE_TIME and the rest is never read.
+	var tuned: bool = false
+	## The running (or last) count's seconds to hide.
+	var hide_len: float = HIDE_TIME
+	## How angry it is, 0 to 1: the HUD's bar.
+	var anger: float = 0.0
+	## "playroomArrived" has been said.
+	var arrived: bool = false
+	## player id -> true: sprinting on the last tick of a search (for "sprintDuringHunt").
+	var sprinting: Dictionary = {}
+	## The grabbed player being dragged to the party table: the seat it drags them to, and the drag's start.
+	var drag_seat: int = -1
+	var drag_t0: float = 0.0
 
 	func copy() -> SeekState:
 		var s := SeekState.new()
+		s.tuned = tuned
+		s.hide_len = hide_len
+		s.anger = anger
+		s.arrived = arrived
+		s.sprinting = sprinting
+		s.drag_seat = drag_seat
+		s.drag_t0 = drag_t0
 		s.t = t
 		s.floor = floor
 		s.minder = minder
@@ -440,8 +477,11 @@ class SeekStep:
 #   {type: "reason", t, hide, why, playerId}           why: "seen" | "flap" | "tick" | "horn"
 #   {type: "sweep", t, zone}  {type: "draw", t, zone, n, hide, k}   (hide -1 when the zone has none)
 #   {type: "look", t, hide}   {type: "lookDone", t, hide, found}    {type: "emptyHide", t, hide}
-#   {type: "found", t, playerId, cause, hide}          cause: "look" | "touch" | "sight" | "gap"
+#   {type: "found", t, playerId, cause, hide}          cause: "look" | "touch" | "sight" | "gap" (T15m: "grab")
 #   {type: "taken", t, playerId, seat}                 {type: "down", t, playerId}
+# T15m only: "count" gains "hide" (its seconds to hide); {type: "playroomArrived", t, depth} on the first
+# tick on the floor; {type: "sprintDuringHunt", t, playerId, n} the tick a player starts sprinting while it
+# searches.
 
 # ---------------------------------------------------------------------------------------------
 # Small helpers.
@@ -480,7 +520,7 @@ static func hide_front_body(plan: Floor.FloorPlan, h: Playroom.Hide) -> Move.Bod
 static func phase_of(s: SeekState) -> StringName:
 	if not s.counting:
 		return &"none"
-	return &"hide" if s.t < s.t0 + HIDE_TIME - EPS else &"seek"
+	return &"hide" if s.t < s.t0 + s.hide_len - EPS else &"seek"
 
 static func player_of(s: SeekState, id: String) -> SeekPlayer:
 	for p in s.players:
@@ -492,7 +532,10 @@ static func player_of(s: SeekState, id: String) -> SeekPlayer:
 static func count_event(s: SeekState) -> Dictionary:
 	if not s.counting:
 		return {}
-	return {"type": "count", "t": s.t0, "n": s.counts, "t0": s.t0, "len": s.len, "last": s.last, "by": s.by, "why": String(s.why)}
+	var e := {"type": "count", "t": s.t0, "n": s.counts, "t0": s.t0, "len": s.len, "last": s.last, "by": s.by, "why": String(s.why)}
+	if s.tuned:
+		e["hide"] = s.hide_len
+	return e
 
 ## The cosine of the angle between its facing and the way to (x, z); 1 when on top of it.
 static func _facing_cos(m_body: Move.Body, yaw: float, x: float, z: float) -> float:
@@ -598,7 +641,8 @@ static func create_seek(plan: Floor.FloorPlan, player_ids: Array[String], floor_
 # ---------------------------------------------------------------------------------------------
 # The step.
 
-static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: FloorInput = null) -> SeekStep:
+## `tuning`: live settings (sim/settings.gd; null: none), the host's search and run speeds.
+static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: FloorInput = null, tuning: Settings.Values = null) -> SeekStep:
 	if fl == null:
 		fl = FloorInput.new()
 	var s := prev.copy()
@@ -626,7 +670,7 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 			s.players.append(np)
 
 	# 1. The count clock.
-	if s.counting and t >= s.t0 + HIDE_TIME + s.len - EPS:
+	if s.counting and t >= s.t0 + s.hide_len + s.len - EPS:
 		_end_count(s, t, events)
 	if not s.counting and not s.done and s.last_at != null and t >= float(s.last_at) - EPS:
 		s.last_at = null
@@ -636,14 +680,14 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 		s.called = true
 		s.call_by = fl.call_by
 		if s.counting:
-			s.last_at = s.t0 + HIDE_TIME + s.len + LAST_AFTER
+			s.last_at = s.t0 + s.hide_len + s.len + LAST_AFTER
 		else:
 			_start_count(s, t, fl.call_by, WHY_CALL, true, events)
 	var phase := phase_of(s)
 	var seeking := phase == &"seek"
 
 	# 3. Players: moving, hides in and out, noises.
-	var noisy := {}  # player id -> first provocation this tick
+	var noisy := {}  # player id -> this tick's provocations, in order (Array[StringName])
 	var moved_of := {}
 	var level := 0.0
 	for p in s.players:
@@ -740,11 +784,13 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 		level = NOISE_FULL
 	s.noise = level
 
-	# 4. Provocations: one tick of any starts a count.
-	if _may_provoke(s, t, fl) and not noisy.is_empty():
+	# 4. Provocations: one tick of any starts a count (T15m: they fill the anger bar, and a full bar does).
+	if s.tuned:
+		_tuned_provoke(s, t, dt, noisy, moved_of, input_of, fl, events)
+	elif _may_provoke(s, t, fl) and not noisy.is_empty():
 		for p in s.players:
 			if noisy.has(p.id):
-				_start_count(s, t, p.id, noisy[p.id], false, events)
+				_start_count(s, t, p.id, noisy[p.id][0], false, events)
 				break
 	phase = phase_of(s)
 	seeking = phase == &"seek"
@@ -767,13 +813,18 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 		m.mode = &"cover"
 		m.anim = &"cover"
 	elif seeking:
-		_seek_step(s, m, input_of, dt, events)
+		_seek_step(s, m, input_of, dt, events, tuning)
+	elif s.tuned and (m.mode == &"grab" or m.mode == &"drag"):
+		_drag_step(s, m, t, dt, events)
 	else:
 		_wander_step(s, m, dt)
 	m.speed = M.hypot2(m.body.x - before.x, m.body.z - before.z) / maxf(dt, EPS)
 	m.moving = m.speed > 1e-9
 	if phase != &"hide":
 		m.anim_time += dt
+	# T15m: outside a count it grabs anyone who comes within GRAB_RANGE.
+	if s.tuned and phase == &"none" and not fl.riding:
+		_tuned_grab(s, m, input_of, t, events)
 
 	# 6. Found.
 	if seeking:
@@ -824,7 +875,8 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 
 static func _note(noisy: Dictionary, id: String, why: StringName) -> void:
 	if not noisy.has(id):
-		noisy[id] = why
+		noisy[id] = [] as Array[StringName]
+	(noisy[id] as Array[StringName]).append(why)
 
 static func _may_provoke(s: SeekState, t: float, fl: FloorInput) -> bool:
 	return not s.counting and not s.called and not s.done and not fl.riding and not fl.boarding \
@@ -835,6 +887,8 @@ static func _start_count(s: SeekState, t: float, by: String, why: StringName, la
 	s.counting = true
 	s.t0 = t
 	s.len = LAST_LENGTH if last else COUNT_LENGTHS[mini(s.counts - 1, COUNT_LENGTHS.size() - 1)]
+	if s.tuned:
+		_tuned_count(s, t, last, events)
 	s.last = last
 	s.by = by
 	s.why = why
@@ -858,7 +912,10 @@ static func _start_count(s: SeekState, t: float, by: String, why: StringName, la
 	m.look_hide = -1
 	m.victim = ""
 	m.stuck = 0.0
-	events.append({"type": "count", "t": t, "n": s.counts, "t0": t, "len": s.len, "last": last, "by": by, "why": String(why)})
+	var ev := {"type": "count", "t": t, "n": s.counts, "t0": t, "len": s.len, "last": last, "by": by, "why": String(why)}
+	if s.tuned:
+		ev["hide"] = s.hide_len
+	events.append(ev)
 
 static func _end_count(s: SeekState, t: float, events: Array[Dictionary]) -> void:
 	# Anyone found before the count ends is taken, caught or not.
@@ -1030,7 +1087,7 @@ static func _wander_step(s: SeekState, m: MinderState, dt: float) -> void:
 		m.goal_kind = &""
 
 ## During a count, after the 6 s.
-static func _seek_step(s: SeekState, m: MinderState, input_of: Dictionary, dt: float, events: Array[Dictionary]) -> void:
+static func _seek_step(s: SeekState, m: MinderState, input_of: Dictionary, dt: float, events: Array[Dictionary], tuning: Settings.Values = null) -> void:
 	var plan := s.floor.plan
 	var t := s.t
 	if m.mode == &"cover" or m.mode == &"wander":
@@ -1095,7 +1152,7 @@ static func _seek_step(s: SeekState, m: MinderState, input_of: Dictionary, dt: f
 		m.anim = &"run"
 		var target := hide_front_body(plan, s.floor.hide_by_id[victim.hide]) if victim.phase != &"out" else victim.body
 		_goal_body(plan, m, &"victim", 0, target)
-		var r := _walk(plan, m, RUN_SPEED, dt, true)
+		var r := _walk(plan, m, Settings.f(tuning, &"minder.run_speed", RUN_SPEED), dt, true)
 		if r != 0 or M.hypot2(target.x - m.body.x, target.z - m.body.z) <= TOUCH_RANGE:
 			m.mode = &"catch"
 			m.timer = CATCH_TIME
@@ -1106,7 +1163,7 @@ static func _seek_step(s: SeekState, m: MinderState, input_of: Dictionary, dt: f
 	if m.replan_in <= EPS or m.goal_kind == &"" or m.goal_cell == null:
 		_choose(s, m, input_of)
 	var face := m.goal_kind == &"player"
-	var r2 := _walk(plan, m, SEARCH_SPEED, dt, face)
+	var r2 := _walk(plan, m, Settings.f(tuning, &"minder.search_speed", SEARCH_SPEED), dt, face)
 	if r2 == 0:
 		return
 	match m.goal_kind:
@@ -1266,3 +1323,181 @@ static func _choose(s: SeekState, m: MinderState, input_of: Dictionary) -> void:
 static func _hunted(p: SeekPlayer, input_of: Dictionary) -> bool:
 	var inp: SeekInput = input_of.get(p.id, null)
 	return p.status == &"ok" and inp != null and inp.active and p.body != null
+
+# ---------------------------------------------------------------------------------------------
+# T15m: the Playroom tuned from the owner's first play (see the header). Everything below is read only
+# for a state made with tune(); a state without it is stepped exactly as every stored result has it.
+# Owner, 17 Nov: "You need more time to hide ... 30-45 seconds"; "a bar that fills up to show how angry
+# the monster is"; "Minder kinda just wanders, unless you get too close, within a meter, where it grabs
+# and drags you to the party table. Once it's aggro'd, that's when it hunts actively for players."
+
+## Seconds to hide, by the count's number on the floor (45 after that), and for the last count; then the
+## search, the same for every count.
+const TUNED_HIDE_LENGTHS: Array[float] = [30.0, 35.0, 40.0, 45.0]
+const TUNED_LAST_HIDE := 30.0
+const TUNED_SEARCH := 30.0
+## Anger, 0 to 1. A provocation that lasts adds its rate a second for as long as it lasts (two seconds of
+## sprinting fill an empty bar; a walk across a squeaky tile, about a third); one that happens once adds
+## its lump (three of them fill it). Nobody provoking, it cools by ANGER_COOL a second (full to empty in
+## 50 s). The bar is full through a count and drains to empty over the CALM_TIME after it.
+const ANGER_RATES := {&"sprint": 0.5, &"squeaker": 0.5, &"bump": 1.0, &"light": 0.5, &"voice": 0.5}
+const ANGER_LUMPS := {&"ballpit": 0.34, &"flap": 0.34, &"tape": 0.34, &"emote": 0.34}
+const ANGER_COOL := 0.02
+## Outside a count: within this of it (out of a hide, same level) it grabs you; holds you this long
+## (its mask in your face), then drags you to the party table at DRAG_SPEED, DRAG_BEHIND behind it. A drag
+## that has not got there after DRAG_MAX seconds seats them anyway.
+const GRAB_RANGE := 1.0
+const GRAB_TIME := 1.0
+const DRAG_SPEED := 2.0
+const DRAG_BEHIND := 0.6
+const DRAG_MAX := 60.0
+const DRAG_RADIUS := 0.3
+
+## The state with T15m on (a copy).
+static func tune(s0: SeekState) -> SeekState:
+	var s := s0.copy()
+	s.tuned = true
+	return s
+
+## What a provocation adds to the anger this tick.
+static func anger_gain(why: StringName, dt: float) -> float:
+	if ANGER_RATES.has(why):
+		return float(ANGER_RATES[why]) * dt
+	return float(ANGER_LUMPS.get(why, 0.0))
+
+## Step 4 with T15m on: the hint events, then the anger, and a count when it is full.
+static func _tuned_provoke(s: SeekState, t: float, dt: float, noisy: Dictionary, moved_of: Dictionary, input_of: Dictionary,
+		fl: FloorInput, events: Array[Dictionary]) -> void:
+	if not s.arrived and not fl.riding:
+		s.arrived = true
+		events.append({"type": "playroomArrived", "t": t, "depth": s.floor.plan.depth})
+	var now_sprinting := {}
+	if phase_of(s) == &"seek":
+		for p in s.players:
+			var inp: SeekInput = input_of.get(p.id, null)
+			if inp == null or not inp.active or p.status != &"ok" or p.phase != &"out":
+				continue
+			if inp.gait == &"sprint" and moved_of.get(p.id, false):
+				now_sprinting[p.id] = true
+				if not s.sprinting.has(p.id):
+					events.append({"type": "sprintDuringHunt", "t": t, "playerId": p.id, "n": s.counts})
+	s.sprinting = now_sprinting
+	if s.counting:
+		s.anger = 1.0
+		return
+	if s.ended >= 1 and t < s.calm_until - EPS:
+		s.anger = clampf((s.calm_until - t) / CALM_TIME, 0.0, 1.0)
+		return
+	if not _may_provoke(s, t, fl):
+		s.anger = maxf(0.0, s.anger - ANGER_COOL * dt)
+		return
+	var level := s.anger
+	var gained := false
+	for p in s.players:
+		if not noisy.has(p.id):
+			continue
+		for why: StringName in noisy[p.id]:
+			var g := anger_gain(why, dt)
+			if g <= 0.0:
+				continue
+			gained = true
+			level += g
+			if level >= 1.0 - EPS:
+				_start_count(s, t, p.id, why, false, events)
+				return
+	s.anger = level if gained else maxf(0.0, level - ANGER_COOL * dt)
+
+## A count starting with T15m on: its hiding and search lengths, the bar full, and a player being dragged
+## to the table seated at once.
+static func _tuned_count(s: SeekState, t: float, last: bool, events: Array[Dictionary]) -> void:
+	s.hide_len = TUNED_LAST_HIDE if last else TUNED_HIDE_LENGTHS[mini(s.counts - 1, TUNED_HIDE_LENGTHS.size() - 1)]
+	s.len = TUNED_SEARCH
+	s.anger = 1.0
+	var m := s.minder
+	if (m.mode == &"grab" or m.mode == &"drag") and m.victim != "":
+		var v := player_of(s, m.victim)
+		if v != null and v.status == &"found":
+			_take(s, v, t, events)
+	s.drag_seat = -1
+
+## The first free party-table seat (as _take picks it), or -1.
+static func _free_seat(s: SeekState) -> int:
+	var used := {}
+	for q in s.players:
+		if q.seat >= 0:
+			used[q.seat] = true
+	for i in s.floor.seats.size():
+		if not used.has(i):
+			return i
+	return -1
+
+## Outside a count (after the Minder has moved): the first player in order within GRAB_RANGE, out of a
+## hide (getting in or out is out) and on its level, is grabbed. Not while it already holds someone.
+static func _tuned_grab(s: SeekState, m: MinderState, input_of: Dictionary, t: float, events: Array[Dictionary]) -> void:
+	if m.mode == &"grab" or m.mode == &"drag":
+		return
+	for p in s.players:
+		var inp: SeekInput = input_of.get(p.id, null)
+		if inp == null or not inp.active or p.status != &"ok" or p.body == null or p.phase == &"inside":
+			continue
+		if not _touching(m.body, p.body, GRAB_RANGE):
+			continue
+		_found(s, p, &"grab", t, events)
+		if p.phase == &"leaving" and p.hide >= 0:
+			p.body = hide_front_body(s.floor.plan, s.floor.hide_by_id[p.hide])
+		p.phase = &"out"
+		p.hide = -1
+		p.phase_left = 0.0
+		m.mode = &"grab"
+		m.anim = &"catch"
+		m.anim_time = 0.0
+		m.timer = GRAB_TIME
+		m.victim = p.id
+		m.yaw = yaw_toward(p.body.x - m.body.x, p.body.z - m.body.z)
+		m.path = []
+		m.goal_kind = &""
+		m.goal_cell = null
+		m.stuck = 0.0
+		s.drag_seat = _free_seat(s)
+		s.drag_t0 = t
+		return
+
+## Holding a grabbed player, then dragging them to the party table.
+static func _drag_step(s: SeekState, m: MinderState, t: float, dt: float, events: Array[Dictionary]) -> void:
+	var plan := s.floor.plan
+	var v := player_of(s, m.victim)
+	if v == null or v.status != &"found":
+		_drag_end(s, m)
+		return
+	if m.mode == &"grab":
+		m.anim = &"catch"
+		m.timer -= dt
+		if m.timer > EPS:
+			return
+		m.timer = 0.0
+		m.mode = &"drag"
+		m.anim_time = 0.0
+	m.anim = &"walk"
+	if s.drag_seat < 0 or s.drag_seat >= s.floor.seats.size():
+		_take(s, v, t, events)
+		_drag_end(s, m)
+		return
+	var st := s.floor.seats[s.drag_seat]
+	_goal_body(plan, m, &"drag", s.drag_seat, point_body(plan, st.at, st.level))
+	var r := _walk(plan, m, DRAG_SPEED, dt, false)
+	# The player comes along behind it.
+	v.body = Move.move_with_collision(plan, m.body, M.sin_js(m.yaw) * DRAG_BEHIND, M.cos_js(m.yaw) * DRAG_BEHIND, DRAG_RADIUS)
+	if r != 0 or t - s.drag_t0 >= DRAG_MAX - EPS:
+		_take(s, v, t, events)
+		_drag_end(s, m)
+
+static func _drag_end(s: SeekState, m: MinderState) -> void:
+	m.mode = &"wander"
+	m.anim = &"stand"
+	m.victim = ""
+	m.goal_kind = &""
+	m.goal_cell = null
+	m.path = []
+	m.timer = 0.0
+	m.stuck = 0.0
+	s.drag_seat = -1
