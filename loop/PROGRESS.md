@@ -4,10 +4,10 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 44 of 78.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 53.
-- **Now:** T15g The Minder, modelled, rigged and animated in Blender. A Sonnet agent is checking the final Minder model: rebuilds identically, every animation the rules need, face on the front only
-- **Last CI result seen:** passed on b2e26fb
+- **Gates passed:** 7 of 14. **Tasks done:** 57 of 84.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 60.
+- **Now:** nothing in progress
+- **Last CI result seen:** passed on 72f1526
 - **Answers applied up to:** 2026-11-17T05:04:17.919Z
 
 ## Tasks
@@ -81,22 +81,18 @@
   - To do: New from the owner (16 Nov): caught means downed first. A crewmate can heal you for about 10 seconds; only if nobody does do you go out to the security cameras. The camera drops when downed
   - To do: The Orderly's caught scene, as you described it: it turns you to face it, roars and bends down to your face; others see it bend down if they are looking; heal is holding F for 3 seconds; after ten seconds unhealed the player vanishes and a red spot is left. No dragging for the Orderly
   - To do: Confirmed by you: the Orderly stays bent over a downed player for the ten seconds, so the healer has to step in right beside it
-- [ ] **T7e** `doing` Better-looking crewmates and readable name tags
+- [x] **T7e** `done` Better-looking crewmates and readable name tags
   - Why: Crewmates are plain boxes and their names cannot be read from a few metres
-  - To do: Owner asked what they must do for assets (2026-11-16). Answer given: nothing is required; the one useful thing is Mixamo clips for the crewmates (free Adobe account). Steps are in assets_src/inbox/README.md section 2. The upload file assets_src/inbox/convict-for-mixamo.fbx is being built; tell the owner when it is judged and ready. Then: import their clips, trim/loop, bake into public/assets/entities/convict.glb, replace the box figures in src/render/crewFigures.ts, keep per-player tint and number patches.
-  - To do: Owner (2026-11-16): 'Don't forget to reference the North star, though, we talked about drawing faces on. Maybe keep the models the way they are but every person wears a mask with a screen on it that covers the full face and has whatever face they drew on it.' North Star H1 (Your face is everywhere): each player draws a face before the run; it appears on their avatar, the elevator monitor, the standee left where they fall (B6), and posters. The crewmate figure now wears a full-face screen mask with its own flat face_screen surface.
-  - To do: Mesh is FINAL (2,216 triangles, one closed symmetric mesh, T-pose, 1.78 m) after two blind judging rounds and the owner's steer: 'we don't need a lot of those fixes because the filter makes everything so grainy we get a lot for free... Mittens are perfectly acceptable.' Upload file: assets_src/inbox/convict-for-mixamo.fbx (fallback .zip). Waiting on the owner's Mixamo clips in assets_src/inbox/mixamo/.
-  - To do: R opens a wheel of emotes (hold R, move the mouse to pick, let go): wave, the two dances, pray, look behind
-  - To do: Put the crewmates into the real game once the networking is joined (other players drawn with crew_view), then watch walk, run and sneak in motion for foot sliding; sneak at creep speed plays at about half speed and may look like slow motion
+  - Evidence: Marked done at your request. The crewmate model was finished after two blind-judging rounds and your steer (mittens fine, the grainy filter does the rest). It has its animation clips, the emote wheel and a full-face screen mask for your drawn face. The motion polish still running tonight (foot sliding, name tags, face screens) moved to its own task, T7g.
+- [x] **T7g** `done` Crewmates in motion: no foot sliding, name tags readable at 8 m, drawn faces on the mask screens
+  - Why: Your friends' figures move like people and you can tell who is who across a room
+  - Evidence: In the build you play: crewmates whose feet don't slide (0.8-4.3% slip headless, under 12% live), a real sneak when creeping, your drawn face on your mask screen, and name tags only within 2 m, as you chose.
 - [x] **T7f** `done` Draw your face
   - Why: North Star H1: each player doodles a face before the run and it shows on the screen mask their crewmate figure wears, glowing in the dark, and on the lift monitor
   - Evidence: Your drawn face is in the game. After Play alone or Join friends you draw it (it opens on your last one, Enter keeps it); it travels once when you join, the others and late joiners get it, and it shows on your crewmate's mask and on a new monitor in the lift. A bad or oversized face is dropped and the player still joins. Independently checked: browser 29/29, desktop 33/33, two players 27/27, three players 10/10; switching off the face relay turned three checks red. Promoted (play/GoingDown.exe, d94e306); the lab-box server is updated and a two-player game through the public path passed.
-- [ ] **TA** `doing` Real sounds, and comedy sounds
+- [x] **TA** `done` Real sounds, and comedy sounds
   - Why: Today every sound effect is generated by arithmetic. Real recordings (the Orderly's squeaking trolley, the Clinic's hum, the lift) will frighten more, and meme sounds at the right moments are where the laughs come from
-  - To do: Files go in assets_src/inbox/audio (folders: orderly, clinic, lift, player, instrument, scare, funny), with a line per file in SOURCES.txt saying where it came from and its licence
-  - To do: More sounds after the lift section of the shopping list: you said you'll grab them later.
-  - To do: Your rule for sound: balance by loudness (LUFS) per kind of sound against the elevator voice, mix through buses with the voice ducking the background, and space sounds out so none buries another; a test plays a busy minute and fails if any sound buries the voice or the Orderly.
-  - To do: Your rule: the scare shrieks may be a little louder than the elevator voice (about 3 loudness units, never more than 4), never loud enough to hurt; nothing else is louder than the voice.
+  - Evidence: In the build you play: your 31 ElevenLabs recordings, mixed by loudness against the elevator voice on separate buses with a limiter; scares about +3 over the voice (ceiling +4); the hum goes silent in the dark; your own breathing uses the made-in-code breath until a clean one is recorded; the Orderly's sounds stay in the Clinic. Checked by sound_web, mix_check (three runs) and deliberate breaks.
 - [x] **X1** `done` Trial: one Clinic floor in Godot
   - Why: The owner asked whether a game engine would save work and give better lighting. A five-hour trial answers with evidence before any decision to switch
   - Evidence: The five-hour trial finished in 35 minutes and answered the question: Godot gives clearly better lighting and a simple home server, at the cost of a slow first load in the browser (27 to 34 seconds, about 9 with a light setup) and a port of four to six agent-weeks by the trial's estimate. The build is on the hub at /godot/. The owner then decided to move.
@@ -112,15 +108,21 @@
 - [x] **P2b** `done` Fixes from your first play of the Godot build
   - Why: No sound in the browser, ceiling lights floating in the big room, and props poking through paper-thin walls all break the place; and the Windows file is now the main way to play, so it gets checked with pictures and measured sound
   - Evidence: All three things you found are fixed. Sound: the browser build was silent because the game created its sound channels while running, which Godot's browser sound mode cannot cope with; they are now set up in advance, and a new check measures what actually reaches the speakers under a browser's real rules (it passes, and fails when I mute the game). Lights in the big room now sit on the real high ceiling. Walls are 14 cm thick with proper edges at doorways, and props are placed by their real size so nothing pokes through. I re-ran everything myself: browser playthrough 29 of 29, Windows playthrough 33 of 33 including measured sound from the voice, the hum and the Orderly's squeak, and the new build is at the hub's /godot/ link, fetched from the lab box. Nobody has listened by ear yet. In the browser the squeak is not muffled round corners and the voice has no speaker effect; on Windows both work. The far side is darker on Windows than in the browser, and the Orderly is hard to see there.
-- [ ] **T6f** `doing` A bigger elevator
+- [x] **T6f** `done` A bigger elevator
   - Why: The car is a 2 metre square today, so each side of the BANK or DOWN choice is 1 metre wide: cramped for four and a crush for eight
-  - To do: Default size 3 m by 3 m with a 1.6 m door unless the owner says otherwise; the floor generator must keep the space behind and beside the lift wall empty; the lift drawing must read its size from the rules, not its own numbers
-  - To do: Size is now 4 m by 4 m with a 1.8 m door (the owner said bigger still than 3 by 3): each of BANK and DOWN becomes 2 m wide
+  - Evidence: In the build you play: the lift car is 4 m by 4 m with a 1.8 m door; checked on 225 floors with room for the whole crew, and the drawn lift matches the rules' car.
 - [x] **T2c** `done` The camera drops when you creep
   - Why: Creeping should feel like ducking, and what you can see over things should change with it
   - Evidence: The camera drops when you creep (1.13 m, where teammates see your head) and when down (0.45 m), easing over 0.2 s. The eye height the rules judge 'looking' from equals the camera on every frame: 0 of 3,040 inputs off. Teammates see a creeping crewmate crouched with the mask at that eye. Independently checked; both breaks red. Merged 88efc2d.
-- [ ] **T5q** `todo` A quota before the lift can be called
+- [ ] **T5q** `doing` A quota before the lift can be called
   - Why: You cannot just ride straight back up: the crew has to earn a set amount on the instrument on each floor before the call button works
+- [ ] **T5r** `todo` The quota on screen
+  - Why: The call panel shows RECORDED 640 OF 1200, a refused press says NOT YET, and the announcer says when the quota is met
+- [ ] **T16h** `todo` Crew marks and the Temp's sticky notes in the run
+  - Why: In the Annex the crew's three marks are the only directions you can trust, and the Temp leaves notes about you by name
+  - To do: The 14-notes cap is only caught because templates run out at 21; assert 14 directly
+- [ ] **T16j** `todo` Marks, notes and the pad on screen
+  - Why: You press Q to slap down an arrow everyone can see, the pad count shows, and the Temp's notes appear on the walls
 - [x] **P3** `done` Playing together through the home server
   - Why: One small server at home runs the rules and keeps everyone in sync, so friends in their own houses can join and nobody's browser has to host
   - Evidence: Playing together works through the home server. The game opens on a start screen: Play alone, or Join friends with the server address, your name and tonight's passphrase. Friends appear as crewmates with name tags, the emote wheel on R plays for everyone, and a caught crewmate lies where they were taken on every screen. An independent checker re-ran every playthrough: browser 29/29, desktop 33/33, two players 22/22, three players over real connections 10/10, sound audible (and silent when muted). Removing the emote relay on purpose turned the two-player check red. Committed 3d13505 and promoted to play/GoingDown.exe.
@@ -163,32 +165,45 @@
   - To do: Research before building (one agent, written up in docs): how games make a searcher that feels smart and fair. Start from occupancy / probability maps (the searcher keeps a belief of where players could be and checks the likeliest spots), last-known-position search, a director that nudges it toward players without telling it exactly (Alien: Isolation's two-part design), and hiding-spot checks with tells so a hidden player can hold their breath. Must stay deterministic from the seed and simulate hundreds of rounds: good hiders usually live, runners die, nobody dies to pure luck.
   - To do: Fits the existing rules: the entity is heard before seen; the instrument could pay most for a reading taken from a hiding place while it searches nearby; a found player goes down rather than out, with something to do within seconds.
   - To do: Owner (2026-11-16, later): 'Clicking the elevator should trigger a hiding sequence, so you have to survive one last time before making it to freedom.' So on this floor calling the car always starts one last count-and-search; the car arrives when the search ends. It is this floor's version of the Clinic's blackout while waiting.
-- [ ] **T16e** `doing` The place deck: the third floor down is the Annex
+- [x] **T16e** `done` The place deck: the third floor down is the Annex
   - Why: Floors stop being all Clinic; the yellow office arrives at floor 3 and the Playroom at floor 4
-- [ ] **T15a** `todo` The Playroom floor generator
+  - Evidence: In the build you play (play/GoingDown-2026-11-17-0344.zip): floors 1-2 are the Clinic, floor 3 the Annex, floor 4 the Playroom, then a seeded draw that never repeats a place twice running. A separate checker rode a real game down to floors 3 and 4 (pictures), host and players built every floor identically, and four deliberate breaks went red.
+- [x] **T15a** `done` The Playroom floor generator
   - Why: Floor 4 becomes a soft-play centre with ball pits, crawl dens, a party room and places to hide
-- [ ] **T16g** `todo` The Temp's figure and its stapler
+  - Evidence: In the build you play: floor 4 is generated as a soft-play centre with ball pits, crawl dens, party rooms, toddler corners, hiding places, squeaky tiles and zones; 800 test floors, identical on Linux and Windows.
+- [x] **T16g** `done` The Temp's figure and its stapler
   - Why: Something actually lives in the Annex: an office worker with a crewmate's drawing for a face
-  - To do: The click check catches a standing clock that runs per frame while seen, but not one that runs on real seconds; tighten it in the Blender pass
-- [ ] **T16f** `todo` The Temp's body in the rules
+  - Evidence: In the build you play: the Temp stands in the Annex, an office worker with a photocopy of a crewmate's drawn face, clicking its stapler, still and silent while seen. Checked by temp_check (five checks) and a deliberate break.
+- [x] **T16f** `done` The Temp's body in the rules
   - Why: The Temp is shorter, clicks a stapler, and stops the moment you look
-- [ ] **T18j** `doing` The day in the run: bank, ride up, sleep, day 2
+  - Evidence: In the build you play: the Temp uses its own body in the rules (1.8 m, a click every 1.2 m and every 4 s waiting unseen, silent while seen), with the Orderly's stored results unchanged.
+- [x] **T18j** `done` The day in the run: bank, ride up, sleep, day 2
   - Why: Vote BANK and you ride up to the prison, go to bed, and wake to a new day going down
+  - Evidence: In the build you play (play/GoingDown-2026-11-17-0602.zip): BANK rides up to the prison, holding F at your bunk lies you down, the bedtime count can't be stopped, and day 2 starts at floor 1 on its own seed. Three bots over a link that lost 1,960 messages agreed with the host at every stop; four deliberate breaks red; a two-player game over the public address banked and rode up.
 - [ ] **T15b** `todo` The count, the Minder and health, as rules
   - Why: What makes the seeker fair and a real threat
   - To do: On the biggest floors the Minder sometimes can't walk to a far area before the count ends (47 of 320 draws at depth 4): tune the search speed, walks or floor size after a play
   - To do: The health test should also put a player inside a hiding place after a count (today only the whole-floor bot test guards 'resting in a hide restores')
-- [ ] **T15c** `todo` The Playroom's look and a stand-in Minder
+- [x] **T15c** `done` The Playroom's look and a stand-in Minder
   - Why: Padded primary colours, a ball pit, netting and signs that print the hiding odds
+  - Evidence: In the build you play: the Playroom's look (padded primaries, ball pits, netting, signs printing each area's hiding odds, real count dark) with a stand-in Minder that never freezes when seen; the Blender Minder replaces it next.
 - [ ] **T15d** `todo` The count in the run and over the network
   - Why: Somebody sprints, the lights die, and the ball pit actually saves you, the same for every player
-- [ ] **T15e** `todo` The count on screen
+  - To do: No test pins that the Playroom's rules stay still during the lift ride (the deliberate break of the riding guard stayed green; the rules may already ignore the crew while riding). Add one.
+- [ ] **T15e** `doing` The count on screen
   - Why: HIDE, the dark, climbing into hiding places and peeking at a glowing balloon
-- [ ] **T18k** `todo` Bed and the day board on screen
+- [x] **T18k** `done` Bed and the day board on screen
   - Why: The prison shows what the crew banked and HOLD F TO SLEEP works
-- [ ] **T15g** `doing` The Minder, modelled, rigged and animated in Blender
+  - Evidence: In the build you play: the ride up, the report board (owed, banked, short by, streak, misses left, the roll's odds, each share), HOLD F TO SLEEP, IN BED n OF m, lights out on host time, and waking on day 2. Two players read the host's total on their boards and woke together; a board drawn from the client's own sum went red.
+- [ ] **T15g** `todo` The Minder, modelled, rigged and animated in Blender
   - Why: The stand-in becomes a tall padded attendant with a bobbing balloon head
   - To do: When it goes into the game, raise the mask's glow so the face reads in count dark (the final pass made the mask smaller and dimmer)
+- [x] **T15k** `done` The Blender Minder in the game
+  - Why: The stand-in figure in the Playroom becomes the judged model with its ten animations
+  - Evidence: In the build you play: the Blender Minder in the Playroom, all ten clips from the rules' poses, feet that don't slide, never frozen when seen, its music box to 30 m. In the dark at 10 m its mask reads as a glowing point (a to-do).
+- [x] **T15i** `done` The count's voice lines
+  - Why: The lift's announcer tells you to hide, counts down, and says 'Coming, ready or not'
+  - Evidence: Recorded and checked: Hide, forty/thirty/twenty and ten to one, Coming ready or not, Found you, All done, and the last count's line, in both voices, at the same loudness as the other announcer lines; voice budget 22,560 of 50,000; no key anywhere in the repo. They play once the count's screens land (T15e); takes are on the audition page.
 - [ ] **T15h** `todo` The party table for found players
   - Why: Found players sit in paper hats with a horn until a friend fetches them
 - [ ] **T8a** `todo` Down first, then out
@@ -282,43 +297,43 @@
 
 ## Activity (newest first)
 
-- 2026-11-17 08:32Z Started T15g: The Minder, modelled, rigged and animated in Blender. A Sonnet agent is checking the final Minder model: rebuilds identically, every animation the rules need, face on the front only
-- 2026-11-17 08:32Z New pictures for T15g: The Minder, modelled, rigged and animated in Blender.
-- 2026-11-17 08:31Z Started T18j: The day in the run: bank, ride up, sleep, day 2. An Opus builder is wiring the day: vote BANK, ride up to the prison, sleep, wake to day 2 (built on the floor order)
-- 2026-11-17 08:30Z Started T6f: A bigger elevator. Checked together with the floor order build (the 4 m car is on the same branch)
-- 2026-11-17 08:30Z Started T16e: The place deck: the third floor down is the Annex. A Sonnet agent is checking the floor order build: Clinic, Clinic, the Annex with the Temp, the Playroom, all the same for every player
-- 2026-11-17 08:23Z Started T15g: The Minder, modelled, rigged and animated in Blender. The modeller is making the final fixes from round 2's judges
-- 2026-11-17 08:23Z Minder judging round 2 done: 6, 5 and 5 in full light (up from 6, 4, 4), about 7-8 in the dark. Final fix pass under way: a dirty bone-white mask with cut-through eye holes that only glows in the dark, a real pelvis and sloped shoulders, needle teeth with a dark throat, and duller rags.
-- 2026-11-17 08:22Z Minder judging round 2, Fable: 5/10 (7 in the dark or side-on, 3 front-on in full light). Wants: the mask's eyes cut through as holes so the dark head shows behind, a flatter wider smile, a bone-white mask that only glows in the dark, a real pelvis instead of a box, and a curved jaw with needle teeth and a dark throat.
-- 2026-11-17 08:22Z Minder judging round 2, first Opus judge: 6/10 (7-8 in the dark, about 4 front-on in full light). Better: the cute smile over a fanged mouth, the crawl, the peekaboo pose. Still weakest: from the front the round mask on a thin neck reads as a lollipop, the stripes still read too bright, and the pelvis is blocky.
-- 2026-11-17 08:22Z Started T15g: The Minder, modelled, rigged and animated in Blender. Blind judging, round 2 of the revised Minder
-- 2026-11-17 08:22Z New pictures for T15g: The Minder, modelled, rigged and animated in Blender.
-- 2026-11-17 08:22Z New pictures for T15g: The Minder, modelled, rigged and animated in Blender.
-- 2026-11-17 08:21Z The Temp's rules passed their separate check (still and silent while seen, one click per 1.2 m and every 4 s waiting; three deliberate breaks red; the Orderly's stored results unchanged) and are merged.
-- 2026-11-17 08:21Z Paused T16f: waiting for checked and merged (800382e); it takes effect when the floor order puts the Temp in the Annex
-- 2026-11-17 08:17Z Started T7e: Better-looking crewmates and readable name tags. An Opus builder is making the crewmates look better: bodies, jumpsuits and readable name tags
-- 2026-11-17 08:17Z The Playroom's look passed its separate check (every hiding place's furniture exactly where the rules put it, every sign matching the odds, real dark during a count, the stand-in Minder never freezing; the Clinic's 38 checks still pass) and is merged.
-- 2026-11-17 08:17Z Paused T15c: waiting for checked and merged (5b384b9); you walk it once the floor order puts the Playroom at floor 4
-- 2026-11-17 08:14Z Started T16f: The Temp's body in the rules. A Sonnet agent is checking the Temp's rules: still while seen, its stapler clicks, and the Orderly unchanged
-- 2026-11-17 08:08Z Started T15g: The Minder, modelled, rigged and animated in Blender. The modeller is revising the Minder from round 1's three judges; round 2 follows
-- 2026-11-17 08:08Z Minder judging round 1, second Opus judge: 4/10 lit, about 7 in the dark. All three judges agree. The modeller is now revising: a matte bruised skin instead of plastic, faded torn rags instead of bright streamers, a crumpled mask with a crooked too-wide smile, a skull-like head, and a jaw that hangs open.
-- 2026-11-17 08:07Z Minder judging round 1, Fable: 4/10 lit, about 7 in the dark. Same worst points (plastic body, bright streamers), plus: the plain two-dot smiley on a pale disc looks like a well-known YouTuber's mask, so the drawn face will be redrawn crooked and too wide. Its best idea: the mask is a flat disc on the end of a snout with the real jaw underneath.
-- 2026-11-17 08:07Z Minder judging round 1, first judge: 6/10 in a dark corridor (3-4 in full light). Works: the smiley floating in the dark, the mask stuck on the end of a snout with the real jaw under it, dropping onto all fours. Worst: a glossy plastic-looking body with visible joint seams, clean party-coloured streamers, a mask that is too clean and cute up close.
-- 2026-11-17 08:06Z Started T15g: The Minder, modelled, rigged and animated in Blender. Blind judging, round 1: an Opus judge and Fable look only at the pictures; the modeller revises after
-- 2026-11-17 08:06Z The Minder's Blender model is built (5,601 triangles, 43 bones, all ten animations). Blind judging round 1 is starting: judges see only the pictures.
-- 2026-11-17 08:06Z New pictures for T15g: The Minder, modelled, rigged and animated in Blender.
-- 2026-11-17 08:06Z New pictures for T15g: The Minder, modelled, rigged and animated in Blender.
-- 2026-11-17 08:00Z Started T16f: The Temp's body in the rules. An Opus builder is giving the Temp its own numbers in the rules: 1.8 m, its own stapler clicks, still while seen
-- 2026-11-17 08:00Z New pictures for T15c: The Playroom's look and a stand-in Minder.
-- 2026-11-17 08:00Z New pictures for T15c: The Playroom's look and a stand-in Minder.
-- 2026-11-17 08:00Z New pictures for T15c: The Playroom's look and a stand-in Minder.
-- 2026-11-17 08:00Z New pictures for T15c: The Playroom's look and a stand-in Minder.
-- 2026-11-17 08:00Z Started T15c: The Playroom's look and a stand-in Minder. A Sonnet agent is checking the Playroom's look: furniture on every hiding place, signs that match the odds, count dark, and the stand-in Minder
-- 2026-11-17 07:31Z Paused T5q: waiting for comes after the floor order, which edits the same file; the first builder stopped before starting it
-- 2026-11-17 07:31Z Paused T6f: waiting for built and on a branch (4 m car, 1.8 m door); it is checked together with the floor order
-- 2026-11-17 07:31Z Started TA: Real sounds, and comedy sounds. A Sonnet agent is checking the recorded sounds and the mix again (the first check was cut off), now with the player-breath fix
-- 2026-11-17 07:31Z Started T15g: The Minder, modelled, rigged and animated in Blender. An Opus builder is making the Minder in Blender: studying two tutorials, then modelling, rigging and animating it
-- 2026-11-17 07:31Z Started T16e: The place deck: the third floor down is the Annex. An Opus builder is making the floor order: Clinic, Clinic, the Annex, the Playroom, then a seeded draw
-- 2026-11-17 07:27Z The hide-and-seek rules passed their separate check (12 tests; four more deliberate breaks, all red) and are merged.
-- 2026-11-17 07:27Z Paused T15b: waiting for checked and merged; it runs in a game once the count is wired into the run (T15d)
-- 2026-11-17 07:17Z Started T15c: The Playroom's look and a stand-in Minder. An Opus builder is making the Playroom's look and a stand-in Minder
+- 2026-11-17 12:25Z Sample notes from the Temp's test run: 'Welcome, Cy. Your desk is ready. It has always been ready.' / 'Bo and Cy: you are standing very close. HR has been informed.' / 'Ana is furthest from the lift. Somebody has to be.'
+- 2026-11-17 12:25Z Paused T16h: waiting for checked (four players, 837 lost messages, identical marks and notes; marks never move; no note while the Temp is watched; four breaks red); goes into your build with the marks screen (T16j)
+- 2026-11-17 12:14Z Added task T16j: Marks, notes and the pad on screen.
+- 2026-11-17 12:14Z Started T16h: Crew marks and the Temp's sticky notes in the run. A Sonnet agent is checking crew marks and the Temp's notes: four players must end with the host's exact marks and notes
+- 2026-11-17 12:06Z New build in play/ (play/GoingDown-2026-11-17-0602.zip): the day loop (bank, ride up, report board, bed, lights out, day 2), the Blender Minder on floor 4, crewmates that move properly with tags only up close, and the count's voice lines ready. Lab-box server updated; a two-player game over the public address passed.
+- 2026-11-17 12:06Z Finished T7g: Crewmates in motion: no foot sliding, name tags readable at 8 m, drawn faces on the mask screens.
+- 2026-11-17 12:06Z Finished T15k: The Blender Minder in the game.
+- 2026-11-17 12:06Z Finished T18k: Bed and the day board on screen.
+- 2026-11-17 12:06Z Finished T18j: The day in the run: bank, ride up, sleep, day 2.
+- 2026-11-17 12:01Z New pictures for T15e: The count on screen.
+- 2026-11-17 12:01Z New pictures for T15e: The count on screen.
+- 2026-11-17 12:01Z New pictures for T15e: The count on screen.
+- 2026-11-17 12:01Z Started T15e: The count on screen. A Sonnet agent is checking the count on screen: two players' screens must agree on the dark, the bell and who was found
+- 2026-11-17 12:01Z Started T5q: A quota before the lift can be called. Back with its builder: a solo player sometimes can't meet floor 1's quota, a no-grow test is missing, and the test playthroughs need updating
+- 2026-11-17 11:39Z Started T16h: Crew marks and the Temp's sticky notes in the run. An Opus builder is putting the Annex's crew marks and the Temp's sticky notes into the run, the same for every player
+- 2026-11-17 11:39Z Added task T16h: Crew marks and the Temp's sticky notes in the run.
+- 2026-11-17 11:39Z Added task T5r: The quota on screen.
+- 2026-11-17 11:39Z Started T5q: A quota before the lift can be called. A Sonnet agent is checking the floor quota: every client sees the same refusals, dropped tapes still count
+- 2026-11-17 11:01Z Finished T15i: The count's voice lines.
+- 2026-11-17 11:01Z Paused T15d: waiting for checked (all three clients agreed on every count over a link that lost 2,550 messages; walking never starts a count); goes into your build with its screens (T15e)
+- 2026-11-17 10:50Z The count's announcer lines are recorded in both voices (2,148 characters; the voice budget is at 22,560 of 50,000): 'Hide.', forty, thirty, twenty, then ten to one, 'Coming, ready or not!', 'Found you!', 'All done!', and 'Your car is on its way! One more round before we go!'. Takes are on the audition page for you to pick.
+- 2026-11-17 10:50Z Started T15i: The count's voice lines. A Sonnet agent is checking the count's voice lines: budget, loudness, no key anywhere
+- 2026-11-17 10:47Z Started T5q: A quota before the lift can be called. An Opus builder is adding the floor quota: the call button is dead until the crew has recorded enough
+- 2026-11-17 10:47Z Linked T5q to the North Star: C9.
+- 2026-11-17 10:46Z Started T15e: The count on screen. An Opus builder is putting the count on screen: HIDE, the dark, climbing into hiding places, peeking, the health bar, being found
+- 2026-11-17 10:46Z Paused T15k: waiting for checked and merged (7dc9958); marked done once it's in the build you play, with the day screens
+- 2026-11-17 10:46Z Started T15k: The Blender Minder in the game. reopened
+- 2026-11-17 10:46Z Finished T15k: The Blender Minder in the game.
+- 2026-11-17 10:46Z Started T15d: The count in the run and over the network. A Sonnet agent is checking the count in the run: three clients on lossy links must agree on every count
+- 2026-11-17 10:46Z Started T18k: Bed and the day board on screen. A Sonnet agent is running the combined check of the day screens with everything else (floors, sounds, crewmates, the Blender Minder)
+- 2026-11-17 10:15Z New build in play/ (GoingDown-2026-11-17-0344.zip): ride down to the Annex with the Temp on floor 3 and the Playroom on floor 4; your recorded sounds; the bigger lift. The lab-box server is updated, and a two-player game over the public address passed.
+- 2026-11-17 10:14Z Started T15i: The count's voice lines. An Opus builder is recording the count's announcer lines (Hide, the countdown, Coming ready or not, All done) within the voice budget
+- 2026-11-17 10:14Z Added task T15i: The count's voice lines.
+- 2026-11-17 10:10Z Finished T16e: The place deck: the third floor down is the Annex.
+- 2026-11-17 10:10Z Finished T15c: The Playroom's look and a stand-in Minder.
+- 2026-11-17 10:10Z Finished T15a: The Playroom floor generator.
+- 2026-11-17 10:10Z Finished T16f: The Temp's body in the rules.
+- 2026-11-17 10:10Z Finished T16g: The Temp's figure and its stapler.
+- 2026-11-17 10:10Z Finished TA: Real sounds, and comedy sounds.
+- 2026-11-17 10:10Z Finished T6f: A bigger elevator.
