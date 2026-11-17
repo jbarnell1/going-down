@@ -15,8 +15,10 @@
 #      on their own clocks. On every client's every frame:
 #        - the promise: the pose never changes between two frames that both show every eye mark lit;
 #        - a hold shown with every mark lit is the host's: when the marks drop with the figure still in view,
-#          it walks on from where it was held and is never drawn nearer that player than it stood (a seen
-#          report is honoured against what its player had acknowledged: net/host.gd);
+#          it walks on from where it was held, never further along its walk (its own clock), and never
+#          jumps ahead on that clock by more than a frame's walk afterwards (a seen report is honoured against what its player
+#          had acknowledged: net/host.gd). Scripted late glances make that case: p0 watches over a slow link
+#          while the others glance for 150 ms on quick ones;
 #        - a lone watcher of two sees it walk: on a frame with one mark of two lit the drawing is not held, and
 #          the figure is seen to move on such frames;
 #      and every snapshot's watch block is the host's count at that tick.
@@ -48,8 +50,14 @@ const DT := 0.05
 const EPS := 1e-9
 ## The oracle's numbers (the design's table, restated): up players -> watchers needed.
 const O_NEED := {1: 1, 2: 1, 3: 2, 4: 2, 5: 2, 6: 2}
-## A hold let go in view may put the figure this much nearer its watcher (metres): quantisation and blending.
-const RELEASE_TOL := 0.15
+## Measured on its own clock (the pose's animTime, which runs only while it is free to act), so a pose the host
+## put back to (another player's report: an earlier moment of its walk) never counts, only a jump ahead.
+## A hold let go in view may be followed by a pose at most this much later on that clock (seconds): the frame.
+const RELEASE_TOL := 0.08
+## Walking at a lone watcher of two, its clock moves on at most this much from one frame (50 ms) to the next,
+## with room for the drawing clock's catching up. A hold the host never made (a seen report it refused) shows
+## as a jump ahead well past it once the drawing follows the host again.
+const LONE_STEP := 0.15
 
 static func of_type(evs: Array[Dictionary], type: String) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
@@ -394,6 +402,8 @@ class NBot:
 	var looking := false
 	var until := 0.0
 	var on := false
+	## A script instead of the clock: [[from, to], ...] seconds after the looking starts, looking in each.
+	var looks: Array = []
 	## The previous frame: every mark lit, shown, the pose drawn, bent.
 	var prev_all := false
 	var prev_on := false
@@ -407,6 +417,7 @@ class NTally:
 	var lone_moves := 0
 	var releases := 0
 	var max_advance := 0.0
+	var max_step := 0.0
 	var block_checks := 0
 	var failures := 0
 
@@ -420,8 +431,12 @@ class NSess:
 	var ids: Array[String] = ["p0", "p1", "p2"]
 	var tl := NTally.new()
 	var plan: Floor.FloorPlan
+	## Session time the looking started.
+	var t_on := INF
+	var name := ""
 
-	func _init(seed: String) -> void:
+	## `delays`: each player's one-way delay (seconds), or [] for a random 50 to 250 ms each way.
+	func _init(seed: String, delays: Array = []) -> void:
 		rng = Rng.make_rng("%s:session" % seed)
 		net = Transport.MemoryNetwork.new("%s:net" % seed)
 		var ht := net.connect_peer("host")
@@ -433,7 +448,7 @@ class NSess:
 			var tr := net.connect_peer(ids[i])
 			for pair: Array in [["host", ids[i]], [ids[i], "host"]]:
 				# Delayed: at least 50 ms each way, up to the lossy link's own 250, with its jitter and loss.
-				var delay := 0.05 + rng.next() * (n.delay_max - 0.05)
+				var delay: float = 0.05 + rng.next() * (n.delay_max - 0.05) if delays.is_empty() else float(delays[i])
 				net.set_link(pair[0], pair[1], Transport.LinkConfig.make(delay, n.jitter, n.loss, n.reorder, n.reorder_delay, n.duplicate))
 			var b := NBot.new()
 			b.id = ids[i]
@@ -467,7 +482,11 @@ func _nframe(s: NSess, t: T, b: NBot) -> void:
 		var o: Dictionary = c.latest["orderly"]
 		var ob := Move.Body.make(float(o["x"]), float(o["z"]), int(o["level"]), float(o["y"]))
 		lf.yaw = Entity.yaw_toward(ob.x - body.x, ob.z - body.z)
-		if b.on and s.g >= b.until:
+		if b.on and not b.looks.is_empty():
+			b.looking = false
+			for w: Array in b.looks:
+				b.looking = b.looking or (s.g - s.t_on >= float(w[0]) and s.g - s.t_on < float(w[1]))
+		elif b.on and s.g >= b.until:
 			b.looking = not b.looking
 			b.until = s.g + (0.08 + s.rng.next() * 1.1 if b.looking else 0.15 + s.rng.next() * 1.3)
 		if not (b.on and b.looking):
@@ -497,12 +516,15 @@ func _nframe(s: NSess, t: T, b: NBot) -> void:
 		_nfail(s, t, not f.held, "%s at %.2f: held on one mark of two" % [b.id, s.g])
 		if b.prev_on and f.orderly != null and b.prev_pose != null and not Pose.same_pose(f.orderly, b.prev_pose):
 			s.tl.lone_moves += 1
+			var step := _ahead(f.orderly, b.prev_pose)
+			s.tl.max_step = maxf(s.tl.max_step, step)
+			_nfail(s, t, step <= LONE_STEP, "%s at %.2f: jumped %.2f s along its walk (%.2f m nearer) in one frame on one mark of two (a hold the host never made)" % [b.id, s.g, step, _to(b.prev_pose, me) - _to(f.orderly, me)])
 	# A hold with every mark lit let go in view: it walks on from where it was held, never nearer.
 	if b.prev_all and f.eyes_on and not f.eyes_all and f.orderly != null and b.prev_pose != null and not bent:
 		s.tl.releases += 1
-		var advance := _to(b.prev_pose, me) - _to(f.orderly, me)
+		var advance := _ahead(f.orderly, b.prev_pose)
 		s.tl.max_advance = maxf(s.tl.max_advance, advance)
-		_nfail(s, t, advance <= RELEASE_TOL, "%s at %.2f: let go in view %.2f m nearer than it was held (the host never held it there)" % [b.id, s.g, advance])
+		_nfail(s, t, advance <= RELEASE_TOL, "%s at %.2f: let go in view %.2f s further along its walk than it was held (%.2f m nearer; the host never held it there)" % [b.id, s.g, advance, _to(b.prev_pose, me) - _to(f.orderly, me)])
 	# The watch block is the host's count at that tick.
 	if c.latest != null:
 		var hs := s.host.state_at(int(c.latest["tick"]))
@@ -518,6 +540,12 @@ func _nframe(s: NSess, t: T, b: NBot) -> void:
 
 static func _gap(p: Dictionary, q: Dictionary) -> float:
 	return M.hypot3(float(p["x"]) - float(q["x"]), float(p["y"]) - float(q["y"]), float(p["z"]) - float(q["z"]))
+
+## How much further on its own clock pose `p` is than `q` (seconds; 0 across a change of clip).
+static func _ahead(p: Dictionary, q: Dictionary) -> float:
+	if str(p["anim"]) == "reach" or str(q["anim"]) == "reach":
+		return 0.0
+	return float(p["animTime"]) - float(q["animTime"])
 
 static func _to(p: Dictionary, b: Move.Body) -> float:
 	return M.hypot2(float(p["x"]) - b.x, float(p["z"]) - b.z)
@@ -538,9 +566,11 @@ func _nplay(s: NSess, t: T, until: Callable, limit: float) -> bool:
 	return false
 
 ## One session: out of the car to three spots that can all see a spot the resident is then put at, hunting;
-## then 24 s of the three looking at it and away on their own clocks, until someone is caught.
-func _session(t: T, seed: String) -> NSess:
-	var s := NSess.new(seed)
+## then 24 s of the three looking at it and away on their own clocks, until someone is caught. With
+## `scripts` (one per player, see NBot.looks) they look as scripted instead, p0 from the spot furthest off.
+func _session(t: T, seed: String, delays: Array = [], scripts: Array = []) -> NSess:
+	var s := NSess.new(seed, delays)
+	s.name = seed
 	var plan := s.plan
 	var dist := Floor.distances_from(plan, plan.landing)
 	var cells: Array[Floor.Pos] = []
@@ -572,6 +602,8 @@ func _session(t: T, seed: String) -> NSess:
 		if found.size() == 3:
 			spot = ob
 			goals = found
+			if not scripts.is_empty():
+				goals.sort_custom(func(a: Move.Body, b: Move.Body) -> bool: return flat(a, ob) > flat(b, ob))
 			break
 	if spot == null:
 		return null
@@ -604,16 +636,19 @@ func _session(t: T, seed: String) -> NSess:
 	# A second to settle (everyone facing away), then the looking starts.
 	var t1 := s.g + 1.0
 	_nplay(s, t, func() -> bool: return s.g >= t1, t1 + 1.0)
+	s.t_on = s.g
 	for b in s.bots:
 		b.on = true
 		b.looking = s.rng.next() < 0.5
 		b.until = s.g + s.rng.next() * 0.8
+		if not scripts.is_empty():
+			b.looks = scripts[b.index]
 	var caught := func() -> bool:
 		for p in s.host.state.players:
 			if p.status != &"ok":
 				return true
 		return false
-	_nplay(s, t, caught, s.g + 24.0)
+	_nplay(s, t, caught, s.g + (24.0 if scripts.is_empty() else 8.0))
 	return s
 
 func test_three_clients_on_a_lossy_delayed_link_never_see_it_move_with_every_mark_lit(t: T) -> void:
@@ -622,10 +657,19 @@ func test_three_clients_on_a_lossy_delayed_link_never_see_it_move_with_every_mar
 	var lost := 0
 	var unheld := 0
 	var played := 0
+	# Random looks; then the late glance: p0 watches it walk at them over a slow link (240 ms each way)
+	# while p1 and p2, on quick links, glance at it for 150 ms now and then, so p0's screen holds on a
+	# count the host has already let go by the time p0's report arrives.
+	var late: Array = [[[0.0, 30.0]], [[0.5, 0.65], [2.6, 2.75], [4.7, 4.85]], [[1.55, 1.7], [3.65, 3.8]]]
+	var runs: Array = []
 	for i in sessions:
-		var s := _session(t, "watch-net-%d" % i)
+		runs.append(["watch-net-%d" % i, [], []])
+	for i in sessions:
+		runs.append(["watch-late-%d" % i, [0.24, 0.03, 0.03], late])
+	for run: Array in runs:
+		var s := _session(t, run[0], run[1], run[2])
 		if s == null:
-			t.check(false, "session %d: could not be staged" % i)
+			t.check(false, "session %s: could not be staged" % run[0])
 			continue
 		played += 1
 		for k: String in s.net.stats:
@@ -637,6 +681,7 @@ func test_three_clients_on_a_lossy_delayed_link_never_see_it_move_with_every_mar
 		all.lone_moves += s.tl.lone_moves
 		all.releases += s.tl.releases
 		all.max_advance = maxf(all.max_advance, s.tl.max_advance)
+		all.max_step = maxf(all.max_step, s.tl.max_step)
 		all.block_checks += s.tl.block_checks
 		all.failures += s.tl.failures
 	t.eq(all.failures, 0, "failures on the clients' frames")
@@ -644,5 +689,5 @@ func test_three_clients_on_a_lossy_delayed_link_never_see_it_move_with_every_mar
 	t.check(all.lone_moves > 20, "not vacuous: frames it walked at a lone watcher of two %d" % all.lone_moves)
 	t.check(all.releases > 3, "not vacuous: holds let go in view %d" % all.releases)
 	t.check(all.block_checks > 1000, "watch blocks compared %d" % all.block_checks)
-	t.note("%d sessions: %d client frames; %d pairs with every mark lit; %d frames with one of two lit (%d moving); %d holds let go in view (max %.3f m nearer); %d reports not honoured; %d messages lost" % [
-		played, all.frames, all.all_pairs, all.lone_frames, all.lone_moves, all.releases, all.max_advance, unheld, lost])
+	t.note("%d sessions: %d client frames; %d pairs with every mark lit; %d frames with one of two lit (%d moving); %d holds let go in view (at most %.3f s further on); biggest jump on a lone frame %.3f s; %d reports not honoured; %d messages lost" % [
+		played, all.frames, all.all_pairs, all.lone_frames, all.lone_moves, all.releases, all.max_advance, all.max_step, unheld, lost])
