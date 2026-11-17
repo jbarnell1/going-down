@@ -888,7 +888,9 @@ static func _move_step(plan: Floor.FloorPlan, car: CarGeometry, open: bool, cur:
 	var out := -(r + DOOR_ZONE_SLACK)
 	var here_in_channel := here[0] > out and absf(here[1]) <= band + EPS
 	var next_in_channel := next[0] > out and absf(next[1]) <= band + EPS
-	var zone := here[0] > 0.0 or here_in_channel
+	# Past the wall line only counts as the car within the car's own width: the line runs on across the
+	# floor, and a body crossing it anywhere else (a room beside the shaft) is not in the car.
+	var zone := (here[0] > 0.0 and absf(here[1]) <= car.width / 2.0 + EPS) or here_in_channel
 	if not zone:
 		if open and next_in_channel:
 			return car_body(car, next[0], next[1])

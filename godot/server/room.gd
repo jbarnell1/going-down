@@ -28,7 +28,8 @@
 # the lobby when everyone has gone. A run without days ends as before.
 #
 # The run has the floor quota (`quota`, on unless a test turns it off: sim/run.gd, North Star C9): the
-# call button does nothing until the crew has recorded enough on the floor.
+# call button does nothing until the crew has recorded enough on the floor. A server started with the
+# argument `quota=0` has none (test-only: tools/play_net.mjs passes it; HostRules.quota_off_by_arg).
 extends RefCounted
 
 const Run = preload("res://sim/run.gd")
@@ -177,7 +178,7 @@ func _start(now: float) -> void:
 	for id: String in people:
 		roster.append(id)
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
-	rules = HostRules.new(true, 1, Places.FULL, days, quota)
+	rules = HostRules.new(true, 1, Places.FULL, days, quota and not HostRules.quota_off_by_arg(false))
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))

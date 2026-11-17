@@ -125,6 +125,25 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_quota(s)
 	return s
 
+## Test-only: whether this process was started with the floor quota turned off, `quota=0` (a desktop or
+## server argument after `--`, or the web page's ?quota=0). The scripted playthroughs (tools/play_*.mjs)
+## pass it so their one reading is enough to call the lift; the quota itself is proved headless
+## (tests/prop_quota_net.gd). `need_auto`: honoured only together with `auto=1` (the game's automation
+## flag), so a player cannot turn it off by accident in a normal game.
+static func quota_off_by_arg(need_auto: bool) -> bool:
+	var off := false
+	var auto := false
+	for raw in OS.get_cmdline_user_args():
+		var a := raw.trim_prefix("--")
+		off = off or a == "quota=0"
+		auto = auto or a == "auto=1"
+	if OS.has_feature("web"):
+		var q := str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('quota') ?? ''", true))
+		var au := str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('auto') ?? ''", true))
+		off = off or q == "0"
+		auto = auto or au == "1"
+	return off and (auto or not need_auto)
+
 ## Tests: the next tick presses the call button for `id` from `body`.
 func force_call(id: String, body: Move.Body) -> void:
 	_forced_id = id

@@ -15,7 +15,8 @@
 #    Session.deck is Places.FULL, as client/main.gd sets it; tests leave Clinic only).
 #  - The floor quota (sim/run.gd quota: the call button does nothing until the crew has recorded enough on
 #    the floor) is the same: `quota` true, false, or null to follow the game's deck. With the resident off
-#    (`entity_on` false) it is always off (net/host_rules.gd): nothing could ever be recorded.
+#    (`entity_on` false) it is always off (net/host_rules.gd): nothing could ever be recorded. The
+#    scripted playthroughs start the game with `auto=1 quota=0` to turn it off (HostRules.quota_off_by_arg).
 extends "res://net/room_client.gd"
 
 const Host = preload("res://net/host.gd")
@@ -66,6 +67,8 @@ func days_on() -> bool:
 func quota_on() -> bool:
 	if quota != null:
 		return bool(quota)
+	if HostRules.quota_off_by_arg(true):
+		return false
 	return Session.deck == Places.FULL
 
 ## The room's clock: local seconds, scaled by time_scale.

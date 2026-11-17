@@ -19,8 +19,12 @@
 #      holds is under the quota; earned never fell while on the floor and is every reading closed there;
 #      every client's quota block is the host's at that tick; floor 2 asks for more than floor 1, and less
 #      once p2 has left the game.
+#   2b. The quota never grows on a floor: a player admitted while the car arrives counts, one joining
+#      mid-floor does not, and players leaving the game shrink it.
 #   3. Reading bots (pure rules, no network) on floor 1: how long a crew of 1 to 4 that reads well takes to
-#      meet the quota (noted; the default run checks each crew's median is 60 to 240 s).
+#      meet the quota. Alone, every floor tried must be met (3 in the quick set, 8 in the default run): a
+#      player alone must always be able to leave floor 1. The default run also checks each crew's median
+#      is 60 to 240 s.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -30,6 +34,7 @@ const Move = preload("res://sim/move.gd")
 const Follow = preload("res://sim/follow.gd")
 const Entity = preload("res://sim/entity.gd")
 const Instr = preload("res://sim/instrument.gd")
+const TapeLib = preload("res://sim/tape.gd")
 const Places = preload("res://sim/places.gd")
 const Day = preload("res://sim/day.gd")
 const Rng = preload("res://sim/rng.gd")
@@ -39,6 +44,7 @@ const Transport = preload("res://net/transport.gd")
 const Host = preload("res://net/host.gd")
 const Client = preload("res://net/client.gd")
 const HostRules = preload("res://net/host_rules.gd")
+const LocalRoom = preload("res://net/local_room.gd")
 const Harness = preload("res://tests/net_harness.gd")
 const NetLib = preload("res://tests/net_lib.gd")
 const DayNet = preload("res://tests/prop_day_net.gd")
@@ -72,6 +78,7 @@ class Reader:
 	const FAR := 7.0
 	const NEAR := 3.0
 	const BACK := 5.5
+	const STALL := 12.0
 	var mode := "approach"
 	var watched := 0.0
 	var replan := 0.0
@@ -79,6 +86,9 @@ class Reader:
 	var careless := false
 	## Somewhere a cornered reader does not retreat towards (within AVOID metres), or null.
 	var avoid: Move.Body = null
+	## Where the resident stood when last seen to move, and for how long it has not.
+	var o_ref: Move.Body = null
+	var still_for := 0.0
 
 	## One step: the new body, where it looks (yaw) and whether the instrument is up. `mover(body, dx, dz)`
 	## moves a body with the walls.
@@ -86,6 +96,19 @@ class Reader:
 		var d := M.hypot2(o.x - b.x, o.z - b.z)
 		var to_o := Entity.yaw_toward(o.x - b.x, o.z - b.z)
 		var yaw := to_o + PI
+		# Nothing happening (it has stood still for STALL seconds, say held by our own look across a
+		# stair): walk off somewhere else, watching it, and start again.
+		if o_ref == null or M.hypot2(o.x - o_ref.x, o.z - o_ref.z) > 1.0 or o.level != o_ref.level:
+			o_ref = o
+			still_for = 0.0
+		else:
+			still_for += dt
+		if mode != "move" and still_for >= STALL and not careless:
+			mode = "move"
+			still_for = 0.0
+			walk = Follow.start_path_walk(Floor.find_path(plan, Move.cell_of(plan, b), Reader.away_cell(plan, b, o, avoid)))
+		if mode == "move" and walk != null and not Follow.path_done(plan, walk, b):
+			return {"body": Reader.follow(plan, walk, b, dt, mover), "yaw": to_o, "raised": true}
 		if o.level != b.level or d > FAR:
 			mode = "approach"
 		elif mode == "approach":
@@ -110,11 +133,11 @@ class Reader:
 					walk = Follow.start_path_walk(Floor.find_path(plan, Move.cell_of(plan, b), Move.cell_of(plan, o)))
 					replan = 1.0
 				if not Follow.path_done(plan, walk, b):
-					nb = Follow.step_path_walk(plan, walk, b, SPEED * dt, RADIUS)
+					nb = Reader.follow(plan, walk, b, dt, mover)
 					if M.hypot2(nb.x - b.x, nb.z - b.z) > 1e-6:
 						yaw = Entity.yaw_toward(nb.x - b.x, nb.z - b.z)
 			"move":
-				nb = Follow.step_path_walk(plan, walk, b, SPEED * dt, RADIUS)
+				nb = Reader.follow(plan, walk, b, dt, mover)
 				yaw = to_o
 			"record":
 				walk = null
@@ -125,6 +148,14 @@ class Reader:
 				if d < BACK:
 					nb = mover.call(b, (b.x - o.x) / maxf(d, 1e-6) * BACK_SPEED * dt, (b.z - o.z) / maxf(d, 1e-6) * BACK_SPEED * dt)
 		return {"body": nb, "yaw": yaw, "raised": true}
+
+	## One step along a path, moved by `mover` as a player is (so the car's shut doors hold): the path walk
+	## alone knows the plan's walls but not the car. Climbing a stair, the path walk's own step.
+	static func follow(plan: Floor.FloorPlan, walk: Follow.PathWalk, b: Move.Body, dt: float, mover: Callable) -> Move.Body:
+		var nb := Follow.step_path_walk(plan, walk, b, SPEED * dt, RADIUS)
+		if nb.level != b.level:
+			return nb
+		return mover.call(b, nb.x - b.x, nb.z - b.z)
 
 	## A walkable cell on the same level, at most 10 cells' walk away, at least 7 m from the resident and
 	## AVOID from `avoid` (if any).
@@ -268,6 +299,14 @@ func test_the_quota_grows_with_depth_and_crew(t: T) -> void:
 	t.check(on.quota and on.days, "host rules asked for the quota (and days) turn it on")
 	t.eq(on.floor_needed, Run.floor_quota(3, 3), "prepared at depth 3: floor 3's quota for three")
 	t.check(on.floor_earned == 0.0 and not on.quota_met, "nothing recorded yet")
+	# The game's own rooms have it on (the playthroughs turn it off with `auto=1 quota=0`, not given here).
+	var was := Session.deck
+	Session.deck = Places.FULL
+	var lr := LocalRoom.new()
+	t.check(lr.quota_on(), "the game's local room has the quota on")
+	Session.deck = was
+	t.check(not lr.quota_on(), "tests' local room (Clinic only) has it off")
+	t.check(not HostRules.quota_off_by_arg(false), "no quota=0 on this command line")
 	var by_crew: Array = []
 	for n in range(1, 7):
 		by_crew.append(Run.floor_quota(1, n))
@@ -276,6 +315,100 @@ func test_the_quota_grows_with_depth_and_crew(t: T) -> void:
 		by_depth.append(Run.floor_quota(d, 3))
 	t.note("floor_quota(depth, crew) = %d x crew x %.2f^(depth-1), to the nearest %d: floor 1 by crew %s; a crew of 3 by depth %s" % [
 		Run.QUOTA_PER_PLAYER, Run.QUOTA_DEPTH_STEP, Run.QUOTA_ROUND, str(by_crew), str(by_depth)])
+
+## Found by the reading bots: on some floors there is floor on the car's side of the elevator wall's line,
+## beside the shaft. A step there used to put the body inside the car (doors shut, unhuntable, the run
+## stuck). It is an ordinary step now.
+func test_a_step_past_the_wall_line_beside_the_car_stays_out_of_it(t: T) -> void:
+	var tried := 0
+	for k in 12:
+		var seed := "beside-car-%d" % k
+		var ids: Array[String] = ["a"]
+		var s := Run.create_run(seed, ids)
+		s = s.copy()
+		s.phase = &"away"
+		var car := s.car
+		var dist := Floor.distances_from(s.plan, s.plan.landing)
+		for i in dist.size():
+			if dist[i] < 0:
+				continue
+			var p := Floor.pos_from_index(s.plan, i)
+			if p.level != car.level:
+				continue
+			var b := Move.body_at_cell(s.plan, p)
+			var l := Run.car_local(car, b.x, b.z)
+			if l[0] < 0.2 or absf(l[1]) < car.width / 2.0 + 1.0:
+				continue
+			tried += 1
+			var nb := Run.move_in_run(s, b, car.in_x * 0.05, car.in_z * 0.05, RADIUS)
+			t.check(not Run.in_car(car, nb), "%s cell (%d,%d): a step beside the car put the body in it" % [seed, p.x, p.y])
+			t.check(M.hypot2(nb.x - b.x, nb.z - b.z) <= 0.051, "%s cell (%d,%d): a 5 cm step moved %.2f m" % [seed, p.x, p.y, M.hypot2(nb.x - b.x, nb.z - b.z)])
+	t.check(tried > 0, "no floor beside the car past the wall line on 12 floors (vacuous)")
+	t.note("%d cells past the wall line beside the car on 12 floors: a step from each stays where it is put" % tried)
+
+## A copy of the run with player `id` added as the host admits a joiner (net/host.gd _admit): in the car,
+## on their feet, with an empty tape.
+static func _admit(st: Run.RunState, id: String) -> Run.RunState:
+	var s := st.copy()
+	var rp := Run.RunPlayer.new()
+	rp.id = id
+	rp.body = Run.car_body(s.car, 2.5, 0.0)
+	rp.status = &"ok"
+	rp.aboard = true
+	var players: Array[Run.RunPlayer] = s.players.duplicate()
+	players.append(rp)
+	s.players = players
+	var c := s.crew.copy()
+	var mem := Instr.CrewMember.new()
+	mem.id = id
+	mem.active = true
+	mem.instrument = Instr.create_instrument()
+	mem.tape = TapeLib.empty_tape("tape-%d" % c.next_tape, id)
+	c.members = s.crew.members.duplicate()
+	c.members.append(mem)
+	c.next_tape += 1
+	s.crew = c
+	return s
+
+## Steps a run with everyone standing on the landing (in the car while it arrives), parked resident.
+static func _stand(st: Run.RunState, seconds: float) -> Run.RunState:
+	var s := st
+	for _k in roundi(seconds / Session.TICK):
+		var inputs: Array[Run.PlayerInput] = []
+		for i in s.players.size():
+			var p := s.players[i]
+			var b := p.body if s.phase == &"arriving" else Run.car_body(s.car, -1.0, -0.6 + 0.4 * i)
+			inputs.append(Run.PlayerInput.make(p.id, b, 1.65, 0.0, 0.0, 90.0, 70.0))
+		s = Run.step_run(s, inputs, Session.TICK).state
+	return s
+
+func test_the_quota_never_grows_on_a_floor(t: T) -> void:
+	var ids: Array[String] = ["a", "b"]
+	var s := Run.create_run("q-grow", ids, [], false, true)
+	s = s.copy()
+	s.orderly = HostRules.parked_orderly(s)
+	t.eq(s.floor_needed, Run.floor_quota(1, 2), "made for two")
+	# Admitted while the car arrives (the host's only stop to admit): the quota is for three.
+	s = _stand(_admit(s, "c"), 0.2)
+	t.eq(s.phase, &"arriving", "still arriving")
+	t.eq(s.floor_needed, Run.floor_quota(1, 3), "a player admitted at the stop counts")
+	s = _stand(s, 6.0)
+	if not t.check(s.phase == &"away", "the car never left (phase %s)" % s.phase):
+		return
+	# Joined mid-floor: the quota stays as it was.
+	s = _stand(_admit(s, "d"), 1.0)
+	t.eq(s.floor_needed, Run.floor_quota(1, 3), "a player joining mid-floor does not raise the quota")
+	# Leaving the game: it shrinks, and stays shrunk.
+	s = s.copy()
+	var players: Array[Run.RunPlayer] = []
+	for p in s.players:
+		var np := p.copy()
+		if np.id == "c" or np.id == "d":
+			np.status = &"leftBehind"
+		players.append(np)
+	s.players = players
+	s = _stand(s, 0.2)
+	t.eq(s.floor_needed, Run.floor_quota(1, 2), "two players leave: the quota is for the two left")
 
 # ---------------------------------------------------------------------------------------------
 # Over the network.
@@ -632,14 +765,18 @@ static func _time_to_quota(seed: String, n: int, depth: int, limit: float) -> fl
 	return INF
 
 func test_reading_bots_meet_floor_1_in_about_two_minutes(t: T) -> void:
-	var seeds := 1 if t.quick else 3
 	var parts: Array[String] = []
 	for n in range(1, 5):
+		# Alone is where a stuck floor would hurt most: more seeds, in the quick set too.
+		var seeds := (3 if t.quick else 8) if n == 1 else (1 if t.quick else 3)
 		var times: Array[float] = []
 		for k in seeds:
 			times.append(_time_to_quota("quota-read-%d-%d" % [k, n], n, 1, 360.0))
 		times.sort()
 		var med := times[times.size() / 2]
+		if n == 1:
+			# A player alone must always be able to leave floor 1 ("one bad roll never ends a run").
+			t.check(not is_inf(times[-1]), "alone, a reading bot never met floor 1's quota of %d in 6 minutes on some floor: %s" % [Run.floor_quota(1, 1), str(times)])
 		var shown := PackedStringArray()
 		for x in times:
 			shown.append("never" if is_inf(x) else "%d:%02d" % [int(x) / 60, int(x) % 60])

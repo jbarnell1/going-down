@@ -21,7 +21,8 @@ const dir = resolve(here, '../export/windows');
 
 const consoleLines = [];
 const t0 = Date.now();
-const game = spawn(resolve(dir, 'GoingDown.exe'), ['--resolution', '960x540', '--position', '40,40', '--', 'auto=1', `quality=${quality}`, `testport=${port}`], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
+// quota=0 (with auto=1): no floor quota, so the playthrough's one reading is enough to call the lift.
+const game = spawn(resolve(dir, 'GoingDown.exe'), ['--resolution', '960x540', '--position', '40,40', '--', 'auto=1', 'quota=0', `quality=${quality}`, `testport=${port}`], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
 const keep = (b) => { for (const l of b.toString().split(/\r?\n/)) if (l.trim()) consoleLines.push(l); };
 game.stdout.on('data', keep);
 game.stderr.on('data', keep);
