@@ -8,6 +8,7 @@
 // npm run godot:export -- server -> the dedicated server: godot/export/server/GoingDownServer.x86_64 (Linux, headless)
 // npm run godot:export     -> import the assets, export godot/export/web and godot/export/windows/GoingDown.exe,
 //                             then precompress the web build for the hub (node hub/precompress.mjs)
+// node godot/tools/godot.mjs golden-diff DIR -> the same summary, comparing the goldens in DIR with godot/tests/golden/
 // node godot/tools/godot.mjs import   -> only the import pass (assets, the global class list)
 // npm run godot:reference  -> HISTORICAL: the TypeScript dumpers that produced the reference the first
 //                             goldens were proved against; writes godot/export/typescript-reference/
@@ -25,6 +26,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..', '..');
 const project = join(root, 'godot');
 const [command, ...rest] = process.argv.slice(2);
+/** godot:golden's summary: at most this many changed parts are described one by one per file; the rest are named. */
+const MAX_DESCRIBED = 12;
 
 function run(cmd, args, opts = {}) {
   const r = spawnSync(cmd, args, { stdio: 'inherit', cwd: root, ...opts });
@@ -95,11 +98,25 @@ if (command === 'reference') {
   const after = readGoldens(goldenDir);
   console.log('');
   console.log(`godot:golden finished in ${((Date.now() - t0) / 1000).toFixed(0)} s (exit ${code}).`);
+  const files = rest.filter((a) => !a.startsWith('--'));
+  console.log(`Test files recorded: ${files.length > 0 ? files.join(', ') : 'all'}.`);
   console.log(full
-    ? 'Sizes regenerated: the FULL property sizes only (properties.json key "full"). Nothing else was recorded.'
-    : 'Sizes regenerated: ref_* and test_jsmath at the default size (they cover the quick set); prop_* at the quick and default sizes (properties.json keys "quick", "sub", "clinic", "clinicQuick"). The full sizes ("full") were NOT regenerated: run `npm run godot:golden -- --full` for those (slow).');
+    ? 'Sizes recorded: the FULL property sizes only (properties.json key "full"). Nothing else was recorded.'
+    : 'Sizes recorded: ref_* and test_jsmath at the default size (they cover the quick set); prop_* at the quick and default sizes (properties.json keys "quick", "sub", "clinic", "clinicQuick"). The full sizes ("full") were NOT recorded: run `npm run godot:golden -- --full` for those (slow).');
   printGoldenSummary(before, after);
   process.exit(code);
+} else if (command === 'golden-diff') {
+  // The same summary without recording: what differs between the goldens in DIR (for example a copy
+  // taken from another commit) and godot/tests/golden/.  node godot/tools/godot.mjs golden-diff DIR
+  const dir = rest.find((a) => !a.startsWith('--'));
+  if (!dir || !existsSync(dir)) {
+    console.error('usage: node godot/tools/godot.mjs golden-diff DIR (a folder of golden files to compare with godot/tests/golden/)');
+    process.exit(2);
+  }
+  const before = readGoldens(resolve(dir));
+  for (const v of before.values()) v.mtime = -1;
+  printGoldenSummary(before, readGoldens(join(project, 'tests', 'golden')), `the goldens in ${dir}`);
+  process.exit(0);
 } else if (command === 'import') {
   process.exit(importPass() ? 0 : 1);
 } else if (command === 'export') {
@@ -138,44 +155,51 @@ if (command === 'reference') {
 // ---------------------------------------------------------------------------------------------
 // The summary godot:golden prints: what changed in the goldens, scenario by scenario.
 
-/** name -> raw text of every golden file in `dir` (null when the folder is missing). */
+/** name -> {text, mtime} of every golden file in `dir` (empty when the folder is missing). */
 function readGoldens(dir) {
   const out = new Map();
   if (!existsSync(dir)) return out;
-  for (const name of readdirSync(dir).filter((n) => n.endsWith('.json')).sort()) out.set(name, readFileSync(join(dir, name), 'utf8'));
+  for (const name of readdirSync(dir).filter((n) => n.endsWith('.json')).sort()) {
+    out.set(name, { text: readFileSync(join(dir, name), 'utf8'), mtime: statSync(join(dir, name)).mtimeMs });
+  }
   return out;
 }
 
-function printGoldenSummary(before, after) {
+function printGoldenSummary(before, after, against = 'the files on disk before this run') {
   console.log('');
-  console.log('What changed in godot/tests/golden/ (compared with the files on disk before this run):');
+  console.log(`What changed in godot/tests/golden/ (compared with ${against}):`);
   const names = [...new Set([...before.keys(), ...after.keys()])].sort();
   for (const name of names) {
-    const a = before.get(name);
-    const b = after.get(name);
-    if (a === undefined) {
+    const fa = before.get(name);
+    const fb = after.get(name);
+    if (fa === undefined) {
       console.log(`  ${name}: NEW FILE`);
       continue;
     }
-    if (b === undefined) {
+    if (fb === undefined) {
       console.log(`  ${name}: REMOVED`);
       continue;
     }
-    if (a === b) {
-      console.log(`  ${name}: unchanged`);
+    if (fa.mtime === fb.mtime && fa.text === fb.text) {
+      console.log(`  ${name}: not recorded in this run (kept as it was)`);
       continue;
     }
-    const units = goldenUnits(name, JSON.parse(a), JSON.parse(b));
+    if (fa.text === fb.text) {
+      console.log(`  ${name}: ${fa.mtime === -1 ? 'unchanged' : 'recorded, unchanged'}`);
+      continue;
+    }
+    const units = goldenUnits(name, JSON.parse(fa.text), JSON.parse(fb.text));
     const changed = units.filter((u) => !deepEqual(u.a, u.b));
     const same = units.filter((u) => deepEqual(u.a, u.b));
     console.log(`  ${name}: ${changed.length} of ${units.length} parts changed`);
-    for (const u of changed) {
+    for (const u of changed.slice(0, MAX_DESCRIBED)) {
       const lines = describe(u.a, u.b);
       console.log(`    CHANGED ${u.label}: ${lines[0] ?? ''}`);
-      for (const l of lines.slice(1, 14)) console.log(`        ${l}`);
-      if (lines.length > 14) console.log(`        ... ${lines.length - 14} more differences`);
+      for (const l of lines.slice(1, 8)) console.log(`        ${l}`);
+      if (lines.length > 8) console.log(`        ... ${lines.length - 8} more differences`);
     }
-    if (same.length > 0) console.log(`    unchanged (${same.length}): ${same.map((u) => u.label).join(', ')}`);
+    if (changed.length > MAX_DESCRIBED) console.log(`    also changed (${changed.length - MAX_DESCRIBED}): ${changed.slice(MAX_DESCRIBED).map((u) => u.label).join(', ')}`);
+    if (same.length > 0) console.log(`    unchanged (${same.length}): ${same.slice(0, 20).map((u) => u.label).join(', ')}${same.length > 20 ? `, ... ${same.length - 20} more` : ''}`);
   }
 }
 
@@ -238,7 +262,9 @@ function firstChunk(x, y, size) {
   for (let i = 0; i < n; i += size) if (x.slice(i, i + size) !== y.slice(i, i + size)) return i / size;
   return x.length === y.length ? -1 : n / size;
 }
-const isTrace = (v) => v && typeof v === 'object' && typeof v.full === 'string' && typeof v.ticks === 'number' && 'events' in v;
+function isTrace(v) {
+  return v && typeof v === 'object' && typeof v.full === 'string' && typeof v.ticks === 'number' && 'events' in v;
+}
 
 /** Lines describing how `b` differs from `a`: the first line is the headline. */
 function describe(a, b) {
