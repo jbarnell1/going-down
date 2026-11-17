@@ -1,10 +1,11 @@
 # The day's guarantees over seeded random days (sim/day.gd): shares always sum to what was banked;
-# a made day never takes an upgrade; a missed day takes exactly one owned upgrade (none when none is
-# owned) and every player computes the same one; the third miss of a night is game over and resets
+# a made day never takes an upgrade; a missed day takes exactly one of their OWN upgrades from EVERY
+# player who owns any (nothing from those who own none) and every player computes the same ones; the third miss of a night is game over and resets
 # to a fresh Day 1 with empty wallets; the quota is deterministic, ignores the seed, grows only on
 # made days and stops at day 8; the BANK preview always agrees with what BANK then does; no call
 # edits what it was given; and lights go out exactly 20 s after more than half the crew is in bed,
-# never before, and at once when everyone is in.
+# never before, and at once when everyone is in; once the count has started it cannot be stopped by
+# climbing out or leaving.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -158,38 +159,53 @@ func test_a_made_day_never_takes_an_upgrade(t: T) -> void:
 		made += 1
 	t.note("%d made days, none took an upgrade" % made)
 
-func test_a_missed_day_takes_exactly_one_owned_upgrade_the_same_for_everyone(t: T) -> void:
-	t.eq(Day.LOSS_RULE, Day.LossRule.CREW_ONE, "the reading built and tested: one upgrade per miss for the crew")
+func test_a_missed_day_takes_one_upgrade_from_each_owner_the_same_for_everyone(t: T) -> void:
+	t.eq(Day.LOSS_RULE, Day.LossRule.EACH_PLAYER_ONE, "the owner's answer: one upgrade from EVERY player who owns any")
 	var rng := Rng.make_rng("day-missed")
 	var runs := 200 if t.quick else 1500
 	var took := 0
+	var several := 0
 	var empty := 0
 	for i in runs:
 		var crew := _crew(rng, rng.int_in(1, 6))
-		var w := _wallets(rng, crew, 0.0 if rng.chance(0.15) else 0.4)
+		var w := _wallets(rng, crew, 0.0 if rng.chance(0.15) else 0.3)
+		# Some players own nothing at all.
+		for p in crew:
+			if rng.chance(0.25):
+				w[p] = Upgrades.UpgradeState.make((w[p] as Upgrades.UpgradeState).credits)
 		var s := _state(rng.int_in(1, 12), rng.int_in(0, 5), rng.int_in(0, 1), rng.int_in(0, Day.MAX_LEVEL), crew.size())
 		var fq := rng.int_in(1, 300)
 		var q := Day.day_quota(s, fq)
 		var seed_text := "miss-%d" % i
 		var r := Day.end_day(s, rng.int_in(0, q - 1), crew, w, fq, seed_text)
 		t.check(not r.made and r.outcome == &"missed", "day %d: short of the quota" % i)
-		var had := _owned_count(w)
-		if had == 0:
-			t.check(r.taken.is_empty(), "day %d: nothing owned, nothing taken" % i)
+		var owners := 0
+		var taken_by := {}
+		for k: Dictionary in r.taken:
+			t.check(not taken_by.has(k["player"]), "day %d: %s lost two" % [i, k["player"]])
+			taken_by[k["player"]] = String(k["node"])
+		for p in crew:
+			var before: Upgrades.UpgradeState = w[p]
+			var after: Upgrades.UpgradeState = r.wallets[p]
+			if before.owned.is_empty():
+				t.check(not taken_by.has(p) and after.owned.is_empty(), "day %d: %s owns none and loses nothing" % [i, p])
+				continue
+			owners += 1
+			if not t.check(taken_by.has(p), "day %d: %s owns %d and lost none" % [i, p, before.owned.size()]):
+				continue
+			var node_id: String = taken_by[p]
+			t.check(before.owned.has(node_id) and not after.owned.has(node_id), "day %d: %s owned %s and lost it" % [i, p, node_id])
+			t.eq(after.owned.size(), before.owned.size() - 1, "day %d: %s lost exactly one" % [i, p])
+		t.eq(r.taken.size(), owners, "day %d: one loss per owner" % i)
+		t.eq(r.facts["taken"].size(), owners, "day %d: the narrator is told every loss" % i)
+		if owners == 0:
 			empty += 1
 		else:
-			t.eq(r.taken.size(), 1, "day %d: exactly one upgrade taken" % i)
-			t.eq(_owned_count(r.wallets), had - 1, "day %d: one fewer owned" % i)
-			if r.taken.size() == 1:
-				var p: String = r.taken[0]["player"]
-				var node_id: String = r.taken[0]["node"]
-				var before: Upgrades.UpgradeState = w[p]
-				var after: Upgrades.UpgradeState = r.wallets[p]
-				t.check(before.owned.has(node_id) and not after.owned.has(node_id), "day %d: %s owned %s and lost it" % [i, p, node_id])
-				t.eq(r.facts["taken"].size(), 1, "day %d: the narrator is told what went" % i)
 			took += 1
+			if owners > 1:
+				several += 1
 		t.check(r.state.streak == 0 and r.state.misses == s.misses + 1 and r.state.level == s.level, "day %d: streak 0, one more miss, quota level kept" % i)
-		# Every player computes the roll on their own machine, wallets arriving in any order.
+		# Every player computes the roll on their own machine, wallets and upgrades arriving in any order.
 		var other := {}
 		var order: Array[String] = crew.duplicate()
 		_shuffle(rng, order)
@@ -201,8 +217,8 @@ func test_a_missed_day_takes_exactly_one_owned_upgrade_the_same_for_everyone(t: 
 		var again := Day.end_day(s, r.banked, order, other, fq, seed_text)
 		t.check(str(again.taken) == str(r.taken), "day %d: the roll differs by order: %s vs %s" % [i, str(again.taken), str(r.taken)])
 		t.eq(_fp_wallets(again.wallets), _fp_wallets(r.wallets), "day %d: the same wallets after" % i)
-	t.check(took > runs / 2 and empty > 0, "not vacuous: %d took one, %d had nothing" % [took, empty])
-	t.note("%d missed days: %d took one upgrade, %d had none to take" % [runs, took, empty])
+	t.check(took > runs / 2 and several > runs / 5 and empty > 0, "not vacuous: %d took, %d took from several players, %d had nothing" % [took, several, empty])
+	t.note("%d missed days: %d took upgrades (%d from several players), %d had none to take" % [runs, took, several, empty])
 
 func test_the_third_miss_is_game_over_and_resets_but_deletes_nothing(t: T) -> void:
 	var rng := Rng.make_rng("day-over")
@@ -314,10 +330,28 @@ func test_bank_preview_agrees_with_end_day(t: T) -> void:
 			t.eq(p.misses_after, r.state.misses, tag + ": misses after")
 		if not p.made and not p.game_over:
 			shorts += 1
-			t.eq(p.at_stake, Day.crew_pool(w).size(), tag + ": the odds count every upgrade the crew owns")
-			t.eq(r.taken.size(), 1 if p.at_stake > 0 else 0, tag + ": the preview's stake is what was taken")
-			if p.at_stake > 0:
-				t.eq(p.odds, "1 in %d" % p.at_stake, tag + ": printed odds")
+			var owners: Array[String] = []
+			for id in crew:
+				if not (w[id] as Upgrades.UpgradeState).owned.is_empty():
+					owners.append(id)
+			t.eq(p.at_stake, owners.size(), tag + ": the stake is one upgrade per owner")
+			t.eq(r.taken.size(), p.at_stake, tag + ": the preview's stake is what was taken")
+			t.eq(p.per_player.size(), owners.size(), tag + ": the odds list every owner")
+			var parts: Array[String] = []
+			for k: Dictionary in p.per_player:
+				var n := (w[k["player"]] as Upgrades.UpgradeState).owned.size()
+				t.eq(k["owned"], n, tag + ": %s's pool" % k["player"])
+				t.eq(k["odds"], "1 in %d" % n, tag + ": %s's printed odds" % k["player"])
+				parts.append("%s 1 in %d" % [k["player"], n])
+			if p.at_stake == 0:
+				t.eq(p.odds, "nothing to take", tag + ": nothing to take")
+				t.check(p.text.contains("NOTHING TO TAKE"), tag + ": the monitor says so: " + p.text)
+			else:
+				t.eq(p.odds, ", ".join(parts), tag + ": printed odds")
+				t.check(p.text.contains("LOSES ONE UPGRADE"), tag + ": the monitor states the stakes: " + p.text)
+				if p.at_stake <= 3:
+					t.check(p.text.contains(p.odds.to_upper()), tag + ": the odds are on the monitor: " + p.text)
+				t.check(("EACH OF YOU" if p.at_stake >= crew.size() else "EACH OWNER") in p.text, tag + ": who loses: " + p.text)
 		else:
 			t.check(r.taken.is_empty() and p.at_stake == 0, tag + ": nothing at stake, nothing taken")
 		if p.game_over:
@@ -365,21 +399,20 @@ func _expected_lights_out(crew_n: int, events: Array) -> float:
 			inside.erase(who)
 			n -= 1
 		var c := inside.size()
-		if c * 2 > n:
-			if over_since < 0.0:
-				over_since = at
-		else:
-			over_since = -1.0
+		# The count starts the first time more than half are in and is never stopped.
+		if c * 2 > n and over_since < 0.0:
+			over_since = at
 		if c == n:
 			if all_since < 0.0:
 				all_since = at
 		else:
 			all_since = -1.0
+	var out := INF
 	if all_since >= 0.0:
-		return all_since
+		out = all_since
 	if over_since >= 0.0:
-		return over_since + 20.0
-	return INF
+		out = minf(out, over_since + 20.0)
+	return out
 
 func test_lights_out_20_seconds_after_more_than_half_never_before_at_once_when_all_in(t: T) -> void:
 	t.eq(Day.LIGHTS_OUT_DELAY, 20.0, "the owner's twenty seconds")
@@ -396,14 +429,30 @@ func test_lights_out_20_seconds_after_more_than_half_never_before_at_once_when_a
 	t.eq(Day.assisted(b), ["di"] as Array[String], "di is assisted to bed")
 	t.eq(Day.count_text(b), "IN BED 3 OF 4", "the count over the cell doors")
 	t.check(Day.climb_out(b, "cy", 31.0) == b, "nobody gets out after lights out")
-	# Back to half stops the count; over half again restarts it from then.
+	# The count cannot be stopped: climbing out (even back to half) keeps lights out at start + 20 s.
 	var c := Day.climb_out(b, "bo", 20.0)
-	t.eq(Day.lights_out_at(c), INF, "back to half: the count stops")
+	t.eq(Day.lights_out_at(c), 30.0, "back to half at 20 s: the count runs on, lights out at 30 s")
+	c = Day.climb_out(c, "cy", 21.0)
+	t.eq(Day.lights_out_at(c), 30.0, "even with one in bed: lights out at 30 s")
 	c = Day.climb_in(c, "bo", 25.0)
-	t.eq(Day.lights_out_at(c), 45.0, "over half again at 25 s: lights out at 45 s")
-	c = Day.climb_in(c, "di", 26.0)
-	t.eq(Day.lights_out_at(c), 26.0, "everyone in at 26 s: lights out at once")
+	t.eq(Day.lights_out_at(c), 30.0, "climbing back in does not restart it: still 30 s")
+	t.check(Day.is_lights_out(c, 30.0) and not Day.is_lights_out(c, 29.999), "out at exactly start + 20 s")
+	t.eq(Day.assisted(c), ["cy", "di"] as Array[String], "cy and di are assisted to bed")
+	# Everyone in earlier means lights out at that moment.
+	c = Day.climb_in(c, "cy", 26.0)
+	c = Day.climb_in(c, "di", 27.0)
+	t.eq(Day.lights_out_at(c), 27.0, "everyone in at 27 s: lights out at once")
 	t.check(Day.assisted(c).is_empty(), "nobody assisted")
+	# Leaving the game does not cancel it either.
+	var lv := Day.climb_in(Day.climb_in(Day.climb_in(Day.BedState.make(crew), "ann", 1.0), "bo", 2.0), "cy", 10.0)
+	lv = Day.leave(lv, "cy", 12.0)
+	t.eq(Day.lights_out_at(lv), 30.0, "cy quits at 12 s: the count started at 10 s still ends at 30 s")
+	lv = Day.leave(lv, "ann", 14.0)
+	t.eq(Day.lights_out_at(lv), 30.0, "ann quits too: still 30 s")
+	t.eq(Day.lights_out_at(Day.leave(lv, "di", 15.0)), 15.0, "bo is the whole crew and is in: lights out when di quits")
+	# Never before more than half were in: a count that never went over half does not run.
+	var half := Day.climb_out(Day.climb_in(Day.climb_in(Day.BedState.make(crew), "ann", 1.0), "bo", 2.0), "bo", 5.0)
+	t.eq(Day.lights_out_at(half), INF, "two of four is not more than half: no count, climbing out changes nothing")
 	# Small crews: more than half is everyone.
 	var one := Day.climb_in(Day.BedState.make(["ann"] as Array[String]), "ann", 3.0)
 	t.eq(Day.lights_out_at(one), 3.0, "alone: lights out as you get in")
@@ -451,8 +500,7 @@ func test_lights_out_20_seconds_after_more_than_half_never_before_at_once_when_a
 			if got < INF:
 				t.check(not Day.is_lights_out(bed, got - 0.001) and Day.is_lights_out(bed, got), "run %d: lights out exactly at %s" % [i, str(got)])
 				if bed.in_bed.size() < bed.crew.size():
-					t.eq(got - bed.count_from, 20.0, "run %d: 20 s after more than half" % i)
-					t.check(Day.more_than_half(bed.in_bed.size(), bed.crew.size()), "run %d: the count runs only while more than half are in" % i)
+					t.eq(got - bed.count_from, 20.0, "run %d: 20 s after the count first went over half" % i)
 		if Day.lights_out_at(bed) < INF:
 			if bed.in_bed.size() == bed.crew.size():
 				all_in += 1

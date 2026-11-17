@@ -6,17 +6,18 @@
 # The design: docs/floors/prison.md sections 1, 2 and 6, with "The owner's answers (17 November)"
 # overriding it. A missed day no longer halves the pay: it pays the banked pay as normal, takes ONE
 # upgrade by a seeded roll, and the third missed day of a night is game over. There is no clocking
-# out. Lights go out 20 s after more than half the crew is in bed. Day 1 every game night.
+# out. Lights go out 20 s after more than half the crew is in bed, and once that count has started
+# it cannot be stopped. Day 1 every game night.
 #
 # Words: a WALLET is one player's Upgrades.UpgradeState (credits and owned nodes). Wallets are passed
 # as a Dictionary {player_id: UpgradeState}. Credits are ints; the caller rounds the run's banked
 # total (sim/run.gd keeps it as a float) down before passing it in.
 #
 # Readings built here that the owner has NOT confirmed (each one is a constant or one function):
-#   - LOSS_RULE: "an upgrade taken by roll" = ONE upgrade per missed day for the whole CREW, chosen
-#     by one seeded roll over every upgrade any crew member owns (LossRule.CREW_ONE). The other
-#     reading, one upgrade from EACH player who owns any (LossRule.EACH_PLAYER_ONE), is built in
-#     take_by_roll() too: change the constant to switch.
+#   - LOSS_RULE is the OWNER'S ANSWER (17 Nov): EACH_PLAYER_ONE. A missed day takes one upgrade from
+#     EVERY player who owns any, each player's own picked by a seeded roll over that player's own
+#     upgrades. Players with none lose nothing. LossRule.CREW_ONE (one upgrade for the whole crew by
+#     one roll over the pooled upgrades) is kept as the other reading: change the constant to switch.
 #   - Missed days count within one game night (start_night() clears them).
 #   - Game over resets credits, upgrades, the day number, the streak and the quota level. It deletes
 #     nothing: the caller keeps the save, records and days served.
@@ -38,7 +39,8 @@
 #       Even split. total / n each; the remainder (total mod n) goes one credit each to the next
 #       `remainder` players in sorted-id order, starting at index (day - 1) mod n, so the odd
 #       credit rotates day by day. The shares always sum to total.
-#   loss_odds(wallets) -> Dictionary             {"count": n, "text": "1 in n" | "nothing to take" ...}
+#   loss_odds(wallets) -> Dictionary             {"count": upgrades about to go, "text": "ann 1 in 3, bo 1 in 2" |
+#       "nothing to take", "players": [{"player", "owned", "odds"}] (EACH_PLAYER_ONE: one per owner)}
 #   take_by_roll(seed, day, wallets) -> Array[Dictionary]  [{"player": id, "node": id}], by LOSS_RULE
 #   bank_preview(s, banked, wallets, floor_quota_per_player) -> Preview
 #       What BANK would do right now, for the lift monitor and the quota board (promise 2: the
@@ -46,7 +48,7 @@
 #   end_day(s, banked, crew, wallets, floor_quota_per_player, seed) -> DayResult
 #       Settles the day at BANK (or a wipe, banked 0). Pays every crew member their share into their
 #       wallet. Made: streak + 1, level + 1 (capped). Missed: streak 0, misses + 1, one upgrade taken
-#       by the seeded roll (none when nobody owns one); the third miss is game over: wallets reset to
+#       from each player who owns any, by the seeded roll (none when nobody owns one); the third miss is game over: wallets reset to
 #       empty and the state is start_night(). The returned state describes the NEXT day.
 #   bunk_of(crew, player) -> Vector2i            the player's bunk cell (sim/prison.gd), sorted order
 #
@@ -56,8 +58,10 @@
 #       Refused (the same instance returned) after lights out, for strangers, or when nothing changes.
 #       leave() is a player who quits the game: they leave the crew and the count.
 #   more_than_half(in_count, crew_count) -> bool  2 x in > crew
-#   lights_out_at(b) -> float                    the moment everyone was in; else the moment the count
-#       went over half + LIGHTS_OUT_DELAY; else INF. Dropping back to half or less stops the count.
+#   lights_out_at(b) -> float                    the earlier of: the moment the count first went over half +
+#       LIGHTS_OUT_DELAY, and the moment everyone currently in the crew is in bed; else INF.
+#       The count, once started, is KEPT (owner's answer): climbing out or leaving the game never
+#       stops or pauses it. Everyone in earlier means lights out at that moment.
 #   is_lights_out(b, now) -> bool / seconds_left(b, now) -> float
 #   assisted(b) -> Array[String]                 who is still up (sorted): "ASSISTED TO BED" at zero
 #   count_text(b) -> String                      "IN BED 3 OF 4"
@@ -79,7 +83,7 @@ const LIGHTS_OUT_SECONDS := 5.0
 
 enum LossRule { CREW_ONE, EACH_PLAYER_ONE }
 ## The reading of "an upgrade taken by roll" in force. See take_by_roll().
-const LOSS_RULE := LossRule.CREW_ONE
+const LOSS_RULE := LossRule.EACH_PLAYER_ONE
 
 ## Separates player and node in a roll entry. Node ids never contain it.
 const SEP := "|"
@@ -120,11 +124,15 @@ class Preview:
 	var misses_after: int
 	## True when BANK now would be the third miss.
 	var game_over: bool
-	## How many upgrades the roll would choose from (0 when made or game over).
+	## How many upgrades BANK would take now: one per owner (EACH_PLAYER_ONE), or the pool size under
+	## CREW_ONE (0 when made or game over).
 	var at_stake: int
-	## "1 in 4", "nothing to take", or "" when made or game over.
+	## "ann 1 in 4, bo 1 in 2" (or "1 in 4" under CREW_ONE), "nothing to take", or "" when made or game over.
 	var odds: String
-	## The monitor line, e.g. "BANK NOW: 640 OF 900. SHORT 260. ONE UPGRADE LOST, 1 IN 4. MISS 1 OF 3."
+	## Per owner, [{"player", "owned", "odds"}], sorted by player: each loses one of their own owned
+	## upgrades at these odds. Empty when made, game over or nothing is owned (EACH_PLAYER_ONE only).
+	var per_player: Array[Dictionary] = []
+	## The monitor line, e.g. "BANK NOW: 640 OF 900. SHORT 260. EACH OWNER LOSES ONE UPGRADE: ANN 1 IN 4, BO 1 IN 2. MISS 1 OF 3."
 	var text: String
 
 class DayResult:
@@ -154,7 +162,7 @@ class BedState:
 	var crew: Array[String] = []
 	## Sorted ids of players in bed.
 	var in_bed: Array[String] = []
-	## When the count went over half (and has stayed over), or -1.
+	## When the count FIRST went over half, or -1. Kept for good: it is never cleared.
 	var count_from: float = -1.0
 	## When everyone was in, or -1.
 	var all_in_at: float = -1.0
@@ -265,12 +273,14 @@ static func loss_odds(wallets: Dictionary) -> Dictionary:
 	# EACH_PLAYER_ONE: every player who owns any loses one of their own, 1 in (their count).
 	var count := 0
 	var parts := PackedStringArray()
+	var players: Array[Dictionary] = []
 	for id in _ids(wallets):
 		var n := _wallet(wallets, id).owned.size()
 		if n > 0:
 			count += 1
 			parts.append("%s 1 in %d" % [id, n])
-	return {"count": count, "text": "nothing to take" if count == 0 else ", ".join(parts)}
+			players.append({"player": id, "owned": n, "odds": "1 in %d" % n})
+	return {"count": count, "text": "nothing to take" if count == 0 else ", ".join(parts), "players": players}
 
 ## THE place that decides what a missed day takes. Seeded from the day's seed and day number only,
 ## so every player computes the same result; the order of `wallets` does not matter.
@@ -306,6 +316,8 @@ static func bank_preview(s: DayState, banked: int, wallets: Dictionary, floor_qu
 		var o := loss_odds(wallets)
 		p.at_stake = int(o["count"])
 		p.odds = String(o["text"])
+		for k: Dictionary in o.get("players", []):
+			p.per_player.append(k)
 	var line := "BANK NOW: %d OF %d." % [p.banked, p.quota]
 	if p.made:
 		line += " MADE."
@@ -314,9 +326,20 @@ static func bank_preview(s: DayState, banked: int, wallets: Dictionary, floor_qu
 	elif p.at_stake == 0:
 		line += " SHORT %d. NOTHING TO TAKE. MISS %d OF %d." % [p.short_by, p.misses_after, MISSES_FOR_GAME_OVER]
 	else:
-		line += " SHORT %d. ONE UPGRADE LOST, %s. MISS %d OF %d." % [p.short_by, p.odds.to_upper(), p.misses_after, MISSES_FOR_GAME_OVER]
+		line += " SHORT %d. %s MISS %d OF %d." % [p.short_by, _stake_text(p, wallets.size()), p.misses_after, MISSES_FOR_GAME_OVER]
 	p.text = line
 	return p
+
+## The stakes sentence on the lift monitor. Short: the odds are listed when three or fewer players
+## stand to lose one; the full per-player odds are in Preview.per_player for the quota board.
+static func _stake_text(p: Preview, player_count: int) -> String:
+	if LOSS_RULE == LossRule.CREW_ONE:
+		return "ONE UPGRADE LOST, %s." % p.odds.to_upper()
+	var who := "EACH OF YOU" if p.at_stake >= player_count else "EACH OWNER"
+	var text := "%s LOSES ONE UPGRADE" % who
+	if p.at_stake <= 3:
+		return "%s: %s." % [text, p.odds.to_upper()]
+	return text + "."
 
 static func end_day(s: DayState, banked: int, crew: Array[String], wallets: Dictionary, floor_quota_per_player: int, seed_text: String) -> DayResult:
 	var pv := bank_preview(s, banked, wallets, floor_quota_per_player)
@@ -407,11 +430,12 @@ static func more_than_half(in_count: int, crew_count: int) -> bool:
 	return 2 * in_count > crew_count
 
 static func lights_out_at(b: BedState) -> float:
+	var at := INF
 	if b.all_in_at >= 0.0:
-		return b.all_in_at
+		at = b.all_in_at
 	if b.count_from >= 0.0:
-		return b.count_from + LIGHTS_OUT_DELAY
-	return INF
+		at = minf(at, b.count_from + LIGHTS_OUT_DELAY)
+	return at
 
 static func is_lights_out(b: BedState, now: float) -> bool:
 	return now >= lights_out_at(b)
@@ -436,11 +460,10 @@ static func _settle(b: BedState, now: float) -> void:
 			b.all_in_at = now
 	else:
 		b.all_in_at = -1.0
-	if more_than_half(b.in_bed.size(), b.crew.size()):
-		if b.count_from < 0.0:
-			b.count_from = now
-	else:
-		b.count_from = -1.0
+	# The count starts the first time more than half are in and is never cleared: nobody can stop it
+	# by climbing out or leaving the game.
+	if b.count_from < 0.0 and more_than_half(b.in_bed.size(), b.crew.size()):
+		b.count_from = now
 
 static func climb_in(b: BedState, player: String, now: float) -> BedState:
 	if is_lights_out(b, now) or not b.crew.has(player) or b.in_bed.has(player):

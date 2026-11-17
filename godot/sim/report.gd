@@ -1,6 +1,6 @@
 # The end-of-day incident report (docs/floors/prison.md, section 5 and task P5; North Star H2).
 # Pure rules: given one day's TRUE facts per player and a seed, give EVERY player exactly one award and,
-# when the day's quota was missed, the line that says which upgrade the roll took and whose it was.
+# when the day's quota was missed, the line that says which upgrades the roll took and whose they were.
 # No engine random, no clock: the same inputs give the same report on every machine. Every name and
 # number in a line is copied from the facts; the roast is about what a player DID in the game.
 # The awards and lines are in data/report_awards.json.
@@ -22,7 +22,8 @@
 #       "sprints":         int      sprints
 #   "quota_met":   bool           true when the day quota was met (default true)
 #   "missed_days": int            missed days this game night INCLUDING today (needed when quota_met is false)
-#   "upgrade_taken": Dictionary   the upgrade the roll took (sim/upgrades.gd), {"owner": player name, "upgrade": upgrade id}; absent or empty when the crew owned none
+#   "upgrade_taken": Array        every upgrade the day's roll took (sim/day.gd take_by_roll: one from EACH player who owns any),
+#                                 each {"owner": player name, "upgrade": upgrade name}; absent or empty when nobody owned any
 #   "game_over":   bool           true when this miss ends the game night (default false)
 #   "missed_limit": int           optional, the number of misses that ends the night (default 3, from the data file; display only)
 # The report never rolls: it writes the line for the result the day gives it.
@@ -175,10 +176,11 @@ static func awards(seed: String, day: Dictionary) -> Array[Dictionary]:
 		})
 	return out
 ## The "upgrade lost" announcement for a missed day quota, or {} when the quota was met.
-## Only WRITES the line: the roll itself is sim/upgrades.gd's, and the day hands the result in as facts
+## Only WRITES the line: the roll itself is sim/day.gd's (via sim/upgrades.gd), and the day hands the result in as facts
 ## ("upgrade_taken", "missed_days", "game_over"). The seed only picks which wording of the line is used.
-## Returns {"line": String, "owner": String, "upgrade": String, "misses": int, "game_over": bool}
-## owner and upgrade are "" in the "nothing owned" case.
+## Returns {"line": String, "taken": Array[Dictionary], "misses": int, "game_over": bool}
+## taken is the list of {"owner", "upgrade"} named in the line (every one the day gave, in the given order),
+## empty in the "nothing owned" case.
 static func upgrade_lost(seed: String, day: Dictionary) -> Dictionary:
 	if bool(day.get("quota_met", true)):
 		return {}
@@ -186,23 +188,31 @@ static func upgrade_lost(seed: String, day: Dictionary) -> Dictionary:
 	var limit := int(day.get("missed_limit", data()["upgrade_limit"]))
 	var misses := maxi(1, int(day.get("missed_days", 1)))
 	var final := bool(day.get("game_over", false))
-	var taken: Variant = day.get("upgrade_taken", {})
-	var owner := ""
-	var upgrade := ""
-	if taken is Dictionary:
-		owner = str(taken.get("owner", ""))
-		upgrade = str(taken.get("upgrade", ""))
-	if owner == "" or upgrade == "":
-		owner = ""
-		upgrade = ""
-	var kind := ("taken" if upgrade != "" else "empty") + ("_final" if final else "")
+	var given: Variant = day.get("upgrade_taken", [])
+	var taken: Array[Dictionary] = []
+	var phrases := PackedStringArray()
+	if given is Array:
+		for k: Variant in given:
+			if k is Dictionary:
+				var owner := str(k.get("owner", ""))
+				var upgrade := str(k.get("upgrade", ""))
+				if owner != "" and upgrade != "":
+					taken.append({"owner": owner, "upgrade": upgrade})
+					phrases.append("%s's %s" % [owner, upgrade])
+	var kind := ("taken" if not taken.is_empty() else "empty") + ("_final" if final else "")
 	var rng := Rng.make_rng("%s:upgrade-words:%d" % [seed, day_no])
 	var templates: Array = data()["upgrade_lines"][kind]
 	var text: String = templates[rng.int_in(0, templates.size() - 1)]
 	return {
-		"line": _fill(text, {"name": owner, "upgrade": upgrade, "misses": misses, "limit": limit, "day": day_no}),
-		"owner": owner, "upgrade": upgrade, "misses": misses, "game_over": final,
+		"line": _fill(text, {"what": _list_words(phrases), "misses": misses, "limit": limit, "day": day_no}),
+		"taken": taken, "misses": misses, "game_over": final,
 	}
+
+## "A", "A and B", "A, B and C".
+static func _list_words(items: PackedStringArray) -> String:
+	if items.size() <= 1:
+		return "".join(items)
+	return "%s and %s" % [", ".join(items.slice(0, items.size() - 1)), items[items.size() - 1]]
 
 ## The whole report: {"awards": Array[Dictionary], "upgrade": Dictionary ({} when the quota was met)}.
 static func build(seed: String, day: Dictionary) -> Dictionary:

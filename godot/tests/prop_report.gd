@@ -2,7 +2,7 @@
 # exactly one award; no award twice; every name and number in a line equals the fact it came from (the
 # oracle is written here, by award id, and reads the line back); a leader award goes to a true crew-wide
 # leader; no placeholder is left; the same input gives the same report; the "upgrade lost" line appears
-# exactly when the day was missed and names exactly the upgrade and owner the day gave it.
+# exactly when the day was missed and names every upgrade and owner the day gave it (and only those).
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -31,10 +31,13 @@ func _rand_day(rng: Rng) -> Dictionary:
 		for k in FACTS:
 			p[k] = rng.int_in(0, hi) if rng.chance(0.8) else 0
 		players.append(p)
-	# The day's result (sim/upgrades.gd's roll is not run here): the upgrade taken, or nothing owned.
-	var taken := {}
-	if rng.chance(0.7):
-		taken = {"owner": players[rng.int_in(0, n - 1)]["name"], "upgrade": rng.pick(UPGRADES)}
+	# The day's result (sim/day.gd's roll is not run here): one upgrade from each of several players
+	# (possibly all, possibly none).
+	var taken: Array = []
+	if rng.chance(0.75):
+		for p: Dictionary in players:
+			if rng.chance(0.6):
+				taken.append({"owner": p["name"], "upgrade": rng.pick(UPGRADES)})
 	var misses := rng.int_in(1, 3)
 	return {
 		"day": rng.int_in(1, 30), "players": players, "quota_met": rng.chance(0.5),
@@ -158,6 +161,7 @@ func test_same_input_same_report(t: T) -> void:
 func test_upgrade_line_only_when_missed(t: T) -> void:
 	var runs := 300 if t.quick else 1500
 	var with_line := 0
+	var many := 0
 	for run in runs:
 		var day := _rand_day(Rng.make_rng("report-up-%d" % run))
 		var met: bool = day["quota_met"]
@@ -172,11 +176,20 @@ func test_upgrade_line_only_when_missed(t: T) -> void:
 		t.eq(up["misses"], int(day["missed_days"]), "run %d: misses" % run)
 		t.eq(up["game_over"], bool(day["game_over"]), "run %d: game over as given" % run)
 		t.check(line.contains("%d of 3" % int(day["missed_days"])), "run %d: missed days in the line: %s" % [run, line])
-		var taken: Dictionary = day["upgrade_taken"]
-		t.eq(up["owner"], taken.get("owner", ""), "run %d: owner is the one given" % run)
-		t.eq(up["upgrade"], taken.get("upgrade", ""), "run %d: upgrade is the one given" % run)
-		if taken.is_empty():
-			t.check(not line.contains("Second") and not line.contains("Doorstop") and not line.contains("Flashbulb") and not line.contains("Whistle") and not line.contains("Marker"), "run %d: nothing owned, none named: %s" % [run, line])
-		else:
-			t.check(line.contains(taken["owner"] + "'s " + taken["upgrade"]) or line.contains(taken["owner"] + " loses " + taken["upgrade"]), "run %d: owner and upgrade in the line: %s" % [run, line])
-	t.check(with_line > 100, "not vacuous: %d missed days" % with_line)
+		var taken: Array = day["upgrade_taken"]
+		t.eq(str(up["taken"]), str(taken), "run %d: the taken list is the one given" % run)
+		var names_in_line := 0
+		for u: String in UPGRADES:
+			names_in_line += line.count(u)
+		t.eq(names_in_line, taken.size(), "run %d: exactly one upgrade name per taken upgrade: %s" % [run, line])
+		if taken.size() > 1:
+			many += 1
+		for k: Dictionary in taken:
+			t.check(line.contains("%s's %s" % [k["owner"], k["upgrade"]]), "run %d: %s's %s in the line: %s" % [run, k["owner"], k["upgrade"], line])
+		# Only taken ones are named: no player is named in the possessive unless they lost one.
+		var owners_named := 0
+		for pl: Dictionary in day["players"]:
+			if line.contains(str(pl["name"]) + "'s "):
+				owners_named += 1
+		t.eq(owners_named, taken.size(), "run %d: only taken upgrades are named: %s" % [run, line])
+	t.check(with_line > 100 and many > 50, "not vacuous: %d missed days, %d with several upgrades" % [with_line, many])

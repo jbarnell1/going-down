@@ -29,13 +29,13 @@
   "upgrade_limit": 3,
   "upgrade_lines": {
     "taken": [
-      "Quota missed. The Company has repossessed {name}'s {upgrade}. Missed days: {misses} of {limit}. Please do not take it personally. We did.",
-      "The quota was not met. A roll was held and {name} loses {upgrade}. That is {misses} of {limit}. The dice send their regards.",
-      "Day {day} fell short. {name}'s {upgrade} has been reassigned to Nobody. Missed days: {misses} of {limit}."
+      "Quota missed. The Company has repossessed {what}. Missed days: {misses} of {limit}. Please do not take it personally. We did.",
+      "The quota was not met. A roll was held for everyone who owned anything, and the dice took {what}. That is {misses} of {limit}. The dice send their regards.",
+      "Day {day} fell short. Reassigned to Nobody: {what}. Missed days: {misses} of {limit}."
     ],
     "taken_final": [
-      "Quota missed again. {name}'s {upgrade} goes by roll, and so does your employment. Missed days: {misses} of {limit}. Game over.",
-      "That is {misses} of {limit}. {name} loses {upgrade} on the way out. The Company thanks you for your service. Game over."
+      "Quota missed again. Repossessed by roll: {what}. Your employment goes too. Missed days: {misses} of {limit}. Game over.",
+      "That is {misses} of {limit}. On the way out the Company also takes {what}. The Company thanks you for your service. Game over."
     ],
     "empty": [
       "Quota missed. The roll found nothing to repossess. The Company will remember this. Missed days: {misses} of {limit}.",
