@@ -1,38 +1,45 @@
-# The seeded RNG against src/sim/rng.ts: sequences, ints, chances, picks and forks for 50 seeds.
+# The seeded RNG: sequences, ints, chances, picks and forks for 50 seeds (35 strings, 15 numbers),
+# against tests/golden/rng.json (first proved equal to src/sim/rng.ts).
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
-const Snap = preload("res://tests/snap.gd")
 const Rng = preload("res://sim/rng.gd")
 
+## The seeds (dump_reference.ts dumpRng): seed-0..34, then fifteen numbers.
+static func seeds() -> Array:
+	var out: Array = []
+	for i in 35:
+		out.append("seed-%d" % i)
+	out.append_array([0, 1, 4294967295, 4294967296 + 5, -1, -123456789, 2654435761, 12345, 99, 7, 1 << 30, 3000000000, 42, 65535, 31337])
+	return out
+
 func test_sequences_and_forks(t: T) -> void:
-	var cases: Array = Snap.load_ref("rng.json")
-	var compared := 0
-	for c: Dictionary in cases:
-		var seed: Variant = c["seed"]
-		if c["hash"] != null:
-			t.eq(Rng.hash_seed(seed), int(c["hash"]), "hashSeed(%s)" % seed)
+	var cases: Array = []
+	var n := 0
+	for seed: Variant in seeds():
 		var r := Rng.make_rng(seed)
-		var got := {"next": [], "ints": [], "chance": [], "pick": [], "fork": [], "forkfork": [], "after": []}
+		var c := {"seed": seed, "hash": Rng.hash_seed(seed) if seed is String else null}
+		var keys := ["next", "ints", "chance", "pick", "fork", "forkfork", "after"]
+		for k: String in keys:
+			c[k] = []
 		for i in 12:
-			got["next"].append(r.next())
+			c["next"].append(r.next())
 		for i in 12:
-			got["ints"].append(r.int_in(-5, 17))
+			c["ints"].append(r.int_in(-5, 17))
 		for i in 12:
-			got["chance"].append(r.chance(0.3))
+			c["chance"].append(r.chance(0.3))
 		var items := ["a", "b", "c", "d", "e", "f", "g"]
 		for i in 6:
-			got["pick"].append(r.pick(items))
+			c["pick"].append(r.pick(items))
 		var f := r.fork("floor-3")
 		for i in 6:
-			got["fork"].append(f.next())
+			c["fork"].append(f.next())
 		var ff := r.fork("a").fork("b")
 		for i in 4:
-			got["forkfork"].append(ff.next())
+			c["forkfork"].append(ff.next())
 		for i in 4:
-			got["after"].append(r.next())
-		for k: String in got:
-			var d := Snap.compare(got[k], c[k], "%s.%s" % [seed, k])
-			compared += d.compared
-			t.check(d.bad == 0 and d.inexact == 0, "seed %s %s: %s" % [seed, k, d.summary()])
-	t.note("50 seeds, %d values compared, all identical" % compared if t.failures.is_empty() else "")
+			c["after"].append(r.next())
+		cases.append(c)
+		n += 1
+	var d := t.expect("rng.json", "", cases, "rng")
+	t.note("%d seeds, %d values compared, all identical" % [n, d.compared] if t.failures.is_empty() and not t.recording else "")

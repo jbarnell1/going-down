@@ -2,7 +2,8 @@
 # shares nothing with sight.gd): it never moves or turns on a tick any bot could see it; it is never
 # visible in two consecutive frames at different positions; looking saves you during a wind-up;
 # it stays put for GRACE after the last sighting; and the squeak is heard before it can be seen.
-# The counts must equal the TypeScript tests' for the same seeds (godot/tools/property_counts.ts).
+# The counts must equal the golden counts for the same seeds (tests/golden/properties.json, written
+# by npm run godot:golden; the first ones were proved equal to TypeScript's, property_counts.ts).
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -263,13 +264,16 @@ static func counts(n: int) -> Dictionary:
 		c["graceViolations"] += r.grace_violations
 	return c
 
-static func expected(t: T, key: String) -> Dictionary:
-	var ref: Dictionary = Snap.load_ref("properties.json")
-	return ref[t.size_key()][key]
+## Runs per size (tools/property_counts.ts QUICK, SUB, FULL: entity and hear).
+const SIZES := {"quick": {"entity": 4, "hear": 3}, "sub": {"entity": 24, "hear": 16}, "full": {"entity": 500, "hear": 104}}
+
+## The golden counts of `key` at this run's size, as a Dictionary (empty while recording).
+static func golden_counts(t: T, key: String) -> Dictionary:
+	var g: Variant = t.golden("properties.json", "%s.%s" % [t.size_key(), key])
+	return g if g is Dictionary else {}
 
 func test_stillness_by_the_oracle(t: T) -> void:
-	var want := expected(t, "entity")
-	var n: int = want["runs"]
+	var n: int = SIZES[t.size_key()]["entity"]
 	var c := counts(n)
 	var frac := float(n) / 500.0
 	t.eq(c["violations"], 0, "moved or turned while the oracle saw it")
@@ -281,19 +285,20 @@ func test_stillness_by_the_oracle(t: T) -> void:
 		t.check(float(c["moving"]) / n > 0.6 and float(c["seenRuns"]) / n > 0.6, "not vacuous: moving %d, seen %d of %d" % [c["moving"], c["seenRuns"], n])
 		t.check(c["catchRuns"] > 10 * frac, "not vacuous: runs with a catch %d" % c["catchRuns"])
 		t.check(c["graceChecks"] > 1000 * frac, "not vacuous: grace checks %d" % c["graceChecks"])
-	var d := Snap.compare(c, want, "entity")
-	t.check(d.ok(), "counts differ from TypeScript's: " + d.summary())
+	var want := golden_counts(t, "entity")
+	t.expect("properties.json", "%s.entity" % t.size_key(), c, "the counts")
 	t.note("%d runs x 75 s: oracle checks %d, seen-ticks %d, moved >5 m %d, seen %d, runs with a catch %d (%d catches), grace ticks %d; violations %d/%d/%d/%d" % [
 		n, c["oracleChecks"], c["oracleSeenTicks"], c["moving"], c["seenRuns"], c["catchRuns"], c["catches"], c["graceChecks"],
 		c["violations"], c["frameViolations"], c["catchesWhileWatched"], c["graceViolations"]])
-	t.note("TypeScript, same seeds: oracle checks %d, seen-ticks %d, moved %d, seen %d, catch runs %d (%d), grace %d" % [
-		want["oracleChecks"], want["oracleSeenTicks"], want["moving"], want["seenRuns"], want["catchRuns"], want["catches"], want["graceChecks"]])
+	if not want.is_empty():
+		t.note("golden, same seeds: oracle checks %d, seen-ticks %d, moved %d, seen %d, catch runs %d (%d), grace %d" % [
+			want["oracleChecks"], want["oracleSeenTicks"], want["moving"], want["seenRuns"], want["catchRuns"], want["catches"], want["graceChecks"]])
 
 ## Heard before seen: a listener at the landing facing away; the squeak (gain > 0.05) leads the first
 ## moment the oracle says it could be seen, and its coming within 12 m, by at least 1 s.
 func test_heard_before_seen(t: T) -> void:
-	var want := expected(t, "hear")
-	var n: int = want["seeds"]
+	var want := golden_counts(t, "hear")
+	var n: int = SIZES[t.size_key()]["hear"]
 	var leads: Array[float] = []
 	var see_leads: Array[float] = []
 	var plain_sight := 0
@@ -329,11 +334,10 @@ func test_heard_before_seen(t: T) -> void:
 	t.eq(seen_ever, 0, "seen by a listener facing away")
 	t.eq(plain_sight, 0, "in plain sight of the landing at the start")
 	t.check(float(c["minSeeLead"]) >= 1.0 and float(c["minNearLead"]) >= 1.0, "heard too late: %s" % str(c))
-	var d := Snap.compare(c, want, "hear")
-	t.check(d.ok(), "differs from TypeScript's: " + d.summary())
-	t.note("%d seeds: hearing leads first possible sight by min %s s (median %s s), coming within 12 m by min %s s (median %s s); TypeScript: min %s s / %s s" % [
+	t.expect("properties.json", "%s.hear" % t.size_key(), c, "the leads")
+	t.note("%d seeds: hearing leads first possible sight by min %s s (median %s s), coming within 12 m by min %s s (median %s s)%s" % [
 		n, M.to_fixed(c["minSeeLead"], 2), M.to_fixed(c["medianSeeLead"], 2), M.to_fixed(c["minNearLead"], 2), M.to_fixed(c["medianNearLead"], 2),
-		M.to_fixed(want["minSeeLead"], 2), M.to_fixed(want["minNearLead"], 2)])
+		"" if want.is_empty() else "; golden: min %s s / %s s" % [M.to_fixed(want["minSeeLead"], 2), M.to_fixed(want["minNearLead"], 2)]])
 
 static func _median(xs: Array[float]) -> float:
 	var s := xs.duplicate()

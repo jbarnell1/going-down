@@ -1,11 +1,14 @@
-# Stamina, the instrument and tapes against src/sim/stamina.ts, instrument.ts and tape.ts: stamina
-# traces for seeded inputs, the rate curve, the repeat factors, and three scripted scenes tick by
-# tick (the recording routine, tapes dropped / picked up / carried / lost, staring earns nothing),
-# with the pay the game shows (whole units, and two decimals). Mirrors dumpInstrument.
+# Stamina, the instrument and tapes (sim/stamina.gd, instrument.gd, tape.gd): stamina traces for
+# seeded inputs, the rate curve, the repeat factors, and three scripted scenes tick by tick (the
+# recording routine, tapes dropped / picked up / carried / lost, staring earns nothing), with the pay
+# the game shows (whole units, and two decimals), against tests/golden/instrument.json, pay included,
+# exactly. (First proved equal to src/sim: everything but the pay exactly, the pay within 1e-9, as
+# JavaScript's pow differs from fdlibm's in the last bit; the historical dumpInstrument.)
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
 const Snap = preload("res://tests/snap.gd")
+const Golden = preload("res://tests/golden.gd")
 const Trace = preload("res://tests/trace.gd")
 const Plans = preload("res://tests/plans.gd")
 const Floor = preload("res://sim/floor.gd")
@@ -24,8 +27,6 @@ static func shown(v: float) -> Array:
 	return [int(floor(v)), M.to_fixed(v, 2)]
 
 func test_stamina(t: T) -> void:
-	var ref: Dictionary = Snap.load_ref("instrument.json")
-	var want: Dictionary = ref["stamina"]
 	var r := Rng.make_rng("stamina")
 	var traces: Array = []
 	for n in 6:
@@ -46,24 +47,20 @@ func test_stamina(t: T) -> void:
 			st = Stamina.step_stamina(st, gait, ground, 1.0 / 20.0)
 			rows.append([String(gait), ground, st.level, st.winded, Stamina.exertion(st)])
 		traces.append(rows)
-	var d := Snap.compare({"traces": traces, "flee": Stamina.sustained_flee_speed()}, want, "stamina")
-	t.check(d.bad == 0 and d.inexact == 0, d.summary())
+	var d := t.expect("instrument.json", "stamina", {"traces": traces, "flee": Stamina.sustained_flee_speed()}, "stamina")
 	t.note("6 traces x 400 steps: %s" % d.summary())
 
 func test_rate_and_repeat(t: T) -> void:
-	var ref: Dictionary = Snap.load_ref("instrument.json")
 	var rates: Array = []
 	for i in 201:
 		var d := i * 0.05
 		rates.append([d, Instr.rate_at(d)])
-	var rd := Snap.compare(rates, ref["rates"], "rateAt")
-	t.check(rd.ok(), rd.summary())
+	var rd := t.expect("instrument.json", "rates", rates, "rateAt")
 	var rep: Array = []
 	for c: int in [0, 1, 2, 3, 7]:
 		rep.append(Instr.repeat_factor(c))
-	var pd := Snap.compare(rep, ref["repeat"], "repeatFactor")
-	t.check(pd.ok() and pd.inexact == 0, pd.summary())
-	t.note("rateAt at 201 distances: %s (k ** 3 is the platform's pow in JavaScript)" % rd.summary())
+	t.expect("instrument.json", "repeat", rep, "repeatFactor")
+	t.note("rateAt at 201 distances: %s" % rd.summary())
 
 class Corridor:
 	var p: Floor.FloorPlan
@@ -115,8 +112,7 @@ static func crew_of(ids: Array[String]) -> Instr.CrewState:
 	return Instr.create_crew(ids)
 
 func test_scenes_and_pay(t: T) -> void:
-	var ref: Dictionary = Snap.load_ref("instrument.json")
-	var traces: Array = ref["traces"]
+	var traces: Variant = t.golden("instrument.json", "traces")
 	var pay: Array = []
 	var results: Array[Trace] = []
 
@@ -126,7 +122,7 @@ func test_scenes_and_pay(t: T) -> void:
 		var orderly := Entity.create_orderly(c.p)
 		var me_ids: Array[String] = ["me"]
 		var crew := Instr.set_raised(crew_of(me_ids), "me", true)
-		var tr := Trace.new(traces[0])
+		var tr := Trace.new("routine", 10, Golden.item(traces, 0))
 		results.append(tr)
 		var me := c.at(8.0)
 		var stage := 0
@@ -178,7 +174,7 @@ func test_scenes_and_pay(t: T) -> void:
 		for id: String in ["a", "c", "d"]:
 			crew = Instr.set_raised(crew, id, true)
 		var pos := {"a": Move.Body.make(10, 10, 0, 0), "b": Move.Body.make(11, 10, 0, 0), "c": Move.Body.make(12, 10, 0, 0), "d": Move.Body.make(60, 60, 0, 0)}
-		var tr := Trace.new(traces[1])
+		var tr := Trace.new("tapes", 10, Golden.item(traces, 1))
 		results.append(tr)
 		var ctx := {"e": _ent(base, Move.Body.make(14, 10, 0, 0)), "crew": crew}
 		var step := func(move: bool, caught: Array) -> void:
@@ -244,7 +240,7 @@ func test_scenes_and_pay(t: T) -> void:
 		var me_ids: Array[String] = ["me"]
 		var crew := Instr.set_raised(crew_of(me_ids), "me", true)
 		var me := c.at(5.0)
-		var tr := Trace.new(traces[2])
+		var tr := Trace.new("stare-earns-nothing", 20, Golden.item(traces, 2))
 		results.append(tr)
 		for k in 600:
 			var before := orderly
@@ -254,15 +250,13 @@ func test_scenes_and_pay(t: T) -> void:
 			crew = out.crew
 			tr.tick({"orderly": Snap.orderly(orderly), "crew": Snap.crew(crew)}, res.events + out.events)
 
-	var total := Snap.Diff.new()
+	var total := Trace.finish_all(t, "instrument.json", "traces", results, traces)
 	var ticks := 0
 	var firsts := PackedStringArray()
 	for tr in results:
 		ticks += tr.ticks
-		total.add(tr.finish(t, true))
 		firsts.append("%s: %s" % [tr.name, tr.first_difference()])
-	var pd := Snap.compare(pay, ref["pay"], "pay")
-	t.check(pd.ok(), "pay: " + pd.summary())
+	var pd := t.expect("instrument.json", "pay", pay, "pay")
 	var tape := TapeLib.empty_tape("t", "o")
 	var i := 0
 	for v: float in [12.5, 0.1, 0.2, 99.99, 1.0 / 3.0]:
@@ -278,10 +272,9 @@ func test_scenes_and_pay(t: T) -> void:
 		tape = TapeLib.add_reading(tape, r)
 		i += 1
 	var one: Array[TapeLib.Tape] = [tape]
-	var od := Snap.compare({"total": tape.total, "value": TapeLib.tape_value(one), "shown": shown(tape.total)}, ref["tapeOps"], "tapeOps")
-	t.check(od.ok() and od.inexact == 0, "tape sums: " + od.summary())
-	t.note("3 scenes, %d ticks; state outside pay identical every tick; events, snapshots: %s" % [ticks, total.summary()])
-	t.note("first differing tick (exact = state without pay, full = with pay): " + ", ".join(firsts))
+	t.expect("instrument.json", "tapeOps", {"total": tape.total, "value": TapeLib.tape_value(one), "shown": shown(tape.total)}, "tape sums")
+	t.note("3 scenes, %d ticks; every tick's state (pay included) compared; events, snapshots: %s" % [ticks, total.summary()])
+	t.note("first differing tick: " + ", ".join(firsts))
 	t.note("pay as shown (whole units and two decimals): %s" % pd.summary())
 
 static func _ent(base: Entity.OrderlyState, b: Move.Body) -> Entity.OrderlyState:

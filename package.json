@@ -18,6 +18,7 @@
     "e2e:update": "playwright test tests/e2e/visual.spec.ts --update-snapshots",
     "godot:reference": "node godot/tools/godot.mjs reference",
     "godot:test": "node godot/tools/godot.mjs test",
+    "godot:golden": "node godot/tools/godot.mjs golden",
     "godot:export": "node godot/tools/godot.mjs export",
     "godot:promote": "node scripts/promote-godot.mjs"
   },

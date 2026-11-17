@@ -10,8 +10,16 @@
 #      dark frame draws the Orderly;
 #   5. events exactly once and in order, and at the end every client agrees with the host;
 #   6. other players are drawn within 0.5 m of where the host had them at the drawn time.
-# The counts must equal TypeScript's for the same sessions (tools/property_counts.ts, key `net` of
-# properties.json, at the quick, default and full sizes).
+# The counts must equal the golden counts for the same sessions (tests/golden/properties.json key
+# `net`, at the quick, default and full sizes; the first ones were proved equal to TypeScript's,
+# tools/property_counts.ts).
+# Plus, at the default and full sizes, the rule test's other assertions (the host honours what was
+# seen: releasing a held pose rarely needs a jump; not vacuous; being taken rarely for nothing; the
+# blackout's share), scaled from its 200 sessions to the number run here.
+# And the host's side of the rule driven by hand-made inputs (ported from tests/net/host.test.ts, at
+# every size): put-backs to exactly the pose a client holds, the rewritten history, the Orderly held
+# while a client says it sees it, the bound, catches that wait for the victim's screen, a seen report
+# cancelling a wind-up, and the light policing of bodies.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -27,6 +35,9 @@ const Protocol = preload("res://net/protocol.gd")
 const JsJson = preload("res://net/jsjson.gd")
 const Move = preload("res://sim/move.gd")
 const Client = preload("res://net/client.gd")
+const Run = preload("res://sim/run.gd")
+const Host = preload("res://net/host.gd")
+const Transport = preload("res://net/transport.gd")
 
 const TICK := Session.TICK
 const FRAME := Harness.FRAME
@@ -459,9 +470,6 @@ static func counts(rs: Array[Result]) -> Dictionary:
 		c["extraDarkMax"] = 0.0
 	return c
 
-func _want(t: T) -> Dictionary:
-	return Snap.load_ref("properties.json")[t.size_key()]["net"]
-
 func _first(rs: Array[Result], field: String) -> Array[String]:
 	var out: Array[String] = []
 	for r in rs:
@@ -473,15 +481,13 @@ func _no(t: T, rs: Array[Result], field: String, what: String) -> void:
 	var bad := _first(rs, field)
 	t.check(bad.is_empty(), "%s: %d, first: %s" % [what, bad.size(), bad[0] if not bad.is_empty() else ""])
 
-## Every count equals TypeScript's for the same sessions.
-func test_counts_match_typescript(t: T) -> void:
+## Every count equals the golden count for the same sessions.
+func test_counts_match_the_golden(t: T) -> void:
 	var runs := _runs(t)
-	var want := _want(t)
 	var lossy: Array[Result] = runs["lossy"]
 	var zero: Array[Result] = runs["zero"]
 	var got := {"lossy": counts(lossy), "zero": counts(zero)}
-	var d := Snap.compare(got, {"lossy": want["lossy"], "zero": want["zero"]}, "net")
-	t.check(d.ok(), "counts: %s" % d.summary())
+	t.expect("properties.json", "%s.net" % t.size_key(), got, "the network counts")
 	var l: Dictionary = got["lossy"]
 	t.note("%d lossy + %d zero-delay sessions of %d s in %.1f s: frames %d, visible pairs %d (violations %d), put-backs %d of %d reports, releases %d (big %d), catches %d (latched first %d, forced %d), latches %d (false %d), blinks %d (blackouts %d), blind frames checked %d (lit %d), dark frames drawing it %d, players checked %d (max error %.3f m), events %d, disagreements %d" % [
 		lossy.size(), zero.size(), int(SIZES[t.size_key()][2]), runs["secs"], l["frames"], l["pairs"], l["violations"], l["putBacks"], l["reports"], l["releases"],
@@ -510,6 +516,10 @@ func test_looking_saves_you(t: T) -> void:
 	var c := counts(lossy)
 	if not t.quick:
 		t.check(c["latchedCatches"] >= c["catches"] * 0.9, "catches latched first: %d of %d" % [c["latchedCatches"], c["catches"]])
+		# Being taken rarely for nothing (rule.test.ts: more than 20 latches and catches in 200 sessions, under 5% called off).
+		t.check(c["latches"] > _scaled(20.0, lossy.size()), "not vacuous: %d latches" % c["latches"])
+		t.check(float(c["falseLatches"]) / maxf(1.0, c["latches"]) < 0.05, "latches called off: %d of %d" % [c["falseLatches"], c["latches"]])
+		t.check(c["catches"] > _scaled(20.0, lossy.size()), "not vacuous: %d catches" % c["catches"])
 
 ## 4. Blinks and the blackout: every frame the host treats as blind is dark on every client; no dark frame draws it.
 func test_blinks_dark_everywhere(t: T) -> void:
@@ -523,6 +533,11 @@ func test_blinks_dark_everywhere(t: T) -> void:
 	if not t.quick:
 		t.check(c["blinkFramesChecked"] > 1000 * lossy.size(), "not vacuous: %d blind frames checked" % c["blinkFramesChecked"])
 		t.check(c["extraDarkSum"] / maxf(1.0, c["extraDarkN"]) < 1.0, "extra darkness per blink per client %.2f s" % (c["extraDarkSum"] / maxf(1.0, c["extraDarkN"])))
+		# rule.test.ts: more than 300 blinks in 200 sessions; most sessions reach their blackout; 50 000 blackout and dark frames.
+		t.check(c["blinks"] > _scaled(300.0, lossy.size()), "not vacuous: %d blinks" % c["blinks"])
+		t.check(c["blackoutSessions"] > lossy.size() * 0.6, "sessions with a blackout: %d of %d" % [c["blackoutSessions"], lossy.size()])
+		t.check(c["blackoutFramesChecked"] > _scaled(50000.0, lossy.size()), "not vacuous: %d blackout frames checked" % c["blackoutFramesChecked"])
+		t.check(c["darkFrames"] > _scaled(50000.0, lossy.size()), "not vacuous: %d dark frames" % c["darkFrames"])
 
 ## 5 and 6. Events exactly once and in order; every client agrees with the host; players drawn within 0.5 m.
 func test_agreement(t: T) -> void:
@@ -532,3 +547,250 @@ func test_agreement(t: T) -> void:
 	_no(t, lossy, "pos_over", "players drawn more than 0.5 m from the host's record")
 	var c := counts(lossy)
 	t.check(c["maxPosErr"] <= POS_BOUND, "largest drawn-player error %.3f m" % c["maxPosErr"])
+	if not t.quick:
+		# rule.test.ts: more than 10 000 events and 100 000 drawn players checked in 200 sessions.
+		t.check(c["eventsChecked"] > _scaled(10000.0, lossy.size()), "not vacuous: %d events checked" % c["eventsChecked"])
+		t.check(c["posChecks"] > _scaled(100000.0, lossy.size()), "not vacuous: %d drawn players checked" % c["posChecks"])
+
+## A threshold of rule.test.ts (200 lossy sessions) scaled to `n` sessions.
+static func _scaled(x: float, n: int) -> float:
+	return x * n / 200.0
+
+## 1. The host honours what was seen (rule.test.ts): a held pose is let go only when neither it nor
+## the host's pose is in view, and because the host puts the Orderly back where the client holds it,
+## the two are almost always the same pose: letting go rarely needs a jump. (The exceptions: two
+## players holding different poses; the host keeps the earlier one.)
+func test_host_honours_what_was_seen(t: T) -> void:
+	var runs := _runs(t)
+	var lossy: Array[Result] = runs["lossy"]
+	var c := counts(lossy)
+	var releases: int = c["releases"]
+	if not t.quick:
+		t.check(releases > _scaled(1000.0, lossy.size()), "not vacuous: %d releases" % releases)
+		t.check(float(c["bigReleases"]) / maxf(1.0, releases) < 0.08, "releases needing a jump over 0.25 m: %d of %d" % [c["bigReleases"], releases])
+	t.note("releases %d, jumps over 0.25 m %d, largest %.2f m" % [releases, c["bigReleases"], c["maxReleaseJump"]])
+
+## 2. Not vacuous (rule.test.ts): it moves, is seen and catches; put-backs are rare and small without
+## delay, common with it.
+func test_not_vacuous(t: T) -> void:
+	var runs := _runs(t)
+	var lossy: Array[Result] = runs["lossy"]
+	var zero: Array[Result] = runs["zero"]
+	var l := counts(lossy)
+	var z := counts(zero)
+	var n := lossy.size()
+	var zero_mean: float = z["putBackSum"] / maxf(1.0, z["putBacks"])
+	if not t.quick:
+		t.check(float(l["moved"]) / n > 0.8, "sessions where it moved more than 5 m: %d of %d" % [l["moved"], n])
+		t.check(float(l["seen"]) / n > 0.8, "sessions where it was seen: %d of %d" % [l["seen"], n])
+		t.check(l["caught"] > _scaled(20.0, n), "sessions where it caught someone: %d" % l["caught"])
+		# With zero network delay the only lag is the 100 ms interpolation delay: put-backs stay small.
+		t.check(z["bigPutBacks"] <= 2, "zero delay: %d put-backs over 0.6 m" % z["bigPutBacks"])
+		t.check(zero_mean < 0.4, "zero delay: mean put-back %.2f m" % zero_mean)
+		t.check(l["putBacks"] > 5.0 * maxi(1, z["putBacks"]) * float(zero.size()) / n, "put-backs with delay %d, without %d" % [l["putBacks"], z["putBacks"]])
+		t.check(l["bigPutBacks"] > _scaled(50.0, n), "put-backs over 0.6 m with delay: %d" % l["bigPutBacks"])
+	t.note("moved in %d of %d, seen in %d, caught in %d; put-backs %d (over 0.6 m %d) with delay, %d (mean %.2f m) without" % [
+		l["moved"], n, l["seen"], l["caught"], l["putBacks"], l["bigPutBacks"], z["putBacks"], zero_mean])
+
+# =============================================================================================
+# The host's side of the rule, driven by hand-made inputs (tests/net/host.test.ts).
+
+## The players stand on the landing looking straight up with a 1 degree field of view: they see nothing.
+static func blind_landing(s: Run.RunState) -> Run.RunState:
+	var out := s.copy()
+	var players: Array[Run.RunPlayer] = []
+	for i in s.players.size():
+		var p := s.players[i].copy()
+		p.body = Run.car_body(s.car, -0.7, 0.45 if i % 2 == 1 else -0.45)
+		p.aboard = false
+		players.append(p)
+	out.players = players
+	out.phase = &"away"
+	var o := s.orderly.copy()
+	o.mode = &"hunting"
+	out.orderly = o
+	return out
+
+## The Orderly hunting, 0.7 m from the blind player on the landing.
+static func close_by(s: Run.RunState) -> Run.RunState:
+	var out := blind_landing(s)
+	var o := out.orderly.copy()
+	o.body = Run.car_body(out.car, -1.4, -0.45)
+	out.orderly = o
+	return out
+
+## One player's machine, by hand: its inputs are written here, the host's snapshots read back.
+class Rig:
+	var net: Transport.MemoryNetwork
+	var host: Host
+	var me: Transport.MemoryTransport
+	var now := 0.0
+	var seq := 0
+	var ct := 0.0
+	var snaps := {}
+	var latest: Variant = null
+	var place_ack := 0
+	var body := Move.Body.make(0.0, 0.0, 0, 0.0)
+
+	func _init(seed: String, prepare: Callable, roster: Array[String] = ["p0"]) -> void:
+		net = Transport.MemoryNetwork.new("rig")
+		var ht := net.connect_peer("host")
+		me = net.connect_peer("p0")
+		host = Host.new(ht, seed, roster, 0.0, prepare)
+		me.send("host", Protocol.encode({"type": "join", "name": "p0", "ct": 0.0}))
+		tick()
+
+	func input(over: Dictionary = {}) -> void:
+		ct += TICK
+		seq += 1
+		var lh: float = float(latest["ht"]) if latest != null else -1.0
+		var m := {"type": "input", "seq": seq, "ct": ct, "body": body, "eye": 1.65, "yaw": 0.0, "pitch": PI / 2.0, "hFovDeg": 1.0, "vFovDeg": 1.0,
+			"raised": false, "holdDoors": false, "gait": "walk", "seeing": false, "calls": 0, "pickUps": 0, "ackEvent": 0, "ackHt": lh,
+			"renderTime": lh, "placeAck": place_ack, "seen": []}
+		m.merge(over, true)
+		me.send("host", Protocol.encode(m))
+
+	## `n` ticks, calling `each` (the inputs) before each.
+	func tick(n: int = 1, each: Callable = Callable()) -> void:
+		for i in n:
+			if each.is_valid():
+				each.call()
+			now += TICK
+			net.now = now
+			host.update(now)
+			for d: Dictionary in me.receive():
+				var m: Variant = Protocol.decode(d["data"])
+				if m == null or m["type"] != "snap":
+					continue
+				snaps[int(m["tick"])] = m
+				latest = m
+				if m["place"] != null and int(m["place"]["seq"]) > place_ack:
+					place_ack = m["place"]["seq"]
+					body = m["place"]["body"]
+
+	## A seen report of the pose drawn `alpha` of the way from snapshot `a` to `a + 1`.
+	func report(id: int, a: int, alpha: float = 0.5) -> Dictionary:
+		var sa: Dictionary = snaps[a]
+		var sb: Dictionary = snaps[a + 1]
+		return {"id": id, "depth": 1, "a": a, "b": a + 1, "alpha": alpha, "pose": Pose.lerp_pose(sa["orderly"], sb["orderly"], alpha)}
+
+	func event_types() -> Array[String]:
+		var out: Array[String] = []
+		for l in host.event_log:
+			out.append(String(l.e["type"]))
+		return out
+
+static func _xz(v: Variant) -> Array[float]:
+	if v is Move.Body:
+		return [v.x, v.z]
+	return [float(v["x"]), float(v["z"])]
+
+static func _dist(a: Variant, b: Variant) -> float:
+	var p := _xz(a)
+	var q := _xz(b)
+	return M.hypot2(p[0] - q[0], p[1] - q[1])
+
+static func _same_body(a: Move.Body, b: Move.Body) -> bool:
+	return a.x == b.x and a.y == b.y and a.z == b.z and a.level == b.level
+
+## Put back to exactly the pose the client holds, the history rewritten, and held while the player
+## says they see it, even with a camera that sees nothing (the host honours what the client saw).
+func test_host_puts_back_and_holds_what_a_client_sees(t: T) -> void:
+	var r := Rig.new("host-a", blind_landing)
+	r.tick(60, func() -> void: r.input())
+	var now := r.host.state.orderly.body
+	var k := r.host.tick - 20
+	var rep := r.report(1, k)
+	t.check(_dist(now, rep["pose"]) > 1.0, "it walked on since that frame (%.2f m)" % _dist(now, rep["pose"]))
+	r.input({"seeing": true, "seen": [rep]})
+	r.tick()
+	var o := r.host.state.orderly
+	t.check(Pose.same_pose(Pose.pose_of(o), rep["pose"]), "put back to exactly the reported pose: %s, reported %s" % [str(Pose.pose_of(o)), str(rep["pose"])])
+	t.eq(r.host.stats.put_backs, 1, "put-backs")
+	t.eq(int(r.latest["ackSeen"]), 1, "the report acknowledged")
+	# A later report about the abandoned timeline changes nothing.
+	r.input({"seeing": true, "seen": [r.report(2, k + 5)]})
+	r.tick()
+	t.check(_same_body(r.host.state.orderly.body, o.body), "a report about the abandoned timeline moved it")
+	t.eq(r.host.stats.put_backs, 1, "put-backs after the stale report")
+	# Held while the player says they see it, and for the grace after.
+	r.tick(40, func() -> void: r.input({"seeing": true}))
+	t.check(_same_body(r.host.state.orderly.body, o.body), "it moved while the player said they saw it (%.2f m)" % _dist(r.host.state.orderly.body, o.body))
+	r.tick(5, func() -> void: r.input())
+	t.check(_same_body(r.host.state.orderly.body, o.body), "it moved within the grace after the player stopped seeing it")
+	r.tick(40, func() -> void: r.input())
+	t.check(_dist(r.host.state.orderly.body, o.body) > 0.5, "it hunts again once nobody sees it (%.2f m)" % _dist(r.host.state.orderly.body, o.body))
+
+## Beyond the bound it is not moved: the violation is counted.
+func test_host_put_back_bound(t: T) -> void:
+	var r := Rig.new("host-b", blind_landing)
+	r.tick(58, func() -> void: r.input())
+	var k := 1
+	while _dist(r.snaps[k]["orderly"] if r.snaps.has(k) else {"x": 0.0, "z": 0.0}, r.host.state.orderly.body) <= 4.5:
+		k += 1
+	var before := r.host.state.orderly.body
+	r.input({"seeing": true, "seen": [r.report(1, k)]})
+	r.tick()
+	t.check(_same_body(r.host.state.orderly.body, before), "moved beyond the bound")
+	t.eq(r.host.stats.bound_violations, 1, "bound violations")
+	t.eq(r.host.stats.put_backs, 0, "put-backs")
+
+## A catch waits until the victim has drawn up to its end without seeing it, then lands.
+func test_host_catch_waits_for_the_victims_screen(t: T) -> void:
+	var r := Rig.new("host-c", close_by)
+	r.tick(30, func() -> void: r.input({"ackHt": -1.0, "renderTime": -1.0}))
+	var types := r.event_types()
+	t.check(types.has("windUp"), "no wind-up: %s" % str(types))
+	t.check(not types.has("caught"), "caught before the victim's screen drew the wind-up's end")
+	t.check(r.host.stats.catch_hold_ticks > 0, "the catch never waited")
+	t.eq(String(r.host.state.orderly.mode), "windUp", "mode while the catch waits")
+	# The victim's machine now shows it drew past the wind-up's end (and saw nothing).
+	r.tick(3, func() -> void: r.input())
+	t.check(r.event_types().has("caught"), "not caught once the victim's screen drew past the wind-up")
+
+## A seen report during the wind-up cancels it, and nobody is caught while it is seen.
+func test_host_seen_report_cancels_a_wind_up(t: T) -> void:
+	var r := Rig.new("host-d", close_by)
+	r.tick(4, func() -> void: r.input({"ackHt": -1.0, "renderTime": -1.0}))
+	t.eq(String(r.host.state.orderly.mode), "windUp", "mode")
+	var k := r.host.tick - 1
+	r.input({"seeing": true, "seen": [r.report(1, k - 1, 0.0)]})
+	r.tick()
+	t.check(r.event_types().has("windUpCancelled"), "the wind-up was not cancelled")
+	r.tick(60, func() -> void: r.input({"seeing": true}))
+	t.check(not r.event_types().has("caught"), "caught while seen")
+
+## Policing bodies: an impossible jump is refused until enough time has passed to make it possible.
+func test_host_refuses_an_impossible_jump(t: T) -> void:
+	var r := Rig.new("host-e", blind_landing)
+	r.tick(5, func() -> void: r.input())
+	var start := r.host.state.players[0].body
+	var far := Move.Body.make(r.body.x + 12.0, r.body.z, r.body.level, r.body.y)
+	r.input({"body": far})
+	r.tick()
+	t.eq(r.host.stats.clamped_inputs, 1, "clamped inputs")
+	t.check(_same_body(r.host.state.players[0].body, start), "the impossible jump was taken")
+	# Four seconds later the same spot is reachable at walking pace (3 m/s, plus the 0.75 m slack).
+	r.ct += 4.0
+	r.input({"body": far})
+	r.tick()
+	t.check(_same_body(r.host.state.players[0].body, far), "the possible move was refused")
+
+## Policing bodies: the inputs of a caught player are ignored (no call, no movement).
+func test_host_ignores_a_caught_player(t: T) -> void:
+	var caught := func(s: Run.RunState) -> Run.RunState:
+		var out := blind_landing(s)
+		var players: Array[Run.RunPlayer] = []
+		for p in out.players:
+			var q := p.copy()
+			if q.id == "p0":
+				q.status = &"caught"
+			players.append(q)
+		out.players = players
+		return out
+	var r := Rig.new("host-f", caught, ["p0", "p1"])
+	var start := r.host.state.players[0].body
+	r.tick(20, func() -> void: r.input({"calls": 1, "body": Move.Body.make(r.body.x - 0.5, r.body.z, r.body.level, r.body.y)}))
+	t.check(not r.event_types().has("called"), "a caught player called the car")
+	t.check(_same_body(r.host.state.players[0].body, start), "a caught player moved")
+	t.eq(String(r.host.state.phase), "away", "phase")

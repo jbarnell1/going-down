@@ -1,7 +1,7 @@
 # The blackout (ported from tests/sim/blackout.test.ts): 1. the dark schedule over many seeds and
 # depths; 2. fairness by simulation with wait bots (tests/waits.gd): a crew that stays at the lift
 # loses someone in at least 70% of waits; a crew that flees and comes back loses someone in at most
-# 30% and boards at least 80% of the time. Tables must equal TypeScript's for the same seeds.
+# 30% and boards at least 80% of the time. Tables must equal the golden tables.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -64,12 +64,13 @@ func test_dark_schedule(t: T) -> void:
 	var parts := PackedStringArray()
 	for k: int in keys:
 		parts.append("\"%d\":%d" % [k, steps[k]])
-	t.note("dark schedules: blinks before the blackout {%s}; false stops %d, inside the blackout %d (TypeScript prints {\"1\":346,\"2\":516,\"3\":678,\"4\":457,\"5\":3}; false stops 440, inside the blackout 440)" % [",".join(parts), false_stops, stops_in_blackout])
+	t.note("dark schedules: blinks before the blackout {%s}; false stops %d, inside the blackout %d (the TypeScript printed {\"1\":346,\"2\":516,\"3\":678,\"4\":457,\"5\":3}; false stops 440, inside the blackout 440)" % [",".join(parts), false_stops, stops_in_blackout])
+
+## Waits per table cell and size (tools/property_counts.ts QUICK, SUB, FULL waits).
+const SIZES := {"quick": 2, "sub": 20, "full": 300}
 
 func test_fairness(t: T) -> void:
-	var ref: Dictionary = Snap.load_ref("properties.json")
-	var want: Dictionary = ref[t.size_key()]["blackout"]
-	var waits: int = want["waits"]
+	var waits: int = SIZES[t.size_key()]
 	var tables: Array = []
 	var lines := PackedStringArray()
 	for depth: int in [1, 2, 3]:
@@ -86,10 +87,10 @@ func test_fairness(t: T) -> void:
 				t.check(float(tb.lost) / waits <= 0.3, "depth %d: a crew that flees lost someone in %d of %d" % [depth, tb.lost, waits])
 				t.check(float(tb.boarded) / waits >= 0.8, "depth %d: a crew that flees boarded only %d of %d" % [depth, tb.boarded, waits])
 				t.check(tb.median_farthest > 20.0 and float(tb.chased) / waits > 0.1, "depth %d: a chase, not a walk: %s" % [depth, Waits.table_line(tb)])
-	var d := Snap.compare(tables, want["tables"], "blackout")
-	t.check(d.ok(), "tables differ from TypeScript's: " + d.summary())
-	var wl: Array = want["lines"]
+	var g: Variant = t.golden("properties.json", "%s.blackout" % t.size_key())
+	t.expect("properties.json", "%s.blackout" % t.size_key(), {"waits": waits, "tables": tables, "lines": Array(lines)}, "the tables")
+	var wl: Array = g["lines"] if g is Dictionary else []
 	for i in lines.size():
-		t.eq(lines[i], wl[i], "table line %d" % i)
-		t.note("Godot:      " + lines[i])
-		t.note("TypeScript: " + String(wl[i]))
+		t.note("now:    " + lines[i])
+		if i < wl.size() and wl[i] != lines[i]:
+			t.note("golden: " + String(wl[i]))
