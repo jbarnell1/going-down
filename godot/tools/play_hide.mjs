@@ -257,12 +257,12 @@ try {
     if (foundA && foundB && a.mySeek?.status === 'taken') break;
     if (a.mySeek?.status === 'found' && !catchShot && a.hide.catch > 0.7) { catchShot = true; await A.shot('05-found-the-mask-fills-the-screen.png'); }
     const o = b.orderly;
-    if (!bobPeekShot && b.mySeek?.phase === 'inside' && o.pose && o.distance < 10 && o.distance > 4.6) {
+    if (!bobPeekShot && b.mySeek?.phase === 'inside' && o.pose && o.distance < 12 && o.distance > 7) {
       await B.cmd('peek 1');
       await B.cmd(`face ${o.x} ${o.z} ${o.pose.y + 1.5}`);
       await sleep(250);
       const bb = await B.state();
-      if (bb.mySeek?.peek && (bb.mySeek?.gap ?? 0) < 0.3) { await B.shot('03-peeking-the-minders-mask.png'); bobPeekShot = true; }
+      if (bb.mySeek?.peek && (bb.mySeek?.gap ?? 0) < 0.8) { await B.shot('03-peeking-the-minders-mask.png'); bobPeekShot = true; }
       await B.cmd('peek 0');
     }
     // Ann stands in its view: if it is far off and has not seen her, she goes to stand in front of it,
@@ -321,6 +321,8 @@ try {
     b.hud.health >= 0 && b.hud.health === b.mySeek.health && hostNum !== undefined && Math.abs(hostNum - b.hud.health) < 0.011 && /WALK -3\/S/.test(b.hud.rates),
     `bar ${b.hud.health}, Bob's snapshot ${b.mySeek.health}, Ann's copy of tick ${r3(b.t)} ${hostNum ?? 'not in her last snapshots'}; rates "${b.hud.rates}"`);
   check('walking drains it at the printed rate (3 a second)', h0 - b.hud.health > 3 && h0 - b.hud.health < 8, `${h0} to ${b.hud.health} over about 2 s of walking`);
+  await B.cmd(`face ${pit.inside[0]} ${pit.inside[1]} 0.6`);
+  await sleep(300);
   await B.shot('04-the-health-bar.png');
 
   // ---- 6. Peeking from a hide with a narrow gap: the camera turns only within the gap.

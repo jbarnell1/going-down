@@ -297,7 +297,7 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 			if str(o.get("mode", "")) == "catch":
 				catch_k = minf(1.0, catch_k + dt * 0.8)
 	elif status == "taken":
-		hud.center_note = "AT THE PARTY TABLE IN A PAPER HAT. WATCH. THE LIFT TAKES YOU ALONG."
+		hud.center_note = "TAKEN: AT THE PARTY TABLE. WATCH."
 	if status != "found":
 		catch_k = move_toward(catch_k, 0.0, dt * 4.0)
 	hud.seek_note = note

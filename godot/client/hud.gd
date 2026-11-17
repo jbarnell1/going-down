@@ -172,7 +172,7 @@ func _draw_health(px: float) -> void:
 	var margin := Vector2(maxf(size.x * 0.06, 16.0), maxf(size.y * 0.06, 12.0))
 	var label := "HEALTH %d" % ceili(health)
 	var bar_w := 80.0 * px
-	var y := size.y - margin.y - 30 * px
+	var y := size.y - margin.y - 44 * px
 	var low := health < 30.0
 	PixelFont.draw_shadowed(self, label, Vector2(margin.x, y), px, Color("#ff7a6a") if low else Color("#f4f4ec"))
 	var bar := Rect2(Vector2(margin.x, y + 10 * px), Vector2(bar_w, 4 * px))
