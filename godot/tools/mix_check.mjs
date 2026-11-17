@@ -6,7 +6,8 @@
 //   - Master's true peak stays at or under -1 dBTP;
 //   - while the Orderly has been moving unseen within hearing for 3 s, Entity is no more than 12 LU under V;
 //   - while the voice has been speaking for 3 s, Ambience is at least 14 LU under V (the beds duck);
-//   - the busy minute really happened (the voice spoke, the Orderly came on unseen, a blink, the blackout).
+//   - the busy minute really happened (the voice spoke, the Orderly came on unseen, a blink, the blackout);
+//   - every bus was recorded from the same frame (in every run), or the times above do not line up.
 // Then the Annex, the Playroom and the prison with the lift's panel (tools/mix_check_floors.gd: each one's loudest moments through the real
 // sound code, headless, no walls), each judged against the voice heard in that same run (V = the Voice
 // bus, integrated over the four lines):
@@ -19,7 +20,7 @@
 //        [--break=office|sting|far]   (GODOT = the engine)
 //   --break=office  the Annex's office tone 12 dB up: must FAIL;  --break=sting  the found-you sting 8 dB up: must FAIL
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,7 +49,12 @@ function runGodot(script, args) {
 }
 
 // Every bus of a recording in `d`: short-term rows (100 ms), integrated, true peak.
-function measure(d, rate) {
+// Every bus must be recorded from the same frame, or one runs early against the others and the timeline
+// (the Ambience once lost 2 s at the start and the beds seemed to come back up before the voice ended).
+function measure(d, rate, label) {
+  const secs = BUSES.map((b) => statSync(join(d, `${b}.f32`)).size / (8 * rate));
+  const spread = Math.max(...secs) - Math.min(...secs);
+  check(`${label}: every bus recorded in step`, spread <= 0.1, `${secs.map((s, i) => `${BUSES[i]} ${s.toFixed(2)}`).join(', ')} s`);
   const meter = {};
   for (const b of BUSES) {
     const r = spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-f', 'f32le', '-ar', String(rate), '-ac', '2', '-i', join(d, `${b}.f32`), '-af', 'ebur128=peak=true', '-f', 'null', '-'], { encoding: 'utf8', maxBuffer: 256 << 20 });
@@ -83,7 +89,7 @@ function clinic() {
     console.log(out.split(/\r?\n/).find((l) => l.startsWith('mix_check:')) ?? '');
   }
   const meta = JSON.parse(readFileSync(join(cdir, 'timeline.json'), 'utf8'));
-  const meter = measure(cdir, meta.rate);
+  const meter = measure(cdir, meta.rate, 'Clinic');
   const V = meter.Voice.I;
   const at = (b, t) => meter[b].rows[Math.min(meter[b].rows.length - 1, Math.max(0, Math.round(t * 10)))]?.S ?? -120;
   const tl = meta.timeline;
@@ -132,7 +138,7 @@ function oneFloor(name) {
     console.log(out.split(/\r?\n/).find((l) => l.startsWith('mix_check_floors:')) ?? '');
   }
   const meta = JSON.parse(readFileSync(join(fdir, 'timeline.json'), 'utf8'));
-  const meter = measure(fdir, meta.rate);
+  const meter = measure(fdir, meta.rate, name[0].toUpperCase() + name.slice(1));
   const mk = (w) => meta.marks.find((m) => m.what === w)?.t;
   const V = integrated(fdir, meta.rate, 'Voice', mk('voice'), mk('voice_end'));
   const Name = name[0].toUpperCase() + name.slice(1);
@@ -178,7 +184,7 @@ function far() {
     if (out === null) { check('the far run ran', false, 'it did not'); return; }
   }
   const meta = JSON.parse(readFileSync(join(fdir, 'timeline.json'), 'utf8'));
-  const meter = measure(fdir, meta.rate);
+  const meter = measure(fdir, meta.rate, 'Far');
   const mk = (w) => meta.marks.find((m) => m.what === w)?.t;
   const V = integrated(fdir, meta.rate, 'Voice', mk('voice'), mk('voice_end'));
   const max = (b, k, from, to) => Math.max(-120, ...meter[b].rows.filter((r) => r.t >= from && r.t <= to).map((r) => r[k]));
@@ -190,10 +196,21 @@ function far() {
   const mAt = (t) => meter.Entity.rows[Math.min(meter.Entity.rows.length - 1, Math.max(0, Math.round(t * 10)))]?.M ?? -120;
   let onset = 0;
   for (const [t, d] of meta.track) if (mAt(t) > V - 35) { onset = d; break; }
-  const at = (dm) => { const row = meta.track.find(([, d]) => d <= dm); return row ? mAt(row[0]) : -120; };
-  console.log(`  the breathing, momentary loudness vs V: ${[30, 25, 20, 15, 10, 5, 2].map((dm) => `${dm} m ${(at(dm) - V).toFixed(1)}`).join(', ')}`);
+  // The loudest moment while it comes from dm + 3 m to dm m (1.5 s at 2 m/s): the slow breath has a
+  // 0.6 s hush between breaths every 2.7 s, so one 100 ms reading at the very metre could land in a hush
+  // and read 15 dB low (what made "louder at 5 m than at 20 m" come and go).
+  const at = (dm) => Math.max(-120, ...meta.track.filter(([, d]) => d >= dm && d <= dm + 3).map(([t]) => mAt(t)));
+  console.log(`  the breathing, loudest momentary vs V coming in to: ${[30, 25, 20, 15, 10, 5, 2].map((dm) => `${dm} m ${(at(dm) - V).toFixed(1)}`).join(', ')}`);
   check('Far: the Orderly\'s breathing is heard from 20 m or further out (Entity momentary over V-35)', onset >= 20, onset ? `first heard at ${onset.toFixed(1)} m` : 'never heard');
   check('Far: the breathing builds as it nears (louder at 5 m than at 20 m), never over the voice', at(5) > at(20) && max('Entity', 'S', mk('breath'), mk('end')) <= V, `20 m ${(at(20) - V).toFixed(1)}, 5 m ${(at(5) - V).toFixed(1)} LU vs V`);
+  // In the game the trolley sounds while it comes on unseen, and the breath steps back under it close in
+  // (Sfx.breath_db): it must still never drop as it nears, with the trolley or without.
+  const curve = meta.curve ?? [];
+  const drops = (k) => curve.slice(1).filter((row, i) => row[k] < curve[i][k] - 0.01).map((row) => row[0]);
+  const show = (k) => [20, 10, 5, 2].map((dm) => `${dm} m ${(curve.find((r) => r[0] === dm)?.[k] ?? NaN).toFixed(1)}`).join(', ');
+  console.log(`  the breath's curve in dB, alone: ${show(1)}; under the trolley: ${show(2)}; the rattle under the trolley: ${show(3)}`);
+  check('Far: the breathing never drops as it nears, alone or under the trolley, nor the rattle (Sfx.breath_db, every half metre from 40 m)', curve.length > 0 && [1, 2, 3].every((k) => drops(k).length === 0),
+    curve.length ? ([1, 2, 3].some((k) => drops(k).length) ? `drops at ${[1, 2, 3].flatMap((k) => drops(k)).join(', ')} m` : `${curve.length} points`) : 'no curve logged');
 }
 
 if (only !== 'floors' && only !== 'far') clinic();

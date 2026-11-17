@@ -51,6 +51,17 @@ func _initialize() -> void:
 			brk = a.substr(6)
 	DirAccess.make_dir_recursive_absolute(out)
 	rate = AudioServer.get_mix_rate()
+	world = Node3D.new()
+	root.add_child(world)
+	cam = Camera3D.new()
+	world.add_child(cam)
+	cam.position = Vector3(0, 1.6, 0)
+	cam.current = true
+	sfx = Sfx.new()
+	root.add_child(sfx)
+	sfx.setup(world)
+	# The captures after the sound code's own bus effects (adding an effect empties a capture already on
+	# that bus, which put the Ambience recording out of step with the rest; see mix_check.gd).
 	for b in BUSES:
 		var i := AudioServer.get_bus_index(b)
 		if i < 0:
@@ -61,15 +72,6 @@ func _initialize() -> void:
 		AudioServer.add_bus_effect(i, c)
 		caps[b] = c
 		data[b] = PackedFloat32Array()
-	world = Node3D.new()
-	root.add_child(world)
-	cam = Camera3D.new()
-	world.add_child(cam)
-	cam.position = Vector3(0, 1.6, 0)
-	cam.current = true
-	sfx = Sfx.new()
-	root.add_child(sfx)
-	sfx.setup(world)
 	voice = AudioStreamPlayer.new()
 	voice.bus = "Voice"
 	voice.volume_db = -5.0
@@ -287,6 +289,7 @@ func _playroom() -> void:
 ## [time, metres] each frame so tools/mix_check.mjs can find where the breathing is first heard.
 ## break=far puts the curves back as they were (Sfx.old_falloff).
 var track: Array = []
+var curve: Array = []   # [metres, breath dB alone, under the trolley, the rattle under the trolley], from 40 m in
 func _far() -> void:
 	Sfx.old_falloff = brk == "far"
 	sfx.set_floor({"place": "clinic", "depth": 1, "rooms": [], "doors": []}, "mix-far")
@@ -308,6 +311,10 @@ func _far() -> void:
 		var pose := {"x": 0.0, "y": 0.0, "z": d, "level": 0, "yaw": 0.0, "anim": "walk", "animTime": t}
 		sfx.world(1.0 / 60.0, {"t": 0.0, "orderly": {"pose": pose, "held": false, "seeing": false, "distance": d, "mode": "hunting", "moving": true, "taken": false}}, 0.0))
 	_mark("end")
+	# What the player hears in the game, with the trolley sounding and without, every half metre in.
+	for i in range(80, 3, -1):
+		var dm := i * 0.5
+		curve.append([dm, Sfx.breath_db(dm, false), Sfx.breath_db(dm, true), Sfx.breath_db(dm, true, "rattle")])
 	Sfx.old_falloff = false
 
 ## The prison and the lift (the rest of the 17 Nov list): the block's night, the voice, the call panel
@@ -349,7 +356,7 @@ func _save() -> void:
 		var f := FileAccess.open(out.path_join(b + ".f32"), FileAccess.WRITE)
 		f.store_buffer((data[b] as PackedFloat32Array).to_byte_array())
 		f.close()
-	var meta := {"rate": rate, "seconds": frames / rate, "floor": floor_name, "break": brk, "marks": marks, "track": track, "played": sfx.played.map(func(p: Dictionary) -> String: return str(p["name"]))}
+	var meta := {"rate": rate, "seconds": frames / rate, "floor": floor_name, "break": brk, "marks": marks, "track": track, "curve": curve, "played": sfx.played.map(func(p: Dictionary) -> String: return str(p["name"]))}
 	var j := FileAccess.open(out.path_join("timeline.json"), FileAccess.WRITE)
 	j.store_string(JSON.stringify(meta))
 	j.close()

@@ -24,6 +24,12 @@ func _initialize() -> void:
 	out = args[0] if args.size() > 0 else "user://mix_check"
 	DirAccess.make_dir_recursive_absolute(out)
 	rate = AudioServer.get_mix_rate()
+	# The game first: its sound code adds its own effects to the buses (the Ambience low-pass), and adding
+	# an effect to a bus starts that bus' effects afresh, emptying a capture already there. Captures added
+	# before it lost up to 2 s of the Ambience recording, so the Ambience ran early against the timeline
+	# and the duck seemed to let go before the voice ended. Added after, every bus starts on the same frame.
+	main = (load("res://main.tscn") as PackedScene).instantiate()
+	root.add_child(main)
 	for b in BUSES:
 		var i := AudioServer.get_bus_index(b)
 		if i < 0:
@@ -34,8 +40,6 @@ func _initialize() -> void:
 		AudioServer.add_bus_effect(i, c)
 		caps[b] = c
 		data[b] = PackedFloat32Array()
-	main = (load("res://main.tscn") as PackedScene).instantiate()
-	root.add_child(main)
 	_run.call_deferred()
 
 func _process(_delta: float) -> bool:
@@ -103,6 +107,10 @@ func _log(t: float) -> void:
 		if bool(d["loops"][k]["playing"]):
 			loops.append(k)
 	row["loops"] = loops
+	row["duck"] = d["duck"]
+	row["speaking"] = ann.call("speaking")
+	row["amb_db"] = AudioServer.get_bus_volume_db(AudioServer.get_bus_index("Ambience"))
+	row["amb_lag"] = ((data["Master"] as PackedFloat32Array).size() - (data["Ambience"] as PackedFloat32Array).size()) / 2
 	timeline.append(row)
 
 func _wait(sec: float) -> void:
@@ -120,6 +128,16 @@ func _until(pred: Callable, sec: float) -> Dictionary:
 
 func _run() -> void:
 	Engine.max_fps = 60
+	# Start every recording on the same frame once the game's beds are playing: even with the captures added
+	# after the game, the Ambience came out 0.28 s short (all of it lost in the first 0.3 s, before its beds
+	# start; a bus with nothing on it seems not to run its effects), so early against the rest.
+	await _wait(1.0)
+	for b: String in caps:
+		(caps[b] as AudioEffectCapture).clear_buffer()
+		data[b] = PackedFloat32Array()
+	frames = 0
+	_next_log = 0.0
+	timeline.clear()
 	for i in 200:
 		if _cmd("ui alone") == "ok":
 			break

@@ -149,7 +149,7 @@ const BREATH_NEAR := 2.0         # full level within this
 const BREATH_FAR := 28.0         # heard from here (the onset)
 const BREATH_FAR_DB := -22.0     # at the onset; a slow build in dB from there to BREATH_NEAR
 const RATTLE_FAR := 26.0         # the rattle is tried within this (was 14 m) and follows the breath curve
-const BREATH_UNDER_TROLLEY_DB := -9.0   # while the trolley sounds (it is moving unseen)
+const BREATH_UNDER_TROLLEY_DB := -9.0   # while the trolley sounds, close in (see breath_db)
 const SILENT_DB := -79.0
 ## Tests (mix_check_floors.gd break=far): the curves before the change.
 static var old_falloff := false
@@ -168,6 +168,27 @@ static func far_db(curve: String, d: float) -> float:
 	if d > far_m:
 		return -80.0
 	return BREATH_FAR_DB * clampf((d - BREATH_NEAR) / (far_m - BREATH_NEAR), 0.0, 1.0)
+
+## The Orderly's slow breathing at `d` metres, with the trolley sounding or not. Under the trolley (it is
+## coming, unseen; the trolley carries 34 m, past the breath's 28 m) the breath steps back so the two
+## together stay under the voice close in, but only as much as it closes: nothing at the onset, growing to
+## the full BREATH_UNDER_TROLLEY_DB at BREATH_DUCK_FULL and holding it from there in. The breath's curve
+## climbs 0.85 dB a metre and the step back grows 0.41 dB a metre, so the breathing still builds all the
+## way in, trolley or not (tools/mix_check.mjs checks both). Before, the whole -9 dB held at every distance
+## (-24 dB at 20 m under the trolley; now -18.5).
+## The throat rattle (`curve` "rattle", within RATTLE_FAR) steps back the same way, by RATTLE_UNDER_TROLLEY_DB:
+## on the breath's curve it came 5 dB louder at 5 m than it was (-2.8 dB against -8), and a rattle over the
+## trolley close in put the Entity bus 0.3 LU over the voice in one busy minute of three; under the trolley
+## it is now where it was close in (-7.8 at 5 m) and still carries further out.
+const BREATH_DUCK_FULL := 6.0
+const RATTLE_UNDER_TROLLEY_DB := -5.0
+static func breath_db(d: float, trolley: bool, curve := "breath") -> float:
+	var db := far_db(curve, d)
+	var rattle := curve == "rattle"
+	var far_m := RATTLE_FAR if rattle else BREATH_FAR
+	if trolley and not old_falloff and db > -80.0:
+		db += (RATTLE_UNDER_TROLLEY_DB if rattle else BREATH_UNDER_TROLLEY_DB) * clampf((far_m - d) / (far_m - BREATH_DUCK_FULL), 0.0, 1.0)
+	return db
 
 ## Far sounds lose their top: a low-pass from open at 8 m to 2.5 kHz at 60 m and beyond.
 static func _far_cutoff(d: float) -> float:
@@ -534,7 +555,7 @@ func play_at(name: String, pos: Vector3, gain_db := 0.0) -> AudioStreamPlayer3D:
 	var curve := "scare" if cat == "scare" else ("rattle" if name == "rattle" else "")
 	if curve != "":
 		var d := _ear_distance(pos)
-		var fd := far_db(curve, d)
+		var fd := far_db(curve, d) if curve == "scare" else breath_db(d, squeak != null and squeak.playing, curve)
 		p.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
 		p.max_distance = 0.0
 		p.volume_db += fd
@@ -738,10 +759,9 @@ func _orderly(delta: float, o: Dictionary) -> void:
 	if at != null:
 		orderly_breath.global_position = at
 		var bd := _ear_distance(at)
-		bdb = far_db("breath", bd)
-		# Under the trolley (it is coming) the breath steps back, so the two together stay under the voice.
-		if not old_falloff and squeak.playing:
-			bdb += BREATH_UNDER_TROLLEY_DB
+		# Under the trolley (it is coming) the breath steps back close in, so the two together stay under
+		# the voice; it still builds as it nears (breath_db).
+		bdb = breath_db(bd, squeak.playing)
 		orderly_breath.attenuation_filter_cutoff_hz = _far_cutoff(bd)
 	_loop(orderly_breath, "orderly", at != null and not held and not bool(o.get("taken", false)) and bdb > SILENT_DB, BASE_DB + bdb)
 	if at == null:
