@@ -1,6 +1,6 @@
 # What is drawn crisp over the tape picture, in the camcorder's pixel font: the on-screen display
 # (PLAY, the tape counter, the value of the tapes held), the announcer's subtitles, the lift prompt,
-# the black cut and the line of being taken, and the end screen. Like src/render/osd.ts,
+# the black cut and the line of being taken, being down (the timer) and out, and the end screen. Like src/render/osd.ts,
 # endScreen.ts, caughtFx.ts and the subtitles in src/game/announcer.ts.
 class_name Hud
 extends Control
@@ -32,6 +32,7 @@ const MENU_ROWS: Array[Array] = [
 	["E", "INSTRUMENT OUT / AWAY"],
 	["RIGHT MOUSE", "HOLD THE INSTRUMENT UP"],
 	["F", "CALL / HOLD DOORS / PICK UP / SLEEP / HIDE"],
+	["HOLD F BY A FRIEND", "HELP THEM UP"],
 	["W IN A HIDE", "LEAN TO THE GAP"],
 	["T", "TAPE LOOK ON / OFF"],
 	["HOLD R", "EMOTE WHEEL: AIM, LET GO"],
@@ -68,6 +69,16 @@ var health_rates := ""
 ## call button is in reach or a refusal flashes; its tone ("count", "met", "refused").
 var quota_line := ""
 var quota_tone := ""
+## Down first, then out (client/down_view.gd). Down: the timer in big red ("DOWN  7"), how much of it is
+## left (0..1, a bar that drains; below 0 not shown), a line of what can happen now, a second line (what
+## you can do), and how far a heal has got (0..1, or -1 for none). Out: the screen goes dark and says so.
+var down_head := ""
+var down_left := -1.0
+var down_line := ""
+var down_line2 := ""
+var down_heal := -1.0
+var out_on := false
+var out_lines: Array = []
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -105,6 +116,8 @@ func _draw() -> void:
 		return
 	if fade > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, clampf(fade, 0.0, 1.0)))
+	if out_on and not black:
+		_draw_out(px)
 	if osd_on:
 		var blink_on := (now / 700) % 2 == 0
 		var top := "PLAY >" if blink_on else "PLAY  "
@@ -153,6 +166,8 @@ func _draw() -> void:
 		PixelFont.draw_shadowed(self, seek_note, sp, px, Color("#f4f4ec"))
 	if health >= 0.0 and not black:
 		_draw_health(px)
+	if down_head != "" and not black:
+		_draw_down(px)
 	if big_note != "" and not black:
 		var p3 := px * 2.0
 		PixelFont.draw_shadowed(self, big_note, Vector2(floorf((size.x - PixelFont.width(big_note) * p3) * 0.5), floorf(size.y * 0.42)), p3, Color("#f4f4ec"))
@@ -160,7 +175,7 @@ func _draw() -> void:
 		var t := "YOU WENT DOWN"
 		var p2 := px * 2.0
 		PixelFont.draw_shadowed(self, t, Vector2((size.x - PixelFont.width(t) * p2) * 0.5, size.y * 0.42), p2, Color("#f4f4ec"))
-	if not black and not wheel_on:   # the wheel's labels sit where the tags would
+	if not black and not wheel_on and not out_on:   # the wheel's labels sit where the tags would
 		_draw_tags(px)
 	if note != "" and not black:
 		PixelFont.draw_shadowed(self, note, Vector2((size.x - PixelFont.width(note) * px) * 0.5, size.y * 0.7), px, Color("#ffd27a"))
@@ -185,6 +200,44 @@ func _draw_quota(px: float, now: int) -> void:
 	elif quota_tone == "refused":
 		ink = Color("#ff7a6a") if (now / 160) % 2 == 0 else Color("#7a2a22")
 	PixelFont.draw_shadowed(self, quota_line, qp, px, ink)
+
+## Down: the timer big and red near the top with a bar draining under it, then the lines under the middle
+## (where a prompt would be) and, while a crewmate holds F beside you, their hold's bar.
+func _draw_down(px: float) -> void:
+	var red := Color("#ff7a6a")
+	var p2 := px * 2.0
+	var hw := PixelFont.width(down_head) * p2
+	var hp := Vector2(floorf((size.x - hw) * 0.5), floorf(size.y * 0.2))
+	PixelFont.draw_shadowed(self, down_head, hp, p2, red)
+	if down_left >= 0.0:
+		var bw := 90.0 * px
+		var bar := Rect2(Vector2(floorf((size.x - bw) * 0.5), hp.y + 20 * px), Vector2(bw, 3 * px))
+		draw_rect(bar.grow(px), Color(0, 0, 0, 0.6))
+		draw_rect(Rect2(bar.position, Vector2(bw * clampf(down_left, 0.0, 1.0), bar.size.y)), red)
+	var y := floorf(size.y * 0.5)
+	for l: String in [down_line, down_line2]:
+		if l == "":
+			continue
+		var lw := PixelFont.width(l) * px
+		var lp := Vector2(floorf((size.x - lw) * 0.5), y)
+		draw_rect(Rect2(lp - Vector2(4, 3) * px, Vector2(lw + 8 * px, 13 * px)), Color(0, 0, 0, 0.45))
+		PixelFont.draw_shadowed(self, l, lp, px, Color("#f4f4ec") if l == down_line else Color("#ffd27a"))
+		if l == down_line and down_heal >= 0.0:
+			var hb := Rect2(lp + Vector2(0, 11 * px), Vector2(lw, 2 * px))
+			draw_rect(hb, Color(0, 0, 0, 0.55))
+			draw_rect(Rect2(hb.position, Vector2(hb.size.x * clampf(down_heal, 0.0, 1.0), hb.size.y)), Color("#9fe0a0"))
+		y += 16 * px
+
+## Out: the picture goes nearly black; the lines in the middle, the first big and red.
+func _draw_out(px: float) -> void:
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.01, 0.0, 0.0, 0.93))
+	var y := floorf(size.y * 0.38)
+	for i in out_lines.size():
+		var l := str(out_lines[i])
+		var sc := px * 2.0 if i == 0 else px
+		var lw := PixelFont.width(l) * sc
+		PixelFont.draw_shadowed(self, l, Vector2(floorf((size.x - lw) * 0.5), y), sc, Color("#ff7a6a") if i == 0 else Color("#d8ddd9"))
+		y += (24 if i == 0 else 13) * px
 
 ## The health bar, bottom left: HEALTH and the number, the bar, the rates under it.
 func _draw_health(px: float) -> void:

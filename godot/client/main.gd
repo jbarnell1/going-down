@@ -10,6 +10,9 @@
 # drew on their mask (others_view.gd), and the lift's monitor shows the whole crew's (lift.gd). In the
 # prison, F at the face kiosk (client/face_kiosk.gd) opens the same editor on your face; Done sends the
 # new face to everyone in the run (net/room_client.gd set_face).
+# Caught means down, not out (client/down_view.gd): down, your view is on the floor, you crawl, your timer
+# counts down and a crewmate can hold F beside you to get you up; out, the screen goes dark until the car
+# next moves; everyone sees the downed lying, the resident bent over them, and a red spot where one went out.
 # The 3D is drawn at 480x270 in a SubViewport and shown through the tape shader; the on-screen
 # display, name tags, subtitles, menus and end screen are drawn crisp on top.
 #
@@ -42,6 +45,7 @@ const Run = preload("res://sim/run.gd")
 const Day = preload("res://sim/day.gd")
 const HideView = preload("res://client/hide_view.gd")
 const QuotaView = preload("res://client/quota_view.gd")
+const DownView = preload("res://client/down_view.gd")
 
 const VFOV := 70.0
 const SENS := 0.0022
@@ -90,6 +94,16 @@ var inst_view: InstrumentView
 var hide_view: HideView
 ## The floor quota on screen: the call panel, a refused press, the line under the prompt (client/quota_view.gd).
 var quota_view := QuotaView.new()
+## Down first, then out on screen: your timer, the help prompt, the out screen, the red spots (client/down_view.gd).
+var down_view := DownView.new()
+## The floor's red spots are drawn under this (rebuilt with each floor).
+var spots_root: Node3D = null
+## Caught and down: until when (msec) the camera turns to the resident bent over you (B6: "turns you
+## round to face it").
+var _turn_until := -1
+## Seconds the camera takes to settle on the resident, and how long it is held there.
+const TURN_RATE := 5.0
+const TURN_MS := 3500
 var screen: TextureRect
 var tape_mat: ShaderMaterial
 
@@ -554,6 +568,8 @@ func _clear_world() -> void:
 	sfx.update(0.0, {}, null, 0.0, 0.0, 0.0, false, 0.0, Vector3.ZERO)
 	sfx.clear_floor()
 	hide_view.reset()
+	down_view.reset()
+	spots_root = null
 
 # --- runs and floors ----------------------------------------------------------------------------
 
@@ -573,6 +589,8 @@ func _on_new_run() -> void:
 	sfx.ride(false)
 	hud.set_seed(str(link.client().seed) if link.client().seed != null else seed)
 	quota_view.reset()
+	down_view.reset()
+	_turn_until = -1
 	# In a browser nothing is heard before the first click or key (autoplay rules): the welcome
 	# waits for it rather than being spoken to a muted page.
 	if _gesture or not OS.has_feature("web"):
@@ -604,6 +622,9 @@ func _build_floor(plan: Dictionary) -> void:
 	lift.set_faces(link.crew_faces())
 	_use_resident(plan)
 	hide_view.reset()
+	spots_root = Node3D.new()
+	spots_root.name = "RedSpots"
+	world.add_child(spots_root)
 	built_depth = int(plan["depth"])
 	level.set_emergency(0.0)
 	level.set_light_level(1.0)
@@ -1028,7 +1049,8 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	tape_mat.set_shader_parameter("snow", 1.0 if (noise and not black) else 0.0)
 	tape_mat.set_shader_parameter("glitch", 1.0 if noise else 0.0)
 	hud.black = black
-	hud.went_down = caught_at >= 0 and now - caught_at >= BLACK_MS + NOISE_MS and now - caught_at < BLACK_MS + NOISE_MS + LINE_MS and ending.is_empty()
+	# With the down rule the timer says it instead (client/down_view.gd).
+	hud.went_down = caught_at >= 0 and now - caught_at >= BLACK_MS + NOISE_MS and now - caught_at < BLACK_MS + NOISE_MS + LINE_MS and ending.is_empty() and s.get("downs") == null
 	var tapes: Dictionary = s["tapes"]
 	hud.set_tapes(int(tapes["count"]), float(tapes["value"]))
 	hud.subtitle = announcer.shown()
@@ -1043,8 +1065,15 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	var bed: Variant = s.get("bed")
 	var home := s.get("day") != null and int(s["depth"]) == 0 and bed is Dictionary
 	hud.prompt_fill = -1.0
-	if not ended and not noise and not kiosk.is_open() and not _lights_out:
-		if home and bool((bed as Dictionary)["inBed"]):
+	# Down first, then out (client/down_view.gd): your own timer or the out screen, or a crewmate to help.
+	var holding: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and Input.is_action_pressed("use"))
+	down_view.update(s, link.my_id(), link.names(), holding)
+	var me_down := str(me["status"]) == "down" or str(me["status"]) == "out"
+	if not ended and not noise and not kiosk.is_open() and not _lights_out and not me_down:
+		if down_view.prompt != "":
+			prompt = down_view.prompt
+			hud.prompt_fill = down_view.fill
+		elif home and bool((bed as Dictionary)["inBed"]):
 			prompt = "F TO GET UP"
 		elif home and bool((bed as Dictionary)["atBunk"]):
 			prompt = "HOLD F TO SLEEP"
@@ -1061,8 +1090,11 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 			prompt = "F  PICK UP"
 	hud.prompt = prompt
 	_show_quota(now)
+	if me_down:
+		hud.quota_line = ""
 	_show_day(s, now)
 	_show_count(s, dt)
+	_show_down(s, now, dt, noise)
 	var sk: Variant = s.get("seek")
 	if sk is Dictionary and (_seek_hist.is_empty() or _seek_hist[-1][0] != s["t"]):
 		var hs := {}
@@ -1079,6 +1111,31 @@ func _show_quota(now: int) -> void:
 	var c := link.client()
 	hud.quota_line = quota_view.update(c.quota() if c != null else null, lift, hud.prompt == "F  ▼ CALL", now)
 	hud.quota_tone = quota_view.tone
+
+## Down first, then out (client/down_view.gd, already updated this frame): your timer and its lines (once
+## the catch's noise has passed), the out screen, the red spots for everyone. Caught and down, the camera
+## turns to the resident bent over you for the first moments (B6: it turns you round to face it).
+func _show_down(s: Dictionary, now: int, dt: float, noise: bool) -> void:
+	var shown := not noise and hud.end_lines.is_empty()
+	hud.down_head = down_view.head if shown else ""
+	hud.down_left = down_view.left
+	hud.down_line = down_view.line
+	hud.down_line2 = down_view.line2
+	hud.down_heal = down_view.heal
+	hud.out_on = down_view.out and hud.end_lines.is_empty()
+	hud.out_lines = down_view.out_lines
+	var block: Variant = s.get("downs")
+	down_view.show_spots(spots_root, (block as Dictionary)["spots"] if block is Dictionary else [])
+	if now < _turn_until and str((s["me"] as Dictionary)["status"]) == "down":
+		var op: Variant = (s["orderly"] as Dictionary).get("pose")
+		if op is Dictionary:
+			var lv := Vector3(float(op["x"]), float(op["y"]) + 1.2, float(op["z"]))
+			var want_yaw := atan2(-(lv.x - cam.position.x), -(lv.z - cam.position.z))
+			var want_pitch := clampf(atan2(lv.y - cam.position.y, Vector2(lv.x - cam.position.x, lv.z - cam.position.z).length()), -MAX_PITCH, MAX_PITCH)
+			var k := 1.0 - exp(-dt * TURN_RATE)
+			yaw = yaw + wrapf(want_yaw - yaw, -PI, PI) * k
+			pitch = lerpf(pitch, want_pitch, k)
+			cam.rotation = Vector3(pitch, yaw, 0)
 
 ## The Playroom's count and hiding (client/hide_view.gd): the count dark, the bell, the tune, the
 ## captions, the hide prompts, the health bar; found, the camera turns to the Minder as it comes.
@@ -1156,7 +1213,7 @@ func _name_tags(s: Dictionary, dark: bool) -> void:
 		# Full within the nearer 85 % of TAG_RANGE, fading out over the rest (no pop at the edge).
 		var near := Vector2(head.x - cam.position.x, head.z - cam.position.z).length()
 		var a := clampf((TAG_RANGE - near) / (0.15 * TAG_RANGE), 0.0, 1.0) if TAG_RANGE > 0.0 else 0.0
-		var shown := not dark and a > 0.0 and not cam.is_position_behind(head) and d > 0.4
+		var shown := not dark and a > 0.0 and not cam.is_position_behind(head) and d > 0.4 and str(o["status"]) != "out"
 		if shown:
 			shown = link.can_see_point(vb, Vector3(head.x, float(o["y"]) + eye_h - 0.05, head.z), int(o["level"]), open)
 		var p := cam.unproject_position(head) * k
@@ -1307,6 +1364,24 @@ func _present(events: Array, now: int) -> void:
 				if mine:
 					raise_latch = false
 					sfx.caught(true, null)
+			"downed":
+				# Down first, then out: caught by the resident, the camera turns to it as it bends over you.
+				if mine:
+					raise_latch = false
+					if str(e.get("by", "")) == "catch":
+						_turn_until = now + TURN_MS
+			"healed":
+				if mine:
+					_turn_until = -1
+					hud.note = "> BACK ON YOUR FEET"
+					_note_until = now + 2000
+				elif str(e.get("by", "")) == my:
+					hud.note = "> YOU GOT %s UP" % str(link.names().get(str(e["playerId"]), "THEM")).to_upper()
+					_note_until = now + 2000
+			"out":
+				if mine:
+					_turn_until = -1
+					raise_latch = false
 			"caught":
 				var op: Variant = (snap.get("orderly", {}) as Dictionary).get("pose")
 				sfx.caught(mine, Vector3(float(op["x"]), float(op["y"]) + 2.0, float(op["z"])) if op is Dictionary else null)
@@ -1707,7 +1782,7 @@ func _command(c: String) -> String:
 			var pl := link.plan_dict
 			return JSON.stringify({"width": pl["width"], "height": pl["height"], "landing": pl["landing"], "entityStart": pl["entityStart"],
 				"sightlines": pl["sightlines"], "car": pl["car"], "elevatorWall": pl["elevatorWall"], "landingFacing": pl["landingFacing"],
-				"cells": pl["cells"], "liftDist": pl["liftDist"], "rooms": pl["rooms"], "doors": pl["doors"], "depth": pl["depth"]})
+				"cells": pl["cells"], "liftDist": pl["liftDist"], "rooms": pl["rooms"], "doors": pl["doors"], "depth": pl["depth"], "edges": pl["edges"]})
 		_:
 			return "unknown command"
 	return "ok"
@@ -1806,6 +1881,9 @@ func _test_state() -> Dictionary:
 			"seekNote": hud.seek_note, "subtitle": hud.subtitle, "bigNote": hud.big_note, "centerNote": hud.center_note},
 		"quota": {"host": link.client().quota() if link.client() != null else null, "panel": lift.quota_text, "tone": lift.quota_tone,
 			"hud": hud.quota_line, "view": quota_view.describe(), "at": [lift.quota_point().x, lift.quota_point().y, lift.quota_point().z]},
+		"downs": {"host": s.get("downs"), "view": down_view.describe(), "hud": {"head": hud.down_head, "left": hud.down_left, "line": hud.down_line,
+			"line2": hud.down_line2, "heal": hud.down_heal, "out": hud.out_on, "outLines": hud.out_lines, "prompt": hud.prompt, "fill": hud.prompt_fill},
+			"turning": _turn_until > Time.get_ticks_msec(), "bend": orderly.get("bend") if orderly != null else null},
 		"captions": announcer.said_count.map(func(c: Dictionary) -> String: return str(c["text"])),
 		"bells": sfx.bells.duplicate(), "seekHist": _seek_hist.duplicate(), "camPos": [cam.position.x, cam.position.y, cam.position.z],
 		"events": event_counts,

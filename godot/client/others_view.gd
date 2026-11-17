@@ -1,6 +1,6 @@
 # The other players in the world: one CrewView (crew_view.gd) each, placed every frame from the network
 # frame's interpolated bodies (play_link.gd `others`), with their gait, the instrument raised or not,
-# being caught (set_downed for as long as the host says so), their emotes, and their footsteps from
+# being down (set_downed for as long as the host says so: they lie and crawl), out (not drawn), their emotes, and their footsteps from
 # where they are. Each is dressed from their player index (skin, headwear, the number on the patch)
 # so friends can tell each other apart; the name tag is the HUD's (main.gd projects it). Each wears the
 # face that player drew on their mask's screen (the host passes faces on; play_link.gd `face`).
@@ -61,8 +61,11 @@ func update(dt: float, others: Array, cam: Vector3) -> void:
 		view.set_body(pos, float(o["yaw"]))
 		view.set_gait(GAITS.get(gait, &"walk"), sp)
 		view.set_raised(bool(o["raised"]))
-		view.set_downed(str(o["status"]) == "caught")
-		view.visible = Vector2(pos.x - cam.x, pos.z - cam.z).length() > NEAR_CAMERA or absf(pos.y - cam.y) > 2.5
+		# Down (or caught, without the down rule): lying where they fell, crawling as they crawl. Out: gone;
+		# a red spot is left where they lay (client/down_view.gd).
+		var st := str(o["status"])
+		view.set_downed(st == "caught" or st == "down")
+		view.visible = st != "out" and (Vector2(pos.x - cam.x, pos.z - cam.z).length() > NEAR_CAMERA or absf(pos.y - cam.y) > 2.5)
 		# Footsteps, from where they are.
 		if sp > CrewView.MOVING and str(o["status"]) == "ok" and sfx != null:
 			var steps := float(fig["steps"]) + sp * dt / float(STEP_LEN.get(gait, 0.75))
