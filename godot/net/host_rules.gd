@@ -18,6 +18,18 @@
 #    (server/room.gd, net/local_room.gd) ask for it, so BANK rides up to the prison and bed starts the
 #    next day. prepare() turns it on before the first tick. With the resident off, every new day's
 #    resident is parked too.
+#  - The floor quota (sim/run.gd quota, North Star C9): off unless asked (`quota`); the game's rooms ask
+#    for it, so the call button does nothing until the crew has recorded enough on the floor. prepare()
+#    turns it on before the first tick, after any depth above 1, so it is that floor's quota. With the
+#    resident off nothing can ever be recorded, so the quota would lock the lift for good: it stays off.
+#  - The Annex's marks and notes (sim/run.gd annex) are the run's own: the soft catch keeps them from the
+#    real tick (the catch's note), and a forced call passes the mark and peel keys on like the rest.
+#  - Down first, then out (sim/run.gd downs, North Star B6): off unless asked (`downs`); the game's rooms ask
+#    for it, so a catch puts the player down where they stood for ten seconds, a crewmate holding F beside
+#    them for three puts them back up, and otherwise they are out until the car next rides down. prepare()
+#    turns it on before the first tick. With it on the run's own down replaces the soft catch above (a catch
+#    is never a wipe on its own tick, so the soft catch never fires): a crew all out is a wipe, wherever the
+#    car is, because nobody is left to board it.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -42,12 +54,18 @@ var _depth: int
 var deck: Array[StringName]
 ## The day loop (off unless asked).
 var days: bool
+## The floor quota (off unless asked; never with the resident off).
+var quota: bool
+## Down first, then out (off unless asked).
+var downs: bool
 
-func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false) -> void:
+func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false) -> void:
 	_entity_on = entity_on
 	_depth = depth
 	deck = Run.deck_of(deck_)
 	days = days_
+	quota = quota_
+	downs = downs_
 
 ## Where player `i` of `n` stands in the car at the start (car-local u, v).
 static func start_spot(i: int, n: int) -> PackedFloat64Array:
@@ -114,6 +132,10 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s.orderly = parked_orderly(s)
 		# The Playroom's Minder too: no count, no search (sim/run.gd seek_off).
 		s.seek_off = true
+	if quota and _entity_on and not s.quota:
+		s = Run.with_quota(s)
+	if downs and not s.downs:
+		s = Run.with_downs(s)
 	return s
 
 ## Tests: the next tick presses the call button for `id` from `body`.
@@ -165,6 +187,14 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 		var st := alt.state.copy()
 		st.orderly = r.state.orderly
 		st.crew = r.state.crew
+		# The floor quota goes with the crew: the victim's reading closed as they were caught counts.
+		st.floor_earned = r.state.floor_earned
+		st.floor_by = r.state.floor_by
+		st.floor_needed = r.state.floor_needed
+		st.quota_met = r.state.quota_met
+		# The Annex's marks and notes too: the catch's note was triggered by the real tick.
+		st.annex = r.state.annex
+		st.note_seq = r.state.note_seq
 		st.players = players
 		st.summary = null
 		var kept_events: Array[Dictionary] = []
@@ -206,4 +236,6 @@ static func _copy_input(i: Run.PlayerInput) -> Run.PlayerInput:
 	n.voice = i.voice
 	n.horn = i.horn
 	n.light = i.light
+	n.mark = i.mark
+	n.peel = i.peel
 	return n
