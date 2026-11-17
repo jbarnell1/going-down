@@ -6,7 +6,7 @@
 
 - **Gates passed:** 7 of 14. **Tasks done:** 62 of 104.
 - **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 66.
-- **Now:** T20f Controls card and a ready-up screen. Part of the same Opus job: the car waits while anyone is aboard; a returning car waits 30 s; anyone left out wakes in the prison without their credits (the ready-up screen comes later)
+- **Now:** nothing in progress
 - **Last CI result seen:** passed on cb7c7a0
 - **Answers applied up to:** 2026-11-17T15:39:30.665Z
 
@@ -213,7 +213,7 @@
   - To do: Add a test that walks a body through the open doorway into the car (today it is covered only by reading the code and the passing movement tests)
 - [ ] **T8c** `todo` Down and healed on screen
   - Why: When you go down you crawl with a 10-second timer; a friend sees HOLD F TO HELP and a fill bar; out leaves a red spot
-- [ ] **T19a** `doing` Freeze takes two watchers
+- [ ] **T19a** `todo` Freeze takes two watchers
   - Why: The Orderly keeps moving if only one of you is looking: it takes two (or, with two players, either of you) to hold it
 - [ ] **T19b** `todo` Hiding places on every floor
   - Why: Under hospital beds, inside cabinets (E), under desks (Ctrl) - so a re-rolled monster on any floor can be survived
@@ -223,20 +223,21 @@
   - Why: No two monsters share a rule: the Temp needs its own way to hunt and to be recorded
 - [ ] **T19d** `todo` Traits re-roll per floor
   - Why: Recognising the monster never tells you how to survive it
-- [ ] **T19e** `doing` Monsters slip away and reappear out of view
+- [ ] **T19e** `todo` Monsters slip away and reappear out of view
   - Why: Every monster relocates out of everyone's sight in a way that fits its rule, so you can lose track of it
-- [ ] **T20a** `doing` The Orderly stays visible in the dark
+- [ ] **T20a** `todo` The Orderly stays visible in the dark
   - Why: When the lights go out you should still glimpse it moving, not have it vanish
 - [ ] **T20b** `todo` The Orderly pushes a real trolley
   - Why: Its squeak comes from a trolley you can see it roll
 - [ ] **T20i** `todo` The Orderly and crewmates animated in Mixamo
   - Why: Better movement: the Orderly pushing its trolley, crewmates crawling when down, kneeling to help, lying under beds
   - To do: Bake the 8 new crewmate clips into crewmate.glb (build_crewmate.py CLIPS): Dig And Plant Seeds = help, Tonic Seizure = down idle, Getting Up, Pointing, Sitting Idle = party table, Prone Idle = under a bed, Cheering, Terrified; then use them for down/heal, hiding and the emote wheel. The Orderly's clips wait until you have time
-- [ ] **T16k** `doing` The Temp as a proper Blender figure
+- [ ] **T16k** `todo` The Temp as a proper Blender figure
   - Why: A real modelled office worker with the photocopied face sheet, stapler and notes, ready to animate in Mixamo
-- [ ] **T20c** `doing` Longer blackouts before the car comes
+  - To do: Your direction: more dishevelled - a coffee stain, half the shirt tail untucked, the tie half undone, like he doesn't take care of himself
+- [ ] **T20c** `todo` Longer blackouts before the car comes
   - Why: Once the lights start dimming, the dark should hold longer while you wait for the lift
-- [ ] **T20h** `doing` A bit more stamina, monsters paced to match
+- [ ] **T20h** `todo` A bit more stamina, monsters paced to match
   - Why: You can run a little longer, and the monsters are retuned so they stay just as dangerous
 - [ ] **T15m** `todo` Playroom tuning from your play
   - Why: A warning line on arrival to sneak, more time to hide, the ball pit lowers your view so you can watch it search, an anger bar, and a reminder to get your instrument out
@@ -246,7 +247,7 @@
   - Why: Beds, chairs, cabinets and desks block you, which hiding needs
 - [ ] **T20e** `todo` The day quota you can see, and no going home short
   - Why: You know how close you are to the day's target; BANK is refused until it is met, with a snide line from the announcer; in the prison you can only shop and sleep
-- [ ] **T20f** `doing` Controls card and a ready-up screen
+- [ ] **T20f** `todo` Controls card and a ready-up screen
   - Why: Everyone reads the controls and readies up, then drops into the lift together; the lift waits and never pushes anyone out
   - To do: Your car answer: the car waits as long as anyone is aboard; a returning car waits 30 s before its doors close; anyone left out then dies and wakes in the prison without the credits they earned
 - [ ] **T20g** `todo` Things to find: drawers, gurneys, credits, poem notes
@@ -255,7 +256,7 @@
   - Why: Four squares at the bottom of the screen, scroll or 1-4 to pick what is in your hand; the instrument is always in the other hand; store items take a slot
 - [ ] **T21b** `todo` The nerve bar
   - Why: Your nerve drops near monsters and in the dark, and a juice carton steadies you
-- [ ] **TB** `doing` Your second batch of sounds in the game
+- [ ] **TB** `todo` Your second batch of sounds in the game
   - Why: The Annex, the Playroom and the crew get their own recorded sounds: staplers, office tone, the music box, squeaky tiles, the ball pit, the Minder's wheeze, breathing that isn't wet
 - [ ] **T11a** `todo` A whole run with bots, headless
   - Why: Proof the build plays end to end, from the Clinic to day 2
@@ -350,6 +351,37 @@
 
 ## Activity (newest first)
 
+- 2026-11-17 17:50Z Paused T19e: waiting for Merged into main and pushed (219 quick tests, relocation/watchers/downs full tests, 3-player network 10/10, down check 24/24). Goes into your next build
+- 2026-11-17 17:33Z Paused T19e: waiting for Checked green; merge into main committing now with its tests (background b4axi33yd); verify and push when usage resets
+- 2026-11-17 17:33Z Paused T20f: waiting for Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets
+- 2026-11-17 17:33Z Paused T20h: waiting for Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets
+- 2026-11-17 17:33Z Paused T20c: waiting for Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets
+- 2026-11-17 17:33Z Paused T20a: waiting for Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets
+- 2026-11-17 17:33Z Paused TB: waiting for Paused: usage limit reached; the mix fix was in progress (worktree-agent-a9d98f0ff17540e95). Restart when usage resets
+- 2026-11-17 17:33Z Paused T19c: waiting for Paused: usage limit reached; builder stopped early (worktree-agent-ab87781c91fa45e54). Restart when usage resets
+- 2026-11-17 17:33Z Paused T19e: waiting for Checked: 216 quick tests, 98 relocations over 80 floors all fair, stored results unchanged, both deliberate breaks red. Being merged into the main code
+- 2026-11-17 17:33Z Paused T16k: waiting for Modelled and judged twice (round 2 fixes made: soft untucked tail, a hunched lopsided outline, the sheet covering every edge). Merged into the main code. Waits for your Mixamo animations: assets_src/mixamo/export/temp.fbx
+- 2026-11-17 17:33Z New pictures for T16k: The Temp as a proper Blender figure.
+- 2026-11-17 17:24Z Paused T19a: waiting for Merged into main and pushed with its network check; goes into your next build
+- 2026-11-17 17:24Z Started T19c: The Temp's own mechanic. An Opus builder is making the Temp's own rule, Lonely: it hunts whoever is out of sight of everyone and far from them, slightly faster than walking, and slips away once you rejoin someone
+- 2026-11-17 17:24Z Started T20f: Controls card and a ready-up screen. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks
+- 2026-11-17 17:24Z Started T20h: A bit more stamina, monsters paced to match. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks
+- 2026-11-17 17:24Z Started T20c: Longer blackouts before the car comes. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks
+- 2026-11-17 17:24Z Started T20a: The Orderly stays visible in the dark. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks
+- 2026-11-17 17:20Z Started T16k: The Temp as a proper Blender figure. Judging round 2 done (bright 3-4/10, dark 5-7/10). Second revision under way: a natural untucked shirt tail, a hunched, lopsided outline that reads wrong from far away, the sheet covering every edge
+- 2026-11-17 17:18Z Started T16k: The Temp as a proper Blender figure. Revised (sheet wrapped and stapled on, dishevelled as you asked: coffee stain, shirt tail out, tie half undone; arms deliberately too long). Judging round 2 running
+- 2026-11-17 17:18Z New pictures for T16k: The Temp as a proper Blender figure.
+- 2026-11-17 17:09Z Paused T19a: waiting for Checked: 210 quick tests, all 26 stored-result tests unchanged, both deliberate breaks red. Being merged into the main code now
+- 2026-11-17 17:02Z Started T16k: The Temp as a proper Blender figure. Judging round 1 done (bright corridor 3-4/10, dark 6-7/10; all three like the drawn face over a hidden head). The builder is now fixing the sheet so it looks worn and stapled on, the mannequin arms and neck, and the stapler and notes
+- 2026-11-17 17:01Z Started T16k: The Temp as a proper Blender figure. Judging round 1: Fable done; Opus judges now
+- 2026-11-17 17:01Z Started T19e: Monsters slip away and reappear out of view. Built: when nobody has seen the Orderly for a while, it slips away out of everyone's sight and reappears 12-20 m from a player, with a sound first. A Sonnet agent is re-running its checks
+- 2026-11-17 17:00Z Down and heal is merged into the main code and pushed. The three-player network check now allows the one move you decided watchers see (the Orderly bent over a downed player, working in place) and still goes red if it walks while watched (checked with a deliberate break).
+- 2026-11-17 16:58Z The Temp's first judge (shown only pictures): the face sheet over a real head and the tilted head work; in the dark it scores 6.5/10. Weak: the sheet looks like a flat board, thin tube arms with mitten hands, trousers too short. Two more judges, then the fixes.
+- 2026-11-17 16:57Z Started TB: Your second batch of sounds in the game. Back with its builder: make the breathing grow louder as it nears every time, and the beds' hum dip reliably under the voice
+- 2026-11-17 16:57Z Started T16k: The Temp as a proper Blender figure. Built in Blender (3,812 triangles, T-pose with spread fingers, stapler and notes separate). Judging round 1: Fable now, two Opus judges when builder slots free
+- 2026-11-17 16:57Z New pictures for T16k: The Temp as a proper Blender figure.
+- 2026-11-17 16:57Z New pictures for T16k: The Temp as a proper Blender figure.
+- 2026-11-17 16:56Z Paused TB: waiting for Checked: tests, export and the browser sound check all pass, and the far-carry breaks go red. But the mix check is unstable: the beds' duck under the voice misses by about 1 dB in 2 of 3 runs, and the 'breathing grows as it nears' check failed 2 of 3 (at 5 m it was sometimes quieter than at 20 m). Goes back to its builder when a builder slot frees
 - 2026-11-17 16:22Z Paused T8a: waiting for Merged into main with its screen (T8c); goes into your next build
 - 2026-11-17 16:22Z Paused T8c: waiting for Checked: 209 quick tests, the two-player down check 24/24, a deliberate break (no HOLD F TO HELP) turned it red. Merged into main; re-running the three-player network test on main before your next build
 - 2026-11-17 16:12Z Sound batch 2 built: a roar 55 m away is now heard (it was silent), and the breathing starts at about 26 m instead of 9 m.
@@ -359,34 +391,3 @@
 - 2026-11-17 16:12Z Started T20a: The Orderly stays visible in the dark. An Opus builder is drawing the Orderly as normal in the dark (no glow), with longer blackouts, more stamina, and a lift that waits
 - 2026-11-17 16:12Z Started TB: Your second batch of sounds in the game. Built: all your new sounds wired in, scares carry across the floor, the Orderly's breathing starts from 28 m. A Sonnet agent is re-running the sound and mix checks
 - 2026-11-17 16:02Z Started T16k: The Temp as a proper Blender figure. An Opus builder is studying two tutorials, then modelling the Temp in Blender in a T-pose with spread fingers, ready for Mixamo
-- 2026-11-17 16:02Z New pictures for T8c: Down and healed on screen.
-- 2026-11-17 16:02Z New pictures for T8c: Down and healed on screen.
-- 2026-11-17 16:02Z Started T8c: Down and healed on screen. Built (you crawl with a DOWN timer, a friend sees HOLD F TO HELP and a filling bar, out leaves a red stain). A Sonnet agent is re-running its checks
-- 2026-11-17 16:01Z Your eight new crewmate clips are in (helping a friend, lying hurt, getting up, pointing, sitting, prone, cheering, terrified); they go into the crewmate model with the next builder. The Orderly's T-pose now has its fingers fanned and thumbs forward.
-- 2026-11-17 15:52Z New pictures for T19b: Hiding places on every floor.
-- 2026-11-17 15:52Z Paused T19b: waiting for Checked: 210 quick tests; 800 Clinics and 800 Annexes all have a hide within 14 steps of every corridor; nobody in a hide was ever caught without being seen getting in; the Playroom unchanged; all three deliberate breaks red. Goes into your build after the down-and-heal screen merges
-- 2026-11-17 15:49Z New pictures for T20i: The Orderly and crewmates animated in Mixamo.
-- 2026-11-17 15:46Z Paused T16k: waiting for You asked for it: next free Opus builder (study, build, two judge rounds; T-pose export for Mixamo; face sheet stays swappable)
-- 2026-11-17 15:46Z Added task T16k: The Temp as a proper Blender figure.
-- 2026-11-17 15:45Z New pictures for T20i: The Orderly and crewmates animated in Mixamo.
-- 2026-11-17 15:45Z New pictures for T20i: The Orderly and crewmates animated in Mixamo.
-- 2026-11-17 15:45Z Paused T20i: waiting for Exported the Orderly and the crewmate for Mixamo (assets_src/mixamo/export, instructions in assets_src/mixamo/README.md). Waits for your animation files
-- 2026-11-17 15:45Z Added task T20i: The Orderly and crewmates animated in Mixamo.
-- 2026-11-17 15:40Z Added task T21b: The nerve bar.
-- 2026-11-17 15:40Z Added task T21a: A four-slot inventory.
-- 2026-11-17 15:40Z Took a default: Your answers applied: Lonely as designed (solo Annex: Lonely but slower than one player); eye marks shown; F for cabinets; relocation as designed and on for the Minder (wanders, grabs within 1 m, hunts once angered, voice says don't run); day quota counts everything earned; a wipe is the missed day; juice carton AND a nerve bar; a 4-slot inventory; quick noisy search; ready-up as recommended; the car waits while anyone is aboard, and a returning car waits 30 s, then anyone left out dies and wakes in the prison without their credits.
-- 2026-11-17 15:40Z Applied the owner's new answers.
-- 2026-11-17 15:37Z Hiding everywhere checked so far: 210 quick tests green; over 800 Clinics and 800 Annexes every corridor is within 14 steps of a hide; nobody inside a hide was ever caught without a reason (28 catches from hides, all after being seen getting in). Ball pit and seeking tests and the deliberate breaks still running.
-- 2026-11-17 15:23Z Paused T15m: waiting for Your notes recorded: warning line on arrival, a longer count (today 30-45 s), ball pit lowers your view instead of covering it, an anger bar, an 'instruments out' reminder. Waits for a free builder
-- 2026-11-17 15:23Z Added task T15m: Playroom tuning from your play.
-- 2026-11-17 15:19Z Paused T20g: waiting for Designed: hold F to search drawers, gurneys and lockers for credits, poem notes and juice cartons. Waits for furniture in the rules (T20d) and a free builder
-- 2026-11-17 15:19Z Paused T20f: waiting for Designed: a controls card and ready-up screen, everyone drops in together, the car waits. Waits for a free builder
-- 2026-11-17 15:19Z Paused T20e: waiting for Designed: BANK locked until the day quota is met, the quota shown always, a wipe is now the missed day. Six questions on your Questions page. Waits for a free builder
-- 2026-11-17 15:19Z Took a default: Day quota, ready-up and findables designed (docs/floors/findables-and-day.md). Six questions on the Questions page; building on the recommended defaults until you answer.
-- 2026-11-17 15:19Z Paused T20a: waiting for Your call: don't hide it in the dark and add no glow; just draw it as normal. Waits for a free builder
-- 2026-11-17 15:19Z Added task T20h: A bit more stamina, monsters paced to match.
-- 2026-11-17 15:15Z Your sound note went to the sound builder: shrieks, roars and wails will carry across the floor so you hear them from the lift, and the raspy breathing starts much further out, well before a catch.
-- 2026-11-17 15:10Z Found: the lift pushes you out after 12 seconds (will change to wait); furniture exists only on your screen, so the rules can't make it block you (needs the furniture list in the rules, next to hiding places); the day quota line is written but never shown; and you already can't leave the prison without sleeping.
-- 2026-11-17 15:10Z Paused T20a: waiting for Cause found: the Orderly is hidden on purpose whenever the lights are out, and has no glow. Fix (a faint moving silhouette in the dark) waits for a free builder
-- 2026-11-17 15:08Z Started T20a: The Orderly stays visible in the dark. A Sonnet agent is finding why the Orderly disappears in the dark, why furniture doesn't block you, and why the lift pushes players out
-- 2026-11-17 15:08Z Started T20e: The day quota you can see, and no going home short. Fable is designing the visible day quota, refusing BANK until it is met, and the prison as shop-then-sleep

@@ -57,7 +57,7 @@ const cleanup = () => { for (const p of procs) p.kill(); };
 process.on('exit', cleanup);
 process.on('SIGINT', () => { cleanup(); process.exit(1); });
 
-const server = run(['res://server/server.tscn', '--', 'server', `port=${port}`, 'bind=127.0.0.1', 'seed=e2e-1', 'stats=10', 'quota=0'], { env: { GD_JOIN_SECRET: SECRET }, echo: 'server', timeout: 600 });
+const server = run(['res://server/server.tscn', '--', 'server', `port=${port}`, 'bind=127.0.0.1', 'seed=e2e-1', 'stats=10', 'quota=0', 'watchers=0'], { env: { GD_JOIN_SECRET: SECRET }, echo: 'server', timeout: 600 });
 await new Promise((res) => {
   const t = setInterval(() => { if (server.out.includes('listening on')) { clearInterval(t); res(); } }, 100);
 });
