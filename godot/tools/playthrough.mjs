@@ -2,7 +2,8 @@
 // The scripted playthrough, the same for the browser build (tools/play_web.mjs) and the Windows
 // build (tools/play_desktop.mjs): step out, the clean side, the corrupted side, the Orderly's corridor,
 // watch it (it does not move), turn away (it moves), take a reading, call the lift, flee at the blackout
-// warning, come back when the lights return, board on BANK, bank; then a second run rides DOWN.
+// warning, come back when the lights return, board on BANK, bank; then a second run rides DOWN, and
+// on that floor the camera drops for creeping and for being down (with the eye sent checked every frame).
 // Every step is asserted from the rules' state as the bridge reports it; a picture at each step.
 // driver: { cmd(text) -> reply, screenshot(path), wait(ms), close(), consoleLines: [] }
 // opts: { shots (folder), only, report (file name), firstFrameMs, busPeaks (desktop: assert sound by bus) }
@@ -394,6 +395,7 @@ check('a doorway to see the wall edge-on', door !== undefined);
 const spots = JSON.parse(await cmd('props'));
 const usedRooms = new Set();
 let propViews = 0;
+let propSpot = null;
 for (const sp of spots) {
   if (propViews >= 2 || sp.level !== 0 || sp.tipped || usedRooms.has(sp.room)) continue;
   const [wx, wy] = sp.wall;
@@ -403,6 +405,7 @@ for (const sp of spots) {
   usedRooms.add(sp.room);
   propViews++;
   const fc = { x: sp.foot[0] + sp.foot[2] / 2, z: sp.foot[1] + sp.foot[3] / 2 };
+  if (!propSpot) propSpot = { inside, fc };
   await cmd(`teleport 0 ${inside.x} ${inside.y}`);
   await wait(200);
   await cmd(`face ${fc.x} ${fc.z} 0.6`);
@@ -417,6 +420,45 @@ for (const sp of spots) {
   await shot(`props-room-${propViews}-other-side`);
 }
 check('two rooms with props by a wall, seen from both sides', propViews === 2, `${spots.length} props on this floor`);
+
+// ---- 12. The camera drops when you creep (North Star B12): the same spot and the same look, standing
+// then creeping (Ctrl held, standing still), then up again. The eye is the camera as drawn above the feet.
+const eyeOf = (st) => st.client.camY - st.me.y;
+if (propSpot) {
+  await cmd(`teleport 0 ${propSpot.inside.x} ${propSpot.inside.y}`);
+  await wait(200);
+  await cmd(`face ${propSpot.fc.x} ${propSpot.fc.z} 0.9`);
+  await wait(600);
+}
+const stood = await state();
+await shot('eye-standing');
+await cmd('move 0 0 0 1');
+await wait(700);
+const crept = await state();
+await shot('eye-creeping-same-spot');
+await cmd('stopmove');
+await wait(600);
+const upAgain = await state();
+const sameSpot = Math.hypot(crept.me.x - stood.me.x, crept.me.z - stood.me.z) < 1e-6 && crept.client.yaw === stood.client.yaw && crept.client.pitch === stood.client.pitch;
+check('creeping drops the camera (same spot, same look)', crept.me.gait === 'creep' && eyeOf(crept) < 1.3 && Math.abs(eyeOf(stood) - 1.65) < 0.005 && sameSpot,
+  `standing eye ${eyeOf(stood).toFixed(3)} m, creeping ${eyeOf(crept).toFixed(3)} m (gait ${crept.me.gait}), same spot and look ${sameSpot}`);
+check('standing up raises it again', Math.abs(eyeOf(upAgain) - 1.65) < 0.005 && upAgain.me.gait !== 'creep', `eye ${eyeOf(upAgain).toFixed(3)} m`);
+
+// ---- 13. Down (the caught status stands for it until the downed-and-healed rules): the camera near the
+// floor. Playing alone that is a wipe, so it comes last.
+const downOk = JSON.parse(await cmd('down 1')).ok === true;
+const downed = await until((st) => st.me.status === 'caught' && eyeOf(st) < 0.5, 3000, 50);
+await wait(250);
+await shot('eye-down');
+check('down: the camera near the floor', downOk && downed.me.status === 'caught' && eyeOf(downed) < 0.5, `status ${downed.me.status}, eye ${eyeOf(downed).toFixed(3)} m`);
+await wait(300);
+// Every frame of the whole playthrough: the camera drawn against the camera the client judged sight
+// from on that frame, and on every frame an input went, the eye in that input as sent.
+const eyes = JSON.parse(await cmd('eyestats'));
+const span = (k) => `${eyes[k].frames} frames ${eyes[k].min.toFixed(2)}-${eyes[k].max.toFixed(2)} m`;
+check('every frame, standing, creeping and down: the eye sent to the rules is the camera drawn', eyes.mismatch === 0 && eyes.sentMismatch === 0 && eyes.stand.frames > 100 && eyes.creep.frames > 20 && eyes.down.frames > 5 && eyes.sent > 50,
+  `${eyes.mismatch} frames off (largest gap ${eyes.maxDiff.toFixed(4)} m), ${eyes.sentMismatch} of ${eyes.sent} inputs off (largest ${eyes.maxSentDiff.toFixed(4)} m); standing ${span('stand')}, creeping ${span('creep')}, down ${span('down')}`);
+check('creeping frames go below 1.3 m', eyes.creep.min < 1.3, `lowest creeping eye ${eyes.creep.min.toFixed(2)} m`);
 
 await finish();
 

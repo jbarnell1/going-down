@@ -23,6 +23,7 @@
 extends Node
 
 const PlayLink = preload("res://client/play_link.gd")
+const EyeHeight = preload("res://client/eye_height.gd")
 const RoomClient = preload("res://net/room_client.gd")
 const LocalRoom = preload("res://net/local_room.gd")
 const Protocol = preload("res://net/protocol.gd")
@@ -121,6 +122,8 @@ var tick_acc := 0.0
 var event_counts: Dictionary = {}
 var event_log: Array = []
 var emotes_seen: Array = []
+## The camera's eye against the client's (main.gd _eye_check), for the tests.
+var eye_stats: Dictionary = {}
 var frames := 0
 var game_frames := 0
 var _ft_sum := 0.0
@@ -152,6 +155,7 @@ func _ready() -> void:
 		return
 	var t0 := Time.get_ticks_msec()
 	_t0_us = Time.get_ticks_usec()
+	_reset_eye_stats()
 	_read_options()
 	_add_actions()
 	_build_view()
@@ -766,9 +770,10 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	var ended := not hud.end_lines.is_empty() or str(s.get("phase", "")) == "ended"
 	var still := _noise_on() or ended
 
-	# The camera.
-	cam.position = Vector3(float(me["x"]), float(me["y"]) + float(me["eye"]), float(me["z"]))
+	# The camera: at this frame's eye height (standing, creeping, down; play_link.gd `eye`).
+	cam.position = PlayLink.camera_point(me)
 	cam.rotation = Vector3(pitch, yaw, 0)
+	_eye_check(me)
 
 	# The Orderly: drawn exactly as the frame says, never in the dark, never while taken.
 	var o: Dictionary = s["orderly"]
@@ -875,6 +880,39 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	hud.prompt = prompt
 	_show_end(now)
 
+## Tests: on every frame, the camera as drawn against the client's own camera for that frame (the eye
+## sight was judged from) and, on frames an input went, the eye in the input as sent; counted by state
+## (stand, creep, down), with the lowest and highest eye drawn in each.
+func _eye_check(me: Dictionary) -> void:
+	var c := link.client()
+	if c == null or c.last_camera == null:
+		return
+	var lc := c.last_camera
+	var want := Vector3(lc.body.x, lc.body.y + lc.eye, lc.body.z)
+	var drawn := cam.position.y - float(me["y"])
+	var st := "down" if EyeHeight.target(str(me["status"]), "walk") == EyeHeight.DOWN else ("creep" if str(me["gait"]) == "creep" else "stand")
+	var e: Dictionary = eye_stats[st]
+	e["frames"] = int(e["frames"]) + 1
+	e["min"] = minf(float(e["min"]), drawn)
+	e["max"] = maxf(float(e["max"]), drawn)
+	var diff := cam.position.distance_to(want)
+	eye_stats["maxDiff"] = maxf(float(eye_stats["maxDiff"]), diff)
+	if diff > 0.001:
+		eye_stats["mismatch"] = int(eye_stats["mismatch"]) + 1
+	if c.last_input_frame == c.stats.frames:
+		var m: Variant = Protocol.decode(c.last_input)
+		if m is Dictionary:
+			var sent := float((m as Dictionary)["eye"])
+			eye_stats["sent"] = int(eye_stats["sent"]) + 1
+			eye_stats["maxSentDiff"] = maxf(float(eye_stats["maxSentDiff"]), absf(sent - drawn))
+			if absf(sent - drawn) > 0.001:
+				eye_stats["sentMismatch"] = int(eye_stats["sentMismatch"]) + 1
+
+func _reset_eye_stats() -> void:
+	eye_stats = {"mismatch": 0, "maxDiff": 0.0, "sent": 0, "sentMismatch": 0, "maxSentDiff": 0.0}
+	for st: String in ["stand", "creep", "down"]:
+		eye_stats[st] = {"frames": 0, "min": 99.0, "max": -99.0}
+
 ## Name tags over the other players: projected from the head into the window, readable to TAG_NEAR
 ## metres and gone at TAG_FAR, never through walls (the rules' line of sight), not in the dark.
 func _name_tags(s: Dictionary, dark: bool) -> void:
@@ -884,14 +922,14 @@ func _name_tags(s: Dictionary, dark: bool) -> void:
 	var vb := link.view_body()
 	var open: bool = s["doorsOpen"]
 	for o: Dictionary in s["others"]:
-		# Over the head; a crewmate lying down (caught) has it just above the body, not 2 m over the floor.
-		var lying := str(o["status"]) == "caught"
-		var head := Vector3(float(o["x"]), float(o["y"]) + (0.75 if lying else 2.05), float(o["z"]))
+		# Over the head, wherever their eyes are: standing, creeping lower, down near the floor.
+		var eye_h := EyeHeight.target(str(o["status"]), str(o["gait"]))
+		var head := Vector3(float(o["x"]), float(o["y"]) + eye_h + 0.4, float(o["z"]))
 		var d := head.distance_to(cam.position)
 		var a := clampf(1.0 - (d - TAG_NEAR) / (TAG_FAR - TAG_NEAR), 0.0, 1.0)
 		var shown := not dark and a > 0.0 and not cam.is_position_behind(head) and d > 0.4
 		if shown:
-			shown = link.can_see_point(vb, Vector3(head.x, float(o["y"]) + (0.4 if lying else 1.6), head.z), int(o["level"]), open)
+			shown = link.can_see_point(vb, Vector3(head.x, float(o["y"]) + eye_h - 0.05, head.z), int(o["level"]), open)
 		var p := cam.unproject_position(head) * k
 		# Whole tags only: one cut by the edge of the picture reads as a glitch.
 		var hp := maxf(2.0, floorf(win.y / 320.0))   # the HUD's pixel (hud.gd _scale)
@@ -1053,6 +1091,7 @@ func _n4(v: float) -> String:
 	return "%04d" % int(floorf(v))
 
 func _reset_stats() -> void:
+	_reset_eye_stats()
 	_ft_sum = 0.0
 	_ft_n = 0
 	_ft_max = 0.0
@@ -1075,7 +1114,8 @@ func _on_js(args: Array) -> void:
 
 ## Commands (space separated): state | stats | resetstats | move f r sprint creep | stopmove |
 ## look yawDeg pitchDeg | face x z [y] | raise 0|1|- | hold 0|1|- | call | pick | teleport level x y |
-## walkto level x y [pace] | stopwalk | timescale k | newrun | tape 0|1 | debug | floortapes | plan
+## walkto level x y [pace] | stopwalk | timescale k | newrun | tape 0|1 | debug | floortapes | plan |
+## down 0|1 (alone: put the player down or up) | eyestats (the camera's eye against the client's, every frame)
 ## The start screen and the room: alone (PLAY ALONE, then Enter on the face) | ui <alone|join|go|back|start|leave> |
 ## type <address|name> <text> | start | leave | emote <name> | wheel open | wheel aim dx dy | wheel release | screen
 ## The face step: draw done | draw cancel | draw press <editor control id> | draw line x0 y0 x1 y1 (cells, with
@@ -1241,6 +1281,12 @@ func _command(c: String) -> String:
 			announcer.request(p[1], 9000)
 		"props":
 			return JSON.stringify(level.prop_spots if level != null else [])
+		"down":
+			if not in_game:
+				return JSON.stringify({"ok": false, "error": "no run"})
+			return JSON.stringify(link.set_down(p.size() > 1 and p[1] == "1"))
+		"eyestats":
+			return JSON.stringify(eye_stats)
 		"nudge":
 			if not in_game:
 				return JSON.stringify({"ok": false, "error": "no run"})
@@ -1330,6 +1376,7 @@ func _test_state() -> Dictionary:
 			"spoken": announcer.history.map(func(h: Dictionary) -> String: return str(h["id"])), "caught": caught_at >= 0, "noise": _noise_on(),
 			"wentDown": hud.went_down, "end": hud.end_lines.map(func(l: Dictionary) -> String: return str(l["text"])), "tapeText": hud.tape_text,
 			"prompt": hud.prompt, "menu": hud.menu_on, "built": built_depth, "hudSize": [hud.size.x, hud.size.y],
-			"wheel": wheel_open, "wheelSel": hud.wheel_sel, "note": hud.note, "tags": hud.tags.map(func(t: Dictionary) -> String: return str(t["text"]))},
+			"wheel": wheel_open, "wheelSel": hud.wheel_sel, "note": hud.note, "tags": hud.tags.map(func(t: Dictionary) -> String: return str(t["text"])),
+			"camY": cam.position.y},
 		"events": event_counts,
 	}

@@ -159,10 +159,16 @@ safe side of the fairness rule.
 
 - `tools/net_local.mjs` (10 checks): the headless server and three headless GDScript players over
   real WebSockets with injected delay, then hostile probes.
-- `tools/play_net.mjs` (27 checks): the real Windows game, two windows and a browser, through the start
+- `tools/play_net.mjs` (31 checks): the real Windows game, two windows and a browser, through the start
   screen, the face step, the lobby, the run and back (see `godot/README.md`, Checks). To prove it can
   fail, replace `_transport.send(q.peer, text)` in `host.gd` `_relay_emote` with
   `pass  # BREAK: _transport.send(q.peer, text)`, export Windows (`npm run godot:export -- windows`)
   and run it: the two emote checks fail. Likewise `var relay_faces := false` in `host.gd`: the face
   checks (the monitor, the masks, faces received) fail. Undo it and export again.
 - `tests/run_face_net.gd` (7 tests): the face in the join and the host passing it on, in memory.
+- `tests/run_eye.gd` (3 tests): the eye height (`client/eye_height.gd`: standing 1.65, creeping 1.13,
+  down 0.45, eased over 0.2 s in whole centimetres). Playing alone through `play_link.gd` and the real
+  NetClient and host: on every frame the camera drawn is the camera sight is judged from, and every
+  input carries that eye; creeping under an atrium's edge hides an Orderly on the floor above that
+  standing shows. Desks, beds and counters do not block the rules' sight (generous), so a crouch behind
+  one can hide the Orderly on screen while it still counts as seen: the safe side of the fairness rule.

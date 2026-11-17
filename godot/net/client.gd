@@ -142,6 +142,11 @@ var emotes: Array[Dictionary] = []
 ## the host passed them on: player id -> FaceCodec text (only valid faces get this far).
 var face := ""
 var faces := {}
+## The camera of the last frame (what sight was judged from), the text of the last input sent, and
+## the frame it went on (stats.frames): the eye checks compare them with the camera drawn.
+var last_camera: Pose.Camera = null
+var last_input := ""
+var last_input_frame := -1
 
 var host_id: String
 var name: String
@@ -442,6 +447,7 @@ func frame(now: float, local: LocalFrame) -> Frame:
 		local_depth = _pending_place["depth"]
 		_pending_place = null
 	var cam := Pose.Camera.make(placed if placed != null else local.body, local.eye, local.yaw, local.pitch, local.h_fov_deg, local.v_fov_deg)
+	last_camera = cam
 	var clock_rt: Variant = _render_time(now)
 	var show := _bracket(INF if clock_rt == null else float(clock_rt))
 	# The host time of the state actually drawn (behind the clock when snapshots are late).
@@ -686,6 +692,8 @@ func _send(now: float, cam: Pose.Camera, local: LocalFrame, rt: float) -> void:
 		_tank_at.erase(_seq - TANK_KEEP)
 	var text := Protocol.encode(m)
 	_transport.send(host_id, text)
+	last_input = text
+	last_input_frame = stats.frames
 	_last_send = now
 	_seeing_latch = false
 	stats.inputs += 1
