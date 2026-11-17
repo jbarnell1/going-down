@@ -104,7 +104,7 @@ func _player(t: float) -> void:
 		res["seenFrames"] += 1
 	if prev != null and prev.seeing and f.seeing and prev.orderly != null and f.orderly != null and prev.depth == f.depth:
 		res["watchedPairs"] += 1
-		if not Pose.same_pose(prev.orderly, f.orderly):
+		if not Pose.same_pose(prev.orderly, f.orderly) and not _bending_in_place(prev.orderly, f.orderly):
 			res["watchedMoves"] += 1
 	prev = f
 	frames_log.append([f.render_time, f.seeing])
@@ -162,6 +162,14 @@ func _player(t: float) -> void:
 		_report(c)
 
 var _call_next := false
+
+## The one movement a watched Orderly makes (B6, the owner's call: "Anyone looking sees it bend down
+## too"): bent over a downed player, it works at them where it stands. Only the bend's own clock may
+## run; any step, turn or other clip still counts as moving while seen.
+func _bending_in_place(a: Dictionary, b: Dictionary) -> bool:
+	return a["anim"] == "bend" and b["anim"] == "bend" and a["x"] == b["x"] and a["y"] == b["y"] \
+		and a["z"] == b["z"] and a["level"] == b["level"] and a["yaw"] == b["yaw"]
+
 
 ## Over when the run banks or wipes, or (against a server with the floor quota on, which scripted players
 ## who never record cannot meet) once the call has been refused.

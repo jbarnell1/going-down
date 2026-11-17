@@ -211,7 +211,7 @@
 - [ ] **T8a** `todo` Down first, then out
   - Why: Being caught drops you; a friend holding F puts you back up
   - To do: Add a test that walks a body through the open doorway into the car (today it is covered only by reading the code and the passing movement tests)
-- [ ] **T8c** `doing` Down and healed on screen
+- [ ] **T8c** `todo` Down and healed on screen
   - Why: When you go down you crawl with a 10-second timer; a friend sees HOLD F TO HELP and a fill bar; out leaves a red spot
 - [ ] **T19a** `doing` Freeze takes two watchers
   - Why: The Orderly keeps moving if only one of you is looking: it takes two (or, with two players, either of you) to hold it
@@ -350,6 +350,8 @@
 
 ## Activity (newest first)
 
+- 2026-11-17 16:22Z Paused T8a: waiting for Merged into main with its screen (T8c); goes into your next build
+- 2026-11-17 16:22Z Paused T8c: waiting for Checked: 209 quick tests, the two-player down check 24/24, a deliberate break (no HOLD F TO HELP) turned it red. Merged into main; re-running the three-player network test on main before your next build
 - 2026-11-17 16:12Z Sound batch 2 built: a roar 55 m away is now heard (it was silent), and the breathing starts at about 26 m instead of 9 m.
 - 2026-11-17 16:12Z Started T20f: Controls card and a ready-up screen. Part of the same Opus job: the car waits while anyone is aboard; a returning car waits 30 s; anyone left out wakes in the prison without their credits (the ready-up screen comes later)
 - 2026-11-17 16:12Z Started T20h: A bit more stamina, monsters paced to match. Part of the same Opus job: more stamina, monster speeds retuned so catches stay as likely
@@ -388,5 +390,3 @@
 - 2026-11-17 15:10Z Paused T20a: waiting for Cause found: the Orderly is hidden on purpose whenever the lights are out, and has no glow. Fix (a faint moving silhouette in the dark) waits for a free builder
 - 2026-11-17 15:08Z Started T20a: The Orderly stays visible in the dark. A Sonnet agent is finding why the Orderly disappears in the dark, why furniture doesn't block you, and why the lift pushes players out
 - 2026-11-17 15:08Z Started T20e: The day quota you can see, and no going home short. Fable is designing the visible day quota, refusing BANK until it is met, and the prison as shop-then-sleep
-- 2026-11-17 15:08Z Your notes from playing are in: the Orderly vanishing in the dark, no trolley, longer blackouts, the day quota and the prison, a ready-up screen, findables, furniture collision. Seven tasks added (T20a-g); a designer is writing up the day quota, ready-up and findables, and a code lookup is finding the causes of the bugs.
-- 2026-11-17 15:08Z Added task T20g: Things to find: drawers, gurneys, credits, poem notes.

@@ -2128,7 +2128,7 @@
         "B6"
       ],
       "startedAt": "2026-11-17T12:32:19.658Z",
-      "waiting": "checked (200 bot runs, all four deliberate breaks red, no golden changed); goes into your build with its screen (T8c)",
+      "waiting": "Merged into main with its screen (T8c); goes into your next build",
       "todo": [
         "Add a test that walks a body through the open doorway into the car (today it is covered only by reading the code and the passing movement tests)"
       ]
@@ -2137,14 +2137,12 @@
       "id": "T8c",
       "title": "Down and healed on screen",
       "why": "When you go down you crawl with a 10-second timer; a friend sees HOLD F TO HELP and a fill bar; out leaves a red spot",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "B6"
       ],
       "startedAt": "2026-11-17T14:56:26.415Z",
-      "doingText": "Built (you crawl with a DOWN timer, a friend sees HOLD F TO HELP and a filling bar, out leaves a red stain). A Sonnet agent is re-running its checks",
-      "doingAt": "2026-11-17T16:02:50.198Z",
       "media": [
         {
           "src": "T8c/20261117T160250-1-down-timer.png",
@@ -2158,7 +2156,8 @@
           "kind": "image",
           "at": "2026-11-17T16:02:50.622Z"
         }
-      ]
+      ],
+      "waiting": "Checked: 209 quick tests, the two-player down check 24/24, a deliberate break (no HOLD F TO HELP) turned it red. Merged into main; re-running the three-player network test on main before your next build"
     },
     {
       "id": "T19a",
@@ -2983,6 +2982,16 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-17T16:22:27.336Z",
+      "text": "Paused T8a: waiting for Merged into main with its screen (T8c); goes into your next build",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T16:22:27.223Z",
+      "text": "Paused T8c: waiting for Checked: 209 quick tests, the two-player down check 24/24, a deliberate break (no HOLD F TO HELP) turned it red. Merged into main; re-running the three-player network test on main before your next build",
+      "kind": "note"
+    },
     {
       "at": "2026-11-17T16:12:27.656Z",
       "text": "Sound batch 2 built: a roar 55 m away is now heard (it was silent), and the breathing starts at about 26 m instead of 9 m.",
@@ -3972,16 +3981,6 @@
       "at": "2026-11-17T05:48:13.740Z",
       "text": "The bigger lift (4 m car, 1.8 m door) is built on the rules agent's branch; it is now on the floor quota. Both get checked together when it reports.",
       "kind": "note"
-    },
-    {
-      "at": "2026-11-17T05:05:41.203Z",
-      "text": "Took a default: The Minder: more animalistic and moves on all fours (owner's picture as direction, design kept original: a gaunt eyeless thing in tabard rags with a printed smiley party mask). Walking is quiet; the party horn never starts a count; floors 5+ are drawn by the seed.",
-      "kind": "decision"
-    },
-    {
-      "at": "2026-11-17T05:05:41.070Z",
-      "text": "Applied the owner's new answers.",
-      "kind": "answers"
     }
   ]
 }
