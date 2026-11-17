@@ -69,6 +69,10 @@ jobs:
         run: |
           unzip -q Godot_v4.7.2-stable_linux.x86_64.zip
           chmod +x Godot_v4.7.2-stable_linux.x86_64
+      # A fresh checkout has no class list yet (godot/.godot is not committed), so scripts that name
+      # global classes (Lift, FacePaint, RulesBridge) fail to load until the project is imported once.
+      - name: Import the Godot project
+        run: timeout 300 ./Godot_v4.7.2-stable_linux.x86_64 --headless --path godot --import
       - name: Run the Godot tests
         run: timeout 900 ./Godot_v4.7.2-stable_linux.x86_64 --headless --path godot --script res://tests/run_tests.gd -- --quick
 
