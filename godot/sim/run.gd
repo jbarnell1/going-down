@@ -983,7 +983,10 @@ static func _move_step(plan: Floor.FloorPlan, car: CarGeometry, open: bool, cur:
 	var out := -(r + DOOR_ZONE_SLACK)
 	var here_in_channel := here[0] > out and absf(here[1]) <= band + EPS
 	var next_in_channel := next[0] > out and absf(next[1]) <= band + EPS
-	var zone := here[0] > 0.0 or here_in_channel
+	# Inside the car: past the wall line AND within its width and depth. Floor beside or behind the car, past
+	# the wall line's extension, is ordinary floor (it used to count as inside and snapped a body into the car).
+	var inside := here[0] > 0.0 and here[0] <= car.depth + EPS and absf(here[1]) <= car.width / 2.0 + EPS
+	var zone := inside or here_in_channel
 	if not zone:
 		if open and next_in_channel:
 			return car_body(car, next[0], next[1])
@@ -992,7 +995,7 @@ static func _move_step(plan: Floor.FloorPlan, car: CarGeometry, open: bool, cur:
 	var max_u := car.depth - r
 	if open and absf(next[1]) <= band + EPS:
 		return car_body(car, minf(next[0], max_u), next[1])
-	if here[0] > 0.0:
+	if inside:
 		# Inside: the car's walls hold. In the open doorway, slide along it; otherwise stay clear of the front wall.
 		if open and here[0] < r:
 			return car_body(car, minf(next[0], max_u), _clamp(next[1], -band, band))
