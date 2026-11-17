@@ -55,7 +55,7 @@ func start_run() -> void:
 	run_seed = seed if runs == 0 else "%s-%d" % [seed, runs]
 	runs += 1
 	epoch += 1
-	rules = HostRules.new(entity_on, 1)
+	rules = HostRules.new(entity_on, 1, Session.deck)
 	# Method callables hold no reference to this object, so the pipes do not keep it alive.
 	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
 	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))

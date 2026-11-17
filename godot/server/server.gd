@@ -14,6 +14,8 @@ extends Node
 
 const WsServer = preload("res://net/ws_server.gd")
 const Room = preload("res://server/room.gd")
+const Session = preload("res://net/session.gd")
+const Places = preload("res://sim/places.gd")
 
 var _ws: WsServer
 var _room: Room
@@ -65,6 +67,8 @@ func _ready() -> void:
 		say("not started: cannot listen on %s:%d (error %d)" % [bind, port, err])
 		get_tree().quit(3)
 		return
+	# The game's deck, as every client's (client/main.gd); the room gives it to each run.
+	Session.deck = Places.FULL
 	_room = Room.new(_ws, say)
 	_room.fixed_seed = args.get("seed", "")
 	# A server needs no frame rate of its own: 250 loops a second is a 4 ms step for the 20 Hz ticks.

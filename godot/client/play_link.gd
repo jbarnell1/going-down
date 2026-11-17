@@ -33,10 +33,10 @@ const M = preload("res://sim/jsmath.gd")
 const EyeHeight = preload("res://client/eye_height.gd")
 
 const PLAYER_RADIUS := 0.3
-## The door-hold button inside the car, car-local (src/render/elevator.ts HOLD_BUTTON; main.ts nearHoldButton).
-const HOLD_BUTTON_V := 0.84
-## Where a spectator's camera stands until the host admits them (car-local u).
-const WATCH_U := 1.45
+## The door-hold button inside the car, car-local v: where client/lift.gd draws it.
+const HOLD_BUTTON_V := Lift.HOLD_BUTTON.x
+## Where a spectator's camera stands until the host admits them (car-local u): the middle of the car.
+const WATCH_U := Run.CAR_DEPTH / 2.0
 
 var rc: RoomClient
 var local := false

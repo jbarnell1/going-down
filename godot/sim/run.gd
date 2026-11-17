@@ -9,8 +9,10 @@
 #      huntable, and (while the car is coming) the call itself as a blind target at the landing;
 #   3. the crew's instruments, then pick-ups; readings that close are multiplied by the depth's pay.
 #
-# The car is the void 2 m cell on the far side of the landing's elevator wall (landing.gd says which
-# wall). It is outside the floor plan, so nothing that moves with the plan's collision (the Orderly)
+# The car is the void 4 m by 4 m space on the far side of the landing's elevator wall (landing.gd says
+# which wall): centred on the landing cell's wall, two cells deep (North Star C5, owner decision V9: "about
+# four metres square, so a full crew fits and has room to change sides before the bell"). The floor plans
+# keep that space void on both levels (clinic.gd, annex.gd, prison.gd). It is outside the floor plan, so nothing that moves with the plan's collision (the Orderly)
 # can ever enter it; run.gd checks that anyway every tick and puts it back if it ever ended inside.
 # Players get in and out through the doorway with move_in_run, which knows when the doors are open.
 #
@@ -24,6 +26,11 @@
 #  - Caught players stay inactive until the car next RIDES DOWN (not when it leaves empty).
 #  - The depth multiplier compounds and is applied when a reading closes onto a tape.
 #  - Each floor's Orderly is a new subject (entity id `orderly-<depth>`), so repeat factors restart.
+#  - Which place a floor is comes from the run's deck (places.gd): Clinic only unless the caller passes
+#    another, so a run made without one is the run every stored result was recorded from. The game
+#    passes Places.FULL. The floor's resident is driven by "the Orderly" below whoever it is: the Temp
+#    keeps the Orderly's rules for now (T16f); the Minder, not a Stillness resident, only wanders
+#    harmlessly (Places.wander_step) until the Playroom's count is wired in (T15d).
 #  - The lights while the car comes (dark_schedule): blinks that grow, then the blackout, ending on the
 #    tick the car arrives. A false stop (one floor above, in the last few seconds) always falls inside
 #    the blackout: it is heard in the dark, and the blackout still ends as the doors really open.
@@ -37,7 +44,7 @@
 extends RefCounted
 
 const Entity = preload("res://sim/entity.gd")
-const Clinic = preload("res://sim/clinic.gd")
+const Places = preload("res://sim/places.gd")
 const Floor = preload("res://sim/floor.gd")
 const Instr = preload("res://sim/instrument.gd")
 const Landing = preload("res://sim/landing.gd")
@@ -49,12 +56,14 @@ const M = preload("res://sim/jsmath.gd")
 # ---------------------------------------------------------------------------------------------
 # Tuning.
 
-## Width of the car along the elevator wall, metres (one cell).
-const CAR_WIDTH := 2.0
-## Depth of the car away from the landing, metres (one cell).
-const CAR_DEPTH := 2.0
-## Width of the door opening, centred on the landing cell's elevator wall, metres.
-const CAR_DOOR_WIDTH := 1.2
+## Width of the car along the elevator wall, metres (two cells), centred on the landing cell: BANK and
+## DOWN are each half of it, 2 m wide.
+const CAR_WIDTH := 4.0
+## Depth of the car away from the landing, metres (two cells).
+const CAR_DEPTH := 4.0
+## Width of the door opening, centred on the landing cell's elevator wall, metres (so half of it opens
+## onto each half of the car).
+const CAR_DOOR_WIDTH := 1.8
 ## Seconds the car sits with its doors shut on arrival before they open.
 const ARRIVE_DOOR_DELAY := 1.0
 ## On arrival the doors close this long after the last active player stepped out (seconds)...
@@ -149,7 +158,7 @@ class CarGeometry:
 	var width: float
 	var depth: float
 	var door_width: float  # TypeScript: doorWidth
-	## The car's floor as an axis-aligned rectangle (it is one plan cell).
+	## The car's floor as an axis-aligned rectangle.
 	var rect: Rect
 	## The BANK half (left walking in) and the DOWN half (right walking in).
 	var bank: Rect
@@ -222,10 +231,10 @@ static func car_side(car: CarGeometry, b: Move.Body) -> Variant:
 		return null
 	return &"bank" if car_local(car, b.x, b.z)[1] < 0.0 else &"down"
 
-## Spawn spots inside the car, by player index.
+## Spawn spots inside the car, by player index: two rows, a metre either side of the middle line.
 static func _car_slot(car: CarGeometry, i: int) -> Move.Body:
-	var us: Array[float] = [0.7, 0.7, 1.4, 1.4]
-	var vs: Array[float] = [-0.5, 0.5, -0.5, 0.5]
+	var us: Array[float] = [1.3, 1.3, 2.7, 2.7]
+	var vs: Array[float] = [-1.0, 1.0, -1.0, 1.0]
 	return car_body(car, us[i % 4], vs[i % 4])
 
 ## Spots on the landing just outside the doors, by index.
@@ -440,6 +449,8 @@ class RunState:
 	var orderly: Entity.OrderlyState
 	## Entity id of this floor's Orderly. (TypeScript: entityId)
 	var entity_id: String
+	## The places this run's floors are drawn from (places.gd); Clinic only by default.
+	var deck: Array[StringName] = Places.CLINIC_ONLY
 	var crew: Instr.CrewState
 	var players: Array[RunPlayer] = []
 	var phase: StringName = &"arriving"
@@ -470,6 +481,7 @@ class RunState:
 		s.car = car
 		s.orderly = orderly
 		s.entity_id = entity_id
+		s.deck = deck
 		s.crew = crew
 		s.players = players
 		s.phase = phase
@@ -530,20 +542,30 @@ class _FloorFor:
 	var orderly: Entity.OrderlyState
 	var entity_id: String
 
-static func _floor_for(seed: String, depth: int) -> _FloorFor:
+static func _floor_for(seed: String, depth: int, deck: Array[StringName]) -> _FloorFor:
 	var f := _FloorFor.new()
-	f.plan = Clinic.generate_clinic(seed, depth)
+	f.plan = Places.generate(seed, depth, deck)
 	f.car = car_geometry(f.plan)
-	f.orderly = Entity.create_orderly(f.plan)
-	f.entity_id = "orderly-%d" % depth
+	f.orderly = Places.create_resident(f.plan)
+	f.entity_id = Places.entity_id(f.plan.place, depth)
 	return f
 
-## A new run: the crew in the car at floor 1's landing, doors about to open.
-static func create_run(seed: String, player_ids: Array[String]) -> RunState:
+## The deck a caller gave, or Clinic only.
+static func deck_of(deck: Array) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for p: Variant in deck:
+		out.append(StringName(p))
+	return out if not out.is_empty() else Places.CLINIC_ONLY
+
+## A new run: the crew in the car at floor 1's landing, doors about to open. `deck`: the places its
+## floors are drawn from (places.gd); empty means Clinic only.
+static func create_run(seed: String, player_ids: Array[String], deck: Array = []) -> RunState:
 	assert(not player_ids.is_empty(), "a run needs at least one player")
-	var f := _floor_for(seed, 1)
+	var d := deck_of(deck)
+	var f := _floor_for(seed, 1, d)
 	var s := RunState.new()
 	s.seed = seed
+	s.deck = d
 	s.t = 0.0
 	s.depth = 1
 	s.plan = f.plan
@@ -871,7 +893,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				s.phase = &"coming"
 				s.lure = true
 				# The call is loud. If the Orderly was still standing where the floor began, it wakes now.
-				if s.orderly.mode == &"waiting":
+				if s.orderly.mode == &"waiting" and Places.resident(s.plan.place).stillness:
 					var o := s.orderly.copy()
 					o.mode = &"hunting"
 					o.replan_in = 0.0
@@ -1064,7 +1086,21 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 
 	# ---- 2. The Orderly (not while riding: that floor is behind the crew).
 	var entity_ticks: Array[Instr.EntityTick] = []
-	if s.phase != &"riding":
+	var who := Places.resident(s.plan.place)
+	if s.phase != &"riding" and not who.stillness:
+		# Not a Stillness resident (the Minder): it wanders and never takes anyone. No events.
+		var before_w := s.orderly
+		var next_w := Places.wander_step(s.plan, before_w, dt, "%s:%s" % [s.seed, s.entity_id])
+		if rect_distance(car.rect, next_w.body.x, next_w.body.z) < Entity.ORDERLY_RADIUS - 1e-3 and next_w.body.level == car.level:
+			next_w = next_w.copy()
+			next_w.body = before_w.body
+			next_w.moving = false
+			next_w.speed = 0.0
+		s.orderly = next_w
+		s.lure = false
+		var none: Array[Dictionary] = []
+		entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, before_w, next_w, none)]
+	elif s.phase != &"riding":
 		var blind := blinking(s)
 		var open := doors_open(s)
 		var views: Array[Entity.PlayerView] = []
@@ -1076,7 +1112,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				# Never huntable inside the car. With the doors open and the lights on, they still watch the floor.
 				var w := _threshold_view(car, i)
 				var just_w: Array[Entity.PlayerView] = [w]
-				if open and not blind and not i.blind and Entity.seen_by(s.plan, s.orderly.body, just_w) != null:
+				if open and not blind and not i.blind and Entity.seen_by(s.plan, s.orderly.body, just_w, Entity.kind_of(s.orderly)) != null:
 					views.append(w)
 				else:
 					views.append(_view_of(i, false, false))
@@ -1112,7 +1148,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				o_events.append(e)
 		for e in o_events:
 			events.append(_with_t(e, t))
-		entity_ticks = [Instr.EntityTick.make(s.entity_id, &"stillness", before, next, o_events)]
+		entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, before, next, o_events)]
 		for e in o_events:
 			if e["type"] != "caught":
 				continue
@@ -1164,7 +1200,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	# ---- Arriving on the next floor.
 	if s.phase == &"riding" and s.timer <= EPS:
 		var depth := s.depth + 1
-		var f := _floor_for(s.seed, depth)
+		var f := _floor_for(s.seed, depth, s.deck)
 		var bodies := {}
 		for i in players.size():
 			var p := players[i]

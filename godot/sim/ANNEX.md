@@ -74,13 +74,13 @@ All headless, under a timeout, from the repository root (`$GODOT` is the console
 ```sh
 "$GODOT" --headless --path godot --script res://tests/run_annex.gd              # the eight properties, 800 floors
 "$GODOT" --headless --path godot --script res://tests/run_annex.gd -- --quick   # 40 floors
-"$GODOT" --headless --path godot --script res://tools/annex_tool.gd -- hashes   # rewrite tests/annex_hashes.json
 "$GODOT" --headless --path godot --script res://tools/annex_tool.gd -- maps     # five text maps to godot/export/annex/
 ```
 
-`tests/run_annex.gd` runs `tests/prop_annex.gd` the way `run_tests.gd` runs a file (same lines, same
-summary, engine errors fail the test) until `prop_annex` is added to `run_tests.gd`'s list. Rewrite the
-hashes only when the Annex is meant to change, and commit the new file with the change.
+`prop_annex` is in `run_tests.gd`'s list (`npm run godot:test -- prop_annex`: 40 floors in the quick set,
+800 in the default run); `tests/run_annex.gd` still runs it alone the same way. The plan hashes are a
+golden, `tests/golden/annex.json`: re-record them with `npm run godot:golden -- prop_annex` only when
+the Annex is meant to change, read the summary it prints, and commit the new file with the change.
 
 ## The properties (`tests/prop_annex.gd`)
 
@@ -93,7 +93,7 @@ are written in the test from `floor.gd`'s step rule; the lattice is found from t
 3. Blocking the middle cell of any one segment leaves every other corridor cell of that level
    connected through corridor; blocking any one stair leaves everything else, level 1 included,
    reachable. Two stairs, three from depth 4.
-4. Generating twice gives the same plan hash, and every hash matches `tests/annex_hashes.json`;
+4. Generating twice gives the same plan hash, and every hash matches the golden `tests/golden/annex.json`;
    `plan.place` is `&"annex"`.
 5. Every corridor cell has at least two ways out; at least two side branches per floor, each one
    door in and at most two rooms deep; no room cell more than **9** steps from a corridor (see
@@ -118,8 +118,9 @@ are written in the test from `floor.gd`'s step rule; the lattice is found from t
   same arrangement is the same room to a player. The copy suite's shape depends only on which way it
   faces, so giving it the template number with the most free blocks (at least a third of them) makes
   property 7 hold by construction. The offset and the other two templates are still seeded.
-- **Hash file location.** `tests/annex_hashes.json` (the design's T1 list said
-  `tests/reference/annex_hashes.json`; `tests/reference/` holds what the TypeScript rules write).
+- **Hash file location.** `tests/golden/annex.json`, recorded by `npm run godot:golden` like every other
+  golden (it began as `tests/annex_hashes.json`, written by a tool of its own; the design's T1 list said
+  `tests/reference/annex_hashes.json`).
 - **Linux.** The hashes were checked on Windows only; run the test on the Linux server build to
   confirm the same list there.
 

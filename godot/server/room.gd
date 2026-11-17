@@ -29,6 +29,7 @@ const Protocol = preload("res://net/protocol.gd")
 const Transport = preload("res://net/transport.gd")
 const Host = preload("res://net/host.gd")
 const HostRules = preload("res://net/host_rules.gd")
+const Places = preload("res://sim/places.gd")
 const WsServer = preload("res://net/ws_server.gd")
 
 ## Seconds after a bank or a wipe before the room goes back to the lobby.
@@ -159,7 +160,8 @@ func _start(now: float) -> void:
 	var roster: Array[String] = []
 	for id: String in people:
 		roster.append(id)
-	rules = HostRules.new(true, 1)
+	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
+	rules = HostRules.new(true, 1, Places.FULL)
 	_transport = RoomTransport.new(self)
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))
 	_dirty = true

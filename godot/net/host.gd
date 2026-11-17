@@ -41,6 +41,9 @@
 #
 # Events are numbered and kept; each snapshot carries the events after the ones its client has
 # acknowledged (up to EVENT_BUDGET bytes), so they arrive exactly once and in order.
+#
+# Seen reports and "I can see it" hold only a Stillness resident (sim/places.gd resident). On a floor whose
+# resident is not one (the Playroom's Minder) looking does nothing, so they are dropped.
 extends RefCounted
 
 const Run = preload("res://sim/run.gd")
@@ -53,6 +56,7 @@ const TapeLib = preload("res://sim/tape.gd")
 const M = preload("res://sim/jsmath.gd")
 const Protocol = preload("res://net/protocol.gd")
 const Session = preload("res://net/session.gd")
+const Places = preload("res://sim/places.gd")
 const Pose = preload("res://net/pose.gd")
 const JsJson = preload("res://net/jsjson.gd")
 const Transport = preload("res://net/transport.gd")
@@ -535,15 +539,17 @@ func _step(now: float) -> void:
 	var t_next := s.t + TICK
 
 	# 1. What the clients saw.
+	var still := Places.resident(s.plan.place).stillness
 	var q := _queue
 	_queue = []
-	for item: Array in q:
-		s = _apply_report(s, item[0], item[1], extra, t_next)
+	if still:
+		for item: Array in q:
+			s = _apply_report(s, item[0], item[1], extra, t_next)
 
 	# 2. Anyone saying they can see it now: held, and a wind-up is off.
 	var seeing := false
 	for p: HostPlayer in _players.values():
-		if _playing(p) and p.input["seeing"] == true and ht - p.input_at <= Session.SEEING_TIMEOUT and _before_armed(p.input["renderTime"], true):
+		if still and _playing(p) and p.input["seeing"] == true and ht - p.input_at <= Session.SEEING_TIMEOUT and _before_armed(p.input["renderTime"], true):
 			seeing = true
 			break
 	if seeing:
@@ -657,7 +663,7 @@ func _admit(s: Run.RunState) -> Run.RunState:
 	var crew := s.crew
 	for p in waiting:
 		var k := players.size()
-		var body := Run.car_body(s.car, 0.6 + 0.4 * (floori(k / 2.0) % 3), 0.55 if k % 2 == 1 else -0.55)
+		var body := Run.car_body(s.car, 0.9 + 0.9 * (floori(k / 2.0) % 3), 1.0 if k % 2 == 1 else -1.0)
 		var rp := Run.RunPlayer.new()
 		rp.id = p.id
 		rp.body = body

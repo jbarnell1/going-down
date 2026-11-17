@@ -27,6 +27,10 @@ const STAIR_LENGTH := 4
 const NORTH_BAND := STAIR_LENGTH + 4
 const MIN_SIGHTLINE := 8
 const ENTITY_MIN_STEPS := 12
+## The car's space beyond the landing's elevator wall, in cells: along the wall (centred on the landing)
+## and away from it. Holds run.gd's 4 m by 4 m car centred on the landing cell.
+const CAR_ZONE_W := 3
+const CAR_ZONE_D := 2
 const BASE_SIZE := 36
 ## TypeScript starts the room budget at Infinity; any number larger than a floor can hold will do.
 const UNLIMITED := 1 << 40
@@ -404,6 +408,17 @@ static func _lay_out(seed: String, depth: int, W: int, H: int) -> Canonical:
 	var landing := Floor.Pos.make(0, lx + lw / 2, lobby.y + lobby.h - 1)
 	_set_cell(b, 0, landing.x, landing.y, Floor.LANDING)
 	b.reserved[1][landing.y * W + landing.x] = 1  # elevator shaft
+	# The car's space beyond the lobby's outer wall (run.gd CAR_WIDTH by CAR_DEPTH, 4 m square, centred
+	# on the landing: three cells along the wall, two away from it) and the shaft above it stay void on
+	# both levels. Level 0 is clear anyway (the lobby holds those columns); this keeps level-1 rooms off it.
+	# Cells past the grid's edge are void already.
+	for level in 2:
+		for dy in range(1, CAR_ZONE_D + 1):
+			for dx in range(-(CAR_ZONE_W / 2), CAR_ZONE_W / 2 + 1):
+				var zx := landing.x + dx
+				var zy := landing.y + dy
+				if zx >= 0 and zx < W and zy >= 0 and zy < H:
+					b.reserved[level][zy * W + zx] = 1
 
 	# --- Stairs climb north out of the ring to the upper hall on level 1.
 	var stair_rng := root.fork("stairs")

@@ -10,7 +10,9 @@ const S := 2.0            # cell size, metres (plan.cellSize)
 const LH := 3.2           # storey height (src/sim/move.ts LEVEL_HEIGHT)
 const DOOR_W := 1.1       # src/sim/walls.ts DOOR_WIDTH
 const DOOR_H := 2.1       # src/sim/sight.ts DOOR_HEIGHT
-const LIFT_HALF := 0.6    # half of src/sim/run.ts CAR_DOOR_WIDTH
+## Half the lift's doorway in the landing wall: half the rules' door (plan.car.doorWidth, run.gd
+## CAR_DOOR_WIDTH), set by build().
+var lift_half := 0.9
 const LIFT_H := 2.25      # src/render/structure.ts LIFT_DOOR_HEIGHT
 ## How far short of a crossing wall's far face a wall's end stops (m), so no two faces share a plane.
 const CORNER_TUCK := 0.002
@@ -104,6 +106,8 @@ func build(p: Dictionary, seed_text: String) -> void:
 		edges[l] = p.edges[l]
 	landing = Vector3i(int(p.landing.level), int(p.landing.x), int(p.landing.y))
 	lift_dir = str(p.elevatorWall)
+	if p.has("car"):
+		lift_half = float(p.car.doorWidth) * 0.5
 	dist = PackedInt32Array(p.liftDist)
 	max_dist = 1
 	for d in dist:
@@ -364,7 +368,7 @@ func _edge_parts(level: int, k: String, is_lift: bool) -> Array:
 	var gap0 := (S - DOOR_W) * 0.5
 	var gap1 := (S + DOOR_W) * 0.5
 	if is_lift:
-		return [[[[0.0, S * 0.5 - LIFT_HALF], [S * 0.5 + LIFT_HALF, S]], 0.0, LH], [[[S * 0.5 - LIFT_HALF, S * 0.5 + LIFT_HALF]], LIFT_H, LH]]
+		return [[[[0.0, S * 0.5 - lift_half], [S * 0.5 + lift_half, S]], 0.0, LH], [[[S * 0.5 - lift_half, S * 0.5 + lift_half]], LIFT_H, LH]]
 	match k:
 		"wall":
 			return [[[[0.0, S]], 0.0, LH]]
@@ -421,6 +425,27 @@ func _door_glow(level: int, a2: Vector2, b2: Vector2, cellA: Vector2i, cellB: Ve
 		var n := (Vector3((cell.x + 0.5) * S, 0, (cell.y + 0.5) * S) - mid)
 		n = Vector3(signf(n.x) if absf(n.x) > absf(n.z) else 0.0, 0, signf(n.z) if absf(n.z) >= absf(n.x) else 0.0)
 		_glow_piece(level, mid - along * SIGN_HALF, mid + along * SIGN_HALF, n, DOOR_H + SIGN_GAP, DOOR_H + SIGN_GAP + SIGN_H, SIGN_COLOR)
+
+## Whether the landing cell has a wall on its left as you face the lift (the side the call button goes):
+## a one-cell lobby does (the Prison); a landing in a wider lobby does not (the Clinic, the Annex).
+func lift_left_wall() -> bool:
+	var v := _dir_vec(lift_dir)
+	# Facing the lift along v, the left is (v.y, -v.x) in plan cells (x east, y south).
+	var left := Vector2i(v.y, -v.x)
+	var lx := landing.y
+	var ly := landing.z
+	var vert: Array = edges[landing.x].vertical
+	var hor: Array = edges[landing.x].horizontal
+	var k := ""
+	if left == Vector2i(-1, 0):
+		k = vert[ly * (W + 1) + lx]
+	elif left == Vector2i(1, 0):
+		k = vert[ly * (W + 1) + lx + 1]
+	elif left == Vector2i(0, -1):
+		k = hor[ly * W + lx]
+	else:
+		k = hor[(ly + 1) * W + lx]
+	return k == "wall"
 
 func _lift_edge() -> Vector4i:
 	var lx := landing.y

@@ -90,6 +90,25 @@ console.log(`plan ${W}x${H}, landing ${JSON.stringify(plan.landing)}, Orderly st
 let s = await until((s) => s.phase === 'unloading' && s.client.doors > 0.95, 15000);
 check('starts in the car, doors open onto the floor', s.me.aboard === true && s.doorsOpen === true, `phase ${s.phase}, doors ${s.client.doors.toFixed(2)}`);
 await shot('in-the-car');
+// The car (North Star C5, V9): 4 m by 4 m with a 1.8 m door by the rules, and drawn that size, its floor
+// painted into a BANK half and a DOWN half 2 m wide each (measured from the lift's meshes on this screen).
+{
+  const car = plan.car;
+  const d = s.client.lift ?? {};
+  const near = (a, b, e) => typeof a === 'number' && Math.abs(a - b) <= e;
+  check('the car is 4 m by 4 m with a 1.8 m door, and drawn that size with 2 m BANK and DOWN halves',
+    car.width === 4 && car.depth === 4 && near(car.doorWidth, 1.8, 1e-9) && near(d.width, car.width, 0.15) && near(d.depth, car.depth, 0.15)
+      && near(d.doorway, car.doorWidth, 0.01) && near(d.bank, car.width / 2, 0.06) && near(d.down, car.width / 2, 0.06),
+    `rules ${car.width} x ${car.depth} m, door ${car.doorWidth} m; drawn ${JSON.stringify(d)}`);
+  // From the back of the car, facing the doors and looking down: both halves and the doorway.
+  await cmd('move -1 0 0 0');
+  await until((t) => Math.abs((t.me.x - car.doorX) * car.inX + (t.me.z - car.doorZ) * car.inZ) > 3.3, 2500, 30);
+  await cmd('stopmove');
+  await cmd(`look ${(Math.atan2(car.inX, car.inZ) * 180) / Math.PI} -30`);
+  await wait(400);
+  await shot('car-inside-bank-down');
+  await cmd(`look ${(Math.atan2(car.inX, car.inZ) * 180) / Math.PI} 0`);
+}
 
 // ---- 2. Step out.
 await cmd('move 1 0 0 0');
