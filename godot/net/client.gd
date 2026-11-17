@@ -448,14 +448,22 @@ func count_event() -> Dictionary:
 			break
 	if latest != null and latest.get("seek") != null and int(latest["seek"]["n"]) > 0:
 		var k: Dictionary = latest["seek"]
-		return {"type": "count", "t": k["t0"], "n": k["n"], "t0": k["t0"], "len": k["len"], "last": k["last"], "by": k["by"], "why": k["why"]}
+		var e := {"type": "count", "t": k["t0"], "n": k["n"], "t0": k["t0"], "len": k["len"], "last": k["last"], "by": k["by"], "why": k["why"]}
+		if k.has("hide"):
+			e["hide"] = k["hide"]
+		return e
 	return {}
 
+## A count event's seconds to hide: its "hide" (the tuned Playroom, sim/seek.gd T15m), else the 6 s.
+static func hide_time(ev: Dictionary) -> float:
+	return float(ev.get("hide", Seek.HIDE_TIME))
+
 ## Where a count stands at host time `host_t`, worked out from its event alone (every screen agrees, as
-## the event is the host's): {phase: "hide" (the 6 s), "seek" or "over", left: seconds of that phase}.
+## the event is the host's): {phase: "hide" (the 6 s, or the event's "hide"), "seek" or "over", left:
+## seconds of that phase}.
 static func count_clock(ev: Dictionary, host_t: float) -> Dictionary:
 	var t0 := float(ev["t0"])
-	var hide_end := t0 + Seek.HIDE_TIME
+	var hide_end := t0 + hide_time(ev)
 	var end := hide_end + float(ev["len"])
 	if host_t < hide_end:
 		return {"phase": "hide", "left": hide_end - host_t}

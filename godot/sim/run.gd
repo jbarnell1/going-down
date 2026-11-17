@@ -205,6 +205,13 @@
 #    Day.end_day leave them out), and they wake on their bunk in the prison when the crew gets home (or after
 #    a wipe), as everyone does.
 #
+# The Playroom tuned from the owner's first play (T15m, `playroom_tuned`, with_playroom_tuned: net/host_rules.gd
+# turns it on for the game's rooms; tests and every stored result leave it off, and then nothing below happens).
+# The run only hands it to sim/seek.gd (Seek.tune on the floor's seek state); the rules are seek.gd's "T15m"
+# section: 30-45 s to hide, then a 30 s search; an anger bar the provocations fill, a count when it is full; the
+# Minder grabs anyone within 1 m outside a count and drags them to the party table; and the hint events
+# ("playroomArrived", "sprintDuringHunt") for the announcer.
+#
 # Events are Dictionaries with the TypeScript shapes (see RunEvent in run.ts), carrying Move.Body,
 # TapeLib.Reading and RunSummary objects where TypeScript carries those objects.
 extends RefCounted
@@ -850,9 +857,13 @@ class RunState:
 	var car_waits: bool = false
 	## The car waits: who the car left on a floor today, {id: true}, until the crew gets home. Replaced, never edited.
 	var left_out: Dictionary = {}
+	## The Playroom tuned from the owner's first play (T15m, with_playroom_tuned; sim/seek.gd "T15m"). Off: the
+	## Playroom's rules are exactly as every stored result has them.
+	var playroom_tuned: bool = false
 
 	func copy() -> RunState:
 		var s := RunState.new()
+		s.playroom_tuned = playroom_tuned
 		s.two_watchers = two_watchers
 		s.relocation = relocation
 		s.seed = seed
@@ -1113,6 +1124,15 @@ static func with_car_waits(s0: RunState) -> RunState:
 	var s := s0.copy()
 	s.car_waits = true
 	s.left_out = {}
+	return s
+
+## Turns the tuned Playroom on (T15m, see the header): every Playroom from now on (and one already reached)
+## has the long hiding time, the anger bar, the grab at 1 m and the hint events (sim/seek.gd "T15m").
+static func with_playroom_tuned(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.playroom_tuned = true
+	if s.seek != null:
+		s.seek = Seek.tune(s.seek as Seek.SeekState)
 	return s
 
 ## Seconds of sprinting a player's tank holds in this run (Stamina.Stamina.tank): more when paced.
@@ -1422,6 +1442,8 @@ static func _sync_seek(s: RunState) -> void:
 		ids.append(p.id)
 	s.seek = Seek.create_seek(s.plan, ids)
 	(s.seek as Seek.SeekState).t = s.t
+	if s.playroom_tuned:
+		s.seek = Seek.tune(s.seek as Seek.SeekState)
 	s.seek_drops = []
 	s.seek_call_at = -1.0
 

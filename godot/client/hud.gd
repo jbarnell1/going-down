@@ -69,6 +69,10 @@ var count_by := ""
 var seek_note := ""
 var health := -1.0
 var health_rates := ""
+## The tuned Playroom (T15m): how angry the Minder is, 0..1 (below 0 not shown), the host's own number;
+## what fills it, printed under it.
+var anger := -1.0
+var anger_rates := ""
 ## The floor quota (client/quota_view.gd): the call panel's words, printed under the prompt while the
 ## call button is in reach or a refusal flashes; its tone ("count", "met", "refused").
 var quota_line := ""
@@ -174,6 +178,8 @@ func _draw() -> void:
 		PixelFont.draw_shadowed(self, seek_note, sp, px, Color("#f4f4ec"))
 	if health >= 0.0 and not black:
 		_draw_health(px)
+	if anger >= 0.0 and not black:
+		_draw_anger(px)
 	if down_head != "" and not black:
 		_draw_down(px)
 	if EYE_MARKS and not black and not eyes.is_empty() and bool(eyes.get("on", false)):
@@ -309,6 +315,26 @@ func _draw_health(px: float) -> void:
 	draw_rect(Rect2(bar.position, Vector2(bar_w * clampf(health / 100.0, 0.0, 1.0), bar.size.y)), Color("#ff7a6a") if low else Color("#9fe0a0"))
 	if health_rates != "":
 		PixelFont.draw_shadowed(self, health_rates, Vector2(margin.x, y + 17 * px), px, Color("#d8ddd9"))
+
+## The anger bar (T15m), top right: ANGER and the number out of 100, the bar (amber, red and pulsing once nearly full or while it
+## counts), and what fills it under it.
+func _draw_anger(px: float) -> void:
+	var margin := Vector2(maxf(size.x * 0.06, 16.0), maxf(size.y * 0.06, 12.0))
+	var bar_w := 80.0 * px
+	var x := size.x - margin.x - bar_w
+	var y := margin.y + 14 * px   # under the tape's PLAY
+	var hot := anger >= 0.75
+	var label := "ANGER %d/100" % roundi(anger * 100.0)
+	PixelFont.draw_shadowed(self, label, Vector2(x, y), px, Color("#ff7a6a") if hot else Color("#f4f4ec"))
+	var bar := Rect2(Vector2(x, y + 10 * px), Vector2(bar_w, 4 * px))
+	draw_rect(bar.grow(px), Color(0, 0, 0, 0.6))
+	var col := Color("#ff5a4a") if hot else Color("#ffd27a")
+	if hot:
+		col.a = 0.75 + 0.25 * sin(Time.get_ticks_msec() / 120.0)
+	draw_rect(Rect2(bar.position, Vector2(bar_w * clampf(anger, 0.0, 1.0), bar.size.y)), col)
+	if anger_rates != "":
+		var rw := PixelFont.width(anger_rates) * px
+		PixelFont.draw_shadowed(self, anger_rates, Vector2(size.x - margin.x - rw, y + 17 * px), px, Color("#d8ddd9"))
 
 ## The report board, crisp, down the left of the picture: a dark card, the title amber.
 func _draw_board(px: float) -> void:

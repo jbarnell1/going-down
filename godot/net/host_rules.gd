@@ -42,6 +42,9 @@
 #    `paced`, `car_waits`); the game's rooms ask for all three, so the blackout is longer, the tank is bigger
 #    and the residents hunt faster to match, and the car waits for whoever is aboard, boards for 30 s and
 #    leaves anyone out for the day. prepare() turns them on before the first tick.
+#  - The Playroom tuned from the owner's first play (sim/run.gd playroom_tuned, sim/seek.gd T15m): off unless
+#    asked (`playroom_tuned`); the game's rooms ask for it, so there are 30-45 s to hide, an anger bar, and the
+#    Minder grabs anyone within 1 m outside a count. prepare() turns it on before the first tick.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -80,9 +83,13 @@ var relocation: bool
 var long_dark: bool
 var paced: bool
 var car_waits: bool
+## The Playroom tuned from the owner's first play (off unless asked; sim/run.gd playroom_tuned, T15m).
+var playroom_tuned: bool
 
 func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false,
-		watchers_: bool = false, relocation_: bool = false, long_dark_: bool = false, paced_: bool = false, car_waits_: bool = false) -> void:
+		watchers_: bool = false, relocation_: bool = false, long_dark_: bool = false, paced_: bool = false, car_waits_: bool = false,
+		playroom_tuned_: bool = false) -> void:
+	playroom_tuned = playroom_tuned_
 	relocation = relocation_
 	_entity_on = entity_on
 	_depth = depth
@@ -175,6 +182,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_paced(s)
 	if car_waits and not s.car_waits:
 		s = Run.with_car_waits(s)
+	if playroom_tuned and not s.playroom_tuned:
+		s = Run.with_playroom_tuned(s)
 	return _capped(s)
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web

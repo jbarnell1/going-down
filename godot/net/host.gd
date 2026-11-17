@@ -1160,9 +1160,14 @@ static func seek_block(s: Run.RunState) -> Variant:
 	for sp in ss.players:
 		players.append({"id": sp.id, "hide": sp.hide, "peek": sp.peeking, "phase": String(sp.phase), "status": String(sp.status),
 			"health": sp.health, "sight": sp.sight, "gap": sp.gap, "seat": sp.seat})
-	return {"noise": ss.noise, "counting": ss.counting, "last": ss.last, "called": ss.called, "done": ss.done, "n": ss.counts,
+	var k := {"noise": ss.noise, "counting": ss.counting, "last": ss.last, "called": ss.called, "done": ss.done, "n": ss.counts,
 		"t0": ss.t0, "len": ss.len, "by": ss.by, "why": String(ss.why), "ended": ss.ended, "calmUntil": ss.calm_until,
 		"lastAt": ss.last_at, "players": players}
+	# T15m (sim/seek.gd tune): the anger bar and the count's seconds to hide, the host's own numbers.
+	if ss.tuned:
+		k["anger"] = ss.anger
+		k["hide"] = ss.hide_len
+	return k
 
 ## Hiding off the Playroom (sim/hiding.gd, T19b) in the seek block's shape (Protocol.enc_seek, no new
 ## field): each player's hide, peek and phase, everyone "ok"; no count, nothing found, no health. Sent from

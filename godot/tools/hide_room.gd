@@ -4,6 +4,8 @@
 extends "res://server/room.gd"
 
 var start_depth := 4
+## The tuned Playroom (sim/seek.gd T15m), for tools/play_hide_tuned.mjs. Off: the Playroom as play_hide checks it.
+var tuned := false
 
 func _start(now: float) -> void:
 	if host != null or people.is_empty():
@@ -15,7 +17,7 @@ func _start(now: float) -> void:
 	var roster: Array[String] = []
 	for id: String in people:
 		roster.append(id)
-	rules = HostRules.new(true, start_depth, Places.FULL, days)
+	rules = HostRules.new(true, start_depth, Places.FULL, days, false, false, false, false, false, false, false, tuned)
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))

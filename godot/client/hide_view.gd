@@ -15,8 +15,14 @@
 # Every line is a caption in the pixel font, and its recording (T15i, client/count_lines.gd) plays by id
 # (client/announcer.gd say_count; the numbers on their own player).
 #
-# This player (the snapshot's mySeek row): the hide in reach and how to get in; the dark inside a hide
-# (sat back) and the gap's frame (peeking, W); a rising toy-piano trill and picture noise as their own
+# The tuned Playroom (T15m, sim/seek.gd tune: the count event carries "hide"): the bell and the numbers
+# (forty, thirty, twenty, ten to one) count down the time to hide, "COMING, READY OR NOT!" starts the search,
+# which is quiet but for the Minder's music box; and the anger bar (the seek block's "anger") with what
+# fills it printed under it.
+#
+# This player (the snapshot's mySeek row): the hide in reach and how to get in; sat back in a hide, on the
+# Playroom the view out kept (T15m: the ball pit's camera down at the balls, a few at the bottom edge; the
+# others the room through the gap and its frame), elsewhere the dark inside; the gap's frame (peeking, W); a rising toy-piano trill and picture noise as their own
 # sight or gap total rises; the health bar once the first count has ended, with its rates printed; the
 # instrument warning (ticking in a hide within 5 m of it is a reason: LOWER IT); winding down; found (the
 # camera is turned to the Minder and, as it bends for the catch, its mask fills the screen); taken (the
@@ -64,6 +70,8 @@ const WHY := {"sprint": "SPRINTING", "squeaker": "A SQUEAKY TILE", "ballpit": "J
 const KIND_NAMES := {"pit": "BALL PIT", "slide": "TUBE SLIDE", "den": "CRAWL DEN", "playhouse": "PLAYHOUSE", "table": "UNDER THE TABLE",
 	"chest": "TOY CHEST", "cubby": "COAT CUBBY", "bed": "UNDER THE BED", "cabinet": "IN THE CABINET", "desk": "UNDER THE DESK"}
 const HEALTH_RATES := "WALK -3/S  SPRINT -8/S  STILL OR CREEP +1/S"
+## T15m: what fills the anger bar (sim/seek.gd ANGER_RATES and ANGER_LUMPS), printed under it.
+const ANGER_RATES := "SPRINT 2 S OR 3 NOISES FILL IT"
 
 static var test_break := ""
 
@@ -144,7 +152,7 @@ func clock_of(ev: Dictionary, host_now: float, local_now: float) -> Dictionary:
 ## Count dark (0 lit .. 1 dark) at host time `ht` of count `ev`: the banks going, then dark, then coming back.
 static func dark_at(ev: Dictionary, ht: float) -> float:
 	var t0 := float(ev["t0"])
-	var end := t0 + Seek.HIDE_TIME + float(ev["len"])
+	var end := t0 + Client.hide_time(ev) + float(ev["len"])
 	if ht < t0:
 		return 0.0
 	if ht < end:
@@ -165,6 +173,7 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 			reset()
 		sfx.playroom(false, 0.0)
 		hud.health = -1.0
+		hud.anger = -1.0
 		hud.count_by = ""
 		hud.count_text = ""
 		_hiding_only(s, hud)
@@ -174,6 +183,7 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 			reset()
 		sfx.playroom(false, 0.0)
 		hud.health = -1.0
+		hud.anger = -1.0
 		hud.count_by = ""
 		hud.seek_note = ""
 		return {"on": false}
@@ -205,21 +215,41 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 	var want_sag := 0.0
 	if not ev.is_empty():
 		var t0 := float(ev["t0"])
-		var end := t0 + Seek.HIDE_TIME + float(ev["len"])
+		var end := t0 + Client.hide_time(ev) + float(ev["len"])
 		want_sag = clampf((ht - t0) / SAG_TIME, 0.0, 1.0) if ht < end else clampf(1.0 - (ht - end) / SAG_TIME, 0.0, 1.0)
 	sag = want_sag
 	sfx.playroom(true, sag)
 	# Lines and the bell.
+	var tuned := ev.has("hide")
 	if n > 0:
 		var t0 := float(ev["t0"])
+		var hide_len := Client.hide_time(ev)
 		var last := bool(ev["last"])
 		if count_phase == "hide":
 			if ht - t0 < LATE and _once(n, "start"):
 				sfx.play("xylo")
 			if _once(n, "hide"):
 				ann.say_count("hide", "HIDE.", LINE_MS)
+			if tuned:
+				# T15m: it counts while you hide, so the numbers mean what they say (seconds left to hide):
+				# a bell a second, and forty, thirty, twenty, ten to one said (count_lines.gd).
+				var hl := int(roundf(hide_len))
+				var hi := int(floorf(ht - t0))
+				if hi > _bell_i and hi >= 0 and hi < hl:
+					_bell_i = hi
+					var hnum := hl - hi
+					sfx.count_bell(hnum)
+					strokes.append([n, hi, host_now])
+					if strokes.size() > 120:
+						strokes.pop_front()
+					if float(hi) >= COMING_TIME:
+						ann.say_count("number", "%d." % hnum, NUMBER_MS, hnum, hl)
+		elif count_phase == "seek" and tuned:
+			# T15m: the search is quiet but for its music box; the line as it starts.
+			if _once(n, "coming"):
+				ann.say_count("search", "COMING, READY OR NOT!", int(COMING_TIME * 1000.0))
 		elif count_phase == "seek":
-			var t_s := t0 + Seek.HIDE_TIME
+			var t_s := t0 + hide_len
 			var len := int(roundf(float(ev["len"])))
 			var i := int(floorf(ht - t_s))
 			if _once(n, "coming"):
@@ -233,7 +263,7 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 					strokes.pop_front()
 				if float(i) >= COMING_TIME:
 					ann.say_count("number", "%d." % num, NUMBER_MS, num, len)
-		elif count_phase == "over" and ht - (t0 + Seek.HIDE_TIME + float(ev["len"])) < 3.0:
+		elif count_phase == "over" and ht - (t0 + hide_len + float(ev["len"])) < 3.0:
 			if _once(n, "done"):
 				ann.say_count("done", "ALL DONE!", LINE_MS)
 	# Found, whoever it is.
@@ -252,6 +282,8 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 	var top := ""
 	if count_phase == "hide":
 		top = "HIDE  %d" % ceili(count_left)
+	elif count_phase == "seek" and tuned:
+		top = "%s %d" % ["LAST SEARCH" if bool(ev.get("last", false)) else "IT IS SEARCHING", ceili(count_left)]
 	elif count_phase == "seek":
 		top = "%s %d" % ["LAST COUNT" if bool(ev.get("last", false)) else "COUNTING", ceili(count_left)]
 	elif not bool(seek["counting"]) and int(seek["ended"]) >= 1 and host_now < float(seek["calmUntil"]) and not bool(seek["done"]) and not bool(seek["called"]):
@@ -260,6 +292,9 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 		top = "ONE LAST COUNT IN %d" % ceili(maxf(0.0, float(seek["lastAt"]) - host_now))
 	hud.count_text = top
 	hud.count_by = started_by if count_phase == "hide" else ""
+	# T15m: the anger bar, the host's own number (the snapshot's seek block), the same on every screen.
+	hud.anger = clampf(float(seek["anger"]), 0.0, 1.0) if seek.has("anger") else -1.0
+	hud.anger_rates = ANGER_RATES if seek.has("anger") else ""
 	# --- this player.
 	var look: Variant = null
 	var note := ""
@@ -307,10 +342,14 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 			var pd: Dictionary = pose
 			look = Vector3(float(pd["x"]), float(pd["y"]) + Seek.MINDER_HEAD + 0.15, float(pd["z"]))
 			var d := Vector2(float(pd["x"]) - float(me["x"]), float(pd["z"]) - float(me["z"])).length()
-			if str(o.get("mode", "")) == "catch" or str(o.get("mode", "")) == "run":
+			var om := str(o.get("mode", ""))
+			if om == "catch" or om == "run" or om == "grab":
 				catch_k = maxf(catch_k, clampf((CATCH_NEAR - d) / (CATCH_NEAR - CATCH_FULL), 0.0, 1.0))
-			if str(o.get("mode", "")) == "catch":
+			if om == "catch" or om == "grab":
 				catch_k = minf(1.0, catch_k + dt * 0.8)
+			elif om == "drag":
+				# T15m: dragged to the party table, you see it pulling you along.
+				catch_k = move_toward(catch_k, 0.0, dt * 2.0)
 	elif status == "taken":
 		hud.center_note = "TAKEN: AT THE PARTY TABLE. WATCH."
 	if status != "found":
@@ -321,6 +360,7 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 	# The overlay: the dark inside, the gap's frame, the catch, the hat.
 	overlay.mode = ov_mode
 	overlay.kind = ov_kind
+	overlay.view_out = true
 	overlay.catch_k = catch_k
 	overlay.hat = status == "taken"
 	overlay.queue_redraw()
@@ -363,6 +403,7 @@ func _hiding_only(s: Dictionary, hud: Hud) -> void:
 	hud.seek_note = note
 	overlay.mode = ov_mode
 	overlay.kind = ov_kind
+	overlay.view_out = false
 	overlay.catch_k = 0.0
 	overlay.hat = false
 	overlay.queue_redraw()
@@ -418,7 +459,7 @@ func describe() -> Dictionary:
 	return {"n": count_n, "phase": count_phase, "left": count_left, "dark": dark, "sag": sag, "startedBy": started_by,
 		"seenAt": seen_at, "darkFullAt": dark_full_at, "strokes": strokes.duplicate(), "noise": noise_k, "catch": catch_k,
 		"overlay": overlay.mode if overlay != null else "", "overlayKind": overlay.kind if overlay != null else "", "hat": overlay.hat if overlay != null else false,
-		"hats": _hats.keys(), "break": test_break}
+		"hats": _hats.keys(), "break": test_break, "viewOut": overlay.view_out if overlay != null else false}
 
 ## Drawn over the picture, under the HUD: the dark inside a hide with its gap, the gap's frame when
 ## peeking, the Minder's mask filling the screen at the catch, the brim of your own paper hat.
@@ -428,6 +469,9 @@ class HideOverlay:
 	var kind := ""
 	var catch_k := 0.0
 	var hat := false
+	## The Playroom (T15m): sat back you still see out (its rules never ask what you can see). Off the
+	## Playroom a sat-back player is blind by the rules (sim/hiding.gd), so the dark stays.
+	var view_out := false
 
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -443,39 +487,15 @@ class HideOverlay:
 		var w := size.x
 		var h := size.y
 		var ink := Color(0.01, 0.01, 0.015)
-		if mode == "sat":
-			# Sat back: the dark inside, and a thin line of the room through the gap.
-			draw_rect(Rect2(Vector2.ZERO, size), Color(ink, 0.9))
-			if kind == "pit":
-				_balls(Rect2(0, 0, w, h), 0.55, 46)
-			else:
-				var slit := _gap_rect(w, h)
-				draw_rect(slit, Color(0, 0, 0, 0.0))
-				_hole(slit, Color(ink, 0.9))
-		elif mode == "peek":
-			var hole := _gap_rect(w, h).grow(h * 0.12)
-			_hole(hole, Color(ink, 0.82))
-			match kind:
-				"den":
-					for i in range(1, 12):
-						draw_line(Vector2(hole.position.x + hole.size.x * i / 12.0, hole.position.y), Vector2(hole.position.x + hole.size.x * i / 12.0, hole.end.y), Color(0.75, 0.75, 0.72, 0.35), maxf(1.0, h / 270.0))
-					for j in range(1, 6):
-						draw_line(Vector2(hole.position.x, hole.position.y + hole.size.y * j / 6.0), Vector2(hole.end.x, hole.position.y + hole.size.y * j / 6.0), Color(0.75, 0.75, 0.72, 0.35), maxf(1.0, h / 270.0))
-				"pit":
-					_balls(Rect2(0, h * 0.78, w, h * 0.22), 0.9, 22)
-				"cubby":
-					draw_rect(Rect2(0, 0, w * 0.3, h), Color(0.15, 0.2, 0.35, 0.92))
-					draw_rect(Rect2(w * 0.7, 0, w * 0.3, h), Color(0.35, 0.12, 0.1, 0.92))
-				"cabinet":
-					# The door's slats across the gap.
-					for j in range(1, 9):
-						var y := hole.position.y + hole.size.y * j / 9.0
-						draw_rect(Rect2(hole.position.x, y - h * 0.012, hole.size.x, h * 0.024), Color(ink, 0.88))
-				"bed":
-					# The mattress's edge above, the frame's legs at the sides.
-					draw_rect(Rect2(0, hole.position.y, w, h * 0.04), Color(0.2, 0.22, 0.24, 0.95))
-					draw_rect(Rect2(w * 0.03, hole.position.y, w * 0.025, hole.size.y), Color(0.32, 0.34, 0.36, 0.95))
-					draw_rect(Rect2(w * 0.945, hole.position.y, w * 0.025, hole.size.y), Color(0.32, 0.34, 0.36, 0.95))
+		var lay := layout(mode, kind, view_out, w, h)
+		if float(lay["dark"]) > 0.0:
+			draw_rect(Rect2(Vector2.ZERO, size), Color(ink, float(lay["dark"])))
+		if lay["hole"] is Rect2:
+			_hole(lay["hole"], Color(ink, float(lay["holeAlpha"])))
+			if bool(lay["frame"]):
+				_frame(lay["hole"], w, h, ink)
+		if int(lay["balls"]) > 0:
+			_balls(lay["ballRect"], float(lay["ballAlpha"]), int(lay["balls"]))
 		if catch_k > 0.0:
 			_mask(catch_k)
 		if hat:
@@ -483,9 +503,75 @@ class HideOverlay:
 			var c := Color(0.95, 0.35, 0.55, 0.85)
 			draw_colored_polygon(PackedVector2Array([Vector2(w * 0.38, 0), Vector2(w * 0.62, 0), Vector2(w * 0.5, h * 0.035)]), c)
 
+	## The kind's frame round the gap `hole`: the netting, the coats, the slats, the bed's frame.
+	func _frame(hole: Rect2, w: float, h: float, ink: Color) -> void:
+		match kind:
+			"den":
+				for i in range(1, 12):
+					draw_line(Vector2(hole.position.x + hole.size.x * i / 12.0, hole.position.y), Vector2(hole.position.x + hole.size.x * i / 12.0, hole.end.y), Color(0.75, 0.75, 0.72, 0.35), maxf(1.0, h / 270.0))
+				for j in range(1, 6):
+					draw_line(Vector2(hole.position.x, hole.position.y + hole.size.y * j / 6.0), Vector2(hole.end.x, hole.position.y + hole.size.y * j / 6.0), Color(0.75, 0.75, 0.72, 0.35), maxf(1.0, h / 270.0))
+			"pit":
+				_balls(Rect2(0, h * 0.78, w, h * 0.22), 0.9, 22)
+			"cubby":
+				draw_rect(Rect2(0, 0, w * 0.3, h), Color(0.15, 0.2, 0.35, 0.92))
+				draw_rect(Rect2(w * 0.7, 0, w * 0.3, h), Color(0.35, 0.12, 0.1, 0.92))
+			"cabinet":
+				# The door's slats across the gap.
+				for j in range(1, 9):
+					var y := hole.position.y + hole.size.y * j / 9.0
+					draw_rect(Rect2(hole.position.x, y - h * 0.012, hole.size.x, h * 0.024), Color(ink, 0.88))
+			"bed":
+				# The mattress's edge above, the frame's legs at the sides.
+				draw_rect(Rect2(0, hole.position.y, w, h * 0.04), Color(0.2, 0.22, 0.24, 0.95))
+				draw_rect(Rect2(w * 0.03, hole.position.y, w * 0.025, hole.size.y), Color(0.32, 0.34, 0.36, 0.95))
+				draw_rect(Rect2(w * 0.945, hole.position.y, w * 0.025, hole.size.y), Color(0.32, 0.34, 0.36, 0.95))
+
+	## What the overlay draws, as a pure function (tests/prop_playroom_tuned.gd reads it): `dark`, ink over
+	## the whole picture (alpha); `hole`, the gap (a Rect2, or null) with everything round it inked at
+	## `holeAlpha`, and its kind's `frame`; `balls` balls in `ballRect` at `ballAlpha`.
+	static func layout(mode_: String, kind_: String, view_out_: bool, w: float, h: float) -> Dictionary:
+		var out := {"dark": 0.0, "hole": null, "holeAlpha": 0.0, "frame": false, "balls": 0, "ballRect": Rect2(), "ballAlpha": 0.0}
+		if mode_ == "sat" and view_out_:
+			# The Playroom, sat back (T15m, owner: "Part of the anticipation is seeing a monster looking for
+			# you"): the view out is kept. In the ball pit the camera is down at the balls with a few at the
+			# bottom edge; elsewhere the room through the gap, its frame round it, darker than peeking.
+			if kind_ == "pit":
+				out["balls"] = 7
+				out["ballRect"] = Rect2(0, h * 0.93, w, h * 0.12)
+				out["ballAlpha"] = 0.95
+			else:
+				out["hole"] = gap_rect(kind_, w, h)
+				out["holeAlpha"] = 0.9
+				out["frame"] = true
+		elif mode_ == "sat":
+			# Sat back: the dark inside, and a thin line of the room through the gap.
+			out["dark"] = 0.9
+			if kind_ == "pit":
+				out["balls"] = 46
+				out["ballRect"] = Rect2(0, 0, w, h)
+				out["ballAlpha"] = 0.55
+			else:
+				out["hole"] = gap_rect(kind_, w, h)
+				out["holeAlpha"] = 0.9
+		elif mode_ == "peek":
+			out["hole"] = gap_rect(kind_, w, h).grow(h * 0.12)
+			out["holeAlpha"] = 0.82
+			if kind_ == "pit" and view_out_:
+				# Head up over the balls: a few at the very edge.
+				out["balls"] = 5
+				out["ballRect"] = Rect2(0, h * 0.95, w, h * 0.1)
+				out["ballAlpha"] = 0.95
+			else:
+				out["frame"] = true
+		return out
+
 	## The gap as a rectangle on the screen, by kind: a slit for a lid or a hem, a window for a shutter.
 	func _gap_rect(w: float, h: float) -> Rect2:
-		match kind:
+		return gap_rect(kind, w, h)
+
+	static func gap_rect(kind_: String, w: float, h: float) -> Rect2:
+		match kind_:
 			"chest":
 				return Rect2(w * 0.08, h * 0.44, w * 0.84, h * 0.1)
 			"table":

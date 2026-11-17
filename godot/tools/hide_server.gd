@@ -36,6 +36,7 @@ func _initialize() -> void:
 	_room = HideRoom.new(_ws, say)
 	_room.fixed_seed = str(args.get("seed", ""))
 	_room.start_depth = int(args.get("depth", "4"))
+	_room.tuned = str(args.get("tuned", "0")) == "1"
 	Engine.max_fps = 250
 	_t0 = Time.get_ticks_usec()
 	say("hide server listening on 127.0.0.1:%d, runs start at depth %d" % [port, _room.start_depth])
