@@ -43,6 +43,14 @@
     "bella": {},
     "brian": {}
   },
+  "groups": {
+    "playroom": {
+      "title": "The Playroom count",
+      "about": "The lift's voice running hide-and-seek on the Playroom floor (docs/floors/playarea.md sections 3 and 10). Played by the count on screen (T15e) by line id, not dealt by moment: godot/client/count_lines.gd maps each count event to its line id.",
+      "countdown": "Numbers recorded: one to ten, and twenty, thirty, forty. The voice says forty, thirty and twenty as they pass (never on the count's first second, which belongs to 'Coming, ready or not!'), then every second from ten to one. The bell carries the seconds in between. 13 clips cover every count length (30, 35, 40, 45 s) instead of 45, and the last ten are the part worth hearing every second: the bell rises over the last five.",
+      "audition": "Three takes of each line and two of each number. For the numbers, pick one take that sounds the same across all thirteen, since they play one after another. Until you choose, take 1 plays."
+    }
+  },
   "moments": {
     "board": {
       "priority": 2,
@@ -99,6 +107,30 @@
     "lights": {
       "priority": 4,
       "when": "the lights come back after the blackout as the car arrives"
+    },
+    "count_last": {
+      "priority": 4,
+      "when": "Playroom: the call button is pressed, which starts the last count instead of the usual wait"
+    },
+    "count_hide": {
+      "priority": 5,
+      "when": "Playroom: a count starts; the 6 s to hide begin"
+    },
+    "count_coming": {
+      "priority": 5,
+      "when": "Playroom: the 6 s are over and the search begins"
+    },
+    "count_number": {
+      "priority": 5,
+      "when": "Playroom: the countdown, on the second it names (forty, thirty, twenty as they pass, then ten to one)"
+    },
+    "count_found": {
+      "priority": 4,
+      "when": "Playroom: a player is found; the caption carries their name"
+    },
+    "count_done": {
+      "priority": 4,
+      "when": "Playroom: the count reaches zero"
     }
   },
   "lines": [
@@ -695,6 +727,240 @@
         "similarity_boost": 0.75
       },
       "note": "Cheerful about how far away that is."
+    },
+    {
+      "id": "count_last_1",
+      "moment": "count_last",
+      "group": "playroom",
+      "text": "[delighted] Your car is on its way! [short pause] One more round before we go!",
+      "plain": "Your car is on its way! One more round before we go!",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 3,
+      "note": "Chosen over: '[warmly] The car has been called! [short pause] Everybody hide, one last time.' This one confirms the call (it replaces the called line on this floor) and offers the last count as a treat; the other gives an order that 'Hide.' repeats seconds later."
+    },
+    {
+      "id": "count_hide_1",
+      "moment": "count_hide",
+      "group": "playroom",
+      "text": "[Bright, playful, sing-song voice] Hide.",
+      "plain": "Hide.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 3,
+      "note": "A game starting at a birthday party. One word, sung, not an order."
+    },
+    {
+      "id": "count_coming_1",
+      "moment": "count_coming",
+      "group": "playroom",
+      "text": "[Quick, light, playful pace] Coming, ready or not!",
+      "plain": "Coming, ready or not!",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 3,
+      "note": "The playground call, with real glee. It has no idea what is about to come."
+    },
+    {
+      "id": "count_found_1",
+      "moment": "count_found",
+      "group": "playroom",
+      "text": "[delighted] Found you!",
+      "plain": "Found you!",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 3,
+      "note": "Pleased for them, as if they won. The caption adds the name: 'Found you, {name}!'"
+    },
+    {
+      "id": "count_done_1",
+      "moment": "count_done",
+      "group": "playroom",
+      "text": "[warmly] All done!",
+      "plain": "All done!",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 3,
+      "note": "End of the game, praise for everyone who played. Said the same whether anyone was found."
+    },
+    {
+      "id": "count_40",
+      "moment": "count_number",
+      "group": "playroom",
+      "text": "[delighted] Forty.",
+      "plain": "Forty.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 2,
+      "note": "A milestone, said as the count passes it. Counting down is fun."
+    },
+    {
+      "id": "count_30",
+      "moment": "count_number",
+      "group": "playroom",
+      "text": "[delighted] Thirty.",
+      "plain": "Thirty.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 2,
+      "note": "A milestone, said as the count passes it. Counting down is fun."
+    },
+    {
+      "id": "count_20",
+      "moment": "count_number",
+      "group": "playroom",
+      "text": "[delighted] Twenty.",
+      "plain": "Twenty.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 2,
+      "note": "A milestone, said as the count passes it. Counting down is fun."
+    },
+    {
+      "id": "count_10",
+      "moment": "count_number",
+      "group": "playroom",
+      "text": "[delighted] Ten.",
+      "plain": "Ten.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 2,
+      "note": "One a second with the bell. Falling, even, cheerful; the same read for every number."
+    },
+    {
+      "id": "count_9",
+      "moment": "count_number",
+      "group": "playroom",
+      "text": "[delighted] Nine.",
+      "plain": "Nine.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 2,
+      "note": "One a second with the bell. Falling, even, cheerful; the same read for every number."
+    },
+    {
+      "id": "count_8",
+      "moment": "count_number",
+      "group": "playroom",
+      "text": "[delighted] Eight.",
+      "plain": "Eight.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 2,
+      "note": "One a second with the bell. Falling, even, cheerful; the same read for every number."
+    },
+    {
+      "id": "count_7",
+      "moment": "count_number",
+      "group": "playroom",
+      "text": "[delighted] Seven.",
+      "plain": "Seven.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 2,
+      "note": "One a second with the bell. Falling, even, cheerful; the same read for every number."
+    },
+    {
+      "id": "count_6",
+      "moment": "count_number",
+      "group": "playroom",
+      "text": "[delighted] Six.",
+      "plain": "Six.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 2,
+      "note": "One a second with the bell. Falling, even, cheerful; the same read for every number."
+    },
+    {
+      "id": "count_5",
+      "moment": "count_number",
+      "group": "playroom",
+      "text": "[delighted] Five.",
+      "plain": "Five.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 2,
+      "note": "One a second with the bell. Falling, even, cheerful; the same read for every number."
+    },
+    {
+      "id": "count_4",
+      "moment": "count_number",
+      "group": "playroom",
+      "text": "[delighted] Four.",
+      "plain": "Four.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 2,
+      "note": "One a second with the bell. Falling, even, cheerful; the same read for every number."
+    },
+    {
+      "id": "count_3",
+      "moment": "count_number",
+      "group": "playroom",
+      "text": "[delighted] Three.",
+      "plain": "Three.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 2,
+      "note": "One a second with the bell. Falling, even, cheerful; the same read for every number."
+    },
+    {
+      "id": "count_2",
+      "moment": "count_number",
+      "group": "playroom",
+      "text": "[delighted] Two.",
+      "plain": "Two.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 2,
+      "note": "One a second with the bell. Falling, even, cheerful; the same read for every number."
+    },
+    {
+      "id": "count_1",
+      "moment": "count_number",
+      "group": "playroom",
+      "text": "[delighted] One.",
+      "plain": "One.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 2,
+      "note": "One a second with the bell. Falling, even, cheerful; the same read for every number."
     }
   ]
 }
