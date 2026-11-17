@@ -22,6 +22,8 @@
 #    then out, then (with nobody left standing) the wipe.
 #  - Relocation (sim/run.gd relocation, sim/relocate.gd: the resident may leave where nobody can see it and
 #    arrive where nobody can) is the same again: `relocation` true, false, or null to follow the game's deck.
+#  - Lonely (sim/run.gd lonely, sim/lonely.gd: the Temp's own mechanic) is the same again: `lonely` true, false,
+#    or null to follow the game's deck. Alone you are always lonely, and it chases slower than you walk.
 extends "res://net/room_client.gd"
 
 const Host = preload("res://net/host.gd")
@@ -49,6 +51,8 @@ var quota: Variant = null
 var downs: Variant = null
 ## Relocation: true, false, or null to follow the game's deck (see the header).
 var relocation: Variant = null
+## Lonely: true, false, or null to follow the game's deck (see the header).
+var lonely: Variant = null
 ## Cost of the host's ticks on this machine (microseconds, summed), for the stats hook.
 var host_us := 0
 var _vt := 0.0
@@ -86,6 +90,12 @@ func downs_on() -> bool:
 		return bool(downs)
 	return Session.deck == Places.FULL
 
+## Whether the next run has Lonely.
+func lonely_on() -> bool:
+	if lonely != null:
+		return bool(lonely)
+	return Session.deck == Places.FULL
+
 ## Whether the next run has relocation.
 func relocation_on() -> bool:
 	if relocation != null:
@@ -102,7 +112,7 @@ func start_run() -> void:
 	run_seed = seed if runs == 0 else "%s-%d" % [seed, runs]
 	runs += 1
 	epoch += 1
-	rules = HostRules.new(entity_on, 1, Session.deck, days_on(), quota_on(), downs_on(), false, relocation_on())
+	rules = HostRules.new(entity_on, 1, Session.deck, days_on(), quota_on(), downs_on(), false, relocation_on(), lonely_on())
 	# Method callables hold no reference to this object, so the pipes do not keep it alive.
 	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
 	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))

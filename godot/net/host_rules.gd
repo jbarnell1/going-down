@@ -38,6 +38,9 @@
 #  - Relocation (sim/run.gd relocation, sim/relocate.gd, T19e): off unless asked (`relocation`); the game's rooms
 #    ask for it (the server's always, playing alone with the game's deck), so a resident may leave where nobody
 #    can see it and arrive where nobody can, near a player. prepare() turns it on before the first tick.
+#  - Lonely (sim/run.gd lonely, sim/lonely.gd, T19c): off unless asked (`lonely`); the game's rooms ask for it
+#    (the server's always, playing alone with the game's deck), so the Annex's Temp carries its own mechanic
+#    instead of Stillness. prepare() turns it on before the first tick.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -72,9 +75,12 @@ var downs: bool
 var watchers: bool
 ## Relocation (off unless asked).
 var relocation: bool
+## Lonely, the Temp's own mechanic (off unless asked).
+var lonely: bool
 
-func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false, watchers_: bool = false, relocation_: bool = false) -> void:
+func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false, watchers_: bool = false, relocation_: bool = false, lonely_: bool = false) -> void:
 	relocation = relocation_
+	lonely = lonely_
 	_entity_on = entity_on
 	_depth = depth
 	deck = Run.deck_of(deck_)
@@ -157,6 +163,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_two_watchers(s)
 	if relocation and not s.relocation:
 		s = Run.with_relocation(s)
+	if lonely and not s.lonely:
+		s = Run.with_lonely(s)
 	return _capped(s)
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web

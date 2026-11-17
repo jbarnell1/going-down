@@ -37,10 +37,12 @@
 #   stillness  leaves: no watcher for STILL_UNWATCHED s and more than STILL_FAR m by walking from its target;
 #              or its dormant spell (after a catch or a heal) has ended since it last relocated or reached for
 #              anyone (Entity reloc_wish). Goes to: the player it was hunting, else the nearest by walking.
-#   lonely     T19c: broke off a chase, or nobody lonely for 20 s; goes to the most isolated player, never the
-#              one it just left when there is another. Add the case to both matches below (wants_to_leave
-#              returns the event's `why`), and call sim/run.gd's _relocate from the Lonely resident's own branch
-#              as the Stillness branch does (it is per trait: the trait's name picks the row).
+#   lonely     (T19c, sim/lonely.gd) leaves: it broke off a chase and is walking off or standing out of view
+#              ("brokeOff"); or nobody has been lonely for LONELY_QUIET s while it lurks or approaches
+#              ("nobodyLonely"); never during a chase. Goes to: the most isolated player, the one furthest (in a
+#              straight line; another level is furthest) from their nearest crewmate, on their feet or down;
+#              never the one it just left (the one it broke off from, else the one it was near) when there is
+#              another. sim/run.gd's Lonely branch calls _relocate as the Stillness branch does.
 #   hearing    away from the Playroom, T19f: the loudest noise of the last 10 s more than 30 m off; goes to the
 #              noise. The Playroom's Minder: off until the owner has played the Playroom (sim/run.gd steps it
 #              with sim/seek.gd and never asks).
@@ -74,6 +76,8 @@ const CAR_ZONE := 2.0
 ## Stillness: no watcher for this many seconds, and further than this many metres by walking from its target.
 const STILL_UNWATCHED := 12.0
 const STILL_FAR := 30.0
+## Lonely: nobody lonely for this many seconds.
+const LONELY_QUIET := 20.0
 ## T19b's hide list, when it exists.
 const HIDES_SCRIPT := "res://sim/hides.gd"
 const EPS := 1e-9
@@ -214,7 +218,12 @@ static func wants_to_leave(trait_name: StringName, plan: Floor.FloorPlan, o: Ent
 				return &""
 			var target := _eye(eyes, o.target_id)
 			return &"far" if target != null and target.up and _walk_to(plan, o.body, target) > STILL_FAR + EPS else &""
-		# &"lonely": T19c (&"brokeOff", &"nobodyLonely"). &"hearing" (away from the Playroom): T19f. &"watched": when built.
+		&"lonely":
+			if o.lonely_phase == &"breakoff":
+				return &"brokeOff"
+			if o.lonely_phase != &"chase" and o.lonely_quiet >= LONELY_QUIET - EPS:
+				return &"nobodyLonely"
+		# &"hearing" (away from the Playroom): T19f. &"watched": when built.
 	return &""
 
 ## The player it goes to (an up eye with a place on the floor), or "" for none.
@@ -235,7 +244,25 @@ static func goes_to(trait_name: StringName, plan: Floor.FloorPlan, o: Entity.Ord
 					best_d = float(d)
 					best = e.id
 			return best
-		# &"lonely": T19c (the most isolated player, never the one it just left when there is another).
+		&"lonely":
+			var left: Variant = o.lonely_left if o.lonely_left != null else o.target_id
+			var best := ""
+			var best_d := -1.0
+			var only := ""
+			for e in eyes:
+				if not e.up or e.walk == null:
+					continue
+				if left != null and e.id == str(left):
+					only = e.id
+					continue
+				var near := INF
+				for f in eyes:
+					if f != e and f.body.level == e.body.level:
+						near = minf(near, M.hypot2(f.body.x - e.body.x, f.body.z - e.body.z))
+				if near > best_d:
+					best_d = near
+					best = e.id
+			return best if best != "" else only
 	return ""
 
 # ---------------------------------------------------------------------------------------------

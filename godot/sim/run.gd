@@ -146,6 +146,20 @@
 # blink, blackout or warning, the lift not boarding or riding). The trait decides the rest (sim/relocate.gd rows);
 # only Stillness has one yet.
 #
+# The Temp's own mechanic, Lonely (docs/floors/traits-and-hiding.md section 2; T19c; sim/lonely.gd), on only for a
+# run made with it (with_lonely(): net/host_rules.gd turns it on for the game's rooms; tests and every stored
+# result leave it off, and then the Temp keeps the Orderly's Stillness, as before). With it on, the Annex's
+# resident is Lonely (resident_of; Places.resident_in) and is stepped by sim/lonely.gd instead of Stillness: it
+# only goes for a player who is alone (lonely_people: every player on their feet with an input, and every
+# player down, is company), chases one in its sight within 16 m, breaks off the tick they have company. Looking
+# at it does nothing. Its events: "chaseStarted" {playerId, at, yaw} and "chaseEnded" {playerId, why}. The
+# instrument records it only while it chases, and only on the chased player's (EntityTick acting, holders).
+# With relocation on, sim/relocate.gd's Lonely row moves it after a break-off or 20 s with nobody lonely. In a
+# solo run it is Lonely too, chasing slower than a walk (sim/lonely.gd SOLO_CHASE_SPEED). On the Annex its
+# notes gain two triggers: "chase" (note 7 naming the chased, where it stood) and "relocate" ("Gone to see
+# {name}.", where it left from, naming who it went to); a chase note at most once per player per
+# NOTE_HUNT_EVERY seconds.
+#
 # Down first, then out (North Star B6; loop/NIGHT-PLAN.md A5, T8a), on only for a run made with it
 # (create_run's `downs`, with_downs(): net/host_rules.gd turns it on for the game's rooms; tests and every
 # stored result leave it off, and then nothing below happens and a catch is "caught" as before). With it on:
@@ -193,6 +207,7 @@ const Marks = preload("res://sim/marks.gd")
 const Notes = preload("res://sim/notes.gd")
 const Walls = preload("res://sim/walls.gd")
 const Relocate = preload("res://sim/relocate.gd")
+const Lonely = preload("res://sim/lonely.gd")
 
 # ---------------------------------------------------------------------------------------------
 # Tuning.
@@ -641,6 +656,8 @@ class AnnexFloor:
 	var sprints: Dictionary = {}
 	var sprinting: Dictionary = {}
 	var named: Dictionary = {}
+	## Lonely (see the header): the run time of the last chase note queued for each player, {id: t}.
+	var chase_noted: Dictionary = {}
 
 	static func start(plan_: Floor.FloorPlan, note_seq: int) -> AnnexFloor:
 		var a := AnnexFloor.new()
@@ -663,6 +680,7 @@ class AnnexFloor:
 		a.sprints = sprints.duplicate()
 		a.sprinting = sprinting.duplicate()
 		a.named = named.duplicate()
+		a.chase_noted = chase_noted.duplicate()
 		return a
 
 ## A downed player (see the header). Replaced, never edited, once in a RunState.
@@ -780,9 +798,13 @@ class RunState:
 	## Relocation (T19e, with_relocation; sim/relocate.gd): the resident may leave where nobody can see it and
 	## arrive where nobody can. Off: it never does, as every stored result has it.
 	var relocation: bool = false
+	## Lonely (T19c, with_lonely; sim/lonely.gd): the Temp carries its own mechanic. Off: Stillness, as every
+	## stored result has it.
+	var lonely: bool = false
 
 	func copy() -> RunState:
 		var s := RunState.new()
+		s.lonely = lonely
 		s.two_watchers = two_watchers
 		s.relocation = relocation
 		s.seed = seed
@@ -1020,6 +1042,16 @@ static func with_relocation(s0: RunState) -> RunState:
 	var s := s0.copy()
 	s.relocation = true
 	return s
+
+## The run with Lonely on (sim/lonely.gd; docs/floors/traits-and-hiding.md section 2): see the header.
+static func with_lonely(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.lonely = true
+	return s
+
+## Who lives on the run's floor, with the run's rules (Places.resident_in): the host and the network read it too.
+static func resident_of(s: RunState) -> Places.Resident:
+	return Places.resident_in(s.plan.place if s.plan != null else &"", s.lonely)
 
 static func _create_run(seed: String, player_ids: Array[String], deck: Array = []) -> RunState:
 	assert(not player_ids.is_empty(), "a run needs at least one player")
@@ -1621,6 +1653,21 @@ static func _step_annex(s: RunState, players: Array[RunPlayer], input_of: Dictio
 				a.queue.append({"trigger": "lift", "facts": {"lift_caller": name_of(s, str(e["playerId"]))}})
 			"healed":
 				a.queue.append({"trigger": "heal", "facts": {"healed": name_of(s, str(e["playerId"])), "healer": name_of(s, str(e["by"]))}})
+			"chaseStarted":
+				# Lonely: where it stood as the chase began, naming who is alone (at most once per player per
+				# NOTE_HUNT_EVERY seconds).
+				var id := str(e["playerId"])
+				if not a.chase_noted.has(id) or t - float(a.chase_noted[id]) >= NOTE_HUNT_EVERY - EPS:
+					a.chase_noted[id] = t
+					var at: Move.Body = e["at"]
+					a.queue.append({"trigger": "chase", "facts": {"alone": [name_of(s, id)]}, "level": at.level,
+						"spot": note_spot(s.plan, at.level, at.x, at.z, float(e["yaw"]))})
+			"relocated":
+				# Lonely: where it left from, naming who it has gone to.
+				if resident_of(s).trait_name == &"lonely":
+					var from: Move.Body = e["from"]
+					a.queue.append({"trigger": "relocate", "facts": {"gone_to": name_of(s, str(e["near"]))}, "level": from.level,
+						"spot": note_spot(s.plan, from.level, from.x, from.z, s.orderly.yaw)})
 	if not riding and (s.orderly.mode == &"hunting" or s.orderly.mode == &"windUp"):
 		a.hunt_clock += dt
 		while a.hunt_clock >= NOTE_HUNT_EVERY - EPS:
@@ -1694,7 +1741,11 @@ static func _step_annex(s: RunState, players: Array[RunPlayer], input_of: Dictio
 	if not riding and not a.queue.is_empty() and not s.orderly.held:
 		var job: Dictionary = a.queue.pop_front()
 		var o := s.orderly
-		_post_note(s, players, a, str(job["trigger"]), job["facts"], o.body.level, note_spot(s.plan, o.body.level, o.body.x, o.body.z, o.yaw), t, events)
+		if job.has("spot"):
+			# A note that goes where something happened (Lonely's two), not where it stands now.
+			_post_note(s, players, a, str(job["trigger"]), job["facts"], int(job["level"]), job["spot"], t, events)
+		else:
+			_post_note(s, players, a, str(job["trigger"]), job["facts"], o.body.level, note_spot(s.plan, o.body.level, o.body.x, o.body.z, o.yaw), t, events)
 
 # ---------------------------------------------------------------------------------------------
 # Down first, then out (see the header).
@@ -1971,7 +2022,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				s.phase = &"coming"
 				s.lure = true
 				# The call is loud. If the Orderly was still standing where the floor began, it wakes now.
-				if s.orderly.mode == &"waiting" and Places.resident(s.plan.place).stillness:
+				if s.orderly.mode == &"waiting" and (resident_of(s).stillness or resident_of(s).trait_name == &"lonely"):
 					var o := s.orderly.copy()
 					o.mode = &"hunting"
 					o.replan_in = 0.0
@@ -2172,13 +2223,16 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 
 	# ---- 2. The Orderly (not while riding: that floor is behind the crew).
 	var entity_ticks: Array[Instr.EntityTick] = []
-	var who := Places.resident(s.plan.place)
+	var who := resident_of(s)
 	var home := at_home(s)
 	if home:
 		pass  # The prison has no resident: nothing hunts there.
 	elif s.phase != &"riding" and s.seek != null:
 		# The Playroom: the count, the search, hiding, health (sim/seek.gd; see the header).
 		entity_ticks = [_step_seek(s, players, input_of, seek_call_by, prev.t, t, dt, events)]
+	elif s.phase != &"riding" and who.trait_name == &"lonely":
+		# The Temp's own mechanic (sim/lonely.gd; see the header).
+		entity_ticks = [_step_lonely(s, players, input_of, t, dt, events)]
 	elif s.phase != &"riding" and not who.stillness:
 		# A resident that is not a Stillness one, with its rules off (seek_off: the resident parked): it
 		# stands where it is and takes nobody. No events.
@@ -2713,6 +2767,71 @@ static func _relocate(s: RunState, o: Entity.OrderlyState, trait_name: StringNam
 	if st.event != null:
 		events.append(st.event)
 	return st.state
+
+## Lonely (see the header; sim/lonely.gd): the people, every player on their feet with an input (in the car too,
+## as company only) and every player down (company only), with their eyes.
+static func lonely_people(s: RunState, players: Array[RunPlayer], input_of: Dictionary) -> Array[Lonely.Person]:
+	var out: Array[Lonely.Person] = []
+	for p in players:
+		var i: PlayerInput = input_of.get(p.id)
+		if _is_active(p, input_of):
+			out.append(Lonely.Person.make(p.id, p.body, i.eye, not in_car(s.car, p.body)))
+		elif p.status == &"down":
+			out.append(Lonely.Person.make(p.id, p.body, i.eye if i != null else 1.65, false))
+	return out
+
+## One tick of the Lonely Temp (see the header): its step, the car, catches (the down rule's bend), relocation,
+## and the instrument's tick (recording only the chased).
+static func _step_lonely(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, dt: float, events: Array[Dictionary]) -> Instr.EntityTick:
+	var car := s.car
+	s.lure = false
+	var blind := blinking(s)
+	var views: Array[Entity.PlayerView] = []
+	for p in players:
+		var i := _inp(p, input_of)
+		views.append(_view_of(i, _is_active(p, input_of) and not p.aboard, blind or i.blind))
+	var before := s.orderly
+	var er := Lonely.step(s.plan, before, lonely_people(s, players, input_of), views, dt, players.size() <= 1, s.relocation)
+	var next := er.state
+	# Belt and braces: it can never end a tick in (or overlapping) the car.
+	if rect_distance(car.rect, next.body.x, next.body.z) < Entity.ORDERLY_RADIUS - 1e-3 and next.body.level == car.level:
+		next = next.copy()
+		next.body = before.body
+		next.moving = false
+		next.speed = 0.0
+	var crew_events: Array[Dictionary] = er.events
+	if s.downs:
+		crew_events = []
+		for e in er.events:
+			if e["type"] == "caught":
+				next = Entity.bend_over(next, str(e["playerId"]))
+			else:
+				crew_events.append(e)
+	var moved_on: Array[Dictionary] = []
+	if s.relocation:
+		next = _relocate(s, next, &"lonely", players, input_of, t, dt, moved_on)
+	s.orderly = next
+	for e in er.events:
+		events.append(_with_t(e, t))
+	events.append_array(moved_on)
+	var et := Instr.EntityTick.make(s.entity_id, &"lonely", before, next, crew_events)
+	var who := Lonely.chased(before, next)
+	et.acting = who != ""
+	et.holders = {who: true} if who != "" else {}
+	for e in er.events:
+		if e["type"] != "caught":
+			continue
+		for k in players.size():
+			if players[k].id == e["playerId"]:
+				if s.downs:
+					if players[k].status == &"ok":
+						_go_down(s, players, k, t, &"catch", events)
+					continue
+				var np := players[k].copy()
+				np.status = &"caught"
+				np.side = null
+				players[k] = np
+	return et
 
 static func _active_aboard(players: Array[RunPlayer], input_of: Dictionary) -> Array[RunPlayer]:
 	var out: Array[RunPlayer] = []

@@ -285,9 +285,24 @@ class OrderlyState:
 	var unwatched_for: float = 0.0
 	var reloc_wish: bool = false
 
+	## Lonely (sim/lonely.gd; T19c), the Temp's own mechanic; untouched by every other trait. What it is doing
+	## while it hunts ("" until it has hunted, "lurk", "approach", "chase", "breakoff"); who it chases; who it
+	## broke off from last (relocation never takes it back to them when there is another); seconds without a
+	## clear line to the chased (in a break-off: seconds since it began); seconds nobody has been lonely.
+	var lonely_phase: StringName = &""
+	var lonely_target: Variant = null
+	var lonely_left: Variant = null
+	var lonely_lost: float = 0.0
+	var lonely_quiet: float = 0.0
+
 	## TypeScript: { ...state }.
 	func copy() -> OrderlyState:
 		var s := OrderlyState.new()
+		s.lonely_phase = lonely_phase
+		s.lonely_target = lonely_target
+		s.lonely_left = lonely_left
+		s.lonely_lost = lonely_lost
+		s.lonely_quiet = lonely_quiet
 		s.relocated = relocated
 		s.relocations = relocations
 		s.stand_left = stand_left
@@ -859,6 +874,12 @@ static func arrive(o: OrderlyState, body: Move.Body, yaw: float, t: float, targe
 	s.click_walk = 0.0
 	s.click_wait = 0.0
 	s.clicks = 0
+	# Lonely (sim/lonely.gd): it lurks where it arrived, near the player it came for.
+	if o.lonely_phase != &"":
+		s.lonely_phase = &"lurk"
+	s.lonely_target = null
+	s.lonely_lost = 0.0
+	s.lonely_quiet = 0.0
 	return s
 
 ## Keeps `from`'s relocation bookkeeping on `o` (a state rebuilt from an older one, the host's put-back).

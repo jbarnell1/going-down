@@ -7,6 +7,8 @@
 #      audible near it and silent beyond 30 m;
 #   3. walking, it clicks once per 1.2 m walked: click k comes in the tick its walked distance first
 #      reaches 1.2 k metres.
+#   4. under Lonely (sim/lonely.gd, T19c), its own mechanic, the same stapler clicks once per 1.2 m while it
+#      goes for a lonely player, and a look neither holds it nor stops the clicks.
 # And the default body is still the Orderly's, with no stapler.
 #
 # The design's numbers are restated here, not imported from entity.gd. The deliberate break (let the
@@ -22,6 +24,7 @@ const Bot = preload("res://sim/bot.gd")
 const Rng = preload("res://sim/rng.gd")
 const M = preload("res://sim/jsmath.gd")
 const PE = preload("res://tests/prop_entity.gd")
+const Lonely = preload("res://sim/lonely.gd")
 
 const DT := 0.05
 const DEPTH := 3
@@ -198,6 +201,42 @@ func test_walking_clicks_every_1_2_metres(t: T) -> void:
 		walked_total += walked
 		clicks_total += k
 	t.note("%d walking clicks over %.1f m" % [clicks_total, walked_total])
+
+## 4. Lonely (sim/lonely.gd, T19c): the same stapler on its own mechanic. Chasing a lonely player it clicks once
+## per 1.2 m (about three a second at its chase), and looking at it neither holds it nor stops the clicks.
+func test_lonely_temp_clicks_while_it_chases(t: T) -> void:
+	var total := 0
+	var looked := 0
+	for i in floors(t):
+		var p := annex(i)
+		var st := Entity.create_orderly(p, Entity.temp_body())
+		st.mode = &"hunting"
+		st.lonely_phase = &"lurk"
+		var me := Move.body_at_cell(p, p.landing)
+		# The player stands looking straight at it: Stillness would hold it; Lonely does not care.
+		var yaw := Entity.yaw_toward(st.body.x - me.x, st.body.z - me.z)
+		var views: Array[Entity.PlayerView] = [Entity.PlayerView.make("me", me, Bot.BOT_EYE, yaw, 0.0, Bot.BOT_HFOV_DEG, Bot.BOT_VFOV_DEG, true)]
+		var people: Array[Lonely.Person] = [Lonely.Person.make("me", me, Bot.BOT_EYE, true)]
+		var walked := 0.0
+		var k := 0
+		for tick in int(round(40.0 / DT)):
+			var before := st
+			var r := Lonely.step(p, before, people, views, DT, false, false)
+			st = r.state
+			if st.mode != &"hunting":
+				break
+			t.check(not st.held, "floor %d t=%.2f: held by a look" % [i, st.t])
+			if st.seen:
+				looked += 1
+			walked += M.hypot2(st.body.x - before.body.x, st.body.z - before.body.z)
+			var n := clicks_of(r.events, "walk")
+			var want := int(floor(walked / O_CLICK_STEP + 1e-9)) - k
+			if not t.eq(n, want, "floor %d t=%.2f: walking clicks this tick (walked %.4f m)" % [i, st.t, walked]):
+				return
+			k += n
+		t.check(walked > 10.0 * O_CLICK_STEP, "floor %d: it walked over 12 m (%.1f)" % [i, walked])
+		total += k
+	t.note("%d walking clicks under Lonely, %d ticks of it walking while seen" % [total, looked])
 
 ## The default is still the Orderly: no stapler, no click events, in the same kind of run.
 func test_orderly_never_clicks(t: T) -> void:
