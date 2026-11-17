@@ -64,6 +64,10 @@ var count_by := ""
 var seek_note := ""
 var health := -1.0
 var health_rates := ""
+## The floor quota (client/quota_view.gd): the call panel's words, printed under the prompt while the
+## call button is in reach or a refusal flashes; its tone ("count", "met", "refused").
+var quota_line := ""
+var quota_tone := ""
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -129,6 +133,8 @@ func _draw() -> void:
 			var bar := Rect2(pp + Vector2(0, 11 * px), Vector2(pw, 2 * px))
 			draw_rect(bar, Color(0, 0, 0, 0.55))
 			draw_rect(Rect2(bar.position, Vector2(bar.size.x * clampf(prompt_fill, 0.0, 1.0), bar.size.y)), Color("#ffd27a"))
+	if quota_line != "" and not black:
+		_draw_quota(px, now)
 	if not board_lines.is_empty() and not black:
 		_draw_board(px)
 	if count_text != "" and not black:
@@ -166,6 +172,19 @@ func _draw() -> void:
 		_draw_wheel(px)
 	if menu_on and not black:
 		_draw_menu()
+
+## The call panel's words under the prompt: amber while counting, green once met, red (blinking) when a
+## press was refused.
+func _draw_quota(px: float, now: int) -> void:
+	var qw := PixelFont.width(quota_line) * px
+	var qp := Vector2(floorf((size.x - qw) * 0.5), floorf(size.y * 0.62) + (15 * px if prompt != "" else 0.0))
+	draw_rect(Rect2(qp - Vector2(4, 3) * px, Vector2(qw + 8 * px, 13 * px)), Color(0, 0, 0, 0.55))
+	var ink := Color("#ffd27a")
+	if quota_tone == "met":
+		ink = Color("#9fe0a0")
+	elif quota_tone == "refused":
+		ink = Color("#ff7a6a") if (now / 160) % 2 == 0 else Color("#7a2a22")
+	PixelFont.draw_shadowed(self, quota_line, qp, px, ink)
 
 ## The health bar, bottom left: HEALTH and the number, the bar, the rates under it.
 func _draw_health(px: float) -> void:

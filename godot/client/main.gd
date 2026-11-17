@@ -41,6 +41,7 @@ const FaceKiosk = preload("res://client/face_kiosk.gd")
 const Run = preload("res://sim/run.gd")
 const Day = preload("res://sim/day.gd")
 const HideView = preload("res://client/hide_view.gd")
+const QuotaView = preload("res://client/quota_view.gd")
 
 const VFOV := 70.0
 const SENS := 0.0022
@@ -87,6 +88,8 @@ var kiosk: FaceKiosk
 var inst_view: InstrumentView
 ## The Playroom's count and hiding on screen (client/hide_view.gd).
 var hide_view: HideView
+## The floor quota on screen: the call panel, a refused press, the line under the prompt (client/quota_view.gd).
+var quota_view := QuotaView.new()
 var screen: TextureRect
 var tape_mat: ShaderMaterial
 
@@ -569,6 +572,7 @@ func _on_new_run() -> void:
 	others.clear()
 	sfx.ride(false)
 	hud.set_seed(str(link.client().seed) if link.client().seed != null else seed)
+	quota_view.reset()
 	# In a browser nothing is heard before the first click or key (autoplay rules): the welcome
 	# waits for it rather than being spoken to a muted page.
 	if _gesture or not OS.has_feature("web"):
@@ -1056,6 +1060,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		elif _tape_in_reach(me):
 			prompt = "F  PICK UP"
 	hud.prompt = prompt
+	_show_quota(now)
 	_show_day(s, now)
 	_show_count(s, dt)
 	var sk: Variant = s.get("seek")
@@ -1067,6 +1072,13 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		if _seek_hist.size() > 80:
 			_seek_hist.pop_front()
 	_show_end(now)
+
+## The floor quota (client/quota_view.gd): the call panel shows the host's quota block, and its words go
+## under the prompt while the call button is in reach or a refused press flashes.
+func _show_quota(now: int) -> void:
+	var c := link.client()
+	hud.quota_line = quota_view.update(c.quota() if c != null else null, lift, hud.prompt == "F  ▼ CALL", now)
+	hud.quota_tone = quota_view.tone
 
 ## The Playroom's count and hiding (client/hide_view.gd): the count dark, the bell, the tune, the
 ## captions, the hide prompts, the health bar; found, the camera turns to the Minder as it comes.
@@ -1214,6 +1226,7 @@ func _present(events: Array, now: int) -> void:
 		return
 	announcer.on_events(events, 1)
 	var my := link.my_id()
+	quota_view.on_events(events, my, sfx, now)
 	for e: Dictionary in events:
 		var ty := str(e["type"])
 		event_counts[ty] = int(event_counts.get(ty, 0)) + 1
@@ -1791,6 +1804,8 @@ func _test_state() -> Dictionary:
 		"place": link.plan_dict.get("place", ""),
 		"hide": hide_view.describe(), "hud": {"health": hud.health, "rates": hud.health_rates, "countText": hud.count_text, "countBy": hud.count_by,
 			"seekNote": hud.seek_note, "subtitle": hud.subtitle, "bigNote": hud.big_note, "centerNote": hud.center_note},
+		"quota": {"host": link.client().quota() if link.client() != null else null, "panel": lift.quota_text, "tone": lift.quota_tone,
+			"hud": hud.quota_line, "view": quota_view.describe(), "at": [lift.quota_point().x, lift.quota_point().y, lift.quota_point().z]},
 		"captions": announcer.said_count.map(func(c: Dictionary) -> String: return str(c["text"])),
 		"bells": sfx.bells.duplicate(), "seekHist": _seek_hist.duplicate(), "camPos": [cam.position.x, cam.position.y, cam.position.z],
 		"events": event_counts,

@@ -36,6 +36,12 @@ const MON_Y := 1.98
 const MON_BG := Color("#0b0f0e")
 ## The car's light, at full.
 const LAMP_ENERGY := 0.8
+## The call panel (show_quota): its picture in pixels (two rows of the pixel font), its size on the wall,
+## how far above the call button its middle is, and its dark glass.
+const QUOTA_PX := Vector2i(88, 21)
+const QUOTA_SIZE := Vector2(0.84, 0.84 * 21.0 / 88.0)
+const QUOTA_RISE := 0.38
+const QUOTA_BG := Color("#0b0605")
 
 ## The car as the rules give it (plan.car): half its width, its depth, half its door.
 var half := 2.0
@@ -67,6 +73,14 @@ var _mon_img: Image
 var _mon_tex: ImageTexture
 var _mon_key := "-"
 var _mon_slots: Array[Rect2i] = []
+## The call panel above the call button (client/quota_view.gd): the floor quota, earned against needed.
+## What it shows ("" while hidden) and its tone ("count", "met", "refused").
+var quota_text := ""
+var quota_tone := ""
+var _quota_node: Node3D
+var _quota_img: Image
+var _quota_tex: ImageTexture
+var _quota_key := "-"
 
 ## Builds the lift for the rules' car (plan.car). `left_wall`: the landing cell has a wall on its left as
 ## you face the lift (Level.lift_left_wall), so the call button goes on it.
@@ -168,6 +182,7 @@ func build(car: Dictionary, left_wall := false) -> void:
 		call_at = Vector3(CALL_BUTTON.x, CALL_BUTTON.y, LAND + 0.04)
 		_box(Vector3(CALL_BUTTON.x, CALL_BUTTON.y, LAND + 0.02), Vector3(0.14, 0.26, 0.03), dark)
 		_box(Vector3(CALL_BUTTON.x, CALL_BUTTON.y, LAND + 0.04), Vector3(0.06, 0.06, 0.02), _call_mat)
+	_build_quota_panel(left_wall, dark)
 	_box(Vector3(HOLD_BUTTON.x, HOLD_BUTTON.y, -FRONT - 0.03), Vector3(0.14, 0.2, 0.03), dark)
 	_hold_mat = Level.glow_material(Color(0.4, 1.0, 0.5), 0.25)
 	_box(Vector3(HOLD_BUTTON.x, HOLD_BUTTON.y, -FRONT - 0.05), Vector3(0.06, 0.06, 0.02), _hold_mat)
@@ -269,6 +284,70 @@ func show_indicator(label: String, lit: bool, arrow: int) -> void:
 	var lw := PixelFont.width(label)
 	PixelFont.blit(_ind_img, label, Vector2i(24 - lw, 2), on)
 	_ind_tex.update(_ind_img)
+
+## The call panel: a small lit display just above the call button, on the same wall, facing the landing.
+func _build_quota_panel(left_wall: bool, dark: ShaderMaterial) -> void:
+	_quota_img = Image.create(QUOTA_PX.x, QUOTA_PX.y, false, Image.FORMAT_RGBA8)
+	_quota_img.fill(QUOTA_BG)
+	_quota_tex = ImageTexture.create_from_image(_quota_img)
+	_quota_node = Node3D.new()
+	_quota_node.name = "QuotaPanel"
+	add_child(_quota_node)
+	if left_wall:
+		var wx := -(Level.S * 0.5 - Level.WALL_T * 0.5)
+		_quota_node.position = Vector3(wx, CALL_SIDE.y + QUOTA_RISE, CALL_SIDE.x + 0.25)
+		_quota_node.rotation = Vector3(0, PI / 2.0, 0)
+	else:
+		_quota_node.position = Vector3(CALL_BUTTON.x - 0.2, CALL_BUTTON.y + QUOTA_RISE, LAND)
+	_box(Vector3(0, 0, 0.015), Vector3(QUOTA_SIZE.x + 0.05, QUOTA_SIZE.y + 0.05, 0.03), dark, _quota_node)
+	var q := QuadMesh.new()
+	q.size = QUOTA_SIZE
+	var mi := MeshInstance3D.new()
+	mi.name = "QuotaScreen"
+	mi.mesh = q
+	mi.material_override = Level.glow_material(Color.WHITE, 1.0, _quota_tex)
+	mi.position = Vector3(0, 0, 0.032)
+	_quota_node.add_child(mi)
+	_quota_node.visible = false
+
+## What the call panel shows: `text` one line (client/quota_view.gd), drawn on two; "" hides it. `tone`
+## "count" (amber), "met" (green) or "refused" (red); `lit` false dims it (the refusal's blink).
+func show_quota(text: String, tone: String, lit := true) -> void:
+	var key := "%s|%s|%s" % [text, tone, lit]
+	if key == _quota_key or _quota_img == null:
+		return
+	_quota_key = key
+	quota_text = text
+	quota_tone = tone
+	_quota_node.visible = text != ""
+	if text == "":
+		return
+	_quota_img.fill(QUOTA_BG)
+	var ink := Color("#ffb02a")
+	if tone == "met":
+		ink = Color("#8dff9e")
+	elif tone == "refused":
+		ink = Color("#ff4a34")
+	if not lit:
+		ink = ink.darkened(0.75)
+	var rows := quota_rows(text)
+	for i in rows.size():
+		var w := PixelFont.width(rows[i])
+		PixelFont.blit(_quota_img, rows[i], Vector2i((QUOTA_PX.x - w) / 2, 3 + i * 10), ink)
+	_quota_tex.update(_quota_img)
+
+## Tests: the middle of the call panel's screen in the world.
+func quota_point() -> Vector3:
+	return _quota_node.global_position if _quota_node != null else Vector3.ZERO
+
+## The panel's line on two rows: after "RECORDED", after a full stop, or after a colon.
+static func quota_rows(text: String) -> PackedStringArray:
+	for cut: String in ["RECORDED ", ". ", ": "]:
+		var i := text.find(cut)
+		if i >= 0:
+			var at := i + cut.length()
+			return PackedStringArray([text.left(at).strip_edges(), text.substr(at).strip_edges()])
+	return PackedStringArray([text])
 
 ## The monitor shows these faces (FaceCodec text each, "" for a crewmate who drew none) side by side.
 func set_faces(codes: Array[String]) -> void:

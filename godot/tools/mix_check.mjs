@@ -22,7 +22,8 @@ const dir = reuse || arg('keep') || mkdtempSync(join(tmpdir(), 'mixcheck-'));
 if (!reuse) {
   const godot = process.env.GODOT;
   if (!godot) { console.error('set GODOT to the engine'); process.exit(2); }
-  const r = spawnSync(godot, ['--headless', '--path', project, '-s', 'res://tools/mix_check.gd', '--', dir, 'auto=1'], { encoding: 'utf8', timeout: 240000, killSignal: 'SIGKILL' });
+  // quota=0 (with auto=1): no floor quota, so the busy minute's call brings the car without a reading.
+  const r = spawnSync(godot, ['--headless', '--path', project, '-s', 'res://tools/mix_check.gd', '--', dir, 'auto=1', 'quota=0'],{ encoding: 'utf8', timeout: 240000, killSignal: 'SIGKILL' });
   const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
   const errs = out.split(/\r?\n/).filter((l) => /SCRIPT ERROR|Parse Error/.test(l));
   if (r.status !== 0 || errs.length) { console.log(out.slice(-3000)); console.log('FAIL the busy minute did not run'); process.exit(1); }

@@ -58,6 +58,12 @@
 # places a player where the rules hold them when they get into a hide, start getting out, are found, are
 # taken to the party table or go down, and adds the seek block to every snapshot (Protocol.enc_seek). The
 # count is the run's own event, stamped with the host's time: every client works the count out from it.
+#
+# The floor quota (sim/run.gd quota; North Star C9): the run decides, the host only reports. When the run
+# has the quota on, every snapshot carries the quota block (Protocol.enc_quota: earned and needed, whole
+# credits), and the run's "callRefused" and "quotaMet" events reach every client like any other. A press
+# of the call button is one call input (the "calls" counter), so each press below the quota is one
+# "callRefused". A run without the quota sends exactly what it did before.
 extends RefCounted
 
 const Run = preload("res://sim/run.gd")
@@ -941,7 +947,14 @@ func world() -> Dictionary:
 		out["day"] = day_block(s)
 	if s.seek != null:
 		out["seek"] = seek_block(s)
+	if s.quota:
+		out["quota"] = quota_block(s)
 	return out
+
+## The floor quota block of a run with the quota (Protocol.enc_quota): whole credits recorded on this
+## floor against this floor's quota.
+static func quota_block(s: Run.RunState) -> Dictionary:
+	return {"earned": floori(s.floor_earned), "needed": s.floor_needed}
 
 ## The Playroom's seek block (Protocol.enc_seek): the count in host times, and each player's hide,
 ## peek, health and totals, plus the crew's noise. Null off the Playroom.

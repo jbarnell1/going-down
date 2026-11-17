@@ -5,8 +5,8 @@
 # chewing when it takes someone, the Clinic's tube hum (gone in every blink and the blackout), the blink
 # warning's flicker, the tube popping at the blackout and the emergency lighting's drone, the vent, sparse
 # room tones placed and timed from the floor's seed and the host's clock (the same for every player),
-# the lift's chimes, dings, doors, bell, machinery and ride, the instrument's ticking, footsteps and
-# breathing when winded.
+# the lift's chimes, dings, doors, bell, machinery and ride, the call panel's buzz (a press below the
+# floor quota), the instrument's ticking, footsteps and breathing when winded.
 #
 # The mix (assets/sfx/MIX.md): every file is normalised by loudness to its category's level relative to
 # the elevator voice, and every player here plays at the voice's own volume (BASE_DB), so the balance is
@@ -76,12 +76,12 @@ const SYNTH_DB := {
 	"tick": -3.5, "chime": -12.1, "chime_far": -12.1, "ding": -5.7, "bell": -6.2, "bell_warn": -7.6, "closed": -8.6, "slip": -1.4,
 	"doors": -2.8, "doors_far": -2.8, "blink_warn": 0.3, "blackout_warn": -0.7, "blink": -3.4, "caught": -7.0,
 	"step": 0.8, "squeak": -4.0, "machinery": -7.6, "breath": -0.7, "hum": -13.9, "ride": -10.2,
-	"xylo": -6.0, "count_bell": -3.0, "trill": -12.0, "tune": -16.0,
+	"xylo": -6.0, "count_bell": -3.0, "trill": -12.0, "tune": -16.0, "refused": -2.9,
 }
 const SYNTH_BUS := {
 	"tick": "UI", "chime": "UI", "chime_far": "UI", "ding": "UI", "bell": "UI", "bell_warn": "UI", "closed": "UI", "slip": "UI",
 	"doors": "Effects", "doors_far": "Effects", "blink_warn": "Effects", "blackout_warn": "Effects", "blink": "Effects", "caught": "Scare",
-	"xylo": "UI",
+	"xylo": "UI", "refused": "UI",
 }
 ## The count's bell: in the last RISE_FROM seconds each stroke is RISE_PITCH higher and RISE_DB louder.
 const RISE_FROM := 5
@@ -170,6 +170,7 @@ func setup(world_parent: Node3D) -> void:
 	streams["count_bell"] = _wav(_hand_bell(), false)
 	streams["trill"] = _wav(_toy_note(), false)
 	streams["tune"] = _wav(_tune(), true)
+	streams["refused"] = _wav(_refused(), false)
 	for name: String in RECORDED:
 		var spec: Array = RECORDED[name]
 		var list: Array = []
@@ -786,6 +787,21 @@ func _buzz(seconds: float) -> PackedFloat32Array:
 		var t := float(i) / RATE
 		var on := 1.0 if fmod(t * 9.0, 1.0) < 0.6 else 0.2
 		a[i] = (fmod(t * 120.0, 1.0) * 2.0 - 1.0) * 0.18 * on
+	return a
+
+## The call button pressed below the floor quota (client/quota_view.gd): two short low buzzes, a panel
+## saying no.
+func _refused() -> PackedFloat32Array:
+	var a := _buf(0.34)
+	for i in a.size():
+		var t := float(i) / RATE
+		var k := t if t < 0.14 else t - 0.19
+		if t >= 0.14 and t < 0.19:
+			continue
+		var env := minf(1.0, k / 0.006) * minf(1.0, (0.14 - k) / 0.02)
+		var saw := fmod(t * 150.0, 1.0) * 2.0 - 1.0
+		var sq := 1.0 if fmod(t * 75.0, 1.0) < 0.5 else -1.0
+		a[i] = (saw * 0.6 + sq * 0.25) * 0.3 * maxf(env, 0.0)
 	return a
 
 func _winddown(seconds: float) -> PackedFloat32Array:

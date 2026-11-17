@@ -45,6 +45,11 @@
 # the host's own t0: count_clock() works out its phase and seconds left at any host time (use the
 # clock's host_time(now)), so every screen starts the dark and the bell at the same moment. The newest
 # snapshot's "seek" block has each player's hide, peek, phase, status, health and totals, and the noise.
+#
+# The floor quota (sim/run.gd quota; North Star C9): quota() is the newest snapshot's quota block,
+# {earned, needed} in whole credits (null when the run has no quota), for the call panel. The host's
+# "callRefused" {playerId, earned, needed} and "quotaMet" {depth, earned, needed, top} arrive in `events` like
+# any other. Nothing is predicted here: the call is pressed as always and the host decides.
 extends RefCounted
 
 const Move = preload("res://sim/move.gd")
@@ -301,6 +306,13 @@ func blink_windows() -> Array[Dictionary]:
 		var k: Dictionary = _blinks[at]
 		out.append({"start": float(k["at"]) - TICK - guard - off, "end": float(k["at"]) + float(k["len"]) + TICK + guard - off})
 	return out
+
+## The floor quota as the newest snapshot has it: {earned, needed} in whole credits, or null when the
+## run has no quota (or nothing has arrived yet). The call works once earned >= needed.
+func quota() -> Variant:
+	if latest == null:
+		return null
+	return latest.get("quota")
 
 ## The Playroom's newest count as its host event ({n, t0, len, last, by, why}), or {} before any (or on
 ## another floor): from the events, else from the newest snapshot's seek block (a player who joined
