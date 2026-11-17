@@ -7,6 +7,7 @@ const Client = preload("res://net/client.gd")
 const Transport = preload("res://net/transport.gd")
 const Session = preload("res://net/session.gd")
 const Protocol = preload("res://net/protocol.gd")
+const BuildInfo = preload("res://net/build_info.gd")
 
 ## "connecting", "lobby" (connected; no run, or a run this client is not in yet), "running" (a NetClient
 ## for the current run exists), "closed" (see close_code / close_reason).
@@ -79,6 +80,18 @@ func leave() -> void:
 	_ws.close(1000, "bye")
 	status = "closed"
 
+## Telemetry for the server's log (client/telemetry.gd): a Protocol "telemetry" message, on its own
+## "t|" frame. False (nothing sent) unless connected to a server, or if it does not encode.
+func send_telemetry(m: Dictionary) -> bool:
+	if status != "lobby" and status != "running":
+		return false
+	var text := Protocol.encode(m)
+	if text.is_empty():
+		return false
+	_queue("t|" + text)
+	_flush(_now)
+	return true
+
 func _queue(text: String) -> void:
 	_out.append([_now + delay, text])
 
@@ -107,7 +120,7 @@ func poll(now: float) -> void:
 		return
 	if not _hello_sent:
 		_hello_sent = true
-		_ws.send_text(JSON.stringify(["hello", 1, _secret, _name]))
+		_ws.send_text(JSON.stringify(["hello", 1, _secret, _name, BuildInfo.id()]))
 		_secret = ""
 	while _ws.get_available_packet_count() > 0:
 		var pkt := _ws.get_packet()

@@ -4,11 +4,11 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 62 of 107.
+- **Gates passed:** 7 of 14. **Tasks done:** 63 of 109.
 - **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 67.
-- **Now:** T23 The announcer's hints. An Opus builder is recording the 38 hints in both voices and wiring the ones whose moments exist in the game today
+- **Now:** T24 The story: the tape, the nightly tapes and the clues. A builder is making the VCR orientation tape now: blue and yellow, narrated, with a video you can watch here when it is done
 - **Last CI result seen:** passed on cb7c7a0
-- **Answers applied up to:** 2026-11-17T15:39:30.665Z
+- **Answers applied up to:** 2026-11-17T21:11:49.720Z
 
 ## Tasks
 
@@ -219,14 +219,19 @@
   - Why: Under hospital beds, inside cabinets (E), under desks (Ctrl) - so a re-rolled monster on any floor can be survived
   - To do: Every hiding place keeps a view out: under a bed you can look around, a cabinet shows a thin crack; same rules for being found
   - To do: The under-desk view in the Annex reads as a window, not as hiding under a desk: add the desk edge to the view
-- [ ] **T19c** `doing` The Temp's own mechanic
+- [x] **T19c** `done` The Temp's own mechanic
   - Why: No two monsters share a rule: the Temp needs its own way to hunt and to be recorded
+  - Evidence: Merged as e54eed3. Checker: quick 230/230, the Lonely/Temp/notes/relocate tests 25/25, ref_* 18/18 with 0 values differing, net_local 10/10, play_down 24/24; two deliberate breaks (company never seen; every holder may record) each turned two tests red. Merged with the 0833 fixes by hand (Lonely is the last rules switch); 241/241 on the merge commit.
 - [ ] **T22** `doing` Live settings for the host
   - Why: On game night the host can slow a monster that's too fast, lengthen the lift's return or the time you have down, and much more, from an in-game panel, while everyone plays
+- [ ] **T25** `todo` Crash reports, metrics and a same-night hotfix
+  - Why: If something breaks on game night we see exactly what happened on whose PC, fix it, and send everyone a new build within minutes
 - [ ] **T23** `doing` The announcer's hints
   - Why: The lift's announcer teaches the game with snide, creepy hints: board on time or lose your pay, the quota, sneaking in the Playroom, instruments out
 - [ ] **T24** `doing` The story: the tape, the nightly tapes and the clues
   - Why: A blue-and-yellow VCR orientation tape on joining, a new tape each night in the prison, and clues on every floor that the monsters were once crews like yours
+  - To do: Your answers: better names (Fable proposing); left out = keep your bed, draw a new face, get a new number, and the next monster wears your old face; bedtime tape on the lift monitor during the ride up, the car waits for it unless over half skip; tape shot 16: the diamond body for two frames, then one more two-frame flicker
+  - To do: Names chosen: Lidgate, the Soke, Continuance, 'Leave it with us.', Lidgate Reception Centre, Day Release, Crew 41 (script updated)
 - [ ] **T19d** `todo` Traits re-roll per floor
   - Why: Recognising the monster never tells you how to survive it
 - [ ] **T19e** `todo` Monsters slip away and reappear out of view
@@ -243,6 +248,7 @@
   - To do: Your direction: more dishevelled - a coffee stain, half the shirt tail untucked, the tie half undone, like he doesn't take care of himself
 - [ ] **T20c** `todo` Longer blackouts before the car comes
   - Why: Once the lights start dimming, the dark should hold longer while you wait for the lift
+  - To do: Your answer: make the car take longer to arrive so a few blinks come before the full blackout (today about 2 blinks on average)
 - [ ] **T20h** `todo` A bit more stamina, monsters paced to match
   - Why: You can run a little longer, and the monsters are retuned so they stay just as dangerous
 - [ ] **T15m** `doing` Playroom tuning from your play
@@ -263,7 +269,7 @@
   - Why: Four squares at the bottom of the screen, scroll or 1-4 to pick what is in your hand; the instrument is always in the other hand; store items take a slot
 - [ ] **T21b** `todo` The nerve bar
   - Why: Your nerve drops near monsters and in the dark, and a juice carton steadies you
-- [ ] **TB** `doing` Your second batch of sounds in the game
+- [ ] **TB** `todo` Your second batch of sounds in the game
   - Why: The Annex, the Playroom and the crew get their own recorded sounds: staplers, office tone, the music box, squeaky tiles, the ball pit, the Minder's wheeze, breathing that isn't wet
 - [ ] **T11a** `todo` A whole run with bots, headless
   - Why: Proof the build plays end to end, from the Clinic to day 2
@@ -318,6 +324,11 @@
   - To do: Plan: (1) a connection test in the lobby that says plainly whether a direct link to the host works and what kind of router each side has, plus a short note the owner can send a friend to try it this week; (2) a relay (TURN) path for the pairs that cannot link directly. The public build is a static site in a public repo, so the relay's secret cannot live in it: use a provider that hands out short-lived credentials through a tiny free hosted function the owner deploys, or a free-tier static credential that is quota-limited. Research current free offerings first, then give the owner exact sign-up steps on the Questions page. (3) Also warn in the lobby that the host must keep the game tab in front (a background tab stalls the run).
   - To do: Owner (2026-11-16): 'We can definitely run a server on either mo's pc or the homelab pc... server should just be responsible for handling client updates and keeping everyone in sync.' This changes the plan: the game's host logic already runs without a browser (it does in the tests), so a small always-on game server on the lab box can host every run. Friends then connect to it, nobody's router has to accept a direct link, no relay account is needed, and the host's tab going to the background no longer stalls the run. Open point: friends are outside the tailnet, so the server needs one public door; that choice is the owner's (question server-door).
   - To do: Superseded by P3 (the home server in Godot) after the owner chose to play the Godot build on Friday. No relay is being built for the old browser game.
+- [ ] **TP** `todo` Bring the build checks up to the new rules
+  - Why: The build that carries your 0833 fixes can't reach play/ until the scripted playthroughs agree with the new rules (the Orderly drawn in the dark, downs, the longer blackout)
+  - To do: playthrough.mjs: the blackout and dark checks still expect the Orderly hidden; owner said draw it (T20a)
+  - To do: playthrough.mjs: alone, being caught in the longer, faster blackout now means down, out and the wipe; the run then rides away and every later check fails
+  - To do: sound_web.mjs: blackout never seen, so the hum-silent and emergency-drone checks fail; same cause
 
 ## Gates
 
@@ -356,9 +367,25 @@
 - 2026-11-17: Day quota, ready-up and findables designed (docs/floors/findables-and-day.md). Six questions on the Questions page; building on the recommended defaults until you answer.
 - 2026-11-17: Your answers applied: Lonely as designed (solo Annex: Lonely but slower than one player); eye marks shown; F for cabinets; relocation as designed and on for the Minder (wanders, grabs within 1 m, hunts once angered, voice says don't run); day quota counts everything earned; a wipe is the missed day; juice carton AND a nerve bar; a 4-slot inventory; quick noisy search; ready-up as recommended; the car waits while anyone is aboard, and a returning car waits 30 s, then anyone left out dies and wakes in the prison without their credits.
 - 2026-11-17: Live settings designed (docs/floors/live-settings.md): 59 settings in six groups, F8 opens the host panel. Five questions on the Questions page; building on the recommended defaults.
+- 2026-11-17: Your answers applied: blackout 20-24 s and a longer wait for the car so a few blinks come first; left-out players wake with the crew; monsters at 3.8; live settings as recommended; all hints recorded in both voices; better story names coming; left-out players keep their bed but draw a new face and get a new number (the next monster wears the old face); the bedtime tape plays on the ride up and the car waits for it unless most skip. Voice cap raised to 100,000 characters.
 
 ## Activity (newest first)
 
+- 2026-11-17 21:47Z Finished T19c: The Temp's own mechanic.
+- 2026-11-17 21:47Z Promote check of a84aa2b: tests 230/230, play_down 24/24, net_local 10/10, mix 45/45 green; play_web 31/42, play_desktop 34/46 and sound_web red. The checks predate the 0833 rule changes; a builder brings them up to date before the promote
+- 2026-11-17 21:47Z Added task TP: Bring the build checks up to the new rules.
+- 2026-11-17 21:34Z Playroom tuning is built (30-45 s to hide, ball-pit view, anger bar, the 1 m grab); it waits for its check after the Lonely merge
+- 2026-11-17 21:34Z The Temp's Lonely rule passed its check (230 quick tests, two deliberate breaks caught) and is being merged into main
+- 2026-11-17 21:34Z Started T24: The story: the tape, the nightly tapes and the clues. A builder is making the VCR orientation tape now: blue and yellow, narrated, with a video you can watch here when it is done
+- 2026-11-17 21:26Z Paused T24: waiting for Script final with your names. The VCR tape (ST1, recorded narration) goes to the next free builder, first in line
+- 2026-11-17 21:14Z Paused T25: waiting for Planned; starts with the next free builder (high priority for Friday)
+- 2026-11-17 21:14Z Added task T25: Crash reports, metrics and a same-night hotfix.
+- 2026-11-17 21:12Z Took a default: Your answers applied: blackout 20-24 s and a longer wait for the car so a few blinks come first; left-out players wake with the crew; monsters at 3.8; live settings as recommended; all hints recorded in both voices; better story names coming; left-out players keep their bed but draw a new face and get a new number (the next monster wears the old face); the bedtime tape plays on the ride up and the car waits for it unless most skip. Voice cap raised to 100,000 characters.
+- 2026-11-17 21:12Z Applied the owner's new answers.
+- 2026-11-17 21:07Z Everything from today is in the main code and pushed: down and heal, the two-watcher Orderly, monsters slipping away, hiding everywhere, your quick fixes and your second batch of sounds. A full build check is running before it becomes your playable build.
+- 2026-11-17 21:07Z Paused TB: waiting for Merged into main and pushed. In the build check now
+- 2026-11-17 20:58Z Paused T24: waiting for Written: the story (the city Datum, the company Upwell, the sealed district Lowfield, crews before you), a 68-second orientation tape in 21 shots, three bedtime tapes for Friday, 14 notes and clues on each monster. Four questions on your Questions page. Building waits for your OK on the tape script
+- 2026-11-17 20:53Z Paused TB: waiting for Checked green (three mix runs in a row, breathing builds from 27 m, the beds dip under the voice every time). Merging into main and pushing
 - 2026-11-17 20:49Z Started T23: The announcer's hints. An Opus builder is recording the 38 hints in both voices and wiring the ones whose moments exist in the game today
 - 2026-11-17 20:49Z Started T19c: The Temp's own mechanic. Built: the Temp now hunts whoever is alone (nobody within 8 m and nobody in sight within 20 m), chases at 3.9 m/s, breaks off the moment you have company and slips away to someone else, leaving a 'Gone to see' note. A Sonnet agent is re-running the checks
 - 2026-11-17 20:47Z Started T24: The story: the tape, the nightly tapes and the clues. Fable is writing the story bible, the orientation tape script and storyboard, the nightly tapes, the notes and the clues
@@ -384,18 +411,3 @@
 - 2026-11-17 19:54Z Started T20a: The Orderly stays visible in the dark. Built; a Sonnet agent is re-running its checks (restarted after the pause)
 - 2026-11-17 19:54Z Paused T19b: waiting for Being merged into the main code now with its tests (relocation now also avoids landing on hiding spots)
 - 2026-11-17 17:50Z Paused T19e: waiting for Merged into main and pushed (219 quick tests, relocation/watchers/downs full tests, 3-player network 10/10, down check 24/24). Goes into your next build
-- 2026-11-17 17:33Z Paused T19e: waiting for Checked green; merge into main committing now with its tests (background b4axi33yd); verify and push when usage resets
-- 2026-11-17 17:33Z Paused T20f: waiting for Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets
-- 2026-11-17 17:33Z Paused T20h: waiting for Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets
-- 2026-11-17 17:33Z Paused T20c: waiting for Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets
-- 2026-11-17 17:33Z Paused T20a: waiting for Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets
-- 2026-11-17 17:33Z Paused TB: waiting for Paused: usage limit reached; the mix fix was in progress (worktree-agent-a9d98f0ff17540e95). Restart when usage resets
-- 2026-11-17 17:33Z Paused T19c: waiting for Paused: usage limit reached; builder stopped early (worktree-agent-ab87781c91fa45e54). Restart when usage resets
-- 2026-11-17 17:33Z Paused T19e: waiting for Checked: 216 quick tests, 98 relocations over 80 floors all fair, stored results unchanged, both deliberate breaks red. Being merged into the main code
-- 2026-11-17 17:33Z Paused T16k: waiting for Modelled and judged twice (round 2 fixes made: soft untucked tail, a hunched lopsided outline, the sheet covering every edge). Merged into the main code. Waits for your Mixamo animations: assets_src/mixamo/export/temp.fbx
-- 2026-11-17 17:33Z New pictures for T16k: The Temp as a proper Blender figure.
-- 2026-11-17 17:24Z Paused T19a: waiting for Merged into main and pushed with its network check; goes into your next build
-- 2026-11-17 17:24Z Started T19c: The Temp's own mechanic. An Opus builder is making the Temp's own rule, Lonely: it hunts whoever is out of sight of everyone and far from them, slightly faster than walking, and slips away once you rejoin someone
-- 2026-11-17 17:24Z Started T20f: Controls card and a ready-up screen. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks
-- 2026-11-17 17:24Z Started T20h: A bit more stamina, monsters paced to match. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks
-- 2026-11-17 17:24Z Started T20c: Longer blackouts before the car comes. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks

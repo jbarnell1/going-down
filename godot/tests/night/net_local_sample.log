@@ -1,0 +1,102 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+[16:26:10] Going Down server listening on 127.0.0.1:4491 (one room, at most 8 players), build e2e-build
+{"gd":1,"t":"2026-11-17T22:26:10Z","night":"bc5c46a6","ev":"start","build":"e2e-build","port":4491}
+[16:26:11] c1 joined from address 80803f64
+{"gd":1,"t":"2026-11-17T22:26:11Z","night":"bc5c46a6","ev":"join","id":"c1","name":"B","build":"e2e-build","addr":"80803f64"}
+[16:26:11] c2 joined from address 80803f64
+{"gd":1,"t":"2026-11-17T22:26:11Z","night":"bc5c46a6","ev":"join","id":"c2","name":"A","build":"e2e-build","addr":"80803f64"}
+[16:26:11] c3 joined from address 80803f64
+{"gd":1,"t":"2026-11-17T22:26:11Z","night":"bc5c46a6","ev":"join","id":"c3","name":"C","build":"e2e-build","addr":"80803f64"}
+{"gd":1,"t":"2026-11-17T22:26:11Z","night":"bc5c46a6","ev":"hb","id":"c2","name":"A","data":{"avg_ms":16.7,"build":"e2e-build","errors":1.0,"fps":60.0,"mode":"lobby","os":"Windows","ping_ms":100.0,"worst_ms":30.0}}
+{"gd":1,"t":"2026-11-17T22:26:11Z","night":"bc5c46a6","ev":"clog","id":"c2","name":"A","line":"err net_local test error from every player (res://tests/net_e2e_client.gd:1 _tell)"}
+{"gd":1,"t":"2026-11-17T22:26:11Z","night":"bc5c46a6","ev":"report","id":"c2","name":"A","kind":"rep","rid":1,"part":0,"parts":1,"body":"player pressed F9 at A, lobby (net_local test)\na line before it"}
+[16:26:11] run 1 started with 3 players
+{"gd":1,"t":"2026-11-17T22:26:11Z","night":"bc5c46a6","ev":"run","run":1,"seed":"e2e-1","players":["B","A","C"]}
+{"gd":1,"t":"2026-11-17T22:26:11Z","night":"bc5c46a6","ev":"hb","id":"c1","name":"B","data":{"avg_ms":16.7,"build":"e2e-build","errors":1.0,"fps":60.0,"mode":"lobby","os":"Windows","ping_ms":300.0,"worst_ms":50.0}}
+{"gd":1,"t":"2026-11-17T22:26:11Z","night":"bc5c46a6","ev":"clog","id":"c1","name":"B","line":"err net_local test error from every player (res://tests/net_e2e_client.gd:1 _tell)"}
+{"gd":1,"t":"2026-11-17T22:26:11Z","night":"bc5c46a6","ev":"report","id":"c1","name":"B","kind":"rep","rid":1,"part":0,"parts":1,"body":"player pressed F9 at B, lobby (net_local test)\na line before it"}
+{"gd":1,"t":"2026-11-17T22:26:12Z","night":"bc5c46a6","ev":"hb","id":"c3","name":"C","data":{"avg_ms":16.7,"build":"e2e-build","errors":1.0,"fps":60.0,"mode":"lobby","os":"Windows","ping_ms":600.0,"worst_ms":80.0}}
+{"gd":1,"t":"2026-11-17T22:26:12Z","night":"bc5c46a6","ev":"clog","id":"c3","name":"C","line":"err net_local test error from every player (res://tests/net_e2e_client.gd:1 _tell)"}
+{"gd":1,"t":"2026-11-17T22:26:12Z","night":"bc5c46a6","ev":"report","id":"c3","name":"C","kind":"rep","rid":1,"part":0,"parts":1,"body":"player pressed F9 at C, lobby (net_local test)\na line before it"}
+{"gd":1,"t":"2026-11-17T22:26:16Z","night":"bc5c46a6","ev":"game","run":1,"type":"carLeft","depth":1,"reason":"unloaded"}
+[16:26:20] players 3, pending 0, run 1, ticks 175, 3.119 ms a tick (worst 35.49 ms), refused {"auth":0,"backoff":0,"flood":0,"full":0,"idle":0,"pending":0,"protocol":0,"too_big":0,"version":0}
+{"gd":1,"t":"2026-11-17T22:26:20Z","night":"bc5c46a6","ev":"tick","ticks":175,"ms":3.119,"worst":35.49,"players":3}
+[16:26:30] players 3, pending 0, run 1, ticks 375, 3.389 ms a tick (worst 11.27 ms), refused {"auth":0,"backoff":0,"flood":0,"full":0,"idle":0,"pending":0,"protocol":0,"too_big":0,"version":0}
+{"gd":1,"t":"2026-11-17T22:26:30Z","night":"bc5c46a6","ev":"tick","ticks":200,"ms":3.624,"worst":11.27,"players":3}
+[16:26:40] players 3, pending 0, run 1, ticks 575, 3.188 ms a tick (worst 7.55 ms), refused {"auth":0,"backoff":0,"flood":0,"full":0,"idle":0,"pending":0,"protocol":0,"too_big":0,"version":0}
+{"gd":1,"t":"2026-11-17T22:26:40Z","night":"bc5c46a6","ev":"tick","ticks":200,"ms":2.812,"worst":7.56,"players":3}
+{"gd":1,"t":"2026-11-17T22:26:49Z","night":"bc5c46a6","ev":"game","run":1,"type":"caught","depth":1,"player":"C"}
+{"gd":1,"t":"2026-11-17T22:26:49Z","night":"bc5c46a6","ev":"game","run":1,"type":"downed","depth":1,"by":"catch","player":"C"}
+[16:26:50] players 3, pending 0, run 1, ticks 775, 3.065 ms a tick (worst 5.92 ms), refused {"auth":0,"backoff":0,"flood":0,"full":0,"idle":0,"pending":0,"protocol":0,"too_big":0,"version":0}
+{"gd":1,"t":"2026-11-17T22:26:50Z","night":"bc5c46a6","ev":"tick","ticks":200,"ms":2.71,"worst":5.92,"players":3}
+{"gd":1,"t":"2026-11-17T22:26:59Z","night":"bc5c46a6","ev":"game","run":1,"type":"out","depth":1,"player":"C"}
+[16:27:00] players 3, pending 0, run 1, ticks 975, 2.994 ms a tick (worst 7.49 ms), refused {"auth":0,"backoff":0,"flood":0,"full":0,"idle":0,"pending":0,"protocol":0,"too_big":0,"version":0}
+{"gd":1,"t":"2026-11-17T22:27:00Z","night":"bc5c46a6","ev":"tick","ticks":200,"ms":2.718,"worst":7.49,"players":3}
+{"gd":1,"t":"2026-11-17T22:27:00Z","night":"bc5c46a6","ev":"game","run":1,"type":"caught","depth":1,"player":"A"}
+{"gd":1,"t":"2026-11-17T22:27:00Z","night":"bc5c46a6","ev":"game","run":1,"type":"downed","depth":1,"by":"catch","player":"A"}
+{"gd":1,"t":"2026-11-17T22:27:02Z","night":"bc5c46a6","ev":"game","run":1,"type":"carArrived","depth":1,"wait":46.0499999999993}
+[16:27:10] players 3, pending 0, run 1, ticks 1175, 2.995 ms a tick (worst 7.64 ms), refused {"auth":0,"backoff":0,"flood":0,"full":0,"idle":0,"pending":0,"protocol":0,"too_big":0,"version":0}
+{"gd":1,"t":"2026-11-17T22:27:10Z","night":"bc5c46a6","ev":"tick","ticks":200,"ms":2.999,"worst":7.64,"players":3}
+{"gd":1,"t":"2026-11-17T22:27:10Z","night":"bc5c46a6","ev":"game","run":1,"type":"out","depth":1,"player":"A"}
+[16:27:20] players 3, pending 0, run 1, ticks 1375, 2.939 ms a tick (worst 5.43 ms), refused {"auth":0,"backoff":0,"flood":0,"full":0,"idle":0,"pending":0,"protocol":0,"too_big":0,"version":0}
+{"gd":1,"t":"2026-11-17T22:27:20Z","night":"bc5c46a6","ev":"tick","ticks":200,"ms":2.61,"worst":5.43,"players":3}
+[16:27:30] players 3, pending 0, run 1, ticks 1575, 2.888 ms a tick (worst 8.69 ms), refused {"auth":0,"backoff":0,"flood":0,"full":0,"idle":0,"pending":0,"protocol":0,"too_big":0,"version":0}
+{"gd":1,"t":"2026-11-17T22:27:30Z","night":"bc5c46a6","ev":"tick","ticks":200,"ms":2.543,"worst":8.69,"players":3}
+{"gd":1,"t":"2026-11-17T22:27:32Z","night":"bc5c46a6","ev":"game","run":1,"type":"banked","depth":1,"total":0.0}
+{"gd":1,"t":"2026-11-17T22:27:32Z","night":"bc5c46a6","ev":"game","run":1,"type":"dayEnded","depth":1}
+{"gd":1,"t":"2026-11-17T22:27:32Z","night":"bc5c46a6","ev":"game","run":1,"type":"carLeft","depth":1,"reason":"up"}
+{"gd":1,"t":"2026-11-17T22:27:35Z","night":"bc5c46a6","ev":"leave","id":"c2","name":"A","code":1000,"reason":"bye","secs":84.1}
+{"gd":1,"t":"2026-11-17T22:27:35Z","night":"bc5c46a6","ev":"leave","id":"c1","name":"B","code":1000,"reason":"bye","secs":84.2}
+[16:27:35] run 1 over, back to the lobby
+{"gd":1,"t":"2026-11-17T22:27:35Z","night":"bc5c46a6","ev":"leave","id":"c3","name":"C","code":1000,"reason":"bye","secs":84.4}
+{"gd":1,"t":"2026-11-17T22:27:35Z","night":"bc5c46a6","ev":"runEnd","run":1}
+[16:27:37] c4 joined from address 80803f64
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"join","id":"c4","name":"probe","build":"e2e-build","addr":"80803f64"}
+[16:27:37] c5 joined from address 80803f64
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"join","id":"c5","name":"probe","build":"e2e-build","addr":"80803f64"}
+[16:27:37] c6 joined from address 80803f64
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"join","id":"c6","name":"probe","build":"e2e-build","addr":"80803f64"}
+[16:27:37] c7 joined from address 80803f64
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"join","id":"c7","name":"probe","build":"e2e-build","addr":"80803f64"}
+[16:27:37] c8 joined from address 80803f64
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"join","id":"c8","name":"probe","build":"e2e-build","addr":"80803f64"}
+[16:27:37] c9 joined from address 80803f64
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"join","id":"c9","name":"probe","build":"e2e-build","addr":"80803f64"}
+[16:27:37] c10 joined from address 80803f64
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"join","id":"c10","name":"probe","build":"e2e-build","addr":"80803f64"}
+[16:27:37] c11 joined from address 80803f64
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"join","id":"c11","name":"probe","build":"e2e-build","addr":"80803f64"}
+[16:27:37] refused a connection from address 80803f64: the room is full
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"refused","counts":{"full":1}}
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"leave","id":"c4","name":"probe","code":1000,"reason":"","secs":0.4}
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"leave","id":"c5","name":"probe","code":1000,"reason":"","secs":0.4}
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"leave","id":"c6","name":"probe","code":1000,"reason":"","secs":0.3}
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"leave","id":"c7","name":"probe","code":1000,"reason":"","secs":0.3}
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"leave","id":"c8","name":"probe","code":1000,"reason":"","secs":0.2}
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"leave","id":"c9","name":"probe","code":1000,"reason":"","secs":0.2}
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"leave","id":"c10","name":"probe","code":1000,"reason":"","secs":0.1}
+{"gd":1,"t":"2026-11-17T22:27:37Z","night":"bc5c46a6","ev":"leave","id":"c11","name":"probe","code":1000,"reason":"","secs":0.1}
+[16:27:38] c12 joined from address 80803f64
+{"gd":1,"t":"2026-11-17T22:27:38Z","night":"bc5c46a6","ev":"join","id":"c12","name":"probe","build":"e2e-build","addr":"80803f64"}
+{"gd":1,"t":"2026-11-17T22:27:38Z","night":"bc5c46a6","ev":"leave","id":"c12","name":"probe","code":4003,"reason":"message too big","secs":0.0}
+{"gd":1,"t":"2026-11-17T22:27:38Z","night":"bc5c46a6","ev":"refused","counts":{"too_big":1}}
+[16:27:40] c13 joined from address 80803f64
+{"gd":1,"t":"2026-11-17T22:27:40Z","night":"bc5c46a6","ev":"join","id":"c13","name":"probe","build":"e2e-build","addr":"80803f64"}
+{"gd":1,"t":"2026-11-17T22:27:40Z","night":"bc5c46a6","ev":"leave","id":"c13","name":"probe","code":4004,"reason":"too many messages","secs":0.0}
+{"gd":1,"t":"2026-11-17T22:27:40Z","night":"bc5c46a6","ev":"refused","counts":{"flood":1}}
+[16:27:40] players 0, pending 1, run none, ticks 1685, 2.873 ms a tick (worst 9.99 ms), refused {"auth":0,"backoff":0,"flood":1,"full":1,"idle":0,"pending":0,"protocol":0,"too_big":1,"version":0}
+{"gd":1,"t":"2026-11-17T22:27:40Z","night":"bc5c46a6","ev":"tick","ticks":110,"ms":2.657,"worst":9.99,"players":0}
+[16:27:41] c14 joined from address 80803f64
+{"gd":1,"t":"2026-11-17T22:27:41Z","night":"bc5c46a6","ev":"join","id":"c14","name":"probe","build":"e2e-build","addr":"80803f64"}
+{"gd":1,"t":"2026-11-17T22:27:41Z","night":"bc5c46a6","ev":"leave","id":"c14","name":"probe","code":4005,"reason":"bad message","secs":0.0}
+{"gd":1,"t":"2026-11-17T22:27:41Z","night":"bc5c46a6","ev":"refused","counts":{"protocol":1}}
+[16:27:42] refused a connection from address 80803f64: build an-old-build, this server is e2e-build
+{"gd":1,"t":"2026-11-17T22:27:42Z","night":"bc5c46a6","ev":"refused","counts":{"version":1}}
+[16:27:44] refused a connection from address 80803f64: no valid passphrase
+{"gd":1,"t":"2026-11-17T22:27:44Z","night":"bc5c46a6","ev":"refused","counts":{"auth":1}}
+[16:27:44] refused a connection from address 80803f64: no valid passphrase
+{"gd":1,"t":"2026-11-17T22:27:44Z","night":"bc5c46a6","ev":"refused","counts":{"auth":1}}
+[16:27:44] refused a connection from address 80803f64: no valid passphrase
+{"gd":1,"t":"2026-11-17T22:27:44Z","night":"bc5c46a6","ev":"refused","counts":{"auth":1}}
+{"gd":1,"t":"2026-11-17T22:27:44Z","night":"bc5c46a6","ev":"refused","counts":{"backoff":1}}

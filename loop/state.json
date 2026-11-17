@@ -4,14 +4,14 @@
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
   "iteration": 67,
-  "now": "T23",
-  "nowText": "An Opus builder is recording the 38 hints in both voices and wiring the ones whose moments exist in the game today",
+  "now": "T24",
+  "nowText": "A builder is making the VCR orientation tape now: blue and yellow, narrated, with a video you can watch here when it is done",
   "ci": {
     "status": "passed",
     "commit": "cb7c7a0",
     "at": "2026-11-17T16:04:16.993Z"
   },
-  "answersAppliedTo": "2026-11-17T15:39:30.665Z",
+  "answersAppliedTo": "2026-11-17T21:11:49.720Z",
   "tasks": [
     {
       "id": "T0",
@@ -2201,7 +2201,7 @@
       "id": "T19c",
       "title": "The Temp's own mechanic",
       "why": "No two monsters share a rule: the Temp needs its own way to hunt and to be recorded",
-      "status": "doing",
+      "status": "done",
       "gates": [],
       "ns": [
         "B1",
@@ -2209,7 +2209,11 @@
       ],
       "startedAt": "2026-11-17T17:24:07.172Z",
       "doingText": "Built: the Temp now hunts whoever is alone (nobody within 8 m and nobody in sight within 20 m), chases at 3.9 m/s, breaks off the moment you have company and slips away to someone else, leaving a 'Gone to see' note. A Sonnet agent is re-running the checks",
-      "doingAt": "2026-11-17T20:49:16.078Z"
+      "doingAt": "2026-11-17T20:49:16.078Z",
+      "nsCheck": "A Temp that hunts only the lonely: it chases a player with nobody in sight, breaks off when company comes and leaves a 'Gone to see' note, as the owner approved ('Lonely as designed'). Not yet tuned: chase 3.9 vs pacing is the owner's call.",
+      "finishedAt": "2026-11-17T21:47:20.996Z",
+      "summary": "Merged as e54eed3. Checker: quick 230/230, the Lonely/Temp/notes/relocate tests 25/25, ref_* 18/18 with 0 values differing, net_local 10/10, play_down 24/24; two deliberate breaks (company never seen; every holder may record) each turned two tests red. Merged with the 0833 fixes by hand (Lonely is the last rules switch); 241/241 on the merge commit.",
+      "todo": []
     },
     {
       "id": "T22",
@@ -2222,6 +2226,16 @@
       "startedAt": "2026-11-17T20:23:31.311Z",
       "doingText": "Designed (59 settings in six groups, F8 opens the host panel). An Opus builder is making the settings list and wiring the first ten: each monster's speed, the lift's return, the down timer",
       "doingAt": "2026-11-17T20:34:56.073Z"
+    },
+    {
+      "id": "T25",
+      "title": "Crash reports, metrics and a same-night hotfix",
+      "why": "If something breaks on game night we see exactly what happened on whose PC, fix it, and send everyone a new build within minutes",
+      "status": "todo",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "new from the owner on 17 Nov: tooling for game night, amendment recorded",
+      "waiting": "Planned; starts with the next free builder (high priority for Friday)"
     },
     {
       "id": "T23",
@@ -2247,8 +2261,12 @@
         "H5"
       ],
       "startedAt": "2026-11-17T20:47:49.167Z",
-      "doingText": "Fable is writing the story bible, the orientation tape script and storyboard, the nightly tapes, the notes and the clues",
-      "doingAt": "2026-11-17T20:47:49.168Z"
+      "todo": [
+        "Your answers: better names (Fable proposing); left out = keep your bed, draw a new face, get a new number, and the next monster wears your old face; bedtime tape on the lift monitor during the ride up, the car waits for it unless over half skip; tape shot 16: the diamond body for two frames, then one more two-frame flicker",
+        "Names chosen: Lidgate, the Soke, Continuance, 'Leave it with us.', Lidgate Reception Centre, Day Release, Crew 41 (script updated)"
+      ],
+      "doingText": "A builder is making the VCR orientation tape now: blue and yellow, narrated, with a video you can watch here when it is done",
+      "doingAt": "2026-11-17T21:34:10.080Z"
     },
     {
       "id": "T19d",
@@ -2383,7 +2401,10 @@
         "B4"
       ],
       "startedAt": "2026-11-17T16:12:27.188Z",
-      "waiting": "Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build"
+      "waiting": "Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build",
+      "todo": [
+        "Your answer: make the car take longer to arrive so a few blinks come before the full blackout (today about 2 blinks on average)"
+      ]
     },
     {
       "id": "T20h",
@@ -2486,15 +2507,14 @@
       "id": "TB",
       "title": "Your second batch of sounds in the game",
       "why": "The Annex, the Playroom and the crew get their own recorded sounds: staplers, office tone, the music box, squeaky tiles, the ball pit, the Minder's wheeze, breathing that isn't wet",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "B11",
         "A11"
       ],
       "startedAt": "2026-11-17T13:49:58.420Z",
-      "doingText": "The sound builder is back on the mix fix after the pause",
-      "doingAt": "2026-11-17T19:54:05.383Z"
+      "waiting": "Merged into main and pushed. In the build check now"
     },
     {
       "id": "T11a",
@@ -2875,6 +2895,20 @@
       ],
       "ns": [],
       "nsWhy": "Foundations: how friends connect; the owner said everyone plays from their own house"
+    },
+    {
+      "id": "TP",
+      "title": "Bring the build checks up to the new rules",
+      "why": "The build that carries your 0833 fixes can't reach play/ until the scripted playthroughs agree with the new rules (the Orderly drawn in the dark, downs, the longer blackout)",
+      "status": "todo",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "tooling: the playthrough scripts that gate a promote",
+      "todo": [
+        "playthrough.mjs: the blackout and dark checks still expect the Orderly hidden; owner said draw it (T20a)",
+        "playthrough.mjs: alone, being caught in the longer, faster blackout now means down, out and the wipe; the run then rides away and every later check fails",
+        "sound_web.mjs: blackout never seen, so the hum-silent and emergency-drone checks fail; same cause"
+      ]
     }
   ],
   "gates": [
@@ -3050,9 +3084,88 @@
     {
       "at": "2026-11-17T20:33:26.160Z",
       "text": "Live settings designed (docs/floors/live-settings.md): 59 settings in six groups, F8 opens the host panel. Five questions on the Questions page; building on the recommended defaults."
+    },
+    {
+      "at": "2026-11-17T21:12:37.151Z",
+      "text": "Your answers applied: blackout 20-24 s and a longer wait for the car so a few blinks come first; left-out players wake with the crew; monsters at 3.8; live settings as recommended; all hints recorded in both voices; better story names coming; left-out players keep their bed but draw a new face and get a new number (the next monster wears the old face); the bedtime tape plays on the ride up and the car waits for it unless most skip. Voice cap raised to 100,000 characters."
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-17T21:47:20.997Z",
+      "text": "Finished T19c: The Temp's own mechanic.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-17T21:47:05.788Z",
+      "text": "Promote check of a84aa2b: tests 230/230, play_down 24/24, net_local 10/10, mix 45/45 green; play_web 31/42, play_desktop 34/46 and sound_web red. The checks predate the 0833 rule changes; a builder brings them up to date before the promote",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T21:47:05.346Z",
+      "text": "Added task TP: Bring the build checks up to the new rules.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T21:34:10.301Z",
+      "text": "Playroom tuning is built (30-45 s to hide, ball-pit view, anger bar, the 1 m grab); it waits for its check after the Lonely merge",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T21:34:10.189Z",
+      "text": "The Temp's Lonely rule passed its check (230 quick tests, two deliberate breaks caught) and is being merged into main",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T21:34:10.081Z",
+      "text": "Started T24: The story: the tape, the nightly tapes and the clues. A builder is making the VCR orientation tape now: blue and yellow, narrated, with a video you can watch here when it is done",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T21:26:55.075Z",
+      "text": "Paused T24: waiting for Script final with your names. The VCR tape (ST1, recorded narration) goes to the next free builder, first in line",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T21:14:19.491Z",
+      "text": "Paused T25: waiting for Planned; starts with the next free builder (high priority for Friday)",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T21:14:19.346Z",
+      "text": "Added task T25: Crash reports, metrics and a same-night hotfix.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T21:12:37.152Z",
+      "text": "Took a default: Your answers applied: blackout 20-24 s and a longer wait for the car so a few blinks come first; left-out players wake with the crew; monsters at 3.8; live settings as recommended; all hints recorded in both voices; better story names coming; left-out players keep their bed but draw a new face and get a new number (the next monster wears the old face); the bedtime tape plays on the ride up and the car waits for it unless most skip. Voice cap raised to 100,000 characters.",
+      "kind": "decision"
+    },
+    {
+      "at": "2026-11-17T21:12:37.027Z",
+      "text": "Applied the owner's new answers.",
+      "kind": "answers"
+    },
+    {
+      "at": "2026-11-17T21:07:39.211Z",
+      "text": "Everything from today is in the main code and pushed: down and heal, the two-watcher Orderly, monsters slipping away, hiding everywhere, your quick fixes and your second batch of sounds. A full build check is running before it becomes your playable build.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T21:07:39.108Z",
+      "text": "Paused TB: waiting for Merged into main and pushed. In the build check now",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T20:58:20.219Z",
+      "text": "Paused T24: waiting for Written: the story (the city Datum, the company Upwell, the sealed district Lowfield, crews before you), a 68-second orientation tape in 21 shots, three bedtime tapes for Friday, 14 notes and clues on each monster. Four questions on your Questions page. Building waits for your OK on the tape script",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T20:53:52.277Z",
+      "text": "Paused TB: waiting for Checked green (three mix runs in a row, breathing builds from 27 m, the beds dip under the voice every time). Merging into main and pushing",
+      "kind": "note"
+    },
     {
       "at": "2026-11-17T20:49:16.165Z",
       "text": "Started T23: The announcer's hints. An Opus builder is recording the 38 hints in both voices and wiring the ones whose moments exist in the game today",
@@ -3977,81 +4090,6 @@
       "at": "2026-11-17T09:44:49.933Z",
       "text": "Started T7g: Crewmates in motion: no foot sliding, name tags readable at 8 m, drawn faces on the mask screens. A Sonnet agent is checking crewmate motion (foot slip 0.8-4.3% headless, under 15% live) and the close-only name tags",
       "kind": "start"
-    },
-    {
-      "at": "2026-11-17T09:44:49.762Z",
-      "text": "New pictures for T7g: Crewmates in motion: no foot sliding, name tags readable at 8 m, drawn faces on the mask screens.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T09:44:49.659Z",
-      "text": "New pictures for T7g: Crewmates in motion: no foot sliding, name tags readable at 8 m, drawn faces on the mask screens.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T09:40:13.027Z",
-      "text": "Started TA: Real sounds, and comedy sounds. Merged; the combined pre-build check is running",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T09:40:12.820Z",
-      "text": "Your recorded sounds passed their check (mix held over three runs, scares +3.1 to +3.4 over the voice, both breaks red) and are merged. The Orderly's breathing, shriek and chewing now stay in the Clinic so the Temp and the Minder sound only like themselves. A combined check of the whole build, with a ride down to the Annex and the Playroom, runs before it goes into play/.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T09:31:19.951Z",
-      "text": "Started T18k: Bed and the day board on screen. An Opus builder is putting the day on screen: the ride up, HOLD F TO SLEEP, the bed count, lights out and the day board",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T09:31:19.812Z",
-      "text": "Started T18j: The day in the run: bank, ride up, sleep, day 2. A Sonnet agent is checking the day rules: three bots over a lossy link play two days and must agree with the host at every stop",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T09:25:18.950Z",
-      "text": "Finished T7e: Better-looking crewmates and readable name tags.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T09:25:18.831Z",
-      "text": "Started T7g: Crewmates in motion: no foot sliding, name tags readable at 8 m, drawn faces on the mask screens. An Opus builder is fixing foot sliding, the creep walk, name tags and face screens (moved here from T7e)",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T09:25:18.668Z",
-      "text": "Added task T7g: Crewmates in motion: no foot sliding, name tags readable at 8 m, drawn faces on the mask screens.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T09:19:18.024Z",
-      "text": "The floor order passed its separate check: every floor matched between host and player, the Temp never moved while seen, the Minder never froze, four deliberate breaks all red, desktop 39/39, two-player 33, browser 35. Merged with the 4 m lift.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T09:19:17.908Z",
-      "text": "Paused T6f: waiting for checked (4 m by 4 m, 1.8 m door, 225 floors) and merged (beb4fed); promoted with the next build",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T09:19:17.793Z",
-      "text": "Paused T16e: waiting for checked and merged (beb4fed); promoted to the build you play together with the sounds once their check finishes",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T08:42:25.883Z",
-      "text": "Started T15k: The Blender Minder in the game. An Opus builder is swapping the Playroom's stand-in for the Blender Minder",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T08:42:25.714Z",
-      "text": "Paused T15g: waiting for checked and merged; it goes into the game in T15k",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T08:42:25.563Z",
-      "text": "Added task T15k: The Blender Minder in the game.",
-      "kind": "note"
     }
   ]
 }
