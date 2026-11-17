@@ -8,9 +8,9 @@
 // the one a picture is saved in, is dropped and counted), and asserts:
 //   - slip at most SLIP_MAX of the body's travel for walk, backwards walk, run and creep;
 //   - the creep plays the sneak at a sensible rate (CREEP_RATE_MIN..MAX), not slowed to half speed;
-//   - Bob's name tag is on Ann's screen, fully opaque, at 8 m;
+//   - Bob's name tag shows only up close (main.gd TAG_RANGE): on Ann's screen at 1.5 m, not at 4 or 8 m;
 //   - Bob's mask on Ann's screen shows the face Bob drew.
-// Pictures (Ann's window as drawn) in export/shots/crew/: Bob walking at 4 m and 8 m, creeping, his face
+// Pictures (Ann's window as drawn) in export/shots/crew/: Bob walking at 4 m, standing at 1.5 m (his tag), creeping, his face
 // screen close up. Prints `N passed, M failed`; exit code 1 on any failure.
 //   node godot/tools/crew_check.mjs [--port=4470] [--break=rate|swing]
 // --break passes crewbreak= to Ann's game (CrewView.test_break): the slip checks must then fail.
@@ -164,8 +164,8 @@ try {
       dark ||= s.dark;
       for (const p of pics) {
         if (!shotAt[p.file] && Math.abs(d - p.at) < 0.45 && !s.dark && o?.motion?.clip === clip) {
-          shotAt[p.file] = { d, tagAlpha: o?.tagAlpha, tags: s.client.tags, clip: o?.motion?.clip };
-          await A.shot(p.file);
+          shotAt[p.file] = { d, tagAlpha: o?.tagAlpha, tags: s.client.tags, clip: o?.motion?.clip, range: s.client.tagRange };
+          if (!p.stateOnly) await A.shot(p.file);
           console.log(`    ${p.file}: Bob ${d.toFixed(2)} m away, clip ${o?.motion?.clip}, tag alpha ${o?.tagAlpha?.toFixed(2)}, tags ${JSON.stringify(s.client.tags)}`);
         }
       }
@@ -199,11 +199,28 @@ try {
   check('the creep plays a sneak at a sensible rate, not a slowed one', creep.rate >= CREEP_RATE_MIN && creep.rate <= CREEP_RATE_MAX, `${creep.rate.toFixed(2)}x (want ${CREEP_RATE_MIN}-${CREEP_RATE_MAX})`);
   // The pictures, on passes of their own.
   await stretch('back off for the pictures', '-1 0 0 0', (d) => d > 10, 'walk', [], false);
-  await stretch('walk toward Ann, pictures', '1 0 0 0', (d) => d < 3.2, 'walk', [{ file: 'bob-walking-8m.png', at: 8 }, { file: 'bob-walking-4m.png', at: 4 }]);
+  await stretch('walk toward Ann, pictures', '1 0 0 0', (d) => d < 1.6, 'walk',
+    [{ file: 'at-8m', at: 8, stateOnly: true }, { file: 'bob-walking-4m.png', at: 4 }]);
+  // Bob has stopped about 1.5 m from Ann: inside the tag range.
+  {
+    const s = await A.state();
+    await annLooks(s);
+    await sleep(200);
+    const s2 = await A.state();
+    const o = bobOn(s2);
+    shotAt['bob-1.5m.png'] = { d: apart(s2), tagAlpha: o?.tagAlpha, tags: s2.client.tags, clip: o?.motion?.clip, range: s2.client.tagRange };
+    await A.shot('bob-1.5m.png');
+    console.log(`    bob-1.5m.png: Bob ${apart(s2).toFixed(2)} m away, clip ${o?.motion?.clip}, tag alpha ${o?.tagAlpha?.toFixed(2)}, tags ${JSON.stringify(s2.client.tags)}`);
+  }
   await stretch('back off again', '-1 0 0 0', (d) => d > 7, 'walk', [], false);
   await stretch('creep toward Ann, picture', '1 0 0 1', (d) => d < 3, 'sneak', [{ file: 'bob-creeping-5m.png', at: 5 }]);
-  const at8 = shotAt['bob-walking-8m.png'];
-  check("Bob's name tag is on Ann's screen and fully readable at 8 m", !!at8 && at8.tags.includes('BOB') && at8.tagAlpha >= 0.99, at8 ? `at ${at8.d.toFixed(2)} m, alpha ${at8.tagAlpha?.toFixed(2)}` : 'no picture at 8 m');
+  // Name tags only up close (main.gd TAG_RANGE): who is who further off is for asking or walking up.
+  const at8 = shotAt['at-8m'];
+  const at15 = shotAt['bob-1.5m.png'];
+  const at4 = shotAt['bob-walking-4m.png'];
+  check("Bob's name tag is not on Ann's screen at 8 m or 4 m (beyond the tag range)", !!at8 && !!at4 && !at8.tags.includes('BOB') && !at4.tags.includes('BOB') && at8.tagAlpha === 0 && at4.tagAlpha === 0,
+    `range ${at8?.range} m; at ${at8?.d?.toFixed(2)} m alpha ${at8?.tagAlpha}, at ${at4?.d?.toFixed(2)} m alpha ${at4?.tagAlpha}`);
+  check("Bob's name tag is on Ann's screen, fully opaque, at 1.5 m", !!at15 && at15.tags.includes('BOB') && at15.tagAlpha >= 0.99, at15 ? `at ${at15.d.toFixed(2)} m, alpha ${at15.tagAlpha?.toFixed(2)}` : 'no picture at 1.5 m');
 
   // The face screen close up: Bob steps up to Ann and stands; Ann looks at his mask.
   await bobFacesAnn();

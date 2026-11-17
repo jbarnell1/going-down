@@ -21,6 +21,7 @@ const CREEP_RATE_MIN := 0.75
 const CREEP_RATE_MAX := 1.3
 const MASK_TOL := 0.06
 const SECONDS := 4.0
+const TURN_SECONDS := 1.5
 
 var view: CrewView
 var problems: Array[String] = []
@@ -48,19 +49,23 @@ func _run() -> void:
 		["walk", Stamina.WALK_SPEED, 90.0], ["walk", Stamina.WALK_SPEED, -45.0], ["walk", Stamina.WALK_SPEED, 180.0],
 		["sprint", Stamina.SPRINT_SPEED, 60.0], ["creep", Stamina.CREEP_SPEED, 90.0], ["creep", Stamina.CREEP_SPEED, 180.0],
 		["walk", 1.6, 0.0],
+		# Turning round and walking off at once (standing facing away, the look flips, the walk starts):
+		# measured over the first TURN_SECONDS only.
+		["walk", Stamina.WALK_SPEED, 0.0, true], ["sprint", Stamina.SPRINT_SPEED, 0.0, true],
 	]
 	var worst := 0.0
 	for c: Array in cases:
-		var r: Dictionary = await _drive(StringName(c[0]), float(c[1]), float(c[2]))
+		var turn := c.size() > 3 and bool(c[3])
+		var r: Dictionary = await _drive(StringName(c[0]), float(c[1]), float(c[2]), turn)
 		var ratio: float = r["ratio"]
 		worst = maxf(worst, ratio)
 		var ok := ratio <= SLIP_MAX
-		print("%s %-6s %.1f m/s, %4.0f deg from the look: clip %s at %.2fx%s, planted %.2f s, toe %.3f m/s against body %.3f m/s, slip %.1f %%" % [
-			"PASS" if ok else "FAIL", c[0], c[1], c[2], r["clip"], absf(r["rate"]), " reversed" if r["reverse"] else "", r["t"], r["footv"], r["bodyv"], 100.0 * ratio])
+		print("%s %-6s %.1f m/s, %4.0f deg from the look%s: clip %s at %.2fx%s, planted %.2f s, toe %.3f m/s against body %.3f m/s, slip %.1f %%" % [
+			"PASS" if ok else "FAIL", c[0], c[1], c[2], ", turning round first" if turn else "", r["clip"], absf(r["rate"]), " reversed" if r["reverse"] else "", r["t"], r["footv"], r["bodyv"], 100.0 * ratio])
 		if not ok:
 			problems.append("%s %.1f m/s at %.0f deg slips %.1f %% (limit %.0f %%)" % [c[0], c[1], c[2], 100.0 * ratio, 100.0 * SLIP_MAX])
-		if r["t"] < 0.5:
-			problems.append("%s at %.0f deg: a toe was planted only %.2f s in %.0f s (not measured)" % [c[0], c[2], r["t"], SECONDS])
+		if r["t"] < (0.25 if turn else 0.5):
+			problems.append("%s at %.0f deg: a toe was planted only %.2f s (not measured)" % [c[0], c[2], r["t"]])
 		if c[0] == "creep" and c[2] == 0.0:
 			var rate := absf(float(r["rate"]))
 			var rate_ok := rate >= CREEP_RATE_MIN and rate <= CREEP_RATE_MAX
@@ -95,22 +100,26 @@ func _run() -> void:
 	print("crew check: %s" % ("PASS" if problems.is_empty() else "FAIL, %d problems" % problems.size()))
 	quit(0 if problems.is_empty() else 1)
 
-# Looks along -Z (yaw 0) and moves at `deg` from it; settles one second, then measures SECONDS.
-func _drive(gait: StringName, sp: float, deg: float) -> Dictionary:
+# Looks along -Z (yaw 0) and moves at `deg` from it; settles one second, then measures SECONDS. With
+# `turn` it first stands looking the other way (yaw PI), and is measured from the first step for
+# TURN_SECONDS.
+func _drive(gait: StringName, sp: float, deg: float, turn := false) -> Dictionary:
 	var dir := Vector3(-sin(deg_to_rad(deg)), 0.0, -cos(deg_to_rad(deg)))
 	var pos := Vector3(50.0, 0.0, 50.0)
 	view.set_gait(&"still", 0.0)
-	view.set_body(pos, 0.0)
-	await _frames(30)
+	for i in 60:
+		view.set_body(pos, PI if turn else 0.0)
+		await process_frame
 	var dt := 1.0 / 60.0
 	var before := {}
 	var mask := Vector2(99.0, -99.0)
-	var n := int((1.0 + SECONDS) / dt)
+	var n := int((TURN_SECONDS if turn else 1.0 + SECONDS) / dt)
+	var from := 0 if turn else int(1.0 / dt)
 	var rate := 0.0
 	for i in n:
 		if i == n / 2:
 			rate = view.ap.speed_scale
-		if i == int(1.0 / dt):
+		if i == from:
 			before = view.slip.duplicate(true)
 		pos += dir * sp * dt
 		view.set_body(pos, 0.0)
@@ -121,10 +130,10 @@ func _drive(gait: StringName, sp: float, deg: float) -> Dictionary:
 			mask = Vector2(minf(mask.x, h), maxf(mask.y, h))
 	await process_frame
 	var c := view.clip
-	var a: Dictionary = view.slip.get(c, {"t": 0.0, "foot": 0.0, "body": 0.0})
-	var b: Dictionary = before.get(c, {"t": 0.0, "foot": 0.0, "body": 0.0})
-	var t := float(a["t"]) - float(b["t"])
-	var foot := float(a["foot"]) - float(b["foot"])
-	var body := float(a["body"]) - float(b["body"])
+	var a: Dictionary = view.slip.get(c, {})
+	var b: Dictionary = before.get(c, {})
+	var t := float(a.get("t", 0.0)) - float(b.get("t", 0.0))
+	var foot := float(a.get("foot", 0.0)) - float(b.get("foot", 0.0))
+	var body := float(a.get("body", 0.0)) - float(b.get("body", 0.0))
 	return {"clip": c, "rate": rate, "reverse": view.reverse, "t": t, "footv": foot / maxf(t, 1e-6),
 		"bodyv": body / maxf(t, 1e-6), "ratio": foot / maxf(body, 1e-6), "mask": mask}

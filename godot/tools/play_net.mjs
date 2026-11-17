@@ -11,7 +11,7 @@
 //   - B changes face mid-run at the face kiosk (the kiosk's own editor, opened by the test hook as F
 //     at the prison's kiosk opens it): A sees B's new face on B's mask and on the lift's monitor;
 //   - each sees the other as a crewmate where the other really stands (the drawn figure's position
-//     against the other's own body), drawn, with a readable name tag; a picture from each;
+//     against the other's own body), drawn, its name tag shown only up close (TAG_RANGE); a picture from each;
 //   - one creeps: their camera drops, and the other sees their figure crouch with its mask at their eye;
 //   - the emote wheel: one aims and lets go, the other sees the emote on that figure;
 //   - a watched Orderly never moves on the watcher's screen (consecutive seeing frames) while the
@@ -213,12 +213,17 @@ try {
     if (!o) return { ok: false, detail: 'not in the frame' };
     const off = o.at ? Math.hypot(o.at[0] - other.me.x, o.at[2] - other.me.z) : Infinity;
     const tag = viewer.client.tags.includes(o.name.toUpperCase());
-    return { ok: o.drawn && off < 0.15 && tag && o.tagAlpha > 0.9, off, o, detail: `drawn ${o.drawn}, ${off.toFixed(3)} m from where ${o.name} stands, tag "${o.name.toUpperCase()}" ${tag ? 'shown' : 'NOT shown'} (alpha ${o.tagAlpha?.toFixed(2)}), clip ${o.clip}, patch ${o.index + 1}` };
+    // Name tags show only up close (main.gd TAG_RANGE, body to body): fully within 85 % of it, never beyond it.
+    const range = viewer.client.tagRange ?? 0;
+    const apart = Math.hypot(o.x - viewer.me.x, o.z - viewer.me.z);
+    const want = apart <= 0.85 * range ? 'shown' : apart >= range ? 'hidden' : 'either';
+    const tagOk = want === 'shown' ? tag && o.tagAlpha > 0.9 : want === 'hidden' ? !tag && o.tagAlpha === 0 : true;
+    return { ok: o.drawn && off < 0.15 && tagOk, off, o, detail: `drawn ${o.drawn}, ${off.toFixed(3)} m from where ${o.name} stands, ${apart.toFixed(2)} m apart (tags within ${range} m: want ${want}), tag "${o.name.toUpperCase()}" ${tag ? 'shown' : 'not shown'} (alpha ${o.tagAlpha?.toFixed(2)}), clip ${o.clip}, patch ${o.index + 1}` };
   };
   const ab = sees(a, b);
   const ba = sees(b, a);
-  check('A sees B as a crewmate where B stands, with a readable name tag', ab.ok, ab.detail);
-  check('B sees A as a crewmate where A stands, with a readable name tag', ba.ok, ba.detail);
+  check('A sees B as a crewmate where B stands, its name tag only if close', ab.ok, ab.detail);
+  check('B sees A as a crewmate where A stands, its name tag only if close', ba.ok, ba.detail);
   check('each is dressed differently (skin, headwear, number from the player index)', ab.o && ba.o && ab.o.index !== ba.o.index, `A wears ${ba.o?.index + 1}, B wears ${ab.o?.index + 1}`);
   check('nobody sees their own figure', !(a.others ?? []).some((x) => x.id === a.me.id) && !(b.others ?? []).some((x) => x.id === b.me.id));
   await A.shot('05-ann-sees-bob.png');

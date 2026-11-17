@@ -42,7 +42,10 @@ const SPINE: Array[String] = ["Spine", "Spine1", "Spine2", "Neck", "Head"]
 ## The body turns to where it moves (so sideways and backwards steps do not slide); the upper body and
 ## head twist back toward where the player looks, at most this far (radians).
 const TWIST_MAX := 1.3
-const TURN_RATE := 9.0          # radians per second the body turns toward its heading
+const TURN_RATE := 9.0          # radians per second the body turns toward the look, standing
+## ... and toward its heading while stepping: a quick pivot (about one step for a half turn), so
+## turning round and walking off at once does not walk the feet sideways for long.
+const TURN_RATE_STEP := 18.0
 const VEL_EASE := 10.0          # how fast the measured velocity follows the placements (1/s)
 ## Moving more than this far from where the player looks (radians) the figure walks backwards instead
 ## (faces the look and plays the clip in reverse); it turns forward again under REVERSE_OFF.
@@ -356,7 +359,7 @@ func _steer(delta: float, stepping: bool, twist: bool) -> void:
 		reverse = false
 	if downed and clip != "crawl":
 		target = body_yaw   # falling: where it stood
-	body_yaw = rotate_toward(body_yaw, target, TURN_RATE * delta)
+	body_yaw = rotate_toward(body_yaw, target, (TURN_RATE_STEP if stepping else TURN_RATE) * delta)
 	rotation = Vector3(0, body_yaw + PI, 0)
 	_twist.angle = clampf(wrapf(_look_yaw - body_yaw, -PI, PI), -TWIST_MAX, TWIST_MAX) if twist else 0.0
 	_twist.active = absf(_twist.angle) > 0.001

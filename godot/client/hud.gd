@@ -128,7 +128,7 @@ func _draw_tags(px: float) -> void:
 		var a := float(t["alpha"])
 		if a <= 0.01:
 			continue
-		# Bigger up close (main.gd TAG_BIG), whole pixels; a dark outline all round reads on any wall.
+		# Half as big again as the HUD (main.gd), whole pixels; a dark outline all round reads on any wall.
 		var tp := roundf(px * float(t.get("size", 1.0)))
 		var w := PixelFont.width(text) * tp
 		var p: Vector2 = t["pos"]
