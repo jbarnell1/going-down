@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 50,
-  "now": "T15a",
-  "nowText": "An Opus builder is writing the Playroom floor generator (hides, squeaky tiles, zones, party-table seats)",
+  "iteration": 53,
+  "now": "T15g",
+  "nowText": "A Sonnet agent is checking the final Minder model: rebuilds identically, every animation the rules need, face on the front only",
   "ci": {
     "status": "passed",
-    "commit": "9a66bfa",
-    "at": "2026-11-17T05:22:10.885Z"
+    "commit": "b2e26fb",
+    "at": "2026-11-17T07:58:13.206Z"
   },
   "answersAppliedTo": "2026-11-17T05:04:17.919Z",
   "tasks": [
@@ -959,7 +959,7 @@
       "id": "T7e",
       "title": "Better-looking crewmates and readable name tags",
       "why": "Crewmates are plain boxes and their names cannot be read from a few metres",
-      "status": "todo",
+      "status": "doing",
       "gates": [],
       "startedAt": "2026-11-16T16:46:55.079Z",
       "todo": [
@@ -1053,7 +1053,8 @@
         "H1",
         "F4"
       ],
-      "waiting": "a free agent to watch the crewmates walk, run and sneak in the real game for foot sliding. They are already in the game as your friends' figures (committed 3d13505)."
+      "doingText": "An Opus builder is making the crewmates look better: bodies, jumpsuits and readable name tags",
+      "doingAt": "2026-11-17T08:17:13.589Z"
     },
     {
       "id": "T7f",
@@ -1133,8 +1134,8 @@
         "Your rule: the scare shrieks may be a little louder than the elevator voice (about 3 loudness units, never more than 4), never loud enough to hurt; nothing else is louder than the voice."
       ],
       "startedAt": "2026-11-16T23:22:42.172Z",
-      "doingText": "A Sonnet agent is checking the recorded sounds and the mix, merged onto the current game (commit 92c77ee)",
-      "doingAt": "2026-11-17T04:31:10.897Z"
+      "doingText": "A Sonnet agent is checking the recorded sounds and the mix again (the first check was cut off), now with the player-breath fix",
+      "doingAt": "2026-11-17T07:31:02.378Z"
     },
     {
       "id": "X1",
@@ -1298,8 +1299,8 @@
         "Size is now 4 m by 4 m with a 1.8 m door (the owner said bigger still than 3 by 3): each of BANK and DOWN becomes 2 m wide"
       ],
       "startedAt": "2026-11-17T03:42:21.782Z",
-      "doingText": "Opus is making the car 4 m square with a 1.8 m door, after registering the newer tests in the main test list",
-      "doingAt": "2026-11-17T03:42:21.783Z"
+      "doingText": "Checked together with the floor order build (the 4 m car is on the same branch)",
+      "doingAt": "2026-11-17T08:30:58.722Z"
     },
     {
       "id": "T2c",
@@ -1323,15 +1324,14 @@
       "id": "T5q",
       "title": "A quota before the lift can be called",
       "why": "You cannot just ride straight back up: the crew has to earn a set amount on the instrument on each floor before the call button works",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "C9",
         "C5"
       ],
       "startedAt": "2026-11-17T03:42:21.993Z",
-      "doingText": "The same Opus agent then adds the floor quota: the call button does nothing until the crew has earned enough on this floor",
-      "doingAt": "2026-11-17T03:42:21.994Z"
+      "waiting": "comes after the floor order, which edits the same file; the first builder stopped before starting it"
     },
     {
       "id": "P3",
@@ -1574,7 +1574,10 @@
         "G10"
       ],
       "ns": [],
-      "nsWhy": "Tooling, hosting or validation; the North Star has no mechanic for it"
+      "nsWhy": "Tooling, hosting or validation; the North Star has no mechanic for it",
+      "todo": [
+        "The Clinic bench shows 258 real lights plus 152 emergency lights against a 256 label; check whether that limit is per view and whether the Clinic needs trimming"
+      ]
     },
     {
       "id": "T11",
@@ -1641,25 +1644,27 @@
       "id": "T16e",
       "title": "The place deck: the third floor down is the Annex",
       "why": "Floors stop being all Clinic; the yellow office arrives at floor 3 and the Playroom at floor 4",
-      "status": "todo",
+      "status": "doing",
       "gates": [],
       "ns": [
         "A2"
-      ]
+      ],
+      "startedAt": "2026-11-17T07:31:02.066Z",
+      "doingText": "A Sonnet agent is checking the floor order build: Clinic, Clinic, the Annex with the Temp, the Playroom, all the same for every player",
+      "doingAt": "2026-11-17T08:30:58.568Z"
     },
     {
       "id": "T15a",
       "title": "The Playroom floor generator",
       "why": "Floor 4 becomes a soft-play centre with ball pits, crawl dens, a party room and places to hide",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "A11",
         "A2"
       ],
       "startedAt": "2026-11-17T04:55:51.342Z",
-      "doingText": "An Opus builder is writing the Playroom floor generator (hides, squeaky tiles, zones, party-table seats)",
-      "doingAt": "2026-11-17T04:55:51.343Z"
+      "waiting": "checked and merged (3ecc027); it reaches the build you play once the place deck (T16e) puts the Playroom at floor 4"
     },
     {
       "id": "T16g",
@@ -1669,6 +1674,25 @@
       "gates": [],
       "ns": [
         "B11"
+      ],
+      "startedAt": "2026-11-17T05:57:58.537Z",
+      "media": [
+        {
+          "src": "T16g/20261117T062956-front_clean.png",
+          "caption": "The Temp, made in code tonight: an office worker with a photocopy of a crewmate's drawn face stapled over its own (this is the test face)",
+          "kind": "image",
+          "at": "2026-11-17T06:29:56.696Z"
+        },
+        {
+          "src": "T16g/20261117T062956-corridor_6m.png",
+          "caption": "The Temp at 6 m down an Annex corridor, through the tape filter",
+          "kind": "image",
+          "at": "2026-11-17T06:29:56.802Z"
+        }
+      ],
+      "waiting": "checked and merged (1ff6027); you meet it once the floor order (T16e) puts the Annex at floor 3",
+      "todo": [
+        "The click check catches a standing clock that runs per frame while seen, but not one that runs on real seconds; tighten it in the Blender pass"
       ]
     },
     {
@@ -1679,16 +1703,21 @@
       "gates": [],
       "ns": [
         "B11"
-      ]
+      ],
+      "startedAt": "2026-11-17T08:00:18.989Z",
+      "waiting": "checked and merged (800382e); it takes effect when the floor order puts the Temp in the Annex"
     },
     {
       "id": "T18j",
       "title": "The day in the run: bank, ride up, sleep, day 2",
       "why": "Vote BANK and you ride up to the prison, go to bed, and wake to a new day going down",
-      "status": "todo",
+      "status": "doing",
       "gates": [],
       "ns": [],
-      "nsWhy": "prison.md P7, designed beside the North Star (V16+)"
+      "nsWhy": "prison.md P7, designed beside the North Star (V16+)",
+      "startedAt": "2026-11-17T08:31:22.144Z",
+      "doingText": "An Opus builder is wiring the day: vote BANK, ride up to the prison, sleep, wake to day 2 (built on the floor order)",
+      "doingAt": "2026-11-17T08:31:22.145Z"
     },
     {
       "id": "T15b",
@@ -1698,7 +1727,13 @@
       "gates": [],
       "ns": [
         "A11"
-      ]
+      ],
+      "startedAt": "2026-11-17T06:29:56.970Z",
+      "todo": [
+        "On the biggest floors the Minder sometimes can't walk to a far area before the count ends (47 of 320 draws at depth 4): tune the search speed, walks or floor size after a play",
+        "The health test should also put a player inside a hiding place after a count (today only the whole-floor bot test guards 'resting in a hide restores')"
+      ],
+      "waiting": "checked and merged; it runs in a game once the count is wired into the run (T15d)"
     },
     {
       "id": "T15c",
@@ -1708,7 +1743,35 @@
       "gates": [],
       "ns": [
         "A11"
-      ]
+      ],
+      "startedAt": "2026-11-17T07:17:03.293Z",
+      "media": [
+        {
+          "src": "T15c/20261117T080018-ballpit_hall.png",
+          "caption": "The ball-pit hall under strip lights",
+          "kind": "image",
+          "at": "2026-11-17T08:00:18.489Z"
+        },
+        {
+          "src": "T15c/20261117T080018-party_sign.png",
+          "caption": "A party room with its printed hiding odds",
+          "kind": "image",
+          "at": "2026-11-17T08:00:18.587Z"
+        },
+        {
+          "src": "T15c/20261117T080018-count_dark_hall.png",
+          "caption": "Count dark: only the ceiling stars and the glowing floor lines stay on",
+          "kind": "image",
+          "at": "2026-11-17T08:00:18.705Z"
+        },
+        {
+          "src": "T15c/20261117T080018-minder_front.png",
+          "caption": "The stand-in Minder in a party room (made in code; the Blender one is being built)",
+          "kind": "image",
+          "at": "2026-11-17T08:00:18.818Z"
+        }
+      ],
+      "waiting": "checked and merged (5b384b9); you walk it once the floor order puts the Playroom at floor 4"
     },
     {
       "id": "T15d",
@@ -1743,11 +1806,49 @@
       "id": "T15g",
       "title": "The Minder, modelled, rigged and animated in Blender",
       "why": "The stand-in becomes a tall padded attendant with a bobbing balloon head",
-      "status": "todo",
+      "status": "doing",
       "gates": [],
       "ns": [
         "B11",
         "A11"
+      ],
+      "startedAt": "2026-11-17T07:31:02.224Z",
+      "doingText": "A Sonnet agent is checking the final Minder model: rebuilds identically, every animation the rules need, face on the front only",
+      "doingAt": "2026-11-17T08:32:59.855Z",
+      "media": [
+        {
+          "src": "T15g/20261117T080636-turn_34.png",
+          "caption": "The Minder from Blender, first build: gaunt, eyeless, tabard rags, a printed smiley card mask",
+          "kind": "image",
+          "at": "2026-11-17T08:06:36.674Z"
+        },
+        {
+          "src": "T15g/20261117T080636-pose_run.png",
+          "caption": "Running on all fours",
+          "kind": "image",
+          "at": "2026-11-17T08:06:36.793Z"
+        },
+        {
+          "src": "T15g/20261117T082202-turn_34.png",
+          "caption": "The Minder after round 1's judges: matte bruised skin, faded torn rags, a crumpled paper-plate mask with a crooked too-wide smile",
+          "kind": "image",
+          "at": "2026-11-17T08:22:02.256Z"
+        },
+        {
+          "src": "T15g/20261117T082202-face.png",
+          "caption": "The new mask up close: mismatched eyes, a wobbly too-wide smile, hooked yellow teeth beneath",
+          "kind": "image",
+          "at": "2026-11-17T08:22:02.364Z"
+        },
+        {
+          "src": "T15g/20261117T083259-turn_front.png",
+          "caption": "The final Minder front-on: a small dirty card mask over an eyeless skull, the jaw gaping beneath with needle teeth",
+          "kind": "image",
+          "at": "2026-11-17T08:32:59.681Z"
+        }
+      ],
+      "todo": [
+        "When it goes into the game, raise the mask's glow so the face reads in count dark (the final pass made the mask smaller and dimmer)"
       ]
     },
     {
@@ -2307,6 +2408,276 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-17T08:32:59.856Z",
+      "text": "Started T15g: The Minder, modelled, rigged and animated in Blender. A Sonnet agent is checking the final Minder model: rebuilds identically, every animation the rules need, face on the front only",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T08:32:59.681Z",
+      "text": "New pictures for T15g: The Minder, modelled, rigged and animated in Blender.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T08:31:22.145Z",
+      "text": "Started T18j: The day in the run: bank, ride up, sleep, day 2. An Opus builder is wiring the day: vote BANK, ride up to the prison, sleep, wake to day 2 (built on the floor order)",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T08:30:58.723Z",
+      "text": "Started T6f: A bigger elevator. Checked together with the floor order build (the 4 m car is on the same branch)",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T08:30:58.569Z",
+      "text": "Started T16e: The place deck: the third floor down is the Annex. A Sonnet agent is checking the floor order build: Clinic, Clinic, the Annex with the Temp, the Playroom, all the same for every player",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T08:23:37.781Z",
+      "text": "Started T15g: The Minder, modelled, rigged and animated in Blender. The modeller is making the final fixes from round 2's judges",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T08:23:37.622Z",
+      "text": "Minder judging round 2 done: 6, 5 and 5 in full light (up from 6, 4, 4), about 7-8 in the dark. Final fix pass under way: a dirty bone-white mask with cut-through eye holes that only glows in the dark, a real pelvis and sloped shoulders, needle teeth with a dark throat, and duller rags.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T08:22:43.505Z",
+      "text": "Minder judging round 2, Fable: 5/10 (7 in the dark or side-on, 3 front-on in full light). Wants: the mask's eyes cut through as holes so the dark head shows behind, a flatter wider smile, a bone-white mask that only glows in the dark, a real pelvis instead of a box, and a curved jaw with needle teeth and a dark throat.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T08:22:38.268Z",
+      "text": "Minder judging round 2, first Opus judge: 6/10 (7-8 in the dark, about 4 front-on in full light). Better: the cute smile over a fanged mouth, the crawl, the peekaboo pose. Still weakest: from the front the round mask on a thin neck reads as a lollipop, the stripes still read too bright, and the pelvis is blocky.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T08:22:02.539Z",
+      "text": "Started T15g: The Minder, modelled, rigged and animated in Blender. Blind judging, round 2 of the revised Minder",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T08:22:02.364Z",
+      "text": "New pictures for T15g: The Minder, modelled, rigged and animated in Blender.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T08:22:02.256Z",
+      "text": "New pictures for T15g: The Minder, modelled, rigged and animated in Blender.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T08:21:24.210Z",
+      "text": "The Temp's rules passed their separate check (still and silent while seen, one click per 1.2 m and every 4 s waiting; three deliberate breaks red; the Orderly's stored results unchanged) and are merged.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T08:21:24.117Z",
+      "text": "Paused T16f: waiting for checked and merged (800382e); it takes effect when the floor order puts the Temp in the Annex",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T08:17:13.589Z",
+      "text": "Started T7e: Better-looking crewmates and readable name tags. An Opus builder is making the crewmates look better: bodies, jumpsuits and readable name tags",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T08:17:05.685Z",
+      "text": "The Playroom's look passed its separate check (every hiding place's furniture exactly where the rules put it, every sign matching the odds, real dark during a count, the stand-in Minder never freezing; the Clinic's 38 checks still pass) and is merged.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T08:17:05.575Z",
+      "text": "Paused T15c: waiting for checked and merged (5b384b9); you walk it once the floor order puts the Playroom at floor 4",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T08:14:15.726Z",
+      "text": "Started T16f: The Temp's body in the rules. A Sonnet agent is checking the Temp's rules: still while seen, its stapler clicks, and the Orderly unchanged",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T08:08:09.122Z",
+      "text": "Started T15g: The Minder, modelled, rigged and animated in Blender. The modeller is revising the Minder from round 1's three judges; round 2 follows",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T08:08:08.957Z",
+      "text": "Minder judging round 1, second Opus judge: 4/10 lit, about 7 in the dark. All three judges agree. The modeller is now revising: a matte bruised skin instead of plastic, faded torn rags instead of bright streamers, a crumpled mask with a crooked too-wide smile, a skull-like head, and a jaw that hangs open.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T08:07:33.985Z",
+      "text": "Minder judging round 1, Fable: 4/10 lit, about 7 in the dark. Same worst points (plastic body, bright streamers), plus: the plain two-dot smiley on a pale disc looks like a well-known YouTuber's mask, so the drawn face will be redrawn crooked and too wide. Its best idea: the mask is a flat disc on the end of a snout with the real jaw underneath.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T08:07:26.758Z",
+      "text": "Minder judging round 1, first judge: 6/10 in a dark corridor (3-4 in full light). Works: the smiley floating in the dark, the mask stuck on the end of a snout with the real jaw under it, dropping onto all fours. Worst: a glossy plastic-looking body with visible joint seams, clean party-coloured streamers, a mask that is too clean and cute up close.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T08:06:57.792Z",
+      "text": "Started T15g: The Minder, modelled, rigged and animated in Blender. Blind judging, round 1: an Opus judge and Fable look only at the pictures; the modeller revises after",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T08:06:36.897Z",
+      "text": "The Minder's Blender model is built (5,601 triangles, 43 bones, all ten animations). Blind judging round 1 is starting: judges see only the pictures.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T08:06:36.794Z",
+      "text": "New pictures for T15g: The Minder, modelled, rigged and animated in Blender.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T08:06:36.674Z",
+      "text": "New pictures for T15g: The Minder, modelled, rigged and animated in Blender.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T08:00:18.989Z",
+      "text": "Started T16f: The Temp's body in the rules. An Opus builder is giving the Temp its own numbers in the rules: 1.8 m, its own stapler clicks, still while seen",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T08:00:18.818Z",
+      "text": "New pictures for T15c: The Playroom's look and a stand-in Minder.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T08:00:18.705Z",
+      "text": "New pictures for T15c: The Playroom's look and a stand-in Minder.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T08:00:18.587Z",
+      "text": "New pictures for T15c: The Playroom's look and a stand-in Minder.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T08:00:18.489Z",
+      "text": "New pictures for T15c: The Playroom's look and a stand-in Minder.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T08:00:18.389Z",
+      "text": "Started T15c: The Playroom's look and a stand-in Minder. A Sonnet agent is checking the Playroom's look: furniture on every hiding place, signs that match the odds, count dark, and the stand-in Minder",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T07:31:02.590Z",
+      "text": "Paused T5q: waiting for comes after the floor order, which edits the same file; the first builder stopped before starting it",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T07:31:02.488Z",
+      "text": "Paused T6f: waiting for built and on a branch (4 m car, 1.8 m door); it is checked together with the floor order",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T07:31:02.379Z",
+      "text": "Started TA: Real sounds, and comedy sounds. A Sonnet agent is checking the recorded sounds and the mix again (the first check was cut off), now with the player-breath fix",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T07:31:02.224Z",
+      "text": "Started T15g: The Minder, modelled, rigged and animated in Blender. An Opus builder is making the Minder in Blender: studying two tutorials, then modelling, rigging and animating it",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T07:31:02.067Z",
+      "text": "Started T16e: The place deck: the third floor down is the Annex. An Opus builder is making the floor order: Clinic, Clinic, the Annex, the Playroom, then a seeded draw",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T07:27:49.770Z",
+      "text": "The hide-and-seek rules passed their separate check (12 tests; four more deliberate breaks, all red) and are merged.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T07:27:49.604Z",
+      "text": "Paused T15b: waiting for checked and merged; it runs in a game once the count is wired into the run (T15d)",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T07:17:03.294Z",
+      "text": "Started T15c: The Playroom's look and a stand-in Minder. An Opus builder is making the Playroom's look and a stand-in Minder",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T07:17:03.037Z",
+      "text": "Started T15b: The count, the Minder and health, as rules. A Sonnet agent is checking the hide-and-seek rules: re-running the tests and breaking them on purpose",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T07:06:14.721Z",
+      "text": "The online check (Linux) passed with the Playroom generator in, so its 40 quick-test floors come out the same on Linux as on Windows.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T06:40:48.480Z",
+      "text": "The Temp passed its separate check (face, 1.8 m, still while seen, clicks, frame time; both deliberate breaks red; the Clinic's 38 desktop checks still pass) and is merged.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T06:40:48.275Z",
+      "text": "Paused T16g: waiting for checked and merged (1ff6027); you meet it once the floor order (T16e) puts the Annex at floor 3",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T06:29:56.971Z",
+      "text": "Started T15b: The count, the Minder and health, as rules. An Opus builder is writing the hide-and-seek rules: what starts a count, how the Minder searches, the four ways of being found, and health",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T06:29:56.802Z",
+      "text": "New pictures for T16g: The Temp's figure and its stapler.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T06:29:56.696Z",
+      "text": "New pictures for T16g: The Temp's figure and its stapler.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T06:29:56.608Z",
+      "text": "Started T16g: The Temp's figure and its stapler. A Sonnet agent is checking the Temp's figure: its face, its stapler clicks, and that it never moves while you look",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T06:13:43.824Z",
+      "text": "Playroom generator checked by a separate agent (800 floors, byte-identical hashes, three deliberate breaks all caught) and merged. Linux hash agreement will show on the next CI run.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T06:13:43.712Z",
+      "text": "Paused T15a: waiting for checked and merged (3ecc027); it reaches the build you play once the place deck (T16e) puts the Playroom at floor 4",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T05:58:33.221Z",
+      "text": "The Playroom floor generator is built: 800 test floors pass, each with ball pits, crawl dens, a party room, toddler corners, hiding places and squeaky tiles. A separate agent is checking it now.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T05:57:58.538Z",
+      "text": "Started T16g: The Temp's figure and its stapler. An Opus builder is making the Temp's figure: an office worker with a crewmate's drawing for a face",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T05:57:58.389Z",
+      "text": "Started T15a: The Playroom floor generator. A Sonnet agent is checking the Playroom generator: re-running its 800-floor tests and trying deliberate breaks",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T05:48:13.740Z",
+      "text": "The bigger lift (4 m car, 1.8 m door) is built on the rules agent's branch; it is now on the floor quota. Both get checked together when it reports.",
+      "kind": "note"
+    },
     {
       "at": "2026-11-17T05:05:41.203Z",
       "text": "Took a default: The Minder: more animalistic and moves on all fours (owner's picture as direction, design kept original: a gaunt eyeless thing in tabard rags with a printed smiley party mask). Walking is quiet; the party horn never starts a count; floors 5+ are drawn by the seed.",
@@ -3036,276 +3407,6 @@
       "at": "2026-11-17T00:32:45.707Z",
       "text": "Started T16b: Crew marks in the Annex. A Sonnet agent is writing the rules for crew marks: one pad of 3 for the whole crew per floor, place with Q, anyone can peel.",
       "kind": "start"
-    },
-    {
-      "at": "2026-11-17T00:32:45.527Z",
-      "text": "Started T16a: The Annex floor generator. An Opus agent is building the Annex generator: a lattice of offices whose corridors loop back, two levels, an atrium, tested on 800 floors.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T00:32:45.345Z",
-      "text": "Added task T16c: The Temp's sticky notes.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T00:32:45.164Z",
-      "text": "Added task T16b: Crew marks in the Annex.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T00:32:44.996Z",
-      "text": "Added task T16a: The Annex floor generator.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T00:31:06.293Z",
-      "text": "Your Annex answers are in: all eight accepted, and the marks become 3 shared by the whole crew, with more from the skill tree. The prison hub with the bank room, upgrades, a day quota and beds is now a task; Fable designs it first.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T00:31:06.170Z",
-      "text": "Added task T18: The prison: the bank room, upgrades, a day quota and beds.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T00:31:05.963Z",
-      "text": "Applied the owner's new answers.",
-      "kind": "answers"
-    },
-    {
-      "at": "2026-11-17T00:25:04.403Z",
-      "text": "Resumed after the usage reset. The Godot tests passed on GitHub for the first time (47 of 47). Three Opus agents are picking up exactly where they stopped.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T00:25:04.284Z",
-      "text": "Started T7f: Draw your face. Resumed: an Opus agent is switching faces to dark ink on a lit screen so they read at 3 metres, then the README and a proof the tests can fail.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T00:25:04.110Z",
-      "text": "Started T0g: Godot tests stand on their own results. Resumed: an Opus agent is running the new test layout for the first time in its own copy of the code, then proving it matches the old results and closing two test gaps.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T00:25:03.990Z",
-      "text": "Started P3: Playing together through the home server. Resumed after the usage reset: an Opus agent is fixing the last two multiplayer checks (the dance aim and boarding), then re-running every older playthrough and the sound check on the new build.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T00:23:48.974Z",
-      "text": "Finished T17: Godot tests on GitHub too.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T23:34:31.253Z",
-      "text": "All agents are paused for usage, each with notes on where it stopped. Pushed work is safe on GitHub; the joining, face and test work waits uncommitted until it is finished and checked.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T23:32:59.788Z",
-      "text": "Paused for usage: every running agent is writing what it has done and what is left to a file, so the work picks up cleanly after the reset. Nothing is lost; unfinished work stays uncommitted until it is checked.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T23:28:43.848Z",
-      "text": "The Annex design is ready: crew marks are the only trustworthy directions (sticky arrows you place with Q), the office repeats and its signs loop, and the Temp is heard by its stapler. Eight choices wait for you on the Questions page.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T23:28:43.739Z",
-      "text": "Started T16: The Annex, the second place. Fable's design for the Annex and the Temp is written (docs/floors/annex.md). Eight choices in it are proposals beyond the North Star: they are on the Questions page. Building starts after your answers, in five parallel pieces.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T23:25:47.000Z",
-      "text": "Sound shopping list ready: a link and licence for each of the 82 sounds, 74 of them CC0 (free to use anywhere). Freesound needs a free login to download. The vine boom and 'bruh' stay in the friends' copy only. No list of SMii7Y's sounds exists online that the agent could find.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T23:25:46.918Z",
-      "text": "Started TA: Real sounds, and comedy sounds. The sound shopping list is ready (assets_src/inbox/audio/WHERE-TO-GET.md): 82 sounds, 74 with a CC0 link, 2 meme clips for the friends' copy only, 5 not found. Waiting for the files you download.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T23:25:14.468Z",
-      "text": "Started T17: Godot tests on GitHub too. The Godot tests are added to GitHub's checks and pushed (d5f7819). Waiting for GitHub's first run to finish before marking this done.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T23:23:35.691Z",
-      "text": "The Godot tests will now also run on GitHub's machines on every push, with the engine checked against its published fingerprint. A fresh copy of the code passed them here first (47 of 47).",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T23:23:01.221Z",
-      "text": "A zip for friends now comes from one command (npm run godot:package): the game plus a READ ME FIRST with how to start it, the Windows warning, how to join and the controls. Not handed out yet: it waits for the join screen.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T23:22:42.278Z",
-      "text": "The loop is now run by an Opus session with several agents at once: up to 3 Opus builders and 5 Sonnet agents for mechanical work and checks; Fable designs floors. The Progress page now lists everything in progress at once.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T23:22:42.173Z",
-      "text": "Started TA: Real sounds, and comedy sounds. A Sonnet agent is finding free sounds with their licences for your list, as links you can click; it downloads nothing. Files you grab go in assets_src/inbox/audio.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T23:22:41.993Z",
-      "text": "Started P4: Light browser build and a download for friends. A Sonnet agent is making the zip for friends with a READ ME FIRST.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T23:22:41.896Z",
-      "text": "Started T17: Godot tests on GitHub too. A Sonnet agent is adding the Godot tests to the checks on GitHub.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T23:22:41.787Z",
-      "text": "Started T16: The Annex, the second place. Fable is designing the Annex and the Temp: how only marks the crew made can be trusted, the looping office layout, the Temp's caught scene and sticky notes. You will see the design before anything is built.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T23:22:41.622Z",
-      "text": "Started T7f: Draw your face. An Opus agent is building the face editor: draw in under a minute, a compact format to send to other players, and the face shown on the crewmates' screen masks.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T23:22:41.423Z",
-      "text": "Started T0g: Godot tests stand on their own results. An Opus agent, in its own copy of the code, is making the tests keep Godot's own results, so your rule changes (lift, crouch, quota, downed) can go in.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T23:22:41.285Z",
-      "text": "Started P3: Playing together through the home server. An Opus agent is joining the game to the server: a start screen with Play alone and Join friends, a lobby, friends drawn as crewmates with name tags, and the emote wheel on R. The server itself is already running on the lab box.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T23:19:55.927Z",
-      "text": "Linked TA to the North Star: H3, B11.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T23:19:55.767Z",
-      "text": "Added task T17: Godot tests on GitHub too.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T23:19:55.650Z",
-      "text": "Added task T16: The Annex, the second place.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T23:08:55.672Z",
-      "text": "The game server is running on the lab box in a locked-down container, reachable only from the lab box itself. Two scripted players from this PC played a full session through it and a wrong passphrase was refused. Friends cannot reach it until you open its door with Funnel.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T23:00:15.863Z",
-      "text": "Added task TA: Real sounds, and comedy sounds.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T22:57:56.668Z",
-      "text": "Started P3: Playing together through the home server. Joining the game to the server: a join screen, other players drawn as crewmates, the emote wheel; and putting the server on the lab box",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T22:57:56.510Z",
-      "text": "Started T0g: Godot tests stand on their own results. Making the Godot tests keep Godot's own results as the reference, so rule changes made only in Godot can be tested",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T22:54:57.123Z",
-      "text": "The networking and the home server are checked: 47 of 47 tests in my own runs, the end-to-end check with three players passed 10 of 10 including every refusal, and both of my deliberate breaks were caught (any passphrase accepted; the server ignoring what players see). The server is not on the lab box yet and the game is not joined to it yet.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T22:12:00.595Z",
-      "text": "The North Star is updated to draft 5: your 13 decisions from today are folded in with your words quoted, and a new first section says where the build stands.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T22:11:40.198Z",
-      "text": "Linked T15 to the North Star: A11.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T22:11:40.046Z",
-      "text": "Linked T5q to the North Star: C9, C5.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T22:11:39.878Z",
-      "text": "Linked T2c to the North Star: B12.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T21:50:50.222Z",
-      "text": "The crewmates move: your 13 Mixamo clips are baked onto the convict (walk, run, sneak, crawl, two dances, wave and more), with a drawn face on the screen mask, four skin tones, headwear and a number. I rebuilt the model myself and re-ran the picture run. Nobody has watched them in motion yet, and they are not in the game until the networking is joined to the client.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T21:50:50.112Z",
-      "text": "New pictures for T7e: Better-looking crewmates and readable name tags.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T21:48:15.374Z",
-      "text": "A checked Windows build now lives in one fixed place, C:\\new_game\\play\\GoingDown.exe, with BUILD.txt beside it saying when it was built. This one has your control scheme and the controls list on Esc.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T21:39:29.878Z",
-      "text": "Added task T5q: A quota before the lift can be called.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T21:39:19.040Z",
-      "text": "Added task T0g: Godot tests stand on their own results.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T21:39:18.926Z",
-      "text": "Added task T2c: The camera drops when you creep.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T21:29:14.608Z",
-      "text": "Controls changed to your scheme: Ctrl (or C) creeps, E brings the instrument out and puts it away, F now calls the lift, holds the doors and picks up tapes. The emote wheel on R comes with the crewmates.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T21:26:09.607Z",
-      "text": "Started P3: Playing together through the home server. Moving the networking and its fairness rules to Godot, and building the small server that will run on the lab box behind a join passphrase",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T21:26:09.410Z",
-      "text": "Linked P3 to the North Star: B1, B6, C5.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T21:25:43.015Z",
-      "text": "Finished P0: Godot project, tests and builds.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T20:52:48.539Z",
-      "text": "Applied the owner's new answers.",
-      "kind": "answers"
-    },
-    {
-      "at": "2026-11-16T20:52:48.436Z",
-      "text": "Time limit moved to 2026-11-21T05:00:00.000Z: the owner answered 'Keep going until Friday' on the Questions page",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T20:35:28.317Z",
-      "text": "Finished P2b: Fixes from your first play of the Godot build.",
-      "kind": "done"
     }
   ]
 }
