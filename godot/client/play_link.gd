@@ -331,12 +331,14 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 		if _auto != null:
 			auto_status = "interrupted"
 		_auto = null
-	# What this screen showed (the fairness rule, counted for the tests).
-	if f.seeing and _prev_seeing and f.orderly != null and _prev_pose != null:
+	# What this screen showed (the fairness rule, counted for the tests): two frames running with every eye
+	# mark lit (with one watcher needed, every frame it is seen).
+	var all_lit := f.seeing and f.eyes_all
+	if all_lit and _prev_seeing and f.orderly != null and _prev_pose != null:
 		watched_pairs += 1
 		if not Pose.same_pose(f.orderly, _prev_pose):
 			watched_moves += 1
-	_prev_seeing = f.seeing
+	_prev_seeing = all_lit
 	_prev_pose = f.orderly
 
 	# 3. What to draw and play.
@@ -501,7 +503,8 @@ func _snapshot(c: Client, f: Client.Frame, latest: Dictionary, me_row: Variant, 
 		ox = float(pd["x"])
 		oz = float(pd["z"])
 		olevel = int(pd["level"])
-		if not f.seeing and not f.held and moving and _orderly_tpl != null:
+		# Its sound goes on under a lone watcher of two (not held on this screen); held, it cuts dead.
+		if not f.held and moving and _orderly_tpl != null:
 			var drawn := _orderly_tpl.copy()
 			drawn.body = Pose.pose_body(pd)
 			drawn.moving = true
@@ -592,6 +595,9 @@ func _snapshot(c: Client, f: Client.Frame, latest: Dictionary, me_row: Variant, 
 			"level": olevel,
 			"squeak": squeak,
 			"distance": distance,
+			# Two-watcher Stillness: the eye marks, and where the one watcher it walks at stands (the watched walk).
+			"eyes": {"on": f.eyes_on, "need": f.eyes_need, "lit": f.eyes_lit, "all": f.eyes_all},
+			"watchedAt": _watcher_at(f, vb),
 		},
 		"inst": inst_v,
 		"tapes": {"count": tape_count, "value": tape_value},
@@ -603,6 +609,18 @@ func _snapshot(c: Client, f: Client.Frame, latest: Dictionary, me_row: Variant, 
 		"others": others,
 		"auto": auto_status,
 	}
+
+## Two-watcher Stillness: the eye point of the one watcher it walks at ([x, y, z]), or null.
+func _watcher_at(f: Client.Frame, vb: Move.Body) -> Variant:
+	if f.watched_by == "":
+		return null
+	if f.watched_by == str(_client.id):
+		return [vb.x, vb.y + eye, vb.z]
+	for p: Dictionary in f.players:
+		if str(p["id"]) == f.watched_by:
+			var b: Move.Body = p["body"]
+			return [b.x, b.y + 1.6, b.z]
+	return null
 
 ## Everyone else, interpolated by the client: what to draw for each.
 func _others(f: Client.Frame, latest: Dictionary) -> Array:

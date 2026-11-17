@@ -303,7 +303,27 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < 19:
 			out.append(null)
 		out.append(enc_downs(w["downs"]))
+	if w.get("watch") != null:
+		while out.size() < 20:
+			out.append(null)
+		out.append(enc_watch(w["watch"]))
 	return out
+
+## The watch block (see the header) from its readable form {need, watchers: [ids]}.
+static func enc_watch(k: Dictionary) -> Array:
+	var ids: Array = []
+	for id: Variant in k["watchers"]:
+		ids.append(String(id))
+	return [k["need"], ids]
+
+static func dec_watch(c: _V, w: Variant) -> Dictionary:
+	var a := _a(c, w, 2, 2)
+	if c.bad:
+		return {}
+	var ids: Array = []
+	for id: Variant in _a(c, a[1], 0, 64):
+		ids.append(_s(c, id))
+	return {"need": _i(c, a[0], 1, 2), "watchers": ids}
 
 ## The downs block (see the header) from its readable form {down: [{id, at, until, by, healer, healFrom}],
 ## spots: [{playerId, x, z, level, y, t}]}.
@@ -581,7 +601,7 @@ static func _opt_num(c: _V, v: Variant) -> Variant:
 	return null if v == null else _f(c, v)
 
 static func dec_world(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 15, 20)
+	var a := _a(c, w, 15, 21)
 	if c.bad:
 		return {}
 	var blink: Variant = null
@@ -647,8 +667,10 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 		out["quota"] = dec_quota(c, a[17])
 	if a.size() > 18 and (a[18] != null or a.size() == 19):
 		out["annex"] = dec_annex(c, a[18])
-	if a.size() > 19:
+	if a.size() > 19 and (a[19] != null or a.size() == 20):
 		out["downs"] = dec_downs(c, a[19])
+	if a.size() > 20:
+		out["watch"] = dec_watch(c, a[20])
 	return out
 
 static func _dec_report(c: _V, w: Variant) -> Dictionary:
