@@ -24,6 +24,7 @@ const STRIP_COLOR := Color(1.0, 0.36, 0.05)
 const SIGN_COLOR := Color(0.95, 0.08, 0.03)
 ## How many lights nearest the camera cast shadows at the "full" quality level.
 const SHADOW_LIGHTS := 4
+const PRISON_VIEW := preload("res://client/prison_view.gd")
 
 var plan: Dictionary
 var W: int
@@ -103,6 +104,10 @@ func build(p: Dictionary, seed_text: String) -> void:
 	for d in dist:
 		max_dist = maxi(max_dist, d)
 	_index_rooms()
+	# The Prison hub has its own look (client/prison_view.gd); everything below is the Clinic's.
+	if str(p.get("place", "")) == "prison":
+		PRISON_VIEW.new().dress(self)
+		return
 	_make_materials()
 	_build_floors_and_ceilings()
 	_build_walls()

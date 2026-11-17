@@ -1,12 +1,16 @@
 # The Prison hub plan (docs/floors/prison.md, section 4 and task P4): a fixed plan, place "prison",
 # no entity; every walkable cell reachable from the lift; eight bunks, one per cell; four teller
 # windows in the bank room; no bunk more than 20 m of walking from the lift; the same plan on every
-# call; the lift's shaft zone clear. Oracles are written here from floor.gd's step rule only.
+# call; the lift's shaft zone clear; the tellers' side of the counter out of reach; the windows
+# numbered left to right as you face them; each bunk standing where the look draws it. Oracles are
+# written here from floor.gd's step rule only, and the look is built from the same plan to check it.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
 const Floor = preload("res://sim/floor.gd")
 const Prison = preload("res://sim/prison.gd")
+const PrisonView = preload("res://client/prison_view.gd")
+const LevelScript = preload("res://client/level.gd")
 
 ## Every position reachable from the landing, as pos_index keys (a flood fill over can_step).
 func _flood(p: Floor.FloorPlan) -> Dictionary:
@@ -146,3 +150,111 @@ func test_the_lift_shaft_zone_is_clear(t: T) -> void:
 	t.check(z.position.x + z.size.x == p.landing.x, "the shaft zone does not end at the landing's west side")
 	t.check(p.landing.y >= z.position.y and p.landing.y < z.position.y + z.size.y, "the shaft zone is not level with the landing")
 	t.check(z.position.x >= 1 and z.position.y >= 1, "the shaft zone touches the grid edge")
+
+## The prison as the client draws it: a Level built from the plan, and its dressing. Free the Level after.
+func _drawn() -> Array:
+	var lv: Node3D = LevelScript.new()
+	lv.call("build", PrisonView.plain_plan(), "prison")
+	return [lv, lv.get_meta(&"prison")]
+
+## A cell's door: [the cell inside the room, the cell outside], or [] if it has none.
+func _door_of(p: Floor.FloorPlan, room: Floor.Room) -> Array:
+	var rect := Rect2i(room.x, room.y, room.w, room.h)
+	for d in p.doors:
+		var a := Vector2i(d.ax, d.ay)
+		var b := Vector2i(d.bx, d.by)
+		if rect.has_point(a) and not rect.has_point(b):
+			return [a, b]
+		if rect.has_point(b) and not rect.has_point(a):
+			return [b, a]
+	return []
+
+func test_the_counter_keeps_players_on_the_hall_side(t: T) -> void:
+	var p := Prison.prison_plan()
+	var seen := _flood(p)
+	var f := Prison.COUNTER_FACING
+	var z := Prison.TELLER_SIDE
+	t.eq(absi(f.x) + absi(f.y), 1, "the counter faces one of the four ways")
+	# Behind the glass is void: not walkable, and nothing reaches it.
+	for y in range(z.position.y, z.end.y):
+		for x in range(z.position.x, z.end.x):
+			t.check(not Floor.is_walkable(p, 0, x, y), "the tellers' side %d,%d is walkable" % [x, y])
+			t.check(not seen.has(Floor.pos_index(p, Floor.Pos.make(0, x, y))), "the tellers' side %d,%d is reachable from the lift" % [x, y])
+	# Each window looks across the counter onto the tellers' side.
+	var line := -1
+	for w in Prison.window_positions():
+		t.check(z.has_point(w + f), "window %s does not face the tellers' side across the counter" % str(w))
+		var d := w.x * f.x + w.y * f.y
+		t.check(line < 0 or d == line, "window %s is not on the counter line" % str(w))
+		line = d
+	# No reachable cell lies past the counter line within the bank room's span along it.
+	var bank := Prison.BANK_ROOM
+	var past := PackedStringArray()
+	for y in p.height:
+		for x in p.width:
+			var c := Vector2i(x, y)
+			var along := c.x if f.x == 0 else c.y
+			var lo := bank.position.x if f.x == 0 else bank.position.y
+			var hi := bank.end.x if f.x == 0 else bank.end.y
+			if along >= lo and along < hi and c.x * f.x + c.y * f.y > line and seen.has(Floor.pos_index(p, Floor.Pos.make(0, x, y))):
+				past.append(str(c))
+	t.check(past.is_empty(), "reachable cells behind the counter: " + ", ".join(past))
+
+func test_window_numbers_read_left_to_right_facing_the_counter(t: T) -> void:
+	var f := Prison.COUNTER_FACING
+	# A player facing (fx, fy) on the plan (x east, y south) has their right hand toward (-fy, fx).
+	var right := Vector2i(-f.y, f.x)
+	var w := Prison.window_positions()
+	for i in range(1, w.size()):
+		var step := w[i] - w[i - 1]
+		t.check(step.x * right.x + step.y * right.y > 0, "window %d at %s is not right of window %d at %s, facing %s" % [i + 1, str(w[i]), i, str(w[i - 1]), str(f)])
+	# The look numbers the panes in that order: pane i stands in front of window i, across the counter.
+	var built := _drawn()
+	var view: Object = built[1]
+	var centres: Array[Vector3] = view.get("window_centres")
+	t.eq(centres.size(), w.size(), "drawn panes")
+	for i in mini(centres.size(), w.size()):
+		var c := Vector2i(int(floor(centres[i].x / 2.0)), int(floor(centres[i].z / 2.0)))
+		t.eq(c, w[i] + f, "pane %d is not across the counter from window %d's stand cell" % [i + 1, i + 1])
+	(built[0] as Node).free()
+	t.note("windows 1..4 left to right facing %s: %s" % [str(f), str(w)])
+
+func test_each_bunk_stands_where_it_is_drawn(t: T) -> void:
+	var p := Prison.prison_plan()
+	var bunks := Prison.bunk_positions()
+	var walls: Array[Vector2i] = []
+	# The rules: each bunk cell is in its cell's door column, against the back wall (the next cell on
+	# from the door is outside the room).
+	for b in bunks:
+		var id := Floor.room_id_at(p, 0, b.x, b.y)
+		if id < 0:
+			t.check(false, "bunk %s is not in a room" % str(b))
+			walls.append(Vector2i.ZERO)
+			continue
+		var r := p.rooms[id]
+		var rect := Rect2i(r.x, r.y, r.w, r.h)
+		var dd := _door_of(p, r)
+		t.check(not dd.is_empty(), "the cell holding bunk %s has no door" % str(b))
+		if dd.is_empty():
+			walls.append(Vector2i.ZERO)
+			continue
+		var inside: Vector2i = dd[0]
+		var fwd: Vector2i = inside - (dd[1] as Vector2i)
+		var off := b - inside
+		t.eq(off.x * fwd.y - off.y * fwd.x, 0, "bunk %s is not in line with its door at %s" % [str(b), str(inside)])
+		t.check(not rect.has_point(b + fwd), "bunk %s is not against its cell's back wall (the cell goes on to %s)" % [str(b), str(b + fwd)])
+		walls.append(fwd)
+	# The look: the mattress is drawn in that cell, against the far side of it from the door.
+	var built := _drawn()
+	var view: Object = built[1]
+	var centres: Array[Vector3] = view.get("bunk_centres")
+	t.eq(centres.size(), bunks.size(), "drawn bunks")
+	for i in mini(centres.size(), bunks.size()):
+		var c := centres[i]
+		var cell := Vector2i(int(floor(c.x / 2.0)), int(floor(c.z / 2.0)))
+		t.eq(cell, bunks[i], "bunk %d is drawn in another cell" % (i + 1))
+		var fwd := walls[i]
+		var far_edge := Vector2((bunks[i].x + 0.5 + fwd.x * 0.5) * 2.0, (bunks[i].y + 0.5 + fwd.y * 0.5) * 2.0)
+		var gap := absf((far_edge - Vector2(c.x, c.z)).dot(Vector2(fwd)))
+		t.check(gap < 0.6, "bunk %d is %.2f m off its back wall" % [i + 1, gap])
+	(built[0] as Node).free()

@@ -146,6 +146,10 @@ func _ready() -> void:
 	if "server" in OS.get_cmdline_user_args():
 		get_tree().change_scene_to_file.call_deferred("res://server/server.tscn")
 		return
+	if OS.get_cmdline_user_args().has("scene=prison_demo"):  # the Prison hub look, no day loop (client/prison_demo.gd)
+		process_mode = Node.PROCESS_MODE_DISABLED
+		get_tree().change_scene_to_file.call_deferred("res://client/prison_demo.tscn")
+		return
 	var t0 := Time.get_ticks_msec()
 	_t0_us = Time.get_ticks_usec()
 	_read_options()
