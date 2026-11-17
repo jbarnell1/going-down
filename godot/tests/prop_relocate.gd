@@ -23,7 +23,7 @@
 #   4. Over the network: three wandering bots on lossy, delayed links through the real NetHost (net/host_rules.gd
 #      with relocation on) and NetClient. A client never draws the figure between the two poses: on every frame
 #      drawn between the last tick before a relocation and its tick, the figure is at the new pose (the snap) or
-#      still at the old one, never on the way.
+#      still held where that screen last saw it on its old walk, never on the straight line between the two.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -346,12 +346,17 @@ func _far_stage(seed: String, far: float) -> Array:
 	return [s, spot]
 
 ## Steps the stage `secs` seconds, the player facing away from it (or at it: `look`); the host time of the first
-## relocation, or -1.
+## relocation, or -1. `_far_lined`: whether the player had a clear line to it on some tick (by the oracle).
+var _far_lined := false
+
 func _far_run(s0: Run.RunState, secs: float, look: bool = false) -> float:
 	var s := s0
 	var pb := s.players[0].body
+	_far_lined = false
+	var k := Entity.kind_of(s.orderly)
 	for _n in roundi(secs / DT):
 		var ob := s.orderly.body
+		_far_lined = _far_lined or o_line(s.plan, pb, 1.65, ob, k)
 		var yaw := Entity.yaw_toward(ob.x - pb.x, ob.z - pb.z) + (0.0 if look else PI)
 		var ins: Array[Run.PlayerInput] = [Run.PlayerInput.make("p", pb, 1.65, yaw, 0.0, 90.0, 70.0)]
 		var r := Run.step_run(s, ins, DT)
@@ -375,7 +380,8 @@ func test_stillness_leaves_when_long_unwatched_and_far(t: T) -> void:
 		var ready := s.copy()
 		ready.orderly = o
 		var at := _far_run(ready, 4.0)
-		if t.check(at > 0.0, "seed %d: never left, unwatched past 12 s and far from its target" % i):
+		# Walking at them, it may come into a line from the cells round them first: then it rightly stays.
+		if t.check(at > 0.0 or _far_lined, "seed %d: never left, unwatched past 12 s, far from its target and out of every line" % i) and at > 0.0:
 			left += 1
 			t.check(at >= ready.t + 1.0 + 1.0 - DT - EPS, "seed %d: left %.2f s in, before 12 s unwatched and 1 s out of view" % [i, at - ready.t])
 		# Not before 12 s: just woken, in four seconds it does not go.
@@ -402,7 +408,8 @@ func test_stillness_leaves_when_long_unwatched_and_far(t: T) -> void:
 		if staged >= (4 if t.quick else 12):
 			break
 	t.check(staged >= 3, "staged floors %d" % staged)
-	t.note("%d floors staged: it left in %d" % [staged, left])
+	t.check(left * 3 >= staged * 2, "not vacuous: it left on %d of %d floors" % [left, staged])
+	t.note("%d floors staged: it left in %d (on the rest it came into a line first)" % [staged, left])
 
 func test_never_with_a_watcher(t: T) -> void:
 	var staged := 0
@@ -469,6 +476,7 @@ class NSess:
 	var frames := 0
 	var straddles := 0
 	var short := 0
+	var held_old := 0
 	var failures := 0
 
 	func _init(seed: String, place: StringName) -> void:
@@ -583,9 +591,16 @@ func _nframe(s: NSess, t: T, b: NBot) -> void:
 		s.straddles += 1
 		var to_new := M.hypot2(float(d["x"]) - float(pn[1]), float(d["z"]) - float(pn[2]))
 		var to_old := M.hypot2(float(d["x"]) - float(po[1]), float(d["z"]) - float(po[2]))
-		var at_new := to_new <= 0.03 and int(d["level"]) == int(pn[3])
-		var at_old := to_old <= 0.3 and int(d["level"]) == int(po[3])
-		_nfail(s, t, at_new or at_old, "%s %s at %.2f: drawn %.2f m from where it left and %.2f m from where it arrived (%.1f m apart): between the two" % [s.name, b.id, rt, to_old, to_new, gap])
+		# On the way: on the straight line from where it left to where it arrived, at neither end. A pose still
+		# held where this screen last saw it (on its old walk) is not on the way, and it is let go only out of view.
+		var ex := float(pn[1]) - float(po[1])
+		var ez := float(pn[2]) - float(po[2])
+		var u := clampf(((float(d["x"]) - float(po[1])) * ex + (float(d["z"]) - float(po[2])) * ez) / (ex * ex + ez * ez), 0.0, 1.0)
+		var off := M.hypot2(float(d["x"]) - (float(po[1]) + ex * u), float(d["z"]) - (float(po[2]) + ez * u))
+		var between := off <= 0.3 and to_old > 0.3 and to_new > 0.03
+		if to_new > 0.03:
+			s.held_old += 1
+		_nfail(s, t, not between, "%s %s at %.2f: drawn %.2f m from where it left and %.2f m from where it arrived (%.1f m apart), %.2f m off the line between: on the way" % [s.name, b.id, rt, to_old, to_new, gap, off])
 
 func _nplay(s: NSess, t: T, secs: float) -> void:
 	var end := s.g + secs
@@ -608,6 +623,7 @@ func test_a_client_never_draws_it_between_the_two_poses(t: T) -> void:
 	var straddles := 0
 	var relocs := 0
 	var short := 0
+	var held := 0
 	var failures := 0
 	for place in PLACES:
 		for i in sessions:
@@ -619,9 +635,10 @@ func test_a_client_never_draws_it_between_the_two_poses(t: T) -> void:
 			straddles += s.straddles
 			relocs += s.relocs.size()
 			short += s.short
+			held += s.held_old
 			failures += s.failures
 	t.eq(failures, 0, "frames drawn between the two poses")
 	t.check(relocs >= (2 if t.quick else 8), "not vacuous: relocations on the host %d" % relocs)
 	t.check(straddles >= (3 if t.quick else 12), "not vacuous: frames drawn across a relocation %d" % straddles)
-	t.note("%d sessions: %d relocations on the host; %d client frames, %d of them drawn across a relocation (%d more across one shorter than 4 m)" % [
-		sessions * PLACES.size(), relocs, frames, straddles, short])
+	t.note("%d sessions: %d relocations on the host; %d client frames, %d of them drawn across a relocation (%d still holding a pose of its old walk; %d more across one shorter than 4 m)" % [
+		sessions * PLACES.size(), relocs, frames, straddles, held, short])
