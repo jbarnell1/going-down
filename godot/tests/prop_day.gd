@@ -362,6 +362,56 @@ func test_bank_preview_agrees_with_end_day(t: T) -> void:
 	t.check(shorts > runs / 5 and overs > 0, "not vacuous: %d short days, %d game overs" % [shorts, overs])
 	t.note("%d random days, preview matched end_day every time (%d short, %d game over)" % [runs, shorts, overs])
 
+func test_a_missed_day_with_nothing_owned_says_nothing_to_take_and_players_without_upgrades_lose_nothing(t: T) -> void:
+	var crew: Array[String] = ["ann", "bo", "cy"]
+	var fq := 100
+	var s := _state(3, 1, 0, 2, crew.size())
+	var q := Day.day_quota(s, fq)
+	# Nobody owns anything: the odds, the monitor and the roll all say nothing is at stake.
+	var empty := {}
+	for p in crew:
+		empty[p] = Upgrades.UpgradeState.make(50)
+	var o := Day.loss_odds(empty)
+	t.eq(int(o["count"]), 0, "nobody owns anything: loss_odds counts none at stake")
+	t.eq(String(o["text"]), "nothing to take", "nobody owns anything: loss_odds text")
+	t.check((o.get("players", []) as Array).is_empty(), "nobody owns anything: loss_odds lists no players")
+	var pv := Day.bank_preview(s, q - 1, empty, fq)
+	t.check(not pv.made and not pv.game_over, "short of the quota, not the third miss")
+	t.eq(pv.at_stake, 0, "preview: nothing at stake")
+	t.check(pv.per_player.is_empty(), "preview: per_player is empty")
+	t.eq(pv.odds, "nothing to take", "preview: odds say nothing to take")
+	t.check(pv.text.contains("NOTHING TO TAKE") and not pv.text.contains("LOSES ONE UPGRADE"), "the monitor says NOTHING TO TAKE: " + pv.text)
+	var r := Day.end_day(s, q - 1, crew, empty, fq, "nothing-owned")
+	t.check(r.taken.is_empty() and r.facts["taken"].is_empty(), "end_day took nothing and told the narrator nothing")
+	t.check(r.outcome == &"missed" and not r.made and not r.game_over, "it still counts as a missed day")
+	t.eq(r.state.misses, s.misses + 1, "the miss is counted")
+	t.eq(r.state.streak, 0, "the streak is broken")
+	t.eq(_owned_count(r.wallets), 0, "no upgrades appear or vanish")
+	t.eq(r.odds, pv.odds, "the result's odds are the preview's")
+	# A mixed crew: bo and cy own nothing, ann owns three. Only ann is listed, only ann can lose.
+	var mixed := empty.duplicate()
+	var ann := Upgrades.UpgradeState.make(50)
+	var ids := _node_ids()
+	ann.owned.append(ids[0])
+	ann.owned.append(ids[1])
+	ann.owned.append(ids[2])
+	mixed["ann"] = ann
+	var mp := Day.bank_preview(s, q - 1, mixed, fq)
+	t.eq(mp.at_stake, 1, "mixed: one owner at stake")
+	t.eq(mp.per_player.size(), 1, "mixed: only the owner is listed")
+	t.eq(String(mp.per_player[0]["player"]), "ann", "mixed: ann is the one listed")
+	t.eq(mp.odds, "ann 1 in 3", "mixed: the printed odds")
+	t.check(mp.text.contains("EACH OWNER") and not mp.text.contains("NOTHING TO TAKE") and not mp.text.contains("BO") and not mp.text.contains("CY"), "mixed: the monitor names only the owner: " + mp.text)
+	for i in (20 if t.quick else 100):
+		var mr := Day.end_day(s, q - 1, crew, mixed, fq, "mixed-%d" % i)
+		t.eq(mr.taken.size(), 1, "mixed %d: exactly one loss" % i)
+		t.eq(String(mr.taken[0]["player"]), "ann", "mixed %d: ann lost it" % i)
+		t.check(ann.owned.has(String(mr.taken[0]["node"])), "mixed %d: it was one of ann's own" % i)
+		for p: String in ["bo", "cy"]:
+			t.check((mr.wallets[p] as Upgrades.UpgradeState).owned.is_empty(), "mixed %d: %s still owns nothing" % [i, p])
+		t.eq((mr.wallets["ann"] as Upgrades.UpgradeState).owned.size(), 2, "mixed %d: ann has two left" % i)
+	t.note("nothing owned: no stake, NOTHING TO TAKE, miss counted; mixed crew: only the owner listed and losing")
+
 func test_no_call_edits_what_it_was_given(t: T) -> void:
 	var rng := Rng.make_rng("day-pure")
 	for i in (100 if t.quick else 500):
