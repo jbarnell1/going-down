@@ -12,7 +12,9 @@ const DOOR_W := 1.1       # src/sim/walls.ts DOOR_WIDTH
 const DOOR_H := 2.1       # src/sim/sight.ts DOOR_HEIGHT
 const LIFT_HALF := 0.6    # half of src/sim/run.ts CAR_DOOR_WIDTH
 const LIFT_H := 2.25      # src/render/structure.ts LIFT_DOOR_HEIGHT
-const WALL_T := 0.14     # drawn wall thickness (the rules' walls are lines; bodies keep 0.3 m off them)
+## How far short of a crossing wall's far face a wall's end stops (m), so no two faces share a plane.
+const CORNER_TUCK := 0.002
+const WALL_T := 0.14    # drawn wall thickness (the rules' walls are lines; bodies keep 0.3 m off them)
 const PROP_MARGIN := 0.06 # gap between a prop's footprint and a wall face
 const CHUNK := 4         # cells per mesh chunk side (keeps per-object light counts low)
 const STRIP_Y0 := 0.06    # src/render/structure.ts EMERGENCY
@@ -292,8 +294,10 @@ func _wall_edge(level: int, x0: float, z0: float, x1: float, z1: float, cellA: V
 		var t: float = part[1]
 		var a := start + dirv * f
 		var b := start + dirv * t
-		var ea := start + dirv * (f - (h if f <= 0.001 and ext0 else 0.0))
-		var eb := start + dirv * (t + (h if t >= S - 0.001 and ext1 else 0.0))
+		# The reach past a corner stops CORNER_TUCK short of the other wall's far face: reaching all the
+		# way put this end's cap in the same plane as that face, and the two flickered (z-fighting).
+		var ea := start + dirv * (f - (h - CORNER_TUCK if f <= 0.001 and ext0 else 0.0))
+		var eb := start + dirv * (t + (h - CORNER_TUCK if t >= S - 0.001 and ext1 else 0.0))
 		if showA:
 			_wall_face(level, ea.x + nA.x * h, ea.z + nA.z * h, eb.x + nA.x * h, eb.z + nA.z * h, y0, y1, nA, cellA.x, cellA.y, what)
 		if showB:

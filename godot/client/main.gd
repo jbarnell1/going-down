@@ -7,7 +7,9 @@
 #   other players, their emotes and footsteps.
 # Before the game: the start screen (start_screen.gd): Play alone, Join friends, draw your face, the
 # lobby. The face drawn goes in the join (net/protocol.gd); every crewmate wears the face their player
-# drew on their mask (others_view.gd), and the lift's monitor shows the whole crew's (lift.gd).
+# drew on their mask (others_view.gd), and the lift's monitor shows the whole crew's (lift.gd). In the
+# prison, F at the face kiosk (client/face_kiosk.gd) opens the same editor on your face; Done sends the
+# new face to everyone in the run (net/room_client.gd set_face).
 # The 3D is drawn at 480x270 in a SubViewport and shown through the tape shader; the on-screen
 # display, name tags, subtitles, menus and end screen are drawn crisp on top.
 #
@@ -27,6 +29,9 @@ const RoomClient = preload("res://net/room_client.gd")
 const LocalRoom = preload("res://net/local_room.gd")
 const Protocol = preload("res://net/protocol.gd")
 const Move = preload("res://sim/move.gd")
+const Prison = preload("res://sim/prison.gd")
+const PrisonView = preload("res://client/prison_view.gd")
+const FaceKiosk = preload("res://client/face_kiosk.gd")
 
 const VFOV := 70.0
 const SENS := 0.0022
@@ -65,6 +70,9 @@ var sfx: Sfx
 var announcer: Announcer
 var hud: Hud
 var start: StartScreen
+## The face kiosk's editor over the game (client/face_kiosk.gd): opened by F at the prison's kiosk, or
+## by the test hook. Done changes the face for everyone in the run.
+var kiosk: FaceKiosk
 var inst_view: InstrumentView
 var screen: TextureRect
 var tape_mat: ShaderMaterial
@@ -353,6 +361,11 @@ func _build_view() -> void:
 	start.start_pressed.connect(_lobby_start)
 	start.leave_pressed.connect(_leave_room)
 	start.screen_shown.connect(_on_screen_shown)
+	kiosk = FaceKiosk.new()
+	kiosk.name = "FaceKiosk"
+	kiosk.remember = true
+	add_child(kiosk)
+	kiosk.changed.connect(_kiosk_changed)
 	sfx = Sfx.new()
 	add_child(sfx)
 	var audio3d := Node3D.new()
@@ -469,6 +482,7 @@ func _close_words(code: int) -> String:
 	return "CONNECTION LOST."
 
 func _clear_world() -> void:
+	kiosk.close()
 	for c: Node in world.get_children():
 		c.queue_free()
 	level = null
@@ -550,6 +564,12 @@ func _input(event: InputEvent) -> void:
 				start.key(k0)
 			get_viewport().set_input_as_handled()
 		return
+	if kiosk.is_open():
+		# The kiosk's editor has the keys (Enter done, Esc cancel) and its own mouse.
+		if event is InputEventKey:
+			kiosk.key(event as InputEventKey)
+			get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		# The mouse is captured only after a real click, never under automation.
@@ -583,6 +603,8 @@ func _input(event: InputEvent) -> void:
 			_new_run()
 		elif k.physical_keycode == KEY_E:
 			raise_latch = not raise_latch
+		elif k.physical_keycode == KEY_F and _station() == "kiosk":
+			_open_kiosk()
 		elif k.physical_keycode == KEY_F:
 			pending_call = true
 			pending_pick = true
@@ -621,6 +643,33 @@ func _send_emote(which: String) -> void:
 		return
 	link.client().emote(which)
 	hud.note = "> " + EMOTE_LABELS[Protocol.EMOTES.find(which)]
+	_note_until = Time.get_ticks_msec() + 1500
+
+## What the player stands at in the prison (Prison.station_at: "shop", "skills", "kiosk"), "" elsewhere
+## or on any other floor.
+func _station() -> String:
+	if link == null or str(link.plan_dict.get("place", "")) != String(Prison.PLACE) or snap.is_empty() or not snap.has("me"):
+		return ""
+	var me: Dictionary = snap["me"]
+	if int(me["level"]) != 0:
+		return ""
+	return String(Prison.station_at(Vector2i(floori(float(me["x"]) / Prison.CELL_SIZE), floori(float(me["z"]) / Prison.CELL_SIZE))))
+
+## The face kiosk: the editor over the game, on this player's current face. False when not in a run.
+func _open_kiosk() -> bool:
+	if mode != "game" or link == null or link.client() == null:
+		return false
+	wheel_open = false
+	kiosk.open(start.face_code)
+	return true
+
+## The kiosk's Done: the new face is this player's from now on, on every screen in the run (the host
+## passes it on) and in every later run's join.
+func _kiosk_changed(code: String) -> void:
+	start.face_code = code
+	if link != null:
+		link.rc.set_face(code)
+	hud.note = "> FACE CHANGED"
 	_note_until = Time.get_ticks_msec() + 1500
 
 func _noise_on() -> bool:
@@ -726,7 +775,7 @@ func _game_input(dt: float) -> Dictionary:
 		r = t_move[1]
 		sprint = t_move[2]
 		creep = t_move[3]
-	elif mode == "game":
+	elif mode == "game" and not kiosk.is_open():
 		f = Input.get_action_strength("forward") - Input.get_action_strength("back")
 		r = Input.get_action_strength("right") - Input.get_action_strength("left")
 		sprint = Input.is_action_pressed("sprint")
@@ -815,6 +864,11 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	lift.set_light(1.0 if not dark else 0.1)
 	lift.set_faces(link.crew_faces())
 	lift.update(dt)
+	if level.has_meta(&"prison"):
+		# The face kiosk's screen shows this player's own face.
+		var pv: Object = level.get_meta(&"prison")
+		if str(pv.get("kiosk_face")) != start.face_code:
+			pv.call("set_kiosk_face", start.face_code)
 	if phase == "boarding":
 		var bell_left := float(s["bellLeft"])
 		for w: float in BELL_WARNINGS:
@@ -863,10 +917,13 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	hud.wheel_labels = EMOTE_LABELS
 	hud.wheel_sel = _wheel_sel() if wheel_open else -1
 	# The menu (the controls) shows whenever the mouse is free: after Esc, and before the first click.
-	hud.menu_on = t_menu or (error_text == "" and not automated and not wheel_open and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and hud.end_lines.is_empty())
+	hud.menu_on = t_menu or (error_text == "" and not automated and not wheel_open and not kiosk.is_open() and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and hud.end_lines.is_empty())
 	var prompt := ""
-	if not ended and not noise:
-		if bool(me.get("canCall", false)):
+	var station := _station()
+	if not ended and not noise and not kiosk.is_open():
+		if station != "":
+			prompt = PrisonView.prompt_for(Vector2i(floori(float(me["x"]) / Prison.CELL_SIZE), floori(float(me["z"]) / Prison.CELL_SIZE)))
+		elif bool(me.get("canCall", false)):
 			prompt = "F  ▼ CALL"
 		elif bool(me.get("nearHold", false)):
 			prompt = "F  <|> HOLD"
@@ -1080,6 +1137,8 @@ func _on_js(args: Array) -> void:
 ## type <address|name> <text> | start | leave | emote <name> | wheel open | wheel aim dx dy | wheel release | screen
 ## The face step: draw done | draw cancel | draw press <editor control id> | draw line x0 y0 x1 y1 (cells, with
 ## the mouse events a player's drag sends) | faces (what is on every mask and on the monitor)
+## The face kiosk, mid-run: kiosk open | kiosk press <editor control id> | kiosk line x0 y0 x1 y1 |
+## kiosk done | kiosk cancel
 func _command(c: String) -> String:
 	var p := c.split(" ", false)
 	if p.is_empty():
@@ -1138,6 +1197,30 @@ func _command(c: String) -> String:
 					return "unknown draw command"
 		"faces":
 			return JSON.stringify(_faces_state())
+		"kiosk":
+			# The face kiosk's editor during a run, as F at the prison's kiosk opens it.
+			if p.size() < 2:
+				return "kiosk what"
+			if p[1] == "open":
+				return "ok" if _open_kiosk() else "not in a run"
+			if not kiosk.is_open():
+				return "the kiosk is not open"
+			var ked := kiosk.editor
+			match p[1]:
+				"done":
+					ked.key(_enter_key())
+				"cancel":
+					ked.press("cancel")
+				"press":
+					if p.size() < 3:
+						return "press what"
+					ked.press(p[2])
+				"line":
+					if p.size() < 6:
+						return "line x0 y0 x1 y1"
+					_drag_on_editor(ked, Vector2(float(p[2]), float(p[3])), Vector2(float(p[4]), float(p[5])))
+				_:
+					return "unknown kiosk command"
 		"ui":
 			if p.size() < 2:
 				return "ui what"
@@ -1293,7 +1376,8 @@ func _faces_state() -> Dictionary:
 	return {"own": CrewView.texture_hash(mine) if mine != null else "", "hasFace": start.face_code != "",
 		"default": CrewView.texture_hash(CrewView.default_face()), "masks": masks,
 		"monitor": lift.monitor_hashes() if lift != null else [],
-		"received": link.client().faces.size() if link != null and link.client() != null else 0}
+		"received": link.client().faces.size() if link != null and link.client() != null else 0,
+		"kioskOpen": kiosk.is_open(), "changeWaiting": link.client().face_change_waiting() if link != null and link.client() != null else false}
 
 ## The start screen as a test sees it (the passphrase is never in it).
 func _screen_state() -> Dictionary:

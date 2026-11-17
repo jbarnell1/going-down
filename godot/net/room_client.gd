@@ -6,6 +6,7 @@ extends RefCounted
 const Client = preload("res://net/client.gd")
 const Transport = preload("res://net/transport.gd")
 const Session = preload("res://net/session.gd")
+const Protocol = preload("res://net/protocol.gd")
 
 ## "connecting", "lobby" (connected; no run, or a run this client is not in yet), "running" (a NetClient
 ## for the current run exists), "closed" (see close_code / close_reason).
@@ -50,6 +51,17 @@ func connect_to(url: String, secret: String, name: String, face: String = "") ->
 	_ws.inbound_buffer_size = 1 << 20
 	_ws.outbound_buffer_size = 1 << 16
 	return _ws.connect_to_url(url)
+
+## Changes the player's face (the face kiosk): the run's client sends it now (or after the host's gap),
+## and every later run's join carries it. False if `face` is not a valid face.
+func set_face(face: String) -> bool:
+	if Protocol.valid_face(face) == "":
+		return false
+	_face = face
+	if client != null and not client.ended:
+		client.change_face(face, _now)
+		_flush(_now)
+	return true
 
 ## Starts a run (from the lobby; the server ignores it while one is on).
 func start_run() -> void:

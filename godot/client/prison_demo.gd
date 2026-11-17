@@ -18,6 +18,7 @@ const Run = preload("res://sim/run.gd")
 const Stamina = preload("res://sim/stamina.gd")
 const Prison = preload("res://sim/prison.gd")
 const PrisonView = preload("res://client/prison_view.gd")
+const FaceKiosk = preload("res://client/face_kiosk.gd")
 
 const VFOV := 70.0
 const EYE := 1.65
@@ -41,6 +42,10 @@ var lift: Lift
 var fp: Floor.FloorPlan
 var car: Run.CarGeometry
 var failed := false
+var hud: Hud
+var kiosk: FaceKiosk
+## The face "you" wear in the demo (it never reads or writes the player's saved face).
+var my_face := ""
 var _bench_on := false
 var _bench_route: PackedVector3Array = PackedVector3Array()
 var _bench_t := 0.0
@@ -115,6 +120,15 @@ func _build_view() -> void:
 	screen.material = tape_mat
 	screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(screen)
+	# The prompt line (the game's HUD, its display off) and the face kiosk's editor over the picture.
+	hud = Hud.new()
+	hud.osd_on = false
+	add_child(hud)
+	kiosk = FaceKiosk.new()
+	kiosk.name = "FaceKiosk"
+	kiosk.remember = false
+	add_child(kiosk)
+	kiosk.changed.connect(_kiosk_changed)
 
 func _build_place() -> bool:
 	var plan: Dictionary
@@ -153,6 +167,45 @@ func _build_place() -> bool:
 
 func _say(s: String) -> void:
 	print("prison_demo: " + s)
+
+# --- the stations: prompts and the face kiosk ---------------------------------------------------
+
+func _view() -> PrisonView:
+	if level == null or not level.has_meta(&"prison"):
+		return null
+	return level.get_meta(&"prison") as PrisonView
+
+## The cell the camera stands in.
+func _cam_cell() -> Vector2i:
+	return Vector2i(floori(cam.position.x / Level.S), floori(cam.position.z / Level.S))
+
+## The prompt line for where the camera stands (as the game shows it), hidden while the kiosk is open.
+func _update_prompt() -> void:
+	hud.prompt = "" if kiosk.is_open() or place != "prison" else PrisonView.prompt_for(_cam_cell())
+
+## F: at the face kiosk, its editor opens on your face. The windows do nothing yet.
+func _use() -> bool:
+	if place != "prison" or kiosk.is_open() or Prison.station_at(_cam_cell()) != &"kiosk":
+		return false
+	kiosk.open(my_face)
+	_update_prompt()
+	return true
+
+func _kiosk_changed(code: String) -> void:
+	my_face = code
+	var v := _view()
+	if v != null:
+		v.set_kiosk_face(code)
+
+func _input(event: InputEvent) -> void:
+	if not event is InputEventKey:
+		return
+	var k := event as InputEventKey
+	if kiosk.is_open():
+		kiosk.key(k)
+		get_viewport().set_input_as_handled()
+	elif k.pressed and not k.echo and k.physical_keycode == KEY_F:
+		_use()
 
 func _process(delta: float) -> void:
 	if level:
@@ -335,6 +388,104 @@ func _prison_pictures() -> void:
 	_check("bank room brighter than the corridor", lb >= lh * BANK_OVER_HALL, "%.3f vs corridor (pictures 1 and 5) %.3f, needs x%.2f" % [lb, lh, BANK_OVER_HALL])
 	var orange := _orange_share(cell)
 	_check("cell night light orange", orange >= ORANGE_MIN, "%.1f%% orange pixels, needs >= %.1f%%" % [orange * 100.0, ORANGE_MIN * 100.0])
+	await _station_pictures()
+
+# The signs, a window's prompt, and the face kiosk: your face on its screen, F opens the editor on it,
+# Done keeps the new face, Cancel keeps the old.
+func _station_pictures() -> void:
+	var view := _view()
+	var gz := (Prison.WINDOWS[0].y + 1) * Level.S
+	# 8. From the hall in front of the bank door: SHOP over windows 1-2, SKILLS over 3-4.
+	var bdx := (Prison.BANK_DOOR_X + 0.5) * Level.S
+	var door_z := Prison.BANK_ROOM.position.y * Level.S
+	_look(Vector3(bdx, EYE, door_z - 0.6), Vector3(bdx + 0.6, 2.6, gz))
+	_update_prompt()
+	await _shot("08_bank_signs_from_door")
+	_check("no prompt in the hall", hud.prompt == "", "\"%s\"" % hud.prompt)
+	# 9. At window 1, facing the counter: the prompt.
+	var w1 := Prison.WINDOWS[0]
+	var wc := Vector3((w1.x + 0.5) * Level.S, EYE, (w1.y + 0.5) * Level.S)
+	_look(wc, Vector3(wc.x, 1.5, gz + 0.3))
+	_update_prompt()
+	await _shot("09_window_1_prompt")
+	_check("the prompt at window 1", hud.prompt == "F  SHOP", "\"%s\"" % hud.prompt)
+	var w4 := Prison.WINDOWS[3]
+	cam.position = Vector3((w4.x + 0.5) * Level.S, EYE, (w4.y + 0.5) * Level.S)
+	_update_prompt()
+	_check("the prompt at window 4", hud.prompt == "F  SKILL TREE", "\"%s\"" % hud.prompt)
+	# 10. At the kiosk: your face on its screen, and the prompt.
+	my_face = FaceCodec.encode(FacePaint.starter("frown"))
+	view.set_kiosk_face(my_face)
+	var k := Prison.kiosk_position()
+	var kc := view.kiosk_centre
+	var stand := Vector3((k.x + 0.5) * Level.S, EYE, (k.y + 0.5) * Level.S)
+	_look(stand + Vector3(-0.35, 0, 0.25), Vector3(kc.x, kc.y - 0.1, kc.z))
+	_update_prompt()
+	await _shot("10_kiosk_your_face")
+	_check("the prompt at the kiosk", hud.prompt == "F  CHANGE YOUR FACE", "\"%s\"" % hud.prompt)
+	_check("the kiosk shows your face", view.kiosk_face_hash() == CrewView.texture_hash(FaceCodec.decode(my_face)), "screen %s, face %s" % [view.kiosk_face_hash(), CrewView.texture_hash(FaceCodec.decode(my_face))])
+	# 11. F: the editor opens on your face; draw on it.
+	var opened := _use()
+	await _frames(2)
+	_check("F at the kiosk opens the face editor on your face", opened and kiosk.is_open() and kiosk.editor.get_code() == my_face and hud.prompt == "", "open %s, starts on your face %s" % [kiosk.is_open(), kiosk.editor.get_code() == my_face if kiosk.editor != null else false])
+	var old := my_face
+	kiosk.editor.press("starter:shock")
+	kiosk.editor.press("colour:2")
+	kiosk.editor.press("brush:2")
+	_drag(kiosk.editor, Vector2(4, 20), Vector2(7, 20))
+	_drag(kiosk.editor, Vector2(25, 20), Vector2(28, 20))
+	await _shot("11_kiosk_editor_open")
+	var drawn := kiosk.editor.get_code()
+	# 12. Done: the kiosk shows the new face.
+	kiosk.editor.key(_key(KEY_ENTER))
+	await _frames(2)
+	_update_prompt()
+	await _shot("12_kiosk_new_face")
+	_check("Done keeps the new face", not kiosk.is_open() and my_face == drawn and my_face != old and view.kiosk_face_hash() == CrewView.texture_hash(FaceCodec.decode(drawn)), "closed %s, face changed %s" % [not kiosk.is_open(), my_face != old])
+	# Cancel keeps the old one.
+	_use()
+	await _frames(2)
+	kiosk.editor.press("clear")
+	kiosk.editor.key(_key(KEY_ESCAPE))
+	await _frames(2)
+	_check("Cancel keeps the face you had", not kiosk.is_open() and my_face == drawn and view.kiosk_face_hash() == CrewView.texture_hash(FaceCodec.decode(drawn)), "closed %s, face kept %s" % [not kiosk.is_open(), my_face == drawn])
+	# F anywhere else opens nothing.
+	cam.position = Vector3((Prison.HALL_X0 + 0.5) * Level.S, EYE, (Prison.HALL_ROW + 0.5) * Level.S)
+	_check("F away from the kiosk opens nothing", not _use() and not kiosk.is_open(), "")
+	_update_prompt()
+	# 13. The cell doors at a grazing angle, walking slowly down the hall close to the cells' wall: three
+	# frames 3 cm apart. Faces sharing a plane (z-fighting) show as frame edges that change from frame
+	# to frame; drawn right, only the small step of the view changes.
+	var hz := Prison.HALL_ROW * Level.S + 0.45
+	for i in 3:
+		var x := (Prison.HALL_X0 + 1.2) * Level.S + i * 0.03
+		_look(Vector3(x, EYE, hz), Vector3(x + 8.0, 1.2, hz - 0.9))
+		_update_prompt()
+		await _shot("13_cell_doors_grazing_%d" % (i + 1))
+
+static func _key(code: Key) -> InputEventKey:
+	var k := InputEventKey.new()
+	k.pressed = true
+	k.keycode = code
+	k.physical_keycode = code
+	return k
+
+## A drag across the face editor's canvas from cell `a` to cell `b`, as the mouse sends it.
+func _drag(ed: FaceEditor, a: Vector2, b: Vector2) -> void:
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	down.position = ed.cell_to_screen(a)
+	ed._gui_input(down)
+	for i in range(1, 9):
+		var mv := InputEventMouseMotion.new()
+		mv.position = ed.cell_to_screen(a.lerp(b, i / 8.0))
+		ed._gui_input(mv)
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	up.position = ed.cell_to_screen(b)
+	ed._gui_input(up)
 
 func lv_bank_centre() -> Vector3:
 	var r := Prison.BANK_ROOM

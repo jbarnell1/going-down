@@ -11,10 +11,13 @@
 #   client -> server  m|{"t":"start"}        start a run (in the lobby; ignored while one runs)
 #                     m|{"t":"name","name":"..."}
 #                     m|{"t":"ping"}         keeps a lobby connection alive (any message does)
-#                     n<E>|<protocol text>   input, join, leave, ping or emote of run E (the host passes
-#                                            emotes on to the others, rate limited; a join may carry the
-#                                            player's drawn face, which the host passes on once and
-#                                            nothing logs; a client may not send "F"); anything else, or a
+#                     n<E>|<protocol text>   input, join, leave, ping, emote or face change ("C") of run E
+#                                            (the host passes emotes on to the others, rate limited; a
+#                                            join may carry the player's drawn face, which the host passes
+#                                            on once and nothing logs; a face change is passed on the same
+#                                            way, at most one per player every Host.FACE_GAP seconds, and
+#                                            a "C" whose face is not valid is ignored, not kicked; a client
+#                                            may not send "F"); anything else, or a
 #                                            message that does not decode exactly (net/protocol.gd
 #                                            decode validates every field), closes the connection.
 # A client's run messages are passed to the host as coming from that connection's own id, so it can
@@ -31,6 +34,8 @@ const WsServer = preload("res://net/ws_server.gd")
 ## Seconds after a bank or a wipe before the room goes back to the lobby.
 const END_LINGER := 10.0
 const LOBBY_EVERY := 2.0
+## The run messages (net/protocol.gd types) a client may send; anything else closes the connection.
+const ACCEPTED: Array[String] = ["input", "join", "leave", "ping", "emote", "setFace"]
 
 ## What NetHost talks through: the room pushes what arrives, sends go out framed with the run's epoch.
 class RoomTransport extends Transport.Transport:
@@ -188,7 +193,7 @@ func _on_message(id: String, data: String, now: float) -> void:
 			return  # a late message of a finished run
 		var text := data.substr(bar + 1)
 		var m: Variant = Protocol.decode(text)
-		if m == null or not (String(m["type"]) in ["input", "join", "leave", "ping", "emote"]):
+		if m == null or not (String(m["type"]) in ACCEPTED):
 			_ws.kick(id, WsServer.CLOSE_PROTOCOL, "bad message")
 			return
 		_transport.push(id, text)
