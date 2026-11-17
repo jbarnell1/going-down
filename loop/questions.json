@@ -1562,6 +1562,79 @@
       "default": [
         "forever"
       ]
+    },
+    {
+      "id": "hunt-speed",
+      "title": "How fast should the monsters hunt now that you sprint for 7 s?",
+      "context": "Sprint is now 7 s (was 5). Bot test runs: at 3.7 m/s catches stay as today; at 3.8 fleeing crews are caught about 8% more often (running is a little better than today but not a plan); at 3.85 running matches today exactly but costs about 11% more catches.",
+      "type": "single",
+      "options": [
+        {
+          "id": "3.8",
+          "label": "3.8 m/s",
+          "note": "Recommended."
+        },
+        {
+          "id": "3.7",
+          "label": "3.7 m/s, catches as today",
+          "note": ""
+        },
+        {
+          "id": "3.85",
+          "label": "3.85 m/s",
+          "note": ""
+        }
+      ],
+      "default": [
+        "3.8"
+      ]
+    },
+    {
+      "id": "blackout-length",
+      "title": "How long should the last blackout before the car be?",
+      "context": "It was 12-15 s (9-10 s on floor 1). Now 20-24 s (14-16 s on floor 1), capped so at least one blink still comes first. Crews who wait on the landing are caught about 16% more; crews who move away are not.",
+      "type": "single",
+      "options": [
+        {
+          "id": "20-24",
+          "label": "20-24 s (floor 1: 14-16 s)",
+          "note": "Recommended."
+        },
+        {
+          "id": "16-20",
+          "label": "16-20 s, a gentler step",
+          "note": ""
+        },
+        {
+          "id": "old",
+          "label": "Keep 12-15 s",
+          "note": ""
+        }
+      ],
+      "default": [
+        "20-24"
+      ]
+    },
+    {
+      "id": "left-out-wake",
+      "title": "When do players left out of the car wake in the prison?",
+      "context": "Anyone on their feet not aboard when the doors close is left out: no pay today. They wake on their bunk when the crew gets home (after a bank or a wipe), not literally the next morning. Players who are down or out still rejoin when the car next moves.",
+      "type": "single",
+      "options": [
+        {
+          "id": "home",
+          "label": "When the crew gets home",
+          "note": "Recommended."
+        },
+        {
+          "id": "morning",
+          "label": "The next morning (they miss the evening in the prison)",
+          "note": ""
+        }
+      ],
+      "default": [
+        "home"
+      ]
     }
   ]
 }

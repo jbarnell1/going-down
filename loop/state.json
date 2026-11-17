@@ -4,8 +4,8 @@
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
   "iteration": 66,
-  "now": "T16k",
-  "nowText": "Judging round 2 done (bright 3-4/10, dark 5-7/10). Second revision under way: a natural untucked shirt tail, a hunched, lopsided outline that reads wrong from far away, the sheet covering every edge",
+  "now": null,
+  "nowText": "",
   "ci": {
     "status": "passed",
     "commit": "cb7c7a0",
@@ -2170,7 +2170,7 @@
         "C2"
       ],
       "startedAt": "2026-11-17T13:31:58.984Z",
-      "waiting": "Checked: 210 quick tests, all 26 stored-result tests unchanged, both deliberate breaks red. Being merged into the main code now"
+      "waiting": "Merged into main and pushed with its network check; goes into your next build"
     },
     {
       "id": "T19b",
@@ -2206,7 +2206,9 @@
       "ns": [
         "B1",
         "B11"
-      ]
+      ],
+      "startedAt": "2026-11-17T17:24:07.172Z",
+      "waiting": "Paused: usage limit reached; builder stopped early (worktree-agent-ab87781c91fa45e54). Restart when usage resets"
     },
     {
       "id": "T19d",
@@ -2224,29 +2226,27 @@
       "id": "T19e",
       "title": "Monsters slip away and reappear out of view",
       "why": "Every monster relocates out of everyone's sight in a way that fits its rule, so you can lose track of it",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "B1",
         "B11"
       ],
       "startedAt": "2026-11-17T15:01:23.538Z",
-      "doingText": "Built: when nobody has seen the Orderly for a while, it slips away out of everyone's sight and reappears 12-20 m from a player, with a sound first. A Sonnet agent is re-running its checks",
-      "doingAt": "2026-11-17T17:01:02.993Z"
+      "waiting": "Merged into main and pushed (219 quick tests, relocation/watchers/downs full tests, 3-player network 10/10, down check 24/24). Goes into your next build"
     },
     {
       "id": "T20a",
       "title": "The Orderly stays visible in the dark",
       "why": "When the lights go out you should still glimpse it moving, not have it vanish",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "B11",
         "B4"
       ],
       "startedAt": "2026-11-17T15:08:32.563Z",
-      "doingText": "An Opus builder is drawing the Orderly as normal in the dark (no glow), with longer blackouts, more stamina, and a lift that waits",
-      "doingAt": "2026-11-17T16:12:26.888Z"
+      "waiting": "Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets"
     },
     {
       "id": "T20b",
@@ -2296,14 +2296,12 @@
       "id": "T16k",
       "title": "The Temp as a proper Blender figure",
       "why": "A real modelled office worker with the photocopied face sheet, stapler and notes, ready to animate in Mixamo",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "B11"
       ],
       "startedAt": "2026-11-17T16:02:51.010Z",
-      "doingText": "Judging round 2 done (bright 3-4/10, dark 5-7/10). Second revision under way: a natural untucked shirt tail, a hunched, lopsided outline that reads wrong from far away, the sheet covering every edge",
-      "doingAt": "2026-11-17T17:20:20.878Z",
       "media": [
         {
           "src": "T16k/20261117T165755-annex_34.png",
@@ -2322,37 +2320,42 @@
           "caption": "The Temp after round-one fixes: the sheet wrapped and stapled on, coffee stain, shirt tail out, tie half undone",
           "kind": "image",
           "at": "2026-11-17T17:18:23.485Z"
+        },
+        {
+          "src": "T16k/20261117T173331-annex_34.png",
+          "caption": "The Temp after two judging rounds: hunched, head hung over, shirt tail out, coffee-stained, sheet stapled and tied on",
+          "kind": "image",
+          "at": "2026-11-17T17:33:31.807Z"
         }
       ],
       "todo": [
         "Your direction: more dishevelled - a coffee stain, half the shirt tail untucked, the tie half undone, like he doesn't take care of himself"
-      ]
+      ],
+      "waiting": "Modelled and judged twice (round 2 fixes made: soft untucked tail, a hunched lopsided outline, the sheet covering every edge). Merged into the main code. Waits for your Mixamo animations: assets_src/mixamo/export/temp.fbx"
     },
     {
       "id": "T20c",
       "title": "Longer blackouts before the car comes",
       "why": "Once the lights start dimming, the dark should hold longer while you wait for the lift",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "B4"
       ],
       "startedAt": "2026-11-17T16:12:27.188Z",
-      "doingText": "Part of the same Opus job: blackouts last longer before the car comes",
-      "doingAt": "2026-11-17T16:12:27.189Z"
+      "waiting": "Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets"
     },
     {
       "id": "T20h",
       "title": "A bit more stamina, monsters paced to match",
       "why": "You can run a little longer, and the monsters are retuned so they stay just as dangerous",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "B1"
       ],
       "startedAt": "2026-11-17T16:12:27.413Z",
-      "doingText": "Part of the same Opus job: more stamina, monster speeds retuned so catches stay as likely",
-      "doingAt": "2026-11-17T16:12:27.415Z"
+      "waiting": "Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets"
     },
     {
       "id": "T15m",
@@ -2396,7 +2399,7 @@
       "id": "T20f",
       "title": "Controls card and a ready-up screen",
       "why": "Everyone reads the controls and readies up, then drops into the lift together; the lift waits and never pushes anyone out",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [],
       "nsWhy": "new from the owner on 17 Nov; not in the North Star yet (amendment recorded)",
@@ -2404,8 +2407,7 @@
         "Your car answer: the car waits as long as anyone is aboard; a returning car waits 30 s before its doors close; anyone left out then dies and wakes in the prison without the credits they earned"
       ],
       "startedAt": "2026-11-17T16:12:27.525Z",
-      "doingText": "Part of the same Opus job: the car waits while anyone is aboard; a returning car waits 30 s; anyone left out wakes in the prison without their credits (the ready-up screen comes later)",
-      "doingAt": "2026-11-17T16:12:27.526Z"
+      "waiting": "Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets"
     },
     {
       "id": "T20g",
@@ -2441,15 +2443,14 @@
       "id": "TB",
       "title": "Your second batch of sounds in the game",
       "why": "The Annex, the Playroom and the crew get their own recorded sounds: staplers, office tone, the music box, squeaky tiles, the ball pit, the Minder's wheeze, breathing that isn't wet",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "B11",
         "A11"
       ],
       "startedAt": "2026-11-17T13:49:58.420Z",
-      "doingText": "Back with its builder: make the breathing grow louder as it nears every time, and the beds' hum dip reliably under the voice",
-      "doingAt": "2026-11-17T16:57:55.937Z"
+      "waiting": "Paused: usage limit reached; the mix fix was in progress (worktree-agent-a9d98f0ff17540e95). Restart when usage resets"
     },
     {
       "id": "T11a",
@@ -3004,6 +3005,91 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-17T17:50:20.887Z",
+      "text": "Paused T19e: waiting for Merged into main and pushed (219 quick tests, relocation/watchers/downs full tests, 3-player network 10/10, down check 24/24). Goes into your next build",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T17:33:45.033Z",
+      "text": "Paused T19e: waiting for Checked green; merge into main committing now with its tests (background b4axi33yd); verify and push when usage resets",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T17:33:44.781Z",
+      "text": "Paused T20f: waiting for Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T17:33:44.526Z",
+      "text": "Paused T20h: waiting for Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T17:33:44.246Z",
+      "text": "Paused T20c: waiting for Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T17:33:44.041Z",
+      "text": "Paused T20a: waiting for Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T17:33:43.809Z",
+      "text": "Paused TB: waiting for Paused: usage limit reached; the mix fix was in progress (worktree-agent-a9d98f0ff17540e95). Restart when usage resets",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T17:33:43.598Z",
+      "text": "Paused T19c: waiting for Paused: usage limit reached; builder stopped early (worktree-agent-ab87781c91fa45e54). Restart when usage resets",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T17:33:32.035Z",
+      "text": "Paused T19e: waiting for Checked: 216 quick tests, 98 relocations over 80 floors all fair, stored results unchanged, both deliberate breaks red. Being merged into the main code",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T17:33:31.946Z",
+      "text": "Paused T16k: waiting for Modelled and judged twice (round 2 fixes made: soft untucked tail, a hunched lopsided outline, the sheet covering every edge). Merged into the main code. Waits for your Mixamo animations: assets_src/mixamo/export/temp.fbx",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T17:33:31.807Z",
+      "text": "New pictures for T16k: The Temp as a proper Blender figure.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T17:24:07.256Z",
+      "text": "Paused T19a: waiting for Merged into main and pushed with its network check; goes into your next build",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T17:24:07.172Z",
+      "text": "Started T19c: The Temp's own mechanic. An Opus builder is making the Temp's own rule, Lonely: it hunts whoever is out of sight of everyone and far from them, slightly faster than walking, and slips away once you rejoin someone",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T17:24:07.026Z",
+      "text": "Started T20f: Controls card and a ready-up screen. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T17:24:06.917Z",
+      "text": "Started T20h: A bit more stamina, monsters paced to match. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T17:24:06.735Z",
+      "text": "Started T20c: Longer blackouts before the car comes. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T17:24:06.561Z",
+      "text": "Started T20a: The Orderly stays visible in the dark. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks",
+      "kind": "start"
+    },
     {
       "at": "2026-11-17T17:20:20.879Z",
       "text": "Started T16k: The Temp as a proper Blender figure. Judging round 2 done (bright 3-4/10, dark 5-7/10). Second revision under way: a natural untucked shirt tail, a hunched, lopsided outline that reads wrong from far away, the sheet covering every edge",
@@ -3917,91 +4003,6 @@
     {
       "at": "2026-11-17T08:06:57.792Z",
       "text": "Started T15g: The Minder, modelled, rigged and animated in Blender. Blind judging, round 1: an Opus judge and Fable look only at the pictures; the modeller revises after",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T08:06:36.897Z",
-      "text": "The Minder's Blender model is built (5,601 triangles, 43 bones, all ten animations). Blind judging round 1 is starting: judges see only the pictures.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T08:06:36.794Z",
-      "text": "New pictures for T15g: The Minder, modelled, rigged and animated in Blender.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T08:06:36.674Z",
-      "text": "New pictures for T15g: The Minder, modelled, rigged and animated in Blender.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T08:00:18.989Z",
-      "text": "Started T16f: The Temp's body in the rules. An Opus builder is giving the Temp its own numbers in the rules: 1.8 m, its own stapler clicks, still while seen",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T08:00:18.818Z",
-      "text": "New pictures for T15c: The Playroom's look and a stand-in Minder.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T08:00:18.705Z",
-      "text": "New pictures for T15c: The Playroom's look and a stand-in Minder.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T08:00:18.587Z",
-      "text": "New pictures for T15c: The Playroom's look and a stand-in Minder.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T08:00:18.489Z",
-      "text": "New pictures for T15c: The Playroom's look and a stand-in Minder.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T08:00:18.389Z",
-      "text": "Started T15c: The Playroom's look and a stand-in Minder. A Sonnet agent is checking the Playroom's look: furniture on every hiding place, signs that match the odds, count dark, and the stand-in Minder",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T07:31:02.590Z",
-      "text": "Paused T5q: waiting for comes after the floor order, which edits the same file; the first builder stopped before starting it",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T07:31:02.488Z",
-      "text": "Paused T6f: waiting for built and on a branch (4 m car, 1.8 m door); it is checked together with the floor order",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T07:31:02.379Z",
-      "text": "Started TA: Real sounds, and comedy sounds. A Sonnet agent is checking the recorded sounds and the mix again (the first check was cut off), now with the player-breath fix",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T07:31:02.224Z",
-      "text": "Started T15g: The Minder, modelled, rigged and animated in Blender. An Opus builder is making the Minder in Blender: studying two tutorials, then modelling, rigging and animating it",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T07:31:02.067Z",
-      "text": "Started T16e: The place deck: the third floor down is the Annex. An Opus builder is making the floor order: Clinic, Clinic, the Annex, the Playroom, then a seeded draw",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T07:27:49.770Z",
-      "text": "The hide-and-seek rules passed their separate check (12 tests; four more deliberate breaks, all red) and are merged.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T07:27:49.604Z",
-      "text": "Paused T15b: waiting for checked and merged; it runs in a game once the count is wired into the run (T15d)",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T07:17:03.294Z",
-      "text": "Started T15c: The Playroom's look and a stand-in Minder. An Opus builder is making the Playroom's look and a stand-in Minder",
       "kind": "start"
     }
   ]
