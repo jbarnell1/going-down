@@ -64,6 +64,14 @@
 # credits), and the run's "callRefused" and "quotaMet" events reach every client like any other. A press
 # of the call button is one call input (the "calls" counter), so each press below the quota is one
 # "callRefused". A run without the quota sends exactly what it did before.
+#
+# The Annex (sim/run.gd annex; T16h): the run decides, the host passes keys on and reports. A new "marks"
+# count is a press of Q (PlayerInput.mark); a new "peels" count asks to peel the mark "peelId"
+# (PlayerInput.peel). Each player's name, from their join, goes to the run (RunState.names) for the notes.
+# On an Annex floor every snapshot carries the annex block (Protocol.enc_annex: the pad, every mark, and
+# how many notes the floor has), the welcome also every note so far (so a player who joins mid-floor has
+# them all), and the run's mark and note events reach every client like any other. Marks and notes go to
+# everyone alike: nothing is sent to one player only.
 extends RefCounted
 
 const Run = preload("res://sim/run.gd")
@@ -142,6 +150,14 @@ class HostPlayer:
 	var hide_pending := false
 	var hide_fast := false
 	var emote_pending := false
+	## The name this player joined with ("" before the join).
+	var name := ""
+	## The Annex: Q presses counted so far (a press not yet given to the run), peels asked for so far and
+	## the mark of a peel not yet given to the run (-1 for none).
+	var marks := 0
+	var mark_pending := false
+	var peels := 0
+	var peel_pending := -1
 
 class History:
 	var o: Entity.OrderlyState
@@ -385,7 +401,7 @@ func _on_message(from: String, data: String, now: float) -> void:
 	var ht := host_time(now)
 	match String(m["type"]):
 		"join":
-			_join(from, str(m.get("face", "")))
+			_join(from, str(m.get("face", "")), str(m.get("name", "")))
 		"leave":
 			_leave(from)
 		"ping":
@@ -443,7 +459,7 @@ func _relay_emote(p: HostPlayer, emote: String, ht: float) -> void:
 
 ## A join (or a repeated one, when the welcome was lost): the welcome carries the whole state. `face`:
 ## the face the join carried ("" for none; the protocol has already refused anything not a face).
-func _join(peer: String, face: String = "") -> void:
+func _join(peer: String, face: String = "", name: String = "") -> void:
 	var id: Variant = _by_peer.get(peer)
 	var p: HostPlayer = _players.get(id) if id != null else null
 	if p != null and p.left:
@@ -459,8 +475,10 @@ func _join(peer: String, face: String = "") -> void:
 		p.ack_event = event_log.size()
 	p.connected = true
 	p.joined = true
+	if name != "":
+		p.name = name
 	var ev_from := p.ack_event + 1
-	_transport.send(peer, Protocol.encode({"type": "welcome", "you": p.id, "seed": seed, "playing": p.in_run, "evFrom": ev_from, "world": world()}))
+	_transport.send(peer, Protocol.encode({"type": "welcome", "you": p.id, "seed": seed, "playing": p.in_run, "evFrom": ev_from, "world": world(true)}))
 	_share_faces(p, face)
 
 ## Faces, after a (repeated) welcome: the joiner gets every other player's face (so a late joiner has
@@ -525,6 +543,12 @@ func _on_input(p: HostPlayer, m: Dictionary, ht: float) -> void:
 		p.hide_fast = int(m.get("fastHides", 0)) > p.fast_hides
 		p.hides = int(m["hides"])
 		p.fast_hides = int(m.get("fastHides", 0))
+	if int(m.get("marks", 0)) > p.marks:
+		p.marks = int(m["marks"])
+		p.mark_pending = true
+	if int(m.get("peels", 0)) > p.peels:
+		p.peels = int(m["peels"])
+		p.peel_pending = int(m.get("peelId", -1))
 	_step_gait(p, m)
 	# The body: not until the client has the latest placement; never further than they could go.
 	if p.place != null and int(m["placeAck"]) < int(p.place["seq"]):
@@ -597,6 +621,16 @@ func _step(now: float) -> void:
 	# 3. A catch waits for its victim's screen.
 	s = _confirm_catch(s, ht)
 
+	# The players' names, for the Annex's notes (sim/run.gd names).
+	var names := {}
+	for rp in s.players:
+		var hp: HostPlayer = _players.get(rp.id)
+		if hp != null and hp.name != "":
+			names[rp.id] = hp.name
+	if names != s.names:
+		s = s.copy()
+		s.names = names
+
 	# 4. Inputs.
 	var inputs: Array[Run.PlayerInput] = []
 	for rp in s.players:
@@ -606,6 +640,8 @@ func _step(now: float) -> void:
 				# Out of the run this tick: a press or an emote made meanwhile is not saved up for later.
 				p.hide_pending = false
 				p.emote_pending = false
+				p.mark_pending = false
+				p.peel_pending = -1
 			continue
 		var m: Dictionary = p.input
 		var pc: Variant = _pending_catch
@@ -628,11 +664,16 @@ func _step(now: float) -> void:
 		inp.hide_fast = p.hide_pending and p.hide_fast
 		inp.peek = m.get("peek", false) == true
 		inp.emote_sound = p.emote_pending
+		# The Annex (sim/run.gd): Q pressed, a peel asked for.
+		inp.mark = p.mark_pending
+		inp.peel = p.peel_pending
 		inputs.append(inp)
 		p.call_pending = false
 		p.pick_pending = false
 		p.hide_pending = false
 		p.emote_pending = false
+		p.mark_pending = false
+		p.peel_pending = -1
 
 	# 5. The run.
 	var r: Run.RunStep = _step_fn.call(s, inputs, TICK)
@@ -905,8 +946,9 @@ static func _close_pose(a: Dictionary, b: Dictionary) -> bool:
 static func _tape(t: TapeLib.Tape) -> Dictionary:
 	return {"id": t.id, "owner": t.owner_id, "readings": t.readings.size(), "total": t.total}
 
-## The shared part of a snapshot (also the welcome's state).
-func world() -> Dictionary:
+## The shared part of a snapshot (also the welcome's state). `full`: the welcome's, with every note of
+## an Annex floor (a snapshot carries only how many there are).
+func world(full: bool = false) -> Dictionary:
 	var s := state
 	var blink: Variant = null
 	if s.blink != null:
@@ -949,6 +991,22 @@ func world() -> Dictionary:
 		out["seek"] = seek_block(s)
 	if s.quota:
 		out["quota"] = quota_block(s)
+	if s.annex != null:
+		out["annex"] = annex_block(s, full)
+	return out
+
+## The Annex's block (Protocol.enc_annex): the crew's pad, every mark down, and this floor's notes (how
+## many, and with `full` every one). Null off the Annex.
+static func annex_block(s: Run.RunState, full: bool = false) -> Variant:
+	if s.annex == null:
+		return null
+	var a := s.annex
+	var marks: Array = []
+	for m in a.marks.marks:
+		marks.append(Run.mark_plain(m))
+	var out := {"pad": a.marks.pad, "padSize": a.marks.pad_size, "marks": marks, "notesFrom": a.notes_from, "noteCount": a.notes.size()}
+	if full:
+		out["notes"] = a.notes.duplicate()
 	return out
 
 ## The floor quota block of a run with the quota (Protocol.enc_quota): whole credits recorded on this

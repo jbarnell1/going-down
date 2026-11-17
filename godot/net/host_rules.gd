@@ -22,6 +22,8 @@
 #    for it, so the call button does nothing until the crew has recorded enough on the floor. prepare()
 #    turns it on before the first tick, after any depth above 1, so it is that floor's quota. With the
 #    resident off nothing can ever be recorded, so the quota would lock the lift for good: it stays off.
+#  - The Annex's marks and notes (sim/run.gd annex) are the run's own: the soft catch keeps them from the
+#    real tick (the catch's note), and a forced call passes the mark and peel keys on like the rest.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -179,6 +181,9 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 		st.floor_by = r.state.floor_by
 		st.floor_needed = r.state.floor_needed
 		st.quota_met = r.state.quota_met
+		# The Annex's marks and notes too: the catch's note was triggered by the real tick.
+		st.annex = r.state.annex
+		st.note_seq = r.state.note_seq
 		st.players = players
 		st.summary = null
 		var kept_events: Array[Dictionary] = []
@@ -220,4 +225,6 @@ static func _copy_input(i: Run.PlayerInput) -> Run.PlayerInput:
 	n.voice = i.voice
 	n.horn = i.horn
 	n.light = i.light
+	n.mark = i.mark
+	n.peel = i.peel
 	return n
