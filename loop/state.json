@@ -5,7 +5,7 @@
   "deadlineAt": "2026-11-21T05:00:00.000Z",
   "iteration": 66,
   "now": "T16k",
-  "nowText": "Judging round 1 done (bright corridor 3-4/10, dark 6-7/10; all three like the drawn face over a hidden head). The builder is now fixing the sheet so it looks worn and stapled on, the mannequin arms and neck, and the stapler and notes",
+  "nowText": "Judging round 2 done (bright 3-4/10, dark 5-7/10). Second revision under way: a natural untucked shirt tail, a hunched, lopsided outline that reads wrong from far away, the sheet covering every edge",
   "ci": {
     "status": "passed",
     "commit": "cb7c7a0",
@@ -2163,15 +2163,14 @@
       "id": "T19a",
       "title": "Freeze takes two watchers",
       "why": "The Orderly keeps moving if only one of you is looking: it takes two (or, with two players, either of you) to hold it",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "B1",
         "C2"
       ],
       "startedAt": "2026-11-17T13:31:58.984Z",
-      "doingText": "A Sonnet agent is checking the two-watcher rule: the full test set, and two deliberate breaks that must turn it red",
-      "doingAt": "2026-11-17T15:01:23.319Z"
+      "waiting": "Checked: 210 quick tests, all 26 stored-result tests unchanged, both deliberate breaks red. Being merged into the main code now"
     },
     {
       "id": "T19b",
@@ -2303,8 +2302,8 @@
         "B11"
       ],
       "startedAt": "2026-11-17T16:02:51.010Z",
-      "doingText": "Judging round 1 done (bright corridor 3-4/10, dark 6-7/10; all three like the drawn face over a hidden head). The builder is now fixing the sheet so it looks worn and stapled on, the mannequin arms and neck, and the stapler and notes",
-      "doingAt": "2026-11-17T17:02:34.094Z",
+      "doingText": "Judging round 2 done (bright 3-4/10, dark 5-7/10). Second revision under way: a natural untucked shirt tail, a hunched, lopsided outline that reads wrong from far away, the sheet covering every edge",
+      "doingAt": "2026-11-17T17:20:20.878Z",
       "media": [
         {
           "src": "T16k/20261117T165755-annex_34.png",
@@ -2317,6 +2316,12 @@
           "caption": "The Temp in a T-pose, ready for Mixamo",
           "kind": "image",
           "at": "2026-11-17T16:57:55.465Z"
+        },
+        {
+          "src": "T16k/20261117T171823-annex_34.png",
+          "caption": "The Temp after round-one fixes: the sheet wrapped and stapled on, coffee stain, shirt tail out, tie half undone",
+          "kind": "image",
+          "at": "2026-11-17T17:18:23.485Z"
         }
       ],
       "todo": [
@@ -2999,6 +3004,26 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-17T17:20:20.879Z",
+      "text": "Started T16k: The Temp as a proper Blender figure. Judging round 2 done (bright 3-4/10, dark 5-7/10). Second revision under way: a natural untucked shirt tail, a hunched, lopsided outline that reads wrong from far away, the sheet covering every edge",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T17:18:23.681Z",
+      "text": "Started T16k: The Temp as a proper Blender figure. Revised (sheet wrapped and stapled on, dishevelled as you asked: coffee stain, shirt tail out, tie half undone; arms deliberately too long). Judging round 2 running",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T17:18:23.485Z",
+      "text": "New pictures for T16k: The Temp as a proper Blender figure.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T17:09:21.725Z",
+      "text": "Paused T19a: waiting for Checked: 210 quick tests, all 26 stored-result tests unchanged, both deliberate breaks red. Being merged into the main code now",
+      "kind": "note"
+    },
     {
       "at": "2026-11-17T17:02:34.095Z",
       "text": "Started T16k: The Temp as a proper Blender figure. Judging round 1 done (bright corridor 3-4/10, dark 6-7/10; all three like the drawn face over a hidden head). The builder is now fixing the sheet so it looks worn and stapled on, the mannequin arms and neck, and the stapler and notes",
@@ -3978,26 +4003,6 @@
       "at": "2026-11-17T07:17:03.294Z",
       "text": "Started T15c: The Playroom's look and a stand-in Minder. An Opus builder is making the Playroom's look and a stand-in Minder",
       "kind": "start"
-    },
-    {
-      "at": "2026-11-17T07:17:03.037Z",
-      "text": "Started T15b: The count, the Minder and health, as rules. A Sonnet agent is checking the hide-and-seek rules: re-running the tests and breaking them on purpose",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T07:06:14.721Z",
-      "text": "The online check (Linux) passed with the Playroom generator in, so its 40 quick-test floors come out the same on Linux as on Windows.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T06:40:48.480Z",
-      "text": "The Temp passed its separate check (face, 1.8 m, still while seen, clicks, frame time; both deliberate breaks red; the Clinic's 38 desktop checks still pass) and is merged.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T06:40:48.275Z",
-      "text": "Paused T16g: waiting for checked and merged (1ff6027); you meet it once the floor order (T16e) puts the Annex at floor 3",
-      "kind": "note"
     }
   ]
 }

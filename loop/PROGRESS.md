@@ -6,7 +6,7 @@
 
 - **Gates passed:** 7 of 14. **Tasks done:** 62 of 104.
 - **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 66.
-- **Now:** T16k The Temp as a proper Blender figure. Judging round 1 done (bright corridor 3-4/10, dark 6-7/10; all three like the drawn face over a hidden head). The builder is now fixing the sheet so it looks worn and stapled on, the mannequin arms and neck, and the stapler and notes
+- **Now:** T16k The Temp as a proper Blender figure. Judging round 2 done (bright 3-4/10, dark 5-7/10). Second revision under way: a natural untucked shirt tail, a hunched, lopsided outline that reads wrong from far away, the sheet covering every edge
 - **Last CI result seen:** passed on cb7c7a0
 - **Answers applied up to:** 2026-11-17T15:39:30.665Z
 
@@ -213,7 +213,7 @@
   - To do: Add a test that walks a body through the open doorway into the car (today it is covered only by reading the code and the passing movement tests)
 - [ ] **T8c** `todo` Down and healed on screen
   - Why: When you go down you crawl with a 10-second timer; a friend sees HOLD F TO HELP and a fill bar; out leaves a red spot
-- [ ] **T19a** `doing` Freeze takes two watchers
+- [ ] **T19a** `todo` Freeze takes two watchers
   - Why: The Orderly keeps moving if only one of you is looking: it takes two (or, with two players, either of you) to hold it
 - [ ] **T19b** `todo` Hiding places on every floor
   - Why: Under hospital beds, inside cabinets (E), under desks (Ctrl) - so a re-rolled monster on any floor can be survived
@@ -351,6 +351,10 @@
 
 ## Activity (newest first)
 
+- 2026-11-17 17:20Z Started T16k: The Temp as a proper Blender figure. Judging round 2 done (bright 3-4/10, dark 5-7/10). Second revision under way: a natural untucked shirt tail, a hunched, lopsided outline that reads wrong from far away, the sheet covering every edge
+- 2026-11-17 17:18Z Started T16k: The Temp as a proper Blender figure. Revised (sheet wrapped and stapled on, dishevelled as you asked: coffee stain, shirt tail out, tie half undone; arms deliberately too long). Judging round 2 running
+- 2026-11-17 17:18Z New pictures for T16k: The Temp as a proper Blender figure.
+- 2026-11-17 17:09Z Paused T19a: waiting for Checked: 210 quick tests, all 26 stored-result tests unchanged, both deliberate breaks red. Being merged into the main code now
 - 2026-11-17 17:02Z Started T16k: The Temp as a proper Blender figure. Judging round 1 done (bright corridor 3-4/10, dark 6-7/10; all three like the drawn face over a hidden head). The builder is now fixing the sheet so it looks worn and stapled on, the mannequin arms and neck, and the stapler and notes
 - 2026-11-17 17:01Z Started T16k: The Temp as a proper Blender figure. Judging round 1: Fable done; Opus judges now
 - 2026-11-17 17:01Z Started T19e: Monsters slip away and reappear out of view. Built: when nobody has seen the Orderly for a while, it slips away out of everyone's sight and reappears 12-20 m from a player, with a sound first. A Sonnet agent is re-running its checks
@@ -387,7 +391,3 @@
 - 2026-11-17 15:40Z Added task T21a: A four-slot inventory.
 - 2026-11-17 15:40Z Took a default: Your answers applied: Lonely as designed (solo Annex: Lonely but slower than one player); eye marks shown; F for cabinets; relocation as designed and on for the Minder (wanders, grabs within 1 m, hunts once angered, voice says don't run); day quota counts everything earned; a wipe is the missed day; juice carton AND a nerve bar; a 4-slot inventory; quick noisy search; ready-up as recommended; the car waits while anyone is aboard, and a returning car waits 30 s, then anyone left out dies and wakes in the prison without their credits.
 - 2026-11-17 15:40Z Applied the owner's new answers.
-- 2026-11-17 15:37Z Hiding everywhere checked so far: 210 quick tests green; over 800 Clinics and 800 Annexes every corridor is within 14 steps of a hide; nobody inside a hide was ever caught without a reason (28 catches from hides, all after being seen getting in). Ball pit and seeking tests and the deliberate breaks still running.
-- 2026-11-17 15:23Z Paused T15m: waiting for Your notes recorded: warning line on arrival, a longer count (today 30-45 s), ball pit lowers your view instead of covering it, an anger bar, an 'instruments out' reminder. Waits for a free builder
-- 2026-11-17 15:23Z Added task T15m: Playroom tuning from your play.
-- 2026-11-17 15:19Z Paused T20g: waiting for Designed: hold F to search drawers, gurneys and lockers for credits, poem notes and juice cartons. Waits for furniture in the rules (T20d) and a free builder

@@ -178,6 +178,14 @@ func _capped(s: Run.RunState) -> Run.RunState:
 	c.floor_needed = _quota_cap
 	return c
 
+## Test-only: whether this server was started with `watchers=0` (an argument after `--`): Stillness is then
+## held by one look at any crew size, as before T19a (tools/net_local.mjs; server/room.gd).
+static func watchers_off_by_arg() -> bool:
+	for raw in OS.get_cmdline_user_args():
+		if raw.trim_prefix("--") == "watchers=0":
+			return true
+	return false
+
 ## Test-only: whether this process was started with the floor quota turned off, `quota=0` (a desktop or
 ## server argument after `--`, or the web page's ?quota=0). The scripted playthroughs (tools/play_*.mjs)
 ## pass it so their one reading is enough to call the lift; the quota itself is proved headless
