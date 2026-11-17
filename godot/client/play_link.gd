@@ -12,6 +12,14 @@
 # Everything rule-like here is read-only geometry the client needs to draw and to move its own body:
 # whether a call button is in reach, which half of the car you stand on, the squeak's audibility from
 # where the Orderly is DRAWN. The run itself is never stepped here.
+#
+# The Playroom (docs/floors/playarea.md sections 3, 4 and 9; sim/seek.gd): F at a hide's front (or in a
+# hide) is a hide press (LocalFrame.hide, hide_fast with sprint held), W held in a hide is a peek. The
+# body stays still while the rules hold it: getting in or out, inside, found, at the party table (the
+# host places it there). Inside, the camera sits back in the hide, or leans to the gap at the hide's eye
+# and turns only within the gap (`hideCam`). The snapshot carries the seek block, this player's row in
+# it, the newest count event, the hide in reach; other players in hides are drawn in them (crouched,
+# sunk to the hide's eye, side by side in a hide that holds several), and those at the party table sit.
 extends RefCounted
 
 const RoomClient = preload("res://net/room_client.gd")
@@ -33,6 +41,9 @@ const M = preload("res://sim/jsmath.gd")
 const EyeHeight = preload("res://client/eye_height.gd")
 const Day = preload("res://sim/day.gd")
 const Prison = preload("res://sim/prison.gd")
+const Places = preload("res://sim/places.gd")
+const Playroom = preload("res://sim/playroom.gd")
+const Seek = preload("res://sim/seek.gd")
 
 const PLAYER_RADIUS := 0.3
 ## The eyes of a player lying on their bunk (whole centimetres: it goes to the host as the frame's eye).
@@ -41,6 +52,23 @@ const BED_EYE := 0.8
 const HOLD_BUTTON_V := Lift.HOLD_BUTTON.x
 ## Where a spectator's camera stands until the host admits them (car-local u): the middle of the car.
 const WATCH_U := Run.CAR_DEPTH / 2.0
+## The Playroom. Sat back in a hide: the eyes this far down from the hide's eye, and this far back from
+## the inside spot (away from the gap). At the party table: the eyes of a seated player.
+const SAT_DROP := 0.12
+const SAT_BACK := 0.3
+const SEAT_EYE := 0.95
+## Seen from outside, a player in a hide is drawn crouched with the mask at the hide's eye, sunk to it
+## (CREW_CROUCH_MASK: the crouched figure's mask, EyeHeight.CREEP); in the ball pit a little higher, so
+## the head shows between the balls. Several in one hide sit SLOT_GAP apart.
+const CREW_CROUCH_MASK := 1.13
+const PIT_HEAD := 0.5
+const SLOT_GAP := 0.55
+## Peeking from the ball pit the camera is just over the balls' tops (the pit's eye, 0.3 m, is under them).
+const PIT_PEEK_EYE := 0.47
+## Peeking: how far up or down the gap lets you look.
+const PEEK_PITCH := 0.35
+## After F for a hide, the body waits this long at most for the host's answer before it may move.
+const HIDE_WAIT := 1.0
 
 var rc: RoomClient
 var local := false
@@ -78,6 +106,7 @@ var _false_stop := false
 var _auto: Follow.PathWalk = null
 var _auto_stuck := 0.0
 var _auto_pace := 0.0
+var _auto_gait: StringName = &"walk"
 var _orderly_tpl: Entity.OrderlyState = null
 var _prev_seeing := false
 var _prev_pose: Variant = null
@@ -85,6 +114,12 @@ var _prev_pose: Variant = null
 ## whether F must be let go first (it was held when the player got up, as the rules want).
 var _bed_hold := 0.0
 var _bed_release := false
+## The Playroom: the floor's hides and party-table seats (pure functions of the plan; [] elsewhere).
+var hides: Array[Playroom.Hide] = []
+var seats: Array[Playroom.Seat] = []
+## Seconds left of waiting for the host after a hide press (the body stays still meanwhile).
+var _hide_wait := 0.0
+var _hide_wait_phase := ""
 
 func _init(room: RoomClient, is_local: bool) -> void:
 	rc = room
@@ -141,12 +176,24 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	var in_yaw := float(inp.get("yaw", 0.0))
 	var in_pitch := float(inp.get("pitch", 0.0))
 	var want_raised: bool = playing and inp.get("raised") == true
+	# The Playroom: this player's row in the seek block (null elsewhere), and whether the rules hold the
+	# body (getting in or out of a hide, inside it, found, at the party table, down).
+	var seek_row: Variant = seek_row_of(latest, str(c.id))
+	var s_phase := str(seek_row["phase"]) if seek_row != null else "out"
+	var s_status := str(seek_row["status"]) if seek_row != null else "ok"
+	if _hide_wait > 0.0:
+		_hide_wait -= clampf(float(inp.get("dt", 0.0)), 0.0, 0.1)
+		if s_phase != _hide_wait_phase:
+			_hide_wait = 0.0
+	var held_here := seek_row != null and (s_phase != "out" or s_status != "ok" or _hide_wait > 0.0)
 
 	# 1. The player's own body (src/game/player.ts control), or the test's auto-walk.
 	tank = c.correct_stamina(tank)
 	var placed_yaw: Variant = null
 	speed = 0.0
 	var before := body
+	if held_here:
+		_auto = null
 	if playing and _auto != null:
 		var b0 := body
 		if Follow.path_done(plan, _auto, body):
@@ -164,11 +211,12 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 				if _auto_stuck > 3.0:
 					_auto = null
 					auto_status = "failed: stuck"
-		gait = &"walk"
+		gait = _auto_gait
 		speed = M.hypot2(body.x - b0.x, body.z - b0.z) / dt if dt > 0.0 else 0.0
 	elif body != null:
-		var fw := clampf(float(inp.get("f", 0.0)), -1.0, 1.0) if playing and not in_bed else 0.0
-		var rt := clampf(float(inp.get("r", 0.0)), -1.0, 1.0) if playing and not in_bed else 0.0
+		var free := playing and not in_bed and not held_here
+		var fw := clampf(float(inp.get("f", 0.0)), -1.0, 1.0) if free else 0.0
+		var rt := clampf(float(inp.get("r", 0.0)), -1.0, 1.0) if free else 0.0
 		var moving := fw != 0.0 or rt != 0.0
 		var cap := Instr.max_walk_speed(true, Stamina.WALK_SPEED) if want_raised else INF
 		gait = Stamina.gait_for(tank, inp.get("sprint") == true, inp.get("creep") == true, moving, cap)
@@ -185,6 +233,19 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 		tank = Stamina.step_stamina(tank, gait, M.hypot2(body.x - before.x, body.z - before.z) / dt, dt)
 	# The eyes: standing, creeping or down (a spectator stands), eased; this frame's camera height.
 	var want_eye := EyeHeight.target(status, String(gait)) if body != null else EyeHeight.STAND
+	# The Playroom: found players stand rooted; at the party table they sit; in a hide the hide decides.
+	var hide_cam := {}
+	if seek_row != null and body != null:
+		if s_status == "found":
+			want_eye = EyeHeight.STAND
+		elif s_status == "taken":
+			want_eye = SEAT_EYE
+		elif s_status == "ok" and s_phase == "inside":
+			hide_cam = hide_camera(seek_row, latest, str(c.id), in_yaw, in_pitch, float(inp.get("f", 0.0)) > 0.0 or inp.get("peek") == true)
+			if not hide_cam.is_empty():
+				want_eye = EyeHeight.to_cm(float(hide_cam["y"]) - body.y)
+				in_yaw = float(hide_cam["yaw"])
+				in_pitch = float(hide_cam["pitch"])
 	eye = _eye.update(BED_EYE if in_bed else want_eye, dt)
 	# F held (the bunk): only sent when the run has days, as the protocol says.
 	var use: bool = day != null and playing and inp.get("use") == true
@@ -217,6 +278,17 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	lf.pick_up = playing and inp.get("pickUp") == true
 	lf.use = use
 	lf.stamina = tank if body != null else null
+	# The Playroom: F for a hide (into the one in reach, or out of the one you are in), quick and loud
+	# with sprint held; W held inside is a peek. The body waits for the host's answer before it moves.
+	var near_hide := -1
+	if seek_row != null and body != null and s_status == "ok" and s_phase == "out":
+		near_hide = hide_in_reach(body)
+	if seek_row != null and playing and inp.get("hide") == true and s_status == "ok" and (s_phase == "inside" or near_hide >= 0):
+		lf.hide = true
+		lf.hide_fast = inp.get("hideFast") == true
+		_hide_wait = HIDE_WAIT
+		_hide_wait_phase = s_phase
+	lf.peek = seek_row != null and s_status == "ok" and s_phase == "inside" and not hide_cam.is_empty() and bool(hide_cam["peek"])
 	var f := rc.frame(now, lf)
 	frame = f
 	var placed: Variant = null
@@ -232,6 +304,13 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 		elif moved_on and c.local_depth == 0:
 			# Woken on your bunk (left behind, or a wipe): face the hall.
 			placed["yaw"] = 0.0 if body.z > (Prison.HALL_ROW + 0.5) * Prison.CELL_SIZE else PI
+		elif not moved_on and seek_row != null:
+			# The Playroom: into a hide, face its gap; at the party table, face across it.
+			var row: Variant = seek_row_of(c.latest, str(c.id))
+			if row != null and str(row["status"]) == "taken" and int(row["seat"]) >= 0 and int(row["seat"]) < seats.size():
+				placed["yaw"] = Seek.yaw_toward(float(Floor.dir_dx(seats[int(row["seat"])].facing)), float(Floor.dir_dy(seats[int(row["seat"])].facing)))
+			elif row != null and str(row["phase"]) in ["entering", "inside"] and int(row["hide"]) >= 0 and int(row["hide"]) < hides.size():
+				placed["yaw"] = gap_yaw(hides[int(row["hide"])])
 		if _auto != null:
 			auto_status = "interrupted"
 		_auto = null
@@ -257,6 +336,14 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 		ids.append(str(p["id"]))
 	var bunk := Day.bunk_of(ids, str(c.id))
 	snap["bed"] = {"inBed": in_bed, "atBunk": at_bunk, "hold": clampf(_bed_hold / Run.BED_HOLD, 0.0, 1.0), "bunk": [bunk.x, bunk.y]}
+	# The Playroom (null / {} / -1 elsewhere): the host's seek block, this player's row in it, the newest
+	# count event (client.gd count_event: host times), the hide in reach, the camera in a hide.
+	snap["seek"] = latest.get("seek")
+	snap["mySeek"] = seek_row
+	snap["countEvent"] = c.count_event() if seek_row != null else {}
+	snap["nearHide"] = near_hide
+	snap["nearHideKind"] = String(hides[near_hide].kind) if near_hide >= 0 and near_hide < hides.size() else ""
+	snap["hideCam"] = hide_cam
 	if plan_dict.has("_new"):
 		plan_dict.erase("_new")
 		snap["plan"] = plan_dict
@@ -285,6 +372,9 @@ func _new_run(c: Client) -> void:
 	_prev_pose = null
 	_bed_hold = 0.0
 	_bed_release = false
+	_hide_wait = 0.0
+	_hide_wait_phase = ""
+	_auto_gait = &"walk"
 
 func _use_floor(seed: String, depth: int) -> void:
 	var p := Session.plan_for(seed, depth)
@@ -296,6 +386,11 @@ func _use_floor(seed: String, depth: int) -> void:
 	plan_dict = PlanDump.dump(p, car)
 	plan_dict["_new"] = true
 	_orderly_tpl = Entity.create_orderly(p)
+	hides = []
+	seats = []
+	if p.place == Places.PLAYROOM:
+		hides = Playroom.hides(p, p.seed)
+		seats = Playroom.seats(p)
 
 func _idle_frame() -> Client.LocalFrame:
 	var lf := Client.LocalFrame.new()
@@ -505,10 +600,48 @@ func _others(f: Client.Frame, latest: Dictionary) -> Array:
 	for p: Dictionary in f.players:
 		var id := str(p["id"])
 		var b: Move.Body = p["body"]
-		out.append({"id": id, "name": nm.get(id, id), "index": int(order.get(id, 0)), "x": b.x, "y": b.y, "z": b.z, "level": b.level,
+		var o := {"id": id, "name": nm.get(id, id), "index": int(order.get(id, 0)), "x": b.x, "y": b.y, "z": b.z, "level": b.level,
 			"yaw": p["yaw"], "pitch": p["pitch"], "gait": p["gait"], "status": p["status"], "active": p["active"],
-			"raised": bool(raised.get(id, false)), "face": str(faces.get(id, ""))})
+			"raised": bool(raised.get(id, false)), "face": str(faces.get(id, ""))}
+		_seek_figure(o, latest)
+		out.append(o)
 	return out
+
+## The Playroom: how another player is drawn from their seek row. In a hide: crouched, facing out of
+## the gap, sunk to the hide's eye, beside the others in it. At the party table: sitting, facing across
+## it, in a paper hat. Found: standing where they were found. Down: downed (the run's "caught"). The
+## row's facts ride along for the views and the tests (hide, seekPhase, seekStatus, seat, hat).
+func _seek_figure(o: Dictionary, latest: Dictionary) -> void:
+	var row: Variant = seek_row_of(latest, str(o["id"]))
+	if row == null:
+		return
+	var st := str(row["status"])
+	var ph := str(row["phase"])
+	o["hide"] = int(row["hide"])
+	o["seekPhase"] = ph
+	o["seekStatus"] = st
+	o["seat"] = int(row["seat"])
+	o["hat"] = st == "taken"
+	if st == "found" or st == "taken":
+		o["status"] = "ok"
+	if st == "taken":
+		o["gait"] = "creep"
+		var si := int(row["seat"])
+		if si >= 0 and si < seats.size():
+			var sf := seats[si].facing
+			o["yaw"] = Seek.yaw_toward(float(Floor.dir_dx(sf)), float(Floor.dir_dy(sf)))
+			o["y"] = float(o["y"]) - (CREW_CROUCH_MASK - SEAT_EYE)
+	elif st == "ok" and ph == "inside" and int(row["hide"]) >= 0 and int(row["hide"]) < hides.size():
+		var h := hides[int(row["hide"])]
+		var off := slot_offset(h, latest, str(o["id"]))
+		o["x"] = float(o["x"]) + off.x
+		o["z"] = float(o["z"]) + off.y
+		o["gait"] = "creep"
+		o["yaw"] = gap_yaw(h)
+		var mask := PIT_HEAD if h.kind == &"pit" else h.eye / 100.0
+		o["y"] = float(o["y"]) + mask - CREW_CROUCH_MASK
+	elif st == "ok" and ph != "out":
+		o["gait"] = "creep"
 
 ## Every crewmate's face in the run's player order, this player's own included (FaceCodec text, ""
 ## for one who sent none): what the lift's monitor shows.
@@ -521,6 +654,89 @@ func crew_faces() -> Array[String]:
 		var id := str(p["id"])
 		out.append(c.face if id == str(c.id) else str(c.faces.get(id, "")))
 	return out
+
+# --- the Playroom ---------------------------------------------------------------------------------
+
+## A player's row in the snapshot's seek block, or null (another floor, or not in it).
+static func seek_row_of(latest: Variant, id: String) -> Variant:
+	if not latest is Dictionary:
+		return null
+	var k: Variant = (latest as Dictionary).get("seek")
+	if not k is Dictionary or not (k as Dictionary).has("players"):
+		return null
+	for p: Dictionary in k["players"]:
+		if str(p["id"]) == id:
+			return p
+	return null
+
+## The hide whose front is in reach of `b` (the rules' Seek.HIDE_REACH, a little inside it), or -1.
+func hide_in_reach(b: Move.Body) -> int:
+	var best := -1
+	var best_d := Seek.HIDE_REACH - 0.05
+	for h in hides:
+		if h.level != b.level:
+			continue
+		var d := M.hypot2(h.front.x / 100.0 - b.x, h.front.y / 100.0 - b.z)
+		if d <= best_d:
+			best = h.id
+			best_d = d
+	return best
+
+## The way a hide's gap faces, as a yaw (out of the hide into the room).
+static func gap_yaw(h: Playroom.Hide) -> float:
+	return Seek.yaw_toward(float(Floor.dir_dx(h.gap)), float(Floor.dir_dy(h.gap)))
+
+## Where in a hide player `id` sits, side by side with the others in it (ordered by id, so every screen
+## agrees): an offset from the inside spot across the gap. One-person hides: none.
+static func slot_offset(h: Playroom.Hide, latest: Variant, id: String) -> Vector2:
+	if h.capacity <= 1 or not latest is Dictionary or (latest as Dictionary).get("seek") == null:
+		return Vector2.ZERO
+	var ids: Array[String] = []
+	for p: Dictionary in (latest as Dictionary)["seek"]["players"]:
+		if int(p["hide"]) == h.id and str(p["phase"]) != "out":
+			ids.append(str(p["id"]))
+	ids.sort()
+	var i := maxi(0, ids.find(id))
+	var gx := float(Floor.dir_dx(h.gap))
+	var gz := float(Floor.dir_dy(h.gap))
+	if h.kind == &"pit":
+		# Round the middle of the pit, the first towards the gap.
+		var a := TAU * i / float(h.capacity)
+		var fwd := Vector2(gx, gz) * cos(a) + Vector2(-gz, gx) * sin(a)
+		return fwd * SLOT_GAP
+	return Vector2(-gz, gx) * SLOT_GAP * (float(i) - (h.capacity - 1) * 0.5)
+
+## The camera in a hide (playarea.md 4): sat back by default, low and back from the gap, looking out
+## through the dark; peeking (W), at the hide's eye at the inside spot, turned only within the gap.
+## Returns {x, y, z, yaw, pitch, peek, hide, kind, gapYaw, gapHalf} (yaw and pitch clamped).
+func hide_camera(row: Dictionary, latest: Dictionary, id: String, want_yaw: float, want_pitch: float, peek: bool) -> Dictionary:
+	var hid := int(row["hide"])
+	if hid < 0 or hid >= hides.size() or plan == null:
+		return {}
+	var h := hides[hid]
+	var ins := Seek.hide_inside_body(plan, h)
+	var off := slot_offset(h, latest, id)
+	var gy := gap_yaw(h)
+	var half := deg_to_rad(float(h.gap_half))
+	var eye_h := h.eye / 100.0
+	if h.kind == &"pit":
+		eye_h = PIT_PEEK_EYE
+	var yaw := want_yaw
+	if half < PI - 1e-3:
+		var rel := wrapf(want_yaw - gy, -PI, PI)
+		yaw = gy + clampf(rel, -half, half)
+	var pitch := clampf(want_pitch, -PEEK_PITCH, PEEK_PITCH)
+	var gx := float(Floor.dir_dx(h.gap))
+	var gz := float(Floor.dir_dy(h.gap))
+	var x := ins.x + off.x
+	var z := ins.z + off.y
+	var y := ins.y + eye_h
+	if not peek:
+		# Sat back: lower, and back from the gap (in the pit, down among the balls).
+		y = ins.y + (0.3 if h.kind == &"pit" else maxf(0.25, eye_h - SAT_DROP))
+		x -= gx * SAT_BACK * (0.0 if h.kind == &"pit" else 1.0)
+		z -= gz * SAT_BACK * (0.0 if h.kind == &"pit" else 1.0)
+	return {"x": x, "y": y, "z": z, "yaw": yaw, "pitch": pitch, "peek": peek, "hide": hid, "kind": String(h.kind), "gapYaw": gy, "gapHalf": half}
 
 ## Where the camera is drawn from, for a snapshot's `me`: the feet raised by this frame's eye height.
 ## main.gd places the camera here; it is the eye point of the client's frame (what the rules are sent).
@@ -573,8 +789,10 @@ func nudge(dx: float, dz: float) -> Dictionary:
 	body = Session.move_local(plan, rc.client.latest["phase"], body, dx, dz, PLAYER_RADIUS)
 	return {"ok": true, "body": _body_plain(body)}
 
-## Walks along the rules' own path to a cell. With friends no faster than walking (the server checks).
-func walk_to(level: int, x: int, y: int, pace: float) -> Dictionary:
+## Walks along the rules' own path to a cell. With friends no faster than walking (the server checks),
+## or creeping (`gait` creep: silent on the Playroom's squeaker tiles), or sprinting (`gait` sprint, for
+## as long as the tank lasts).
+func walk_to(level: int, x: int, y: int, pace: float, walk_gait: StringName = &"walk") -> Dictionary:
 	if plan == null or body == null:
 		return {"ok": false}
 	var path := Floor.find_path(plan, Move.cell_of(plan, body), Floor.Pos.make(level, x, y))
@@ -583,7 +801,9 @@ func walk_to(level: int, x: int, y: int, pace: float) -> Dictionary:
 		return {"ok": false}
 	_auto = Follow.start_path_walk(path)
 	_auto_stuck = 0.0
-	_auto_pace = pace if local else minf(pace, Stamina.WALK_SPEED * 0.95)
+	_auto_gait = walk_gait
+	var cap := Stamina.CREEP_SPEED * 0.95 if walk_gait == &"creep" else (Stamina.SPRINT_SPEED * 0.95 if walk_gait == &"sprint" else Stamina.WALK_SPEED * 0.95)
+	_auto_pace = minf(pace, cap) if (not local or walk_gait == &"creep") else pace
 	auto_status = "walking"
 	return {"ok": true, "cells": path.size()}
 
