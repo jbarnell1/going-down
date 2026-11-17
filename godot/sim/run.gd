@@ -29,8 +29,8 @@
 #  - Which place a floor is comes from the run's deck (places.gd): Clinic only unless the caller passes
 #    another, so a run made without one is the run every stored result was recorded from. The game
 #    passes Places.FULL. The floor's resident is driven by "the Orderly" below whoever it is: the Temp
-#    keeps the Orderly's rules for now (T16f); the Minder, not a Stillness resident, only wanders
-#    harmlessly (Places.wander_step) until the Playroom's count is wired in (T15d).
+#    keeps the Orderly's rules in its own body (T16f); the Playroom's Minder is stepped by sim/seek.gd
+#    (see "The Playroom" below), and `orderly` carries its pose so the network and the views are unchanged.
 #  - The lights while the car comes (dark_schedule): blinks that grow, then the blackout, ending on the
 #    tick the car arrives. A false stop (one floor above, in the last few seconds) always falls inside
 #    the blackout: it is heard in the dark, and the blackout still ends as the doors really open.
@@ -62,12 +62,36 @@
 #  - The tapes are numbered on across days (the crew's next_tape carries on), so every tape id is new.
 # The facts of the day just settled stay on the state (day_result) until the next morning.
 #
+# The Playroom (docs/floors/playarea.md; loop/NIGHT-PLAN.md A3, T15d). On a floor whose place is the
+# Playroom, with its resident on (seek_off false), the run holds sim/seek.gd's state (`seek`) and steps
+# it instead of the Orderly's rules, every tick except while riding (that floor is behind the crew):
+#  - Inputs: each active player who is out of the car, with their gait, the hide key (PlayerInput.hide_use,
+#    a press; hide_fast when sprint was held), W held (peek), a sound emote, the voice and a light; their
+#    instrument ticked on the tick before (Instr ticks), a reason inside a hide. Players in the car are
+#    not on the floor: they neither provoke nor are looked for.
+#  - Found players are rooted: their input is their found spot, so the Minder can run them down. Taken
+#    (at the party table) and down players give no input: their eyes and position count for nothing.
+#    The tick after a "down" their dropped tape is heard (dropped_tape).
+#  - Statuses: found, taken or down is the run's "caught" (out until the car next rides down, as any
+#    catch). Bodies: a player getting into, sitting in or getting out of a hide, found, taken or down is
+#    where the rules hold them (seek's body): the hide's inside or front spot, the found spot, the seat.
+#  - The tape drops where a player is found or goes down (the instrument's "caught", not a run event).
+#  - The instrument (playarea.md 11): trait "hearing", recording only during a count after the 6 s, and
+#    only for a player out of its view, or peeking from a hide (EntityTick.acting, .holders).
+#  - The call (phase away) starts the last count instead of the usual wait: phase "coming" with no call
+#    schedule and no blinks ("called" with floorsAway 0 and last true). The car arrives, doors open, on
+#    the tick of the last count's "countEnd". If the last count is already over (the car left empty), a
+#    call is the usual wait.
+#  - Every seek event is a run event, at its host time ("count" {n, t0, len, last, by, why}, "countEnd",
+#    hide*, "found", "taken", "down", ...: sim/seek.gd lists them).
+#
 # Events are Dictionaries with the TypeScript shapes (see RunEvent in run.ts), carrying Move.Body,
 # TapeLib.Reading and RunSummary objects where TypeScript carries those objects.
 extends RefCounted
 
 const Entity = preload("res://sim/entity.gd")
 const Places = preload("res://sim/places.gd")
+const Seek = preload("res://sim/seek.gd")
 const Day = preload("res://sim/day.gd")
 const Prison = preload("res://sim/prison.gd")
 const Upgrades = preload("res://sim/upgrades.gd")
@@ -531,6 +555,14 @@ class RunState:
 	var use_prev: Dictionary = {}
 	## Run time the lights went out in the prison, or -1.
 	var lights_out_t: float = -1.0
+	## The Playroom (see the header): sim/seek.gd's state on this floor (a Seek.SeekState), else null.
+	var seek: Variant = null
+	## The resident is off (net/host_rules.gd, entity off): no seek, the Minder stays parked.
+	var seek_off: bool = false
+	## Players whose tape hit the floor as they went down last tick: heard this tick.
+	var seek_drops: Array[String] = []
+	## Run time of the call that started the last count (-1 before).
+	var seek_call_at: float = -1.0
 
 	func copy() -> RunState:
 		var s := RunState.new()
@@ -568,6 +600,10 @@ class RunState:
 		s.bed_hold = bed_hold
 		s.use_prev = use_prev
 		s.lights_out_t = lights_out_t
+		s.seek = seek
+		s.seek_off = seek_off
+		s.seek_drops = seek_drops
+		s.seek_call_at = seek_call_at
 		return s
 
 class PlayerInput:
@@ -591,6 +627,21 @@ class PlayerInput:
 	var blind: bool = false
 	## F is held (the use key): in the prison, held on a bunk it lies you down (days on only).
 	var use: bool = false
+	## The Playroom only (see the header). The gait the player has this tick (Stamina.gait_for): "walk",
+	## "creep" or "sprint".
+	var gait: StringName = &"walk"
+	## F pressed for a hide this tick (a press, not held): into the hide in reach, or out of the one
+	## you are in; `hide_fast`: sprint was held as it was pressed (quick, and the flap is let go).
+	var hide_use: bool = false
+	var hide_fast: bool = false
+	## W held inside a hide: leaning to the gap.
+	var peek: bool = false
+	## An emote that plays a sound, the voice (when the microphone exists), the party horn (harmless).
+	var emote_sound: bool = false
+	var voice: bool = false
+	var horn: bool = false
+	## A lamp or flash (a Seek.Light), or null. A hook: lamps do not exist yet.
+	var light: Variant = null
 
 	static func make(id_: String, body_: Move.Body, eye_: float, yaw_: float, pitch_: float, h_fov: float, v_fov: float) -> PlayerInput:
 		var p := PlayerInput.new()
@@ -914,6 +965,162 @@ static func _step_blink(s: RunState, t: float, events: Array[Dictionary]) -> voi
 		events.append({"type": "blinkEnd", "t": t, "blackout": d.blackout})
 		s.blink = _blink_of(s.call, d.n + 1) if (s.phase == &"coming" and s.call != null) else null
 
+# ---------------------------------------------------------------------------------------------
+# The Playroom (see the header).
+
+## Whether this floor's resident is the Minder stepped by seek.gd.
+static func seeks(s: RunState) -> bool:
+	return not s.seek_off and not at_home(s) and s.plan != null and s.plan.place == Places.PLAYROOM
+
+## Keeps `seek` the state of this floor: made when the crew reaches a Playroom (everyone at 100, the
+## Minder at its start facing its wall), dropped on any other floor.
+static func _sync_seek(s: RunState) -> void:
+	if not seeks(s):
+		if s.seek != null:
+			s.seek = null
+			s.seek_drops = []
+			s.seek_call_at = -1.0
+		return
+	if s.seek != null and (s.seek as Seek.SeekState).floor.plan == s.plan:
+		return
+	var ids: Array[String] = []
+	for p in s.players:
+		ids.append(p.id)
+	s.seek = Seek.create_seek(s.plan, ids)
+	(s.seek as Seek.SeekState).t = s.t
+	s.seek_drops = []
+	s.seek_call_at = -1.0
+
+## The run's view of a seek player: whether the rules hold their body (in a hide, found, taken, down).
+static func _seek_holds(sp: Seek.SeekPlayer) -> bool:
+	return sp != null and sp.body != null and (sp.status != &"ok" or sp.phase != &"out")
+
+## One tick of the Playroom's rules. Updates `s` (seek, orderly, seek_drops, the car on the last
+## count's end) and `players` (statuses and bodies), appends the events, and returns the Minder's tick
+## for the instruments.
+static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Dictionary, call_by: String, t_prev: float, t: float, dt: float, events: Array[Dictionary]) -> Instr.EntityTick:
+	var ss: Seek.SeekState = s.seek
+	var drops := s.seek_drops
+	s.seek_drops = []
+	var inputs: Array[Seek.SeekInput] = []
+	for p in players:
+		var sp := Seek.player_of(ss, p.id)
+		var status: StringName = sp.status if sp != null else &"ok"
+		if status == &"found" and sp.body != null:
+			# Rooted where found: the Minder is coming for them.
+			inputs.append(Seek.SeekInput.make(p.id, sp.body, &"walk"))
+			continue
+		if drops.has(p.id):
+			# Down last tick: their tape hits the floor now, and that is heard.
+			var di := Seek.SeekInput.make(p.id, sp.body if (sp != null and sp.body != null) else p.body, &"walk")
+			di.dropped_tape = true
+			inputs.append(di)
+			continue
+		if status != &"ok" or not _is_active(p, input_of) or p.aboard:
+			# Taken (at the party table), down, gone, or in the car: not on the floor for it.
+			continue
+		var i: PlayerInput = input_of[p.id]
+		var si := Seek.SeekInput.make(p.id, i.body, i.gait)
+		si.use = i.hide_use
+		si.fast = i.hide_fast
+		si.peek = i.peek
+		si.emote_sound = i.emote_sound
+		si.voice = i.voice
+		si.horn = i.horn
+		si.light = i.light
+		var mem := Instr.member(s.crew, p.id)
+		si.ticking = mem != null and mem.instrument.ticks > 0
+		inputs.append(si)
+	var fl := Seek.FloorInput.new()
+	fl.call = call_by != ""
+	fl.call_by = call_by
+	fl.boarding = s.phase == &"boarding"
+	fl.riding = s.phase == &"riding"
+	# The seek runs on the run's own clock: every time in its events and state is host time.
+	var base := ss.copy()
+	base.t = t_prev
+	var r := Seek.step_seek(base, inputs, dt, fl)
+	var ns := r.state
+	s.seek = ns
+	events.append_array(r.events)
+
+	# The Minder as the network and the views carry a resident: its pose, mode and speed.
+	var before := s.orderly
+	var o := before.copy()
+	var mm := ns.minder
+	o.t = before.t + dt
+	o.body = mm.body
+	o.yaw = mm.yaw
+	o.mode = mm.mode
+	o.anim = mm.anim
+	o.anim_time = mm.anim_time
+	o.speed = mm.speed
+	o.moving = mm.moving
+	o.seen = false
+	o.held = false
+	o.frozen = false
+	o.wind_up_left = 0.0
+	o.wind_up_target = null
+	o.target_id = null
+	s.orderly = o
+	s.lure = false
+
+	# Statuses and bodies: found, taken and down are out of the run (caught) where the rules hold them.
+	for k in players.size():
+		var p := players[k]
+		var sp := Seek.player_of(ns, p.id)
+		if sp == null:
+			continue
+		var np := p
+		if sp.status != &"ok" and p.status == &"ok":
+			np = p.copy()
+			np.status = &"caught"
+			np.side = null
+		if _seek_holds(sp) and not (np.body.x == sp.body.x and np.body.z == sp.body.z and np.body.level == sp.body.level and np.body.y == sp.body.y):
+			if np == p:
+				np = p.copy()
+			np.body = sp.body
+			np.aboard = in_car(s.car, np.body)
+		players[k] = np
+
+	# The instruments: found or down drops the tapes where they are (the instrument's "caught").
+	var caught: Array[Dictionary] = []
+	for e in r.events:
+		if e["type"] == "found" or e["type"] == "down":
+			caught.append({"type": "caught", "t": t, "playerId": e["playerId"]})
+		if e["type"] == "down":
+			s.seek_drops.append(String(e["playerId"]))
+	var who := Places.resident(s.plan.place)
+	var et := Instr.EntityTick.make(s.entity_id, who.trait_name, before, o, caught)
+	# Recording (playarea.md 11): only while it searches, after the 6 s; only for a player out of its
+	# view, or peeking from a hide. Sitting back in a hide, or standing in its view, records nothing.
+	et.acting = Seek.phase_of(ns) == &"seek"
+	var holders := {}
+	if et.acting:
+		for p in players:
+			var sp := Seek.player_of(ns, p.id)
+			if sp == null or sp.status != &"ok" or sp.body == null or not _is_active(p, input_of) or p.aboard:
+				continue
+			if sp.phase == &"inside":
+				if sp.peeking:
+					holders[p.id] = true
+			elif not Seek.in_view(s.plan, mm.body, mm.yaw, sp.body):
+				holders[p.id] = true
+	et.holders = holders
+
+	# The last count over: the car is here, doors open, boarding as on any floor.
+	for e in r.events:
+		if e["type"] == "countEnd" and bool(e["last"]) and s.phase == &"coming":
+			s.phase = &"boarding"
+			s.bell_left = BOARD_TIME
+			s.hold_left = HOLD_LIMIT
+			s.held = false
+			s.call = null
+			s.blink = null
+			events.append({"type": "carArrived", "t": t, "wait": t - s.seek_call_at if s.seek_call_at >= 0.0 else 0.0})
+			events.append({"type": "doorsOpened", "t": t, "depth": s.depth, "reason": "boarding"})
+	return et
+
 static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) -> RunStep:
 	var res := RunStep.new()
 	if prev.phase == &"ended":
@@ -940,6 +1147,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		np.body = given.body if given != null else p.body
 		np.aboard = in_car(car, np.body)
 		players.append(np)
+	_sync_seek(s)
+	# Who called the car on the Playroom this tick (it starts the last count).
+	var seek_call_by := ""
 
 	# ---- 1. Run rules.
 	match s.phase:
@@ -981,7 +1191,17 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 					and M.hypot2(p.body.x - car.door_x, p.body.z - car.door_z) <= CALL_REACH + EPS and p.body.level == car.level:
 					caller = p
 					break
-			if caller != null:
+			if caller != null and s.seek != null and not (s.seek as Seek.SeekState).done:
+				# The Playroom: the call starts the last count; the car comes when it ends (see the header).
+				s.calls += 1
+				s.call = null
+				s.blink = null
+				s.lure = false
+				s.phase = &"coming"
+				s.seek_call_at = t
+				seek_call_by = caller.id
+				events.append({"type": "called", "t": t, "playerId": caller.id, "floorsAway": 0, "at": caller.body, "last": true})
+			elif caller != null:
 				var index := s.calls
 				var plan := call_plan(s.seed, index, s.last_floors, s.depth)
 				s.calls = index + 1
@@ -1199,19 +1419,15 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	var home := at_home(s)
 	if home:
 		pass  # The prison has no resident: nothing hunts there.
+	elif s.phase != &"riding" and s.seek != null:
+		# The Playroom: the count, the search, hiding, health (sim/seek.gd; see the header).
+		entity_ticks = [_step_seek(s, players, input_of, seek_call_by, prev.t, t, dt, events)]
 	elif s.phase != &"riding" and not who.stillness:
-		# Not a Stillness resident (the Minder): it wanders and never takes anyone. No events.
-		var before_w := s.orderly
-		var next_w := Places.wander_step(s.plan, before_w, dt, "%s:%s" % [s.seed, s.entity_id])
-		if rect_distance(car.rect, next_w.body.x, next_w.body.z) < Entity.ORDERLY_RADIUS - 1e-3 and next_w.body.level == car.level:
-			next_w = next_w.copy()
-			next_w.body = before_w.body
-			next_w.moving = false
-			next_w.speed = 0.0
-		s.orderly = next_w
+		# A resident that is not a Stillness one, with its rules off (seek_off: the resident parked): it
+		# stands where it is and takes nobody. No events.
 		s.lure = false
 		var none: Array[Dictionary] = []
-		entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, before_w, next_w, none)]
+		entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, s.orderly, s.orderly, none)]
 	elif s.phase != &"riding":
 		var blind := blinking(s)
 		var open := doors_open(s)
@@ -1355,6 +1571,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		events.append({"type": "rodeDown", "t": t, "depth": depth, "bodies": bodies})
 
 	s.players = players
+	_sync_seek(s)
 
 	# ---- A wipe: nobody left who can call or board.
 	var everyone_out := true

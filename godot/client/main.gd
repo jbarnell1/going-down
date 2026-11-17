@@ -17,6 +17,9 @@
 #   seed=<text> (default alpha; playing alone)  quality=light|full (browser default light, desktop full)
 #   auto=1 (never capture the mouse; also when navigator.webdriver or testport=)  props=0  entity=0
 #   join=<address> name=<text>: open the join form filled in (quick joining)
+#   delay=<seconds>: FOR LOCAL TESTS ONLY. Every message to and from the server waits this long (a slow
+#     link; play_hide runs one client at 0.3). hidebreak=arrival: play_hide's deliberate break (the count
+#     timed from when its event arrived on this screen, client/hide_view.gd).
 #   pass=<text>: FOR LOCAL TESTS ONLY. With join= and name= it joins at once, through the form's own
 #     Join. It shows in the address bar, the browser history and the process list: never put a real
 #     passphrase there.
@@ -37,6 +40,7 @@ const PrisonView = preload("res://client/prison_view.gd")
 const FaceKiosk = preload("res://client/face_kiosk.gd")
 const Run = preload("res://sim/run.gd")
 const Day = preload("res://sim/day.gd")
+const HideView = preload("res://client/hide_view.gd")
 
 const VFOV := 70.0
 const SENS := 0.0022
@@ -81,6 +85,8 @@ var start: StartScreen
 ## by the test hook. Done changes the face for everyone in the run.
 var kiosk: FaceKiosk
 var inst_view: InstrumentView
+## The Playroom's count and hiding on screen (client/hide_view.gd).
+var hide_view: HideView
 var screen: TextureRect
 var tape_mat: ShaderMaterial
 
@@ -114,6 +120,17 @@ var t_hold: Variant = null
 var t_use: Variant = null
 var pending_call := false
 var pending_pick := false
+## F pressed for a hide (the Playroom); tests: W held in a hide (peek), or null for the keyboard.
+var pending_hide := false
+var pending_hide_fast := false
+var t_peek: Variant = null
+## Tests: seconds of delay on the link to the server (delay=); bus peaks logged every frame (peaklog).
+var delay_arg := 0.0
+var _peaklog_on := false
+var _peaklog: Array = []
+## Tests: the seek block's health of every player in the last snapshots ([t, {id: health}]), so a test
+## can compare one screen's bar with another screen's copy of the same host tick.
+var _seek_hist: Array = []
 ## The instrument is out: E toggles it (the right mouse button still raises it while held).
 var raise_latch := false
 ## The emote wheel (hold R): open, the aim (window pixels from the middle).
@@ -300,6 +317,8 @@ func _read_options() -> void:
 			"join": join_arg = val
 			"name": name_arg = val
 			"pass": pass_arg = val
+			"delay": delay_arg = clampf(float(val), 0.0, 2.0)
+			"hidebreak": HideView.test_break = val
 	if OS.has_feature("web"):
 		seed = _url("seed", seed)
 		quality = _url("quality", quality)
@@ -379,6 +398,10 @@ func _build_view() -> void:
 	screen.material = tape_mat
 	screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(screen)
+	hide_view = HideView.new()
+	hide_view.name = "HideView"
+	add_child(hide_view)
+	hide_view.setup(self, sub)
 	hud = Hud.new()
 	add_child(hud)
 	start = StartScreen.new()
@@ -450,6 +473,7 @@ func _join(address: String, player_name: String, passphrase: String) -> void:
 		_show_start("join")
 		return
 	print("joining %s as %s" % [url, player_name])
+	rc.delay = delay_arg
 	link = PlayLink.new(rc, false)
 	_connect_at = _now()
 	_ever_connected = false
@@ -526,6 +550,7 @@ func _clear_world() -> void:
 	sfx.set_hum(0.0)
 	sfx.update(0.0, {}, null, 0.0, 0.0, 0.0, false, 0.0, Vector3.ZERO)
 	sfx.clear_floor()
+	hide_view.reset()
 
 # --- runs and floors ----------------------------------------------------------------------------
 
@@ -574,6 +599,7 @@ func _build_floor(plan: Dictionary) -> void:
 	lift.set_doors(false, true)
 	lift.set_faces(link.crew_faces())
 	_use_resident(plan)
+	hide_view.reset()
 	built_depth = int(plan["depth"])
 	level.set_emergency(0.0)
 	level.set_light_level(1.0)
@@ -668,6 +694,8 @@ func _input(event: InputEvent) -> void:
 		elif k.physical_keycode == KEY_F:
 			pending_call = true
 			pending_pick = true
+			pending_hide = true
+			pending_hide_fast = Input.is_action_pressed("sprint")
 		elif k.physical_keycode == KEY_T:
 			var st: float = tape_mat.get_shader_parameter("strength")
 			tape_mat.set_shader_parameter("strength", 0.0 if st > 0.5 else 1.0)
@@ -774,6 +802,9 @@ func _process(delta: float) -> void:
 		hud.menu_on = menu_overlay
 		return
 	var now := _now()
+	if _peaklog_on and _peaklog.size() < 20000:
+		var pk := _bus_peaks()
+		_peaklog.append([now, snap.get("hostNow", 0.0), pk.get("Voice", -200.0), pk.get("Master", -200.0)])
 	var dt := minf(delta, 0.1)
 	var s := link.step(now, _game_input(dt))
 	if link == null:
@@ -845,13 +876,22 @@ func _game_input(dt: float) -> Dictionary:
 	var hold: bool = t_hold if t_hold != null else (mode == "game" and Input.is_action_pressed("use") and bool(me.get("nearHold", false)))
 	var use: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and Input.is_action_pressed("use"))
 	var call: bool = pending_call and bool(me.get("canCall", false))
-	var pick: bool = pending_pick and not call
+	# The Playroom: F at a hide's front, or in a hide, is for the hide (the call wins at the lift).
+	var my_seek: Variant = snap.get("mySeek")
+	var in_hide := my_seek is Dictionary and str((my_seek as Dictionary)["phase"]) == "inside"
+	var hide: bool = pending_hide and not call and (int(snap.get("nearHide", -1)) >= 0 or in_hide)
+	var hide_fast: bool = pending_hide_fast or sprint
+	var pick: bool = pending_pick and not call and not hide
 	pending_call = false
 	pending_pick = false
+	pending_hide = false
+	pending_hide_fast = false
+	var peek: bool = t_peek if t_peek != null else (in_hide and f > 0.0)
 	var aspect := 480.0 / 270.0
 	var hfov := rad_to_deg(2.0 * atan(tan(deg_to_rad(VFOV) * 0.5) * aspect))
 	return {"dt": dt, "f": f, "r": r, "sprint": sprint, "creep": creep, "yaw": yaw, "pitch": pitch,
-		"hfov": hfov, "vfov": VFOV, "raised": raised and not still, "call": call, "hold": hold, "pickUp": pick, "still": still, "use": use}
+		"hfov": hfov, "vfov": VFOV, "raised": raised and not still, "call": call, "hold": hold, "pickUp": pick, "still": still, "use": use,
+		"hide": hide, "hideFast": hide_fast, "peek": peek}
 
 func _game_frame(s: Dictionary, dt: float) -> void:
 	var now := Time.get_ticks_msec()
@@ -878,8 +918,17 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 
 	# The camera: at this frame's eye height (standing, creeping, down; play_link.gd `eye`).
 	cam.position = PlayLink.camera_point(me)
+	# The Playroom: in a hide the camera sits back in it or leans to the gap, turned only within the gap.
+	var hc: Dictionary = s.get("hideCam", {})
+	if not hc.is_empty():
+		cam.position = Vector3(float(hc["x"]), float(me["y"]) + float(me["eye"]), float(hc["z"]))
+		yaw = float(hc["yaw"])
+		pitch = float(hc["pitch"])
+	var my_seek: Variant = s.get("mySeek")
+	var held := my_seek is Dictionary and (str((my_seek as Dictionary)["phase"]) != "out" or str((my_seek as Dictionary)["status"]) != "ok")
 	cam.rotation = Vector3(pitch, yaw, 0)
-	_eye_check(me)
+	if not held:
+		_eye_check(me)
 
 	# The Orderly: drawn exactly as the frame says, never in the dark, never while taken.
 	var o: Dictionary = s["orderly"]
@@ -965,7 +1014,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	sfx.update(dt, o["squeak"] if _resident_kind == "orderly" and not _no_resident else {}, o.get("pose"), tick_hz, loud, float(me["exertion"]) if not still else 0.0, bool(me["winded"]), machine,
 		Vector3(float(car["doorX"]), float(car["floorY"]) + 1.5, float(car["doorZ"])), float(o.get("speed", 0.0)))
 	announcer.update()
-	sfx.duck(announcer.player.playing, dt)
+	sfx.duck(announcer.speaking(), dt)
 
 	# The picture and the display.
 	var noise := _noise_on()
@@ -978,7 +1027,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	hud.went_down = caught_at >= 0 and now - caught_at >= BLACK_MS + NOISE_MS and now - caught_at < BLACK_MS + NOISE_MS + LINE_MS and ending.is_empty()
 	var tapes: Dictionary = s["tapes"]
 	hud.set_tapes(int(tapes["count"]), float(tapes["value"]))
-	hud.subtitle = announcer.subtitle
+	hud.subtitle = announcer.shown()
 	hud.center_note = error_text if error_text != "" else ("WATCHING: YOU JOIN AT THE NEXT STOP" if not bool(s.get("playing", true)) else "")
 	hud.wheel_on = wheel_open
 	hud.wheel_labels = EMOTE_LABELS
@@ -1008,7 +1057,43 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 			prompt = "F  PICK UP"
 	hud.prompt = prompt
 	_show_day(s, now)
+	_show_count(s, dt)
+	var sk: Variant = s.get("seek")
+	if sk is Dictionary and (_seek_hist.is_empty() or _seek_hist[-1][0] != s["t"]):
+		var hs := {}
+		for sp: Dictionary in (sk as Dictionary)["players"]:
+			hs[str(sp["id"])] = sp["health"]
+		_seek_hist.append([s["t"], hs])
+		if _seek_hist.size() > 80:
+			_seek_hist.pop_front()
 	_show_end(now)
+
+## The Playroom's count and hiding (client/hide_view.gd): the count dark, the bell, the tune, the
+## captions, the hide prompts, the health bar; found, the camera turns to the Minder as it comes.
+func _show_count(s: Dictionary, dt: float) -> void:
+	hud.count_by = ""
+	hud.seek_note = ""
+	hud.health = -1.0
+	var r := hide_view.update(s, dt, _now(), link.names(), link.my_id(), sfx, announcer, hud, level, s.get("others", []))
+	if not bool(r.get("on", false)):
+		return
+	var dk := float(r["dark"])
+	if dk > 0.0:
+		tape_mat.set_shader_parameter("darkness", maxf(dk, 1.0 if bool(s["dark"]) else 0.0))
+		env.background_color = Color(0.02, 0.025, 0.025) * (1.0 - dk)
+	var nz := float(r["noise"])
+	if nz > 0.0 and not _noise_on():
+		tape_mat.set_shader_parameter("glitch", clampf(nz, 0.0, 1.0))
+		tape_mat.set_shader_parameter("snow", clampf(float(r["catch"]) * 0.6, 0.0, 0.6))
+	var look: Variant = r.get("look")
+	if look is Vector3:
+		var lv: Vector3 = look
+		var want_yaw := atan2(-(lv.x - cam.position.x), -(lv.z - cam.position.z))
+		var want_pitch := clampf(atan2(lv.y - cam.position.y, Vector2(lv.x - cam.position.x, lv.z - cam.position.z).length()), -MAX_PITCH, MAX_PITCH)
+		var k := 1.0 - exp(-dt * 6.0)
+		yaw = yaw + wrapf(want_yaw - yaw, -PI, PI) * k
+		pitch = lerpf(pitch, want_pitch, k)
+		cam.rotation = Vector3(pitch, yaw, 0)
 
 ## Tests: on every frame, the camera as drawn against the client's own camera for that frame (the eye
 ## sight was judged from) and, on frames an input went, the eye in the input as sent; counted by state
@@ -1199,6 +1284,16 @@ func _present(events: Array, now: int) -> void:
 			"leftBehind":
 				if mine and snap.get("day") == null:
 					ending = {"kind": "leftBehind", "at": now}
+			"down":
+				# The Playroom: health ran out. Down where you stand (the run's caught rule).
+				if mine:
+					caught_at = now
+					raise_latch = false
+					sfx.caught(true, null)
+			"found":
+				if mine:
+					raise_latch = false
+					sfx.caught(true, null)
 			"caught":
 				var op: Variant = (snap.get("orderly", {}) as Dictionary).get("pose")
 				sfx.caught(mine, Vector3(float(op["x"]), float(op["y"]) + 2.0, float(op["z"])) if op is Dictionary else null)
@@ -1348,7 +1443,7 @@ func _on_js(args: Array) -> void:
 
 ## Commands (space separated): state | stats | resetstats | move f r sprint creep | stopmove |
 ## look yawDeg pitchDeg | face x z [y] | raise 0|1|- | hold 0|1|- | call | pick | teleport level x y |
-## walkto level x y [pace] | stopwalk | timescale k | newrun | tape 0|1 | debug | floortapes | plan |
+## walkto level x y [pace] [walk|creep|sprint] | stopwalk | timescale k | newrun | tape 0|1 | debug | floortapes | plan |
 ## use 0|1|- (F held: the bunk) | down 0|1 (alone: put the player down or up) | eyestats (the camera's eye against the client's, every frame)
 ## The start screen and the room: alone (PLAY ALONE, then Enter on the face) | ui <alone|join|go|back|start|leave> |
 ## type <address|name> <text> | start | leave | emote <name> | wheel open | wheel aim dx dy | wheel release | screen
@@ -1356,6 +1451,8 @@ func _on_js(args: Array) -> void:
 ## the mouse events a player's drag sends) | faces (what is on every mask and on the monitor)
 ## The face kiosk, mid-run: kiosk open | kiosk press <editor control id> | kiosk line x0 y0 x1 y1 |
 ## kiosk done | kiosk cancel
+## The Playroom: hide [fast] (F for a hide) | peek 0|1|- (W held in a hide) | hides (the floor's hides) |
+## peaklog on|off|get (every frame's Voice and Master peaks)
 func _command(c: String) -> String:
 	var p := c.split(" ", false)
 	if p.is_empty():
@@ -1495,6 +1592,29 @@ func _command(c: String) -> String:
 			t_hold = null if p[1] == "-" else p[1] == "1"
 		"use":
 			t_use = null if p[1] == "-" else p[1] == "1"
+		"hide":
+			# F for a hide (into the one in reach, or out); `hide fast`: with sprint held.
+			pending_hide = true
+			pending_hide_fast = p.size() > 1 and p[1] == "fast"
+		"peek":
+			t_peek = null if p[1] == "-" else p[1] == "1"
+		"hides":
+			if link == null:
+				return "[]"
+			var hl: Array = []
+			for h in link.hides:
+				hl.append({"id": h.id, "kind": String(h.kind), "zone": h.zone, "level": h.level, "inside": [h.inside.x / 100.0, h.inside.y / 100.0],
+					"front": [h.front.x / 100.0, h.front.y / 100.0], "gap": String(h.gap), "capacity": h.capacity, "eye": h.eye / 100.0})
+			return JSON.stringify(hl)
+		"peaklog":
+			# peaklog on | off | get: every frame's bus peaks (dB) with this screen's clock and the host's.
+			if p.size() > 1 and p[1] == "on":
+				_peaklog = []
+				_peaklog_on = true
+			elif p.size() > 1 and p[1] == "off":
+				_peaklog_on = false
+			else:
+				return JSON.stringify(_peaklog)
 		"call":
 			pending_call = true
 		"pick":
@@ -1506,7 +1626,7 @@ func _command(c: String) -> String:
 		"walkto":
 			if not in_game:
 				return JSON.stringify({"ok": false, "error": "no run"})
-			return JSON.stringify(link.walk_to(int(p[1]), int(p[2]), int(p[3]), float(p[4]) if p.size() > 4 else 3.0))
+			return JSON.stringify(link.walk_to(int(p[1]), int(p[2]), int(p[3]), float(p[4]) if p.size() > 4 else 3.0, StringName(p[5]) if p.size() > 5 else &"walk"))
 		"stopwalk":
 			if link == null:
 				return JSON.stringify({"ok": false})
@@ -1667,5 +1787,11 @@ func _test_state() -> Dictionary:
 			"fade": hud.fade, "lightsOut": _lights_out, "goingUp": s.get("goingUp", false), "centerNote": hud.center_note,
 			"hudBoard": hud.board_lines, "dayBoard": _prison_lines("day"), "reportBoard": _prison_lines("report"), "residentDrawn": orderly.visible},
 		"day": s.get("day"), "hostNow": s.get("hostNow"), "bed": s.get("bed"), "seed": s.get("seed"),
+		"seek": s.get("seek"), "mySeek": s.get("mySeek"), "countEvent": s.get("countEvent"), "nearHide": s.get("nearHide"), "hideCam": s.get("hideCam"),
+		"place": link.plan_dict.get("place", ""),
+		"hide": hide_view.describe(), "hud": {"health": hud.health, "rates": hud.health_rates, "countText": hud.count_text, "countBy": hud.count_by,
+			"seekNote": hud.seek_note, "subtitle": hud.subtitle, "bigNote": hud.big_note, "centerNote": hud.center_note},
+		"captions": announcer.said_count.map(func(c: Dictionary) -> String: return str(c["text"])),
+		"bells": sfx.bells.duplicate(), "seekHist": _seek_hist.duplicate(), "camPos": [cam.position.x, cam.position.y, cam.position.z],
 		"events": event_counts,
 	}

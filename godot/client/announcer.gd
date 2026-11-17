@@ -2,8 +2,15 @@
 # at one even loudness (the recordings are all at -16 LUFS; the Voice bus is a band-limited speaker
 # with a compressor), never the same line twice running (each moment's lines are dealt from a shuffled
 # deck), with subtitles. The moments and what triggers them follow src/game/announcer.ts onEvents.
+#
+# The Playroom's count (client/hide_view.gd; docs/floors/playarea.md 10): say_count(line, text) shows
+# every line as a caption in the pixel font and plays its recording by id (client/count_lines.gd, T15i),
+# not through request() (that deals a random line of a moment). The lines go on their own player; the
+# numbers on another, each stopping the one before. Both are on the Voice bus, like this player.
 class_name Announcer
 extends Node
+
+const CountLines = preload("res://client/count_lines.gd")
 
 const EXPIRE_MS := 4000
 const EXPIRE_LONG_MS := 9000
@@ -24,6 +31,13 @@ var blackout_on := false
 var player: AudioStreamPlayer
 var _gap_until := 0
 var _rng := RandomNumberGenerator.new()
+## The count's lines: the caption shown (and until when, ms), the two players, and what was said
+## ({line, text, at, id}: tests).
+var caption := ""
+var caption_until := 0
+var count_player: AudioStreamPlayer
+var number_player: AudioStreamPlayer
+var said_count: Array = []
 
 func _ready() -> void:
 	_rng.randomize()
@@ -33,6 +47,14 @@ func _ready() -> void:
 	player.volume_db = -5.0
 	add_child(player)
 	player.finished.connect(_on_finished)
+	count_player = AudioStreamPlayer.new()
+	count_player.bus = "Voice"
+	count_player.volume_db = -5.0
+	add_child(count_player)
+	number_player = AudioStreamPlayer.new()
+	number_player.bus = "Voice"
+	number_player.volume_db = -5.0
+	add_child(number_player)
 	var m: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://assets/voice/manifest.json"))
 	if not (m is Dictionary):
 		return
@@ -67,7 +89,9 @@ func on_events(events: Array, first_depth := 1) -> void:
 				elif e.reason == "ride":
 					request("ride")
 			"called":
-				request("called", EXPIRE_LONG_MS)
+				# On the Playroom the call starts the last count: the count's own line says so (hide_view.gd).
+				if not bool(e.get("last", false)):
+					request("called", EXPIRE_LONG_MS)
 			"blinkStart":
 				if e.blackout:
 					blackout_on = true
@@ -86,6 +110,41 @@ func on_events(events: Array, first_depth := 1) -> void:
 			"caught":
 				if not wiped:
 					request("taken")
+
+## One of the count's lines: `line` is a key of CountLines.LINES ("hide", "search", "found", "done",
+## "last_called"), or "number" with `number` the seconds left; `text` the caption. The recording plays
+## when there is one (for a number, only the numbers recorded).
+func say_count(line: String, text: String, ms: int, number := -1, length := 0) -> void:
+	var now := Time.get_ticks_msec()
+	caption = text
+	caption_until = now + ms
+	var id := ""
+	if line == "number":
+		id = CountLines.number_line(number, length)
+	else:
+		id = str(CountLines.LINES.get(line, ""))
+	said_count.append({"line": line, "text": text, "at": now, "id": id})
+	if said_count.size() > 80:
+		said_count.pop_front()
+	if id == "":
+		return
+	var path := "res://assets/voice/%s/%s.mp3" % [voice, id]
+	if not ResourceLoader.exists(path):
+		return
+	var p := number_player if line == "number" else count_player
+	p.stop()
+	p.stream = load(path)
+	p.play()
+
+## The subtitle to show: the announcer's own line, else the count's caption while it lasts.
+func shown() -> String:
+	if subtitle != "":
+		return subtitle
+	return caption if Time.get_ticks_msec() < caption_until else ""
+
+## Whether any voice is playing (the beds duck under it).
+func speaking() -> bool:
+	return player.playing or count_player.playing or number_player.playing
 
 func bell_soon() -> void:
 	request("bell", 7000)

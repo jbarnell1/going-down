@@ -31,7 +31,8 @@ const MENU_ROWS: Array[Array] = [
 	["MOUSE", "LOOK"],
 	["E", "INSTRUMENT OUT / AWAY"],
 	["RIGHT MOUSE", "HOLD THE INSTRUMENT UP"],
-	["F", "CALL / HOLD DOORS / PICK UP / SLEEP"],
+	["F", "CALL / HOLD DOORS / PICK UP / SLEEP / HIDE"],
+	["W IN A HIDE", "LEAN TO THE GAP"],
 	["T", "TAPE LOOK ON / OFF"],
 	["HOLD R", "EMOTE WHEEL: AIM, LET GO"],
 	["TAP R", "CLOSE THE WHEEL"],
@@ -56,6 +57,13 @@ var prompt_fill := -1.0
 var big_note := ""
 var fade := 0.0
 var board_lines: Array = []
+## The Playroom (client/hide_view.gd): what started the count, under the count line; a line of what you
+## can do here (F to hide, W to peek, LOWER IT); the health bar (0..100; below 0 not shown) with its
+## rates printed beside it (North Star: the numbers are always printed).
+var count_by := ""
+var seek_note := ""
+var health := -1.0
+var health_rates := ""
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -128,6 +136,17 @@ func _draw() -> void:
 		var cp := Vector2(floorf((size.x - cw) * 0.5), maxf(size.y * 0.06, 12.0))
 		draw_rect(Rect2(cp - Vector2(4, 3) * px, Vector2(cw + 8 * px, 13 * px)), Color(0, 0, 0, 0.45))
 		PixelFont.draw_shadowed(self, count_text, cp, px, Color("#ffd27a"))
+	if count_by != "" and not black:
+		var bw2 := PixelFont.width(count_by) * px
+		var bp := Vector2(floorf((size.x - bw2) * 0.5), maxf(size.y * 0.06, 12.0) + 14 * px)
+		PixelFont.draw_shadowed(self, count_by, bp, px, Color("#f4f4ec"))
+	if seek_note != "" and not black and prompt == "":
+		var sw := PixelFont.width(seek_note) * px
+		var sp := Vector2(floorf((size.x - sw) * 0.5), floorf(size.y * 0.66))
+		draw_rect(Rect2(sp - Vector2(4, 3) * px, Vector2(sw + 8 * px, 13 * px)), Color(0, 0, 0, 0.45))
+		PixelFont.draw_shadowed(self, seek_note, sp, px, Color("#f4f4ec"))
+	if health >= 0.0 and not black:
+		_draw_health(px)
 	if big_note != "" and not black:
 		var p3 := px * 2.0
 		PixelFont.draw_shadowed(self, big_note, Vector2(floorf((size.x - PixelFont.width(big_note) * p3) * 0.5), floorf(size.y * 0.42)), p3, Color("#f4f4ec"))
@@ -147,6 +166,20 @@ func _draw() -> void:
 		_draw_wheel(px)
 	if menu_on and not black:
 		_draw_menu()
+
+## The health bar, bottom left: HEALTH and the number, the bar, the rates under it.
+func _draw_health(px: float) -> void:
+	var margin := Vector2(maxf(size.x * 0.06, 16.0), maxf(size.y * 0.06, 12.0))
+	var label := "HEALTH %d" % ceili(health)
+	var bar_w := 80.0 * px
+	var y := size.y - margin.y - 44 * px
+	var low := health < 30.0
+	PixelFont.draw_shadowed(self, label, Vector2(margin.x, y), px, Color("#ff7a6a") if low else Color("#f4f4ec"))
+	var bar := Rect2(Vector2(margin.x, y + 10 * px), Vector2(bar_w, 4 * px))
+	draw_rect(bar.grow(px), Color(0, 0, 0, 0.6))
+	draw_rect(Rect2(bar.position, Vector2(bar_w * clampf(health / 100.0, 0.0, 1.0), bar.size.y)), Color("#ff7a6a") if low else Color("#9fe0a0"))
+	if health_rates != "":
+		PixelFont.draw_shadowed(self, health_rates, Vector2(margin.x, y + 17 * px), px, Color("#d8ddd9"))
 
 ## The report board, crisp, down the left of the picture: a dark card, the title amber.
 func _draw_board(px: float) -> void:

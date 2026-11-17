@@ -16,6 +16,13 @@
 # Orchestration: at most one room tone at a time and ROOM_GAP seconds apart, room tones step aside while
 # the Orderly is near and moving or just after a scare, never two shrieks within SHRIEK_GAP seconds, and
 # each category has one 3D attenuation (CATS).
+#
+# The Playroom (docs/floors/playarea.md 10; client/hide_view.gd drives these from the host's count):
+# the floor's tune from the ceiling speakers (made here, our own nursery loop, a little slow, on
+# Ambience), which sags to half speed through a low-pass (a filter on the Ambience bus, on only then)
+# for the whole count; three toy xylophone notes at the call to hide; the count's bell, one stroke a
+# second on the Voice bus at the voice's own level (never buried), higher and louder in the last five;
+# and the toy-piano trill only you hear while your own sight or gap total rises (UI).
 class_name Sfx
 extends Node
 
@@ -69,11 +76,21 @@ const SYNTH_DB := {
 	"tick": -3.5, "chime": -12.1, "chime_far": -12.1, "ding": -5.7, "bell": -6.2, "bell_warn": -7.6, "closed": -8.6, "slip": -1.4,
 	"doors": -2.8, "doors_far": -2.8, "blink_warn": 0.3, "blackout_warn": -0.7, "blink": -3.4, "caught": -7.0,
 	"step": 0.8, "squeak": -4.0, "machinery": -7.6, "breath": -0.7, "hum": -13.9, "ride": -10.2,
+	"xylo": -6.0, "count_bell": -3.0, "trill": -12.0, "tune": -16.0,
 }
 const SYNTH_BUS := {
 	"tick": "UI", "chime": "UI", "chime_far": "UI", "ding": "UI", "bell": "UI", "bell_warn": "UI", "closed": "UI", "slip": "UI",
 	"doors": "Effects", "doors_far": "Effects", "blink_warn": "Effects", "blackout_warn": "Effects", "blink": "Effects", "caught": "Scare",
+	"xylo": "UI",
 }
+## The count's bell: in the last RISE_FROM seconds each stroke is RISE_PITCH higher and RISE_DB louder.
+const RISE_FROM := 5
+const RISE_PITCH := 0.06
+const RISE_DB := 0.8
+## The tune: a note every TUNE_NOTE seconds (a little slow), from TUNE_HZ; the count's low-pass.
+const TUNE_NOTE := 0.42
+const TUNE_HZ := 523.25
+const SAG_CUTOFF := 700.0
 
 var streams := {}               # the generated stand-ins, by name
 var recorded := {}              # name -> {cat, streams: Array, next}
@@ -119,6 +136,15 @@ var _prev := {}                 # the Orderly's last mode / moving / anim
 var _hunts := 0
 var _releases := 0
 var _shriek_pending_until := -1
+# The Playroom.
+var bell_player: AudioStreamPlayer
+var trill_player: AudioStreamPlayer
+var tune_player: AudioStreamPlayer
+var _amb_lp := -1                 # the low-pass's index on the Ambience bus
+var _trill_in := 0.0
+var _trill_n := 0
+## Tests: the bell strokes played ([ms, seconds left]).
+var bells: Array = []
 
 func setup(world_parent: Node3D) -> void:
 	_rng.seed = 7
@@ -140,6 +166,10 @@ func setup(world_parent: Node3D) -> void:
 	streams["slip"] = _wav(_printer(), false)
 	streams["closed"] = _wav(_tones([[990.0, 0.0], [1480.0, 0.08]], 0.4, 0.25), false)
 	streams["step"] = _wav(_step(), false)
+	streams["xylo"] = _wav(_xylo(), false)
+	streams["count_bell"] = _wav(_hand_bell(), false)
+	streams["trill"] = _wav(_toy_note(), false)
+	streams["tune"] = _wav(_tune(), true)
 	for name: String in RECORDED:
 		var spec: Array = RECORDED[name]
 		var list: Array = []
@@ -185,7 +215,17 @@ func setup(world_parent: Node3D) -> void:
 		ride_loop.stream = _wav(_rumble(2.0, 42.0), true)
 	drip = _player3d(world_parent, _rec("clinic/drip", true), "Ambience", 1.5, 16.0)
 	monitor = _player3d(world_parent, _rec("clinic/monitor", true), "Ambience", 1.5, 18.0)
-	_loops = {"approach": [squeak, "approach"], "roll": [roll, "approach"], "orderly_breath": [orderly_breath, "orderly"],
+	bell_player = _player2d(streams["count_bell"], "Voice")
+	trill_player = _player2d(streams["trill"], "UI")
+	tune_player = _player2d(streams["tune"], "Ambience")
+	var amb := AudioServer.get_bus_index("Ambience")
+	if amb >= 0:
+		var lp := AudioEffectLowPassFilter.new()
+		lp.cutoff_hz = SAG_CUTOFF
+		AudioServer.add_bus_effect(amb, lp)
+		_amb_lp = AudioServer.get_bus_effect_count(amb) - 1
+		AudioServer.set_bus_effect_enabled(amb, _amb_lp, false)
+	_loops = {"tune": [tune_player, "tune"], "approach": [squeak, "approach"], "roll": [roll, "approach"], "orderly_breath": [orderly_breath, "orderly"],
 		"machinery": [machinery, "machinery"], "breath": [breath, "breath"], "hum": [hum, "hum"], "vent": [vent, "vent"],
 		"drone": [drone, "drone"], "ride": [ride_loop, "rumble"], "drip": [drip, "room"], "monitor": [monitor, "room"]}
 	for i in 6:
@@ -618,6 +658,47 @@ func _room_tones(t: float, o: Dictionary, dark: bool) -> void:
 	if _room_player != null:
 		_last["room"] = Time.get_ticks_msec()
 
+# --- the Playroom -----------------------------------------------------------------------------------
+
+## The floor's tune, from the ceiling speakers: `on` on the Playroom; `sag` 0 at speed, 1 the count's
+## half speed through the low-pass.
+func playroom(on: bool, sag: float) -> void:
+	_loop(tune_player, "tune", on, BASE_DB + float(SYNTH_DB["tune"]) - 3.0 * sag)
+	tune_player.pitch_scale = lerpf(1.0, 0.5, clampf(sag, 0.0, 1.0))
+	var amb := AudioServer.get_bus_index("Ambience")
+	if amb >= 0 and _amb_lp >= 0 and _amb_lp < AudioServer.get_bus_effect_count(amb):
+		AudioServer.set_bus_effect_enabled(amb, _amb_lp, on and sag > 0.02)
+
+## One stroke of the count's bell, `left` seconds of the count left: rising in the last RISE_FROM.
+func count_bell(left: int) -> void:
+	if not _ok("bell"):
+		return
+	var rise := maxi(0, RISE_FROM + 1 - left) if left <= RISE_FROM else 0
+	bell_player.stop()
+	bell_player.pitch_scale = 1.0 + RISE_PITCH * rise
+	bell_player.volume_db = BASE_DB + float(SYNTH_DB["count_bell"]) + RISE_DB * rise
+	bell_player.play()
+	_note("count_bell")
+	bells.append([Time.get_ticks_msec(), left])
+	if bells.size() > 60:
+		bells.pop_front()
+
+## The trill: while `total` (this player's sight or gap total, 0..1) rises, toy-piano notes going up
+## with it; -1 for none.
+func trill(total: float, delta: float) -> void:
+	if total < 0.0 or not _ok("ui"):
+		_trill_in = 0.0
+		return
+	_trill_in -= delta
+	if _trill_in > 0.0:
+		return
+	_trill_in = 0.07
+	_trill_n += 1
+	trill_player.pitch_scale = (1.0 + clampf(total, 0.0, 1.0) * 1.2) * (1.0 if _trill_n % 2 == 0 else 1.12)
+	trill_player.volume_db = BASE_DB + float(SYNTH_DB["trill"]) + 6.0 * clampf(total, 0.0, 1.0)
+	trill_player.play()
+	_note("trill")
+
 ## Tests: every loop (playing, volume, bus), the bus volumes, the last one-shots.
 func describe() -> Dictionary:
 	var loops := {}
@@ -777,6 +858,54 @@ func _hum() -> PackedFloat32Array:
 	for i in a.size():
 		var t := float(i) / RATE
 		a[i] = sin(TAU * 100.0 * t) * 0.25 + sin(TAU * 200.0 * t) * 0.12 + sin(TAU * 300.0 * t) * 0.06 + sin(TAU * 50.0 * t) * 0.1
+	return a
+
+## Three notes on a toy xylophone, going up: the call to hide.
+func _xylo() -> PackedFloat32Array:
+	var a := _buf(1.2)
+	var fs: Array[float] = [1046.5, 1318.5, 1568.0]
+	for k in 3:
+		var f := fs[k]
+		var at := k * 0.2
+		for i in range(int(at * RATE), a.size()):
+			var t := float(i) / RATE - at
+			a[i] += (sin(TAU * f * t) + 0.25 * sin(TAU * f * 3.9 * t) * exp(-t * 30.0)) * exp(-t * 9.0) * 0.4
+	return a
+
+## A struck hand bell: bright, gone within the second, so one stroke a second stands out.
+func _hand_bell() -> PackedFloat32Array:
+	var a := _buf(0.9)
+	var parts := [[880.0, 1.0], [1760.0, 0.5], [2640.0, 0.3], [3520.0, 0.18]]
+	for i in a.size():
+		var t := float(i) / RATE
+		var s := 0.0
+		for p: Array in parts:
+			s += sin(TAU * p[0] * t) * p[1] * exp(-t * (5.0 + p[0] / 900.0))
+		a[i] = s * 0.3
+	return a
+
+## One toy-piano note, short (the trill is made of these).
+func _toy_note() -> PackedFloat32Array:
+	var a := _buf(0.12)
+	for i in a.size():
+		var t := float(i) / RATE
+		a[i] = (sin(TAU * 1568.0 * t) + 0.4 * sin(TAU * 4704.0 * t)) * exp(-t * 28.0) * 0.4
+	return a
+
+## The floor's tune (the Minder's music box plays the same notes, minder_view.gd TUNE): a soft,
+## cheap-speaker voice, one note every TUNE_NOTE seconds, looping.
+func _tune() -> PackedFloat32Array:
+	var notes: Array[int] = [7, 4, 0, 4, 7, 7, 9, 7, 4, 2, 4, 0, 2, 4, 2, -1, 0, -100]
+	var a := _buf(notes.size() * TUNE_NOTE)
+	for k in notes.size():
+		if notes[k] < -50:
+			continue
+		var f := TUNE_HZ * pow(2.0, notes[k] / 12.0)
+		var at := int(k * TUNE_NOTE * RATE)
+		for i in range(at, mini(a.size(), at + int(TUNE_NOTE * RATE))):
+			var t := float(i - at) / RATE
+			var env := minf(1.0, t / 0.01) * exp(-t * 3.0)
+			a[i] += (sin(TAU * f * t) + 0.3 * sin(TAU * f * 3.0 * t) + 0.12 * sin(TAU * f * 5.0 * t)) * env * 0.3
 	return a
 
 func _breathing() -> PackedFloat32Array:
