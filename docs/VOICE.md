@@ -18,7 +18,7 @@ The ElevenLabs key is not in this repository. `.local/MACHINE.md` (not in git) s
 The account is shared with the owner's other work, so the game is careful with its credits:
 
 - Before any batch, call `GET https://api.elevenlabs.io/v1/user/subscription` and log characters used and the limit.
-- **Cap: 50,000 characters in total for the game, takes included** (the owner raised it from 25,000 on 2026-11-15). Keep a running total in `assets_src/voice/ledger.json`.
+- **Cap: 100,000 characters in total for the game, takes included** (the owner raised it from 25,000 on 2026-11-15, to 50,000, and to 100,000 on 2026-11-17 after topping up the account). Keep a running total in `assets_src/voice/ledger.json`.
 - Stop and record a question if a batch would use more than 10% of what is left this month.
 - Cache by a hash of text + voice + model + settings. Never pay twice for the same line.
 

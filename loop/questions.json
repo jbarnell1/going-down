@@ -1838,6 +1838,136 @@
       "default": [
         "retire"
       ]
+    },
+    {
+      "id": "story-names",
+      "title": "The story's names",
+      "context": "The city above: Datum (\"Nothing is below Datum\"). The sealed old district: Lowfield. The company: Upwell, slogan \"Everything comes up\". Tonight's crew: Crew 41.",
+      "type": "single",
+      "options": [
+        {
+          "id": "fable",
+          "label": "Datum, Lowfield, Upwell, \"Everything comes up\"",
+          "note": "Recommended."
+        },
+        {
+          "id": "mine",
+          "label": "Keep the places; I will name the company (write it in the box)",
+          "note": ""
+        },
+        {
+          "id": "none",
+          "label": "No names on Friday",
+          "note": ""
+        }
+      ],
+      "default": [
+        "fable"
+      ]
+    },
+    {
+      "id": "story-reveal",
+      "title": "How much should Friday give away?",
+      "context": "By the day-3 bedtime tape, a silent old recording reads \"IT KEPT ITS FACE.\" The announcer never says it; the notes in drawers do the rest.",
+      "type": "single",
+      "options": [
+        {
+          "id": "day3",
+          "label": "By day 3, as above",
+          "note": "Recommended."
+        },
+        {
+          "id": "slower",
+          "label": "Slower: hold day 3 and the last notes back",
+          "note": ""
+        },
+        {
+          "id": "outright",
+          "label": "The voice says it outright",
+          "note": ""
+        }
+      ],
+      "default": [
+        "day3"
+      ]
+    },
+    {
+      "id": "story-turning",
+      "title": "Turning into one of them, on Friday",
+      "context": "Left out or out cold: a line in the incident report and a FETCHED stamp on your cell door, and the next floor's monster wears your drawn face. Nothing is rolled; no rule changes.",
+      "type": "single",
+      "options": [
+        {
+          "id": "both",
+          "label": "Report line and stamp, plus the next monster wears your face",
+          "note": "Recommended."
+        },
+        {
+          "id": "stamp",
+          "label": "Report line and stamp only",
+          "note": ""
+        },
+        {
+          "id": "later",
+          "label": "Nothing until the full mechanic later",
+          "note": ""
+        }
+      ],
+      "default": [
+        "both"
+      ]
+    },
+    {
+      "id": "story-bedtime",
+      "title": "When does the bedtime tape play?",
+      "context": "A 25-second tape on the cell-block TV each night.",
+      "type": "single",
+      "options": [
+        {
+          "id": "bunk",
+          "label": "Starts when the first player gets into a bunk, ends in the dark at lights out",
+          "note": "Recommended."
+        },
+        {
+          "id": "ride",
+          "label": "On the ride up, on the lift monitor",
+          "note": ""
+        },
+        {
+          "id": "watch",
+          "label": "Everyone must watch before the bunks unlock (about 25 s more a day)",
+          "note": ""
+        }
+      ],
+      "default": [
+        "bunk"
+      ]
+    },
+    {
+      "id": "story-names-2",
+      "title": "The new story names",
+      "context": "City above: Overton (or Lidgate, Mount Pleasant). Old district: Coldbath (or The Soke, Carr End). Company: Continuance (or Hallam Grieve, Overton Amenity). Slogan: \"Leave it with us.\" (or \"We keep things going.\", \"Nothing left unfinished.\"). Prison: Overton Reception Centre (or Approved Premises No. 1, Tarry House). Programme: Day Release (or Fresh Start, Earned Days). Crew 41 kept; a convict who missed the car comes back as seat 41-5. Aloud: \"Hello! And welcome to Continuance.\"",
+      "type": "single",
+      "options": [
+        {
+          "id": "set",
+          "label": "The recommended set: Overton, Coldbath, Continuance, \"Leave it with us.\", Overton Reception Centre, Day Release",
+          "note": "Recommended."
+        },
+        {
+          "id": "mix",
+          "label": "A mix: write which ones in the box",
+          "note": ""
+        },
+        {
+          "id": "again",
+          "label": "None of these: try again",
+          "note": ""
+        }
+      ],
+      "default": [
+        "set"
+      ]
     }
   ]
 }

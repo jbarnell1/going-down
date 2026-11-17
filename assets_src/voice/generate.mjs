@@ -39,7 +39,7 @@ const PUBLIC = path.join(ROOT, 'public', 'assets', 'voice');
 const GODOT = path.join(ROOT, 'godot', 'assets', 'voice');
 const API = 'https://api.elevenlabs.io';
 /** The game's cap on characters, takes included (docs/VOICE.md). */
-const CAP = 50_000;
+const CAP = 100_000;
 /** At most this share of what is left on the account this month, per batch. */
 const MONTH_SHARE = 0.1;
 

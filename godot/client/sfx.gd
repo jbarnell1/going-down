@@ -746,7 +746,7 @@ func world(delta: float, s: Dictionary, emergency: float) -> void:
 # tone ("bell_warn"), twice. It stops on "chaseEnded", on any relocation, catch or new floor.
 const PHONE_EVERY_MS := 2600
 const PHONE_GAP_MS := 240
-const PHONE_DB := -4.0
+const LONELY_PHONE_DB := -4.0
 var _phone: AudioStreamPlayer = null
 var _phone_on := false
 var _phone_depth := -1
@@ -783,7 +783,7 @@ func _phones(s: Dictionary) -> void:
 		_phone_second = 0
 
 func _phone_ring() -> void:
-	_phone.volume_db = BASE_DB + float(SYNTH_DB["bell_warn"]) + PHONE_DB
+	_phone.volume_db = BASE_DB + float(SYNTH_DB["bell_warn"]) + LONELY_PHONE_DB
 	_phone.play()
 	_note("phone")
 # --- end of the phones -------------------------------------------------------------------------------------
