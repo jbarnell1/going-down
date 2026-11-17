@@ -1,11 +1,13 @@
-# Thirty seeded bot crews played tick by tick for 90 s each against src/sim (bot.ts, entity.ts,
-# instrument.ts): bots wander and flee, the Orderly hunts them, every instrument is raised, one bot
-# keeps lowering and raising its own, tapes are dropped and picked up. Every tick's full state is
-# compared by digest. Mirrors botCrew in godot/tools/dump_reference.ts.
+# Thirty seeded bot crews played tick by tick for 90 s each (sim/bot.gd, entity.gd, instrument.gd):
+# bots wander and flee, the Orderly hunts them, every instrument is raised, one bot keeps lowering
+# and raising its own, tapes are dropped and picked up. Every tick's full state is compared by digest
+# with tests/golden/bots.json (first proved equal to src/sim, pay within 1e-9; the historical botCrew
+# in godot/tools/dump_reference.ts).
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
 const Snap = preload("res://tests/snap.gd")
+const Golden = preload("res://tests/golden.gd")
 const Trace = preload("res://tests/trace.gd")
 const Plans = preload("res://tests/plans.gd")
 const Entity = preload("res://sim/entity.gd")
@@ -16,7 +18,7 @@ const M = preload("res://sim/jsmath.gd")
 
 const DT := 0.05
 
-static func bot_crew(i: int, want: Dictionary) -> Trace:
+static func bot_crew(i: int, want: Variant) -> Trace:
 	var seed := "crew-%d" % i
 	var depth := 1 + (i % 4)
 	var n_bots := 1 + ((i / 4) % 4)
@@ -39,7 +41,7 @@ static func bot_crew(i: int, want: Dictionary) -> Trace:
 		crew = Instr.set_raised(crew, id, true)
 	var toggle_in := 2.0 + toggles.next() * 6.0
 	var orderly := Entity.create_orderly(p)
-	var tr := Trace.new(want)
+	var tr := Trace.new(seed, 450, want)
 	var tick := 0
 	while tick < 90.0 / DT:
 		toggle_in -= DT
@@ -89,25 +91,29 @@ static func bot_crew(i: int, want: Dictionary) -> Trace:
 	return tr
 
 func test_thirty_crews(t: T) -> void:
-	var ref: Array = Snap.load_ref("bots.json")
-	var total := Snap.Diff.new()
+	var wants: Variant = t.golden("bots.json")
 	var ticks := 0
 	var events := 0
 	var firsts := PackedStringArray()
-	var pay_ticks := 0
-	# The quick set: two crews (crew-7's pay differs from TypeScript's in the last bits early on).
+	# The quick set: two crews (crew-7 earns early on: its pay differed from TypeScript's in the last bits).
 	var crews: Array[int] = [0, 7]
 	if not t.quick:
 		crews.clear()
 		for i in 30:
 			crews.append(i)
+	var traces: Array = []
 	for i in crews:
-		var tr := bot_crew(i, ref[i])
+		var tr := bot_crew(i, Golden.item(wants, i))
+		traces.append(tr)
 		ticks += tr.ticks
 		events += tr.events.size()
-		pay_ticks += tr.full_bad
-		total.add(tr.finish(t, true))
-		if tr.exact_first >= 0 or tr.full_first >= 0:
+		if tr.full_first >= 0:
 			firsts.append("%s: %s" % [tr.name, tr.first_difference()])
-	t.note("%d crews x 1800 ticks = %d ticks, %d events; every tick's state (pay masked) identical; events, snapshots: %s" % [crews.size(), ticks, events, total.summary()])
-	t.note("ticks whose pay fields differ in the last bits (pow): %d; first differences: %s" % [pay_ticks, ", ".join(firsts) if not firsts.is_empty() else "never"])
+	var total := Snap.Diff.new()
+	if t.recording or not t.quick:
+		total = Trace.finish_all(t, "bots.json", "", traces, wants)
+	else:
+		for tr: Trace in traces:
+			total.add(tr.finish(t))
+	t.note("%d crews x 1800 ticks = %d ticks, %d events; every tick's state (pay included) compared; events, snapshots: %s" % [crews.size(), ticks, events, total.summary()])
+	t.note("first differences: %s" % (", ".join(firsts) if not firsts.is_empty() else "never"))

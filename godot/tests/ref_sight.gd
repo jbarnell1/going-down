@@ -1,11 +1,13 @@
-# Line of sight and "could they see it" against src/sim/sight.ts: 6000 seeded queries on ten floors
-# (random pairs, through doors, up and down stairs, near pairs), each asked seven ways: the default
-# figure, the Orderly's three outlines, no margin, the bare line of sight to the chest, and the
-# view cone. Mirrors sightCase in godot/tools/dump_reference.ts.
+# Line of sight and "could they see it" (sim/sight.gd): 6000 seeded queries on ten floors (random
+# pairs, through doors, up and down stairs, near pairs), each asked seven ways: the default figure,
+# the Orderly's three outlines, no margin, the bare line of sight to the chest, and the view cone,
+# against tests/golden/sight.json (first proved equal to src/sim/sight.ts; the historical sightCase in
+# godot/tools/dump_reference.ts is the same generator).
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
 const Snap = preload("res://tests/snap.gd")
+const Golden = preload("res://tests/golden.gd")
 const Plans = preload("res://tests/plans.gd")
 const Floor = preload("res://sim/floor.gd")
 const Move = preload("res://sim/move.gd")
@@ -101,32 +103,52 @@ static func sight_case(plan: Floor.FloorPlan, rng: Rng, cells: PackedInt32Array)
 		text += "1" if b else "0"
 	return [[kind, v.x, v.z, v.y, v.level, f.x, f.z, f.y, f.level, yaw, pitch], text]
 
+const QUERIES := 600
+
 func test_six_thousand_queries(t: T) -> void:
-	var ref: Array = Snap.load_ref("sight.json")
+	var wants: Variant = t.golden("sight.json")
 	var queries := 0
 	var answers := 0
 	var differ := 0
 	var seen := 0
-	for want: Dictionary in ref:
-		var plan := Plans.plan(want["seed"], want["depth"])
-		var cells := Floor.reachable_from(plan, plan.landing)
-		var rng := Rng.make_rng("sight:%s:%d" % [want["seed"], want["depth"]])
-		var bits := ""
-		var inputs := PackedStringArray()
-		for i in int(want["n"]):
-			var c := sight_case(plan, rng, cells)
-			bits += c[1]
-			inputs.append(JSON.stringify(Snap.hexify(c[0], false), "", true))
-		t.eq("".join(inputs).md5_text().substr(0, 8), want["inputs"], "%s d%d: the generated queries differ" % [want["seed"], want["depth"]])
-		var wbits: String = want["bits"]
-		queries += int(want["n"])
-		for i in wbits.length():
-			answers += 1
-			if bits[i] == "1":
-				seen += 1
-			if i >= bits.length() or bits[i] != wbits[i]:
-				differ += 1
-				if differ <= 10:
-					t.check(false, "%s d%d query %d answer %d: got %s want %s" % [want["seed"], want["depth"], i / 7, i % 7, bits[i] if i < bits.length() else "?", wbits[i]])
-	t.check(differ == 0, "%d answers differ" % differ)
+	var out: Array = []
+	for seed: String in ["alpha", "bravo", "charlie", "delta", "echo"]:
+		for depth: int in [1, 3]:
+			var plan := Plans.plan(seed, depth)
+			var cells := Floor.reachable_from(plan, plan.landing)
+			var rng := Rng.make_rng("sight:%s:%d" % [seed, depth])
+			var bits := ""
+			var inputs := PackedStringArray()
+			for i in QUERIES:
+				var c := sight_case(plan, rng, cells)
+				bits += c[1]
+				inputs.append(JSON.stringify(Snap.hexify(c[0], false), "", true))
+			var got := {"seed": seed, "depth": depth, "n": QUERIES, "bits": bits, "inputs": "".join(inputs).md5_text().substr(0, 8)}
+			var want: Variant = Golden.item(wants, out.size())
+			out.append(got)
+			queries += QUERIES
+			for i in bits.length():
+				answers += 1
+				if bits[i] == "1":
+					seen += 1
+			if t.recording:
+				continue
+			if not (want is Dictionary):
+				t.check(false, "%s d%d: not in the golden" % [seed, depth])
+				continue
+			t.eq(got["inputs"], want["inputs"], "%s d%d: the generated queries differ from the golden's" % [seed, depth])
+			var head := {"seed": seed, "depth": depth, "n": QUERIES}
+			var hd := Snap.compare(head, {"seed": want["seed"], "depth": want["depth"], "n": want["n"]}, "%s d%d" % [seed, depth])
+			t.check(hd.ok(), hd.summary())
+			var wbits: String = want["bits"]
+			for i in maxi(wbits.length(), bits.length()):
+				if i >= bits.length() or i >= wbits.length() or bits[i] != wbits[i]:
+					differ += 1
+					if differ <= 10:
+						t.check(false, "%s d%d query %d answer %d: got %s, golden %s" % [seed, depth, i / 7, i % 7, bits[i] if i < bits.length() else "?", wbits[i] if i < wbits.length() else "?"])
+	if t.recording:
+		Golden.put("sight.json", "", out)
+	else:
+		t.eq(out.size(), (wants as Array).size() if wants is Array else -1, "floors in the golden")
+		t.check(differ == 0, "%d answers differ from the golden" % differ)
 	t.note("%d queries, %d answers (%d yes), %d differ" % [queries, answers, seen, differ])

@@ -1,7 +1,7 @@
 # The recording rule, by an independent oracle (ported from tests/sim/instrument.test.ts; it shares
 # nothing with instrument.gd): a reading only grows on a tick where the holder's instrument was
 # raised, the holder active, the Orderly moved (or its wind-up advanced), within 9 m. Plus the slip
-# prints once, readings close and tapes drop, and greed costs. Counts must equal TypeScript's.
+# prints once, readings close and tapes drop, and greed costs. Counts must equal the golden counts (tests/golden/properties.json).
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -230,10 +230,13 @@ static func counts(n: int) -> Dictionary:
 	c["maxValue"] = values.max() if not values.is_empty() else 0.0
 	return c
 
+## Runs per size (tools/property_counts.ts QUICK, SUB, FULL).
+const SIZES := {"quick": 4, "sub": 24, "full": 500}
+
 func test_recording_rule_by_the_oracle(t: T) -> void:
-	var ref: Dictionary = Snap.load_ref("properties.json")
-	var want: Dictionary = ref[t.size_key()]["instrument"]
-	var n: int = want["runs"]
+	var g: Variant = t.golden("properties.json", "%s.instrument" % t.size_key())
+	var want: Dictionary = g if g is Dictionary else {}
+	var n: int = SIZES[t.size_key()]
 	var frac := float(n) / 500.0
 	var c := counts(n)
 	t.eq(c["violations"], 0, "a reading grew when the rule says it may not")
@@ -244,13 +247,13 @@ func test_recording_rule_by_the_oracle(t: T) -> void:
 	var rate_e := float(c["earnersCaught"]) / maxi(1, c["earners"])
 	var rate_n := float(c["nonEarnersCaught"]) / maxi(1, c["nonEarners"])
 	t.check(t.quick or rate_e > rate_n, "greed costs: earners caught %s, non-earners %s" % [rate_e, rate_n])
-	var d := Snap.compare(c, want, "instrument")
-	t.check(d.ok(), "counts differ from TypeScript's: " + d.summary())
+	t.expect("properties.json", "%s.instrument" % t.size_key(), c, "the counts")
 	t.note("%d runs x 60 s: growth-ticks %d, lowered %d, inactive-raised %d, runs with a reading %d (%d readings), tapes dropped %d in %d runs, picked up %d" % [
 		n, c["growthTicks"], c["lowered"], c["inactiveRaisedTicks"], c["withReading"], c["closedReadings"], c["tapesDropped"], c["dropRuns"], c["pickups"]])
 	t.note("carried out %s, lost %s, median earning run %s, max %s; earners caught %d of %d, non-earners %d of %d" % [
 		M.to_fixed(c["carried"], 0), M.to_fixed(c["lost"], 0), M.to_fixed(c["medianValue"], 1), M.to_fixed(c["maxValue"], 1),
 		c["earnersCaught"], c["earners"], c["nonEarnersCaught"], c["nonEarners"]])
-	t.note("TypeScript, same seeds: growth-ticks %d, lowered %d, inactive-raised %d, with a reading %d (%d), dropped %d, carried %s, lost %s" % [
-		want["growthTicks"], want["lowered"], want["inactiveRaisedTicks"], want["withReading"], want["closedReadings"], want["tapesDropped"],
-		M.to_fixed(want["carried"], 0), M.to_fixed(want["lost"], 0)])
+	if not want.is_empty():
+		t.note("golden, same seeds: growth-ticks %d, lowered %d, inactive-raised %d, with a reading %d (%d), dropped %d, carried %s, lost %s" % [
+			want["growthTicks"], want["lowered"], want["inactiveRaisedTicks"], want["withReading"], want["closedReadings"], want["tapesDropped"],
+			M.to_fixed(want["carried"], 0), M.to_fixed(want["lost"], 0)])

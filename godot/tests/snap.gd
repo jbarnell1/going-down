@@ -1,6 +1,7 @@
 # Snapshots of the ported state as plain data with the TypeScript field names, the canonical digest
-# the reference files carry per tick, and reading and comparing the reference files.
-# Must build exactly what godot/tools/dump_reference.ts builds (snapOrderly, snapCrew, ...).
+# the goldens carry per tick, and comparing with the goldens (exactly). The shapes are those
+# godot/tools/dump_reference.ts built (snapOrderly, snapCrew, ...), so the first goldens could be
+# proved equal to the TypeScript reference (godot/tools/check_goldens_against_typescript.mjs).
 extends RefCounted
 
 const Floor = preload("res://sim/floor.gd")
@@ -14,47 +15,13 @@ const Run = preload("res://sim/run.gd")
 const Stamina = preload("res://sim/stamina.gd")
 const M = preload("res://sim/jsmath.gd")
 
-## Fields derived from rate_at's pow, masked in the `exact` digest (as in dump_reference.ts).
+## Fields derived from rate_at's pow, masked in the `exact` digest (as in dump_reference.ts). The
+## goldens keep both digests; the tests require the unmasked one (`full`) to match, and use the
+## masked one only to say whether a difference is in the pay alone.
 const TAINT := {"value": true, "rate": true, "recorded": true, "tickHz": true, "loudness": true, "tickPhase": true,
 	"ticks": true, "total": true, "peakRate": true, "lostValue": true, "carriedValue": true, "shares": true}
 
 const TWO53 := 9007199254740992.0
-
-# ---------------------------------------------------------------------------------------------
-# Reference files.
-
-static func load_ref(name: String) -> Variant:
-	var text := FileAccess.get_file_as_string("res://tests/reference/" + name)
-	if text.is_empty():
-		push_error("missing reference file %s: run npm run godot:reference" % name)
-		return null
-	return decode(JSON.parse_string(text))
-
-## JSON from a reference file to native values: "~hex" strings become exact floats, integral
-## numbers become ints.
-static func decode(v: Variant) -> Variant:
-	if v is String:
-		var s: String = v
-		if s.begins_with("~") and s.length() == 17:
-			return M.from_hex(s.substr(1))
-		return s
-	if v is float:
-		var f: float = v
-		if f == floorf(f) and absf(f) < TWO53:
-			return int(f)
-		return f
-	if v is Array:
-		var out: Array = []
-		for x: Variant in v:
-			out.append(decode(x))
-		return out
-	if v is Dictionary:
-		var d: Dictionary = v
-		var out := {}
-		for k: Variant in d:
-			out[k] = decode(d[k])
-		return out
-	return v
 
 # ---------------------------------------------------------------------------------------------
 # The canonical digest.
@@ -89,17 +56,17 @@ static func digest(plain: Variant, mask: bool) -> String:
 # ---------------------------------------------------------------------------------------------
 # Comparing.
 
+## An exact comparison: every number bit for bit (an int and a float of the same value are equal,
+## as the files carry integral floats as integers), every string, flag and shape. There is no
+## tolerance anywhere (the goldens hold this implementation's own values, pay included).
 class Diff:
-	## Values that differ by more than the tolerance (or in type, text, flags, shape).
+	## Values that differ (in value, type, text, flags or shape).
 	var bad := 0
-	## Floats that differ but within the tolerance.
-	var inexact := 0
 	var compared := 0
 	var first := ""
 
 	func add(o: Diff) -> void:
 		bad += o.bad
-		inexact += o.inexact
 		compared += o.compared
 		if first.is_empty():
 			first = o.first
@@ -108,9 +75,7 @@ class Diff:
 		return bad == 0
 
 	func summary() -> String:
-		return "%d values, %d differ%s, %d floats within 1e-9 but not identical" % [compared, bad, (" (first: %s)" % first) if bad > 0 else "", inexact]
-
-const TOL := 1e-9
+		return "%d values, %d differ%s" % [compared, bad, (" (first: %s)" % first) if bad > 0 else ""]
 
 static func compare(got: Variant, want: Variant, path: String = "") -> Diff:
 	var d := Diff.new()
@@ -128,9 +93,6 @@ static func _cmp(got: Variant, want: Variant, path: String, d: Diff) -> void:
 		var g := float(got)
 		var w := float(want)
 		if g == w or (is_nan(g) and is_nan(w)):
-			return
-		if absf(g - w) <= TOL:
-			d.inexact += 1
 			return
 		d.bad += 1
 		if d.first.is_empty():

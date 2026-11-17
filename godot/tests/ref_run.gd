@@ -1,11 +1,13 @@
-# The run against src/sim/run.ts: the call plans and dark schedules (blinks and blackout) of 200
-# seeded waits, the depth pay, a whole scripted run from the first floor to the bank (every tick's
-# full state and every event in order), the vote / hold / left-behind / wipe / repeated-call scenes,
-# and 24 whole waits for the car with wait bots (tests/sim/waits.ts). Mirrors dumpRun.
+# The run (sim/run.gd): the call plans and dark schedules (blinks and blackout) of 200 seeded waits,
+# the depth pay, a whole scripted run from the first floor to the bank (every tick's full state and
+# every event in order), the vote / hold / left-behind / wipe / repeated-call scenes, and 24 whole
+# waits for the car with wait bots (tests/waits.gd), against tests/golden/run.json, exactly (first
+# proved equal to src/sim/run.ts, pay within 1e-9; the historical dumpRun).
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
 const Snap = preload("res://tests/snap.gd")
+const Golden = preload("res://tests/golden.gd")
 const Trace = preload("res://tests/trace.gd")
 const Waits = preload("res://tests/waits.gd")
 const Floor = preload("res://sim/floor.gd")
@@ -21,15 +23,13 @@ const M = preload("res://sim/jsmath.gd")
 const DT := 0.05
 
 func test_call_plans_and_depth_pay(t: T) -> void:
-	var ref: Dictionary = Snap.load_ref("run.json")
 	var got: Array = []
 	for i in 200:
 		var prev: Variant = null if i % 5 == 0 else 6 + (i % 7)
 		var depth := 1 + (i % 4)
 		var plan := Run.call_plan("sched-%d" % i, i % 3, -1 if prev == null else int(prev), depth)
 		got.append({"seed": "sched-%d" % i, "index": i % 3, "prev": prev, "depth": depth, "plan": Snap.call_plan(plan)})
-	var d := Snap.compare(got, ref["plans"], "plans")
-	t.check(d.ok() and d.inexact == 0, d.summary())
+	var d := t.expect("run.json", "plans", got, "call plans")
 	var blinks := 0
 	var false_stops := 0
 	for g: Dictionary in got:
@@ -39,8 +39,7 @@ func test_call_plans_and_depth_pay(t: T) -> void:
 	var mult: Array = []
 	for depth in 12:
 		mult.append(Run.depth_multiplier(depth))
-	var md := Snap.compare(mult, ref["mult"], "depthMultiplier")
-	t.check(md.ok(), md.summary())
+	var md := t.expect("run.json", "mult", mult, "depthMultiplier")
 	t.note("200 call plans (%d dark stretches, %d false stops): %s" % [blinks, false_stops, d.summary()])
 	t.note("depth pay 0..11: %s" % md.summary())
 
@@ -214,16 +213,17 @@ func _scripted_floor(dr: Driver, bank_at_end: bool) -> void:
 	dr.until(func(ev: Array[Dictionary]) -> bool: return has(ev, "bell"), 80.0 + Run.BOARD_TIME + Run.HOLD_LIMIT, wait)
 
 func test_scripted_run_to_the_bank(t: T) -> void:
-	var ref: Dictionary = Snap.load_ref("run.json")
 	var dr := Driver.new()
 	var ids: Array[String] = ["A", "B"]
 	dr.st = Run.create_run("script-1", ids)
 	dr.actors = [Actor.make("A", dr.st.players[0].body), Actor.make("B", dr.st.players[1].body)]
-	dr.tr = Trace.new(ref["scripted"])
+	dr.tr = Trace.new("scripted-run", 150, t.golden("run.json", "scripted"))
 	_scripted_floor(dr, false)
 	dr.until(func(ev: Array[Dictionary]) -> bool: return has(ev, "rodeDown"), 10.0)
 	_scripted_floor(dr, true)
-	var d := dr.tr.finish(t, true)
+	var d := dr.tr.finish(t)
+	if t.recording:
+		Golden.put("run.json", "scripted", dr.tr.to_golden())
 	var kinds := PackedStringArray()
 	var banked := 0.0
 	for e: Array in dr.tr.events:
@@ -263,9 +263,9 @@ static func bank_spot(st: Run.RunState, k: int = 0) -> Move.Body:
 static func down_spot(st: Run.RunState, k: int = 0) -> Move.Body:
 	return Run.car_body(st.car, 0.8 + 0.5 * (k % 2), 0.5)
 
-func _scene(want: Dictionary, st0: Run.RunState, actors: Array[Actor], seconds: float, each: Callable, stop_on: String) -> Trace:
+func _scene(name: String, want: Variant, st0: Run.RunState, actors: Array[Actor], seconds: float, each: Callable, stop_on: String) -> Trace:
 	var st := st0
-	var tr := Trace.new(want)
+	var tr := Trace.new(name, 100, want)
 	var k := 0
 	while k < seconds / DT:
 		if each.is_valid():
@@ -302,8 +302,7 @@ static func _tape_with(id: String, owner: String, values: Array[float]) -> TapeL
 	return t
 
 func test_scenes(t: T) -> void:
-	var ref: Dictionary = Snap.load_ref("run.json")
-	var wants: Array = ref["scenes"]
+	var wants: Variant = t.golden("run.json", "scenes")
 	var traces: Array[Trace] = []
 	var none := Callable()
 	var votes: Array = [
@@ -330,7 +329,7 @@ func test_scenes(t: T) -> void:
 			else:
 				body = Run.car_body(st.car, -1.0, 0.0)
 			actors.append(Actor.make(ids[k], body))
-		traces.append(_scene(wants[traces.size()], st, actors, Run.BOARD_TIME + 8.0, none, "rodeDown"))
+		traces.append(_scene(v[0], Golden.item(wants, traces.size()), st, actors, Run.BOARD_TIME + 8.0, none, "rodeDown"))
 	if true:
 		var ids: Array[String] = ["v0", "v1"]
 		var st := boarding_run("vote-switch", ids)
@@ -339,7 +338,7 @@ func test_scenes(t: T) -> void:
 		var switch := func(s: Run.RunState, _k: int) -> void:
 			if s.t >= Run.BOARD_TIME - 2.0:
 				b.body = bank_spot(s, 1)
-		traces.append(_scene(wants[traces.size()], st, [a, b], Run.BOARD_TIME + 1.0, switch, "bell"))
+		traces.append(_scene("vote-switch", Golden.item(wants, traces.size()), st, [a, b], Run.BOARD_TIME + 1.0, switch, "bell"))
 	if true:
 		var ids: Array[String] = ["in", "out"]
 		var st := boarding_run("hold-1", ids)
@@ -348,7 +347,7 @@ func test_scenes(t: T) -> void:
 		outside.hold = true
 		var hold := func(s: Run.RunState, _k: int) -> void:
 			inside.hold = s.t >= 5.0 and s.t < 12.0
-		traces.append(_scene(wants[traces.size()], st, [inside, outside], 60.0, hold, "bell"))
+		traces.append(_scene("hold-1", Golden.item(wants, traces.size()), st, [inside, outside], 60.0, hold, "bell"))
 	if true:
 		var ids: Array[String] = ["in", "late"]
 		var st := boarding_run("hold-2", ids)
@@ -359,7 +358,7 @@ func test_scenes(t: T) -> void:
 		var straggle := func(s: Run.RunState, _k: int) -> void:
 			if s.t >= 28.0:
 				walk_actor(s, late, route, 2.5)
-		traces.append(_scene(wants[traces.size()], st, [inside, late], 60.0, straggle, "rodeDown"))
+		traces.append(_scene("hold-2", Golden.item(wants, traces.size()), st, [inside, late], 60.0, straggle, "rodeDown"))
 	if true:
 		var ids: Array[String] = ["aboard", "behind", "caught"]
 		var st := boarding_run("behind-1", ids)
@@ -386,7 +385,7 @@ func test_scenes(t: T) -> void:
 		var b := Actor.make("behind", Run.car_body(s.car, -1.5, 0.0))
 		b.raised = true
 		var cc := Actor.make("caught", Run.car_body(s.car, -3.0, 0.0))
-		traces.append(_scene(wants[traces.size()], s, [a, b, cc], Run.BOARD_TIME + 12.0, none, "doorsOpened"))
+		traces.append(_scene("behind-1", Golden.item(wants, traces.size()), s, [a, b, cc], Run.BOARD_TIME + 12.0, none, "doorsOpened"))
 	if true:
 		var ids: Array[String] = ["solo"]
 		var st := Run.create_run("wipe-1", ids)
@@ -417,7 +416,7 @@ func test_scenes(t: T) -> void:
 		var solo := Actor.make("solo", spot)
 		var away := func(ss: Run.RunState, _k: int) -> void:
 			look_away(solo, ss.orderly.body)
-		traces.append(_scene(wants[traces.size()], s, [solo], 120.0, away, "wiped"))
+		traces.append(_scene("wipe-1", Golden.item(wants, traces.size()), s, [solo], 120.0, away, "wiped"))
 	for r in 2:
 		var ids: Array[String] = ["caller"]
 		var st := Run.create_run("wait-%d" % r, ids)
@@ -440,36 +439,46 @@ func test_scenes(t: T) -> void:
 			if ss.phase == &"away" and count["calls"] < 3:
 				caller.call = true
 				count["calls"] += 1
-		traces.append(_scene(wants[traces.size()], s, [caller], 200.0, press, "never"))
-	t.eq(traces.size(), wants.size(), "scenes")
-	var total := Snap.Diff.new()
+		traces.append(_scene("calls-%d" % r, Golden.item(wants, traces.size()), s, [caller], 200.0, press, "never"))
+	var total := Trace.finish_all(t, "run.json", "scenes", traces, wants)
 	var ticks := 0
 	var firsts := PackedStringArray()
 	for tr in traces:
 		ticks += tr.ticks
-		total.add(tr.finish(t, true))
 		firsts.append("%s: %s" % [tr.name, tr.first_difference()])
 	t.note("%d scenes (votes and ties, switching sides, holds, left behind, a wipe, repeated calls with false stops), %d ticks: %s" % [traces.size(), ticks, total.summary()])
 	t.note("first differing tick: " + ", ".join(firsts))
 
 func test_whole_waits_with_wait_bots(t: T) -> void:
-	var ref: Dictionary = Snap.load_ref("run.json")
+	var waits: Variant = t.golden("run.json", "waits")
 	var total := Snap.Diff.new()
 	var n := 0
-	var waits: Array = ref["waits"]
-	for wi in waits.size():
+	var cases: Array = []
+	for style: String in ["stay", "flee"]:
+		for depth: int in [1, 2, 3]:
+			for i: int in [0, 1, 2, 5]:
+				cases.append([style, depth, i])
+	var out: Array = []
+	for wi in cases.size():
 		# The quick set: every sixth wait (stay and flee, each depth).
 		if t.quick and wi % 6 != 0:
 			continue
-		var want: Dictionary = waits[wi]
-		var r := Waits.run_wait(StringName(want["style"]), want["depth"], want["i"])
+		var c: Array = cases[wi]
+		var r := Waits.run_wait(StringName(c[0]), c[1], c[2])
 		var got := {
-			"style": want["style"], "depth": want["depth"], "i": want["i"], "caught": r.caught, "boarded": r.boarded,
+			"style": c[0], "depth": c[1], "i": c[2], "caught": r.caught, "boarded": r.boarded,
 			"caughtInBlackout": r.caught_in_blackout, "caughtAfter": r.caught_after, "darks": Array(r.darks), "closest": r.closest,
 			"farthest": r.farthest, "boardedAfter": r.boarded_after, "events": Snap.events(r.events),
 		}
-		var d := Snap.compare(got, want, "%s d%d #%d" % [want["style"], want["depth"], want["i"]])
-		total.add(d)
-		t.check(d.ok(), "wait %s d%d #%d: %s" % [want["style"], want["depth"], want["i"], d.summary()])
+		out.append(got)
 		n += 1
+		if t.recording:
+			continue
+		var d := Snap.compare(got, Golden.item(waits, wi), "%s d%d #%d" % c)
+		total.add(d)
+		t.check(d.ok(), "wait %s d%d #%d differs from the golden: %s" % [c[0], c[1], c[2], d.summary()])
+	if t.recording:
+		Golden.put("run.json", "waits", out)
+	elif not t.quick:
+		t.eq(cases.size(), (waits as Array).size() if waits is Array else -1, "waits in the golden")
 	t.note("%d whole waits (stay and flee, depths 1-3), every event: %s" % [n, total.summary()])

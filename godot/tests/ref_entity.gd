@@ -1,12 +1,14 @@
-# The Orderly against src/sim/entity.ts, state after every tick, in scripted scenes (mirrors
-# entityScenes in godot/tools/dump_reference.ts): stared at, then turned away from (grace, release,
-# frozen again); a blind hunt across levels to a catch and the dormant spell; waking at 60 s; a
-# wind-up cancelled by a look; creeping up on still prey and running down fleeing prey; and the
-# squeak's loudness for a listener it hunts unseen (hearing range, muffling).
+# The Orderly (sim/entity.gd), state after every tick, in scripted scenes, against
+# tests/golden/entity.json: stared at, then turned away from (grace, release, frozen again); a blind
+# hunt across levels to a catch and the dormant spell; waking at 60 s; a wind-up cancelled by a look;
+# creeping up on still prey and running down fleeing prey; the squeak's loudness for a listener it
+# hunts unseen (hearing range, muffling); and kept near the edge of the view. The first fourteen were
+# proved equal to src/sim/entity.ts (the historical entityScenes in godot/tools/dump_reference.ts).
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
 const Snap = preload("res://tests/snap.gd")
+const Golden = preload("res://tests/golden.gd")
 const Trace = preload("res://tests/trace.gd")
 const Plans = preload("res://tests/plans.gd")
 const Floor = preload("res://sim/floor.gd")
@@ -42,11 +44,11 @@ static func start_line(p: Floor.FloorPlan, min_len: int) -> Floor.Sightline:
 	return null
 
 func test_scenes(t: T) -> void:
-	var ref: Array = Snap.load_ref("entity.json")
+	var wants: Variant = t.golden("entity.json")
 	var traces: Array[Trace] = []
-	# (A lambda would capture a counter by value: the next trace is simply the next reference.)
-	var next_trace := func() -> Trace:
-		var tr := Trace.new(ref[traces.size()])
+	# (A lambda would capture a counter by value: the next trace is simply the next golden record.)
+	var next_trace := func(name: String) -> Trace:
+		var tr := Trace.new(name, 50, Golden.item(wants, traces.size()))
 		traces.append(tr)
 		return tr
 
@@ -64,7 +66,7 @@ func test_scenes(t: T) -> void:
 			var me := Move.body_at_cell(p, Floor.Pos.make(s.level, p.entity_start.x + dx * 8, p.entity_start.y + dy * 8))
 			var st := Entity.create_orderly(p)
 			var facing := face_to(me, st.body)
-			var tr: Trace = next_trace.call()
+			var tr: Trace = next_trace.call("stare-%d" % i)
 			for k in 730:
 				var yaw := facing if k < 600 else (facing + PI if k < 630 else facing)
 				var r := Entity.step_entity(p, st, view("me", me, yaw), DT)
@@ -93,7 +95,7 @@ func test_scenes(t: T) -> void:
 		scenes += 1
 		var me := Move.body_at_cell(p, cell)
 		var st := hunting(p)
-		var tr: Trace = next_trace.call()
+		var tr: Trace = next_trace.call("stairs-%d" % (i - 1))
 		var caught_at := -1
 		var k := 0
 		while k < 120.0 / DT and (caught_at < 0 or k < caught_at + 260):
@@ -110,7 +112,7 @@ func test_scenes(t: T) -> void:
 	if true:
 		var p := Plans.plan("wake", 1)
 		var st := Entity.create_orderly(p)
-		var tr: Trace = next_trace.call()
+		var tr: Trace = next_trace.call("wake-60")
 		for k in 1240:
 			var r := Entity.step_entity(p, st, blind("me", Move.body_at_cell(p, p.landing)), DT)
 			st = r.state
@@ -121,7 +123,7 @@ func test_scenes(t: T) -> void:
 		var p := Plans.plan("windup", 1)
 		var me := Move.body_at_cell(p, p.landing)
 		var st := hunting(p)
-		var tr: Trace = next_trace.call()
+		var tr: Trace = next_trace.call("windup")
 		for k in 2400:
 			var r := Entity.step_entity(p, st, blind("me", me), DT)
 			st = r.state
@@ -157,7 +159,7 @@ func test_scenes(t: T) -> void:
 		var max_d := (s.length - 1) * p.cell_size
 		var d := 9.0
 		var st := hunting(p)
-		var tr: Trace = next_trace.call()
+		var tr: Trace = next_trace.call(seed)
 		for k in 500:
 			if k >= 80:
 				d = minf(max_d, d + 3.0 * DT)
@@ -173,7 +175,7 @@ func test_scenes(t: T) -> void:
 		var p := Plans.plan("hear-%d" % h, 1 + (h % 4))
 		var me := Move.body_at_cell(p, p.landing)
 		var st := hunting(p)
-		var tr: Trace = next_trace.call()
+		var tr: Trace = next_trace.call("hear-%d" % h)
 		for k in 1200:
 			var v := view("me", me, face_to(st.body, me))
 			var r := Entity.step_entity(p, st, v, DT)
@@ -181,13 +183,37 @@ func test_scenes(t: T) -> void:
 			var a := Entity.audibility(p, st, me, Bot.BOT_EYE)
 			tr.tick(Snap.orderly(st), r.events, [a.gain, a.muffled])
 
-	t.eq(traces.size(), ref.size(), "scenes")
+	# At the edge of the view (added with the goldens; no TypeScript counterpart): the player stands
+	# down a long corridor from the hunting Orderly and keeps it off to one side, the angle swinging
+	# slowly from well inside the view to beyond its widened edge and back, so whether it may move
+	# depends on exactly where the edge of the view cone is. The other scenes stare dead on or turn
+	# fully away, so they cannot tell a wider or narrower cone.
+	if true:
+		var p: Floor.FloorPlan = null
+		var s: Floor.Sightline = null
+		var j := 0
+		while j < 100 and s == null:
+			p = Plans.plan("edge-%d" % j, 1 + (j % 4))
+			s = start_line(p, 14)
+			j += 1
+		var at_start := s.x1 == p.entity_start.x and s.y1 == p.entity_start.y
+		var dx := _sign(s.x2 - s.x1) * (1 if at_start else -1)
+		var dy := _sign(s.y2 - s.y1) * (1 if at_start else -1)
+		var me := Move.body_at_cell(p, Floor.Pos.make(s.level, p.entity_start.x + dx * 12, p.entity_start.y + dy * 12))
+		var st := hunting(p)
+		var tr: Trace = next_trace.call("edge-of-view")
+		for k in 900:
+			# 0.45 to 1.45 rad off the line to it (the widened half-angle is about 1.10 rad).
+			var off := 0.95 + 0.5 * M.sin_js(k * 0.025)
+			var r := Entity.step_entity(p, st, view("me", me, face_to(me, st.body) + off), DT)
+			st = r.state
+			tr.tick(Snap.orderly(st), r.events, [off])
+
 	var ticks := 0
-	var total := Snap.Diff.new()
+	var total := Trace.finish_all(t, "entity.json", "", traces, wants)
 	var firsts := PackedStringArray()
 	for tr in traces:
 		ticks += tr.ticks
-		total.add(tr.finish(t))
 		firsts.append("%s: %s" % [tr.name, tr.first_difference()])
 	t.note("%d scenes, %d ticks, every tick's state digest compared; events/snapshots/sound: %s" % [traces.size(), ticks, total.summary()])
 	t.note("first differing tick per scene: " + ", ".join(firsts))

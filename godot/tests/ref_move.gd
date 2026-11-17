@@ -1,11 +1,13 @@
-# Walls, collision and movement against src/sim/walls.ts, move.ts, follow.ts and run.ts moveInRun,
-# on five floors: every edge on both levels, every collision segment, seeded random walks (the
-# body after every step), stair jitter, following a path end to end, and walking through the car
-# door while it opens and shuts. Mirrors dumpMove in godot/tools/dump_reference.ts.
+# Walls, collision and movement (sim/walls.gd, move.gd, follow.gd and run.gd move_in_run) on five
+# floors: every edge on both levels, every collision segment, seeded random walks (the body after
+# every step), stair jitter, following a path end to end, and walking through the car door while it
+# opens and shuts, against tests/golden/move.json (first proved equal to the TypeScript; the
+# historical dumpMove in godot/tools/dump_reference.ts is the same driver).
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
 const Snap = preload("res://tests/snap.gd")
+const Golden = preload("res://tests/golden.gd")
 const Plans = preload("res://tests/plans.gd")
 const Floor = preload("res://sim/floor.gd")
 const Walls = preload("res://sim/walls.gd")
@@ -62,10 +64,12 @@ static func walks(plan: Floor.FloorPlan, seed: String) -> Array:
 	return out
 
 func test_five_floors(t: T) -> void:
-	var ref: Array = Snap.load_ref("move.json")
+	var wants: Variant = t.golden("move.json")
 	var total := Snap.Diff.new()
-	for want: Dictionary in ref:
-		var seed: String = want["seed"]
+	var out: Array = []
+	var seeds := ["alpha", "bravo", "charlie", "delta", "echo"]
+	for si in seeds.size():
+		var seed: String = seeds[si]
 		var plan := Plans.plan(seed, 2)
 		var got := {"seed": seed, "depth": 2}
 		var edges: Array = []
@@ -126,7 +130,13 @@ func test_five_floors(t: T) -> void:
 			body = Run.move_in_run(s2, body, M.cos_js(ang) * length, M.sin_js(ang) * length, Bot.BOT_RADIUS)
 			door.append(_row(i, [body.x, body.z, body.y, body.level]))
 		got["door"] = door
-		var d := Snap.compare(got, want, seed)
-		total.add(d)
-		t.check(d.bad == 0 and d.inexact == 0, "%s: %s" % [seed, d.summary()])
+		out.append(got)
+		if not t.recording:
+			var d := Snap.compare(got, Golden.item(wants, si), seed)
+			total.add(d)
+			t.check(d.ok(), "%s differs from the golden: %s" % [seed, d.summary()])
+	if t.recording:
+		Golden.put("move.json", "", out)
+	else:
+		t.eq(seeds.size(), (wants as Array).size() if wants is Array else -1, "floors in the golden")
 	t.note("5 floors, edges + segments + %s" % total.summary())

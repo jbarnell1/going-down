@@ -2,11 +2,14 @@
 // Godot suite does by default (the first N seeds of the same sequences). The run loops and oracles
 // below are copied from tests/sim/entity.test.ts, instrument.test.ts and run.test.ts (only the run
 // counts became parameters), and the blackout tables come from tests/sim/waits.ts itself. The full
-// counts must equal what Vitest prints; the Godot tests compare theirs with these.
-// Run from the repo root: npm run godot:reference (it runs this after dump_reference.ts).
+// counts must equal what Vitest prints. HISTORICAL: the Godot tests compared their counts with these
+// until the goldens (godot/tests/golden/properties.json, written by `npm run godot:golden`) replaced
+// them; check_goldens_against_typescript.mjs still compares the two while no rule has changed.
+// Run from the repo root: npm run godot:reference (it runs this after dump_reference.ts); --out=DIR
+// as there (default godot/export/typescript-reference/).
 
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { botView, createBot, stepBot, BOT_EYE, BOT_HFOV_DEG, BOT_RADIUS, BOT_VFOV_DEG, type Bot } from '../../src/sim/bot';
 import { generateClinic } from '../../src/sim/clinic';
@@ -24,7 +27,10 @@ import { LOSSY, ZERO } from '../../tests/net/harness';
 import { runRuleSession, type SessionResult } from '../../tests/net/rule';
 import { readFileSync } from 'node:fs';
 
-const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'tests', 'reference');
+const OUT = ((): string => {
+  const a = process.argv.find((x) => x.startsWith('--out='));
+  return a ? resolve(a.slice('--out='.length)) : join(dirname(fileURLToPath(import.meta.url)), '..', 'export', 'typescript-reference');
+})();
 const DT = 0.05;
 
 /** Default sizes of the Godot suite (tests/prop_*.gd); --full runs the Vitest sizes. */

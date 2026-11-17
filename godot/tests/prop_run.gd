@@ -2,7 +2,7 @@
 # with run.gd or sight.gd): while the car comes, a crew staring at the Orderly holds it still except
 # in the blinks, every dark is telegraphed and longer than the last, and the last is the blackout
 # ending as the car arrives; and the car is safe (the Orderly never ends a tick in it, nobody in it is
-# caught), with wandering and oblivious bots. Counts must equal TypeScript's for the same seeds.
+# caught), with wandering and oblivious bots. Counts must equal the golden counts.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -322,10 +322,16 @@ static func stare_run(i: int) -> StareResult:
 		res.telegraph += 1
 	return res
 
+## Runs per size (tools/property_counts.ts QUICK, SUB, FULL: stare and safe).
+const SIZES := {"quick": {"stare": 4, "safe": 3}, "sub": {"stare": 24, "safe": 16}, "full": {"stare": 320, "safe": 300}}
+
+static func _golden(t: T, key: String) -> Dictionary:
+	var g: Variant = t.golden("properties.json", "%s.%s" % [t.size_key(), key])
+	return g if g is Dictionary else {}
+
 func test_staring_while_the_car_comes(t: T) -> void:
-	var ref: Dictionary = Snap.load_ref("properties.json")
-	var want: Dictionary = ref[t.size_key()]["stare"]
-	var n: int = want["runs"]
+	var want := _golden(t, "stare")
+	var n: int = SIZES[t.size_key()]["stare"]
 	var c := {"runs": n, "violations": 0, "telegraph": 0, "moved": 0, "caught": 0, "blinks": 0, "blackouts": 0, "advance": 0.0, "arrived": 0, "arrivedOneBlackout": 0}
 	for i in n:
 		var r := stare_run(i)
@@ -343,10 +349,10 @@ func test_staring_while_the_car_comes(t: T) -> void:
 	t.check(t.quick or c["moved"] > n / 2, "staring is not safe: it moved during a blink in %d of %d" % [c["moved"], n])
 	# Vitest asks for more than half the waits to reach the car; the first 24 seeds reach it in 11.
 	t.check(t.quick or c["blinks"] > n * 2 and c["arrived"] > (n / 2 if t.full else n / 3) and c["arrived"] == c["arrivedOneBlackout"], "not vacuous: %s" % str(c))
-	var d := Snap.compare(c, want, "stare")
-	t.check(d.ok(), "counts differ from TypeScript's: " + d.summary())
-	t.note("%d calls: %d dark stretches (%d blackouts); it moved during a blink in %d, caught while waiting %d, arrived %d; TypeScript: %d darks, moved %d, caught %d" % [
-		n, c["blinks"], c["blackouts"], c["moved"], c["caught"], c["arrived"], want["blinks"], want["moved"], want["caught"]])
+	t.expect("properties.json", "%s.stare" % t.size_key(), c, "the counts")
+	t.note("%d calls: %d dark stretches (%d blackouts); it moved during a blink in %d, caught while waiting %d, arrived %d%s" % [
+		n, c["blinks"], c["blackouts"], c["moved"], c["caught"], c["arrived"],
+		"" if want.is_empty() else "; golden: %d darks, moved %d, caught %d" % [want["blinks"], want["moved"], want["caught"]]])
 
 # =============================================================================================
 # 4. The car is safe, with wandering and oblivious bots.
@@ -508,9 +514,8 @@ static func safe_run(i: int, seconds: float = 90.0) -> SafeResult:
 	return res
 
 func test_the_car_is_safe(t: T) -> void:
-	var ref: Dictionary = Snap.load_ref("properties.json")
-	var want: Dictionary = ref[t.size_key()]["safe"]
-	var n: int = want["runs"]
+	var want := _golden(t, "safe")
+	var n: int = SIZES[t.size_key()]["safe"]
 	var c := {"runs": n, "violations": 0, "encounterRuns": 0, "encounterTicks": 0, "caught": 0, "rides": 0, "events": 0}
 	for i in n:
 		var r := safe_run(i)
@@ -522,7 +527,7 @@ func test_the_car_is_safe(t: T) -> void:
 		c["events"] += r.events
 	t.eq(c["violations"], 0, "the Orderly in (or overlapping) the car, or someone caught inside it")
 	t.check(t.quick or c["encounterRuns"] > n / 10 and c["caught"] > 10 * n / 300, "not vacuous: %s" % str(c))
-	var d := Snap.compare(c, want, "safe")
-	t.check(d.ok(), "counts differ from TypeScript's: " + d.summary())
-	t.note("%d runs: %d with the Orderly within 2.5 m of an occupied car (%d ticks), %d catches outside, %d rides, %d events; TypeScript: %d (%d), %d, %d, %d" % [
-		n, c["encounterRuns"], c["encounterTicks"], c["caught"], c["rides"], c["events"], want["encounterRuns"], want["encounterTicks"], want["caught"], want["rides"], want["events"]])
+	t.expect("properties.json", "%s.safe" % t.size_key(), c, "the counts")
+	t.note("%d runs: %d with the Orderly within 2.5 m of an occupied car (%d ticks), %d catches outside, %d rides, %d events%s" % [
+		n, c["encounterRuns"], c["encounterTicks"], c["caught"], c["rides"], c["events"],
+		"" if want.is_empty() else "; golden: %d (%d), %d, %d, %d" % [want["encounterRuns"], want["encounterTicks"], want["caught"], want["rides"], want["events"]]])

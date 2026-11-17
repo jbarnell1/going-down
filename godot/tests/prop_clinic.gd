@@ -1,4 +1,4 @@
-# The Clinic's guarantees on all 800 floors the TypeScript tests use (ported from
+# The Clinic's guarantees on all 800 floors the property tests use (ported from
 # tests/sim/clinic.test.ts): every walkable cell and every room reachable from the landing; walls
 # implicit (a room beside a corridor joins it only through a door); neighbours symmetric; every
 # listed sightline a real straight clear run; the entity starts 12+ steps away on a long sightline;
@@ -12,7 +12,9 @@ const Plans = preload("res://tests/plans.gd")
 const Floor = preload("res://sim/floor.gd")
 
 func test_every_walkable_cell_reachable(t: T) -> void:
-	var want: Dictionary = Snap.load_ref("properties.json")["clinicQuick" if t.quick else "clinic"]
+	var gkey := "clinicQuick" if t.quick else "clinic"
+	var g: Variant = t.golden("properties.json", gkey)
+	var want: Dictionary = g if g is Dictionary else {}
 	var walkable := 0
 	var missing := 0
 	var unreachable_rooms := 0
@@ -46,9 +48,9 @@ func test_every_walkable_cell_reachable(t: T) -> void:
 	t.eq(missing, 0, "walkable cells not reachable from the landing")
 	t.eq(unreachable_rooms, 0, "rooms not reachable")
 	var got := {"floors": Plans.property_plans(t.quick).size(), "walkable": walkable, "missing": missing, "unreachableRooms": unreachable_rooms}
-	var d := Snap.compare(got, want, "clinic")
-	t.check(d.ok(), "counts differ from TypeScript's: " + d.summary())
-	t.note("%d floors, %d walkable cells, %d unreachable (TypeScript: %d cells, %d unreachable)" % [want["floors"], walkable, missing, want["walkable"], want["missing"]])
+	t.expect("properties.json", gkey, got, "the counts")
+	t.note("%d floors, %d walkable cells, %d unreachable%s" % [got["floors"], walkable, missing,
+		"" if want.is_empty() else " (golden: %d cells, %d unreachable)" % [want["walkable"], want["missing"]]])
 
 func test_walls_steps_sightlines_and_the_entity_start(t: T) -> void:
 	var plans := Plans.property_plans(t.quick)

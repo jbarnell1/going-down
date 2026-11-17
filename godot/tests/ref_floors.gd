@@ -1,10 +1,12 @@
-# Floors against src/sim/clinic.ts and floor.ts: 40 complete plans field by field (cells, rooms,
-# doors, stairs, landing, entity start, sightlines, side branches, the lift and its car, paths and
-# distances), and the plan hash of the 800 floors the property tests use.
+# Floors (sim/clinic.gd, floor.gd): 40 complete plans field by field (cells, rooms, doors, stairs,
+# landing, entity start, sightlines, side branches, the lift and its car, paths and distances), and
+# the plan hash of the 800 floors the property tests use, against tests/golden/floors.json (first
+# proved equal to src/sim/clinic.ts and floor.ts).
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
 const Snap = preload("res://tests/snap.gd")
+const Golden = preload("res://tests/golden.gd")
 const Plans = preload("res://tests/plans.gd")
 const Floor = preload("res://sim/floor.gd")
 const Landing = preload("res://sim/landing.gd")
@@ -62,26 +64,50 @@ static func compact(p: Floor.FloorPlan) -> Dictionary:
 		"car": Snap.car(Run.car_geometry(p)),
 	}
 
+## The forty floors (dump_reference.ts FLOOR_CASES): five names at depths 1-4, then floor-0..19.
+static func cases() -> Array:
+	var out: Array = []
+	for s: String in ["alpha", "bravo", "charlie", "delta", "echo"]:
+		for d: int in [1, 2, 3, 4]:
+			out.append([s, d])
+	for i in 20:
+		out.append(["floor-%d" % i, 1 + (i % 6)])
+	return out
+
 func test_forty_plans_field_by_field(t: T) -> void:
-	var ref: Dictionary = Snap.load_ref("floors.json")
+	var wants: Variant = t.golden("floors.json", "floors")
+	var got: Array = []
 	var total := Snap.Diff.new()
-	for want: Dictionary in ref["floors"]:
-		var p := Plans.plan(want["seed"], want["depth"])
-		var got := compact(p)
-		var d := Snap.compare(got, want, "%s d%d" % [want["seed"], want["depth"]])
-		total.add(d)
-		t.check(d.bad == 0 and d.inexact == 0, "%s d%d: %s" % [want["seed"], want["depth"], d.summary()])
+	var all := cases()
+	for i in all.size():
+		var c: Array = all[i]
+		var plan := compact(Plans.plan(c[0], c[1]))
+		got.append(plan)
+		if not t.recording:
+			var d := Snap.compare(plan, Golden.item(wants, i), "%s d%d" % [c[0], c[1]])
+			total.add(d)
+			t.check(d.ok(), "%s d%d differs from the golden: %s" % [c[0], c[1], d.summary()])
+	if t.recording:
+		Golden.put("floors.json", "floors", got)
+	else:
+		t.eq(all.size(), (wants as Array).size() if wants is Array else -1, "floors in the golden")
 	t.note("40 plans: %s" % total.summary())
 
 func test_eight_hundred_plan_hashes(t: T) -> void:
-	var ref: Dictionary = Snap.load_ref("floors.json")
-	var hashes: Array = ref["hashes"]
-	var plans := Plans.property_plans(t.quick)
+	var hashes: Variant = t.golden("floors.json", "hashes")
+	var plans := Plans.property_plans(t.quick and not t.recording)
+	var got: Array = []
 	var wrong := 0
 	for i in plans.size():
-		# The reference lists all 800 (depth-major, 200 seeds a depth); the quick set is seed-0..9 of each.
+		var h := Floor.hash_plan(plans[i])
+		got.append(h)
+		if t.recording:
+			continue
+		# The golden lists all 800 (depth-major, 200 seeds a depth); the quick set is seed-0..9 of each.
 		var k := i if not t.quick else (plans[i].depth - 1) * 200 + i % Plans.QUICK_SEEDS
-		if Floor.hash_plan(plans[i]) != hashes[k]:
+		if h != Golden.item(hashes, k):
 			wrong += 1
-			t.check(false, "hashPlan %s d%d" % [plans[i].seed, plans[i].depth])
+			t.check(false, "hashPlan %s d%d differs from the golden" % [plans[i].seed, plans[i].depth])
+	if t.recording:
+		Golden.put("floors.json", "hashes", got)
 	t.note("%d floors (seed-0..%d, depths 1-4): %d hashes differ" % [plans.size(), plans.size() / 4 - 1, wrong])
