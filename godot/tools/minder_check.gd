@@ -5,8 +5,9 @@
 #  - the loops loop and the one-shots do not (they end held), and each one-shot lasts exactly as long
 #    as the rules hold that pose (STRAIGHTEN_TIME, LOOK_TIME, SLUMP_TIME, CATCH_TIME);
 #  - the triangle and bone counts are within the Orderly's (assets/entities/orderly.glb);
-#  - the glowing mask is on the front of the head only: every vertex of the mask surface is in front
-#    of the skull's middle and every one of its faces looks forward (+Z, the way the model faces).
+#  - the glowing mask is on the front of the head only: every vertex of the mask surface is at least
+#    3 cm in front of the skull's middle and no face of it turns sideways or back (each face's normal
+#    is within about 78 degrees of +Z, the way the model faces; the plate's rim curls back, so not 0).
 # Exit code 0 when all of it holds. Run after an import pass (node godot/tools/godot.mjs import):
 #   "$GODOT" --headless --path godot --script res://tools/minder_check.gd
 # The break: build_minder.py -- --drop cover, import, and this goes red (cover missing).
@@ -132,23 +133,25 @@ func _check_mask(root: Node) -> void:
 		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
 		var behind := 0
 		for v in verts:
-			if v.z <= head_mid.z + 0.10:
+			if v.z <= head_mid.z + 0.03:
 				behind += 1
 		var backward := 0
+		var min_nz := 1.0
 		for i in range(0, idx.size(), 3):
 			var a := verts[idx[i]]
 			var b := verts[idx[i + 1]]
 			var c := verts[idx[i + 2]]
 			# Godot's front faces wind clockwise: the outward normal is (c - a) x (b - a)
 			var n := (c - a).cross(b - a).normalized()
-			if n.z < 0.5:
+			min_nz = minf(min_nz, n.z)
+			if n.z < 0.2:
 				backward += 1
-		print("mask: %d vertices, %d faces; nearest to the back %.3f m in front of the skull's middle; %d faces not looking forward" % [
-			verts.size(), idx.size() / 3, _min_z(verts) - head_mid.z, backward])
+		print("mask: %d vertices, %d faces; nearest to the back %.3f m in front of the skull's middle; most sideways face normal z %.2f; %d faces turned sideways or back" % [
+			verts.size(), idx.size() / 3, _min_z(verts) - head_mid.z, min_nz, backward])
 		if behind > 0:
 			problems.append("%d mask vertices are not on the front of the head" % behind)
 		if backward > 0:
-			problems.append("%d mask faces do not look forward" % backward)
+			problems.append("%d mask faces turn sideways or back" % backward)
 	if not found:
 		problems.append("no mask surface (a material named *mask*)")
 

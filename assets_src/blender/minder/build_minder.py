@@ -32,14 +32,16 @@ FPS = 24
 TEX = 512
 MASK_TEX = 256
 
-COL = dict(  # sRGB 0..1
-    skin=(0.43, 0.39, 0.34), skin_lo=(0.27, 0.24, 0.22), skin_hi=(0.56, 0.52, 0.46),
-    skin_dk=(0.36, 0.31, 0.28), gum=(0.26, 0.18, 0.17), tooth=(0.76, 0.70, 0.54), nail=(0.24, 0.22, 0.19),
-    red=(0.70, 0.30, 0.27), yellow=(0.86, 0.73, 0.36), blue=(0.31, 0.46, 0.70),
-    cord=(0.20, 0.36, 0.62), clip=(0.55, 0.56, 0.58), strap=(0.80, 0.79, 0.74),
-    box=(0.88, 0.62, 0.70), box_top=(0.95, 0.86, 0.66), brass=(0.72, 0.60, 0.30),
-    badge=(0.93, 0.93, 0.90), card=(0.88, 0.86, 0.78), card_back=(0.74, 0.72, 0.66),
-    ink=(0.10, 0.09, 0.10), glow=(0.66, 0.92, 0.68), skin_shade=(0.35, 0.315, 0.28),
+COL = dict(  # sRGB 0..1. A dark, matte body; the mask is the one clean bright thing on it.
+    skin=(0.33, 0.30, 0.27), skin_lo=(0.17, 0.13, 0.14), skin_hi=(0.49, 0.46, 0.37),
+    bruise=(0.29, 0.21, 0.23), skin_shade=(0.26, 0.22, 0.22), skin_mid=(0.39, 0.36, 0.30),
+    skin_dk=(0.27, 0.21, 0.20), gum=(0.20, 0.10, 0.10), mouth=(0.09, 0.04, 0.05),
+    tooth=(0.80, 0.75, 0.58), nail=(0.16, 0.13, 0.11),
+    red=(0.36, 0.19, 0.18), yellow=(0.44, 0.37, 0.19), blue=(0.21, 0.26, 0.32),   # faded: maroon, mustard, slate
+    cord=(0.17, 0.27, 0.42), clip=(0.45, 0.46, 0.47), strap=(0.62, 0.60, 0.55),
+    box=(0.66, 0.48, 0.52), box_top=(0.72, 0.65, 0.50), brass=(0.55, 0.45, 0.24),
+    badge=(0.80, 0.79, 0.74), card=(0.86, 0.84, 0.76), card_back=(0.36, 0.33, 0.28),
+    ink=(0.10, 0.09, 0.10), glow=(0.66, 0.92, 0.68),
 )
 
 # Spine centre line: z -> y offset (negative y = forward).
@@ -48,8 +50,8 @@ SPINE = [(1.05, 0.0), (1.30, 0.004), (1.45, 0.018), (1.62, 0.010), (1.80, 0.010)
 # Torso cross-section: z, half-width, front depth, back depth (from the spine line). Gaunt: a waist
 # sucked in under a flaring ribcage, a long torso.
 TORSO = [
-    (1.08, 0.078, 0.056, 0.066), (1.13, 0.110, 0.068, 0.082), (1.21, 0.120, 0.066, 0.084),
-    (1.29, 0.098, 0.046, 0.068), (1.37, 0.082, 0.036, 0.064), (1.45, 0.090, 0.044, 0.066),
+    (1.08, 0.060, 0.044, 0.056), (1.13, 0.092, 0.052, 0.070), (1.21, 0.106, 0.048, 0.076),
+    (1.29, 0.094, 0.040, 0.066), (1.37, 0.082, 0.036, 0.064), (1.45, 0.090, 0.044, 0.066),
     (1.52, 0.116, 0.082, 0.072), (1.61, 0.134, 0.100, 0.080), (1.71, 0.142, 0.104, 0.086),
     (1.79, 0.146, 0.098, 0.090), (1.86, 0.150, 0.084, 0.090), (1.915, 0.128, 0.068, 0.084),
     (1.955, 0.084, 0.054, 0.066), (1.99, 0.048, 0.040, 0.046),
@@ -60,31 +62,33 @@ NECK_BASE = (0.0, -0.004, 1.965)
 NECK_TOP = (0.0, 0.000, 2.150)     # where the neck enters the underside of the skull
 # The skull, lofted from the back of the head to the end of the snout: y, half-width, half-height, z.
 HEAD_RINGS = [
-    (0.098, 0.022, 0.026, 2.214), (0.086, 0.050, 0.058, 2.216), (0.062, 0.066, 0.076, 2.219),
-    (0.026, 0.072, 0.085, 2.221), (-0.014, 0.069, 0.081, 2.219), (-0.054, 0.060, 0.071, 2.211),
-    (-0.094, 0.048, 0.058, 2.201), (-0.138, 0.041, 0.050, 2.190), (-0.182, 0.038, 0.046, 2.181),
-    (-0.222, 0.036, 0.043, 2.175), (-0.250, 0.031, 0.037, 2.172),
+    (0.080, 0.020, 0.022, 2.208), (0.070, 0.042, 0.048, 2.210), (0.050, 0.054, 0.062, 2.213),
+    (0.020, 0.058, 0.068, 2.214), (-0.016, 0.057, 0.066, 2.212), (-0.054, 0.054, 0.060, 2.206),
+    (-0.094, 0.046, 0.054, 2.198), (-0.138, 0.040, 0.049, 2.190), (-0.182, 0.037, 0.045, 2.181),
+    (-0.222, 0.035, 0.042, 2.175), (-0.250, 0.030, 0.036, 2.172),
 ]
 JAW_HINGE = (0.0, 0.030, 2.158)
-JAW_OPEN = 13.0            # degrees: the jaw is built hanging slack
+JAW_OPEN = 38.0            # degrees: the jaw is built hanging open
 # Lower jaw from the hinge to the chin (built closed, then opened by JAW_OPEN): y, half-width, half-height, z
 JAW = [(0.030, 0.050, 0.016, 2.150), (-0.010, 0.046, 0.016, 2.143), (-0.060, 0.040, 0.015, 2.136),
        (-0.110, 0.034, 0.014, 2.130), (-0.160, 0.030, 0.013, 2.126), (-0.205, 0.027, 0.013, 2.122),
        (-0.240, 0.022, 0.012, 2.119), (-0.258, 0.012, 0.009, 2.118)]
 # The card mask: centre, half-width, half-height, the curve of the card, a slight downward tilt.
-MASK = dict(c=(0.0, -0.276, 2.180), hw=0.084, hh=0.076, bend=0.110, tilt=7.0, rings=4, sectors=20)
+MASK = dict(c=(0.0, -0.280, 2.176), hw=0.106, hh=0.114, bend=0.21, tilt=7.0, rings=6, sectors=28,
+            rim=0.62, curl=0.030, flute=0.0035, crumple=0.0028, torn=((8, 10, 0.885), (19, 20, 0.90)),
+            bent=(3, 6, 0.024))
 
 ARM = dict(shoulder=(0.205, 0.020, 1.915), elbow=(0.236, 0.062, 1.435), wrist=(0.246, 0.012, 0.905),
            knuckle=(0.250, -0.004, 0.790))
 HAND = dict(  # per finger: knuckle y offset, segment lengths, radius, splay of the tip (x, y)
-    index=(-0.030, (0.074, 0.060, 0.050), 0.0098, (0.000, -0.050)),
-    middle=(-0.010, (0.086, 0.068, 0.055), 0.0102, (0.000, -0.016)),
-    ring=(0.011, (0.078, 0.062, 0.050), 0.0096, (0.000, 0.020)),
-    little=(0.030, (0.060, 0.050, 0.042), 0.0086, (0.000, 0.052)),
+    index=(-0.030, (0.074, 0.060, 0.050), 0.0132, (0.000, -0.050)),
+    middle=(-0.010, (0.086, 0.068, 0.055), 0.0137, (0.000, -0.016)),
+    ring=(0.011, (0.078, 0.062, 0.050), 0.0130, (0.000, 0.020)),
+    little=(0.030, (0.060, 0.050, 0.042), 0.0118, (0.000, 0.052)),
     curl=(0.0, -0.007, -0.020),
 )
 LEG = dict(hip=(0.095, 0.005, 1.150), knee=(0.104, -0.032, 0.620), ankle=(0.110, 0.050, 0.140),
-           ball=(0.112, -0.072, 0.028), toe=(0.116, -0.196, 0.012))
+           ball=(0.114, -0.096, 0.032), toe=(0.120, -0.250, 0.014))
 
 # Bones that the solver treats as two-bone chains: upper -> lower.
 IK_CHILD = {"upperarm.L": "forearm.L", "upperarm.R": "forearm.R", "thigh.L": "shin.L", "thigh.R": "shin.R"}
@@ -158,9 +162,17 @@ def body_r(a_deg, z):
         if 9 < off < 72:
             zc = 1.935 + 0.012 * (off - 9) / 63
             r += 0.008 * math.exp(-((z - zc) / 0.011) ** 2) * min(1.0, (off - 9) / 8)
-    r += 0.012 * math.exp(-((z - 1.215) / 0.032) ** 2) * abs(c) ** 3   # hip crests
-    if s > 0:  # spine groove
+    # the pelvis: crests of the hip bones standing out at the sides, running forward into two points
+    # (just inside the front of each hip), the pubic bone low at the front, a flat sacrum behind
+    r += 0.012 * math.exp(-((z - 1.215) / 0.028) ** 2) * abs(c) ** 2
+    off_front = abs(abs(a_deg + 90) - 58) if s < 0 else 99
+    r += 0.018 * math.exp(-((z - 1.195) / 0.026) ** 2) * math.exp(-(off_front / 16) ** 2)
+    if s < 0:
+        r += 0.008 * math.exp(-((z - 1.100) / 0.020) ** 2) * max(0.0, -s) ** 6
+        r -= 0.010 * math.exp(-((z - 1.27) / 0.05) ** 2) * max(0.0, -s) ** 3      # the belly sunk in
+    if s > 0:  # spine groove; the sacrum flattened
         r -= 0.007 * max(0.0, 1 - abs(a_deg - 90) / 12) * (1.0 if 1.30 < z < 1.95 else 0.0)
+        r -= 0.010 * math.exp(-((z - 1.15) / 0.06) ** 2) * max(0.0, s) ** 4
     return r
 
 
@@ -231,7 +243,7 @@ def bone_table():
     for name, (x, y) in RAG_BONES.items():
         b[name] = ((x, y, RAG_TOP), (x * 1.15, y * 1.05, RAG_TOP - 0.42), "spine1")
     b["lanyard"] = (LANYARD[0], LANYARD[1], "spine2")
-    return b
+    return apply_asym_bones(b)
 
 
 def build_armature(bt):
@@ -257,11 +269,13 @@ def cell(cx, cy, w=1, h=1):
 
 
 # Atlas regions on the 512 px body texture (64 px cells).
-REG = dict(skin=cell(0, 0), skin_lo=cell(1, 0), skin_hi=cell(2, 0), skin_dk=cell(3, 0), gum=cell(4, 0),
-           tooth=cell(5, 0), nail=cell(6, 0), strap=cell(7, 0),
+REG = dict(skin=cell(2, 2, 2, 2), skin_hi=cell(4, 2, 2, 2), bruise=cell(6, 2, 2, 2),
+           skin_shade=cell(6, 4, 2, 2), skin_mid=cell(6, 6, 2, 2),
+           skin_lo=cell(1, 0), skin_dk=cell(3, 0), gum=cell(4, 0), tooth=cell(5, 0), nail=cell(6, 0),
+           strap=cell(7, 0), mouth=cell(0, 0), skin_ext=cell(2, 0),
            cord=cell(0, 1), clip=cell(1, 1), box=cell(2, 1), box_top=cell(3, 1), brass=cell(4, 1),
-           card_back=cell(5, 1), skin_shade=cell(6, 1), skin_mid=cell(7, 1),
-           badge=cell(0, 2, 2, 2), skin_big=cell(2, 2, 2, 2),
+           card_back=cell(5, 1),
+           badge=cell(0, 2, 2, 2),
            red=cell(0, 4, 2, 2), yellow=cell(2, 4, 2, 2), blue=cell(4, 4, 2, 2),
            red_p=cell(0, 6, 2, 2), yellow_p=cell(2, 6, 2, 2), blue_p=cell(4, 6, 2, 2))
 VINYL = ("red", "yellow", "blue")
@@ -310,9 +324,10 @@ def frame_for(t, ref=None):
     return xp, t.cross(xp)
 
 
-def tube(mb, rings, sides, reg, cap0=True, cap1=True, ref=None, reg_fn=None, phase=0.0):
+def tube(mb, rings, sides, reg, cap0=True, cap1=True, ref=None, reg_fn=None, phase=0.0, wob=0.0):
     """rings: list of (center, radius, weights). radius: a number, (rx, ry) or a function of the
-    unit direction d. weights: a dict or a function of position. reg_fn(i, k, centre, face centre)."""
+    unit direction d. weights: a dict or a function of position. reg_fn(i, k, centre, face centre).
+    wob roughens the outline: each vertex's distance from the centre varies by up to +-wob."""
     n = len(rings)
     cs = [Vector(r[0]) for r in rings]
     idx = []
@@ -330,6 +345,8 @@ def tube(mb, rings, sides, reg, cap0=True, cap1=True, ref=None, reg_fn=None, pha
                 p = c + xp * (rad[0] * math.cos(a)) + yp * (rad[1] * math.sin(a))
             else:
                 p = c + d * rad
+            if wob and 0 < i < n - 1:
+                p = c + (p - c) * (1.0 + wob * wobble(len(mb.co)))
             row.append(mb.vert(p, w(p) if callable(w) else w))
         idx.append(row)
     for i in range(n - 1):
@@ -447,13 +464,13 @@ def build_torso(mb):
         a = a if a <= 180 else a - 360
         z = cen.z
         if rib_valley(a, z) > 0.55 and z < 1.88:
-            return REG["skin_shade"]
+            return REG["bruise"]
         if -125 < a < -55 and 1.33 < z < 1.50:
-            return REG["skin_lo"]          # the hollow belly under the ribs
+            return REG["skin_shade"]       # the hollow belly under the ribs
         if 1.19 < z < 1.25 and abs(math.cos(math.radians(a))) > 0.85:
-            return REG["skin_hi"]          # hip crests
+            return REG["skin_mid"]         # hip crests
         if 1.10 < z < 1.19 and abs(math.cos(math.radians(a))) > 0.8:
-            return REG["skin_lo"]
+            return REG["bruise"]
         if rib_bump(a, z) > RIBS["amp"] * 0.5:
             return REG["skin_mid"]
         return REG["skin"]
@@ -484,7 +501,7 @@ def build_scapulae(mb):
                 lift = (0.012 if i == 0 else 0.006 if i == 1 else 0.0) * (1.0 if j < 2 else 0.6)
                 row.append(body_point(a, z, extra=lift + 0.002))
             rows.append(row)
-        grid(mb, rows, REG["skin_hi"], interior=Vector((0, spine_y(1.80), 1.80)),
+        grid(mb, rows, REG["skin_mid"], interior=Vector((0, spine_y(1.80), 1.80)),
              wfn=lambda p, j, i, C=C: {"spine2": 0.6, C: 0.4} if p.z > 1.76 else {"spine1": 0.5, "spine2": 0.3, C: 0.2})
         # the lip under the inner edge, so the blade reads as lifted off the back
         lip = [[rows[j][0] for j in range(3)], [body_point(90 - side * 15, z, -0.004) for z in zs]]
@@ -529,18 +546,22 @@ def build_neck(mb):
 
 def skull_radius(ring, d):
     """Cross-section of the skull in direction d (in the x-z plane): flat-topped, narrowing to a keel
-    underneath, a crest along the top of the cranium, shallow hollows where eyes would be."""
+    underneath, a crest along the cranium, a heavy brow, a cheek ridge along each side, the temples sunk
+    in, and shallow sealed hollows under the brow where eyes would be."""
     y, hw, hh, zc = ring
     ang = math.atan2(d.z, d.x)
-    s = math.sin(ang)
+    s, c = math.sin(ang), abs(math.cos(ang))
     w = hw * (1 - 0.22 * max(0.0, -s) ** 1.5)
     h = hh * (1 - 0.10 * max(0.0, s) ** 2)
     r = 1.0 / math.sqrt((math.cos(ang) / w) ** 2 + (s / h) ** 2)
     if y > -0.07:
-        r += 0.006 * max(0.0, s) ** 30            # the crest
-    if -0.13 < y < -0.04:                          # sealed hollows where eyes would be
-        k = math.exp(-((y + 0.085) / 0.028) ** 2)
-        r -= 0.010 * k * math.exp(-((s - 0.45) / 0.22) ** 2) * min(1.0, abs(math.cos(ang)) / 0.6)
+        r += 0.007 * max(0.0, s) ** 30                                                  # crest
+    r += 0.008 * math.exp(-((y + 0.060) / 0.016) ** 2) * math.exp(-((s - 0.62) / 0.16) ** 2)   # brow
+    r += 0.007 * math.exp(-((y + 0.080) / 0.045) ** 2) * math.exp(-((s + 0.12) / 0.14) ** 2) * c ** 4  # cheek
+    r -= 0.008 * math.exp(-((y - 0.012) / 0.025) ** 2) * math.exp(-((s - 0.25) / 0.25) ** 2) * c ** 2  # temples
+    if -0.13 < y < -0.04:                                                                # sealed hollows
+        k = math.exp(-((y + 0.090) / 0.024) ** 2)
+        r -= 0.010 * k * math.exp(-((s - 0.40) / 0.18) ** 2) * min(1.0, c / 0.6)
     return r
 
 
@@ -566,36 +587,50 @@ def build_head(mb):
     def reg_fn(i, k, c, f):
         d = (f - c)
         y = c.y
-        ang = math.degrees(math.atan2(d.z, d.x))
-        if -0.13 < y < -0.04 and (abs(ang - 30) < 22 or abs(ang - 150) < 22):
-            return REG["skin"]                     # the sealed hollows: shaped, not painted (no dark holes)
-        if d.z > 0.0 and abs(d.x) < 0.012 and y > -0.07:
-            return REG["skin_hi"]                  # crest
-        if d.z < -0.02 and y < -0.05:
+        n = d.normalized()
+        s = n.z
+        if abs(y + 0.060) < 0.022 and 0.40 < s < 0.85:
+            return REG["skin_mid"]                 # brow
+        if abs(y + 0.08) < 0.05 and -0.30 < s < 0.05 and abs(n.x) > 0.9:
+            return REG["skin_mid"]                 # cheek ridge
+        if abs(y - 0.012) < 0.03 and 0.0 < s < 0.5:
+            return REG["skin_shade"]               # temples
+        if -0.12 < y < -0.06 and 0.2 < s < 0.6:
+            return REG["bruise"]                   # under the brow, the sealed hollows: a soft bruise
+        if s > 0.98 and y > -0.07:
+            return REG["skin_mid"]                 # crest
+        if s < -0.4 and y < -0.05:
             return REG["skin_dk"]                  # the underside of the snout, toward the mouth
         return REG["skin"]
     tube(mb, rings, 16, REG["skin"], cap0=True, cap1=True, ref=(1, 0, 0), reg_fn=reg_fn)
-    # upper teeth along the underside of the snout, mostly hidden: small and uneven
-    for i in range(5):
-        y = lerp(-0.170, -0.240, i / 4)
-        ring = min(HEAD_RINGS, key=lambda r: abs(r[0] - y))
+    # upper teeth along the front half of the snout's underside: long, uneven, some missing
+    for i in range(6):
+        y = lerp(-0.130, -0.238, i / 5)
+        hw, hh, zc = head_ring_at(y)
         for side in (1, -1):
             if hash01(i * 7 + side) < 0.22:
-                continue                           # a gap where one is missing
-            x = side * ring[1] * 0.62
-            base = Vector((x, y, ring[3] - ring[2] * 0.80))
-            ln = 0.006 + 0.007 * hash01(i * 3 + side * 11)
-            tooth(mb, base, Vector((side * 0.15 * (hash01(i + 5) - 0.5), 0.2 * (hash01(i) - 0.5), -1)).normalized(),
-                  ln, 0.0042, W)
+                continue
+            base = Vector((side * hw * 0.58, y, zc - hh * 0.78))
+            ln = 0.015 + 0.022 * hash01(i * 3 + side * 11)
+            lean = Vector((side * 0.25 * (hash01(i + 5) - 0.5), 0.35 * (hash01(i) - 0.5) - 0.1, -1)).normalized()
+            tooth(mb, base, lean, ln, 0.0055 + 0.002 * hash01(i * 5 + side), W)
 
 
-def tooth(mb, base, direction, length, r, w):
+def tooth(mb, base, direction, length, r, w, reg=None):
+    reg = reg or REG["tooth"]
     xp, yp = frame_for(direction, (1, 0, 0))
     ids = [mb.vert(base + (xp * math.cos(a) + yp * math.sin(a)) * r, w) for a in (0.3, 2.4, 4.4)]
-    tip = mb.vert(base + direction * length, w)
+    bend = xp * (0.18 * length)                  # a slight hook
+    mid = [mb.vert(base + direction * (length * 0.55) + bend * 0.4 + (xp * math.cos(a) + yp * math.sin(a)) * r * 0.55, w)
+           for a in (0.3, 2.4, 4.4)]
+    tip = mb.vert(base + direction * length + bend, w)
+    inside = base - direction * 0.01
     for k in range(3):
-        mb.face([ids[k], ids[(k + 1) % 3], tip], [ruv(REG["tooth"], k / 3, 0), ruv(REG["tooth"], (k + 1) / 3, 0),
-                                                   ruv(REG["tooth"], 0.5, 1)], interior=base - direction * 0.01)
+        k2 = (k + 1) % 3
+        mb.face([ids[k], ids[k2], mid[k2], mid[k]], [ruv(reg, k / 3, 0), ruv(reg, (k + 1) / 3, 0),
+                                                     ruv(reg, (k + 1) / 3, 0.55), ruv(reg, k / 3, 0.55)], interior=inside)
+        mb.face([mid[k], mid[k2], tip], [ruv(reg, k / 3, 0.55), ruv(reg, (k + 1) / 3, 0.55), ruv(reg, 0.5, 1)],
+                interior=inside)
 
 
 def jaw_open_point(p, angle=JAW_OPEN):
@@ -611,22 +646,35 @@ def build_jaw(mb):
     for y, hw, hh, z in JAW:
         rings.append((Vector((0, y, z)), lambda d, hw=hw, hh=hh: 1.0 / math.sqrt((d.x / hw) ** 2 + (d.z / hh) ** 2 + 1e-12), W))
     tube(mb, rings, 8, REG["skin"], cap0=True, cap1=True, ref=(1, 0, 0),
-         reg_fn=lambda i, k, c, f: REG["gum"] if (f - c).z > 0.006 and c.y < -0.10 else (REG["skin_dk"] if (f - c).z < -0.006 else REG["skin"]))
-    # lower teeth: small, uneven, crooked, one or two missing
+         reg_fn=lambda i, k, c, f: REG["gum"] if (f - c).z > 0.006 and c.y < -0.10 else (
+             REG["mouth"] if (f - c).z > 0.006 else (REG["skin_dk"] if (f - c).z < -0.006 else REG["skin"])))
+    # lower teeth: front half only, long, crooked, off-white going yellow, gaps
     for i in range(7):
         t = i / 6
-        y = lerp(-0.160, -0.250, t)
+        y = lerp(-0.135, -0.250, t)
         jr = min(JAW, key=lambda r: abs(r[0] - y))
         for side in (1, -1):
-            if hash01(i * 5 + side * 3 + 1) < 0.18:
+            if hash01(i * 5 + side * 3 + 1) < 0.20:
                 continue
             x = side * jr[1] * (0.62 - 0.4 * max(0.0, t - 0.8))
-            base = Vector((x, y, jr[3] + jr[2] * 0.85))
-            ln = 0.005 + 0.009 * hash01(i * 13 + side)
-            lean = Vector((side * 0.25 * (hash01(i * 2 + side) - 0.4), 0.3 * (hash01(i + 9) - 0.5) - 0.15, 1)).normalized()
-            tooth(mb, base, lean, ln, 0.0040 + 0.0012 * hash01(i), W)
+            base = Vector((x, y, jr[3] + jr[2] * 0.80))
+            ln = 0.020 + 0.026 * hash01(i * 13 + side)
+            lean = Vector((side * 0.30 * (hash01(i * 2 + side) - 0.4), 0.35 * (hash01(i + 9) - 0.5) - 0.2, 1)).normalized()
+            tooth(mb, base, lean, ln, 0.0055 + 0.0025 * hash01(i), W)
     for i in range(first, len(mb.co)):
         mb.co[i] = jaw_open_point(mb.co[i])
+    # the corners of the mouth: wet dark skin stretched from the snout to the open jaw, back half only
+    for side in (1, -1):
+        rows = []
+        for y in (0.010, -0.025, -0.060, -0.095, -0.125):
+            hw, hh, zc = head_ring_at(y)
+            top = Vector((side * hw * 0.70, y, zc - hh * 0.62))
+            jr = min(JAW, key=lambda r: abs(r[0] - y))
+            bot = jaw_open_point(Vector((side * jr[1] * 0.80, y, jr[3] + jr[2] * 0.5)))
+            mid = top.lerp(bot, 0.5) + Vector((-side * 0.010, 0, 0))
+            rows.append([top, mid, bot])
+        grid(mb, rows, REG["mouth"], outward=(side, 0, 0),
+             wfn=lambda p, j, i: {"head": 1.0} if i == 0 else ({"head": 0.5, "jaw": 0.5} if i == 1 else {"jaw": 1.0}))
 
 
 def mask_frame():
@@ -637,24 +685,35 @@ def mask_frame():
     return c, fwd, up, Vector((1, 0, 0))
 
 
-def mask_point(u, v, back=0.0):
-    """u, v in -1..1 across the oval; the card curves back toward the head at the sides."""
+def mask_point(u, v, back=0.0, k=None):
+    """u, v in -1..1 across the oval. A paper plate: the middle gently curved, the rim curling back
+    toward the head and fluted, the whole thing crumpled; one corner bent forward."""
     c, fwd, up, right = mask_frame()
     x = u * MASK["hw"]
     z = v * MASK["hh"]
     R = MASK["bend"]
     sag = R - math.sqrt(max(0.0, R * R - x * x))
-    sag += 0.010 * v * v          # and a little top to bottom
+    rr = math.hypot(u, v)
+    ang = math.atan2(v, u)
+    t = max(0.0, (rr - MASK["rim"]) / (1 - MASK["rim"]))
+    sag += MASK["curl"] * t ** 1.5
+    sag += MASK["flute"] * t * math.sin(ang * MASK["sectors"] / 2)
+    sag += MASK["crumple"] * math.sin(u * 17 + v * 9 + 1.3) * math.sin(v * 13 - u * 5)
+    s0, s1, amt = MASK["bent"]
+    a0, a1 = 2 * math.pi * s0 / MASK["sectors"], 2 * math.pi * s1 / MASK["sectors"]
+    if a0 <= ang % (2 * math.pi) <= a1 and rr > 0.68:
+        mid = (a0 + a1) / 2
+        sag -= amt * ((rr - 0.68) / 0.32) ** 1.3 * math.cos((ang % (2 * math.pi) - mid) / (a1 - a0) * math.pi)
     return c + right * x + up * z - fwd * (sag + back)
 
 
 def build_mask(mb, mask_mat):
     """The card mask: a printed front (its own glowing material) and a plain card back just behind it,
-    so from behind there is only card. An elastic string round the back of the skull."""
+    so from behind there is only card. Torn in two places at the rim. An elastic round the back."""
     W = {"head": 1}
     nr, ns = MASK["rings"], MASK["sectors"]
     c, fwd, _, _ = mask_frame()
-    for back, mat, reg in ((0.0, mask_mat, None), (0.0022, 0, REG["card_back"])):
+    for back, mat, reg in ((0.0, mask_mat, None), (0.0024, 0, REG["card_back"])):
         mb.material = mat
         mb.smooth = True
         ctr = mb.vert(mask_point(0, 0, back), W)
@@ -664,15 +723,19 @@ def build_mask(mb, mask_mat):
             row = []
             for k in range(ns):
                 a = 2 * math.pi * k / ns
-                # a party-mask outline: an oval a little squarer at the top
-                u = rr * math.cos(a)
-                v = rr * math.sin(a) * (1.0 + 0.06 * max(0.0, math.sin(a)))
+                r_ = rr
+                if j == nr:
+                    for k0, k1, cut in MASK["torn"]:
+                        if k0 <= k <= k1:
+                            r_ = rr * (cut + 0.03 * hash01(k))
+                u = r_ * math.cos(a)
+                v = r_ * math.sin(a)
                 row.append((mb.vert(mask_point(u, v, back), W), (u, v)))
             rings.append(row)
 
         def uv(u, v):
             if reg is None:
-                return (0.5 + 0.48 * u, 0.5 + 0.48 * v / 1.06)
+                return (0.5 + 0.48 * u, 0.5 + 0.48 * v)
             return ruv(reg, 0.5 + 0.5 * u, 0.5 + 0.5 * v)
         ref_out = fwd if back == 0.0 else -fwd
         for k in range(ns):
@@ -683,161 +746,163 @@ def build_mask(mb, mask_mat):
                 p, q, r_, s = rings[j][k], rings[j][k2], rings[j + 1][k2], rings[j + 1][k]
                 mb.face([p[0], q[0], r_[0], s[0]], [uv(*p[1]), uv(*q[1]), uv(*r_[1]), uv(*s[1])], outward=ref_out)
     mb.material = 0
-    # elastic: from one edge of the mask, back along the side of the skull, round the back, to the other
-    side_ys = (-0.175, -0.110, -0.040, 0.030, 0.072)
-    pts = [mask_point(-1, 0.05, 0.003)]
+    side_ys = (-0.175, -0.110, -0.040, 0.020, 0.058)
+    pts = [mask_point(-0.97, 0.05, 0.003)]
     for y in side_ys:
         hw, hh, zc = head_ring_at(y)
         pts.append(Vector((-(hw + 0.004), y, zc + 0.35 * hh)))
-    hw, hh, zc = head_ring_at(0.092)
-    pts.append(Vector((0.0, 0.100, zc + 0.30 * hh)))
+    hw, hh, zc = head_ring_at(0.075)
+    pts.append(Vector((0.0, 0.083, zc + 0.30 * hh)))
     for y in reversed(side_ys):
         hw, hh, zc = head_ring_at(y)
         pts.append(Vector((hw + 0.004, y, zc + 0.35 * hh)))
-    pts.append(mask_point(1, 0.05, 0.003))
+    pts.append(mask_point(0.97, 0.05, 0.003))
     tube(mb, [(p, 0.0022, W) for p in pts], 3, REG["strap"], cap0=False, cap1=False)
 
 
 def build_arm(mb, side, sfx):
+    """Tapered, knobbly: each segment thick at its upper end and thin at its lower, the bones showing
+    at the ends (the point of the elbow, the knob of the wrist) on one side only, never a ring."""
     sh, el, wr, kn = (Vector(mirror_pt(ARM[k], side)) for k in ("shoulder", "elbow", "wrist", "knuckle"))
     C, U, F, H = "clavicle" + sfx, "upperarm" + sfx, "forearm" + sfx, "hand" + sfx
     inside = Vector((0.11 * side, spine_y(1.88) + 0.01, 1.88))
     back = Vector((0, 1, 0))
     outv = Vector((side, 0, 0))
+    fwd = Vector((0, -1, 0))
 
-    def r_upper(base, bicep=0.0):
-        return lambda d: base + bicep * max(0.0, -d.y) ** 2
+    def r_seg(base, front=0.0, backk=0.0, outk=0.0, ink=0.0, p=4):
+        return lambda d: (base + front * max(0.0, d.dot(fwd)) ** p + backk * max(0.0, d.dot(back)) ** p
+                          + outk * max(0.0, d.dot(outv)) ** p + ink * max(0.0, -d.dot(outv)) ** p)
 
-    def r_elbow(base, knob):
-        return lambda d: base + knob * max(0.0, d.dot(back)) ** 3 + 0.4 * knob * max(0.0, d.dot(outv)) ** 4
-
-    def r_wrist(base, knob):
-        return lambda d: base * (0.75 + 0.35 * abs(d.y)) + knob * max(0.0, (d.dot(outv) * 0.6 + d.dot(back) * 0.8)) ** 4
-
-    e_up, e_dn = el.lerp(sh, 0.06), el.lerp(wr, 0.07)
     rings = [
         (inside, 0.040, {C: 1}),
         (inside.lerp(sh, 0.6), 0.043, {C: 1}),
-        (sh, 0.044, {C: .6, U: .4}),
-        (sh.lerp(el, 0.25), r_upper(0.033, 0.003), {C: .15, U: .85}),
-        (sh.lerp(el, 0.55), r_upper(0.025, 0.004), {U: 1}),
-        (sh.lerp(el, 0.84), 0.020, {U: 1}),
-        (e_up, 0.028, {U: .85, F: .15}),
-        (el, r_elbow(0.033, 0.026), {U: .5, F: .5}),
-        (e_dn, r_elbow(0.028, 0.010), {U: .15, F: .85}),
-        (el.lerp(wr, 0.28), 0.026, {F: 1}),
-        (el.lerp(wr, 0.62), 0.018, {F: 1}),
-        (el.lerp(wr, 0.88), 0.0145, {F: .9, H: .1}),
-        (wr, r_wrist(0.023, 0.015), {F: .45, H: .55}),
+        (sh, r_seg(0.044, outk=0.006), {C: .6, U: .4}),
+        (sh.lerp(el, 0.18), r_seg(0.036, front=0.006, outk=0.005), {C: .15, U: .85}),
+        (sh.lerp(el, 0.45), r_seg(0.029, front=0.004), {U: 1}),
+        (sh.lerp(el, 0.72), r_seg(0.022), {U: 1}),
+        (sh.lerp(el, 0.90), r_seg(0.022, outk=0.007, ink=0.006, p=6), {U: .9, F: .1}),     # the condyles
+        (el, r_seg(0.024, backk=0.020, outk=0.004, p=8), {U: .5, F: .5}),                  # the point of the elbow
+        (el.lerp(wr, 0.08), r_seg(0.028, front=0.004, backk=0.006), {U: .15, F: .85}),
+        (el.lerp(wr, 0.30), r_seg(0.025, front=0.004), {F: 1}),
+        (el.lerp(wr, 0.60), 0.019, {F: 1}),
+        (el.lerp(wr, 0.86), 0.0155, {F: .9, H: .1}),
+        (wr, r_seg(0.019, outk=0.009, backk=0.004, p=8), {F: .45, H: .55}),               # the knob of the wrist
     ]
 
     def arm_reg(i, k, c, f):
         d = (f - c).normalized()
-        if i in (6, 7, 8) and d.y > 0.2:
-            return REG["skin_hi"]              # the point of the elbow
-        if i == 12:
-            return REG["skin_hi"] if d.dot(Vector((side * 0.6, 0.8, 0))) > 0.2 else REG["skin_lo"]
-        if i in (6, 7) and d.y < -0.4:
-            return REG["skin_lo"]              # the crook of the elbow
+        if i == 7 and d.y > 0.85:
+            return REG["skin_mid"]         # the point of the elbow
+        if i == 12 and d.dot(outv) > 0.8:
+            return REG["skin_mid"]
+        if i == 7 and d.y < -0.7:
+            return REG["bruise"]
         return REG["skin"]
-    tube(mb, rings, 10, REG["skin"], cap0=True, cap1=False, ref=(side, 0, 0), reg_fn=arm_reg)
+    tube(mb, rings, 10, REG["skin"], cap0=True, cap1=False, ref=(side, 0, 0), reg_fn=arm_reg, wob=0.07)
     pv = kn - wr
-    palm = [(wr + pv * 0.05, (0.012, 0.022), {F: .3, H: .7}), (wr + pv * 0.45, (0.011, 0.034), {H: 1}),
-            (wr + pv * 0.85, (0.010, 0.040), {H: 1}), (kn + Vector((0, 0, -0.004)), (0.009, 0.038), {H: 1})]
-    tube(mb, palm, 8, REG["skin"], cap0=False, cap1=True, ref=(side, 0, 0))
+    palm = [(wr - pv * 0.12, (0.015, 0.024), {F: .5, H: .5}), (wr + pv * 0.40, (0.013, 0.036), {H: 1}),
+            (wr + pv * 0.85, (0.012, 0.044), {H: 1}), (kn + Vector((0, 0, -0.004)), (0.011, 0.042), {H: 1})]
+    tube(mb, palm, 8, REG["skin_ext"], cap0=False, cap1=True, ref=(side, 0, 0))
     names = {"index": ("index1", "index2"), "middle": ("middle1", "middle2"),
              "ring": ("ring1", "ring2"), "little": ("ring1", "ring2")}
     for fname, (b1, b2) in names.items():
         b1, b2 = b1 + sfx, b2 + sfx
         pts = finger_points(side, fname)
         rad = HAND[fname][2]
-        rings = [(pts[0] + Vector((0, 0, 0.012)), rad * 1.05, {H: 1}),
-                 (pts[0], rad * 1.45, {H: .4, b1: .6}),
-                 (pts[0].lerp(pts[1], 0.5), rad * 0.72, {b1: 1}),
-                 (pts[1], rad * 1.30, {b1: .5, b2: .5}),
-                 (pts[1].lerp(pts[2], 0.5), rad * 0.68, {b2: 1}),
-                 (pts[2], rad * 1.15, {b2: 1}),
+        rings = [(pts[0] + Vector((0, 0, 0.012)), rad * 1.00, {H: 1}),
+                 (pts[0], rad * 1.22, {H: .4, b1: .6}),
+                 (pts[0].lerp(pts[1], 0.5), rad * 0.80, {b1: 1}),
+                 (pts[1], rad * 1.08, {b1: .5, b2: .5}),
+                 (pts[1].lerp(pts[2], 0.5), rad * 0.74, {b2: 1}),
+                 (pts[2], rad * 0.92, {b2: 1}),
                  (pts[2].lerp(pts[3], 0.55), rad * 0.62, {b2: 1}),
                  (pts[3], rad * 0.45, {b2: 1})]
-        tube(mb, rings, 5, REG["skin"], cap0=False, cap1=True, ref=(side, 0, 0),
-             reg_fn=lambda i, k, c, f=None: REG["skin_hi"] if i in (1, 3, 5) else (REG["nail"] if i == 6 else REG["skin"]))
+        tube(mb, rings, 5, REG["skin_ext"], cap0=False, cap1=False, ref=(side, 0, 0),
+             reg_fn=lambda i, k, c, f=None: REG["bruise"] if i in (1, 3) else REG["skin_ext"])
+        d = (pts[3] - pts[2]).normalized()
+        tooth(mb, pts[3] - d * 0.004, (d + Vector((-side * 0.25, 0, 0))).normalized(), 0.020, rad * 0.50,
+              {b2: 1}, REG["nail"])
     th = thumb_points(side)
     T = "thumb" + sfx
-    rings = [(th[0] + Vector((0.004 * side, 0.012, 0.016)), 0.010, {H: 1}), (th[0], 0.0105, {H: .5, T: .5}),
-             (th[1], 0.0100, {T: 1}), (th[1].lerp(th[2], 0.6), 0.0075, {T: 1}), (th[2], 0.0045, {T: 1})]
-    tube(mb, rings, 5, REG["skin"], cap0=True, cap1=True)
+    rings = [(th[0] + Vector((0.004 * side, 0.012, 0.016)), 0.012, {H: 1}), (th[0], 0.013, {H: .5, T: .5}),
+             (th[1], 0.012, {T: 1}), (th[1].lerp(th[2], 0.6), 0.009, {T: 1}), (th[2], 0.0055, {T: 1})]
+    tube(mb, rings, 5, REG["skin_ext"], cap0=True, cap1=True)
 
 
 def build_leg(mb, side, sfx):
-    """Long thin legs. The heel never touches the floor: it stands on the balls of long feet, with a
-    knob of heel bone sticking out behind the raised ankle, so a crouch bends it the wrong way."""
+    """Long thin legs, tapered and knobbly. The heel never touches the floor: it stands on the balls of
+    long feet, with a knob of heel bone behind the raised ankle, so a crouch bends it the wrong way."""
     T, Sh, Ft, To = "thigh" + sfx, "shin" + sfx, "foot" + sfx, "toe" + sfx
     hip, knee, ankle, ball, toe = (Vector(mirror_pt(LEG[k], side)) for k in ("hip", "knee", "ankle", "ball", "toe"))
     fwd, back, out = Vector((0, -1, 0)), Vector((0, 1, 0)), Vector((side, 0, 0))
 
-    def leg_r(base, front=0.0, front_p=3, sides_=0.0, calf=0.0, achilles=0.0, inner=0.0):
+    def leg_r(base, front=0.0, front_p=3, sides_=0.0, calf=0.0, achilles=0.0, inner=0.0, outer=0.0):
         def r(d):
             v = base + front * max(0.0, d.dot(fwd)) ** front_p
-            v += sides_ * abs(d.x) ** 6 + calf * max(0.0, d.dot(back)) ** 2
-            v += achilles * max(0.0, d.dot(back)) ** 10 + inner * max(0.0, -d.dot(out)) ** 4
+            v += sides_ * abs(d.x) ** 8 + calf * max(0.0, d.dot(back)) ** 2
+            v += achilles * max(0.0, d.dot(back)) ** 10 + inner * max(0.0, -d.dot(out)) ** 6
+            v += outer * max(0.0, d.dot(out)) ** 6
             return v
         return r
 
     kd = (hip - knee).normalized()
     ad = (ankle - knee).normalized()
-    rings = [(hip + Vector((0, 0, 0.05)), 0.066, {T: .5, "hips": .5}),
-             (hip.lerp(knee, 0.25), leg_r(0.045, inner=0.004), {T: 1}),
-             (hip.lerp(knee, 0.62), leg_r(0.031, front=0.004), {T: 1}),
-             (knee + kd * 0.065, leg_r(0.024, front=0.006), {T: .9, Sh: .1}),
-             (knee + kd * 0.025, leg_r(0.032, front=0.022, sides_=0.012), {T: .65, Sh: .35}),
-             (knee, leg_r(0.034, front=0.025, front_p=4, sides_=0.012), {T: .5, Sh: .5}),
-             (knee + ad * 0.035, leg_r(0.027, front=0.010, sides_=0.005), {T: .2, Sh: .8}),
-             (knee + ad * 0.090, leg_r(0.025, front=0.007, front_p=8, calf=0.012), {Sh: 1}),
-             (knee.lerp(ankle, 0.40), leg_r(0.023, front=0.006, front_p=8, calf=0.006), {Sh: 1}),
-             (knee.lerp(ankle, 0.70), leg_r(0.018, front=0.005, front_p=8, achilles=0.004), {Sh: 1}),
-             (knee.lerp(ankle, 0.90), leg_r(0.016, front=0.003, achilles=0.008), {Sh: .85, Ft: .15}),
-             (ankle, leg_r(0.020, sides_=0.010, achilles=0.006), {Sh: .5, Ft: .5})]
+    rings = [(hip + Vector((0, 0, 0.08)), 0.070, {T: .4, "hips": .6}),
+             (hip + Vector((0, -0.004, -0.02)), leg_r(0.060, outer=0.008), {T: .8, "hips": .2}),
+             (hip.lerp(knee, 0.18), leg_r(0.050, inner=0.006, outer=0.006), {T: 1}),
+             (hip.lerp(knee, 0.42), leg_r(0.040, front=0.006), {T: 1}),
+             (hip.lerp(knee, 0.70), leg_r(0.030, front=0.004), {T: 1}),
+             (knee + kd * 0.060, leg_r(0.025, front=0.004, sides_=0.006), {T: .9, Sh: .1}),
+             (knee + kd * 0.022, leg_r(0.028, front=0.012, sides_=0.008, front_p=6), {T: .65, Sh: .35}),
+             (knee, leg_r(0.028, front=0.018, front_p=8, sides_=0.006), {T: .5, Sh: .5}),         # kneecap
+             (knee + ad * 0.040, leg_r(0.029, front=0.008, front_p=6, outer=0.004), {T: .2, Sh: .8}),
+             (knee + ad * 0.110, leg_r(0.026, front=0.006, front_p=8, calf=0.010), {Sh: 1}),
+             (knee.lerp(ankle, 0.42), leg_r(0.022, front=0.005, front_p=8, calf=0.005), {Sh: 1}),
+             (knee.lerp(ankle, 0.72), leg_r(0.017, front=0.004, front_p=8, achilles=0.003), {Sh: 1}),
+             (knee.lerp(ankle, 0.90), leg_r(0.015, achilles=0.006), {Sh: .85, Ft: .15}),
+             (ankle, leg_r(0.018, sides_=0.009, achilles=0.006), {Sh: .5, Ft: .5})]           # ankle bones
 
     def leg_reg(i, k, c, f):
-        d = f - c
-        if i in (4, 5, 6) and d.y < -0.010:
-            return REG["skin_hi"]
-        if i in (7, 8, 9) and d.y < -0.016:
-            return REG["skin_hi"]
-        if i in (4, 5) and d.y > 0.012:
-            return REG["skin_lo"]           # behind the knee
+        d = (f - c).normalized()
+        if i == 7 and d.y < -0.8:
+            return REG["skin_hi"]          # the kneecap
+        if i == 7 and d.y > 0.85:
+            return REG["bruise"]           # behind the knee
+        if i == 13 and abs(d.x) > 0.9:
+            return REG["skin_mid"]         # ankle bones
         return REG["skin"]
-    tube(mb, rings, 10, REG["skin"], cap0=True, cap1=False, ref=(side, 0, 0), reg_fn=leg_reg)
-    # the long foot, from the raised ankle down to the ball, tendons standing up on top
+    tube(mb, rings, 10, REG["skin"], cap0=True, cap1=False, ref=(side, 0, 0), reg_fn=leg_reg, wob=0.07)
     fv = ball - ankle
-    frings = [(ankle - fv * 0.08, 0.022, {Sh: .3, Ft: .7}), (ankle + fv * 0.25, (0.020, 0.024), {Ft: 1}),
-              (ankle + fv * 0.60, (0.024, 0.020), {Ft: 1}), (ball - fv * 0.06, (0.030, 0.017), {Ft: .6, To: .4})]
-    tube(mb, frings, 8, REG["skin"], cap0=True, cap1=True, ref=(1, 0, 0),
-         reg_fn=lambda i, k, c, f: REG["skin_hi"] if (f - c).z > 0.012 else REG["skin"])
-    # the heel bone, a knob sticking out behind the ankle
-    hb = ankle + Vector((0, 0.030, -0.018))
-    tube(mb, [(ankle + Vector((0, 0.004, -0.004)), 0.017, {Ft: 1}), (hb, 0.016, {Ft: 1}),
-              (hb + Vector((0, 0.012, -0.010)), 0.010, {Ft: 1})], 6, REG["skin_hi"], cap0=False, cap1=True)
-    # four long toes from the ball, gripping at the tips
-    for j, (dx, L, r0) in enumerate(((-0.026, 0.130, 0.0115), (-0.008, 0.124, 0.0105), (0.010, 0.114, 0.0098),
-                                     (0.027, 0.098, 0.0090))):
+    frings = [(ankle - fv * 0.10, 0.024, {Sh: .3, Ft: .7}), (ankle + fv * 0.25, (0.024, 0.028), {Ft: 1}),
+              (ankle + fv * 0.60, (0.029, 0.024), {Ft: 1}), (ball - fv * 0.06, (0.037, 0.021), {Ft: .6, To: .4})]
+    tube(mb, frings, 8, REG["skin_ext"], cap0=True, cap1=True, ref=(1, 0, 0),
+         reg_fn=lambda i, k, c, f: REG["skin_mid"] if (f - c).z > 0.016 else REG["skin_ext"])
+    hb = ankle + Vector((0, 0.034, -0.020))
+    tube(mb, [(ankle + Vector((0, 0.004, -0.004)), 0.020, {Ft: 1}), (hb, 0.019, {Ft: 1}),
+              (hb + Vector((0, 0.014, -0.012)), 0.012, {Ft: 1})], 6, REG["skin_hi"], cap0=False, cap1=True)
+    # four long toes from the ball, gripping at the tips, each ending in a thick dark claw
+    for j, (dx, L, r0) in enumerate(((-0.034, 0.165, 0.0150), (-0.011, 0.158, 0.0140), (0.012, 0.146, 0.0132),
+                                     (0.034, 0.124, 0.0122))):
         b0 = ball + Vector((-dx * side, 0.006, -0.004))
-        spread = -dx * side * 0.35
-        pts = [b0, b0 + Vector((spread * 0.3, -L * 0.36, 0.006)), b0 + Vector((spread * 0.6, -L * 0.66, 0.010)),
-               b0 + Vector((spread * 0.85, -L * 0.90, 0.002)), b0 + Vector((spread, -L, -0.008))]
+        spread = -dx * side * 0.40
+        pts = [b0, b0 + Vector((spread * 0.3, -L * 0.36, 0.008)), b0 + Vector((spread * 0.6, -L * 0.66, 0.012)),
+               b0 + Vector((spread * 0.85, -L * 0.90, 0.003)), b0 + Vector((spread, -L, -0.008))]
         tws = [{Ft: .5, To: .5}, {To: 1}, {To: 1}, {To: 1}, {To: 1}]
-        rings = [(p, r0 * s, w) for p, s, w in zip(pts, (1.15, 1.05, 0.95, 0.80, 0.50), tws)]
-        tube(mb, rings, 5, REG["skin"], cap0=False, cap1=True,
-             reg_fn=lambda i, k, c, f=None: REG["skin_hi"] if i in (1, 2) and (f - c).z > 0.003 else (REG["nail"] if i == 3 else REG["skin"]))
+        rings = [(p, r0 * s, w) for p, s, w in zip(pts, (1.15, 1.10, 0.95, 0.80, 0.55), tws)]
+        tube(mb, rings, 5, REG["skin_ext"], cap0=False, cap1=False,
+             reg_fn=lambda i, k, c, f=None: REG["bruise"] if i in (1, 2) and (f - c).z > 0.003 else REG["skin_ext"])
+        d = (pts[4] - pts[3]).normalized()
+        tooth(mb, pts[4] - d * 0.006, (d + Vector((0, -0.6, -0.2))).normalized(), 0.032, r0 * 0.55, {To: 1},
+              REG["nail"])
 
 
 # --------------------------- the job: tabard rags, lanyard, badge, music box ---------------------------
 TABARD = dict(top=1.950, bottom=RAG_TOP, off=0.013, cols=8, front=(-152.0, -28.0), back=(28.0, 152.0))
 # strips hanging from the bottom edge of each panel: (panel, column, length m, colour index); some torn off
-STRIPS = [("F", 0, 0.30, 0), ("F", 1, 0.48, 1), ("F", 2, 0.20, 2), ("F", 3, 0.55, 0), ("F", 4, 0.38, 1),
-          ("F", 6, 0.44, 2), ("F", 7, 0.24, 0),
-          ("B", 0, 0.30, 2), ("B", 1, 0.20, 0), ("B", 2, 0.36, 1), ("B", 4, 0.26, 2), ("B", 5, 0.38, 0),
-          ("B", 6, 0.18, 1), ("B", 7, 0.30, 2)]
+STRIPS = [("F", 0, 0.22, 0, 0.70), ("F", 1, 0.40, 1, 1.30), ("F", 3, 0.34, 2, 0.80), ("F", 4, 0.15, 0, 1.25),
+          ("F", 6, 0.30, 1, 0.65),
+          ("B", 1, 0.16, 2, 1.20), ("B", 2, 0.24, 0, 0.70), ("B", 5, 0.20, 1, 1.35), ("B", 6, 0.12, 2, 0.80)]
 
 
 def panel_col_colour(panel, i):
@@ -852,24 +917,23 @@ def build_tabard(mb):
         cols = TABARD["cols"]
         angles = [lerp(a0, a1, i / cols) for i in range(cols + 1)]
         rows = []
-        for z in zs:
+        for j, z in enumerate(zs):
             row = []
-            for a in angles:
+            for i, a in enumerate(angles):
                 off = TABARD["off"] + 0.004 * (1 if z < 1.80 else 0)
                 p = body_point(a, z, extra=off)
+                if j == len(zs) - 1:      # the bottom edge is torn, not cut straight
+                    p.z += 0.025 * hash01(i * 3 + (0 if panel == "F" else 40))
                 row.append(p)
             rows.append(row)
         interior = Vector((0, spine_y(1.82), 1.82))
         ids = grid(mb, rows, REG["red_p"], interior=interior, wfn=lambda p, j, i: torso_weights(Vector((p.x, p.y, min(p.z, 1.89)))),
                    reg_fn=lambda j, i, panel=panel: REG[panel_col_colour(panel, i) + "_p"])
         edges[panel] = (angles, [mb.co[k] for k in ids[-1]])
-    # shoulder straps over the top, joining front and back
     for side in (1, -1):
         pts = []
         for i in range(6):
             t = i / 5
-            a = lerp(-90 + side * 58, 90 - side * 58, t) if side > 0 else lerp(-90 - 58, -270 + 58, t)
-            # walk over the top of the shoulder: x at the side, y from front to back, z over the top
             y = lerp(-0.085, 0.085, t)
             x = side * 0.090
             z = 1.930 + 0.022 * math.sin(math.pi * t)
@@ -877,29 +941,25 @@ def build_tabard(mb):
         rows = [[p + Vector((-side * 0.024, 0, 0.004)), p + Vector((side * 0.024, 0, -0.004))] for p in pts]
         grid(mb, rows, REG["yellow_p"], outward=(0, 0, 1),
              wfn=lambda p, j, i, s=side: {"spine2": 0.5, ("clavicle.L" if s > 0 else "clavicle.R"): 0.5})
-    # the strips: what is left of the panels, hanging free
-    for panel, col, length, ci in STRIPS:
+    for n_strip, (panel, col, length, ci, width) in enumerate(STRIPS):
         angles, bottom = edges[panel]
         p0, p1 = bottom[col], bottom[col + 1]
-        # a little narrower than the column, torn unevenly
         mid = (p0 + p1) / 2
-        half = (p1 - p0) / 2 * 0.86
+        mid.z = RAG_TOP
+        half = (p1 - p0) / 2 * 0.86 * width
+        half.z = 0.0
         out = Vector((mid.x, mid.y - spine_y(RAG_TOP), 0)).normalized()
         rows = []
         nrow = 5
         for j in range(nrow + 1):
             t = j / nrow
             z = RAG_TOP - length * t
-            drift = out * (0.006 * t) + Vector((0, 0, 0))
-            twist = 0.25 * (hash01(col * 3 + j + (0 if panel == "F" else 50)) - 0.5) * t
-            hw = half * (1 - 0.18 * t)
-            a = mid + drift + Vector((0, 0, z - mid.z))
-            rows.append([a - hw + out * twist * 0.02, a + hw - out * twist * 0.02])
-        # torn ends: drop one corner of the last row
-        if hash01(col + (7 if panel == "F" else 31)) > 0.5:
-            rows[-1][0] = rows[-1][0] + Vector((0, 0, length * 0.10))
-        else:
-            rows[-1][1] = rows[-1][1] + Vector((0, 0, length * 0.10))
+            hw = half * (1 - 0.25 * t * hash01(n_strip + 3))
+            a = mid + out * (0.006 * t) + Vector((0, 0, z - mid.z))
+            row = [a - hw, a, a + hw]
+            if j == nrow:      # ragged torn end: three points at different lengths
+                row = [p + Vector((0, 0, length * 0.35 * hash01(n_strip * 5 + q))) for q, p in enumerate(row)]
+            rows.append(row)
         side = 1 if mid.x >= 0 else -1
         rb = "rag.%s.%s" % (panel, "L" if side > 0 else "R")
         top_w = torso_weights(Vector((mid.x, mid.y, RAG_TOP)))
@@ -914,19 +974,17 @@ def build_tabard(mb):
 
 
 def build_lanyard(mb):
-    """The staff lanyard round the neck, its clip, the laminated badge and the wind-up music box."""
+    """The staff lanyard round the neck, its clip, the laminated badge (grimy, hanging crooked) and the
+    wind-up music box."""
     mb.smooth = False
     ring_pts = []
     n = 14
     for i in range(n):
         a = 2 * math.pi * i / n
         s = math.sin(a)
-        x = 0.064 * math.cos(a)
-        y = -0.004 + 0.060 * s
-        z = 1.982 + 0.022 * max(0.0, s) - 0.026 * max(0.0, -s) ** 2
-        ring_pts.append(Vector((x, y, z)))
+        ring_pts.append(Vector((0.064 * math.cos(a), -0.004 + 0.060 * s,
+                                1.982 + 0.022 * max(0.0, s) - 0.026 * max(0.0, -s) ** 2)))
     ring_w = lambda p: {"spine2": 0.55, "neck": 0.45}
-    # closed ring: tube with the first point repeated
     tube(mb, [(p, 0.0045, ring_w) for p in ring_pts + ring_pts[:1]], 3, REG["cord"], cap0=False, cap1=False)
     clip = Vector(LANYARD[1])
     for side in (1, -1):
@@ -935,11 +993,8 @@ def build_lanyard(mb):
         for i in range(7):
             t = i / 6
             p = start.lerp(clip + Vector((0.006 * side, 0, 0.012)), t)
-            z = p.z
-            a = -90 + side * math.degrees(math.atan2(abs(p.x), 0.1))
-            surf = body_point(-90 + side * 12 * (1 - t), z, extra=TABARD["off"] + 0.016)
-            p = Vector((p.x, min(p.y, surf.y), z))
-            pts.append(p)
+            surf = body_point(-90 + side * 12 * (1 - t), p.z, extra=TABARD["off"] + 0.016)
+            pts.append(Vector((p.x, min(p.y, surf.y), p.z)))
 
         def cw(p, start=start):
             t = min(1.0, max(0.0, (start.z - p.z) / (start.z - clip.z)))
@@ -948,20 +1003,17 @@ def build_lanyard(mb):
     L = {"lanyard": 1}
     X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
     box(mb, clip + Vector((0, -0.002, 0.004)), X * 0.009, Y * 0.004, Z * 0.012, L, lambda f: REG["clip"])
-    # the badge: a laminated card hanging from the clip
-    bc = clip + Vector((0.0, -0.006, -0.064))
-    box(mb, bc, X * 0.040, Y * 0.0020, Z * 0.056, L,
+    q = Quaternion(Y, math.radians(-16)) @ Quaternion(Z, math.radians(9))     # hanging crooked
+    bc = clip + Vector((0.010, -0.006, -0.062))
+    box(mb, bc, q @ (X * 0.040), q @ (Y * 0.0020), q @ (Z * 0.056), L,
         lambda f: REG["badge"] if f == "y-" else REG["card_back"])
-    # the wind-up music box, clipped on beside it, its crank sticking out
     mc = clip + Vector((0.058, -0.024, -0.036))
-    box(mb, mc, X * 0.032, Y * 0.023, Z * 0.028, L,
-        lambda f: REG["box_top"] if f == "z+" else REG["box"])
+    box(mb, mc, X * 0.032, Y * 0.023, Z * 0.028, L, lambda f: REG["box_top"] if f == "z+" else REG["box"])
     crank = [mc + Vector((0.032, 0, 0.006)), mc + Vector((0.052, 0, 0.006)), mc + Vector((0.052, 0, -0.016)),
              mc + Vector((0.064, 0, -0.016))]
     tube(mb, [(p, 0.0032, L) for p in crank], 3, REG["brass"], cap0=False, cap1=True)
     tube(mb, [(mc + Vector((0.064, 0, -0.016)), 0.0070, L), (mc + Vector((0.077, 0, -0.016)), 0.0070, L)], 5,
          REG["box_top"], cap0=True, cap1=True)
-    # a short strap from the clip to the box
     tube(mb, [(clip + Vector((0.008, -0.004, 0.0)), 0.003, L), (mc + Vector((-0.016, 0, 0.028)), 0.003, L)], 3,
          REG["cord"], cap0=False, cap1=False)
     mb.smooth = True
@@ -969,9 +1021,12 @@ def build_lanyard(mb):
 
 # ============================ TEXTURES ============================
 def make_atlas():
+    """Colour, normal and roughness maps for the body, all on the same 512 px layout."""
     n = TEX
     rng = np.random.default_rng(2311)
     img = np.ones((n, n, 4), dtype=np.float32)
+    height = np.zeros((n, n), np.float32)
+    rough = np.full((n, n), 0.86, np.float32)
     C = {k: np.array(v, dtype=np.float32) for k, v in COL.items()}
 
     def px(reg):
@@ -983,142 +1038,173 @@ def make_atlas():
         yy, xx = np.mgrid[0:h, 0:w]
         return x0, y0, x1, y1, (xx + 0.5) / w, (yy + 0.5) / h
 
-    def fill(reg, col, noise=0.012, spots=0):
+    def fill(reg, col, noise=0.012):
         x0, y0, x1, y1 = px(reg)
         h, w = y1 - y0, x1 - x0
-        block = np.tile(col, (h, w, 1)) * (1 + (rng.random((h, w, 1)) - 0.5) * 2 * noise)
-        for _ in range(spots):
-            cx, cy, r = rng.random() * w, rng.random() * h, 2 + rng.random() * 5
-            yy, xx = np.mgrid[0:h, 0:w]
-            m = np.clip(1 - ((xx - cx) ** 2 + (yy - cy) ** 2) / r ** 2, 0, 1)[..., None] * 0.25
-            block = block * (1 - m) + col * 0.75 * m
-        img[y0:y1, x0:x1, :3] = np.clip(block, 0, 1)
+        img[y0:y1, x0:x1, :3] = np.clip(np.tile(col, (h, w, 1)) * (1 + (rng.random((h, w, 1)) - 0.5) * 2 * noise), 0, 1)
 
-    fill(REG["skin"], C["skin"], 0.015, spots=4)
-    fill(REG["skin_shade"], C["skin_shade"], 0.012)
-    fill(REG["skin_mid"], (C["skin"] + C["skin_hi"]) / 2, 0.012)
-    fill(REG["skin_lo"], C["skin_lo"], 0.010)
-    fill(REG["skin_hi"], C["skin_hi"], 0.010)
-    fill(REG["skin_dk"], C["skin_dk"], 0.012)
-    fill(REG["skin_big"], C["skin"], 0.015, spots=8)
-    fill(REG["gum"], C["gum"], 0.02)
-    fill(REG["tooth"], C["tooth"], 0.03)
-    x0, y0, x1, y1, u, v = uvgrid(REG["tooth"])      # teeth go brown toward the gum
-    img[y0:y1, x0:x1, :3] *= (0.70 + 0.30 * np.clip(v, 0, 1))[..., None]
-    fill(REG["nail"], C["nail"], 0.03)
-    fill(REG["strap"], C["strap"], 0.02)
-    fill(REG["clip"], C["clip"], 0.03)
-    fill(REG["brass"], C["brass"], 0.03)
-    fill(REG["card_back"], C["card_back"], 0.02, spots=3)
-    # lanyard: blue with white dashes along it
+    def skin(reg, col, bruise_k=0.25, pale_k=0.15, r=0.86):
+        """Mottled skin: low-frequency blotches of bruise and of pale, fine grain, pores in the height."""
+        x0, y0, x1, y1 = px(reg)
+        h, w = y1 - y0, x1 - x0
+        big = noise2((h, w), 24, rng)
+        mid = noise2((h, w), 8, rng)
+        base = np.tile(col, (h, w, 1)) * (0.88 + 0.24 * mid)[..., None]
+        bk = np.clip((big - 0.55) * 3.0, 0, 1)[..., None] * bruise_k
+        pk = np.clip((0.40 - big) * 3.0, 0, 1)[..., None] * pale_k
+        base = base * (1 - bk) + C["bruise"] * bk
+        base = base * (1 - pk) + C["skin_hi"] * pk
+        base *= (1 + (rng.random((h, w, 1)) - 0.5) * 0.04)
+        img[y0:y1, x0:x1, :3] = np.clip(base, 0, 1)
+        fine = noise2((h, w), 3, rng, octaves=2)
+        streak = noise2((h, w * 3), 6, rng, octaves=2)[:, ::3]       # wrinkles stretched across
+        height[y0:y1, x0:x1] = 0.6 * fine + 0.4 * streak
+        rough[y0:y1, x0:x1] = r
+
+    skin(REG["skin"], C["skin"], pale_k=0.05)
+    skin(REG["skin_hi"], C["skin_hi"], bruise_k=0.10, pale_k=0.0)
+    skin(REG["bruise"], C["bruise"], bruise_k=0.0, pale_k=0.05)
+    skin(REG["skin_shade"], C["skin_shade"], bruise_k=0.35)
+    skin(REG["skin_mid"], C["skin_mid"], bruise_k=0.15)
+    skin(REG["skin_ext"], (C["skin"] + C["bruise"]) / 2, bruise_k=0.4, pale_k=0.1)   # hands and feet
+    skin(REG["skin_lo"], C["skin_lo"], bruise_k=0.0, pale_k=0.0)
+    skin(REG["skin_dk"], C["skin_dk"], bruise_k=0.3, pale_k=0.0)
+    fill(REG["gum"], C["gum"], 0.03)
+    fill(REG["mouth"], C["mouth"], 0.03)
+    for name in ("gum", "mouth"):
+        x0, y0, x1, y1 = px(REG[name])
+        rough[y0:y1, x0:x1] = 0.20                      # wet
+    fill(REG["tooth"], C["tooth"], 0.04)
+    x0, y0, x1, y1, u, v = uvgrid(REG["tooth"])      # off-white at the tip going yellow and brown at the gum
+    img[y0:y1, x0:x1, :3] *= (0.55 + 0.45 * np.clip(v, 0, 1))[..., None]
+    img[y0:y1, x0:x1, 2] *= (0.70 + 0.30 * np.clip(v, 0, 1))
+    rough[y0:y1, x0:x1] = 0.35
+    fill(REG["nail"], C["nail"], 0.05)
+    x0, y0, x1, y1 = px(REG["nail"])
+    rough[y0:y1, x0:x1] = 0.45
+    fill(REG["strap"], C["strap"], 0.03)
+    fill(REG["clip"], C["clip"], 0.04)
+    fill(REG["brass"], C["brass"], 0.04)
+    fill(REG["card_back"], C["card_back"], 0.03)
     x0, y0, x1, y1, u, v = uvgrid(REG["cord"])
     cord = np.tile(C["cord"], (y1 - y0, x1 - x0, 1))
-    dash = (np.sin(v * 2 * math.pi * 4) > 0.55)
-    cord[dash] = np.array((0.85, 0.86, 0.88))
-    img[y0:y1, x0:x1, :3] = cord
-    # music box: pink sides with a printed star and a scuffed edge; cream top
-    fill(REG["box"], C["box"], 0.02)
+    cord[np.sin(v * 2 * math.pi * 4) > 0.55] = np.array((0.62, 0.62, 0.60))
+    img[y0:y1, x0:x1, :3] = cord * (0.85 + 0.15 * noise2(cord.shape[:2], 8, rng))[..., None]
+    fill(REG["box"], C["box"], 0.03)
     x0, y0, x1, y1, u, v = uvgrid(REG["box"])
     r = np.hypot(u - 0.5, v - 0.5)
     ang = np.arctan2(v - 0.5, u - 0.5)
-    star = r < (0.16 + 0.10 * np.cos(ang * 5))
     blk = img[y0:y1, x0:x1, :3]
-    blk[star] = np.array((0.97, 0.90, 0.45))
-    blk[(u < 0.08) | (u > 0.92) | (v < 0.08) | (v > 0.92)] *= 0.82
-    fill(REG["box_top"], C["box_top"], 0.02)
-    # the badge: laminated card, a striped header, a photo square, lines of text, a shine
+    blk[r < (0.16 + 0.10 * np.cos(ang * 5))] = np.array((0.78, 0.70, 0.40))
+    blk[(u < 0.08) | (u > 0.92) | (v < 0.08) | (v > 0.92)] *= 0.75
+    fill(REG["box_top"], C["box_top"], 0.03)
+    # the badge: laminated card, a faded striped header, a photo, lines of text; grimy, a scratched shine
     x0, y0, x1, y1, u, v = uvgrid(REG["badge"])
     b = np.tile(C["badge"], (y1 - y0, x1 - x0, 1))
     head = v > 0.80
-    b[head & (u < 0.33)] = C["red"]
-    b[head & (u >= 0.33) & (u < 0.66)] = C["yellow"]
-    b[head & (u >= 0.66)] = C["blue"]
+    b[head & (u < 0.33)] = C["red"] * 1.3
+    b[head & (u >= 0.33) & (u < 0.66)] = C["yellow"] * 1.3
+    b[head & (u >= 0.66)] = C["blue"] * 1.3
     photo = (u > 0.10) & (u < 0.46) & (v > 0.36) & (v < 0.74)
-    b[photo] = np.array((0.62, 0.70, 0.78))
-    face = photo & (np.hypot((u - 0.28) / 0.10, (v - 0.56) / 0.12) < 1.0)
-    b[face] = np.array((0.80, 0.68, 0.58))
-    for k, (yy, ww) in enumerate(((0.66, 0.36), (0.56, 0.30), (0.46, 0.34))):
+    b[photo] = np.array((0.50, 0.55, 0.60))
+    b[photo & (np.hypot((u - 0.28) / 0.10, (v - 0.56) / 0.12) < 1.0)] = np.array((0.62, 0.54, 0.47))
+    for yy, ww in ((0.66, 0.36), (0.56, 0.30), (0.46, 0.34)):
         b[(u > 0.54) & (u < 0.54 + ww) & (np.abs(v - yy) < 0.025)] = C["ink"] * 1.6
-    b[(u > 0.10) & (u < 0.86) & (np.abs(v - 0.22) < 0.04)] = C["ink"] * 1.4      # the name, in capitals
-    shine = np.abs((u - v) - 0.15) < 0.05
-    b[shine] = b[shine] * 0.7 + 0.3
-    b *= 0.92 + 0.08 * (rng.random(b.shape[:2] + (1,)))
+    b[(u > 0.10) & (u < 0.86) & (np.abs(v - 0.22) < 0.04)] = C["ink"] * 1.4
+    grime = noise2(b.shape[:2], 16, rng)
+    b *= (0.62 + 0.38 * grime)[..., None]
+    b = b * 0.85 + np.array((0.30, 0.24, 0.16)) * 0.15 * (1 - v)[..., None]
+    shine = np.abs((u - v) - 0.15) < 0.04
+    b[shine] = b[shine] * 0.85 + 0.12
     img[y0:y1, x0:x1, :3] = np.clip(b, 0, 1)
-    # vinyl: faded colour, wipe-clean shine gone dull, cracks, grime toward the torn end
+    rough[y0:y1, x0:x1] = 0.35
+    # vinyl: faded, dull, cracked, dirtier toward the torn hem
     for name in VINYL:
-        for suffix, grime_k in (("", 1.0), ("_p", 0.35)):
+        for suffix, grime_k in (("", 1.0), ("_p", 0.45)):
             x0, y0, x1, y1, u, v = uvgrid(REG[name + suffix])
-            col = C[name] * (0.88 + 0.06 * np.sin(u * 9.0 + v * 3.0))[..., None]
-            noise = (rng.random(u.shape) - 0.5) * 0.04
-            col = col * (1 + noise[..., None])
-            # grime: darker and browner toward the bottom (v = 0 at the hanging end)
-            g = np.clip(1.0 - v * 1.6, 0, 1) ** 1.6 * grime_k
-            col = col * (1 - 0.45 * g[..., None]) + np.array((0.25, 0.20, 0.14)) * 0.45 * g[..., None]
-            # cracks in the vinyl: thin pale lines
-            for _ in range(6):
+            sh = u.shape
+            col = C[name] * (0.85 + 0.25 * noise2(sh, 12, rng))[..., None]
+            g = np.clip(1.0 - v * 1.4, 0, 1) ** 1.3 * grime_k
+            g = np.clip(g + 0.35 * (noise2(sh, 10, rng) - 0.5) * grime_k, 0, 1)
+            col = col * (1 - 0.65 * g[..., None]) + np.array((0.16, 0.12, 0.08)) * 0.65 * g[..., None]
+            if suffix == "_p":
+                col *= 0.80        # the panels are in the shadow of the chest and as dirty
+            crack_h = np.zeros(sh, np.float32)
+            for _ in range(8):
                 cx, cy = rng.random(), rng.random()
                 a = rng.random() * math.pi
                 d = np.abs((u - cx) * math.sin(a) - (v - cy) * math.cos(a))
                 along = np.abs((u - cx) * math.cos(a) + (v - cy) * math.sin(a))
-                col[(d < 0.006) & (along < 0.18)] = col[(d < 0.006) & (along < 0.18)] * 0.7 + 0.30 * 0.9
-            # stitched edges down both sides
+                m = (d < 0.006) & (along < 0.18)
+                col[m] = col[m] * 0.8 + 0.12
+                crack_h[m] = -1.0
             st = ((u < 0.07) | (u > 0.93)) & (np.sin(v * 60) > 0.2)
-            col[st] = col[st] * 0.55
+            col[st] = col[st] * 0.6
             img[y0:y1, x0:x1, :3] = np.clip(col, 0, 1)
+            height[y0:y1, x0:x1] = 0.5 + 0.3 * crack_h
+            rough[y0:y1, x0:x1] = 0.62
     im = bpy.data.images.new(NAME + "_atlas", n, n, alpha=True)
     im.pixels.foreach_set(img.ravel())
     im.pack()
-    return im
+    # normal map from the height field (tangent space, +y up the texture)
+    gx = (np.roll(height, -1, 1) - np.roll(height, 1, 1)) * 2.2
+    gy = (np.roll(height, -1, 0) - np.roll(height, 1, 0)) * 2.2
+    nz = np.ones_like(gx)
+    ln = np.sqrt(gx * gx + gy * gy + nz * nz)
+    nm = np.dstack([(-gx / ln) * 0.5 + 0.5, (-gy / ln) * 0.5 + 0.5, (nz / ln) * 0.5 + 0.5, np.ones_like(gx)])
+    nim = bpy.data.images.new(NAME + "_normal", n, n, alpha=False)
+    nim.colorspace_settings.name = "Non-Color"
+    nim.pixels.foreach_set(nm.astype(np.float32).ravel())
+    nim.pack()
+    # roughness in green, metal (none) in blue, as glTF wants it
+    rm = np.dstack([np.zeros_like(rough), rough, np.zeros_like(rough), np.ones_like(rough)])
+    rim = bpy.data.images.new(NAME + "_rough", n, n, alpha=False)
+    rim.colorspace_settings.name = "Non-Color"
+    rim.pixels.foreach_set(rm.astype(np.float32).ravel())
+    rim.pack()
+    return im, nim, rim
 
 
 def paint_mask():
-    """The card mask: off-white card, a cheap printed smiley (two dots and a curve) a little off
-    register, a crease, a water stain, two staple holes where the elastic goes. Returns (colour,
-    glow): the glow is the card's phosphor; the ink does not glow, so the face reads in the dark."""
+    """The card mask: off-white card, a cheap print of our own face (two eyes that do not match, one
+    higher and smaller, and a wobbly smile far too wide, nearly edge to edge), a little off register,
+    creased, stained, staple holes. Returns (colour, glow): the bare card glows, the ink does not."""
     n = MASK_TEX
     rng = np.random.default_rng(77)
     yy, xx = np.mgrid[0:n, 0:n]
-    u = ((xx + 0.5) / n - 0.5) / 0.48           # -1..1 across the oval (as build_mask's uv())
-    v = ((yy + 0.5) / n - 0.5) / 0.48 * 1.06
+    u = ((xx + 0.5) / n - 0.5) / 0.48
+    v = ((yy + 0.5) / n - 0.5) / 0.48
     C = {k: np.array(c, np.float32) for k, c in COL.items()}
-    col = np.tile(C["card"], (n, n, 1)) * (1 + (rng.random((n, n, 1)) - 0.5) * 0.03)
-    # a faint yellowing toward the edge, and a water stain low on one side
-    edge = np.clip(np.hypot(u, v / 1.06) - 0.75, 0, 1)
-    col = col * (1 - 0.25 * edge[..., None]) + np.array((0.72, 0.62, 0.38)) * 0.25 * edge[..., None]
-    stain = np.hypot((u + 0.42) / 0.30, (v + 0.40) / 0.22)
-    ring = np.abs(stain - 1.0) < 0.06
-    col[stain < 1.0] = col[stain < 1.0] * 0.94 + np.array((0.70, 0.62, 0.45)) * 0.06
-    col[ring] = col[ring] * 0.85 + np.array((0.55, 0.45, 0.30)) * 0.15
-    # the print: two dots and a curve, slightly uneven, a little lopsided, offset by a pale misprint
+    col = np.tile(C["card"], (n, n, 1)) * (0.94 + 0.08 * noise2((n, n), 16, rng))[..., None]
+    edge = np.clip(np.hypot(u, v) - 0.70, 0, 1)
+    col = col * (1 - 0.45 * edge[..., None]) + np.array((0.62, 0.52, 0.32)) * 0.45 * edge[..., None]
+    for (cx, cy, rx, ry, k) in ((-0.45, -0.38, 0.30, 0.22, 0.10), (0.40, 0.55, 0.22, 0.16, 0.08), (0.10, -0.70, 0.35, 0.15, 0.12)):
+        st = np.hypot((u - cx) / rx, (v - cy) / ry)
+        col[st < 1.0] = col[st < 1.0] * (1 - k) + np.array((0.62, 0.52, 0.34)) * k
+        ring = np.abs(st - 1.0) < 0.07
+        col[ring] = col[ring] * 0.82 + np.array((0.50, 0.40, 0.26)) * 0.18
     ink = np.zeros((n, n), np.float32)
-    for (cx, cy, r) in ((-0.36, 0.26, 0.105), (0.34, 0.28, 0.092)):
-        d = np.hypot((u - cx) / r, (v - cy) / (r * 1.12))
-        ink = np.maximum(ink, np.clip((1.0 - d) * 6, 0, 1))
-    # the curve: an arc from left to right, thin, a little higher on the right
-    tx = u / 0.60
-    cy = -0.20 - 0.26 * (1 - tx * tx) + 0.05 * tx
-    width = 0.030 * (1.0 - 0.25 * np.abs(tx)) + 0.004 * np.sin(u * 40)
-    curve = (np.abs(v - cy) < width) & (np.abs(tx) <= 1.0)
-    endcap = np.minimum(np.hypot(u + 0.60, v - (-0.20 - 0.05)), np.hypot(u - 0.60, v - (-0.20 + 0.05))) < 0.032
-    ink = np.maximum(ink, (curve | endcap).astype(np.float32))
-    mis = np.roll(np.roll(ink, 3, axis=1), -2, axis=0)            # the misregistered second pass
-    col = col * (1 - 0.18 * mis[..., None]) + np.array((0.86, 0.55, 0.50)) * 0.18 * mis[..., None]
+    for (cx, cy, r, sq) in ((-0.36, 0.34, 0.075, 1.15), (0.32, 0.20, 0.120, 0.92)):
+        d = np.hypot((u - cx) / r, (v - cy) / (r * sq))
+        ink = np.maximum(ink, np.clip((1.0 - d) * 8, 0, 1))
+    tx = u / 0.86
+    cy = -0.16 - 0.30 * (1 - tx * tx) + 0.045 * np.sin(tx * 7.0 + 0.4) + 0.05 * tx + 0.10 * np.clip(np.abs(tx) - 0.8, 0, 1) * 5
+    width = 0.020 + 0.008 * np.sin(u * 23) + 0.006 * np.sin(u * 9 + 1)
+    smile = (np.abs(v - cy) < width) & (np.abs(tx) <= 1.0)
+    ink = np.maximum(ink, smile.astype(np.float32))
+    mis = np.roll(np.roll(ink, 3, axis=1), -2, axis=0)
+    col = col * (1 - 0.18 * mis[..., None]) + np.array((0.80, 0.50, 0.46)) * 0.18 * mis[..., None]
     col = col * (1 - ink[..., None]) + C["ink"] * ink[..., None]
-    # the ink is worn through in places
-    worn = (rng.random((n, n)) < 0.04) & (ink > 0.5)
+    worn = (rng.random((n, n)) < 0.015) & (ink > 0.5)
     col[worn] = col[worn] * 0.4 + C["card"] * 0.6
-    # a crease across the card
-    crease = np.abs(v - (0.55 * u + 0.05)) < 0.010
-    col[crease] *= 0.82
-    # staple holes at the sides where the elastic is fixed
+    crease = (np.abs(v - (0.55 * u + 0.05)) < 0.010) | (np.abs(u + 0.62 * v - 0.30) < 0.008)
+    col[crease] *= 0.80
     for sx in (-0.94, 0.94):
-        h = np.hypot(u - sx, v - 0.05) < 0.035
-        col[h] = np.array((0.30, 0.30, 0.32))
-    # glow: the card's phosphor everywhere the card is bare, a little uneven, none under the ink
-    glow = np.tile(C["glow"], (n, n, 1)) * (0.80 + 0.20 * (1 - edge))[..., None]
-    glow *= (0.92 + 0.08 * rng.random((n, n, 1)))
+        col[np.hypot(u - sx, v - 0.05) < 0.035] = np.array((0.30, 0.30, 0.32))
+    glow = np.tile(C["glow"], (n, n, 1)) * (0.70 + 0.30 * (1 - edge))[..., None]
+    glow *= (0.85 + 0.15 * noise2((n, n), 16, rng))[..., None]
     glow = glow * (1 - np.clip(ink * 1.2, 0, 1))[..., None]
-    glow[crease] *= 0.7
+    glow[crease] *= 0.6
     imgs = []
     for name, arr in (("_mask", col), ("_mask_glow", glow)):
         a = np.dstack([np.clip(arr, 0, 1), np.ones((n, n, 1), np.float32)])
@@ -1129,7 +1215,10 @@ def paint_mask():
     return imgs
 
 
-def make_body_material(image):
+def make_body_material(images):
+    """Matte: roughness from the map (skin 0.86, the wet mouth 0.2), low specular, a skin-grain normal
+    map, and (for Blender's renders only) a little dull red under the skin."""
+    image, normal, rough = images
     mat = bpy.data.materials.new(NAME + "_body")
     nt = mat.node_tree
     bsdf = next(nd for nd in nt.nodes if nd.type == "BSDF_PRINCIPLED")
@@ -1137,10 +1226,27 @@ def make_body_material(image):
     tex.image = image
     tex.interpolation = "Closest"
     nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
-    bsdf.inputs["Roughness"].default_value = 0.42     # old wet rubber: a dull sheen
+    rt = nt.nodes.new("ShaderNodeTexImage")
+    rt.image = rough
+    rt.interpolation = "Closest"
+    sep = nt.nodes.new("ShaderNodeSeparateColor")
+    nt.links.new(rt.outputs["Color"], sep.inputs["Color"])
+    nt.links.new(sep.outputs["Green"], bsdf.inputs["Roughness"])
+    nt.links.new(sep.outputs["Blue"], bsdf.inputs["Metallic"])
+    nmt = nt.nodes.new("ShaderNodeTexImage")
+    nmt.image = normal
+    nmt.interpolation = "Linear"
+    nmap = nt.nodes.new("ShaderNodeNormalMap")
+    nmap.inputs["Strength"].default_value = 0.8
+    nt.links.new(nmt.outputs["Color"], nmap.inputs["Color"])
+    nt.links.new(nmap.outputs["Normal"], bsdf.inputs["Normal"])
     if "Specular IOR Level" in bsdf.inputs:
-        bsdf.inputs["Specular IOR Level"].default_value = 0.45
-    mat.use_backface_culling = False                  # tabard strips and the badge are single sheets
+        bsdf.inputs["Specular IOR Level"].default_value = 0.22
+    if "Subsurface Weight" in bsdf.inputs:
+        bsdf.inputs["Subsurface Weight"].default_value = 0.06
+        bsdf.inputs["Subsurface Radius"].default_value = (1.0, 0.25, 0.15)
+        bsdf.inputs["Subsurface Scale"].default_value = 0.01
+    mat.use_backface_culling = False
     return mat
 
 
@@ -1162,6 +1268,85 @@ def make_mask_material(col_im, glow_im):
     return mat
 
 
+ASYM = dict(drop_r=0.065, stretch_l=0.10)
+
+
+R_ARM = ("upperarm.R", "forearm.R", "hand.R", "index1.R", "index2.R", "middle1.R", "middle2.R", "ring1.R",
+         "ring2.R", "thumb.R")
+
+
+L_ARM = tuple(b.replace(".R", ".L") for b in R_ARM)
+
+
+def wobble(n):
+    """A small, fixed irregularity for vertex n: -1..1."""
+    return 2.0 * hash01(n * 0.6180339 + 11.0) - 1.0
+
+
+def asym_amounts(w):
+    """How much a point carried by these weights is moved by ASYM: (drop, stretch) fractions."""
+    tot = sum(w.values()) or 1.0
+    drop = (sum(w.get(b, 0.0) for b in R_ARM) + 0.8 * w.get("clavicle.R", 0.0)) / tot
+    stretch = sum(w.get(b, 0.0) for b in L_ARM) / tot
+    return drop, stretch
+
+
+def asym_point(p, drop, stretch):
+    p = Vector(p)
+    p.z -= ASYM["drop_r"] * drop
+    shz = ARM["shoulder"][2]
+    if stretch and p.z < shz:
+        p.z = shz + (p.z - shz) * (1.0 + ASYM["stretch_l"] * stretch)
+    return p
+
+
+def apply_asym_mesh(mb):
+    for i, w in enumerate(mb.w):
+        d, s = asym_amounts(w)
+        if d or s:
+            mb.co[i] = asym_point(mb.co[i], d, s)
+
+
+def apply_asym_bones(b):
+    out = {}
+    for name, (h, t, parent) in b.items():
+        if name in R_ARM:
+            h, t = asym_point(h, 1, 0), asym_point(t, 1, 0)
+        elif name == "clavicle.R":
+            t = asym_point(t, 1, 0)
+        elif name in L_ARM:
+            h, t = asym_point(h, 0, 1), asym_point(t, 0, 1)
+        out[name] = (tuple(h), tuple(t), parent)
+    return out
+
+
+def noise2(shape, cell, rng, octaves=3):
+    """Smooth value noise in 0..1 (bilinear upsampling of random grids, several octaves)."""
+    h, w = shape
+    out = np.zeros((h, w), np.float32)
+    amp, tot = 1.0, 0.0
+    for o in range(octaves):
+        c = max(1, cell >> o)
+        gh, gw = h // c + 2, w // c + 2
+        g = rng.random((gh, gw)).astype(np.float32)
+        ys = np.arange(h) / c
+        xs = np.arange(w) / c
+        y0 = ys.astype(int)
+        x0 = xs.astype(int)
+        fy = (ys - y0)[:, None]
+        fx = (xs - x0)[None, :]
+        fy = fy * fy * (3 - 2 * fy)
+        fx = fx * fx * (3 - 2 * fx)
+        a = g[y0][:, x0]
+        b = g[y0][:, x0 + 1]
+        cc = g[y0 + 1][:, x0]
+        d = g[y0 + 1][:, x0 + 1]
+        out += amp * ((a * (1 - fx) + b * fx) * (1 - fy) + (cc * (1 - fx) + d * fx) * fy)
+        tot += amp
+        amp *= 0.5
+    return out / tot
+
+
 # ============================ ASSEMBLY ============================
 def collect_mesh():
     mb = MeshBuilder()
@@ -1178,6 +1363,7 @@ def collect_mesh():
         build_leg(mb, side, sfx)
     build_tabard(mb)
     build_lanyard(mb)
+    apply_asym_mesh(mb)
     return mb
 
 
@@ -1416,13 +1602,14 @@ def cloth(fl=0.0, fr=0.0, bl=0.0, br=0.0, side=0.0, lan=0.0, lan_side=0.0, back_
 
 # ---------------- upright ----------------
 def upright(stoop=1.0, drop=0.075, back=0.04, twist=0.0, sway=0.0, head_pitch=10.0, head_turn=0.0, head_tilt=0.0,
-            breath=0.0, jaw=0.0):
+            breath=0.0, jaw=0.0, crane=14.0, lean=7.0):
     """Upright, slow and stooped: knees soft, the long back folded over at the top, the head carried
     out in front and level, the shoulders drawn up."""
     return {
         "hips": [("t", (0, back, -drop)), ("x", 5 * stoop), ("y", sway), ("z", twist)],
         "spine": [("x", 3 * stoop - breath * 0.3)], "spine1": [("x", 11 * stoop - breath * 0.6), ("z", -twist * 0.5)],
-        "spine2": [("x", 20 * stoop - breath)], "neck": [("x", 14 * stoop)], "neck1": [("x", -12 * stoop)],
+        "spine2": [("x", 20 * stoop - breath)], "neck": [("x", 14 * stoop + crane), ("y", -lean)],
+        "neck1": [("x", -12 * stoop - crane * 0.4), ("y", -lean * 0.6)],
         "head": [("level",), ("x", head_pitch), ("z", head_turn), ("y", head_tilt)],
         "jaw": [("x", jaw)],
         "clavicle.L": [("y", -10 - breath * 0.8), ("z", -7)], "clavicle.R": [("y", 13 + breath * 0.8), ("z", 7)],
@@ -1456,7 +1643,7 @@ def feet(ball_l, ball_r, steep_l=FOOT_AIM_UP, steep_r=FOOT_AIM_UP, toe_l=-0.05, 
 
 
 def stand_pose(breath=0.0, head_turn=0.0, head_tilt=0.0, jaw=0.0, fing=0.0, lan=0.0):
-    body = upright(breath=breath, head_turn=head_turn, head_tilt=-11 + head_tilt, jaw=jaw)   # the head hangs to one side
+    body = upright(breath=breath, head_turn=head_turn, head_tilt=-17 + head_tilt, jaw=jaw)   # the head hangs to one side
     fs, ik = feet((0.125, -0.050, 0.026), (-0.118, 0.010, 0.026), splay=0.18)
     arms = hanging_arms(curl_r=34 + fing)
     return RIG.solve(merge(body, fs, arms, cloth(fl=2 + breath, fr=-1, bl=1, br=0, lan=lan)), ik, "stand")
@@ -1752,7 +1939,7 @@ def catch_keys():
         body = quad_body(pitch=pitch, hip_h=hip_h, back=lerp(0.36, 0.20, rise) * (1 - grab) + 0.24 * grab,
                          neck=lerp(4, -14, rise) * (1 - grab) + (14 + 3 * breathe) * grab,
                          head_pitch=lerp(12, -10, rise) * (1 - grab) + (30 + 6 * twitch) * grab,
-                         head_tilt=10 * twitch, jaw=4 + 10 * rise + (26 + 3 * breathe) * grab, arch=-6 * rise + 4 * grab * breathe)
+                         head_tilt=10 * twitch, jaw=2 + 6 * rise + (14 + 3 * breathe) * grab, arch=-6 * rise + 4 * grab * breathe)
         D, H = RIG.solve(body)
         spec, ik = {}, {}
         for k, (side, sfx) in enumerate(((1, ".L"), (-1, ".R"))):
@@ -1804,7 +1991,7 @@ def cover_pose(t):
     r = D["head"] @ right
     spec = {}
     for side, sfx in ((1, ".L"), (-1, ".R")):
-        wrist = M + f * 0.030 - u * 0.150 + r * (side * 0.060)
+        wrist = M + f * 0.035 - u * 0.190 + r * (side * 0.075)
         ik["upperarm" + sfx] = (wrist, (side * 0.9, 0.2, -0.8))
         fingers = (u * 0.95 - r * side * 0.32).normalized()
         rest_d = (Vector(mirror_pt(ARM["knuckle"], side)) - Vector(mirror_pt(ARM["wrist"], side))).normalized()
@@ -1857,7 +2044,8 @@ def main():
     mb = collect_mesh()
     bt = bone_table()
     arm = build_armature(bt)
-    atlas = make_atlas()
+    atlas_imgs = make_atlas()
+    atlas = atlas_imgs[0]
     mask_col, mask_glow = paint_mask()
     if args.atlas:
         for im, suffix in ((atlas, ""), (mask_col, "_mask"), (mask_glow, "_mask_glow")):
@@ -1866,7 +2054,7 @@ def main():
             cp.filepath_raw = base + suffix + ext
             cp.file_format = "PNG"
             cp.save()
-    mats = [make_body_material(atlas), make_mask_material(mask_col, mask_glow)]
+    mats = [make_body_material(atlas_imgs), make_mask_material(mask_col, mask_glow)]
     ob = build_mesh(mb, arm, bt, mats)
     RIG = Rig(arm, bt)
 

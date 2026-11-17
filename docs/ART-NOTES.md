@@ -475,15 +475,16 @@ Rigging bodies that are not human by building the rig from Rigify's separate par
 
 ### How the Minder is built
 
-`assets_src/blender/minder/build_minder.py` makes everything from an empty scene: 5,601 triangles,
-43 bones, a 512 px body atlas painted in numpy and a 256 px mask with its own glow map, ten actions.
+`assets_src/blender/minder/build_minder.py` makes everything from an empty scene: 6,291 triangles,
+43 bones, a 512 px body atlas (colour, normal and roughness) painted in numpy and a 256 px mask with its own glow
+map, ten actions.
 `render_minder.py` re-imports the glb and renders the turnaround, the poses and the dark picture.
 
 - **The skull** is a loft of eleven cross-sections from the back of the head to the end of the snout:
   flat on top with a crest, narrowing to a keel underneath, with shallow sealed hollows where eyes
   would be. They are shaped, not painted: a dark patch there reads as sunglasses (the Orderly's lesson).
 - **The jaw** is its own loft, hinged under the back of the skull and built already hanging open
-  (13 degrees). Its teeth are small three-sided cones, some missing, all on the front half, so the
+  (38 degrees since round one). Its teeth are three-sided hooks, some missing, all on the front half, so the
   mouth shows under the mask's lower edge and never as a grin across the face.
 - **The mask** is two sheets: a printed front with its own material (base colour plus an emission
   map, so the bare card glows and the ink does not) and a plain card back 2 mm behind it on the body
@@ -517,3 +518,48 @@ Rules learned:
 28. **A glow belongs to the bare surface, not the print.** Give the mask an emission map with the ink
     cut out, keep the emission low (0.35) so the card still reads as card in light, and in the dark
     the face is drawn by what does not glow.
+
+### Round one of blind judging on the Minder, and what changed
+
+Three judges saw only the renders: 6, 4 and 4 out of 10 lit, about 7 in the dark. Kept, because all
+three named them: the glowing face floating in the dark at the wrong height, the flat mask on the end
+of a long snout with the real jaw hanging open under it, the drop to all fours, the hands-over-the-face
+crouch, the ID badge. What they caught, and the fix:
+
+- **Glossy plastic, a mannequin.** The material is matte now: a roughness map (skin 0.86, the wet
+  mouth 0.2, teeth 0.35), low specular, and a normal map of skin grain and wrinkles. The skin is
+  mottled (low-frequency blotches of bruise and of pale, fine grain), pale grey-yellow only on small
+  bone points, bruised purple-brown in the rib gaps, behind the knees and on the hands and feet.
+- **Tube limbs with seam rings and ball joints.** Each segment now tapers from its upper end to about
+  0.6 of that at its lower end, and the bones show at the ends on one side only (the point of the
+  elbow, the knob of the wrist, the kneecap, the ankle bones), never as a ring all round. Every vertex
+  of a limb is pushed in or out a little, so the outline is not a straight cylinder.
+- **A bean-shaped pelvis.** The hip crests stand out at the sides and run forward to two points, the
+  pubic bone is a ridge low at the front, the lower belly is sunk in and the sacrum is flat.
+- **Symmetrical.** The right shoulder and arm hang 6.5 cm lower and the left arm is 10% longer. This
+  is done once, after the mesh and bones are built, by moving each vertex by its own arm weights, so
+  every pose and the two-bone solver inherit it.
+- **Wire hands, toy feet.** Fingers are a third thicker with small dark claws; the feet are longer
+  and the toes thicker, each with a thick claw.
+- **Party bunting.** The vinyl is faded to maroon, mustard-brown and slate, dirty toward the hem; a
+  third of the strips are gone, the rest differ in width and length by up to 40% and end in three
+  ragged points; the panels sit darker than the strips. The badge is grimy and hangs crooked.
+- **A friendly cartoon from the front, and a well-known mask.** A pale disc with two dots and a neat
+  curve is too close to a mask a well-known video maker wears. Ours now has two eyes that do not match
+  (one higher and smaller) and a wobbly smile far too wide, nearly edge to edge. The mask is 1.3 times
+  bigger, a little taller than wide, shaped like a paper plate (a gently curved middle, a rim that
+  curls back and is fluted), crumpled, stained, torn in two places, and bent forward at one corner.
+- **A hairdryer head.** The cranium is a quarter smaller, with a heavy brow, a cheek ridge along each
+  side and sunken temples. The jaw hangs open 38 degrees at rest, the teeth are three to four times
+  longer, crooked and off-white going yellow, still only on the front half, and the corners of the
+  mouth are dark wet skin stretched from the snout to the jaw. Standing, the neck cranes forward and
+  the head hangs over to one side.
+
+Rules learned:
+
+29. **Matte first, then colour.** A plastic sheen turns any creature into a figurine; skin wants a
+    roughness map and a grain in the normals before anything is painted.
+30. **Colour by small patches, never by rings.** A region given to a whole ring of a limb reads as a
+    sock, a cuff or a joint of a doll. Pale or bruised colour goes on a few faces facing one way.
+31. **Check a simple face against well-known ones.** Two dots and a curve on a pale disc is someone
+    else's mask. Make the eyes disagree and the smile wrong.
