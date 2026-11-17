@@ -1635,6 +1635,209 @@
       "default": [
         "home"
       ]
+    },
+    {
+      "id": "settings-who",
+      "title": "Who may change the live settings?",
+      "context": "The host panel (F8) changes monster speeds, lift times, the down timer and more, mid-game.",
+      "type": "single",
+      "options": [
+        {
+          "id": "first",
+          "label": "The host: the first player in the room, who can hand the key on",
+          "note": "Recommended."
+        },
+        {
+          "id": "passphrase",
+          "label": "Only someone who types a second host passphrase kept on the lab box",
+          "note": ""
+        },
+        {
+          "id": "anyone",
+          "label": "Anyone",
+          "note": ""
+        }
+      ],
+      "default": [
+        "first"
+      ]
+    },
+    {
+      "id": "settings-last",
+      "title": "Do setting changes last?",
+      "context": "Changes are saved to a file on the server.",
+      "type": "single",
+      "options": [
+        {
+          "id": "saved",
+          "label": "Saved and still in force next time until reset; the panel always shows how many are changed",
+          "note": "Recommended."
+        },
+        {
+          "id": "night",
+          "label": "The night only",
+          "note": ""
+        },
+        {
+          "id": "run",
+          "label": "One run only",
+          "note": ""
+        }
+      ],
+      "default": [
+        "saved"
+      ]
+    },
+    {
+      "id": "settings-others",
+      "title": "What do the other players see when the host changes something?",
+      "context": "So nobody thinks the game is cheating.",
+      "type": "single",
+      "options": [
+        {
+          "id": "line-panel",
+          "label": "A line per change (JON SET ORDERLY SPEED 3.80 > 3.60 M/S) and a read-only panel",
+          "note": "Recommended."
+        },
+        {
+          "id": "line",
+          "label": "The line only",
+          "note": ""
+        },
+        {
+          "id": "nothing",
+          "label": "Nothing",
+          "note": ""
+        }
+      ],
+      "default": [
+        "line-panel"
+      ]
+    },
+    {
+      "id": "settings-hub",
+      "title": "Settings on the hub page for Friday?",
+      "context": "The hub runs on this PC; the game server runs on the lab box.",
+      "type": "single",
+      "options": [
+        {
+          "id": "no",
+          "label": "No: in game only, the file can be edited by hand, a read-only hub table afterwards",
+          "note": "Recommended."
+        },
+        {
+          "id": "readonly",
+          "label": "A read-only hub table for Friday",
+          "note": ""
+        },
+        {
+          "id": "full",
+          "label": "A full hub panel (will not be ready for Friday)",
+          "note": ""
+        }
+      ],
+      "default": [
+        "no"
+      ]
+    },
+    {
+      "id": "settings-player-speed",
+      "title": "Should players own walking and sprint speeds be live settings?",
+      "context": "Players predict their own movement, so changing these mid-floor is the risky part.",
+      "type": "single",
+      "options": [
+        {
+          "id": "last",
+          "label": "Built last, taking effect at the next ride; may miss Friday",
+          "note": "Recommended."
+        },
+        {
+          "id": "out",
+          "label": "Leave them out",
+          "note": ""
+        },
+        {
+          "id": "live",
+          "label": "Live mid-floor, with a second of rubber-banding",
+          "note": ""
+        }
+      ],
+      "default": [
+        "last"
+      ]
+    },
+    {
+      "id": "hints-record",
+      "title": "How many announcer hints should be recorded?",
+      "context": "38 snide hints, each with two takes (A and B), e.g. \"Do not delay in boarding. Miss the car, and we keep your credits.\" Voice budget: about 27,000 characters left of 50,000.",
+      "type": "single",
+      "options": [
+        {
+          "id": "ab-both",
+          "label": "A and B, both voices, one take each: about 11,200 characters",
+          "note": "Recommended."
+        },
+        {
+          "id": "a-both",
+          "label": "A only, both voices: about 5,700",
+          "note": ""
+        },
+        {
+          "id": "ab-bella",
+          "label": "A and B, Bella only: about 5,600",
+          "note": ""
+        }
+      ],
+      "default": [
+        "ab-both"
+      ]
+    },
+    {
+      "id": "hints-needle",
+      "title": "Keep the hint \"The needle is quiet because you are safe. We do not pay for safe.\"?",
+      "context": "Plays once a night, only after two minutes on a floor with nothing recorded. It names no monster rule, but it is the closest hint to one.",
+      "type": "single",
+      "options": [
+        {
+          "id": "keep",
+          "label": "Keep it",
+          "note": "Recommended."
+        },
+        {
+          "id": "cut",
+          "label": "Cut it",
+          "note": ""
+        }
+      ],
+      "default": [
+        "keep"
+      ]
+    },
+    {
+      "id": "hints-retire",
+      "title": "Do the first-timer hints stop after a while?",
+      "context": "Hints teach the game the first time something happens.",
+      "type": "single",
+      "options": [
+        {
+          "id": "retire",
+          "label": "Yes: after a player has heard one on two nights it stops for them; Esc settings get HINTS ON/OFF",
+          "note": "Recommended."
+        },
+        {
+          "id": "fresh",
+          "label": "Every night starts fresh",
+          "note": ""
+        },
+        {
+          "id": "host",
+          "label": "No retiring, but the host panel can turn all hints off",
+          "note": ""
+        }
+      ],
+      "default": [
+        "retire"
+      ]
     }
   ]
 }

@@ -4,8 +4,8 @@
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
   "iteration": 67,
-  "now": "TB",
-  "nowText": "The sound builder is back on the mix fix after the pause",
+  "now": "T23",
+  "nowText": "An Opus builder is recording the 38 hints in both voices and wiring the ones whose moments exist in the game today",
   "ci": {
     "status": "passed",
     "commit": "cb7c7a0",
@@ -2208,8 +2208,47 @@
         "B11"
       ],
       "startedAt": "2026-11-17T17:24:07.172Z",
-      "doingText": "The Opus builder is back on the Temp's Lonely rule after the pause",
-      "doingAt": "2026-11-17T19:54:05.226Z"
+      "doingText": "Built: the Temp now hunts whoever is alone (nobody within 8 m and nobody in sight within 20 m), chases at 3.9 m/s, breaks off the moment you have company and slips away to someone else, leaving a 'Gone to see' note. A Sonnet agent is re-running the checks",
+      "doingAt": "2026-11-17T20:49:16.078Z"
+    },
+    {
+      "id": "T22",
+      "title": "Live settings for the host",
+      "why": "On game night the host can slow a monster that's too fast, lengthen the lift's return or the time you have down, and much more, from an in-game panel, while everyone plays",
+      "status": "doing",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "new from the owner on 17 Nov; a testing and hosting tool, amendment recorded",
+      "startedAt": "2026-11-17T20:23:31.311Z",
+      "doingText": "Designed (59 settings in six groups, F8 opens the host panel). An Opus builder is making the settings list and wiring the first ten: each monster's speed, the lift's return, the down timer",
+      "doingAt": "2026-11-17T20:34:56.073Z"
+    },
+    {
+      "id": "T23",
+      "title": "The announcer's hints",
+      "why": "The lift's announcer teaches the game with snide, creepy hints: board on time or lose your pay, the quota, sneaking in the Playroom, instruments out",
+      "status": "doing",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "new from the owner on 17 Nov; announcer lines (H5 voice), amendment recorded",
+      "startedAt": "2026-11-17T20:34:56.176Z",
+      "doingText": "An Opus builder is recording the 38 hints in both voices and wiring the ones whose moments exist in the game today",
+      "doingAt": "2026-11-17T20:49:16.164Z"
+    },
+    {
+      "id": "T24",
+      "title": "The story: the tape, the nightly tapes and the clues",
+      "why": "A blue-and-yellow VCR orientation tape on joining, a new tape each night in the prison, and clues on every floor that the monsters were once crews like yours",
+      "status": "doing",
+      "gates": [],
+      "ns": [
+        "H1",
+        "H2",
+        "H5"
+      ],
+      "startedAt": "2026-11-17T20:47:49.167Z",
+      "doingText": "Fable is writing the story bible, the orientation tape script and storyboard, the nightly tapes, the notes and the clues",
+      "doingAt": "2026-11-17T20:47:49.168Z"
     },
     {
       "id": "T19d",
@@ -2240,15 +2279,14 @@
       "id": "T20a",
       "title": "The Orderly stays visible in the dark",
       "why": "When the lights go out you should still glimpse it moving, not have it vanish",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "B11",
         "B4"
       ],
       "startedAt": "2026-11-17T15:08:32.563Z",
-      "doingText": "Built; a Sonnet agent is re-running its checks (restarted after the pause)",
-      "doingAt": "2026-11-17T19:54:04.705Z"
+      "waiting": "Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build"
     },
     {
       "id": "T20b",
@@ -2339,42 +2377,42 @@
       "id": "T20c",
       "title": "Longer blackouts before the car comes",
       "why": "Once the lights start dimming, the dark should hold longer while you wait for the lift",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "B4"
       ],
       "startedAt": "2026-11-17T16:12:27.188Z",
-      "doingText": "Built; a Sonnet agent is re-running its checks (restarted after the pause)",
-      "doingAt": "2026-11-17T19:54:04.846Z"
+      "waiting": "Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build"
     },
     {
       "id": "T20h",
       "title": "A bit more stamina, monsters paced to match",
       "why": "You can run a little longer, and the monsters are retuned so they stay just as dangerous",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "B1"
       ],
       "startedAt": "2026-11-17T16:12:27.413Z",
-      "doingText": "Built; a Sonnet agent is re-running its checks (restarted after the pause)",
-      "doingAt": "2026-11-17T19:54:04.985Z"
+      "waiting": "Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build"
     },
     {
       "id": "T15m",
       "title": "Playroom tuning from your play",
       "why": "A warning line on arrival to sneak, more time to hide, the ball pit lowers your view so you can watch it search, an anger bar, and a reminder to get your instrument out",
-      "status": "todo",
+      "status": "doing",
       "gates": [],
       "ns": [
         "A11"
       ],
-      "waiting": "Your notes recorded: warning line on arrival, a longer count (today 30-45 s), ball pit lowers your view instead of covering it, an anger bar, an 'instruments out' reminder. Waits for a free builder",
       "todo": [
         "Hide time is 6 s today (the 30-45 s is the seeking). Make it 30-45 s to hide, counted aloud",
         "Your Minder answer: it just wanders; within 1 m it grabs you and drags you to the party table; once angered it hunts actively, and the intercom says not to run while it hunts; relocation is on for it"
-      ]
+      ],
+      "startedAt": "2026-11-17T20:34:56.369Z",
+      "doingText": "An Opus builder is giving you 30-45 s to hide, a ball pit you can see out of, an anger bar, and a Minder that wanders and only grabs you within a metre until it's angry",
+      "doingAt": "2026-11-17T20:34:56.370Z"
     },
     {
       "id": "T20d",
@@ -2403,16 +2441,16 @@
       "id": "T20f",
       "title": "Controls card and a ready-up screen",
       "why": "Everyone reads the controls and readies up, then drops into the lift together; the lift waits and never pushes anyone out",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [],
       "nsWhy": "new from the owner on 17 Nov; not in the North Star yet (amendment recorded)",
       "todo": [
-        "Your car answer: the car waits as long as anyone is aboard; a returning car waits 30 s before its doors close; anyone left out then dies and wakes in the prison without the credits they earned"
+        "Your car answer: the car waits as long as anyone is aboard; a returning car waits 30 s before its doors close; anyone left out then dies and wakes in the prison without the credits they earned",
+        "Your rule: holding the car open all game must never count. The only way off a floor is quota met, car gone, call, car comes back. Check it and test it"
       ],
       "startedAt": "2026-11-17T16:12:27.525Z",
-      "doingText": "Built; a Sonnet agent is re-running its checks (restarted after the pause)",
-      "doingAt": "2026-11-17T19:54:05.071Z"
+      "waiting": "Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build"
     },
     {
       "id": "T20g",
@@ -3008,9 +3046,93 @@
     {
       "at": "2026-11-17T15:40:18.321Z",
       "text": "Your answers applied: Lonely as designed (solo Annex: Lonely but slower than one player); eye marks shown; F for cabinets; relocation as designed and on for the Minder (wanders, grabs within 1 m, hunts once angered, voice says don't run); day quota counts everything earned; a wipe is the missed day; juice carton AND a nerve bar; a 4-slot inventory; quick noisy search; ready-up as recommended; the car waits while anyone is aboard, and a returning car waits 30 s, then anyone left out dies and wakes in the prison without their credits."
+    },
+    {
+      "at": "2026-11-17T20:33:26.160Z",
+      "text": "Live settings designed (docs/floors/live-settings.md): 59 settings in six groups, F8 opens the host panel. Five questions on the Questions page; building on the recommended defaults."
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-17T20:49:16.165Z",
+      "text": "Started T23: The announcer's hints. An Opus builder is recording the 38 hints in both voices and wiring the ones whose moments exist in the game today",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T20:49:16.079Z",
+      "text": "Started T19c: The Temp's own mechanic. Built: the Temp now hunts whoever is alone (nobody within 8 m and nobody in sight within 20 m), chases at 3.9 m/s, breaks off the moment you have company and slips away to someone else, leaving a 'Gone to see' note. A Sonnet agent is re-running the checks",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T20:47:49.168Z",
+      "text": "Started T24: The story: the tape, the nightly tapes and the clues. Fable is writing the story bible, the orientation tape script and storyboard, the nightly tapes, the notes and the clues",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T20:47:49.012Z",
+      "text": "Added task T24: The story: the tape, the nightly tapes and the clues.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T20:41:39.384Z",
+      "text": "Paused T23: waiting for Written: 38 snide hints with two takes each (e.g. 'Do not delay in boarding. Miss the car, and we keep your credits.'). Three questions on your Questions page. Recording and wiring wait for a free builder",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T20:40:00.818Z",
+      "text": "Paused T20f: waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T20:40:00.694Z",
+      "text": "Paused T20h: waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T20:40:00.605Z",
+      "text": "Paused T20c: waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T20:40:00.518Z",
+      "text": "Paused T20a: waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T20:34:56.370Z",
+      "text": "Started T15m: Playroom tuning from your play. An Opus builder is giving you 30-45 s to hide, a ball pit you can see out of, an anger bar, and a Minder that wanders and only grabs you within a metre until it's angry",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T20:34:56.177Z",
+      "text": "Started T23: The announcer's hints. Fable is writing the announcer's hints: snide, creepy lines that teach boarding, the quota, the BANK lock, sneaking in the Playroom, instruments out",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T20:34:56.074Z",
+      "text": "Started T22: Live settings for the host. Designed (59 settings in six groups, F8 opens the host panel). An Opus builder is making the settings list and wiring the first ten: each monster's speed, the lift's return, the down timer",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T20:33:45.347Z",
+      "text": "Added task T23: The announcer's hints.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T20:33:26.161Z",
+      "text": "Took a default: Live settings designed (docs/floors/live-settings.md): 59 settings in six groups, F8 opens the host panel. Five questions on the Questions page; building on the recommended defaults.",
+      "kind": "decision"
+    },
+    {
+      "at": "2026-11-17T20:23:31.312Z",
+      "text": "Started T22: Live settings for the host. Fable is designing the settings: which numbers, how they're grouped, how a change reaches every player safely mid-game",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T20:23:31.225Z",
+      "text": "Added task T22: Live settings for the host.",
+      "kind": "note"
+    },
     {
       "at": "2026-11-17T20:16:48.064Z",
       "text": "Paused T19b: waiting for Merged into main and pushed (225 quick tests; relocation never lands on any of 6,204 hiding spots over 80 floors; network 10/10; down check 24/24). Goes into your next build",
@@ -3930,86 +4052,6 @@
       "at": "2026-11-17T08:42:25.563Z",
       "text": "Added task T15k: The Blender Minder in the game.",
       "kind": "note"
-    },
-    {
-      "at": "2026-11-17T08:42:25.181Z",
-      "text": "The Minder's Blender model passed its separate check (rebuilds byte-identical from its script, all ten animations, the face only on the front, smaller than the Orderly; the dropped-animation break went red) and is merged.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T08:32:59.856Z",
-      "text": "Started T15g: The Minder, modelled, rigged and animated in Blender. A Sonnet agent is checking the final Minder model: rebuilds identically, every animation the rules need, face on the front only",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T08:32:59.681Z",
-      "text": "New pictures for T15g: The Minder, modelled, rigged and animated in Blender.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T08:31:22.145Z",
-      "text": "Started T18j: The day in the run: bank, ride up, sleep, day 2. An Opus builder is wiring the day: vote BANK, ride up to the prison, sleep, wake to day 2 (built on the floor order)",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T08:30:58.723Z",
-      "text": "Started T6f: A bigger elevator. Checked together with the floor order build (the 4 m car is on the same branch)",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T08:30:58.569Z",
-      "text": "Started T16e: The place deck: the third floor down is the Annex. A Sonnet agent is checking the floor order build: Clinic, Clinic, the Annex with the Temp, the Playroom, all the same for every player",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T08:23:37.781Z",
-      "text": "Started T15g: The Minder, modelled, rigged and animated in Blender. The modeller is making the final fixes from round 2's judges",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T08:23:37.622Z",
-      "text": "Minder judging round 2 done: 6, 5 and 5 in full light (up from 6, 4, 4), about 7-8 in the dark. Final fix pass under way: a dirty bone-white mask with cut-through eye holes that only glows in the dark, a real pelvis and sloped shoulders, needle teeth with a dark throat, and duller rags.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T08:22:43.505Z",
-      "text": "Minder judging round 2, Fable: 5/10 (7 in the dark or side-on, 3 front-on in full light). Wants: the mask's eyes cut through as holes so the dark head shows behind, a flatter wider smile, a bone-white mask that only glows in the dark, a real pelvis instead of a box, and a curved jaw with needle teeth and a dark throat.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T08:22:38.268Z",
-      "text": "Minder judging round 2, first Opus judge: 6/10 (7-8 in the dark, about 4 front-on in full light). Better: the cute smile over a fanged mouth, the crawl, the peekaboo pose. Still weakest: from the front the round mask on a thin neck reads as a lollipop, the stripes still read too bright, and the pelvis is blocky.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T08:22:02.539Z",
-      "text": "Started T15g: The Minder, modelled, rigged and animated in Blender. Blind judging, round 2 of the revised Minder",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T08:22:02.364Z",
-      "text": "New pictures for T15g: The Minder, modelled, rigged and animated in Blender.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T08:22:02.256Z",
-      "text": "New pictures for T15g: The Minder, modelled, rigged and animated in Blender.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T08:21:24.210Z",
-      "text": "The Temp's rules passed their separate check (still and silent while seen, one click per 1.2 m and every 4 s waiting; three deliberate breaks red; the Orderly's stored results unchanged) and are merged.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T08:21:24.117Z",
-      "text": "Paused T16f: waiting for checked and merged (800382e); it takes effect when the floor order puts the Temp in the Annex",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T08:17:13.589Z",
-      "text": "Started T7e: Better-looking crewmates and readable name tags. An Opus builder is making the crewmates look better: bodies, jumpsuits and readable name tags",
-      "kind": "start"
     }
   ]
 }
