@@ -1,12 +1,8 @@
-# The Minder on screen (docs/floors/playarea.md section 2, the body as rewritten on the owner's note):
-# the Playroom's resident, a stand-in made in code until the Blender figure (T15g) replaces it. Gaunt,
-# hairless and too long, about 2.3 m upright, in the dull grey-brown of old wet rubber, ribs and spine
-# showing; arms past its knees ending in long splayed fingers; legs that bend the wrong way when it
-# crouches. A long narrow eyeless head like a greyhound's skull, a slack jaw with small uneven teeth,
-# and strapped over the FRONT only a cheap card party mask printed with a smiley (two dots and a
-# curve) that glows faintly in the dark: the back of the head is bare, so you can always tell which
-# way it faces. Rags of a play attendant's tabard in faded red, yellow and blue, a staff lanyard with
-# a laminated badge, and a wind-up music box clipped to it. Our own figure: no other game's creature.
+# The Minder on screen (docs/floors/playarea.md section 2): the Playroom's resident, the Blender model
+# (assets/entities/minder.glb, built by assets_src/blender/minder/build_minder.py) with its ten clips.
+# Gaunt and too long, about 2.3 m upright, a card mask on the FRONT of its skull only that glows faintly
+# in the dark; it walks upright and drops to all fours to search and run, and crouches with both hands
+# over the mask while it counts.
 #
 #   show_pose(pose, show)   pose {x, y, z, level, yaw, anim, animTime} or null; show: may it be drawn
 #   follow(link)            the PlayLink whose network client it reads the un-held pose from
@@ -20,9 +16,18 @@
 # resident's pose straight from the two snapshots being drawn at the frame's render time (the same
 # interpolation the client uses, without the hold), so it keeps moving while you watch it.
 #
-# The pose name picks the body: upright and stooped (stand, walk, straighten, slump; the interim
-# rules' idle, walk, duck), on all fours (prowl, run, sweep, look, catch; the interim reach), or
-# crouched to the wall with both hands over the mask (cover). Walking runs on the distance walked.
+# The pose name picks the clip (CLIPS: every pose the rules set, and the interim rules' names). Like
+# client/orderly_view.gd the model is loaded once and posed every frame, but the clips are sampled here
+# and written to the skeleton, so that:
+#  - the gaits (walk, prowl, run) run on the distance walked over the clip's own ground speed (GAIT_SPEED),
+#    so the feet do not slide at any speed;
+#  - every clip is timed from the moment its pose began (sim/seek.gd does not reset anim_time when the
+#    pose changes), so a one-shot (straighten, look, slump, catch) plays from its start and ends held;
+#  - a new pose fades in over BLEND seconds from the last one.
+# The materials are the model's own maps (colour, normal, roughness; the mask's print and glow map; alpha
+# cut-outs for the eye holes and rags) on the Playroom's light: client/minder_skin.gdshader and
+# client/minder_mask.gdshader. In count dark the mask's glow goes up to MASK_DARK_E, and from far off the
+# light it sheds (client/minder_halo.gdshader) keeps the face reading alone in the dark at 10 m.
 #
 # The music box: two or three notes of the floor's tune for every 1.5 m it walks (one per NOTE_STEP),
 # so slower when it walks slowly. Its own player, heard to 30 m, quieter and duller through walls, on
@@ -35,6 +40,7 @@ const Sight = preload("res://sim/sight.gd")
 const Move = preload("res://sim/move.gd")
 const Pose = preload("res://net/pose.gd")
 
+const MODEL := "res://assets/entities/minder.glb"
 ## Not a Stillness resident: the pose hold is off (see the header).
 const STILLNESS := false
 const NOTE_STEP := 0.5          # metres walked per note: three per 1.5 m
@@ -42,33 +48,44 @@ const HEAR_RANGE := 30.0
 const MUFFLED_GAIN := 0.45
 const NOTE_DB := -2.0
 const BOX_HEIGHT := 1.55        # where the music box hangs, standing
-const CYCLE_UP := 1.7           # metres per walk cycle upright
-const CYCLE_FOURS := 2.2        # metres per gait cycle on all fours
-const HIP_Y := 1.2
 ## The floor's tune, our own: semitones above the box's note, one per note played, round and round.
 const TUNE: Array[int] = [7, 4, 0, 4, 7, 7, 9, 7, 4, 2, 4, 0, 2, 4, 2, -1, 0]
 const BASE_HZ := 1046.5
 
-## sRGB, as vertex colours.
-const SKIN := Color(0.56, 0.5, 0.45)
-const SKIN_DARK := Color(0.42, 0.37, 0.34)
-const MOUTH := Color(0.12, 0.08, 0.08)
-const TOOTH := Color(0.86, 0.82, 0.7)
-const RAG_RED := Color(0.72, 0.4, 0.36)
-const RAG_YELLOW := Color(0.84, 0.74, 0.44)
-const RAG_BLUE := Color(0.42, 0.54, 0.68)
-const LANYARD := Color(0.24, 0.42, 0.72)
-const CARD := Color(0.95, 0.95, 0.9)
-const BOX := Color(0.92, 0.6, 0.68)
-const BRASS := Color(0.85, 0.7, 0.32)
-const STRAP := Color(0.08, 0.08, 0.08)
+## Every pose name the rules can set (sim/seek.gd, MinderState.anim) and the interim rules' names
+## (idle, walk, duck, reach), and the clip in the model that draws it.
+const CLIPS := {
+	"stand": "stand", "walk": "walk", "straighten": "straighten", "cover": "cover", "prowl": "prowl",
+	"sweep": "sweep", "look": "look", "slump": "slump", "run": "run", "catch": "catch",
+	"idle": "stand", "duck": "walk", "reach": "catch",
+}
+## The rules' poses (sim/seek.gd's documented list).
+const RULE_POSES: Array[String] = ["stand", "walk", "straighten", "cover", "prowl", "sweep", "look", "slump", "run", "catch"]
+## The gaits' own ground speed in the model, m/s: these clips run on the distance walked.
+const GAIT_SPEED := {"walk": 1.0, "prowl": 2.1, "run": 5.2}
+## Seconds a new pose takes to fade in from the last.
+const BLEND := 0.2
+
 ## The body's own light: a figure under strip lights, a little darker than the walls.
 const BODY_LIGHT := 0.75
-## The mask under the lights, and glowing faintly in count dark.
-const MASK_LIT := Color(1.0, 0.99, 0.94)
-const MASK_DARK := Color(0.62, 0.86, 0.6)
-const MASK_LIT_E := 0.95
-const MASK_DARK_E := 0.55
+## The mask's glow (its glow map times this colour and energy): as the model has it under the strip
+## lights (the energy is read from the model, 0.26 when built), and raised in count dark so the bare card
+## glows green-white with the ink and the eye holes dark (above about 2 the card blows out white and
+## the face is lost).
+const MASK_LIT := Color(1.0, 1.0, 1.0)
+const MASK_DARK := Color(1.0, 1.0, 1.0)
+const MASK_LIT_E := 0.26
+const MASK_DARK_E := 1.0
+## The light the mask sheds in the dark, seen from far off (client/minder_halo.gdshader): a soft round
+## glow HALO_SIZE metres across in front of the card, from nothing at 3 m to HALO_E at 9 m and beyond.
+## The card is 11 cm across, under three pixels at 10 m: without it the face is a speck.
+const HALO_SIZE := 0.5
+const HALO_E := 1.6
+
+## Tests: a deliberate break. "clip" maps the look pose to a clip the model does not have (the clips
+## check must go red); "hold" draws the held pose handed in (the hold check must go red); "clip+hold"
+## both.
+static var test_break := ""
 
 ## Every note so far (tests): {semi, gain, muffled, at}.
 var notes: Array[Dictionary] = []
@@ -77,25 +94,38 @@ var drawn: Variant = null
 var body_kind := "upright"
 ## Frames whose pose came from the snapshots rather than from the (held) pose handed in (tests).
 var unheld_frames := 0
+## The clip drawn, its time, and how far the fade from the last clip is (tests).
+var clip := ""
+var clip_time := 0.0
+var fade := 1.0
 
-var _joints := {}
-var _sig_nodes: Array[Node3D] = []
-var _parts := {}
+var model: Node3D
+var skel: Skeleton3D
+var mesh: MeshInstance3D
+## Clip name -> Animation, from the model.
+var anims := {}
+var _tracks := {}
+var _rest_pos := PackedVector3Array()
+var _rest_rot: Array[Quaternion] = []
+var _rest_scl := PackedVector3Array()
 var _body_mat: ShaderMaterial
 var _mask_mat: ShaderMaterial
+var _halo_mat: ShaderMaterial = null
+var _mask_lit_e := MASK_LIT_E
+var _mask_surface := -1
 var _player: AudioStreamPlayer3D
 var _plan: Floor.FloorPlan = null
 var _link: Object = null
 var _dist := 0.0
 var _last := Vector3.INF
 var _note_k := 0
-var _t := 0.0
 var _last_us := 0
+var _prev := ""
+var _prev_t := 0.0
+var _fade_t := 0.0
 
 func _init() -> void:
-	_body_mat = _make_body_mat()
-	_mask_mat = _make_mask_mat()
-	_build()
+	_load_model()
 	_player = AudioStreamPlayer3D.new()
 	_player.name = "MusicBox"
 	_player.stream = note_stream()
@@ -110,6 +140,13 @@ func _init() -> void:
 func _ready() -> void:
 	_player.bus = bus_name()
 
+## The card is lit as the body is: it follows the body's energy, which the Playroom's view sets.
+func _process(_delta: float) -> void:
+	var lit := float(_body_mat.get_shader_parameter("energy"))
+	_mask_mat.set_shader_parameter("lit", lit)
+	if _halo_mat:
+		_halo_mat.set_shader_parameter("lit", lit)
+
 ## The bus its music box plays on: "Entity" when the layout has one, otherwise "Sfx".
 static func bus_name() -> StringName:
 	return &"Entity" if AudioServer.get_bus_index(&"Entity") != -1 else &"Sfx"
@@ -119,35 +156,134 @@ func reset() -> void:
 	_last = Vector3.INF
 	_note_k = 0
 	drawn = null
+	clip = ""
+	clip_time = 0.0
+	fade = 1.0
+	_prev = ""
 	visible = false
 
-static func _make_body_mat() -> ShaderMaterial:
-	var m := ShaderMaterial.new()
-	m.shader = load("res://client/playroom_shade.gdshader")
-	m.set_shader_parameter("mode", 1.0)
-	m.set_shader_parameter("self_light", BODY_LIGHT)
-	m.set_shader_parameter("energy", 1.0)
-	m.set_shader_parameter("bleach", 0.0)
-	return m
+# --- the model ------------------------------------------------------------------------------------
 
-static func _make_mask_mat() -> ShaderMaterial:
-	var m := ShaderMaterial.new()
-	m.shader = load("res://client/playroom_glow.gdshader")
-	m.set_shader_parameter("color", MASK_LIT)
-	m.set_shader_parameter("energy", MASK_LIT_E)
-	m.set_shader_parameter("scissor", 0.5)
-	m.set_shader_parameter("tex", mask_tex())
-	m.set_shader_parameter("haze_density", 0.018)
-	return m
+func _load_model() -> void:
+	var ps: PackedScene = load(MODEL)
+	model = ps.instantiate()
+	model.name = "Model"
+	add_child(model)
+	var ap: AnimationPlayer = model.find_child("AnimationPlayer", true, false)
+	if ap:
+		# The clips are sampled here (see the header), never played by the player.
+		ap.active = false
+		for n: StringName in ap.get_animation_list():
+			anims[String(n)] = ap.get_animation(n)
+	skel = model.find_child("Skeleton3D", true, false)
+	for mi: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
+		mesh = mi
+		break
+	for b in skel.get_bone_count():
+		var rest := skel.get_bone_rest(b)
+		_rest_pos.append(rest.origin)
+		_rest_rot.append(rest.basis.get_rotation_quaternion())
+		_rest_scl.append(rest.basis.get_scale())
+	for c: String in anims:
+		var a: Animation = anims[c]
+		var rows: Array[PackedInt32Array] = []
+		for i in a.get_track_count():
+			var tp := a.track_get_type(i)
+			if tp != Animation.TYPE_POSITION_3D and tp != Animation.TYPE_ROTATION_3D and tp != Animation.TYPE_SCALE_3D:
+				continue
+			var b := skel.find_bone(String(a.track_get_path(i).get_concatenated_subnames()))
+			if b >= 0:
+				rows.append(PackedInt32Array([i, b, tp]))
+		_tracks[c] = rows
+	_body_mat = ShaderMaterial.new()
+	_body_mat.shader = load("res://client/minder_skin.gdshader")
+	_mask_mat = ShaderMaterial.new()
+	_mask_mat.shader = load("res://client/minder_mask.gdshader")
+	for s in mesh.mesh.get_surface_count():
+		var src := mesh.mesh.surface_get_material(s) as StandardMaterial3D
+		var is_mask := src != null and src.resource_name.to_lower().contains("mask")
+		if is_mask:
+			_mask_surface = s
+			_mask_mat.set_shader_parameter("albedo_tex", src.albedo_texture)
+			_mask_mat.set_shader_parameter("glow_tex", src.emission_texture)
+			_mask_mat.set_shader_parameter("scissor", src.alpha_scissor_threshold)
+			_mask_mat.set_shader_parameter("roughness", src.roughness)
+			_mask_lit_e = src.emission.srgb_to_linear().r * src.emission_energy_multiplier
+		elif src != null:
+			_body_mat.set_shader_parameter("albedo_tex", src.albedo_texture)
+			_body_mat.set_shader_parameter("normal_tex", src.normal_texture)
+			_body_mat.set_shader_parameter("rough_tex", src.roughness_texture)
+			_body_mat.set_shader_parameter("normal_depth", src.normal_scale)
+			_body_mat.set_shader_parameter("scissor", src.alpha_scissor_threshold)
+		mesh.set_surface_override_material(s, _mask_mat if is_mask else _body_mat)
+	_body_mat.set_shader_parameter("self_light", BODY_LIGHT)
+	_body_mat.set_shader_parameter("energy", 1.0)
+	_mask_mat.set_shader_parameter("self_light", BODY_LIGHT)
+	_mask_mat.set_shader_parameter("lit", 1.0)
+	_mask_mat.set_shader_parameter("color", MASK_LIT)
+	_mask_mat.set_shader_parameter("energy", _mask_lit_e)
+	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	_make_halo()
+	_set_clip_pose("stand", 0.0, "", 0.0, 1.0)
+
+## A bone's rest pose in the skeleton's frame.
+func _rest_global(b: int) -> Transform3D:
+	var x := skel.get_bone_rest(b)
+	var p := skel.get_bone_parent(b)
+	while p >= 0:
+		x = skel.get_bone_rest(p) * x
+		p = skel.get_bone_parent(p)
+	return x
+
+## The halo (client/minder_halo.gdshader), carried by the head bone a few centimetres in front of the
+## middle of the card, its +z the way the card faces (both from the mask's own vertices as built).
+func _make_halo() -> void:
+	var head := skel.find_bone("head")
+	if _mask_surface < 0 or head < 0:
+		return
+	var arr := mesh.mesh.surface_get_arrays(_mask_surface)
+	var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+	var mid := Vector3.ZERO
+	for v in verts:
+		mid += v
+	mid /= maxi(verts.size(), 1)
+	var face := Vector3.ZERO
+	for i in range(0, idx.size(), 3):
+		face += (verts[idx[i + 2]] - verts[idx[i]]).cross(verts[idx[i + 1]] - verts[idx[i]])
+	face = face.normalized()
+	var att := BoneAttachment3D.new()
+	att.name = "MaskHalo"
+	skel.add_child(att)
+	att.bone_name = "head"
+	_halo_mat = ShaderMaterial.new()
+	_halo_mat.shader = load("res://client/minder_halo.gdshader")
+	_halo_mat.set_shader_parameter("energy", HALO_E)
+	_halo_mat.set_shader_parameter("lit", 1.0)
+	var q := QuadMesh.new()
+	q.size = Vector2(HALO_SIZE, HALO_SIZE)
+	var mi := MeshInstance3D.new()
+	mi.name = "Halo"
+	mi.mesh = q
+	mi.material_override = _halo_mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.custom_aabb = AABB(Vector3.ONE * -HALO_SIZE, Vector3.ONE * HALO_SIZE * 2.0)
+	var at_rest := Transform3D(Basis.looking_at(-face, Vector3.UP), mid + face * 0.04)
+	mi.transform = _rest_global(head).affine_inverse() * at_rest
+	att.add_child(mi)
 
 ## The floor it walks: its plan (heard duller through walls) and the Level drawing it. On the
-## Playroom the body dims with the strip lights and the mask keeps glowing in count dark.
+## Playroom the body dims with the strip lights and the mask glows brighter in count dark.
 func set_floor(plan: Floor.FloorPlan, lv: Level = null) -> void:
 	_plan = plan
 	if lv != null and lv.has_meta("playroom"):
 		var view: Object = lv.get_meta("playroom")
 		view.call(&"add_lit", _body_mat)
-		view.call(&"add_glow", _mask_mat, MASK_LIT, MASK_DARK, MASK_LIT_E, MASK_DARK_E)
+		view.call(&"add_glow", _mask_mat, MASK_LIT, MASK_DARK, _mask_lit_e, MASK_DARK_E)
+
+## The mask's glow energy under the strip lights (the model's own) and in count dark.
+func mask_glow() -> Dictionary:
+	return {"lit": _mask_lit_e, "dark": MASK_DARK_E, "halo": HALO_E}
 
 ## Reads the un-held pose from this PlayLink's network client every frame (see the header).
 func follow(link: Object) -> void:
@@ -179,7 +315,7 @@ func _unheld() -> Variant:
 ## to follow, the pose drawn is the snapshots' own, never the held one handed in.
 func show_pose(pose: Variant, show: bool) -> void:
 	var raw: Variant = _unheld()
-	if raw != null and pose != null:
+	if raw != null and pose != null and not test_break.contains("hold"):
 		pose = raw
 		unheld_frames += 1
 	if pose == null:
@@ -189,8 +325,9 @@ func show_pose(pose: Variant, show: bool) -> void:
 	var p := Vector3(float(pd["x"]), float(pd["y"]), float(pd["z"]))
 	var anim := str(pd["anim"])
 	var now := Time.get_ticks_usec()
+	var dt := 0.0
 	if _last_us > 0:
-		_t += minf((now - _last_us) / 1e6, 0.1)
+		dt = minf((now - _last_us) / 1e6, 0.1)
 	_last_us = now
 	var step := 0.0
 	if _last != Vector3.INF:
@@ -199,17 +336,20 @@ func show_pose(pose: Variant, show: bool) -> void:
 			step = d
 	_last = p
 	_dist += step
+	body_kind = family(anim)
 	var k := floori(_dist / NOTE_STEP)
 	if k > _note_k:
 		_note(p, k)
 	_note_k = k
+	# The clocks run whether or not it is drawn, so a pose comes back where it would be.
+	_advance(anim, dt, step)
 	visible = show
 	if not show:
 		return
 	drawn = pd.duplicate()
 	position = p
 	rotation = Vector3(0, float(pd["yaw"]) + PI, 0)
-	_pose_figure(anim, _t, _dist, step > 0.0)
+	_set_clip_pose(clip, clip_time, _prev, _prev_t, fade)
 
 ## The body a pose name asks for.
 static func family(anim: String) -> String:
@@ -220,172 +360,206 @@ static func family(anim: String) -> String:
 			return "cover"
 	return "upright"
 
-## Sets every joint from the pose name, the local clock (idle sways, the head's sweep) and the distance
-## walked (the gait). Nothing here holds or waits: it is not a Stillness resident.
-func _pose_figure(anim: String, t: float, dist: float, moving: bool) -> void:
-	body_kind = family(anim)
-	var hips_y := HIP_Y
-	var hips := Vector3.ZERO
-	var spine := Vector3(0.18, 0, 0)
-	var chest := Vector3(0.12, 0, 0)
-	var neck := Vector3(0.28, 0, 0)
-	var head := Vector3(-0.52, 0, 0)
-	var jaw := 0.3
-	var sh := [Vector3(-0.3, 0, 0.07), Vector3(-0.3, 0, -0.07)]   # left, right
-	var el := [Vector3(-0.18, 0, 0), Vector3(-0.18, 0, 0)]
-	var hand := [Vector3(-0.1, 0, 0), Vector3(-0.1, 0, 0)]
-	var leg := [Vector3(-0.04, 0, 0.03), Vector3(-0.04, 0, -0.03)]
-	var knee := [0.09, 0.09]
-	var foot := [0.0, 0.0]
-	match body_kind:
-		"fours":
-			var run := anim == "run" or anim == "catch"
-			var ph := dist / (CYCLE_FOURS * (1.25 if run else 1.0)) * TAU
-			var s := sin(ph)
-			var amp := 0.48 if run else 0.32
-			hips_y = 0.9 if run else 0.94
-			spine = Vector3(1.22 if run else 1.16, 0, 0)
-			chest = Vector3(0.16, 0, 0)
-			neck = Vector3(-0.45, 0, 0)
-			head = Vector3(-0.85, 0, 0)
-			jaw = 0.45
-			hips.y = 0.06 * s
-			chest.y = -0.08 * s
-			hips_y += 0.03 * cos(2.0 * ph)
-			# Diagonal pairs: the left hand with the right foot.
-			leg[0] = Vector3(0.62 + amp * s, 0, 0.12)
-			leg[1] = Vector3(0.62 - amp * s, 0, -0.12)
-			knee[0] = -1.22 - 0.25 * maxf(0.0, cos(ph))
-			knee[1] = -1.22 - 0.25 * maxf(0.0, -cos(ph))
-			foot[0] = 0.62
-			foot[1] = 0.62
-			sh[0] = Vector3(-1.5 + amp * s, 0, 0.2)
-			sh[1] = Vector3(-1.5 - amp * s, 0, -0.2)
-			el[0] = Vector3(0.62 + 0.2 * maxf(0.0, -cos(ph)), 0, 0)
-			el[1] = Vector3(0.62 + 0.2 * maxf(0.0, cos(ph)), 0, 0)
-			hand[0] = Vector3(-0.85, 0, 0)
-			hand[1] = Vector3(-0.85, 0, 0)
-			match anim:
-				"sweep":
-					neck.y = 0.7 * sin(t * 2.1)
-				"look":
-					neck.y = 0.35 * sin(t * 0.9)
-					head.x -= 0.12
-				"catch":
-					spine.x = 0.9
-					sh[0] = Vector3(-2.3, 0, 0.25)
-					sh[1] = Vector3(-2.3, 0, -0.25)
-					el[0] = Vector3(-0.3, 0, 0)
-					el[1] = Vector3(-0.3, 0, 0)
-					neck.x = -0.2
-					head.x = -0.6
-					jaw = 0.65
-				_:
-					neck.y = 0.25 * sin(dist * 1.1)
-		"cover":
-			# Crouched to the wall, knees bent the wrong way, both long hands over the mask.
-			hips_y = 0.74
-			leg[0] = Vector3(0.95, 0, 0.18)
-			leg[1] = Vector3(0.95, 0, -0.18)
-			knee[0] = -1.85
-			knee[1] = -1.85
-			foot[0] = 0.9
-			foot[1] = 0.9
-			spine = Vector3(0.62, 0, 0)
-			chest = Vector3(0.3, 0, 0)
-			neck = Vector3(0.1, 0, 0)
-			head = Vector3(-0.1 + 0.03 * sin(t * 1.4), 0, 0)
-			# Two-link reach to the mask: elbows down and forward, forearms folded up over the face.
-			sh[0] = Vector3(-0.8, 0, -0.6)
-			sh[1] = Vector3(-0.8, 0, 0.6)
-			el[0] = Vector3(-2.2, 0, 0)
-			el[1] = Vector3(-2.2, 0, 0)
-			hand[0] = Vector3(-0.35, 0, 0)
-			hand[1] = Vector3(-0.35, 0, 0)
-		_:
-			match anim:
-				"straighten":
-					spine.x = 0.38
-					sh[0] = Vector3(-1.05 + 0.12 * sin(t * 2.6), 0, 0.12)
-					sh[1] = Vector3(-0.95 - 0.12 * sin(t * 2.6), 0, -0.12)
-					el[0] = Vector3(-0.35, 0, 0)
-					el[1] = Vector3(-0.35, 0, 0)
-					neck.x = 0.4
-				"slump":
-					hips_y = 1.12
-					spine.x = 0.5
-					chest.x = 0.25
-					neck.x = 0.55
-					head.x = -0.25
-					sh[0] = Vector3(-0.78, 0, 0.05)
-					sh[1] = Vector3(-0.78, 0, -0.05)
-					knee[0] = 0.22
-					knee[1] = 0.22
-					leg[0].x = -0.12
-					leg[1].x = -0.12
-			if moving or anim == "walk" or anim == "duck":
-				var ph := dist / CYCLE_UP * TAU
-				var s := sin(ph)
-				leg[0].x += -0.36 * s
-				leg[1].x += 0.36 * s
-				knee[0] += 0.62 * pow(maxf(0.0, cos(ph)), 1.5)
-				knee[1] += 0.62 * pow(maxf(0.0, -cos(ph)), 1.5)
-				hips_y += -0.025 + 0.025 * cos(2.0 * ph)
-				hips.y = 0.08 * s
-				chest.y = -0.06 * s
-				sh[0].x += 0.22 * s
-				sh[1].x -= 0.22 * s
-				neck.z = 0.06 * sin(ph * 0.5)
-			else:
-				chest.x += 0.02 * sin(t * 1.3)
-				head.z = 0.05 * sin(t * 0.5)
-				jaw += 0.05 * sin(t * 0.8)
-	_j("hips").position.y = hips_y
-	_j("hips").rotation = hips
-	_j("spine").rotation = spine
-	_j("chest").rotation = chest
-	_j("neck").rotation = neck
-	_j("head").rotation = head
-	_j("jaw").rotation = Vector3(jaw, 0, 0)
-	for i in 2:
-		var sfx := "_l" if i == 0 else "_r"
-		_j("shoulder" + sfx).rotation = sh[i]
-		_j("elbow" + sfx).rotation = el[i]
-		_j("hand" + sfx).rotation = hand[i]
-		_j("leg" + sfx).rotation = leg[i]
-		_j("knee" + sfx).rotation = Vector3(knee[i], 0, 0)
-		var lx: float = (leg[i] as Vector3).x
-		_j("ankle" + sfx).rotation = Vector3(-(lx + knee[i]) + float(foot[i]) * 0.0, 0, 0)
-	# The rags hang down, whatever the body does.
-	var pitch := spine.x + chest.x
-	_j("rag_f").rotation = Vector3(-pitch * 0.92, 0, 0)
-	_j("rag_b").rotation = Vector3(-pitch * 0.92, 0, 0)
-	_j("lanyard").rotation = Vector3(-pitch * 0.85, 0, 0)
+## The clip that draws a pose name ("" when there is none).
+static func clip_for(anim: String) -> String:
+	if test_break.contains("clip") and anim == "look":
+		return "peer"
+	return str(CLIPS.get(anim, ""))
 
-func _j(n: String) -> Node3D:
-	return _joints[n]
+## Moves the clocks on: a new pose starts its clip from its first frame and fades in from the last one.
+func _advance(anim: String, dt: float, step: float) -> void:
+	var want := clip_for(anim)
+	if not anims.has(want):
+		want = "stand"
+	if want != clip:
+		_prev = clip
+		_prev_t = clip_time
+		clip = want
+		clip_time = 0.0
+		_fade_t = 0.0 if _prev != "" else BLEND
+	else:
+		clip_time += _rate(clip, dt, step)
+		_fade_t += dt
+	if _prev != "":
+		_prev_t += _rate(_prev, dt, step)
+	fade = clampf(_fade_t / BLEND, 0.0, 1.0)
+	if fade >= 1.0:
+		_prev = ""
+
+## How far a clip's clock moves this frame: a gait by the distance walked over its own ground speed,
+## anything else by the time.
+static func _rate(c: String, dt: float, step: float) -> float:
+	if GAIT_SPEED.has(c):
+		return step / float(GAIT_SPEED[c])
+	return dt
+
+## The clip's own time for a clock: round and round for a loop, held at the end for a one-shot.
+func _clip_t(c: String, t: float) -> float:
+	var a: Animation = anims[c]
+	if a.loop_mode != Animation.LOOP_NONE:
+		return fposmod(t, a.length) if a.length > 0.0 else 0.0
+	return clampf(t, 0.0, a.length)
+
+## Samples a clip at its time into per-bone arrays (the rest pose where it has no track).
+func _sample(c: String, t: float, pos: PackedVector3Array, rot: Array[Quaternion], scl: PackedVector3Array) -> void:
+	var a: Animation = anims[c]
+	var ct := _clip_t(c, t)
+	var rows: Array[PackedInt32Array] = _tracks[c]
+	for r in rows:
+		match r[2]:
+			Animation.TYPE_ROTATION_3D:
+				rot[r[1]] = a.rotation_track_interpolate(r[0], ct)
+			Animation.TYPE_POSITION_3D:
+				pos[r[1]] = a.position_track_interpolate(r[0], ct)
+			Animation.TYPE_SCALE_3D:
+				scl[r[1]] = a.scale_track_interpolate(r[0], ct)
+
+## Poses the skeleton: clip `c` at `t`, faded in by `w` (smoothed) over `pc` at `pt`.
+func _set_clip_pose(c: String, t: float, pc: String, pt: float, w: float) -> void:
+	if not anims.has(c):
+		return
+	var pos := _rest_pos.duplicate()
+	var rot: Array[Quaternion] = _rest_rot.duplicate()
+	var scl := _rest_scl.duplicate()
+	_sample(c, t, pos, rot, scl)
+	if pc != "" and anims.has(pc) and w < 1.0:
+		var pp := _rest_pos.duplicate()
+		var pr: Array[Quaternion] = _rest_rot.duplicate()
+		var ps := _rest_scl.duplicate()
+		_sample(pc, pt, pp, pr, ps)
+		var k := smoothstep(0.0, 1.0, w)
+		for b in pos.size():
+			pos[b] = pp[b].lerp(pos[b], k)
+			rot[b] = pr[b].slerp(rot[b], k)
+			scl[b] = ps[b].lerp(scl[b], k)
+	for b in pos.size():
+		skel.set_bone_pose_position(b, pos[b])
+		skel.set_bone_pose_rotation(b, rot[b])
+		skel.set_bone_pose_scale(b, scl[b])
+
+## Tests: draws a pose's clip at exactly `t` seconds into it, no fade.
+func hold_clip(anim: String, t: float) -> void:
+	clip = clip_for(anim)
+	if not anims.has(clip):
+		clip = "stand"
+	clip_time = t
+	_prev = ""
+	fade = 1.0
+	body_kind = family(anim)
+	_set_clip_pose(clip, t, "", 0.0, 1.0)
+
+## Tests: the model as built (every bone at rest, upright). The next show_pose poses it again.
+func rest_pose() -> void:
+	for b in skel.get_bone_count():
+		skel.set_bone_pose_position(b, _rest_pos[b])
+		skel.set_bone_pose_rotation(b, _rest_rot[b])
+		skel.set_bone_pose_scale(b, _rest_scl[b])
 
 ## Tests: a short hash of everything drawn about the figure right now.
 func drawn_signature() -> String:
 	var f := PackedFloat32Array()
 	f.append(1.0 if visible else 0.0)
-	for n: Node3D in _sig_nodes:
-		var x := n.transform
+	var xs: Array[Transform3D] = [transform]
+	for b in skel.get_bone_count():
+		xs.append(skel.get_bone_pose(b))
+	for x in xs:
 		for v: Vector3 in [x.basis.x, x.basis.y, x.basis.z, x.origin]:
 			f.append(v.x)
 			f.append(v.y)
 			f.append(v.z)
 	return f.to_byte_array().hex_encode().md5_text().substr(0, 12)
 
-## Tests: the figure's extent in its own frame (feet at y 0, facing +z), from its meshes as posed.
+# --- tests: the posed figure, skinned here on the CPU, in its own frame (feet at y 0, facing +z) ----
+
+var _arrays := {}
+
+func _surface(s: int) -> Array:
+	if not _arrays.has(s):
+		_arrays[s] = mesh.mesh.surface_get_arrays(s)
+	return _arrays[s]
+
+## A bone's pose in the skeleton's frame, composed from the local poses just set (the skeleton's own
+## global poses are only brought up to date when it next draws).
+func _bone_global(b: int) -> Transform3D:
+	var x := skel.get_bone_pose(b)
+	var p := skel.get_bone_parent(b)
+	while p >= 0:
+		x = skel.get_bone_pose(p) * x
+		p = skel.get_bone_parent(p)
+	return x
+
+## The skeleton's frame in the figure's own frame.
+func _skel_xf() -> Transform3D:
+	var x := Transform3D()
+	var n: Node3D = skel
+	while n != self and n != null:
+		x = n.transform * x
+		n = n.get_parent() as Node3D
+	return x
+
+## Every vertex of a surface as posed now, in the figure's own frame.
+func posed_vertices(s: int) -> PackedVector3Array:
+	var arr := _surface(s)
+	var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var bones: PackedInt32Array = arr[Mesh.ARRAY_BONES]
+	var weights: PackedFloat32Array = arr[Mesh.ARRAY_WEIGHTS]
+	var skin := mesh.skin
+	var to_fig := _skel_xf()
+	var mats: Array[Transform3D] = []
+	for i in skin.get_bind_count():
+		var bone := skin.get_bind_bone(i)
+		if bone < 0:
+			bone = skel.find_bone(skin.get_bind_name(i))
+		mats.append(to_fig * _bone_global(bone) * skin.get_bind_pose(i))
+	var per := bones.size() / maxi(verts.size(), 1)
+	var out := PackedVector3Array()
+	out.resize(verts.size())
+	for v in verts.size():
+		var p := Vector3.ZERO
+		for j in per:
+			var w := weights[v * per + j]
+			if w > 0.0:
+				p += (mats[bones[v * per + j]] * verts[v]) * w
+		out[v] = p
+	return out
+
+## The bone each vertex of a surface follows most.
+func _main_bone(s: int) -> PackedStringArray:
+	var key := "main%d" % s
+	if _arrays.has(key):
+		return _arrays[key]
+	var arr := _surface(s)
+	var bones: PackedInt32Array = arr[Mesh.ARRAY_BONES]
+	var weights: PackedFloat32Array = arr[Mesh.ARRAY_WEIGHTS]
+	var n := (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	var per := bones.size() / maxi(n, 1)
+	var out := PackedStringArray()
+	for v in n:
+		var best := 0
+		for j in per:
+			if weights[v * per + j] > weights[v * per + best]:
+				best = j
+		out.append(mesh.skin.get_bind_name(bones[v * per + best]))
+	_arrays[key] = out
+	return out
+
+static func _in_hand(bone: String, side: String) -> bool:
+	if not bone.ends_with("." + side):
+		return false
+	for p: String in ["hand", "index", "middle", "ring", "thumb"]:
+		if bone.begins_with(p):
+			return true
+	return false
+
+static func _side(n: String) -> String:
+	return "R" if n.ends_with("_r") or n.ends_with(".R") else "L"
+
+## Tests: the figure's extent in its own frame, from its skin as posed.
 func extent() -> AABB:
 	var box := AABB()
 	var first := true
-	for mi: MeshInstance3D in find_children("*", "MeshInstance3D", true, false):
-		var bb := mi.get_aabb()
-		var xf := global_transform.affine_inverse() * mi.global_transform
-		for i in 8:
-			var p := xf * bb.get_endpoint(i)
+	for s in mesh.mesh.get_surface_count():
+		for p in posed_vertices(s):
 			if first:
 				box = AABB(p, Vector3.ZERO)
 				first = false
@@ -396,35 +570,53 @@ func extent() -> AABB:
 ## Tests: the lowest point of either hand (its fingertips), in the figure's own frame.
 func fingertip_y() -> float:
 	var low := INF
-	for n: String in ["hand_l", "hand_r"]:
-		for mi: MeshInstance3D in _j(n).find_children("*", "MeshInstance3D", true, false):
-			var bb := mi.get_aabb()
-			var xf := global_transform.affine_inverse() * mi.global_transform
-			for i in 8:
-				low = minf(low, (xf * bb.get_endpoint(i)).y)
+	var main := _main_bone(0)
+	var vs := posed_vertices(0)
+	for v in vs.size():
+		if _in_hand(main[v], "L") or _in_hand(main[v], "R"):
+			low = minf(low, vs[v].y)
 	return low
 
 ## Tests: the middle of a hand, palm to fingertips ("hand_l" or "hand_r"), in the figure's own frame.
 func hand_middle(n: String) -> Vector3:
-	return global_transform.affine_inverse() * _j(n).to_global(Vector3(0, -0.18, 0))
+	var side := _side(n)
+	var main := _main_bone(0)
+	var vs := posed_vertices(0)
+	var sum := Vector3.ZERO
+	var cnt := 0
+	for v in vs.size():
+		if _in_hand(main[v], side):
+			sum += vs[v]
+			cnt += 1
+	return sum / maxi(cnt, 1)
 
-## Tests: where a joint is in the figure's own frame.
+## Tests: where a bone is in the figure's own frame (a bone name, or the old names head, knee_l,
+## knee_r, hand_l, hand_r).
 func joint_point(n: String) -> Vector3:
-	return global_transform.affine_inverse() * _j(n).global_position
+	var names := {"knee_l": "shin.L", "knee_r": "shin.R", "hand_l": "hand.L", "hand_r": "hand.R"}
+	var b := skel.find_bone(str(names.get(n, n)))
+	return _skel_xf() * _bone_global(b).origin
 
-## Tests: the mask's middle and its facing in the figure's own frame (the head's +z), and how many
-## meshes carry the mask's material (one: the face is on the front only).
+## Tests: the mask's middle and its facing (its faces' summed normals) in the figure's own frame, the
+## head bone, and how many surfaces carry the mask's material (one: the face is on the front only).
 func mask_info() -> Dictionary:
 	var count := 0
+	for s in mesh.mesh.get_surface_count():
+		if mesh.get_surface_override_material(s) == _mask_mat:
+			count += 1
 	var at := Vector3.ZERO
 	var facing := Vector3.ZERO
-	for mi: MeshInstance3D in find_children("*", "MeshInstance3D", true, false):
-		if mi.material_override == _mask_mat:
-			count += 1
-			var xf := global_transform.affine_inverse() * mi.global_transform
-			at = xf * mi.get_aabb().get_center()
-			facing = (xf.basis * Vector3.BACK).normalized()
-	return {"count": count, "at": at, "facing": facing, "head": joint_point("head")}
+	if _mask_surface >= 0:
+		var vs := posed_vertices(_mask_surface)
+		for p in vs:
+			at += p
+		at /= maxi(vs.size(), 1)
+		var idx: PackedInt32Array = _surface(_mask_surface)[Mesh.ARRAY_INDEX]
+		for i in range(0, idx.size(), 3):
+			var a := vs[idx[i]]
+			# Godot's front faces wind clockwise: the outward normal is (c - a) x (b - a).
+			facing += (vs[idx[i + 2]] - a).cross(vs[idx[i + 1]] - a)
+	return {"count": count, "at": at, "facing": facing.normalized(), "head": joint_point("head")}
 
 # --- the music box --------------------------------------------------------------------------------
 
@@ -492,219 +684,3 @@ static func note_stream() -> AudioStreamWAV:
 	w.data = data
 	_note_cache = w
 	return w
-
-# --- the mask -----------------------------------------------------------------------------------
-
-static var _mask_tex: Texture2D = null
-
-## The card party mask: an off-white oval with a printed smiley, two dots and a curve, and a faint
-## pink blush; cut out round the oval (alpha).
-static func mask_tex() -> Texture2D:
-	if _mask_tex != null:
-		return _mask_tex
-	var s := 64
-	var img := Image.create(s, s, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
-	var ink := Color(0.12, 0.11, 0.12, 1)
-	for y in s:
-		for x in s:
-			var u := (x + 0.5) / s * 2.0 - 1.0
-			var v := (y + 0.5) / s * 2.0 - 1.0
-			var r := Vector2(u / 0.94, v / 0.98).length()
-			if r > 1.0:
-				continue
-			var c := Color(0.97, 0.95, 0.88, 1)
-			if r > 0.92:
-				c = Color(0.78, 0.76, 0.7, 1)
-			# Two round dots.
-			for ex: float in [-0.34, 0.34]:
-				if Vector2(u - ex, (v + 0.2) * 0.9).length() < 0.11:
-					c = ink
-			# The curve: part of a ring under them.
-			var ring := Vector2(u, v + 0.02).length()
-			if absf(ring - 0.52) < 0.055 and v > 0.18 and absf(u) < 0.52:
-				c = ink
-			for bx: float in [-0.58, 0.58]:
-				if Vector2(u - bx, v - 0.18).length() < 0.13 and c != ink:
-					c = c.lerp(Color(0.95, 0.62, 0.62, 1), 0.45)
-			img.set_pixel(x, y, c)
-	img.generate_mipmaps()
-	_mask_tex = ImageTexture.create_from_image(img)
-	return _mask_tex
-
-# --- the figure ---------------------------------------------------------------------------------
-
-func _joint(n: String, parent: Node3D, at: Vector3) -> Node3D:
-	var j := Node3D.new()
-	j.name = n
-	j.position = at
-	parent.add_child(j)
-	_joints[n] = j
-	_sig_nodes.append(j)
-	return j
-
-func _add(joint: String, mesh: PrimitiveMesh, at: Vector3, col: Color, rot := Vector3.ZERO, scl := Vector3.ONE) -> void:
-	_add_xf(joint, mesh, Transform3D(Basis.from_euler(rot) * Basis.from_scale(scl), at), col)
-
-func _add_xf(joint: String, mesh: PrimitiveMesh, xf: Transform3D, col: Color) -> void:
-	var st: SurfaceTool = _parts.get(joint)
-	if st == null:
-		st = SurfaceTool.new()
-		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		_parts[joint] = st
-	var arr := mesh.get_mesh_arrays()
-	var cols := PackedColorArray()
-	cols.resize((arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size())
-	cols.fill(col.srgb_to_linear())
-	arr[Mesh.ARRAY_COLOR] = cols
-	var tmp := ArrayMesh.new()
-	tmp.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-	st.append_from(tmp, 0, xf)
-
-## A limb segment from a to b (in the joint's frame), tapering from ra to rb.
-func _limb(joint: String, a: Vector3, b: Vector3, ra: float, rb: float, col: Color, seg := 10) -> void:
-	var y := (b - a).normalized()
-	var x := y.cross(Vector3.FORWARD if absf(y.z) < 0.9 else Vector3.RIGHT).normalized()
-	var z := x.cross(y)
-	_add_xf(joint, _cyl(rb, ra, a.distance_to(b), seg), Transform3D(Basis(x, y, z), (a + b) * 0.5), col)
-
-## A flat strip from a to b, w wide and t thick, facing roughly `face`.
-func _strip(joint: String, a: Vector3, b: Vector3, w: float, t: float, col: Color, face := Vector3(0, 0, 1)) -> void:
-	var y := (b - a).normalized()
-	var x := y.cross(face).normalized()
-	var z := x.cross(y)
-	var bm := BoxMesh.new()
-	bm.size = Vector3(w, a.distance_to(b), t)
-	_add_xf(joint, bm, Transform3D(Basis(x, y, z), (a + b) * 0.5), col)
-
-static func _box(sx: float, sy: float, sz: float) -> BoxMesh:
-	var b := BoxMesh.new()
-	b.size = Vector3(sx, sy, sz)
-	return b
-
-static func _cyl(top: float, bottom: float, h: float, seg := 10) -> CylinderMesh:
-	var c := CylinderMesh.new()
-	c.top_radius = top
-	c.bottom_radius = bottom
-	c.height = h
-	c.radial_segments = seg
-	c.rings = 1
-	return c
-
-static func _ball(r: float, h: float, seg := 12) -> SphereMesh:
-	var s := SphereMesh.new()
-	s.radius = r
-	s.height = h
-	s.radial_segments = seg
-	s.rings = seg / 2
-	return s
-
-## The figure faces +Z in its own space (show_pose turns it by yaw + PI, as the other residents); its
-## left side is +X. Feet at y = 0.
-func _build() -> void:
-	_sig_nodes.append(self)
-	var hips := _joint("hips", self, Vector3(0, HIP_Y, 0))
-	# A narrow pelvis, the hip bones showing.
-	_add("hips", _ball(0.13, 0.2), Vector3(0, 0.0, -0.01), SKIN, Vector3.ZERO, Vector3(1.05, 1, 0.7))
-	for side: float in [1.0, -1.0]:
-		_add("hips", _ball(0.035, 0.07, 8), Vector3(0.11 * side, 0.04, 0.06), SKIN_DARK)
-	# Legs: long thin thighs and shins, knobbly knees, long splayed feet.
-	for side: float in [1.0, -1.0]:
-		var sfx := "_l" if side > 0.0 else "_r"
-		var leg := _joint("leg" + sfx, hips, Vector3(0.12 * side, -0.04, 0))
-		_limb("leg" + sfx, Vector3.ZERO, Vector3(0, -0.58, 0), 0.08, 0.056, SKIN)
-		var knee := _joint("knee" + sfx, leg, Vector3(0, -0.58, 0))
-		_add("knee" + sfx, _ball(0.058, 0.12, 10), Vector3(0, 0, 0.012), SKIN_DARK)
-		_limb("knee" + sfx, Vector3.ZERO, Vector3(0, -0.56, 0), 0.054, 0.036, SKIN)
-		var ankle := _joint("ankle" + sfx, knee, Vector3(0, -0.56, 0))
-		_add("ankle" + sfx, _ball(0.04, 0.08, 8), Vector3.ZERO, SKIN_DARK)
-		_add("ankle" + sfx, _box(0.09, 0.035, 0.24), Vector3(0, -0.012, 0.1), SKIN)
-		for k in 3:
-			var a := Vector3((k - 1) * 0.034, -0.02, 0.2)
-			_limb("ankle" + sfx, a, a + Vector3((k - 1) * 0.03, -0.01, 0.12), 0.013, 0.008, SKIN_DARK, 6)
-	# The waist, thin; the ribcage over it; ribs and a spine showing through the skin.
-	var spine := _joint("spine", hips, Vector3(0, 0.04, 0))
-	_add("spine", _cyl(0.1, 0.11, 0.34, 10), Vector3(0, 0.16, -0.02), SKIN, Vector3.ZERO, Vector3(1, 1, 0.78))
-	var chest := _joint("chest", spine, Vector3(0, 0.32, 0))
-	_add("chest", _ball(0.18, 0.44, 14), Vector3(0, 0.18, 0.0), SKIN, Vector3.ZERO, Vector3(1, 1, 0.72))
-	for k in 5:
-		var y := 0.06 + k * 0.055
-		var w := 0.13 - absf(k - 1.5) * 0.012
-		for side: float in [1.0, -1.0]:
-			_strip("chest", Vector3(0.02 * side, y + 0.02, 0.118), Vector3(w * side, y - 0.03, 0.08), 0.022, 0.016, SKIN_DARK, Vector3(0.4 * side, 0, 1))
-	for k in 8:
-		_add("chest" if k < 5 else "spine", _ball(0.022, 0.04, 8), Vector3(0, (0.34 - k * 0.07) if k < 5 else (0.32 - (k - 5) * 0.09), -0.115 if k < 5 else -0.085), SKIN_DARK)
-	# Collar bones and the shoulder bar.
-	_limb("chest", Vector3(-0.22, 0.36, 0.01), Vector3(0.22, 0.36, 0.01), 0.045, 0.045, SKIN)
-	# The tabard's rags, front and back, hanging from the shoulders (posed to hang down).
-	var rag_f := _joint("rag_f", chest, Vector3(0, 0.36, 0.115))
-	var rag_b := _joint("rag_b", chest, Vector3(0, 0.36, -0.115))
-	var rag_cols: Array[Color] = [RAG_RED, RAG_YELLOW, RAG_BLUE]
-	var lens: Array[float] = [0.62, 0.48, 0.74, 0.4, 0.66, 0.55, 0.36]
-	for k in 7:
-		var x := (k - 3) * 0.052
-		var len := lens[k]
-		_strip("rag_f", Vector3(x, 0.0, 0.02 + absf(x) * 0.1), Vector3(x + 0.02 * sin(k * 2.3), -len, 0.05), 0.05, 0.008, rag_cols[k % 3])
-		_strip("rag_b", Vector3(x, 0.0, -0.02 - absf(x) * 0.1), Vector3(x - 0.02 * sin(k * 1.7), -lens[(k + 3) % 7], -0.05), 0.05, 0.008, rag_cols[(k + 1) % 3], Vector3(0, 0, -1))
-	# Over the shoulders: what is left of the yoke.
-	for side: float in [1.0, -1.0]:
-		_add("chest", _box(0.11, 0.02, 0.26), Vector3(0.12 * side, 0.385, 0), RAG_RED if side > 0 else RAG_BLUE, Vector3(0, 0, -0.25 * side))
-	# The lanyard, its badge and the wind-up music box clipped to it (posed to hang down).
-	var lan := _joint("lanyard", chest, Vector3(0, 0.38, 0.06))
-	_strip("lanyard", Vector3(-0.07, 0.0, 0.0), Vector3(-0.02, -0.26, 0.07), 0.016, 0.004, LANYARD)
-	_strip("lanyard", Vector3(0.07, 0.0, 0.0), Vector3(0.02, -0.26, 0.07), 0.016, 0.004, LANYARD)
-	_add("lanyard", _box(0.075, 0.1, 0.006), Vector3(0, -0.31, 0.075), CARD)
-	_add("lanyard", _box(0.06, 0.02, 0.008), Vector3(0, -0.28, 0.078), LANYARD)
-	_add("lanyard", _box(0.07, 0.06, 0.055), Vector3(0, -0.41, 0.08), BOX)
-	_add("lanyard", _cyl(0.006, 0.006, 0.05, 6), Vector3(0.05, -0.41, 0.08), BRASS, Vector3(0, 0, PI * 0.5))
-	_add("lanyard", _box(0.012, 0.035, 0.008), Vector3(0.075, -0.4, 0.08), BRASS)
-	# The neck, long; the head: a long narrow eyeless skull, a slack jaw, and the mask on the front.
-	var neck := _joint("neck", chest, Vector3(0, 0.38, 0.02))
-	_limb("neck", Vector3.ZERO, Vector3(0, 0.22, 0.0), 0.05, 0.042, SKIN)
-	var head := _joint("head", neck, Vector3(0, 0.22, 0))
-	_add("head", _ball(0.1, 0.2, 14), Vector3(0, 0.06, 0.12), SKIN, Vector3.ZERO, Vector3(0.86, 0.95, 2.4))
-	_add("head", _ball(0.07, 0.14, 12), Vector3(0, 0.03, 0.3), SKIN, Vector3.ZERO, Vector3(0.95, 0.9, 1.6))
-	_add("head", _ball(0.04, 0.08, 8), Vector3(0, 0.13, 0.02), SKIN_DARK, Vector3.ZERO, Vector3(0.7, 0.6, 2.2))
-	var jaw := _joint("jaw", head, Vector3(0, -0.01, 0.0))
-	_add("jaw", _box(0.09, 0.026, 0.36), Vector3(0, -0.02, 0.2), SKIN)
-	_add("jaw", _box(0.07, 0.006, 0.3), Vector3(0, -0.005, 0.2), MOUTH)
-	for k in 9:
-		var side := -1.0 if k % 2 == 0 else 1.0
-		var tz := 0.1 + k * 0.028
-		_add("jaw", _box(0.012, 0.016 + 0.01 * ((k * 7) % 3), 0.012), Vector3(0.033 * side, 0.008, tz), TOOTH)
-	# The card mask, strapped over the front: one flat oval facing +z, nothing on the back of the head.
-	var card := QuadMesh.new()
-	card.size = Vector2(0.3, 0.32)
-	var mask_mi := MeshInstance3D.new()
-	mask_mi.name = "mask_mesh"
-	mask_mi.mesh = card
-	mask_mi.material_override = _mask_mat
-	mask_mi.position = Vector3(0, 0.05, 0.41)
-	mask_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	head.add_child(mask_mi)
-	for side: float in [1.0, -1.0]:
-		_strip("head", Vector3(0.12 * side, 0.06, 0.4), Vector3(0.085 * side, 0.09, -0.06), 0.012, 0.004, STRAP, Vector3(side, 0, 0))
-	# Arms: long and thin, past the knees, long splayed fingers.
-	for side: float in [1.0, -1.0]:
-		var sfx := "_l" if side > 0.0 else "_r"
-		var sh := _joint("shoulder" + sfx, chest, Vector3(0.24 * side, 0.34, 0))
-		_add("shoulder" + sfx, _ball(0.055, 0.11, 10), Vector3.ZERO, SKIN_DARK)
-		_limb("shoulder" + sfx, Vector3.ZERO, Vector3(0, -0.63, 0), 0.054, 0.042, SKIN)
-		var el := _joint("elbow" + sfx, sh, Vector3(0, -0.63, 0))
-		_add("elbow" + sfx, _ball(0.04, 0.08, 8), Vector3.ZERO, SKIN_DARK)
-		_limb("elbow" + sfx, Vector3.ZERO, Vector3(0, -0.6, 0), 0.042, 0.03, SKIN)
-		var hand := _joint("hand" + sfx, el, Vector3(0, -0.6, 0))
-		_add("hand" + sfx, _box(0.075, 0.12, 0.03), Vector3(0, -0.06, 0), SKIN)
-		for k in 4:
-			var fx := (k - 1.5) * 0.022
-			_limb("hand" + sfx, Vector3(fx, -0.11, 0), Vector3(fx * 2.4, -0.33 + absf(k - 1.5) * 0.03, 0.02), 0.011, 0.007, SKIN_DARK, 6)
-		_limb("hand" + sfx, Vector3(-0.035 * side, -0.05, 0.01), Vector3(-0.09 * side, -0.2, 0.05), 0.011, 0.007, SKIN_DARK, 6)
-	for n: String in _parts:
-		var mi := MeshInstance3D.new()
-		mi.name = n + "_mesh"
-		mi.mesh = (_parts[n] as SurfaceTool).commit()
-		mi.material_override = _body_mat
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-		_j(n).add_child(mi)
-	_parts.clear()
-	_pose_figure("stand", 0.0, 0.0, false)

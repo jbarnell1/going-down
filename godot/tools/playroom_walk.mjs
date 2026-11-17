@@ -1,20 +1,27 @@
-// The Playroom's look and the stand-in Minder, checked against the rules. Two runs with the engine in
+// The Playroom's look and the Minder (the Blender model, assets/entities/minder.glb), checked against
+// the rules. Two runs with the engine in
 // GODOT (or tools/godot/Godot_v4.7.2-stable_win64_console.exe under the repository root) on this
 // project, so no export is needed:
 //   1. headless, tools/playroom_look_check.gd on 40 floors (play-0..9 at depths 1 to 4): every hide's
 //      furniture within 5 cm of its Playroom.hides spot, every squeaker tile in the rules drawn and no
 //      other, every zone's signs reading its hide count from the rules, the lights under the limit,
 //      the count-dark switch;
-//   2. in a small window, client/playroom_demo.tscn: the same on 13 floors, the Minder's figure, its
-//      pose hold off, its music box, pictures to export/shots/playroom/, and frame times walking the
-//      Playroom against a Clinic of the same seed and depth.
+//   2. in a small window, client/playroom_demo.tscn: the same on 13 floors; the Minder's clips (every
+//      pose the rules set has one, a new pose starts its clip at 0 and fades in, the gaits run on the
+//      distance walked); its figure as posed (about 2.3 m as built, the mask on the front, under
+//      1.6 m running on all fours, both hands on the mask counting); its pose hold off; its music box
+//      heard to 30 m; its mask readable in count dark at 10 m; pictures to export/shots/playroom/;
+//      and frame times walking the Playroom, the Minder prowling ahead, against a Clinic of the same
+//      seed and depth.
 // Writes export/shots/playroom/report.json. Exits non-zero if a check fails, a run does not finish,
 // or the engine printed an error. The window never captures the mouse; start
 // .local/guard-mouse.ps1 beside it anyway.
 // Usage: node playroom_walk.mjs [--seed=play-1] [--depth=4] [--bench=5] [--rounds=2] [--floors=40]
-//          [--break=sign|squeak] [--window=0]
+//          [--break=sign|squeak] [--minder-break=clip|hold] [--window=0]
 //   --break=sign   guesses each sign's number from its zone's kind (PlayroomView.test_break): must fail
 //   --break=squeak leaves one squeaker tile out: must fail
+//   --minder-break=clip  maps the look pose to a clip the model does not have: the clips check must fail
+//   --minder-break=hold  draws the held pose handed in: the hold check must fail (clip+hold: both)
 //   --window=0     only the headless check
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -29,6 +36,7 @@ const bench = arg('bench', '5');
 const rounds = arg('rounds', '2');
 const floors = arg('floors', '40');
 const brk = arg('break', '');
+const minderBrk = arg('minder-break', '');
 const windowed = arg('window', '1') !== '0';
 const project = resolve(here, '..');
 const godot = process.env.GODOT || resolve(here, '../../tools/godot/Godot_v4.7.2-stable_win64_console.exe');
@@ -54,7 +62,7 @@ function run(args, prefix, seconds) {
 }
 
 const failures = [];
-const report = { seed, depth, break: brk };
+const report = { seed, depth, break: brk, minderBreak: minderBrk };
 const errorsIn = (lines) => lines.filter((l) => /\b(SCRIPT ERROR|ERROR)\b/.test(l));
 
 const head = ['--headless', '--path', project, '--script', 'res://tools/playroom_look_check.gd', '--', `floors=${floors}`];
@@ -71,6 +79,7 @@ if (windowed) {
   const args = ['--path', project, '--resolution', '960x540', '--position', '40,40', 'res://client/playroom_demo.tscn', '--',
     `shots=${shots.replaceAll('\\', '/')}`, `seed=${seed}`, `depth=${depth}`, `bench=${bench}`, `rounds=${rounds}`];
   if (brk) args.push(`break=${brk}`);
+  if (minderBrk) args.push(`minder_break=${minderBrk}`);
   const w = await run(args, 'playroom demo:', 400);
   const jsonLine = w.lines.find((l) => l.startsWith('playroom demo json: '));
   const demo = jsonLine ? JSON.parse(jsonLine.slice('playroom demo json: '.length)) : {};
@@ -88,6 +97,7 @@ if (windowed) {
   }
 }
 report.failures = failures;
-writeFileSync(resolve(shots, brk ? `report_break_${brk}.json` : 'report.json'), JSON.stringify(report, null, 2));
+const tag = [brk, minderBrk && `minder_${minderBrk}`].filter(Boolean).join('_');
+writeFileSync(resolve(shots, tag ? `report_break_${tag}.json` : 'report.json'), JSON.stringify(report, null, 2));
 console.log(failures.length ? `PLAYROOM WALK FAILED: ${failures.join('; ')}` : `PLAYROOM WALK PASSED (pictures in ${shots})`);
 process.exit(failures.length ? 1 : 0);

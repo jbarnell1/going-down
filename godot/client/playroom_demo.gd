@@ -8,26 +8,34 @@
 #            every zone's signs reading its hide count from the rules; real lights under the limit
 #            (PlayroomView.check)
 #   dark     the count-dark flag: every real light and strip light out, the glow-in-the-dark things on
-#   figure   about 2.3 m standing; the fingertips below the knees; one mask, on the front of the head,
-#            facing forward; on all fours it is low and its hands are at the floor; counting, both
-#            hands are on the mask
+#   clips    every pose the rules can set (sim/seek.gd's, the documented list, the interim rules'
+#            names) has a clip in assets/entities/minder.glb; a new pose starts its clip from its first
+#            frame and fades in; the gaits run on the distance walked over their own ground speed
+#   figure   the Blender model as posed: about 2.3 m tall as built, stooped about 2 m standing; the
+#            fingertips below the knees; one mask, on the front of the head, facing forward; running on
+#            all fours under 1.6 m tall all through the cycle, prowling with its hands at the floor;
+#            counting, both hands on the mask
 #   hold     not a Stillness resident: handed a held pose while the snapshots move, it draws the
 #            snapshots' pose, a different picture on every frame the camera sees it
+#   glow     in count dark at 10 m the mask is the brightest thing in the picture round it
 #   music    one note per 0.5 m walked (three per 1.5 m), silent beyond 30 m and heard inside it, on
 #            the Entity bus or else Sfx
-#   frames   frame time walking the Playroom within the Clinic's of the same seed and depth (10 %
-#            and 0.5 ms)
-# Pictures (shots=DIR): the ball-pit hall, a party room and its sign, count dark, the Minder front
-# and side, upright and on all fours, and more. The release build loads it with
-# `GoingDown.exe -- scene=playroom_demo` (main.gd); tools/playroom_walk.mjs runs it on the project.
+#   frames   frame time walking the Playroom, with the Minder prowling ahead in view, within the
+#            Clinic's of the same seed and depth (10 % and 0.5 ms)
+# Pictures (shots=DIR): the ball-pit hall, a party room and its sign, count dark, the Minder in the
+# ball-pit hall, front, side and back, on all fours, mid-run, counting, in count dark close and at
+# 10 m, and more. The release build loads it with `GoingDown.exe -- scene=playroom_demo` (main.gd);
+# tools/playroom_walk.mjs runs it on the project.
 # Arguments after `--`: shots=DIR seed=play-1 depth=4 bench=5 (seconds per walk, 0 = none)
-# rounds=2 break=sign|squeak (PlayroomView.test_break: the rules check must go red).
+# rounds=2 break=sign|squeak (PlayroomView.test_break: the rules check must go red)
+# minder_break=clip|hold|clip+hold (MinderView.test_break: the clips or the hold check must go red).
 extends Node
 
 const Playroom = preload("res://sim/playroom.gd")
 const Clinic = preload("res://sim/clinic.gd")
 const Floor = preload("res://sim/floor.gd")
 const Run = preload("res://sim/run.gd")
+const Sight = preload("res://sim/sight.gd")
 const PlanDump = preload("res://client/plan_dump.gd")
 const PlayroomView = preload("res://client/playroom_view.gd")
 const AnnexView = preload("res://client/annex_view.gd")
@@ -36,6 +44,8 @@ const VFOV := 70.0
 const EYE := 1.65
 const S := 2.0
 const LH := 3.2
+## How far ahead of the camera the Minder prowls on the frame-time walk.
+const MINDER_AHEAD := 6.0
 
 ## A stand-in for the network client the Minder reads its un-held pose from (net/client.gd's
 ## _rt, _bracket and local_depth): two snapshots ({depth, orderly: pose, ...}) that move every frame.
@@ -87,6 +97,7 @@ func _ready() -> void:
 			"bench": bench = float(val)
 			"rounds": rounds = int(val)
 			"break": PlayroomView.test_break = val
+			"minder_break": MinderView.test_break = val
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	AudioServer.set_bus_volume_db(0, -18.0)
 	_build_view()
@@ -226,10 +237,67 @@ static func pose_at(p: Vector3, level_i: int, yaw: float, anim: String, t := 0.0
 static func yaw_facing(f: Vector3) -> float:
 	return atan2(-f.x, -f.z)
 
+## Every pose name the rules assign in sim/seek.gd (empty when the source is not there, as in a build).
+static func seek_poses() -> Array[String]:
+	var out: Array[String] = []
+	var src := FileAccess.get_file_as_string("res://sim/seek.gd")
+	var re := RegEx.new()
+	re.compile("\\.anim = &\"(\\w+)\"")
+	for m: RegExMatch in re.search_all(src):
+		if not out.has(m.get_string(1)):
+			out.append(m.get_string(1))
+	return out
+
+## The clips: every pose has one; a switch starts the new clip at its first frame and fades it in; a
+## gait's clock runs on the distance walked.
+func _clips_check() -> void:
+	var poses: Array[String] = []
+	var from_rules := seek_poses()
+	for p: String in MinderView.RULE_POSES + from_rules + ["idle", "walk", "duck", "reach"]:
+		if not poses.has(p):
+			poses.append(p)
+	var missing: Array[String] = []
+	for p in poses:
+		var c := MinderView.clip_for(p)
+		if c == "" or not minder.anims.has(c):
+			missing.append("%s -> %s" % [p, c if c != "" else "(no clip)"])
+	var spot := Vector3(0, 0, 0)
+	minder.reset()
+	minder.show_pose(pose_at(spot, 0, 0.0, "stand", 5.0), true)
+	minder.show_pose(pose_at(spot, 0, 0.0, "stand", 5.1), true)
+	# The rules' anim_time runs on through a switch; the clip starts from its own first frame.
+	minder.show_pose(pose_at(spot, 0, 0.0, "look", 5.2), true)
+	var starts := minder.clip == "look" and minder.clip_time == 0.0 and minder.fade < 1.0
+	await get_tree().process_frame
+	await get_tree().process_frame
+	minder.show_pose(pose_at(spot, 0, 0.0, "look", 5.3), true)
+	var runs_on := minder.clip_time > 0.0 and minder.fade > 0.0
+	# Gaits: 0.3 m walked moves the walk 0.3 s on (its own 1.0 m/s); 0.52 m moves the run 0.1 s on.
+	var gait := {}
+	for g: String in ["walk", "prowl", "run"]:
+		minder.reset()
+		minder.show_pose(pose_at(spot, 0, 0.0, g), true)
+		var d := 0.3 if g == "walk" else 0.52
+		minder.show_pose(pose_at(spot + Vector3(d, 0, 0), 0, 0.0, g), true)
+		gait[g] = {"walked": d, "clip_s": minder.clip_time, "want_s": d / float(MinderView.GAIT_SPEED[g])}
+	var gait_ok := true
+	for g: String in gait:
+		gait_ok = gait_ok and absf(float(gait[g].clip_s) - float(gait[g].want_s)) < 1e-4
+	report["clips"] = {"poses": poses, "from_seek": from_rules, "missing": missing, "switch_starts_at_0": starts, "then_runs": runs_on, "gaits": gait,
+		"model_clips": minder.anims.keys(), "break": MinderView.test_break}
+	_check("clips", missing.is_empty() and from_rules.size() > 0 and starts and runs_on and gait_ok,
+		"%d poses (%d from sim/seek.gd) each with a clip of the model%s; a switch starts the clip at 0 and fades it in: %s, then runs: %s; gaits on distance walked: %s" % [
+		poses.size(), from_rules.size(), "" if missing.is_empty() else ", MISSING: " + ", ".join(missing), starts, runs_on, gait_ok])
+
 func _minder_checks() -> void:
+	await _clips_check()
 	var spot := Vector3(0, 0, 0)
 	minder.reset()
 	minder.show_pose(pose_at(spot, 0, 0.0, "stand"), true)
+	# As built (the rest pose, upright): the model's own height.
+	minder.rest_pose()
+	var built := minder.extent().end.y
+	minder.hold_clip("stand", 0.0)
 	var e := minder.extent()
 	var top := e.end.y
 	var wrist := minder.fingertip_y()
@@ -238,20 +306,30 @@ func _minder_checks() -> void:
 	var head: Vector3 = mask.head
 	var at: Vector3 = mask.at
 	var facing: Vector3 = mask.facing
+	minder.reset()
 	minder.show_pose(pose_at(spot, 0, 0.0, "prowl"), true)
-	var e4 := minder.extent()
-	var hand4 := minder.joint_point("hand_l").y
+	var hand4 := maxf(minder.hand_middle("hand_l").y, minder.hand_middle("hand_r").y)
 	var kind4 := minder.body_kind
+	# The run, all through its cycle.
+	minder.show_pose(pose_at(spot, 0, 0.0, "run"), true)
+	var kindr := minder.body_kind
+	var run_top := 0.0
+	var run_len: float = (minder.anims["run"] as Animation).length
+	for i in 8:
+		minder.hold_clip("run", run_len * i / 8.0)
+		run_top = maxf(run_top, minder.extent().end.y)
+	minder.reset()
 	minder.show_pose(pose_at(spot, 0, 0.0, "cover"), true)
 	var kindc := minder.body_kind
 	var mc: Dictionary = minder.mask_info()
 	var mca: Vector3 = mc.at
 	var reach := maxf(minder.hand_middle("hand_l").distance_to(mca), minder.hand_middle("hand_r").distance_to(mca))
-	report["figure"] = {"height": top, "fingertip_y": wrist, "knee_y": knee, "mask_count": mask.count, "mask_ahead": at.z - head.z, "fours_top": e4.end.y, "fours_hand_y": hand4, "cover_hands_to_mask": reach}
-	var ok := top >= 2.1 and top <= 2.45 and wrist < knee and int(mask.count) == 1 and at.z - head.z > 0.25 and facing.z > 0.9 \
-		and e4.end.y < 1.6 and hand4 < 0.25 and kind4 == "fours" and kindc == "cover" and reach < 0.3
-	_check("figure", ok, "standing %.2f m tall; fingertips %.2f m, knee %.2f m; %d mask, %.2f m in front of the head, facing %s; on all fours %.2f m tall, hands at %.2f m; counting, the middle of both hands within %.2f m of the mask" % [
-		top, wrist, knee, int(mask.count), at.z - head.z, facing, e4.end.y, hand4, reach])
+	report["figure"] = {"height_built": built, "height_standing": top, "fingertip_y": wrist, "knee_y": knee, "mask_count": mask.count, "mask_ahead": at.z - head.z,
+		"mask_facing": [facing.x, facing.y, facing.z], "prowl_hand_y": hand4, "run_top": run_top, "cover_hands_to_mask": reach}
+	var ok := built >= 2.2 and built <= 2.4 and top >= 1.9 and top <= 2.45 and wrist < knee and int(mask.count) == 1 and at.z - head.z > 0.15 and facing.z > 0.9 \
+		and run_top < 1.6 and hand4 < 0.25 and kind4 == "fours" and kindr == "fours" and kindc == "cover" and reach < 0.3
+	_check("figure", ok, "%.2f m tall as built, %.2f m standing (stooped); fingertips %.2f m, knee %.2f m; %d mask, %.2f m in front of the head bone, facing %s; running at most %.2f m tall, prowling hands at %.2f m; counting, the middle of both hands within %.2f m of the mask" % [
+		built, top, wrist, knee, int(mask.count), at.z - head.z, facing, run_top, hand4, reach])
 	# The hold: a held pose handed in (as net/client.gd hands one in while the camera sees it) and
 	# snapshots that keep moving. The Minder draws the snapshots' pose: a new picture every frame.
 	var room := Playroom.party_room(fp)
@@ -373,6 +451,101 @@ func _way_in(r: Floor.Room) -> Array:
 func _room_centre(r: Floor.Room) -> Vector3:
 	return Vector3((r.x + r.w * 0.5) * S, r.level * LH, (r.y + r.h * 0.5) * S)
 
+## A clear 10 m line on level 0, the ball-pit halls first: [the eye, the Minder's feet] or [].
+func _ten_metre_line() -> Array:
+	var cells: Array[Vector2i] = []
+	for r in fp.rooms:
+		if r.kind == &"ballpit" and r.level == 0:
+			for y in range(r.y, r.y + r.h):
+				for x in range(r.x, r.x + r.w):
+					cells.append(Vector2i(x, y))
+	for y in level.H:
+		for x in level.W:
+			cells.append(Vector2i(x, y))
+	var n := int(round(10.0 / S))
+	for a in cells:
+		if not level.walkable(0, a.x, a.y) or level.kind(0, a.x, a.y) == "stair":
+			continue
+		for d: Vector2i in AnnexView.DIRS:
+			var b := a + d * n
+			if b.x < 0 or b.y < 0 or b.x >= level.W or b.y >= level.H:
+				continue
+			if not level.walkable(0, b.x, b.y) or level.kind(0, b.x, b.y) == "stair":
+				continue
+			var eye := level.cell_center(0, a.x, a.y) + Vector3(0, EYE, 0)
+			var feet := level.cell_center(0, b.x, b.y)
+			var ok := true
+			for h: float in [0.4, 1.0, 1.9]:
+				var e := Sight.Point3.make(eye.x, eye.y, eye.z, 0)
+				var s := Sight.Point3.make(feet.x, feet.y + h, feet.z, 0)
+				ok = ok and Sight.has_line_of_sight(fp, e, s)
+			if ok:
+				return [eye, feet]
+	return []
+
+## The Minder standing 10 m away facing the camera in count dark, the picture taken, and how the mask
+## reads in it: its brightest pixel against the picture round it (the glow check).
+func _glow_at_10m() -> void:
+	var line := _ten_metre_line()
+	if line.is_empty():
+		_check("glow", false, "no clear 10 m line on this floor")
+		return
+	var eye: Vector3 = line[0]
+	var feet: Vector3 = line[1]
+	var to_cam := Vector3(eye.x - feet.x, 0, eye.z - feet.z).normalized()
+	# Stood back by as far as its mask hangs in front of its feet, so the mask itself is 10 m away.
+	feet -= to_cam * 0.6
+	minder.reset()
+	minder.follow(null)
+	minder.show_pose(pose_at(feet, 0, yaw_facing(to_cam), "stand", 1.0), true)
+	_look(eye, feet + Vector3(0, 1.3, 0))
+	view.call(&"set_count_dark", 1.0)
+	await _frames(6)
+	var img: Image = await _grab()
+	var path := shots_dir.path_join("minder_dark_10m.png")
+	var err := img.save_png(path)
+	shot_lines.append("minder_dark_10m.png %s: the Minder 10 m away in count dark: the mask alone" % ("ok" if err == OK else "FAILED"))
+	# Where the mask is in the picture (the 480x270 view, scaled to the window).
+	var mi: Dictionary = minder.mask_info()
+	var mask_w := minder.to_global(mi.at as Vector3)
+	# The tape's slight barrel (client/tape.gdshader): the screen point whose source is the mask's.
+	var src := cam.unproject_position(mask_w) / Vector2(sub.size) - Vector2(0.5, 0.5)
+	var cc := src
+	for i in 4:
+		cc = src / (1.0 - 0.035 + 0.07 * cc.dot(cc))
+	var sp := (cc + Vector2(0.5, 0.5)) * Vector2(img.get_width(), img.get_height())
+	var k := float(img.get_width()) / sub.size.x
+	var peak := 0.0
+	var near := PackedFloat32Array()
+	var ring := PackedFloat32Array()
+	var r_in := int(4.0 * k)
+	var r_out := int(30.0 * k)
+	for y in range(int(sp.y) - r_out, int(sp.y) + r_out + 1):
+		for x in range(int(sp.x) - r_out, int(sp.x) + r_out + 1):
+			if x < 0 or y < 0 or x >= img.get_width() or y >= img.get_height():
+				continue
+			var l := img.get_pixel(x, y).get_luminance()
+			var d := Vector2(x - sp.x, y - sp.y).length()
+			if d <= r_in:
+				near.append(l)
+				peak = maxf(peak, l)
+			elif d > r_in * 3:
+				ring.append(l)
+	near.sort()
+	ring.sort()
+	var mask_l := near[int(near.size() * 0.75)] if near.size() > 0 else 0.0
+	var bg_p95 := ring[int(ring.size() * 0.95)] if ring.size() > 0 else 1.0
+	var bg_med := ring[ring.size() / 2] if ring.size() > 0 else 1.0
+	view.call(&"set_count_dark", 0.0)
+	minder.visible = false
+	var dist := eye.distance_to(mask_w)
+	var glow: Dictionary = minder.mask_glow()
+	report["glow"] = {"distance_m": dist, "mask_px": [sp.x, sp.y], "mask_peak": peak, "mask_p75": mask_l, "round_p95": bg_p95, "round_median": bg_med,
+		"emission_lit": glow.lit, "emission_dark": glow.dark}
+	_check("glow", absf(dist - 10.0) < 0.6 and peak >= 0.45 and mask_l > bg_p95 * 1.5 and mask_l > bg_med + 0.2,
+		"in count dark the mask %.1f m away: brightest %.2f, three quarters of it over %.2f; round it the brightest twentieth over %.2f, the median %.2f (mask emission %.2f lit, %.2f dark)" % [
+		dist, peak, mask_l, bg_p95, bg_med, float(glow.lit), float(glow.dark)])
+
 func _pictures() -> void:
 	DirAccess.make_dir_recursive_absolute(shots_dir)
 	minder.visible = false
@@ -423,8 +596,12 @@ func _pictures() -> void:
 			to_door = (w[0] as Vector3) - c
 			to_door.y = 0
 			to_door = to_door.normalized()
-		var side := Vector3(-to_door.z, 0, to_door.x)
-		var at := c + to_door * 0.6
+		# On the open floor along a side wall, clear of the laid table and its seats; the side views look
+		# at it from the middle of the room.
+		to_door = Vector3(signf(to_door.x), 0, 0) if absf(to_door.x) > absf(to_door.z) else Vector3(0, 0, signf(to_door.z))
+		var half_side := (absf(to_door.z) * party.w + absf(to_door.x) * party.h) * S * 0.5
+		var side := -Vector3(-to_door.z, 0, to_door.x)
+		var at := c - side * maxf(0.0, half_side - 1.3)
 		minder.reset()
 		minder.follow(null)
 		minder.visible = true
@@ -443,10 +620,18 @@ func _pictures() -> void:
 		await _shot("minder_fours_side", "the Minder on all fours, from the side")
 		_look(at + to_door * 3.6 + side * 0.6 + Vector3(0, 1.0, 0), at + Vector3(0, 0.7, 0))
 		await _shot("minder_fours_front", "the Minder on all fours, coming")
+		# Mid-run: the bound, the hind feet landing together, the fore feet reaching far out.
+		minder.reset()
+		minder.show_pose(pose_at(at, party.level, yaw, "run", 1.0), true)
+		minder.hold_clip("run", (minder.anims["run"] as Animation).length * 0.3)
+		_look(at + side * 3.6 + Vector3(0, 1.1, 0), at + Vector3(0, 0.6, 0))
+		await _shot("minder_run", "the Minder mid-run, on all fours, from the side")
 		minder.reset()
 		minder.show_pose(pose_at(at, party.level, yaw + PI, "cover", 1.0), true)
+		_look(at - to_door * 2.4 + side * 1.4 + Vector3(0, 1.3, 0), at + Vector3(0, 0.85, 0))
+		await _shot("minder_cover", "the Minder counting: crouched, both hands over the mask")
 		_look(at + side * 2.8 + to_door * 1.6 + Vector3(0, 1.4, 0), at + Vector3(0, 0.8, 0))
-		await _shot("minder_cover", "the Minder counting: crouched, hands over the mask")
+		await _shot("minder_cover_back", "the Minder counting, from behind: the bare back of its head")
 		minder.reset()
 		minder.show_pose(pose_at(at, party.level, yaw, "stand", 2.0), true)
 		_look(at + to_door * 3.4 + Vector3(0, 1.45, 0), at + Vector3(0, 1.35, 0))
@@ -455,6 +640,21 @@ func _pictures() -> void:
 		await _shot("minder_dark", "the Minder in count dark: only the mask glows")
 		view.call(&"set_count_dark", 0.0)
 		minder.visible = false
+	# 3b. The Minder in the ball-pit hall, lit, from its way in; then at 10 m in count dark.
+	if pit != null:
+		var w := _way_in(pit)
+		if not w.is_empty():
+			var inside: Vector3 = w[0]
+			var c := _room_centre(pit)
+			var into := Vector3(c.x - inside.x, 0, c.z - inside.z).normalized()
+			var at := inside + into * 3.6
+			minder.reset()
+			minder.follow(null)
+			minder.show_pose(pose_at(at, pit.level, yaw_facing(-into), "stand", 1.0), true)
+			_look(inside - into * 0.6 + Vector3(0, EYE, 0), at + Vector3(0, 1.2, 0))
+			await _shot("minder_ballpit", "the Minder in the ball-pit hall, lit, from its way in")
+			minder.visible = false
+	await _glow_at_10m()
 	# 4. The shoe room by the lift: PLAY NICELY, the height chart, SOCKS MUST BE WORN.
 	var lobby := _first_room("lobby")
 	if lobby != null:
@@ -566,8 +766,20 @@ func _edge(c: Vector2i, d: Vector2i) -> String:
 	if d == Vector2i(-1, 0): return vert[c.y * (w + 1) + c.x]
 	return vert[c.y * (w + 1) + c.x + 1]
 
-## Walks the route for `secs` at 3 m/s (back again at the end) and returns the frame times in ms.
-func _walk(secs: float) -> PackedFloat64Array:
+## The point `along` metres down the path, and the path's next corner after it.
+static func _path_point(path: Array[Vector3], along: float) -> Array[Vector3]:
+	var acc := 0.0
+	for i in range(1, path.size()):
+		var seg := path[i].distance_to(path[i - 1])
+		if acc + seg >= along:
+			var k := (along - acc) / maxf(seg, 0.001)
+			return [path[i - 1].lerp(path[i], k), path[mini(i + 1, path.size() - 1)]]
+		acc += seg
+	return [path[0], path[path.size() - 1]]
+
+## Walks the route for `secs` at 3 m/s (back again at the end) and returns the frame times in ms. With
+## the Minder, it prowls MINDER_AHEAD metres in front of the camera along the route, drawn every frame.
+func _walk(secs: float, with_minder := false) -> PackedFloat64Array:
 	var path := _route()
 	var times := PackedFloat64Array()
 	var dist := 0.0
@@ -588,25 +800,23 @@ func _walk(secs: float) -> PackedFloat64Array:
 			times.append(dt * 1000.0)
 		dist += 3.0 * minf(dt, 0.1)
 		var along := fmod(dist, 2.0 * total)
-		if along > total:
+		var back := along > total
+		if back:
 			along = 2.0 * total - along
-		var pos := path[0]
-		var ahead := path[path.size() - 1]
-		var acc := 0.0
-		for i in range(1, path.size()):
-			var seg := path[i].distance_to(path[i - 1])
-			if acc + seg >= along:
-				var k := (along - acc) / maxf(seg, 0.001)
-				pos = path[i - 1].lerp(path[i], k)
-				ahead = path[mini(i + 1, path.size() - 1)]
-				break
-			acc += seg
-		var dir := ahead - pos
+		var at := _path_point(path, along)
+		var pos := at[0]
+		var dir := at[1] - pos
 		var want := atan2(-dir.x, -dir.z) if dir.length() > 0.01 else yaw
 		yaw = want if first else lerp_angle(yaw, want, minf(1.0, dt * 4.0))
 		first = false
 		cam.position = pos
 		cam.rotation = Vector3(-0.05, yaw, 0)
+		if with_minder:
+			var m_along := clampf(along + (-MINDER_AHEAD if back else MINDER_AHEAD), 0.0, total)
+			var m := _path_point(path, m_along)
+			var feet := m[0] - Vector3(0, EYE, 0)
+			var to_cam := Vector3(pos.x - feet.x, 0, pos.z - feet.z)
+			minder.show_pose(pose_at(feet, 0, yaw_facing(to_cam.normalized()) if to_cam.length() > 0.01 else yaw, "prowl"), true)
 	return times
 
 func _bench() -> void:
@@ -619,7 +829,11 @@ func _bench() -> void:
 		for place: String in ["playroom", "clinic"]:
 			_build(playroom_plan(seed_text, depth) if place == "playroom" else clinic_plan(seed_text, depth))
 			await _frames(5)
-			var times: PackedFloat64Array = await _walk(bench)
+			minder.reset()
+			if place == "playroom":
+				minder.set_floor(fp, level)
+			var times: PackedFloat64Array = await _walk(bench, place == "playroom")
+			minder.visible = false
 			var sofar: PackedFloat64Array = all[place]
 			sofar.append_array(times)
 			all[place] = sofar
