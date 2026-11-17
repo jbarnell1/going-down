@@ -18,7 +18,7 @@ The ElevenLabs key is not in this repository. `.local/MACHINE.md` (not in git) s
 The account is shared with the owner's other work, so the game is careful with its credits:
 
 - Before any batch, call `GET https://api.elevenlabs.io/v1/user/subscription` and log characters used and the limit.
-- **Cap: 100,000 characters in total for the game, takes included** (the owner raised it from 25,000 on 2026-11-15, to 50,000, and to 100,000 on 2026-11-17 after topping up the account). Keep a running total in `assets_src/voice/ledger.json`.
+- **Cap: 100,000 characters in total for the game, takes included** (the owner raised it from 25,000 on 2026-11-15, to 50,000 the same day, and to 100,000 on 2026-11-17 after topping up the account). Keep a running total in `assets_src/voice/ledger.json`.
 - Stop and record a question if a batch would use more than 10% of what is left this month.
 - Cache by a hash of text + voice + model + settings. Never pay twice for the same line.
 
@@ -102,6 +102,11 @@ To add a third (for example Sarah, already shortlisted, whose three audition lin
 - `--publish` now also writes the manifest, and the files of each voice that already has a folder there (Bella), to `godot/assets/voice/`, which the Godot game reads; `check.mjs` checks that copy matches.
 - A one-word clip runs 1.15 to 1.41 s (about 0.1 s before the word and a 0.25 s tail), so the check's estimate never goes below 1.0 s.
 - `godot/client/count_lines.gd` maps the count's events to these line ids for the count on screen (T15e).
+
+## Learned on 2026-11-17 (the orientation tape, ST2)
+
+- A group in `lines.json` may name its voices (`groups.tape.voices: ["Bella"]`): `--all`, `--publish`, the audition page and `check.mjs` then make, ship and check its lines in those voices only, the manifest lists them on the line (`"voices": ["bella"]`), and `check.mjs` fails if the ledger shows one recorded in another voice.
+- Five beats of the tape, one take each, 958 characters. Bella read them at 0.83 to 0.97 of the design's seconds. The tape cuts its pictures on the pauses between sentences (`node godot/tools/tape_cues.mjs`, which writes the cue times into `godot/data/tapes.json`); run it again after any re-take.
 
 ## Checks the loop can run
 

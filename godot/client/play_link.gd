@@ -71,6 +71,9 @@ const PIT_HEAD := 0.5
 const SLOT_GAP := 0.55
 ## Peeking from the ball pit the camera is just over the balls' tops (the pit's eye, 0.3 m, is under them).
 const PIT_PEEK_EYE := 0.47
+## Sat back in the ball pit (T15m, owner: "should just lower your camera"): the eyes at the balls, so the
+## room stays in view over them.
+const PIT_SAT_EYE := 0.42
 ## Peeking: how far up or down the gap lets you look.
 const PEEK_PITCH := 0.35
 ## After F for a hide, the body waits this long at most for the host's answer before it may move.
@@ -775,9 +778,9 @@ func hide_camera(row: Dictionary, latest: Dictionary, id: String, want_yaw: floa
 	var z := ins.z + off.y
 	var y := ins.y + eye_h
 	if not peek:
-		# Sat back: lower, and back from the gap (in the pit, down among the balls; in a cabinet or under a
+		# Sat back: lower, and back from the gap (in the pit, down at the balls' tops; in a cabinet or under a
 		# desk only as far as its back panel allows).
-		y = ins.y + (0.3 if h.kind == &"pit" else maxf(0.25, eye_h - SAT_DROP))
+		y = ins.y + (PIT_SAT_EYE if h.kind == &"pit" else maxf(0.25, eye_h - SAT_DROP))
 		var back := 0.0 if h.kind == &"pit" else (0.12 if h.kind == &"cabinet" else (0.2 if h.kind == &"desk" else SAT_BACK))
 		x -= gx * back
 		z -= gz * back

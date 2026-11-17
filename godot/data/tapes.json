@@ -1,0 +1,353 @@
+{
+  "about": "Continuance's tapes (docs/floors/story.md sections 2 and 3). Per shot: its beat (one recording per beat, assets_src/voice/lines.json group tape), the design's target seconds, then (the share of the shot after which its second move starts, or null), the caption drawn in the picture, the subtitle (that shot's part of the beat's recording, word for word), the pictograms it uses (client/tape_symbols.gd NAMES) and the picture client/orientation_tape.gd draws. Per beat: where in its recording each shot starts (cues) and the recording's length, both measured by godot/tools/tape_cues.mjs; never edit them by hand.",
+  "orientation": {
+    "title": "CONTINUANCE INDUCTION 1",
+    "beats": {
+      "a": {
+        "line": "tape_orient_a",
+        "audio": "res://assets/voice/bella/tape_orient_a.mp3",
+        "cues": [
+          0,
+          2.805,
+          6.975,
+          9.355
+        ],
+        "duration": 10.684
+      },
+      "b": {
+        "line": "tape_orient_b",
+        "audio": "res://assets/voice/bella/tape_orient_b.mp3",
+        "cues": [
+          0,
+          4.157,
+          8.25
+        ],
+        "duration": 10.684
+      },
+      "c": {
+        "line": "tape_orient_c",
+        "audio": "res://assets/voice/bella/tape_orient_c.mp3",
+        "cues": [
+          0,
+          3.55,
+          6.672,
+          8.469,
+          11.003
+        ],
+        "duration": 15.308
+      },
+      "d": {
+        "line": "tape_orient_d",
+        "audio": "res://assets/voice/bella/tape_orient_d.mp3",
+        "cues": [
+          0,
+          1.971,
+          5.086,
+          6.784
+        ],
+        "duration": 10.841
+      },
+      "e": {
+        "line": "tape_orient_e",
+        "audio": "res://assets/voice/bella/tape_orient_e.mp3",
+        "cues": [
+          0,
+          4.7,
+          7.351,
+          9.578
+        ],
+        "duration": 12.278
+      }
+    },
+    "shots": [
+      {
+        "n": 1,
+        "beat": "a",
+        "target": 2.5,
+        "then": null,
+        "caption": "CONTINUANCE",
+        "subtitle": "Hello! And welcome to Continuance.",
+        "symbols": [
+          "mark"
+        ],
+        "picture": "mark_rise"
+      },
+      {
+        "n": 2,
+        "beat": "a",
+        "target": 4.5,
+        "then": 0.4,
+        "caption": "LIDGATE",
+        "subtitle": "This is Lidgate, our city. Everything is measured from here.",
+        "symbols": [
+          "line",
+          "city"
+        ],
+        "picture": "city_up"
+      },
+      {
+        "n": 3,
+        "beat": "a",
+        "target": 2.5,
+        "then": null,
+        "caption": "NOTHING",
+        "subtitle": "Below Lidgate, there is nothing.",
+        "symbols": [
+          "line",
+          "city"
+        ],
+        "picture": "drop_below"
+      },
+      {
+        "n": 4,
+        "beat": "a",
+        "target": 2,
+        "then": null,
+        "caption": "NOTHING*",
+        "subtitle": "Almost nothing.",
+        "symbols": [
+          "line",
+          "floors"
+        ],
+        "picture": "floors_unroll"
+      },
+      {
+        "n": 5,
+        "beat": "b",
+        "target": 4,
+        "then": 0.55,
+        "caption": "YOU",
+        "subtitle": "This is you. You have been sentenced. Congratulations!",
+        "symbols": [
+          "line",
+          "you"
+        ],
+        "picture": "you_alone"
+      },
+      {
+        "n": 6,
+        "beat": "b",
+        "target": 4,
+        "then": 0.3,
+        "caption": "YOUR CREW",
+        "subtitle": "This is your crew. Draw your own face. We insist.",
+        "symbols": [
+          "line",
+          "crew"
+        ],
+        "picture": "crew_faces"
+      },
+      {
+        "n": 7,
+        "beat": "b",
+        "target": 3,
+        "then": null,
+        "caption": "GOING DOWN",
+        "subtitle": "Each morning, the car takes you down.",
+        "symbols": [
+          "line",
+          "city",
+          "car",
+          "crew",
+          "down"
+        ],
+        "picture": "car_down"
+      },
+      {
+        "n": 8,
+        "beat": "c",
+        "target": 4.5,
+        "then": 0.35,
+        "caption": "RESIDENT",
+        "subtitle": "Every floor has a resident. We do not know what they are.",
+        "symbols": [
+          "line",
+          "floors",
+          "resident"
+        ],
+        "picture": "residents"
+      },
+      {
+        "n": 9,
+        "beat": "c",
+        "target": 4,
+        "then": 0.45,
+        "caption": "RECORD",
+        "subtitle": "Point your instrument at it. Record what it does.",
+        "symbols": [
+          "line",
+          "you",
+          "instrument",
+          "resident",
+          "waves"
+        ],
+        "picture": "record"
+      },
+      {
+        "n": 10,
+        "beat": "c",
+        "target": 2,
+        "then": null,
+        "caption": "CREDITS",
+        "subtitle": "Readings become credits.",
+        "symbols": [
+          "line",
+          "waves",
+          "credit"
+        ],
+        "picture": "waves_to_credits"
+      },
+      {
+        "n": 11,
+        "beat": "c",
+        "target": 3,
+        "then": null,
+        "caption": "",
+        "subtitle": "Credits keep the lights on upstairs.",
+        "symbols": [
+          "line",
+          "credit",
+          "city"
+        ],
+        "picture": "credits_up"
+      },
+      {
+        "n": 12,
+        "beat": "c",
+        "target": 4.5,
+        "then": 0.55,
+        "caption": "CLASSIFIED",
+        "subtitle": "Each resident keeps one rule. We may not tell you what it is.",
+        "symbols": [
+          "line",
+          "hazard?"
+        ],
+        "picture": "classified"
+      },
+      {
+        "n": 13,
+        "beat": "d",
+        "target": 2.5,
+        "then": null,
+        "caption": "QUOTA",
+        "subtitle": "Meet the quota. Call the car.",
+        "symbols": [
+          "line",
+          "meter",
+          "button"
+        ],
+        "picture": "quota"
+      },
+      {
+        "n": 14,
+        "beat": "d",
+        "target": 3.5,
+        "then": null,
+        "caption": "",
+        "subtitle": "The car is not quiet. The floor will notice.",
+        "symbols": [
+          "line",
+          "car",
+          "resident"
+        ],
+        "picture": "car_noticed"
+      },
+      {
+        "n": 15,
+        "beat": "d",
+        "target": 2.5,
+        "then": null,
+        "caption": "BE ABOARD",
+        "subtitle": "Be aboard when the doors close.",
+        "symbols": [
+          "line",
+          "doors",
+          "you"
+        ],
+        "picture": "doors_close"
+      },
+      {
+        "n": 16,
+        "beat": "d",
+        "target": 4.5,
+        "then": 0.5,
+        "caption": "LATE",
+        "subtitle": "Please do not stay late. Staying late is... discouraged.",
+        "symbols": [
+          "line",
+          "doors",
+          "you",
+          "clock"
+        ],
+        "picture": "late"
+      },
+      {
+        "n": 17,
+        "beat": "e",
+        "target": 4,
+        "then": 0.4,
+        "caption": "BANK / DOWN",
+        "subtitle": "Then choose. Up, to bank your day. Or down, for more.",
+        "symbols": [
+          "line",
+          "bank",
+          "down",
+          "you"
+        ],
+        "picture": "choose"
+      },
+      {
+        "n": 18,
+        "beat": "e",
+        "target": 3.5,
+        "then": null,
+        "caption": "REMISSION",
+        "subtitle": "Bank enough, and your sentence will end.",
+        "symbols": [
+          "line",
+          "bunk",
+          "tally"
+        ],
+        "picture": "remission"
+      },
+      {
+        "n": 19,
+        "beat": "e",
+        "target": 3,
+        "then": null,
+        "caption": "",
+        "subtitle": "Many crews are well on their way!",
+        "symbols": [
+          "line",
+          "tally"
+        ],
+        "picture": "long_bar"
+      },
+      {
+        "n": 20,
+        "beat": "e",
+        "target": 2.5,
+        "then": null,
+        "caption": "LEAVE IT WITH US",
+        "subtitle": "Continuance. Leave it with us.",
+        "symbols": [
+          "mark",
+          "line"
+        ],
+        "picture": "mark_end"
+      },
+      {
+        "n": 21,
+        "beat": "",
+        "target": 2,
+        "then": null,
+        "caption": "PLEASE REWIND",
+        "subtitle": "- CLUNK -",
+        "symbols": [
+          "line"
+        ],
+        "picture": "rewind"
+      }
+    ]
+  }
+}

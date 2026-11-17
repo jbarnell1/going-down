@@ -49,6 +49,24 @@
       "about": "The lift's voice running hide-and-seek on the Playroom floor (docs/floors/playarea.md sections 3 and 10). Played by the count on screen (T15e) by line id, not dealt by moment: godot/client/count_lines.gd maps each count event to its line id.",
       "countdown": "Numbers recorded: one to ten, and twenty, thirty, forty. The voice says forty, thirty and twenty as they pass (never on the count's first second, which belongs to 'Coming, ready or not!'), then every second from ten to one. The bell carries the seconds in between. 13 clips cover every count length (30, 35, 40, 45 s) instead of 45, and the last ten are the part worth hearing every second: the bell rises over the last five.",
       "audition": "Three takes of each line and two of each number. For the numbers, pick one take that sounds the same across all thirteen, since they play one after another. Until you choose, take 1 plays."
+    },
+    "hints": {
+      "title": "The hints",
+      "about": "The announcer teaching the game's systems the first time a crew meets them (docs/floors/announcer-hints.md). Each hint is one moment with an A line (_1) and a B line (_2); the deck deals A one time and B the next. Played through godot/client/hints.gd's gate (repeat, spacing, never over another line).",
+      "audition": "One take each. Listen for the dry ones sounding bored rather than angry, and the close ones (hint_listen, hint_play_no_run) sounding confidential, not whispered."
+    },
+    "day": {
+      "title": "The waiting car and the empty day",
+      "about": "Lines from docs/floors/findables-and-day.md whose triggers exist today: the car waiting for someone aboard (car_waiting) and nobody coming back (day_wiped). bank_refused and day_met wait for the BANK lock and the day's earned (FD2).",
+      "audition": "One take each."
+    },
+    "tape": {
+      "title": "The orientation tape",
+      "about": "Continuance's induction video (docs/floors/story.md section 2), played once on joining by godot/client/orientation_tape.gd, by line id, never dealt by moment. One recording per beat; the tape's shots share it. A tape is an object in the world, recorded once, so only Bella reads it.",
+      "voices": [
+        "Bella"
+      ],
+      "audition": "One take of each beat. The tape cuts its pictures on the pauses between sentences, so a re-take needs the cue times rebuilt (node godot/tools/tape_cues.mjs)."
     }
   },
   "moments": {
@@ -135,6 +153,170 @@
     "count_done": {
       "priority": 4,
       "when": "Playroom: the count reaches zero"
+    },
+    "hint_job": {
+      "priority": 2,
+      "when": "6 s after the doors open on the first floor of the night's first day"
+    },
+    "hint_quiet_needle": {
+      "priority": 2,
+      "when": "120 s on a floor with nothing earned there yet and an instrument raised at least once"
+    },
+    "hint_call_dead": {
+      "priority": 2,
+      "when": "the call is refused because the floor quota is short"
+    },
+    "hint_floor_not_day": {
+      "priority": 2,
+      "when": "the floor quota is met while the day quota is not; after the quota line"
+    },
+    "hint_board": {
+      "priority": 3,
+      "when": "a called car arrives (in place of the arrived line), once a day"
+    },
+    "hint_straggler": {
+      "priority": 3,
+      "when": "14 s before the boarding doors close, with an active player not aboard"
+    },
+    "hint_left_crew": {
+      "priority": 3,
+      "when": "another player is left behind by the car"
+    },
+    "hint_left_you": {
+      "priority": 4,
+      "when": "you are left behind by the car (only you hear it)"
+    },
+    "hint_car_stay": {
+      "priority": 2,
+      "when": "the arrival car has waited 10 s with someone aboard and someone on the floor"
+    },
+    "hint_car_no_record": {
+      "priority": 2,
+      "when": "you hold the instrument up while aboard a waiting car (only you hear it)"
+    },
+    "hint_car_here": {
+      "priority": 2,
+      "when": "the call is refused because the car is still at the floor"
+    },
+    "hint_vote": {
+      "priority": 2,
+      "when": "3 s after the first player steps aboard in the night's first boarding"
+    },
+    "hint_bank_locked": {
+      "priority": 3,
+      "when": "someone stands on BANK while the day is locked"
+    },
+    "hint_day": {
+      "priority": 2,
+      "when": "the first ride down of the night's first day (in place of the ride line)"
+    },
+    "hint_stakes": {
+      "priority": 2,
+      "when": "the first morning any crew member owns an upgrade"
+    },
+    "hint_last_miss": {
+      "priority": 3,
+      "when": "a new day with two misses this night"
+    },
+    "hint_down_crew": {
+      "priority": 4,
+      "when": "another player goes down (the first two a day)"
+    },
+    "hint_down_you": {
+      "priority": 4,
+      "when": "you go down (the first two a day; only you hear it)"
+    },
+    "hint_out": {
+      "priority": 2,
+      "when": "the day's first player out; after the taken line"
+    },
+    "hint_winded": {
+      "priority": 1,
+      "when": "you are winded for the first time tonight (only you hear it)"
+    },
+    "hint_search": {
+      "priority": 1,
+      "when": "a search prompt has been on your screen for 3 s and you have searched nothing tonight"
+    },
+    "hint_note": {
+      "priority": 2,
+      "when": "the night's first poem note is found; when the finder's card closes"
+    },
+    "hint_juice": {
+      "priority": 1,
+      "when": "you pick up your first carton"
+    },
+    "hint_odds": {
+      "priority": 1,
+      "when": "you first stand close to a printed sheet or a Playroom zone sign, facing it"
+    },
+    "hint_marks": {
+      "priority": 2,
+      "when": "75 s after the doors open on the night's first Annex, if the crew has placed no mark"
+    },
+    "hint_hide": {
+      "priority": 1,
+      "when": "a hide prompt first shows on your screen, off the Playroom (only you hear it)"
+    },
+    "hint_hide_idle": {
+      "priority": 1,
+      "when": "you have sat in a hide for 25 s with no count running (only you hear it)"
+    },
+    "hint_play_arrive": {
+      "priority": 3,
+      "when": "the doors open on a Playroom (in place of the doors line), every Playroom arrival"
+    },
+    "hint_play_anger": {
+      "priority": 2,
+      "when": "the anger bar first passes half with no count running"
+    },
+    "hint_play_instruments": {
+      "priority": 4,
+      "when": "a provoked count: when the 'Hide.' line ends, the first count of each Playroom floor"
+    },
+    "hint_play_no_run": {
+      "priority": 4,
+      "when": "the search begins (when 'Coming, ready or not!' ends); again if you sprint during a later search"
+    },
+    "hint_play_after": {
+      "priority": 3,
+      "when": "the floor's first count ends and the health bar appears; 2 s after 'All done!'"
+    },
+    "hint_play_table": {
+      "priority": 2,
+      "when": "you are seated at the party table (only you hear it)"
+    },
+    "hint_listen": {
+      "priority": 2,
+      "when": "the night's first resident starts hunting"
+    },
+    "hint_new_floor": {
+      "priority": 2,
+      "when": "the doors open at depth 3, the night's first new place (in place of the doors line)"
+    },
+    "hint_reroll": {
+      "priority": 2,
+      "when": "the doors open at depth 5 or deeper, not on a Playroom (in place of the doors line)"
+    },
+    "hint_home": {
+      "priority": 2,
+      "when": "the doors open in the prison after the ride up; after the banked line"
+    },
+    "hint_bed": {
+      "priority": 2,
+      "when": "30 s in the prison with nobody in bed"
+    },
+    "car_waiting": {
+      "priority": 2,
+      "when": "the arrival car has waited 20 s for someone aboard, then every 30 s"
+    },
+    "day_wiped": {
+      "priority": 3,
+      "when": "home after a wipe, when the day took an upgrade from someone"
+    },
+    "tape": {
+      "priority": 1,
+      "when": "never dealt by the announcer: the orientation tape plays these by id (godot/client/orientation_tape.gd)"
     }
   },
   "lines": [
@@ -998,6 +1180,1119 @@
       },
       "takes": 2,
       "note": "One a second with the bell. Falling, even, cheerful; the same read for every number."
+    },
+    {
+      "id": "hint_job_1",
+      "moment": "hint_job",
+      "group": "hints",
+      "text": "[professional] Instruments out, please. We pay for readings, not for sightseeing.",
+      "plain": "Instruments out, please. We pay for readings, not for sightseeing.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_job_2",
+      "moment": "hint_job",
+      "group": "hints",
+      "text": "[warmly] Your instrument is on E. It is why we keep you.",
+      "plain": "Your instrument is on E. It is why we keep you.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_quiet_needle_1",
+      "moment": "hint_quiet_needle",
+      "group": "hints",
+      "text": "[mischievously] The needle is quiet because you are safe. We do not pay for safe.",
+      "plain": "The needle is quiet because you are safe. We do not pay for safe.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_quiet_needle_2",
+      "moment": "hint_quiet_needle",
+      "group": "hints",
+      "text": "[warmly] Nothing recorded yet! Safe people record nothing. Do think about that.",
+      "plain": "Nothing recorded yet! Safe people record nothing. Do think about that.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_call_dead_1",
+      "moment": "hint_call_dead",
+      "group": "hints",
+      "text": "[dismissive] That button works when the floor quota is met. Not before.",
+      "plain": "That button works when the floor quota is met. Not before.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_call_dead_2",
+      "moment": "hint_call_dead",
+      "group": "hints",
+      "text": "[professional] Call refused. The panel shows what this floor still owes us.",
+      "plain": "Call refused. The panel shows what this floor still owes us.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_floor_not_day_1",
+      "moment": "hint_floor_not_day",
+      "group": "hints",
+      "text": "[professional] This floor is paid. Today is not. See the top corner.",
+      "plain": "This floor is paid. Today is not. See the top corner.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_floor_not_day_2",
+      "moment": "hint_floor_not_day",
+      "group": "hints",
+      "text": "[warmly] One floor does not make a day. Today's number is on your screen.",
+      "plain": "One floor does not make a day. Today's number is on your screen.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_board_1",
+      "moment": "hint_board",
+      "group": "hints",
+      "text": "[professional] Do not delay in boarding. Miss the car, and we keep your credits.",
+      "plain": "Do not delay in boarding. Miss the car, and we keep your credits.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_board_2",
+      "moment": "hint_board",
+      "group": "hints",
+      "text": "[warmly] Board promptly. Credits are for people who are inside the car.",
+      "plain": "Board promptly. Credits are for people who are inside the car.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_straggler_1",
+      "moment": "hint_straggler",
+      "group": "hints",
+      "text": "[Quick, light, playful pace] Somebody is not aboard! Their pay is about to become ours.",
+      "plain": "Somebody is not aboard! Their pay is about to become ours.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_straggler_2",
+      "moment": "hint_straggler",
+      "group": "hints",
+      "text": "[Quick, light, playful pace] We are short one passenger. The doors will not ask twice.",
+      "plain": "We are short one passenger. The doors will not ask twice.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_left_crew_1",
+      "moment": "hint_left_crew",
+      "group": "hints",
+      "text": "[warmly] One of you missed the car. Their credits stay with us.",
+      "plain": "One of you missed the car. Their credits stay with us.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_left_crew_2",
+      "moment": "hint_left_crew",
+      "group": "hints",
+      "text": "[delighted] A colleague stayed behind! They will wake in their cell, unpaid.",
+      "plain": "A colleague stayed behind! They will wake in their cell, unpaid.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_left_you_1",
+      "moment": "hint_left_you",
+      "group": "hints",
+      "text": "[warmly] You missed the car. No pay today. You will wake in your cell.",
+      "plain": "You missed the car. No pay today. You will wake in your cell.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_left_you_2",
+      "moment": "hint_left_you",
+      "group": "hints",
+      "text": "[warmly] The car left without you. So did your credits. See you at home.",
+      "plain": "The car left without you. So did your credits. See you at home.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_car_stay_1",
+      "moment": "hint_car_stay",
+      "group": "hints",
+      "text": "[professional] The car cannot leave while anyone is aboard. Step off.",
+      "plain": "The car cannot leave while anyone is aboard. Step off.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_car_stay_2",
+      "moment": "hint_car_stay",
+      "group": "hints",
+      "text": "[warmly] Still aboard? The floor quota will not meet itself.",
+      "plain": "Still aboard? The floor quota will not meet itself.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_car_no_record_1",
+      "moment": "hint_car_no_record",
+      "group": "hints",
+      "text": "[dismissive] Nothing records from inside the car. Nice try.",
+      "plain": "Nothing records from inside the car. Nice try.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_car_no_record_2",
+      "moment": "hint_car_no_record",
+      "group": "hints",
+      "text": "[mischievously] The car is safe. That is why it pays nothing.",
+      "plain": "The car is safe. That is why it pays nothing.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_car_here_1",
+      "moment": "hint_car_here",
+      "group": "hints",
+      "text": "[professional] The car is already here. It must leave before you call.",
+      "plain": "The car is already here. It must leave before you call.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_car_here_2",
+      "moment": "hint_car_here",
+      "group": "hints",
+      "text": "[dismissive] You cannot call a car you are holding. Empty it first.",
+      "plain": "You cannot call a car you are holding. Empty it first.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_vote_1",
+      "moment": "hint_vote",
+      "group": "hints",
+      "text": "[professional] Stand on BANK for home. Stand on DOWN to deserve it.",
+      "plain": "Stand on BANK for home. Stand on DOWN to deserve it.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_vote_2",
+      "moment": "hint_vote",
+      "group": "hints",
+      "text": "[warmly] Two sides of the car. One goes home. One goes deeper. A tie goes deeper.",
+      "plain": "Two sides of the car. One goes home. One goes deeper. A tie goes deeper.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_bank_locked_1",
+      "moment": "hint_bank_locked",
+      "group": "hints",
+      "text": "[dismissive] That side is locked until today's quota is met. Stand there if it helps.",
+      "plain": "That side is locked until today's quota is met. Stand there if it helps.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_bank_locked_2",
+      "moment": "hint_bank_locked",
+      "group": "hints",
+      "text": "[professional] BANK is locked. The monitor says how much you still owe.",
+      "plain": "BANK is locked. The monitor says how much you still owe.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_day_1",
+      "moment": "hint_day",
+      "group": "hints",
+      "text": "[professional] Today's quota is on the monitor. Meet it, or you do not go home.",
+      "plain": "Today's quota is on the monitor. Meet it, or you do not go home.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_day_2",
+      "moment": "hint_day",
+      "group": "hints",
+      "text": "[warmly] You owe us a day's work. The number is on the monitor. It is not negotiable.",
+      "plain": "You owe us a day's work. The number is on the monitor. It is not negotiable.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_stakes_1",
+      "moment": "hint_stakes",
+      "group": "hints",
+      "text": "[warmly] If nobody comes back, nobody is paid, and we take an upgrade from each of you.",
+      "plain": "If nobody comes back, nobody is paid, and we take an upgrade from each of you.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_stakes_2",
+      "moment": "hint_stakes",
+      "group": "hints",
+      "text": "[professional] An empty car costs each of you an upgrade. The odds are on the monitor.",
+      "plain": "An empty car costs each of you an upgrade. The odds are on the monitor.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_last_miss_1",
+      "moment": "hint_last_miss",
+      "group": "hints",
+      "text": "[professional] Two days lost. A third, and you start from nothing.",
+      "plain": "Two days lost. A third, and you start from nothing.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_last_miss_2",
+      "moment": "hint_last_miss",
+      "group": "hints",
+      "text": "[warmly] One more empty car and your records are wiped. No pressure!",
+      "plain": "One more empty car and your records are wiped. No pressure!",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_down_crew_1",
+      "moment": "hint_down_crew",
+      "group": "hints",
+      "text": "[Quick, light, playful pace] Colleague down! Hold F beside them. They are on a timer.",
+      "plain": "Colleague down! Hold F beside them. They are on a timer.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_down_crew_2",
+      "moment": "hint_down_crew",
+      "group": "hints",
+      "text": "[professional] A colleague is down. Hold F at their side before their time runs out.",
+      "plain": "A colleague is down. Hold F at their side before their time runs out.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_down_you_1",
+      "moment": "hint_down_you",
+      "group": "hints",
+      "text": "[warmly] You are down. A friend must hold F beside you.",
+      "plain": "You are down. A friend must hold F beside you.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_down_you_2",
+      "moment": "hint_down_you",
+      "group": "hints",
+      "text": "[dismissive] Down already? Shout for someone who likes you. They hold F.",
+      "plain": "Down already? Shout for someone who likes you. They hold F.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_out_1",
+      "moment": "hint_out",
+      "group": "hints",
+      "text": "[professional] They return when the car next moves. Their tape is on the floor. Pick it up.",
+      "plain": "They return when the car next moves. Their tape is on the floor. Pick it up.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_out_2",
+      "moment": "hint_out",
+      "group": "hints",
+      "text": "[warmly] Gone until the car moves. Their tape is still worth money. Fetch it.",
+      "plain": "Gone until the car moves. Their tape is still worth money. Fetch it.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_winded_1",
+      "moment": "hint_winded",
+      "group": "hints",
+      "text": "[dismissive] Out of breath already. Walking is free. Do budget accordingly.",
+      "plain": "Out of breath already. Walking is free. Do budget accordingly.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_winded_2",
+      "moment": "hint_winded",
+      "group": "hints",
+      "text": "[warmly] You cannot sprint forever. Nothing down here needs to.",
+      "plain": "You cannot sprint forever. Nothing down here needs to.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_search_1",
+      "moment": "hint_search",
+      "group": "hints",
+      "text": "[warmly] Drawers open if you hold F. What you find counts toward your day.",
+      "plain": "Drawers open if you hold F. What you find counts toward your day.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_search_2",
+      "moment": "hint_search",
+      "group": "hints",
+      "text": "[mischievously] Go on, look inside. Hold F. Previous staff left quickly.",
+      "plain": "Go on, look inside. Hold F. Previous staff left quickly.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_note_1",
+      "moment": "hint_note",
+      "group": "hints",
+      "text": "[warmly] A previous crew left notes. The notes are true. The crew is gone.",
+      "plain": "A previous crew left notes. The notes are true. The crew is gone.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Close content, bright read: the words are the creepy part; the voice stays sunny."
+    },
+    {
+      "id": "hint_note_2",
+      "moment": "hint_note",
+      "group": "hints",
+      "text": "[professional] Read it aloud to your colleagues. The last crew didn't.",
+      "plain": "Read it aloud to your colleagues. The last crew didn't.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Close content, bright read: the words are the creepy part; the voice stays sunny."
+    },
+    {
+      "id": "hint_juice_1",
+      "moment": "hint_juice",
+      "group": "hints",
+      "text": "[delighted] Juice! Press G when your legs give out. One carton each.",
+      "plain": "Juice! Press G when your legs give out. One carton each.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_juice_2",
+      "moment": "hint_juice",
+      "group": "hints",
+      "text": "[warmly] A carton of juice. Press G when running stops working.",
+      "plain": "A carton of juice. Press G when running stops working.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_odds_1",
+      "moment": "hint_odds",
+      "group": "hints",
+      "text": "[professional] Read the signs. We are required to print your odds.",
+      "plain": "Read the signs. We are required to print your odds.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_odds_2",
+      "moment": "hint_odds",
+      "group": "hints",
+      "text": "[warmly] Everything here is posted in advance. Nobody can say we lied.",
+      "plain": "Everything here is posted in advance. Nobody can say we lied.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_marks_1",
+      "moment": "hint_marks",
+      "group": "hints",
+      "text": "[warmly] Every corridor here is the same corridor. Q leaves a mark.",
+      "plain": "Every corridor here is the same corridor. Q leaves a mark.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_marks_2",
+      "moment": "hint_marks",
+      "group": "hints",
+      "text": "[professional] Only your own arrows can be trusted here. Press Q to stick one.",
+      "plain": "Only your own arrows can be trusted here. Press Q to stick one.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_hide_1",
+      "moment": "hint_hide",
+      "group": "hints",
+      "text": "[warmly] Some furniture will hold a person. Get in gently.",
+      "plain": "Some furniture will hold a person. Get in gently.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_hide_2",
+      "moment": "hint_hide",
+      "group": "hints",
+      "text": "[mischievously] Beds, cabinets, desks. You would fit. Slowly, though.",
+      "plain": "Beds, cabinets, desks. You would fit. Slowly, though.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 2,
+      "note": "Bright read: pleased to give the news, whatever it is. Take 1 ran 1.6-1.7x the estimate in both voices (a slow, spaced list), so a second take was made."
+    },
+    {
+      "id": "hint_hide_idle_1",
+      "moment": "hint_hide_idle",
+      "group": "hints",
+      "text": "[dismissive] Hiding earns nothing. The quota is out there, with it.",
+      "plain": "Hiding earns nothing. The quota is out there, with it.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_hide_idle_2",
+      "moment": "hint_hide_idle",
+      "group": "hints",
+      "text": "[warmly] Comfortable in there? We do not pay for furniture.",
+      "plain": "Comfortable in there? We do not pay for furniture.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_play_arrive_1",
+      "moment": "hint_play_arrive",
+      "group": "hints",
+      "text": "[Bright, smiling announcer voice] This floor is known to be... [short pause] dangerous. Sneak, if you can.",
+      "plain": "This floor is known to be... dangerous. Sneak, if you can.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_play_arrive_2",
+      "moment": "hint_play_arrive",
+      "group": "hints",
+      "text": "[warmly] Welcome to the Playroom! Quiet children last longest. Creep with Control.",
+      "plain": "Welcome to the Playroom! Quiet children last longest. Creep with Control.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_play_anger_1",
+      "moment": "hint_play_anger",
+      "group": "hints",
+      "text": "[mischievously] It is getting cross. Whatever you are doing, do less.",
+      "plain": "It is getting cross. Whatever you are doing, do less.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_play_anger_2",
+      "moment": "hint_play_anger",
+      "group": "hints",
+      "text": "[warmly] That bar is its temper. You are filling it.",
+      "plain": "That bar is its temper. You are filling it.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_play_instruments_1",
+      "moment": "hint_play_instruments",
+      "group": "hints",
+      "text": "[Quick, light, playful pace] You have upset it! Hide, and get your instruments out. This part pays.",
+      "plain": "You have upset it! Hide, and get your instruments out. This part pays.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_play_instruments_2",
+      "moment": "hint_play_instruments",
+      "group": "hints",
+      "text": "[delighted] Now it is angry. Now it is worth recording. Instruments, please!",
+      "plain": "Now it is angry. Now it is worth recording. Instruments, please!",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_play_no_run_1",
+      "moment": "hint_play_no_run",
+      "group": "hints",
+      "text": "[Low, confidential, still smiling] It is hunting now. I would not run.",
+      "plain": "It is hunting now. I would not run.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Close read: low and confidential, still smiling. Not the slip, and not a whisper."
+    },
+    {
+      "id": "hint_play_no_run_2",
+      "moment": "hint_play_no_run",
+      "group": "hints",
+      "text": "[Low, confidential, still smiling] No running while it looks. Running is how it finds you.",
+      "plain": "No running while it looks. Running is how it finds you.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Close read: low and confidential, still smiling. Not the slip, and not a whisper."
+    },
+    {
+      "id": "hint_play_after_1",
+      "moment": "hint_play_after",
+      "group": "hints",
+      "text": "[warmly] It remembers you now. Walking costs health. Creeping is free.",
+      "plain": "It remembers you now. Walking costs health. Creeping is free.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_play_after_2",
+      "moment": "hint_play_after",
+      "group": "hints",
+      "text": "[professional] Note the new bar. Hurry, it empties. Creep, it forgives.",
+      "plain": "Note the new bar. Hurry, it empties. Creep, it forgives.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_play_table_1",
+      "moment": "hint_play_table",
+      "group": "hints",
+      "text": "[delighted] You have been seated! Press F for the horn. A friend may fetch you.",
+      "plain": "You have been seated! Press F for the horn. A friend may fetch you.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_play_table_2",
+      "moment": "hint_play_table",
+      "group": "hints",
+      "text": "[warmly] Enjoy the party. A colleague can hold F at the table to bring you back.",
+      "plain": "Enjoy the party. A colleague can hold F at the table to bring you back.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_listen_1",
+      "moment": "hint_listen",
+      "group": "hints",
+      "text": "[Low, confidential, still smiling] You are not alone on this floor now. Listen. It is never silent.",
+      "plain": "You are not alone on this floor now. Listen. It is never silent.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Close read: low and confidential, still smiling. Not the slip, and not a whisper."
+    },
+    {
+      "id": "hint_listen_2",
+      "moment": "hint_listen",
+      "group": "hints",
+      "text": "[Low, confidential, still smiling] Something is up and about. You will hear it first.",
+      "plain": "Something is up and about. You will hear it first.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Close read: low and confidential, still smiling. Not the slip, and not a whisper."
+    },
+    {
+      "id": "hint_new_floor_1",
+      "moment": "hint_new_floor",
+      "group": "hints",
+      "text": "[warmly] New floor, new colleague. What kept you alive upstairs may not.",
+      "plain": "New floor, new colleague. What kept you alive upstairs may not.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_new_floor_2",
+      "moment": "hint_new_floor",
+      "group": "hints",
+      "text": "[professional] Please do not assume this one behaves like the last one.",
+      "plain": "Please do not assume this one behaves like the last one.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_reroll_1",
+      "moment": "hint_reroll",
+      "group": "hints",
+      "text": "[mischievously] You may recognise the staff here. Do not trust the uniform.",
+      "plain": "You may recognise the staff here. Do not trust the uniform.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_reroll_2",
+      "moment": "hint_reroll",
+      "group": "hints",
+      "text": "[warmly] Familiar face? Faces are reassigned. Habits are reassigned separately.",
+      "plain": "Familiar face? Faces are reassigned. Habits are reassigned separately.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "hint_home_1",
+      "moment": "hint_home",
+      "group": "hints",
+      "text": "[warmly] Home! Spend at the windows, then bed. No more car tonight.",
+      "plain": "Home! Spend at the windows, then bed. No more car tonight.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_home_2",
+      "moment": "hint_home",
+      "group": "hints",
+      "text": "[professional] Windows one and two sell. Three and four improve you. Then you sleep.",
+      "plain": "Windows one and two sell. Three and four improve you. Then you sleep.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_bed_1",
+      "moment": "hint_bed",
+      "group": "hints",
+      "text": "[warmly] The day ends when everyone sleeps. Hold F on a bunk.",
+      "plain": "The day ends when everyone sleeps. Hold F on a bunk.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "hint_bed_2",
+      "moment": "hint_bed",
+      "group": "hints",
+      "text": "[dismissive] Nobody leaves until everybody sleeps. Bunks are F. Off you go.",
+      "plain": "Nobody leaves until everybody sleeps. Bunks are F. Off you go.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright read: pleased to give the news, whatever it is."
+    },
+    {
+      "id": "car_waiting_1",
+      "moment": "car_waiting",
+      "group": "day",
+      "text": "[warmly] No rush! The car leaves when you do.",
+      "plain": "No rush! The car leaves when you do.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "findables-and-day.md 'The car waits'. The panel's CAR WAITING FOR: NAME is the second caption line."
+    },
+    {
+      "id": "car_waiting_2",
+      "moment": "car_waiting",
+      "group": "day",
+      "text": "[Quick, light, playful pace] Take your time. The floor has plenty.",
+      "plain": "Take your time. The floor has plenty.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Breezy; the menace is in the words."
+    },
+    {
+      "id": "car_waiting_3",
+      "moment": "car_waiting",
+      "group": "day",
+      "text": "[mischievously] Still aboard? The doors will wait. Other things may not.",
+      "plain": "Still aboard? The doors will wait. Other things may not.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "The last sentence lands lightly, as a joke."
+    },
+    {
+      "id": "day_wiped_1",
+      "moment": "day_wiped",
+      "group": "day",
+      "text": "[warmly] Nobody has returned from today. The court has helped itself to something of yours.",
+      "plain": "Nobody has returned from today. The court has helped itself to something of yours.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "findables-and-day.md 'Nobody came back'. Played only when the day's result took an upgrade, so it is true."
+    },
+    {
+      "id": "day_wiped_2",
+      "moment": "day_wiped",
+      "group": "day",
+      "text": "[delighted] An empty car! We'll take that as a no. And we'll take one other thing.",
+      "plain": "An empty car! We'll take that as a no. And we'll take one other thing.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Delighted at the empty car, then a small polite reach for your pocket."
+    },
+    {
+      "id": "tape_orient_a",
+      "moment": "tape",
+      "group": "tape",
+      "text": "[Bright, smiling announcer voice, unhurried] Hello! And welcome to Continuance. This is Lidgate, our city. Everything is measured from here. Below Lidgate, there is nothing. Almost nothing.",
+      "plain": "Hello! And welcome to Continuance. This is Lidgate, our city. Everything is measured from here. Below Lidgate, there is nothing. Almost nothing.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "note": "Shots 1 to 4. The welcome; \"Almost nothing.\" lands as a small correction, still smiling."
+    },
+    {
+      "id": "tape_orient_b",
+      "moment": "tape",
+      "group": "tape",
+      "text": "[warmly] This is you. You have been sentenced. Congratulations! This is your crew. Draw your own face. We insist. Each morning, the car takes you down.",
+      "plain": "This is you. You have been sentenced. Congratulations! This is your crew. Draw your own face. We insist. Each morning, the car takes you down.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "note": "Shots 5 to 7. \"Congratulations!\" is sincere."
+    },
+    {
+      "id": "tape_orient_c",
+      "moment": "tape",
+      "group": "tape",
+      "text": "[professional] Every floor has a resident. We do not know what they are. Point your instrument at it. Record what it does. Readings become credits. Credits keep the lights on upstairs. Each resident keeps one rule. We may not tell you what it is.",
+      "plain": "Every floor has a resident. We do not know what they are. Point your instrument at it. Record what it does. Readings become credits. Credits keep the lights on upstairs. Each resident keeps one rule. We may not tell you what it is.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "note": "Shots 8 to 12. A briefing: brisk, untroubled by what it is saying."
+    },
+    {
+      "id": "tape_orient_d",
+      "moment": "tape",
+      "group": "tape",
+      "text": "[Quick, light, playful pace] Meet the quota. Call the car. The car is not quiet. The floor will notice. Be aboard when the doors close. Please do not stay late. Staying late is... discouraged.",
+      "plain": "Meet the quota. Call the car. The car is not quiet. The floor will notice. Be aboard when the doors close. Please do not stay late. Staying late is... discouraged.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "note": "Shots 13 to 16. Quick and light; the ellipsis before \"discouraged\" is the only catch on the tape."
+    },
+    {
+      "id": "tape_orient_e",
+      "moment": "tape",
+      "group": "tape",
+      "text": "[warmly] Then choose. Up, to bank your day. Or down, for more. Bank enough, and your sentence will end. Many crews are well on their way! [delighted] Continuance. Leave it with us.",
+      "plain": "Then choose. Up, to bank your day. Or down, for more. Bank enough, and your sentence will end. Many crews are well on their way! Continuance. Leave it with us.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "note": "Shots 17 to 20. Ends on the slogan, delighted."
     }
   ]
 }
