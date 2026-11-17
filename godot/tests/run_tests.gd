@@ -19,6 +19,7 @@ const FILES: Array[String] = [
 	"test_jsmath", "ref_rng", "ref_floors", "ref_move", "ref_sight", "ref_entity", "ref_instrument", "ref_run", "ref_bots", "ref_bridge", "ref_net",
 	"prop_stamina", "prop_clinic", "prop_entity", "prop_instrument", "prop_run", "prop_blackout", "prop_net",
 	"prop_playroom",
+	"prop_seek",
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).
