@@ -47,27 +47,31 @@ MATS = ("temp_body", "temp_face_sheet")
 BODY, SHEET = 0, 1
 
 # Torso key rows, right half (x < 0): z, front (x, y) outer..inner, back (x, y) outer..inner, side-middle y.
-# Narrow, sloping shoulders, a soft belly over the belt, a flat seat.
+# Narrow, sloping shoulders, a soft belly over the belt, a flat seat, and a rounded upper back: years
+# bent over a desk, so the side view is a curve even standing straight.
 KEYS = [
     (0.800, [(-0.156, -0.052), (-0.094, -0.088), (-0.030, -0.082)], [(-0.156, 0.058), (-0.094, 0.100), (-0.030, 0.086)], 0.0),
     (0.900, [(-0.166, -0.060), (-0.104, -0.096), (-0.034, -0.104)], [(-0.166, 0.060), (-0.104, 0.104), (-0.034, 0.090)], 0.0),
     (0.985, [(-0.161, -0.058), (-0.104, -0.100), (-0.034, -0.112)], [(-0.158, 0.055), (-0.104, 0.082), (-0.034, 0.072)], 0.0),
     (1.060, [(-0.158, -0.058), (-0.106, -0.102), (-0.036, -0.116)], [(-0.156, 0.054), (-0.104, 0.080), (-0.036, 0.070)], 0.0),
     (1.160, [(-0.154, -0.056), (-0.106, -0.098), (-0.038, -0.109)], [(-0.154, 0.055), (-0.106, 0.086), (-0.038, 0.078)], 0.0),
-    (1.250, [(-0.158, -0.056), (-0.112, -0.097), (-0.040, -0.105)], [(-0.160, 0.058), (-0.112, 0.092), (-0.040, 0.086)], 0.0),
-    (1.330, [(-0.157, -0.057), (-0.113, -0.095), (-0.040, -0.101)], [(-0.158, 0.058), (-0.110, 0.090), (-0.040, 0.084)], 0.0),
-    (1.385, [(-0.155, -0.057), (-0.108, -0.088), (-0.042, -0.093)], [(-0.155, 0.058), (-0.104, 0.084), (-0.042, 0.078)], None),
+    (1.250, [(-0.158, -0.054), (-0.112, -0.094), (-0.040, -0.101)], [(-0.160, 0.064), (-0.112, 0.104), (-0.040, 0.098)], 0.0),
+    (1.330, [(-0.157, -0.055), (-0.113, -0.091), (-0.040, -0.096)], [(-0.158, 0.066), (-0.110, 0.106), (-0.040, 0.100)], 0.0),
+    (1.385, [(-0.155, -0.057), (-0.108, -0.086), (-0.042, -0.090)], [(-0.155, 0.064), (-0.104, 0.098), (-0.042, 0.092)], None),
 ]
 # rows actually built: z, how far the row is pushed out (the belt, the shirt bloused over it), and how far
 # on the side where the shirt tail has come out of the trousers (TAIL), which hangs over the belt
-TORSO_Z = [(0.800, 0.0, 0.0), (0.860, 0.0, 0.0), (0.886, 0.0, 0.0), (0.889, 0.0, 0.011), (0.920, 0.0, 0.012),
-           (0.955, 0.0, 0.013), (0.958, 0.006, 0.014), (1.000, 0.006, 0.015), (1.003, 0.0, 0.015),
+TORSO_Z = [(0.800, 0.0, 0.0), (0.860, 0.0, 0.0), (0.876, 0.0, 0.012), (0.890, 0.0, 0.012), (0.905, 0.0, 0.012),
+           (0.920, 0.0, 0.013), (0.937, 0.0, 0.013), (0.955, 0.0, 0.013), (0.958, 0.006, 0.014),
+           (0.979, 0.006, 0.014), (1.000, 0.006, 0.015), (1.003, 0.0, 0.015),
            (1.030, 0.010, 0.017), (1.090, 0.004, 0.009), (1.170, 0.0, 0.002), (1.250, 0.0, 0.0), (1.290, 0.0, 0.0),
            (1.330, 0.0, 0.0), (1.385, 0.0, 0.0)]
 BELT = (0.955, 1.003)
-# Half the shirt tail is out: on its left (+X), from the front middle round the side to the back, it
-# hangs loose over the belt to TAIL["hem"]; the right half stays tucked in.
-TAIL = dict(x0=-0.045, x1=0.025, hem=0.889, under=0.886)
+# Half the shirt tail is out: on its left (+X) it hangs loose over the belt down to TAIL["hem"]; on the
+# right it is tucked in under the belt. Between, the hem is pulled up diagonally across the belt, so the
+# belt runs all the way round, hidden under the loose tail. Below TAIL["top"] a ring of the torso belongs
+# to the shirt where it is above hem_z(), otherwise to the belt or the trousers.
+TAIL = dict(x0=-0.085, x1=0.075, hem=0.889, top=1.003, wave=0.008)
 ARM_ROOT_Z = 1.330
 POCKET_ROWS = (1.170, 1.250)        # the breast pocket: left chest, these two bands, front column x2..x1
 SHOULDER = dict(x=-0.155, y=0.057, z=1.430, zmid=1.436)
@@ -84,12 +88,12 @@ HEADR = [
     ("N2", 0.052, 0.047, 0.050, 0.006, 1.516, 1.531),   # Adam's apple
     ("N3", 0.051, 0.047, 0.050, 0.006, 1.538, 1.556),
     ("N4", 0.053, 0.050, 0.052, 0.006, 1.556, 1.574),   # under the jaw
-    ("H1", 0.060, 0.072, 0.062, 0.000, 1.588, 1.612),   # jaw and chin
-    ("H2", 0.068, 0.082, 0.078, 0.000, 1.625, 1.638),
-    ("H3", 0.071, 0.088, 0.089, 0.000, 1.662, 1.665),   # cheekbones
-    ("H4", 0.073, 0.090, 0.096, 0.000, 1.702, 1.698),   # brow; tops of the ears
-    ("H5", 0.072, 0.086, 0.097, 0.000, 1.738, 1.734),
-    ("H6", 0.063, 0.074, 0.087, 0.000, 1.770, 1.766),
+    ("H1", 0.056, 0.072, 0.062, 0.000, 1.588, 1.612),   # jaw and chin (a narrow face: the sheet reaches round it)
+    ("H2", 0.063, 0.082, 0.078, 0.000, 1.625, 1.638),
+    ("H3", 0.066, 0.088, 0.089, 0.000, 1.662, 1.665),   # cheekbones
+    ("H4", 0.068, 0.090, 0.096, 0.000, 1.702, 1.698),   # brow; tops of the ears
+    ("H5", 0.068, 0.086, 0.097, 0.000, 1.738, 1.734),
+    ("H6", 0.060, 0.074, 0.087, 0.000, 1.770, 1.766),
     ("H7", 0.040, 0.047, 0.058, 0.000, 1.791, 1.789),
 ]
 HEAD_TOP_Z = 1.800
@@ -169,14 +173,16 @@ LEG = [
     (0.132, -0.104, 0.006, 0.058, 0.061, 0.064),   # hem edge
     (0.131, -0.104, 0.010, 0.034, 0.035, 0.038),   # under the hem: sock from here
     (0.090, -0.104, 0.012, 0.031, 0.033, 0.036),   # ankle
-    (0.072, -0.104, 0.014, 0.041, 0.048, 0.050),   # shoe opening
-    (0.045, -0.104, 0.012, 0.046, 0.060, 0.058),
-    (0.000, -0.104, 0.010, 0.047, 0.062, 0.060),   # sole
+    (0.072, -0.104, 0.014, 0.038, 0.046, 0.048),   # shoe opening
+    (0.045, -0.104, 0.012, 0.041, 0.056, 0.054),
+    (0.000, -0.104, 0.010, 0.042, 0.058, 0.055),   # sole
 ]
 TROUSER_BANDS = 11          # bands before this are trousers (the last of them the hem's underside)
 SOCK_BANDS = 12
 LEG_ANG = [-135, -90, -45, 0, 45, 90, 135, 180]
-TOE = [dict(y=-0.120, ztop=0.050, sx=1.04), dict(y=-0.172, ztop=0.040, sx=0.92), dict(y=-0.198, ztop=0.028, sx=0.60)]
+# office shoes, slim, the toe springing up off the floor
+TOE = [dict(y=-0.115, ztop=0.046, zbot=0.0, sx=1.0), dict(y=-0.162, ztop=0.037, zbot=0.004, sx=0.88),
+       dict(y=-0.186, ztop=0.027, zbot=0.011, sx=0.55)]
 
 # The collar: a stand up the neck, a fold, a fall down over the shirt, two points at the front. The top
 # button is undone, so it stands open (a wide gap, the points splayed), and its left point has curled up.
@@ -216,14 +222,14 @@ SHEET_CREASES = [  # (u0, v0, u1, v1, height m, half width in uv): a tent along 
     (0.05, 0.70, 0.30, 1.0, 0.0025, 0.05),     # and one in the bottom left
     (0.30, 0.0, 0.10, 0.22, -0.0020, 0.04)]
 SHEET_LIFT = 0.0045              # free edges between the staples stand off this much at most
-STRING = dict(v=0.40, w=0.0035, thick=0.0016, lift=0.0018)   # tied round the back at the page's v (from the top)
+STRING = dict(v=0.30, w=0.0020, thick=0.0012, lift=0.0015, sag=0.016)   # round the back at the page's v (from the top), slack
 TAPE = dict(du=0.11, dv=0.07)    # a strip of masking tape at each side over the string's end
 # the sample photocopy on the sheet (client/temp_view.gd's page, 120 x 170 with the face drawn in
 # FACE_RECT), made PAGE_K times finer so the copied lines have no pixel steps close up
 PAGE = (120, 170)
 PAGE_K = 4
 FACE_RECT = (9, 26, 102, 102)
-PAPER = np.array([0.93, 0.92, 0.88])
+PAPER = np.array([0.97, 0.965, 0.94])
 TONER = np.array([0.07, 0.07, 0.08])
 
 # Props. Each in its own file; Blender space as above.
@@ -369,6 +375,20 @@ def torso_row(z, grow):
     return [push(p) for p in fr], [push(p) for p in bk], midy
 
 
+def tail_w(x):
+    """0 where the shirt is tucked in (its right), 1 where its tail is out (its left)"""
+    t = np.clip((np.asarray(x) - TAIL["x0"]) / (TAIL["x1"] - TAIL["x0"]), 0.0, 1.0)
+    return t * t * (3 - 2 * t)
+
+
+def hem_z(x, y):
+    """the height of the shirt's hem: the top of the belt where tucked, hanging below it where loose, pulled
+    up diagonally between, with a couple of soft folds in it"""
+    w = tail_w(x)
+    a = np.arctan2(np.asarray(y), np.asarray(x))
+    return TAIL["top"] - (TAIL["top"] - TAIL["hem"]) * w + TAIL["wave"] * w * np.sin(a * 3 + 1.0)
+
+
 def bridge(m, A, aa, B, bb, mat, tag):
     """join two closed rings with different vertex counts (angles ascending in both) by triangles"""
     n, k = len(A), len(B)
@@ -486,12 +506,13 @@ def build_body():
     ri = {round(z, 4): i for i, z in enumerate(zs)}
     rA = ri[ARM_ROOT_Z]
 
-    def tail_w(x):
-        t = min(1.0, max(0.0, (x - TAIL["x0"]) / (TAIL["x1"] - TAIL["x0"])))
-        return t * t * (3 - 2 * t)
-
     def pushed(x, y, z, grow, tail):
-        g = grow + (tail - grow) * tail_w(x) if tail > 0 else grow
+        if z <= TAIL["top"] + 1e-6:     # the loose tail stands off the belt and trousers above its hem
+            h = float(hem_z(x, y))
+            s = min(1.0, max(0.0, (z - (h - 0.012)) / 0.016))
+            g = max(grow, tail * s * s * (3 - 2 * s))
+        else:
+            g = grow + (tail - grow) * float(tail_w(x))
         d = Vector((x, y * 1.6)).normalized()
         return (x + d.x * g, y + d.y * g, z)
 
@@ -548,8 +569,9 @@ def build_body():
             j2 = (j + 1) % 14
             q = [T[r][j], T[r][j2], T[r + 1][j2], T[r + 1][j]]
             ft = tag
-            if z0 >= TAIL["under"] - 1e-6 and z1 <= BELT[1] + 1e-6 and tail_w(sum(m.co[v].x for v in q) / 4) > 0.5:
-                ft = "sleeve_in" if z1 <= TAIL["hem"] + 1e-6 else "tail"     # the loose shirt tail over the belt
+            cq = sum((m.co[v] for v in q), Vector()) / 4
+            if z1 <= TAIL["top"] + 1e-6 and z0 >= 0.86 - 1e-6 and cq.z > hem_z(cq.x, cq.y):
+                ft = "tail"                                   # the loose shirt tail over the belt
             tband[(r, j)] = m.f(q, BODY, ft)
     t = T[-1]
     m.f([t[0], t[1], Q1, t[13]], BODY, "shirt")
@@ -636,7 +658,7 @@ def build_body():
                 top = p.z > 0.02
                 dx = (p.x - lcx) * st["sx"]
                 return Vector((lcx + dx, st["y"] - 0.010 * (1 - min(1.0, abs(dx) / 0.03)) * (st is TOE[-1]),
-                               st["ztop"] if top else 0.0))
+                               st["ztop"] if top else st["zbot"]))
             m.extrude(fids, tp)
 
     # ---- neck and head
@@ -665,10 +687,11 @@ def build_body():
     for q in ([R[2], R[3], R[4], M1], [M1, R[4], R[5], M2], [M2, R[5], R[6], R[7]], [M2, R[7], R[8]],
               [R[2], R[1], R[0], M1], [M1, R[0], R[11], M2], [M2, R[11], R[10], R[9]], [M2, R[9], R[8]]):
         m.f(q, BODY, "skin")
-    # ears: a 2 x 2 patch of each side of the head (H2 to H4), pulled out and back twice
+    # ears: small and flat, a 2 x 2 patch of each side of the head (H2 to H4) pulled out a little and back,
+    # under hair grown long over them
     for ks in ((4, 5), (10, 11)):
         fids = [hb[(i, k)] for i in (1, 2) for k in ks]
-        for step, (sc, out, back) in enumerate(((0.80, 0.011, 0.006), (0.86, 0.005, 0.002))):
+        for step, (sc, out, back) in enumerate(((0.80, 0.006, 0.010),)):
             ctr = sum((m.co[v] for i in fids for v in m.faces[i]), Vector()) / 16
             o = Vector((math.copysign(1.0, ctr.x), 0, 0))
 
@@ -1037,8 +1060,8 @@ def build_sheet(m, tree):
             dist = (a + (b - a) * t - q).length
             h += height * max(0.0, 1.0 - dist / hw)
         h += 0.0006 * math.sin(u * 19.0 + v * 7.0) * math.sin(v * 23.0 - u * 5.0)
-        edge = max(math.exp(-(u / 0.07) ** 2), math.exp(-((1 - u) / 0.07) ** 2),
-                   math.exp(-(v / 0.05) ** 2), math.exp(-((1 - v) / 0.05) ** 2))
+        edge = max(0.5 * math.exp(-(u / 0.07) ** 2), 0.5 * math.exp(-((1 - u) / 0.07) ** 2),
+                   math.exp(-((1 - v) / 0.05) ** 2))         # the top edge stays down on the hair
         near = min(math.hypot((u - cu) * asp, v - cv) for cu, cv in staples)
         h += SHEET_LIFT * edge * (1 - math.exp(-(near / 0.10) ** 2)) * (0.6 + 0.4 * math.sin(u * 11 + v * 17))
         q = clear_of(tree, p + normals[k] * h, 0.004)
@@ -1088,7 +1111,7 @@ def build_sheet(m, tree):
     n_ = 18
     for i in range(1, n_):
         a = a0 + (a1 - a0) * i / n_
-        z = z0 + 0.014 * math.sin(math.pi * i / n_)        # rides up a little over the back of the head
+        z = z0 - S["sag"] * math.sin(math.pi * i / n_)     # slack: it droops round the back of the head
         path.append(onto(tree, Vector((0.2 * math.cos(a), 0.2 * math.sin(a), z)), S["lift"])[0])
     path.append(ends[1])
     pts, fcs = [], []
@@ -1100,6 +1123,23 @@ def build_sheet(m, tree):
     for i in range(len(path) - 1):
         fcs.append([2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2])
     m.solid(pts, fcs, lambda p: onto(tree, p, 0.0)[1], S["thick"], BODY, "string")
+    # tied in a knot at the back, its two ends hanging loose down the hair
+    knot = path[n_ // 2]
+    kn = onto(tree, knot, 0.0)[1]
+    side = Vector((0, 0, 1)).cross(kn).normalized()
+    m.box(knot + kn * 0.003, side * 0.0045, kn * 0.003, Vector((0, 0, 1)) * 0.0035, BODY, "string")
+    for sgn, length in ((-1, 0.034), (1, 0.026)):
+        tail = [onto(tree, knot + side * sgn * (0.002 + 0.004 * f) - Vector((0, 0, length * f)), 0.0025)[0]
+                for f in (0.0, 0.33, 0.66, 1.0)]
+        pts, fcs = [], []
+        for i, p in enumerate(tail):
+            tg = (tail[min(i + 1, 3)] - tail[max(i - 1, 0)]).normalized()
+            n = onto(tree, p, 0.0)[1]
+            sd = tg.cross(n).normalized()
+            pts += [p - sd * S["w"] / 2, p + sd * S["w"] / 2]
+        for i in range(3):
+            fcs.append([2 * i, 2 * i + 1, 2 * i + 3, 2 * i + 2])
+        m.solid(pts, fcs, lambda p: onto(tree, p, 0.0)[1], S["thick"], BODY, "string")
     # masking tape over each end of the string, folded round the paper's edge
     for side_u in (0.0, 1.0):
         pts, fcs = [], []
@@ -1186,7 +1226,11 @@ def stain(Pt, cx, cz, radius, seed, ring_only=False):
     d = d * (1 + 0.30 * (vnoise(Pt, 140.0, seed) - 0.5))
     rim = np.exp(-((d - 0.95) / 0.09) ** 2)
     if ring_only:
-        return np.clip(rim * 0.9 + 0.12 * (d < 1.0), 0, 1)
+        # soaked in: a wide soft rim, broken where the mug was lifted at an angle, a faint wash inside
+        ang = np.arctan2(Pt[:, 2] - cz, Pt[:, 0] - cx)
+        broken = np.clip(0.35 + 0.65 * np.sin(ang + 0.6) + 0.3 * (vnoise(Pt, 70.0, seed + 1) - 0.5), 0, 1)
+        soft = np.exp(-((d - 0.92) / 0.20) ** 2)
+        return np.clip(soft * broken * 0.55 + 0.10 * np.clip(1.1 - d, 0, 1), 0, 1)
     inside = np.clip((1.0 - d) / 0.15, 0, 1)
     return np.clip(inside * 0.6 + rim * 0.5, 0, 1)
 
@@ -1201,6 +1245,13 @@ def body_colour(Pt, N, T):
     blot = vnoise(Pt, 9.0, 3)
     soft = lambda ph: (0.5 + 0.5 * np.sin(ph)) ** 2
     front = N[:, 1] < -0.35
+    # round the waist the hem decides, texel by texel, what is shirt, belt or trousers (so the diagonal
+    # hem is a clean line, not the steps of the rings under it)
+    hem = hem_z(x, y)
+    waist = np.isin(T, [TG["tail"], TG["belt"], TG["trousers"], TG["shirt"]]) & (z > 0.86) & (z < TAIL["top"] + 0.0005) & (ax < 0.21)
+    T = np.where(waist, np.where(z > hem, TG["tail"], np.where(z > BELT[0] + 0.002, TG["belt"], TG["trousers"])), T)
+    below = np.clip((hem - z) / 0.012, 0, 1) * (z < hem)
+    hem_shadow = 1 - 0.5 * np.exp(-((hem - z - 0.004) / 0.008) ** 2) * (z < hem) * (z > 0.85)
 
     # --- shirt (body, sleeves, pocket, collar, the loose tail): pale blue-white gone dingy and grey
     shirt = is_("shirt", "pocket", "collar", "sleeve_in", "tail")
@@ -1220,7 +1271,7 @@ def body_colour(Pt, N, T):
     sh *= 1 - 0.25 * g(ax - 0.309, 0.004) * (z > 1.30)
     sh *= 1 - 0.14 * g(np.abs(y), 0.004) * (ax > 0.14) * (z < 1.33)
     # the tail's hem and the shadow it throws on the trousers is painted below
-    sh *= np.where((T == TG["tail"]) & (z < 0.897), 0.78, 1.0)
+    sh *= 1 - 0.20 * (T == TG["tail"]) * np.exp(-((z - hem) / 0.005) ** 2)         # the hem's turned edge
     # placket and buttons down the front; the top one undone
     fr_ = front & (z < 1.47) & (z > 1.00) & (ax < 0.15)
     sh *= np.where(fr_ & (np.abs(x - 0.013) < 0.0025) & (z < OPEN_V["bottom"]), 0.84, 1.0)
@@ -1291,7 +1342,7 @@ def body_colour(Pt, N, T):
     s *= 1 - 0.30 * np.exp(-((ax / 0.05) ** 2 + ((z - 0.785) / 0.05) ** 2))
     s *= 1 - 0.22 * leg * g(ax - 0.03, 0.022) * band(z, 0.45, 0.78, 0.08)
     s *= 1 - 0.25 * (~leg) * g(z - 0.952, 0.006)
-    s *= 1 - 0.45 * (x > -0.02) * g(z - 0.880, 0.010)                # the loose tail's shadow
+    s *= hem_shadow                                                     # the loose tail's shadow
     s *= np.where(T == TG["trouser_in"], 0.6, 1.0)
     s *= 1 - 0.18 * leg * smooth(0.30, 0.13, z) * (0.6 + 0.4 * blot)    # dust at the hems
     col = np.where(tr[:, None], np.array([0.29, 0.29, 0.32])[None, :] * (s * grain)[:, None], col)
@@ -1305,18 +1356,30 @@ def body_colour(Pt, N, T):
     bc = np.where((buckle & (ax < 0.016) & (np.abs(z - 0.979) < 0.010))[:, None], np.array([0.20, 0.18, 0.16]), bc)
     loop = bl & (np.abs(ax - 0.10) < 0.006) & (N[:, 1] < 0)
     bc = np.where(loop[:, None], np.array([0.25, 0.25, 0.28]), bc)
-    col = np.where(bl[:, None], bc, col)
+    col = np.where(bl[:, None], bc * hem_shadow[:, None], col)
 
     # --- skin: warm, unhealthy, darker in the creases; the neck in the shadow of the sheet and the collar
     sk = is_("skin", "nail")
     kc = skin[None, :] * (1 - 0.06 * (blot[:, None] - 0.5))
     hand = ax > 0.80
     arm = (ax > 0.32) & ~hand
+    # tone: blotchy at two sizes, a ruddier, darker elbow and wrist crease, the tops of the forearms a
+    # shade darker (and a little hairy), the undersides paler
+    kc = kc * (1 + 0.09 * (vnoise(Pt, 24.0, 14) - 0.5) + 0.05 * (vnoise(Pt, 70.0, 15) - 0.5))[:, None]
+    elbow = arm * np.exp(-((ax - 0.452) / 0.022) ** 2) * np.clip(N[:, 1] + 0.3, 0, 1)
+    kc = kc * (1 - elbow[:, None] * np.array([0.12, 0.20, 0.22])[None, :])
+    kc = kc * (1 - 0.06 * arm * np.clip(N[:, 2], 0, 1))[:, None]
+    kc = kc * (1 + 0.05 * arm * np.clip(-N[:, 2], 0, 1))[:, None]
+    fuzz = arm & (ax > 0.48) & (N[:, 2] > 0.3) & (vnoise(Pt, 420.0, 16) > 0.72)
+    kc = np.where(fuzz[:, None], kc * 0.88, kc)
+    kc = kc * (1 - 0.12 * np.exp(-((ax - 0.790) / 0.004) ** 2) * (N[:, 2] < 0))[:, None]
+    knuckle = hand * (np.exp(-((ax - 0.886) / 0.007) ** 2) + 0.7 * np.exp(-((ax - 0.931) / 0.005) ** 2)
+                      + 0.5 * np.exp(-((ax - 0.960) / 0.004) ** 2)) * np.clip(N[:, 2], 0, 1)
+    kc = kc * (1 - np.clip(knuckle, 0, 1)[:, None] * np.array([0.10, 0.18, 0.20])[None, :])
     kc = np.where((arm & (N[:, 2] < -0.3))[:, None], kc * np.array([0.93, 0.90, 0.90]), kc)       # under the arm
     kc = kc * (1 - 0.06 * (arm & (N[:, 1] < -0.2)) * g(ax - 0.452, 0.012))[:, None]      # the crook of the elbow
     vein = arm & (ax > 0.50) & (ax < 0.75) & (N[:, 2] > 0.2) & (np.abs(y + 0.008 + 0.004 * np.sin(ax * 60)) < 0.0018)
     kc = np.where(vein[:, None], kc * np.array([0.90, 0.88, 0.95]), kc)
-    kc = np.where((hand & (N[:, 2] > 0.5) & (np.abs(ax - 0.886) < 0.005))[:, None], kc * np.array([0.94, 0.88, 0.86]), kc)
     kc = np.where((hand & (N[:, 2] < -0.5))[:, None], kc * np.array([1.03, 0.96, 0.93]), kc)
     neck = (z > 1.47) & (z < 1.60) & (ax < 0.07) & ~hand
     kc = np.where(neck[:, None], kc * (1 - 0.30 * smooth(1.52, 1.575, z) - 0.25 * smooth(1.50, 1.47, z))[:, None], kc)
@@ -1331,13 +1394,15 @@ def body_colour(Pt, N, T):
     face = watch & (N[:, 2] > 0.55) & (np.abs(y) < 0.016)
     kc = np.where(face[:, None], np.array([0.55, 0.55, 0.52]), kc)
     kc = np.where((face & (np.abs(y) < 0.011) & (x > WATCH_X[0] + 0.004) & (x < WATCH_X[1] - 0.004))[:, None], np.array([0.82, 0.80, 0.72]), kc)
-    # hair: dark, greasy, combed flat, cut short at the nape, a little long over the collar at the back
-    head = (z > hz(1.588) - 0.01) & (ax < 0.12) & ~hand & ~arm
-    hairline = np.where(y > 0.035, 1.598, np.where(y > -0.035, hz(1.700), hz(1.752)))
-    hair = head & (z > hairline + 0.010 * vnoise(Pt, 60.0, 5))
+    # hair: dark, greasy, overgrown: down over the ears to the jaw at the sides, down to the collar at the
+    # back in a ragged edge, combed flat on top
+    head = (z > 1.50) & (ax < 0.12) & ~hand & ~arm
+    hairline = np.where(y > 0.030, 1.522 + 0.010 * np.abs(x) / 0.06, np.where(y > -0.028, 1.548, hz(1.752)))
+    hl = hairline + 0.008 * vnoise(Pt, 45.0, 5)
+    hair_a = head * smooth(hl - 0.007, hl + 0.007, z)        # thinning out to stubble, no hard edge
     comb = 1 - 0.14 * (0.5 + 0.5 * np.sin((x * 0.35 + z) * 2 * math.pi / 0.007))
     hc = np.array([0.17, 0.14, 0.11])[None, :] * comb[:, None] * (1 - 0.15 * (blot[:, None] - 0.5))
-    kc = np.where(hair[:, None], hc, kc)
+    kc = kc * (1 - hair_a[:, None]) + hc * hair_a[:, None]
     col = np.where(sk[:, None], kc * grain[:, None], col)
 
     # --- socks slipped down below a strip of bare shin, shoes
@@ -1396,7 +1461,7 @@ def body_colour(Pt, N, T):
         col = np.where(bd[:, None], card, col)
     pen = T == TG["pen"]
     col = np.where(pen[:, None], np.where((z > 1.296)[:, None], np.array([0.62, 0.63, 0.66]), np.array([0.12, 0.20, 0.55])), col)
-    col = np.where((T == TG["paperback"])[:, None], np.array([0.80, 0.79, 0.75]), col)
+    col = np.where((T == TG["paperback"])[:, None], np.array([0.90, 0.89, 0.86]), col)
     col = np.where((T == TG["staple"])[:, None], np.array([0.42, 0.43, 0.46]), col)
     col = np.where((T == TG["string"])[:, None], np.array([0.58, 0.50, 0.36]) * (1 - 0.2 * (np.sin((x + y) * 900) > 0.5))[:, None], col)
     col = np.where((T == TG["tape"])[:, None], np.array([0.80, 0.72, 0.52]) * (1 - 0.08 * blot)[:, None], col)

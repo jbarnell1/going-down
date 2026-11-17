@@ -200,15 +200,16 @@ def twist(rig, name, deg):
     bpy.context.view_layer.update()
 
 
-def curl(rig, sfx, fingers_deg, thumb_deg):
-    """curl the fingers toward the palm (palm down in the rest pose), in rest space"""
+def curl(rig, sfx, fingers_deg, thumb_deg, stagger=(0, 0, 0, 0)):
+    """curl the fingers toward the palm (palm down in the rest pose), in rest space; `stagger` adds degrees
+    finger by finger (index to little), so they never move as one mitten"""
     side = 1 if sfx == ".L" else -1
-    for name, w, length, fan, koff in BT.FINGERS:
+    for (name, w, length, fan, koff), extra in zip(BT.FINGERS, stagger):
         a = math.radians(fan)
         d = Vector((side * math.cos(a), math.sin(a), 0))
         axis = d.cross(Vector((0, 0, -1)))
         for k, deg in zip((1, 2), fingers_deg):
-            rot_rest(rig, f"{name}{k}{sfx}", axis, deg)
+            rot_rest(rig, f"{name}{k}{sfx}", axis, deg + extra * (1.0 if k == 1 else 0.6))
     d = Vector(BT.THUMB_DIR).normalized()
     d = Vector((side * d.x, d.y, d.z))
     toward = Vector((side * 1.0, 0.2, -0.6)).normalized()     # across the palm, under it
@@ -230,28 +231,36 @@ def palm_frame(rig, sfx):
 
 
 def pose_standing(rig):
-    """A stand-in for the Mixamo idle: standing still, the too-long arms hanging straight down, the head
-    hung over to its right, knees soft; the stapler gripped in the right hand, the pad of notes pinched in
-    the left."""
+    """A stand-in for the Mixamo idle, wrong from far off: the pelvis pushed forward and the upper back
+    hunched (a C down the spine), the right shoulder dropped under the stapler's weight and the left hitched
+    up, the head hung over to its right further than is comfortable, the too-long arms hanging unevenly
+    (the right lower and straight, the left a little bent), the knees soft and the feet planted unevenly,
+    the left one forward and turned out."""
     pose_reset(rig)
-    rot_rest(rig, "chest", (1, 0, 0), 5)
-    rot_rest(rig, "neck", (1, 0, 0), 8)
-    rot_rest(rig, "head", (0, 1, 0), -15)
-    rot_rest(rig, "head", (1, 0, 0), 6)
-    curl(rig, ".R", (80, 75), (25, 30))
-    curl(rig, ".L", (35, 30), (20, 20))
-    rot_rest(rig, "clav.R", (0, 1, 0), 5)        # the right shoulder hitched up
-    rot_rest(rig, "clav.L", (0, 1, 0), 3)        # the left one dropped
-    aim(rig, "upper.L", (0.12, 0.03, -1))
-    aim(rig, "fore.L", (0.05, -0.03, -1))
-    aim(rig, "hand.L", (0.02, -0.04, -1))
-    aim(rig, "upper.R", (-0.12, 0.02, -1))
-    aim(rig, "fore.R", (-0.05, -0.05, -1))
-    aim(rig, "hand.R", (-0.02, -0.06, -1))
-    for s, sx in ((".L", 1), (".R", -1)):         # knees not locked: a little forward, the shins back
-        aim(rig, "thigh" + s, (sx * 0.02, -0.10, -1))
-        aim(rig, "shin" + s, (sx * 0.01, 0.06, -1))
-        aim(rig, "foot" + s, (sx * 0.08, -1, -0.12))
+    rot_rest(rig, "hips", (1, 0, 0), -6)        # pelvis forward
+    rot_rest(rig, "spine", (1, 0, 0), 9)
+    rot_rest(rig, "chest", (1, 0, 0), 14)       # the hunch
+    rot_rest(rig, "chest", (0, 1, 0), -4)       # leaning to the dropped side
+    rot_rest(rig, "neck", (1, 0, 0), 4)
+    rot_rest(rig, "head", (0, 1, 0), -28)       # hung over, past comfortable
+    rot_rest(rig, "head", (1, 0, 0), 4)
+    rot_rest(rig, "head", (0, 0, 1), 6)
+    curl(rig, ".R", (95, 85), (35, 25))
+    curl(rig, ".L", (30, 45), (15, 10), stagger=(0, 8, 16, 24))
+    rot_rest(rig, "clav.R", (0, 1, 0), -10)     # the right shoulder dropped
+    rot_rest(rig, "clav.L", (0, 1, 0), -6)      # the left one hitched up
+    aim(rig, "upper.L", (0.16, 0.02, -1))
+    aim(rig, "fore.L", (0.10, -0.22, -1))
+    aim(rig, "hand.L", (0.06, -0.20, -1))
+    aim(rig, "upper.R", (-0.10, 0.06, -1))
+    aim(rig, "fore.R", (-0.04, 0.02, -1))
+    aim(rig, "hand.R", (-0.02, -0.05, -1))
+    aim(rig, "thigh.L", (0.07, -0.16, -1))      # the left foot forward and out
+    aim(rig, "shin.L", (0.05, 0.04, -1))
+    aim(rig, "foot.L", (0.35, -1, -0.12))
+    aim(rig, "thigh.R", (-0.03, 0.02, -1))
+    aim(rig, "shin.R", (-0.02, 0.10, -1))
+    aim(rig, "foot.R", (-0.10, -1, -0.12))
 
 
 def hold(rig, ob, sfx, offset, local_fn):
@@ -698,7 +707,9 @@ def main():
         rig.rotation_euler.z = 0.0
         bpy.context.view_layer.update()
     if "face" in only:
-        cam = camera("cam_face", (0.28, -0.95, 1.60), (-0.01, -0.05, 1.63), 26.0)
+        pb = rig.pose.bones["head"]
+        hc = rig.matrix_world @ (pb.head.lerp(pb.tail, 0.40))      # the posed face, wherever the tilt took it
+        cam = camera("cam_face", hc + Vector((0.30, -0.95, -0.02)), hc + Vector((0.0, -0.04, -0.01)), 28.0)
         render(os.path.join(args.out, "annex_face.png"), cam, (960, 960))
     if "far" in only:
         cam = camera("cam_far", (0.25, -10.0, R["eye"]), (0.25, 10.0, R["eye"]), R["vfov"])

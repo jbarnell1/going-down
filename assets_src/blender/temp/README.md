@@ -5,9 +5,10 @@ out, coffee down the front, sweat under the arms, the tie pulled loose and the t
 lanyard and badge, trousers a little short over dark socks, a scuffed shoe) with an A4 sheet stapled and
 tied over its face. Its one wrong thing: arms too long (the forearms 7 cm long). One mesh in a clean
 T-pose for Mixamo: arms straight out, fingers straight and spread, thumbs forward and a little down, legs
-straight, feet apart, facing -Y. No armature. 4,592 triangles: the body (with the loose shirt tail) is one
-closed surface of 2,676; the collar, tie knot, blade and loop, lanyard, clip, badge, pen, sheet, four
-staples, the string and two bits of tape are thin closed shells laid over it.
+straight, feet apart, facing -Y; the upper back is rounded from years at a desk. No armature. 4,712
+triangles: the body (with the loose shirt tail) is one closed surface of 2,728; the collar, tie knot, blade
+and loop, lanyard, clip, badge, pen, sheet, four staples, the string with its knot and loose ends and two
+bits of tape are thin closed shells laid over it.
 
 | file | what |
 | --- | --- |
@@ -37,7 +38,7 @@ figure on a throwaway rig with automatic weights (never exported) and writes the
 
 ## After Mixamo
 
-- Upload `assets_src/mixamo/export/temp.fbx`: welded (2,332 vertices, no seams for the rig to tear).
+- Upload `assets_src/mixamo/export/temp.fbx`: welded (2,398 vertices, no seams for the rig to tear).
 - The sheet, staples, string and tape should follow the Head bone only (the crewmate's mask was made
   rigid the same way): the bottom of the sheet is tucked under the jaw, and neck weights would bend it.
 - Parent `temp_stapler.glb` to the right hand and `temp_notes.glb` to the left; the hands are open in

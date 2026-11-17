@@ -762,3 +762,50 @@ Rules learned:
     thing it is (a watch strap) or remove it.
 40. **Neglect is a list of small true things.** One coffee dribble, one ring, one untucked side, one
     curled collar point, one loose knot. Each is cheap and each says the same thing.
+
+### Round two on the Temp, and what changed
+
+The same three-judge setup: 4, 3 and 3 in the bright corridor, 7, 5 and 6 in the dark. Kept: the head
+hung over, the cheerful drawing over a limp body, the stapler, the notes and the stains ("he was at
+work when this happened"). What they caught, and the fix:
+
+- **A stair-stepped hem and a belt that stopped dead.** The loose tail had been a block of whole faces.
+  Now one function, `hem_z(x, y)`, gives the hem everywhere. On the tucked side it is the top of the
+  belt; on the loose side it hangs 11 cm lower, with a couple of soft folds; between, it is pulled up
+  diagonally across the belt. Each torso vertex below the belt's top stands out only if it is above the
+  hem, eased over 1.6 cm, with more rings round the waist. The texture decides shirt, belt or trousers
+  texel by texel from the same function, with a soft shadow under the hem. So the belt runs all the way
+  round and disappears under the tail.
+- **A normal man from afar.** The body now has a rounded upper back (the back of the chest rows is
+  pushed out 1 to 1.5 cm), which shows in the side silhouette even in the T-pose. The stand-in pose is
+  the rest:
+  - pelvis forward, a hunch through the chest;
+  - the right shoulder dropped and the left hitched up;
+  - the head hung 28 degrees over;
+  - the right arm straight and lower, the left bent;
+  - knees soft, the left foot forward and turned out.
+- **Edges of the mask.**
+  - The face is 7% narrower and the ears small, flat and set back under hair grown long over them, so
+    the sheet's edges meet hair, not skin.
+  - The hair now reaches the jaw at the sides and the collar at the back, and fades out over 1.4 cm
+    instead of stopping at a hard line.
+  - The top edge no longer lifts, and the back of the paper is pale, which removes the dark shards on top.
+  - The string is 2 mm, droops round the back, and ends in a knot with two loose ends.
+  - The paper is a shade whiter.
+- **Smaller.**
+  - The skin varies at two scales. The elbows are ruddier and darker, the knuckles and finger joints
+    darker, with a crease at the wrist, darker tops and paler undersides to the forearms, and a few hairs.
+  - In the pose the fingers curl unevenly (never as one mitten) and the right fist closes round the
+    stapler.
+  - The shoes are slimmer, with the toe springing 1.1 cm off the floor.
+  - The mug ring is a wide soft rim, broken on one side, with a faint wash inside: soaked in, not
+    printed on.
+
+Rules learned:
+
+41. **Hems are functions, not faces.** Where cloth changes (tucked to loose, shirt to belt), decide it
+    by a smooth function of position for both the geometry and the paint; whole faces make stairs.
+42. **Commit the wrongness in the silhouette.** Far off and in the dark, only the outline is left: a
+    curved spine, a dropped shoulder and a head held past comfortable read at 10 m; stains do not.
+43. **What shows round a mask must belong to it.** Skin or an ear at the edge says "a man wearing a
+    sheet"; hair grown over, and a string tied at the back, say the sheet is part of him.
