@@ -35,6 +35,8 @@ const Move = preload("res://sim/move.gd")
 const Prison = preload("res://sim/prison.gd")
 const PrisonView = preload("res://client/prison_view.gd")
 const FaceKiosk = preload("res://client/face_kiosk.gd")
+const Run = preload("res://sim/run.gd")
+const Day = preload("res://sim/day.gd")
 
 const VFOV := 70.0
 const SENS := 0.0022
@@ -108,6 +110,8 @@ var t_raise: Variant = null
 ## Tests: show the menu although the mouse is never captured under automation.
 var t_menu := false
 var t_hold: Variant = null
+## Tests: F held (the bunk), or null for the keyboard.
+var t_use: Variant = null
 var pending_call := false
 var pending_pick := false
 ## The instrument is out: E toggles it (the right mouse button still raises it while held).
@@ -155,6 +159,12 @@ var _test_bufs: Array[String] = []
 var _welcome_pending := false
 var _stats_t0 := 0.0
 var _stats_bytes := [0, 0]
+# The day loop on screen (_show_day): the prison has no resident; the morning's note until this time;
+# the report board's lines as shown; whether it is lights out on this screen.
+var _no_resident := false
+var _day_note_until := -1
+var _board: Array[String] = []
+var _lights_out := false
 
 func _ready() -> void:
 	if OS.get_cmdline_user_args().has("scene=annex_demo"):
@@ -423,6 +433,8 @@ func _play_alone() -> void:
 	var lr := LocalRoom.new()
 	var nm := start.player_name if not start.player_name.is_empty() else "YOU"
 	lr.open_local(seed, nm, entity_on, start.face_code)
+	# The game's run is a run of days: BANK rides up to the prison, bed starts the next day.
+	lr.days = true
 	lr.start_run()
 	link = PlayLink.new(lr, true)
 	start.error = ""
@@ -577,6 +589,8 @@ func _use_resident(plan: Dictionary) -> void:
 			kind = "temp"
 		"playroom":  # the Minder (client/minder_view.gd): not Stillness, so it follows the un-held pose
 			kind = "minder"
+	# The prison has no resident (Places.resident names none): nothing is drawn there.
+	_no_resident = Places.resident(StringName(str(plan.get("place", "")))).name == ""
 	if kind != _resident_kind:
 		var view: Node3D = TempView.new() if kind == "temp" else (MinderView.new() if kind == "minder" else OrderlyView.new())
 		view.name = kind.capitalize()
@@ -829,6 +843,7 @@ func _game_input(dt: float) -> Dictionary:
 	var raised: bool = t_raise if t_raise != null else (raise_latch or (mode == "game" and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)))
 	var me: Dictionary = snap.get("me", {})
 	var hold: bool = t_hold if t_hold != null else (mode == "game" and Input.is_action_pressed("use") and bool(me.get("nearHold", false)))
+	var use: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and Input.is_action_pressed("use"))
 	var call: bool = pending_call and bool(me.get("canCall", false))
 	var pick: bool = pending_pick and not call
 	pending_call = false
@@ -836,7 +851,7 @@ func _game_input(dt: float) -> Dictionary:
 	var aspect := 480.0 / 270.0
 	var hfov := rad_to_deg(2.0 * atan(tan(deg_to_rad(VFOV) * 0.5) * aspect))
 	return {"dt": dt, "f": f, "r": r, "sprint": sprint, "creep": creep, "yaw": yaw, "pitch": pitch,
-		"hfov": hfov, "vfov": VFOV, "raised": raised and not still, "call": call, "hold": hold, "pickUp": pick, "still": still}
+		"hfov": hfov, "vfov": VFOV, "raised": raised and not still, "call": call, "hold": hold, "pickUp": pick, "still": still, "use": use}
 
 func _game_frame(s: Dictionary, dt: float) -> void:
 	var now := Time.get_ticks_msec()
@@ -868,7 +883,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 
 	# The Orderly: drawn exactly as the frame says, never in the dark, never while taken.
 	var o: Dictionary = s["orderly"]
-	orderly.call(&"show_pose", o.get("pose"), bool(o.get("visible", false)) and not _noise_on())
+	orderly.call(&"show_pose", o.get("pose"), bool(o.get("visible", false)) and not _noise_on() and not _no_resident)
 
 	# Everyone else, and their name tags (not through walls, fading with distance, not in the dark).
 	var dark: bool = s["dark"]
@@ -893,6 +908,9 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		light = 0.1 if ((now / period) % 2 == 0 or (now / 37) % 7 == 3) else sag
 	elif warn:
 		light = 0.18 if ((now / 55) % 4 == 1 or (now / 140) % 3 == 2) else 0.6
+	_lights_out = _is_lights_out(s)
+	if _lights_out:
+		light = 0.0   # the prison at lights out: only the cells' night lights
 	level.set_light_level(light)
 	sfx.set_hum(light, dark)
 	sfx.world(dt, s, emergency)
@@ -944,7 +962,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		var cd: Dictionary = cl
 		machine = (1.0 - float(cd["floorsAway"]) / maxf(1.0, float(cd["floors"]))) * (0.5 if bool(cd["falseStop"]) else 1.0) + 0.05
 	var car: Dictionary = link.plan_dict["car"]
-	sfx.update(dt, o["squeak"] if _resident_kind == "orderly" else {}, o.get("pose"), tick_hz, loud, float(me["exertion"]) if not still else 0.0, bool(me["winded"]), machine,
+	sfx.update(dt, o["squeak"] if _resident_kind == "orderly" and not _no_resident else {}, o.get("pose"), tick_hz, loud, float(me["exertion"]) if not still else 0.0, bool(me["winded"]), machine,
 		Vector3(float(car["doorX"]), float(car["floorY"]) + 1.5, float(car["doorZ"])), float(o.get("speed", 0.0)))
 	announcer.update()
 	sfx.duck(announcer.player.playing, dt)
@@ -969,9 +987,19 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	hud.menu_on = t_menu or (error_text == "" and not automated and not wheel_open and not kiosk.is_open() and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and hud.end_lines.is_empty())
 	var prompt := ""
 	var station := _station()
-	if not ended and not noise and not kiosk.is_open():
-		if station != "":
-			prompt = PrisonView.prompt_for(Vector2i(floori(float(me["x"]) / Prison.CELL_SIZE), floori(float(me["z"]) / Prison.CELL_SIZE)))
+	var bed: Variant = s.get("bed")
+	var home := s.get("day") != null and int(s["depth"]) == 0 and bed is Dictionary
+	hud.prompt_fill = -1.0
+	if not ended and not noise and not kiosk.is_open() and not _lights_out:
+		if home and bool((bed as Dictionary)["inBed"]):
+			prompt = "F TO GET UP"
+		elif home and bool((bed as Dictionary)["atBunk"]):
+			prompt = "HOLD F TO SLEEP"
+			hud.prompt_fill = float((bed as Dictionary)["hold"])
+		elif station != "":
+			prompt = PrisonView.tonight_prompt_for(Vector2i(floori(float(me["x"]) / Prison.CELL_SIZE), floori(float(me["z"]) / Prison.CELL_SIZE)))
+		elif phase == "night":
+			pass   # home for the night: the car cannot be called
 		elif bool(me.get("canCall", false)):
 			prompt = "F  ▼ CALL"
 		elif bool(me.get("nearHold", false)):
@@ -979,6 +1007,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		elif _tape_in_reach(me):
 			prompt = "F  PICK UP"
 	hud.prompt = prompt
+	_show_day(s, now)
 	_show_end(now)
 
 ## Tests: on every frame, the camera as drawn against the client's own camera for that frame (the eye
@@ -1084,8 +1113,13 @@ func _show_indicator(now: int) -> void:
 			var k := LEAVE_FLOORS if left_at < 0 else mini(LEAVE_FLOORS, (now - left_at) / LEAVE_FLOOR_MS + 1)
 			lift.show_indicator(_floor_label(depth - k), k < LEAVE_FLOORS, 1 if k < LEAVE_FLOORS else 0)
 		"riding":
-			var half := ride_started >= 0 and now - ride_started > RIDE_TIME * 1000.0 / 2.0
-			lift.show_indicator(_floor_label(depth + (1 if half else 0)), true, -1)
+			if bool(snap.get("goingUp", false)):
+				# Up to the prison: the floors count up to G.
+				var k := 0.0 if ride_started < 0 else clampf((now - ride_started) / (Run.RIDE_UP_TIME * 1000.0), 0.0, 1.0)
+				lift.show_indicator(_floor_label(maxi(0, depth - int(floorf(k * (depth + 1))))), true, 1)
+			else:
+				var half := ride_started >= 0 and now - ride_started > RIDE_TIME * 1000.0 / 2.0
+				lift.show_indicator(_floor_label(depth + (1 if half else 0)), true, -1)
 		_:
 			lift.show_indicator("", false, 0)
 
@@ -1106,7 +1140,7 @@ func _present(events: Array, now: int) -> void:
 			"doorsOpened", "doorsClosed":
 				sfx.play("doors")
 			"carLeft":
-				if str(e["reason"]) == "ride":
+				if str(e["reason"]) == "ride" or str(e["reason"]) == "up":
 					ride_started = now
 					sfx.ride(true)
 				else:
@@ -1135,16 +1169,35 @@ func _present(events: Array, now: int) -> void:
 			"rodeDown":
 				sfx.ride(false)
 				ride_started = -1
+			"rodeUp":
+				# Home: the ride is over; whoever was taken or left behind wakes on their bunk.
+				sfx.ride(false)
+				ride_started = -1
+				caught_at = -1
+				raise_latch = false
+			"newDay":
+				# The morning: in the car at floor 1 of the next day.
+				ride_started = -1
+				caught_at = -1
+				left_at = -1
+				prev_bell_left = BOARD_TIME
+				pitch = 0.0
+				raise_latch = false
+				_day_note_until = now + 4000
+				announcer.start_run()
 			"banked":
 				var summary: Dictionary = e["summary"]
 				var shares: Dictionary = summary["shares"]
 				lifetime += float(shares.get(my, 0.0))
-				ending = {"kind": "banked", "at": now, "summary": summary}
+				# With days there is no end screen: the car rides up to the prison (carLeft "up").
+				if snap.get("day") == null:
+					ending = {"kind": "banked", "at": now, "summary": summary}
 				sfx.ride(true)
 			"wiped":
-				ending = {"kind": "wiped", "at": now, "summary": e["summary"]}
+				if snap.get("day") == null:
+					ending = {"kind": "wiped", "at": now, "summary": e["summary"]}
 			"leftBehind":
-				if mine:
+				if mine and snap.get("day") == null:
 					ending = {"kind": "leftBehind", "at": now}
 			"caught":
 				var op: Variant = (snap.get("orderly", {}) as Dictionary).get("pose")
@@ -1186,6 +1239,79 @@ func _show_end(now: int) -> void:
 	if not automated:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
+## Whether the prison's lights are out on this screen: the host's lights-out time has come by the host
+## clock as estimated here (never by when the news arrived).
+func _is_lights_out(s: Dictionary) -> bool:
+	var dv: Variant = s.get("day")
+	if not dv is Dictionary or int(s["depth"]) != 0 or bool(s.get("goingUp", false)):
+		return false
+	var lo: Variant = (dv as Dictionary)["lightsOutAt"]
+	return lo != null and float(s["hostNow"]) >= float(lo)
+
+## The day loop on screen (a run with days; prison.md sections 3 and 6): the ride up's headline; at home
+## the bed count, the lights-out countdown and lights out, the day board by the lift and the report board
+## in the bank room (read crisp on the screen while standing in the bank room); the morning's note. Every
+## number is the host's (the day block), and every time is host time against the host clock.
+func _show_day(s: Dictionary, now: int) -> void:
+	hud.count_text = ""
+	hud.big_note = ""
+	hud.fade = 0.0
+	hud.board_lines = []
+	var dv: Variant = s.get("day")
+	if not dv is Dictionary:
+		return
+	var day: Dictionary = dv
+	var result: Variant = day["result"]
+	var going_up := bool(s.get("goingUp", false))
+	var pv: Object = level.get_meta(&"prison") if level.has_meta(&"prison") else null
+	if pv != null:
+		pv.call("set_lights_out", _lights_out)
+	if going_up and result is Dictionary:
+		hud.center_note = _headline(result as Dictionary, s)
+	if now < _day_note_until and int(s["depth"]) >= 1:
+		hud.big_note = "DAY %d  OWED %d" % [int(day["day"]), int(day["quota"])]
+	if int(s["depth"]) != 0 or going_up:
+		return
+	var hn := float(s["hostNow"])
+	var count := "IN BED %d OF %d" % [(day["inBed"] as Array).size(), int(day["crew"])]
+	var lo: Variant = day["lightsOutAt"]
+	var left := ""
+	if _lights_out:
+		hud.big_note = "LIGHTS OUT"
+		# A moment of the dark cell block, then black until the morning.
+		hud.fade = clampf((hn - float(lo) - 1.5) / (Day.LIGHTS_OUT_SECONDS - 2.0), 0.0, 1.0)
+		left = "LIGHTS OUT"
+	elif lo != null and day["countFrom"] != null:
+		left = "LIGHTS OUT %d" % ceili(maxf(0.0, float(lo) - hn))
+	hud.count_text = count + ("  " + left if left != "" and not _lights_out else "")
+	_board = PrisonView.report_text(result, link.names())
+	if pv != null:
+		pv.call("show_report", _board)
+		var lines := PrisonView.day_text(day, count)
+		if left != "":
+			lines.append(left)
+		pv.call("show_day_board", lines)
+	var me: Dictionary = s["me"]
+	var cell := Vector2i(floori(float(me["x"]) / Prison.CELL_SIZE), floori(float(me["z"]) / Prison.CELL_SIZE))
+	# Anywhere in the bank room but right in front of the board itself (there the board is read on the wall).
+	if int(me["level"]) == 0 and Prison.BANK_ROOM.has_point(cell) and cell != Prison.REPORT_BOARD and not _lights_out:
+		hud.board_lines = _board
+
+## The ride up's headline from the settled day (the host's facts).
+func _headline(r: Dictionary, s: Dictionary) -> String:
+	var sm: Variant = s.get("summary")
+	if sm is Dictionary and bool((sm as Dictionary).get("wiped", false)):
+		return "GOING UP.  NOBODY CAME BACK.  NOTHING BANKED"
+	var head := "GOING UP.  BANKED %d OF %d" % [int(r["banked"]), int(r["quota"])]
+	return head + ("  MADE" if str(r["kind"]) == "made" else "  SHORT %d" % int(r["short_by"]))
+
+## Tests: what a prison board shows now ("day" or "report"), or [] off the prison.
+func _prison_lines(which: String) -> Array:
+	if level == null or not level.has_meta(&"prison"):
+		return []
+	var pv: Object = level.get_meta(&"prison")
+	return pv.get("day_board_lines" if which == "day" else "report_lines")
+
 ## Each bus's level right now (dB, the louder channel; -200 for silence). On the desktop this is
 ## what reaches the speakers; in the browser's Sample mode the buses are bypassed and read silent.
 func _bus_peaks() -> Dictionary:
@@ -1223,7 +1349,7 @@ func _on_js(args: Array) -> void:
 ## Commands (space separated): state | stats | resetstats | move f r sprint creep | stopmove |
 ## look yawDeg pitchDeg | face x z [y] | raise 0|1|- | hold 0|1|- | call | pick | teleport level x y |
 ## walkto level x y [pace] | stopwalk | timescale k | newrun | tape 0|1 | debug | floortapes | plan |
-## down 0|1 (alone: put the player down or up) | eyestats (the camera's eye against the client's, every frame)
+## use 0|1|- (F held: the bunk) | down 0|1 (alone: put the player down or up) | eyestats (the camera's eye against the client's, every frame)
 ## The start screen and the room: alone (PLAY ALONE, then Enter on the face) | ui <alone|join|go|back|start|leave> |
 ## type <address|name> <text> | start | leave | emote <name> | wheel open | wheel aim dx dy | wheel release | screen
 ## The face step: draw done | draw cancel | draw press <editor control id> | draw line x0 y0 x1 y1 (cells, with
@@ -1367,6 +1493,8 @@ func _command(c: String) -> String:
 			t_raise = null if p[1] == "-" else p[1] == "1"
 		"hold":
 			t_hold = null if p[1] == "-" else p[1] == "1"
+		"use":
+			t_use = null if p[1] == "-" else p[1] == "1"
 		"call":
 			pending_call = true
 		"pick":
@@ -1535,6 +1663,9 @@ func _test_state() -> Dictionary:
 			"wentDown": hud.went_down, "end": hud.end_lines.map(func(l: Dictionary) -> String: return str(l["text"])), "tapeText": hud.tape_text,
 			"prompt": hud.prompt, "menu": hud.menu_on, "built": built_depth, "hudSize": [hud.size.x, hud.size.y], "lift": _lift_drawn(),
 			"wheel": wheel_open, "wheelSel": hud.wheel_sel, "note": hud.note, "tags": hud.tags.map(func(t: Dictionary) -> String: return str(t["text"])), "tagRange": TAG_RANGE,
-			"camY": cam.position.y},
+			"camY": cam.position.y, "board": _board, "count": hud.count_text, "bigNote": hud.big_note,
+			"fade": hud.fade, "lightsOut": _lights_out, "goingUp": s.get("goingUp", false), "centerNote": hud.center_note,
+			"hudBoard": hud.board_lines, "dayBoard": _prison_lines("day"), "reportBoard": _prison_lines("report"), "residentDrawn": orderly.visible},
+		"day": s.get("day"), "hostNow": s.get("hostNow"), "bed": s.get("bed"), "seed": s.get("seed"),
 		"events": event_counts,
 	}

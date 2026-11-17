@@ -5,7 +5,10 @@
 //   node assets_src/voice/generate.mjs --all [--voice Name] [--dry-run]
 //                                                               every line, three takes, in one voice (default: the default voice)
 //   node assets_src/voice/generate.mjs --publish                copy the chosen take of every line, for every voice in
-//                                                               voices.ship, to public/assets/voice/<voice>/<id>.mp3, loudness-normalised
+//                                                               voices.ship, to public/assets/voice/<voice>/<id>.mp3, loudness-normalised,
+//                                                               with the manifest, and the files of each voice that has a folder
+//                                                               there, copied to godot/assets/voice/ (the Godot game's res://assets/voice)
+//   A line's own "takes" overrides the file's default number of takes.
 //   node assets_src/voice/generate.mjs --page                   rewrite audition.html from lines.json (free)
 //   --budget N   refuse a batch that would take the ledger's total over N characters (default: the game's cap)
 //
@@ -21,7 +24,7 @@
 // recorded in ledger.json. Each take is cached by a hash of text + voice + model + settings + take
 // number, so the same take is never paid for twice. Any API error stops the batch at once.
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalise } from './ff.mjs';
@@ -32,6 +35,8 @@ const LINES = path.join(HERE, 'lines.json');
 const LEDGER = path.join(HERE, 'ledger.json');
 const TAKES = path.join(HERE, 'takes');
 const PUBLIC = path.join(ROOT, 'public', 'assets', 'voice');
+/** The Godot game's copy of the published folder (res://assets/voice), kept identical to PUBLIC. */
+const GODOT = path.join(ROOT, 'godot', 'assets', 'voice');
 const API = 'https://api.elevenlabs.io';
 /** The game's cap on characters, takes included (docs/VOICE.md). */
 const CAP = 50_000;
@@ -151,13 +156,16 @@ export function takePath(voiceName, id, take) {
   return path.join(TAKES, slug(voiceName), id, `take-${take}.mp3`);
 }
 
+/** How many takes a line gets: its own `takes`, or the file's default. */
+const takesOf = (cfg, line) => line.takes ?? cfg.takes;
+
 function jobsFor(cfg, voices, ids) {
   const jobs = [];
   for (const v of voices) {
     for (const id of ids) {
       const line = cfg.lines.find((l) => l.id === id);
       if (!line) stop(`no line ${id} in lines.json`);
-      for (let take = 1; take <= cfg.takes; take++) {
+      for (let take = 1; take <= takesOf(cfg, line); take++) {
         const job = { id, voiceId: v.id, voiceName: v.name, take, text: line.text, settings: line.settings, model: cfg.model, format: cfg.outputFormat };
         job.hash = hashOf(job);
         job.out = takePath(v.name, id, take);
@@ -243,10 +251,14 @@ function publish(cfg) {
       }
       const dst = path.join(dir, `${line.id}.mp3`);
       const m = normalise(src, dst);
-      console.log(`  ${name} ${line.id}: take ${take} -> ${rel(dst)}  ${m.duration.toFixed(2)} s  ${m.lufs.toFixed(1)} LUFS  peak ${m.truePeak.toFixed(1)} dBTP`);
+      // The Godot game carries only the voices it already has a folder for (today: Bella).
+      const godotDir = path.join(GODOT, slug(name));
+      if (existsSync(godotDir)) copyFileSync(dst, path.join(godotDir, `${line.id}.mp3`));
+      console.log(`  ${name} ${line.id}: take ${take} -> ${rel(dst)}${existsSync(godotDir) ? ' (and godot/)' : ''}  ${m.duration.toFixed(2)} s  ${m.lufs.toFixed(1)} LUFS  peak ${m.truePeak.toFixed(1)} dBTP`);
     }
   }
   saveJson(path.join(PUBLIC, 'manifest.json'), manifest);
+  saveJson(path.join(GODOT, 'manifest.json'), manifest);
   if (missing) stop(`${missing} line(s) had no take to publish.`, 1);
 }
 
@@ -256,18 +268,27 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 function page(cfg) {
   const src = (voice, id, take) => `/files/assets_src/voice/takes/${slug(voice)}/${id}/take-${take}.mp3`;
-  const takes = (voice, id) =>
-    Array.from({ length: cfg.takes }, (_, i) => `<div class="take"><span>Take ${i + 1}</span><audio controls preload="none" src="${src(voice, id, i + 1)}"></audio></div>`).join('');
+  const takes = (voice, line) =>
+    Array.from({ length: takesOf(cfg, line) }, (_, i) => `<div class="take"><span>Take ${i + 1}</span><audio controls preload="none" src="${src(voice, line.id, i + 1)}"></audio></div>`).join('');
   const lineBlock = (voice, line) =>
-    `<div class="line"><p class="id">${esc(line.id)} <span>${esc(line.moment)}</span></p><p class="plain">${esc(line.plain)}</p><p class="tagged">${esc(line.text)}</p><p class="note">${esc(line.note)}</p>${takes(voice, line.id)}</div>`;
+    `<div class="line"><p class="id">${esc(line.id)} <span>${esc(line.moment)}</span></p><p class="plain">${esc(line.plain)}</p><p class="tagged">${esc(line.text)}</p><p class="note">${esc(line.note)}</p>${takes(voice, line)}</div>`;
   const byId = (id) => cfg.lines.find((l) => l.id === id);
   const voices = cfg.voices.shortlist
     .map((v) => `<section><h2>${esc(v.name)}${cfg.voices.default?.id === v.id ? ' <small>(the default)</small>' : ''}</h2><p class="desc">${esc(v.description)}</p><p class="desc">${esc(v.why)}</p>${cfg.audition.map((id) => lineBlock(v.name, byId(id))).join('')}</section>`)
     .join('');
   const ship = cfg.voices.ship ?? [];
+  // Lines in a group (lines.json "groups") get their own section per voice, after the lift's own lines.
+  const groups = cfg.groups ?? {};
+  const inGroup = (g) => cfg.lines.filter((l) => (l.group ?? '') === g);
   const full = ship
     .filter((name) => cfg.lines.every((l) => existsSync(takePath(name, l.id, 1))))
-    .map((name) => `<h2>Every line in ${esc(name)}</h2>${cfg.lines.map((l) => lineBlock(name, l)).join('')}`)
+    .map(
+      (name) =>
+        `<h2>Every line in ${esc(name)}</h2>${inGroup('').map((l) => lineBlock(name, l)).join('')}` +
+        Object.entries(groups)
+          .map(([g, info]) => `<h2>${esc(info.title ?? g)} in ${esc(name)}</h2><p class="desc">${esc(info.audition ?? '')}</p>${inGroup(g).map((l) => lineBlock(name, l)).join('')}`)
+          .join(''),
+    )
     .join('');
   return `<!doctype html>
 <html lang="en">

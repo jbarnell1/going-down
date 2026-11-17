@@ -154,12 +154,20 @@ func _player(t: float) -> void:
 		pitch = 0.0
 	else:
 		_look_at(car.door_x, car.door_z, body.y + 1.65)
-	if phase == "ended" and done_at < 0.0:
+	# The run is over at "ended"; with the day loop on (the server's game), a bank or a wipe rides the
+	# crew up to the prison instead, so seeing that settle is the end of this session too.
+	if done_at < 0.0 and (phase == "ended" or _settled(c)):
 		done_at = t
 	if done_at >= 0.0 and t - done_at > 3.0:
 		_report(c)
 
 var _call_next := false
+
+func _settled(c: Client) -> bool:
+	for e: Dictionary in c.events:
+		if e.get("type") == "banked" or e.get("type") == "wiped":
+			return true
+	return false
 
 static func M_hyp(a: float, b: float) -> float:
 	return sqrt(a * a + b * b)
