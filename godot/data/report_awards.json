@@ -1,0 +1,48 @@
+{
+  "last_resort": {"id": "attended", "title": "Attended", "fact": "", "line": "{name} attended. The Company has noted it."},
+  "awards": [
+    {"id": "top_earner", "tier": 1, "mode": "max", "min": 1, "fact": "credits", "title": "Top Earner", "line": "{name} banked {n} credits on Day {day}. Everyone else was present."},
+    {"id": "top_reader", "tier": 1, "mode": "max", "min": 1, "fact": "readings", "title": "Diligent Filer", "line": "{name} read {n} documents. Nobody asked, and it was noted."},
+    {"id": "most_downed", "tier": 1, "mode": "max", "min": 1, "fact": "downs", "title": "Frequently Collected", "line": "{name} was collected for filing {n}x. The folder is getting thick."},
+    {"id": "top_healer", "tier": 1, "mode": "max", "min": 1, "fact": "heals", "title": "Employee of the Day", "line": "{name} returned colleagues to service {n}x. A sticker is on its way."},
+    {"id": "top_dropper", "tier": 1, "mode": "max", "min": 1, "fact": "tapes_dropped", "title": "Records Mishandler", "line": "{name} dropped tapes {n}x. The tapes have filed a complaint."},
+    {"id": "top_recoverer", "tier": 1, "mode": "max", "min": 1, "fact": "tapes_recovered", "title": "Lost Property Officer", "line": "{name} picked tapes back up {n}x. Hands were involved."},
+    {"id": "top_starer", "tier": 1, "mode": "max", "min": 1, "fact": "stare_seconds", "title": "Longest Stare", "line": "{name} looked the Orderly in the face for {n}s. HR advises against it."},
+    {"id": "top_walker", "tier": 1, "mode": "max", "min": 1, "fact": "distance_m", "title": "Most Mileage", "line": "{name} walked {n} m today. The floor was already there."},
+    {"id": "top_emoter", "tier": 1, "mode": "max", "min": 1, "fact": "emotes", "title": "Chief Communications Officer", "line": "{name} gestured {n}x and said nothing useful."},
+    {"id": "top_marker", "tier": 1, "mode": "max", "min": 1, "fact": "marks", "title": "Stationery Enthusiast", "line": "{name} placed {n} marks. Each one was seen, none were thanked."},
+    {"id": "top_sprinter", "tier": 1, "mode": "max", "min": 1, "fact": "sprints", "title": "Walking Is a Core Value", "line": "{name} sprinted {n}x against policy."},
+    {"id": "ghost", "tier": 1, "mode": "min", "min": 0, "fact": "distance_m", "title": "Ghost of the Run", "line": "{name} walked only {n} m. Were they here? The sign-in sheet says so."},
+
+    {"id": "fill_credits", "tier": 2, "fact": "credits", "title": "Payroll Acknowledgement", "line": "{name} banked {n} credits. Payroll has noted it."},
+    {"id": "fill_readings", "tier": 2, "fact": "readings", "title": "Reading Group Attendee", "line": "{name} read {n} documents. Comprehension is not audited."},
+    {"id": "fill_downs", "tier": 2, "fact": "downs", "title": "Incident Participant", "line": "{name} was collected for filing {n}x. Participation counts."},
+    {"id": "fill_heals", "tier": 2, "fact": "heals", "title": "Team Player, Provisional", "line": "{name} returned colleagues to service {n}x. Probation continues."},
+    {"id": "fill_tapes_dropped", "tier": 2, "fact": "tapes_dropped", "title": "Records Handler", "line": "{name} dropped tapes {n}x. Handling is a journey."},
+    {"id": "fill_tapes_recovered", "tier": 2, "fact": "tapes_recovered", "title": "Lost Property Visitor", "line": "{name} picked tapes up {n}x. The tapes were not consulted."},
+    {"id": "fill_stare_seconds", "tier": 2, "fact": "stare_seconds", "title": "Eye Contact Review", "line": "{name} looked at the Orderly for {n}s. The Orderly has logged it."},
+    {"id": "fill_distance_m", "tier": 2, "fact": "distance_m", "title": "Steps Audit", "line": "{name} walked {n} m. Footwear is the Company's concern."},
+    {"id": "fill_emotes", "tier": 2, "fact": "emotes", "title": "Gesture Log", "line": "{name} gestured {n}x. Each was seen."},
+    {"id": "fill_marks", "tier": 2, "fact": "marks", "title": "Stationery Return", "line": "{name} placed {n} marks. The pad is accounted for."},
+    {"id": "fill_sprints", "tier": 2, "fact": "sprints", "title": "Pace Review", "line": "{name} sprinted {n}x. Walking remains a core value."}
+  ],
+  "upgrade_limit": 3,
+  "upgrade_lines": {
+    "taken": [
+      "Quota missed. The Company has repossessed {name}'s {upgrade}. Missed days: {misses} of {limit}. Please do not take it personally. We did.",
+      "The quota was not met. A roll was held and {name} loses {upgrade}. That is {misses} of {limit}. The dice send their regards.",
+      "Day {day} fell short. {name}'s {upgrade} has been reassigned to Nobody. Missed days: {misses} of {limit}."
+    ],
+    "taken_final": [
+      "Quota missed again. {name}'s {upgrade} goes by roll, and so does your employment. Missed days: {misses} of {limit}. Game over.",
+      "That is {misses} of {limit}. {name} loses {upgrade} on the way out. The Company thanks you for your service. Game over."
+    ],
+    "empty": [
+      "Quota missed. The roll found nothing to repossess. The Company will remember this. Missed days: {misses} of {limit}.",
+      "Day {day} fell short, and the crew owns no upgrades. The Company is reluctantly impressed. Missed days: {misses} of {limit}."
+    ],
+    "empty_final": [
+      "That is {misses} of {limit}. There was nothing left to repossess, so the Company took the rest. Game over."
+    ]
+  }
+}

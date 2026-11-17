@@ -513,6 +513,434 @@
       ]
     },
     {
+      "id": "annex-meme",
+      "title": "The Annex: meme sounds",
+      "context": "Proposal: no meme sounds on the Annex floor itself, only in the lift and at the bank, wipe and report, so the laughs come after the scream.",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "label": "Yes",
+          "note": "Meme sounds only outside the floor."
+        },
+        {
+          "id": "no",
+          "label": "No",
+          "note": "Say what instead in the box below."
+        }
+      ],
+      "default": [
+        "yes"
+      ]
+    },
+    {
+      "id": "annex-when",
+      "title": "The Annex: which floor",
+      "context": "Proposal: floor 1 and floor 2 are the Clinic, floor 3 is the Annex, and deeper floors are drawn by the seed.",
+      "type": "single",
+      "options": [
+        {
+          "id": "floor3",
+          "label": "Floor 3, then drawn",
+          "note": "The recommendation."
+        },
+        {
+          "id": "floor2",
+          "label": "Floor 2, then drawn",
+          "note": "Sooner."
+        },
+        {
+          "id": "drawn",
+          "label": "Drawn from floor 2",
+          "note": "Any floor from 2 on could be either."
+        }
+      ],
+      "default": [
+        "floor3"
+      ]
+    },
+    {
+      "id": "annex-signs",
+      "title": "The Annex: signs that lie by a rule",
+      "context": "Proposal: the hanging LIFT signs follow a fixed rule that sends you in a circle (the same for everyone, not random), and the lift bell plays from every ceiling speaker, so you cannot walk toward it by ear. This is the harsh part of the rule change.",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "label": "Yes",
+          "note": "Looping signs and a bell from every speaker."
+        },
+        {
+          "id": "no",
+          "label": "No",
+          "note": "Say what instead in the box below."
+        }
+      ],
+      "default": [
+        "yes"
+      ]
+    },
+    {
+      "id": "annex-notes",
+      "title": "The Annex: sticky notes about the crew",
+      "context": "The Temp leaves sticky notes about the crew by name. Proposal: on game night every note is true and everyone sees the same note; notes that lie, seen by one player only, come later.",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "label": "Yes",
+          "note": "True and the same for everyone first."
+        },
+        {
+          "id": "no",
+          "label": "No",
+          "note": "Say what instead in the box below."
+        }
+      ],
+      "default": [
+        "yes"
+      ]
+    },
+    {
+      "id": "annex-light",
+      "title": "The Annex: no clean and corrupted sides",
+      "context": "The Clinic gets darker and more corrupted the further you walk from the lift. Proposal: the Annex does not; instead the bad light follows the Temp, so flickering lights tell you it is near.",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "label": "Yes",
+          "note": "Bad light follows the Temp."
+        },
+        {
+          "id": "no",
+          "label": "No",
+          "note": "Say what instead in the box below."
+        }
+      ],
+      "default": [
+        "yes"
+      ]
+    },
+    {
+      "id": "annex-face",
+      "title": "The Annex: the Temp wears a crewmate's face",
+      "context": "Proposal: the Temp's paper face is a photocopy of one crewmate's drawn face.",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "label": "Yes",
+          "note": "A photocopy of a friend's drawn face."
+        },
+        {
+          "id": "no",
+          "label": "No",
+          "note": "Say what instead in the box below."
+        }
+      ],
+      "default": [
+        "yes"
+      ]
+    },
+    {
+      "id": "annex-catch",
+      "title": "The Annex: how the Temp catches you",
+      "context": "Proposal: the Temp staples a sticky note to your forehead, then drags you by the ankle toward a copy room for the ten seconds you are down. Under Stillness, looking at it stops the drag. This uses the drag you said another level could have.",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "label": "Yes",
+          "note": "Stapled, then dragged."
+        },
+        {
+          "id": "no",
+          "label": "No",
+          "note": "Say what instead in the box below."
+        }
+      ],
+      "default": [
+        "yes"
+      ]
+    },
+    {
+      "id": "annex-marks",
+      "title": "The Annex: crew marks",
+      "context": "In the Annex the only directions you can trust are marks the crew made. Proposal: press Q to stick a coloured arrow at your feet, each player has a pad of 10 per floor, and anyone can peel any mark (hold F) to get it back. Full design: docs/floors/annex.md.",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "label": "Yes",
+          "note": "Q to place, 10 a floor, anyone can peel."
+        },
+        {
+          "id": "no",
+          "label": "No",
+          "note": "Say what instead in the box below."
+        }
+      ],
+      "default": [
+        "yes"
+      ]
+    },
+    {
+      "id": "day-clockout",
+      "title": "The prison: where a player who clocks out goes",
+      "context": "From Fable's design for the day and the prison (docs/floors/prison.md). Clocking out (North Star C6): one player steps off at a stop with only their own tape while the rest ride on.",
+      "type": "single",
+      "options": [
+        {
+          "id": "tv",
+          "label": "Up to the prison, watching the crew on the television",
+          "note": "Recommended."
+        },
+        {
+          "id": "cameras",
+          "label": "To the cameras, like a player who is out",
+          "note": ""
+        },
+        {
+          "id": "drop",
+          "label": "Drop clocking out for now",
+          "note": ""
+        }
+      ],
+      "default": [
+        "tv"
+      ]
+    },
+    {
+      "id": "day-upgrades",
+      "title": "The prison: the first upgrades",
+      "context": "From Fable's design for the day and the prison (docs/floors/prison.md). Flashbulb (once a floor, one lit second in the dark that counts as looking; your screen whites out after). Whistle (crewmates hear where you are; it is a noise). Marker Pad (two marks of your own on top of the crew's three). Doorstop (hold the lift doors from the landing; you can be caught there). Second Wind (once a floor, refill stamina when winded; loud gasp and a longer next wind-down).",
+      "type": "single",
+      "options": [
+        {
+          "id": "five",
+          "label": "Yes, these five",
+          "note": "Recommended."
+        },
+        {
+          "id": "two",
+          "label": "Only Marker Pad and Second Wind for game night",
+          "note": ""
+        },
+        {
+          "id": "wait",
+          "label": "Wait for the flare and lamp, then the North Star's own list",
+          "note": ""
+        }
+      ],
+      "default": [
+        "five"
+      ]
+    },
+    {
+      "id": "day-bed",
+      "title": "The prison: one friend will not go to bed",
+      "context": "From Fable's design for the day and the prison (docs/floors/prison.md). The day ends when everyone climbs into bed.",
+      "type": "single",
+      "options": [
+        {
+          "id": "majority",
+          "label": "Lights out 20 seconds after more than half are in",
+          "note": "Recommended."
+        },
+        {
+          "id": "all",
+          "label": "Wait for everyone",
+          "note": ""
+        },
+        {
+          "id": "host",
+          "label": "Whoever started the night can force it",
+          "note": ""
+        }
+      ],
+      "default": [
+        "majority"
+      ]
+    },
+    {
+      "id": "day-save",
+      "title": "The prison: where saves live",
+      "context": "From Fable's design for the day and the prison (docs/floors/prison.md). The server is locked down and writes no files today; a save on the server would need one folder it may write to.",
+      "type": "single",
+      "options": [
+        {
+          "id": "stamped",
+          "label": "On each player's PC, stamped by the server",
+          "note": "Recommended. Needs one more secret line on the lab box."
+        },
+        {
+          "id": "plain",
+          "label": "On each player's PC, no stamp",
+          "note": "Easy to cheat."
+        },
+        {
+          "id": "server",
+          "label": "On the home server, in one folder it may write to",
+          "note": ""
+        }
+      ],
+      "default": [
+        "stamped"
+      ]
+    },
+    {
+      "id": "day-carry",
+      "title": "The prison: does the day count carry on between game nights",
+      "context": "From Fable's design for the day and the prison (docs/floors/prison.md). ",
+      "type": "single",
+      "options": [
+        {
+          "id": "fresh",
+          "label": "No: Day 1 each night, credits and upgrades kept",
+          "note": "Recommended."
+        },
+        {
+          "id": "carry",
+          "label": "Yes: pick up where the crew left off",
+          "note": ""
+        }
+      ],
+      "default": [
+        "fresh"
+      ]
+    },
+    {
+      "id": "day-buy",
+      "title": "The prison: who buys upgrades",
+      "context": "From Fable's design for the day and the prison (docs/floors/prison.md). The North Star (G1) splits banked pay evenly and each player spends their own share.",
+      "type": "single",
+      "options": [
+        {
+          "id": "each",
+          "label": "Each player, from an even share",
+          "note": "Recommended. Matches the North Star."
+        },
+        {
+          "id": "crew",
+          "label": "The crew, from one pot, by vote",
+          "note": ""
+        },
+        {
+          "id": "both",
+          "label": "Both: a share each, plus a small crew pot",
+          "note": ""
+        }
+      ],
+      "default": [
+        "each"
+      ]
+    },
+    {
+      "id": "day-miss",
+      "title": "The prison: banking less than the day quota",
+      "context": "From Fable's design for the day and the prison (docs/floors/prison.md). Each day has a crew quota on top of each floor's. BANK always works; the question is what happens if the crew goes home short.",
+      "type": "single",
+      "options": [
+        {
+          "id": "half",
+          "label": "The warden keeps half that day's pay",
+          "note": "Recommended. Shown on the lift monitor before the bell."
+        },
+        {
+          "id": "none",
+          "label": "No pay that day",
+          "note": ""
+        },
+        {
+          "id": "locked",
+          "label": "BANK is locked until the quota is aboard",
+          "note": ""
+        },
+        {
+          "id": "wipe",
+          "label": "Three missed days wipes everyone's upgrades",
+          "note": ""
+        }
+      ],
+      "default": [
+        "half"
+      ]
+    },
+    {
+      "id": "day-training",
+      "title": "The prison: does the training floor play every day",
+      "context": "From Fable's design for the day and the prison (docs/floors/prison.md). The training floor is the North Star's Orientation (A3), not built yet.",
+      "type": "single",
+      "options": [
+        {
+          "id": "first",
+          "label": "Only on the first day of a night",
+          "note": "Recommended."
+        },
+        {
+          "id": "every",
+          "label": "Every day",
+          "note": ""
+        },
+        {
+          "id": "newbie",
+          "label": "Only when a first-time player is in the crew",
+          "note": ""
+        }
+      ],
+      "default": [
+        "first"
+      ]
+    },
+    {
+      "id": "day-loss-who",
+      "title": "The prison: who loses the upgrade on a missed day",
+      "context": "You said every missed day means an upgrade taken by roll. The day rules are built both ways and switch with one setting. Built so far: one upgrade for the whole crew.",
+      "type": "single",
+      "options": [
+        {
+          "id": "crew",
+          "label": "One upgrade from the whole crew, picked by one roll",
+          "note": "Recommended, and what is built now. The lift monitor shows the odds, for example 1 in 7."
+        },
+        {
+          "id": "each",
+          "label": "One upgrade from every player who owns any",
+          "note": "Harsher: a crew of four can lose four upgrades in one missed day."
+        }
+      ],
+      "default": [
+        "crew"
+      ]
+    },
+    {
+      "id": "day-bed-out",
+      "title": "The prison: climbing back out of bed",
+      "context": "Lights go out 20 seconds after more than half the crew is in bed. If someone climbs out and it drops back to half or fewer, what happens to the 20 second count?",
+      "type": "single",
+      "options": [
+        {
+          "id": "reset",
+          "label": "The count stops, and starts again from 20 when more than half are back in",
+          "note": "Recommended, and what is built now."
+        },
+        {
+          "id": "pause",
+          "label": "The count pauses and carries on from where it stopped",
+          "note": ""
+        },
+        {
+          "id": "keep",
+          "label": "Once it starts it cannot be stopped",
+          "note": ""
+        }
+      ],
+      "default": [
+        "reset"
+      ]
+    },
+    {
       "id": "anything",
       "title": "Anything else for the loop?",
       "context": "Notes, ideas, things that felt wrong when you played. Update this as often as you like.",
