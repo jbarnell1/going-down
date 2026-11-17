@@ -31,7 +31,7 @@ const MENU_ROWS: Array[Array] = [
 	["MOUSE", "LOOK"],
 	["E", "INSTRUMENT OUT / AWAY"],
 	["RIGHT MOUSE", "HOLD THE INSTRUMENT UP"],
-	["F", "CALL LIFT / HOLD DOORS / PICK UP"],
+	["F", "CALL / HOLD DOORS / PICK UP / SLEEP"],
 	["T", "TAPE LOOK ON / OFF"],
 	["HOLD R", "EMOTE WHEEL: AIM, LET GO"],
 	["TAP R", "CLOSE THE WHEEL"],
@@ -47,6 +47,15 @@ var wheel_labels: Array = []
 var wheel_sel := -1
 ## A short line under the prompt (the emote you just sent).
 var note := ""
+## The day loop. The bed count over the cell doors ("IN BED 1 OF 2", the lights-out countdown), drawn
+## at the top; how far the bunk prompt's hold has got (0..1, or -1 for no bar); a big line in the middle
+## ("LIGHTS OUT", "DAY 2"); black over the picture (0..1: lights out going to sleep); the report board,
+## read crisp beside the picture while standing in the bank room (one string per line, first the title).
+var count_text := ""
+var prompt_fill := -1.0
+var big_note := ""
+var fade := 0.0
+var board_lines: Array = []
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -82,6 +91,8 @@ func _draw() -> void:
 	if not end_lines.is_empty():
 		_draw_end()
 		return
+	if fade > 0.0:
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, clampf(fade, 0.0, 1.0)))
 	if osd_on:
 		var blink_on := (now / 700) % 2 == 0
 		var top := "PLAY >" if blink_on else "PLAY  "
@@ -105,6 +116,21 @@ func _draw() -> void:
 		var pp := Vector2((size.x - pw) * 0.5, size.y * 0.62)
 		draw_rect(Rect2(pp - Vector2(4, 3) * px, Vector2(pw + 8 * px, 13 * px)), Color(0, 0, 0, 0.45))
 		PixelFont.draw_shadowed(self, prompt, pp, px, Color("#f4f4ec"))
+		if prompt_fill >= 0.0:
+			# The hold's progress, under the prompt.
+			var bar := Rect2(pp + Vector2(0, 11 * px), Vector2(pw, 2 * px))
+			draw_rect(bar, Color(0, 0, 0, 0.55))
+			draw_rect(Rect2(bar.position, Vector2(bar.size.x * clampf(prompt_fill, 0.0, 1.0), bar.size.y)), Color("#ffd27a"))
+	if not board_lines.is_empty() and not black:
+		_draw_board(px)
+	if count_text != "" and not black:
+		var cw := PixelFont.width(count_text) * px
+		var cp := Vector2(floorf((size.x - cw) * 0.5), maxf(size.y * 0.06, 12.0))
+		draw_rect(Rect2(cp - Vector2(4, 3) * px, Vector2(cw + 8 * px, 13 * px)), Color(0, 0, 0, 0.45))
+		PixelFont.draw_shadowed(self, count_text, cp, px, Color("#ffd27a"))
+	if big_note != "" and not black:
+		var p3 := px * 2.0
+		PixelFont.draw_shadowed(self, big_note, Vector2(floorf((size.x - PixelFont.width(big_note) * p3) * 0.5), floorf(size.y * 0.42)), p3, Color("#f4f4ec"))
 	if went_down:
 		var t := "YOU WENT DOWN"
 		var p2 := px * 2.0
@@ -121,6 +147,18 @@ func _draw() -> void:
 		_draw_wheel(px)
 	if menu_on and not black:
 		_draw_menu()
+
+## The report board, crisp, down the left of the picture: a dark card, the title amber.
+func _draw_board(px: float) -> void:
+	var w := 10
+	for l: Variant in board_lines:
+		w = maxi(w, PixelFont.width(str(l)))
+	var line := 10
+	var h := board_lines.size() * line + 6
+	var origin := Vector2(maxf(size.x * 0.04, 8.0), floorf(size.y * 0.16))
+	draw_rect(Rect2(origin - Vector2(5, 4) * px, Vector2(w + 10, h + 4) * px), Color(0.02, 0.03, 0.025, 0.82))
+	for i in board_lines.size():
+		PixelFont.draw_shadowed(self, str(board_lines[i]), origin + Vector2(0, i * line) * px, px, Color("#ffd27a") if i == 0 else Color("#d8f0dc"))
 
 func _draw_tags(px: float) -> void:
 	for t: Dictionary in tags:
