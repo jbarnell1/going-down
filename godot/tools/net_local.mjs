@@ -8,11 +8,15 @@
 //   - the run banked and every player saw it;
 // and that the server refused: a ninth player (4002), an oversized message (4003, or 1009 from the
 // WebSocket layer), a flood (4004), a message outside the protocol (4005), and a wrong passphrase
-// (4001; after repeated failures the address is refused before any handshake).
-//   node godot/tools/net_local.mjs [port]      (port 4450-4459, default 4451)
+// (4001; after repeated failures the address is refused before any handshake), and a client of another
+// build (4007, with the out-of-date reason). And the night's log (server/night_log.gd): JSON lines for the
+// joins, the players' heartbeats, error lines and F9 reports, the run and its events, the leaves; never the
+// passphrase, never an address.
+//   node godot/tools/net_local.mjs [port] [--save-log=FILE]   (port 4450-4459 or 4490-4499, default 4451;
+//   --save-log writes everything the server printed to FILE: a fixture for tools/night_logs.mjs)
 // Uses the test passphrase `test-passphrase` (local only). Stops every process it starts.
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,8 +25,12 @@ const root = resolve(here, '..', '..');
 const project = join(root, 'godot');
 const godot = process.env.GODOT || join(root, 'tools', 'godot', 'Godot_v4.7.2-stable_win64_console.exe');
 if (!existsSync(godot)) throw new Error(`Godot not found at ${godot}`);
-const port = Number(process.argv[2] || 4451);
-if (!(port >= 4450 && port <= 4459)) throw new Error('port must be 4450-4459');
+const positional = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const saveLog = process.argv.slice(2).find((a) => a.startsWith('--save-log='))?.slice('--save-log='.length);
+const port = Number(positional[0] || 4451);
+if (!((port >= 4450 && port <= 4459) || (port >= 4490 && port <= 4499))) throw new Error('port must be 4450-4459 or 4490-4499');
+/** The build id the server and every client say (a server takes only its own: net/build_info.gd). */
+const BUILD = 'e2e-build';
 const SECRET = 'test-passphrase';
 const url = `ws://127.0.0.1:${port}`;
 const procs = new Set();
@@ -57,7 +65,7 @@ const cleanup = () => { for (const p of procs) p.kill(); };
 process.on('exit', cleanup);
 process.on('SIGINT', () => { cleanup(); process.exit(1); });
 
-const server = run(['res://server/server.tscn', '--', 'server', `port=${port}`, 'bind=127.0.0.1', 'seed=e2e-1', 'stats=10', 'quota=0', 'watchers=0'], { env: { GD_JOIN_SECRET: SECRET }, echo: 'server', timeout: 600 });
+const server = run(['res://server/server.tscn', '--', 'server', `port=${port}`, 'bind=127.0.0.1', 'seed=e2e-1', 'stats=10', 'quota=0', 'watchers=0', `build=${BUILD}`], { env: { GD_JOIN_SECRET: SECRET }, echo: 'server', timeout: 600 });
 await new Promise((res) => {
   const t = setInterval(() => { if (server.out.includes('listening on')) { clearInterval(t); res(); } }, 100);
 });
@@ -69,7 +77,7 @@ const players = [
   ['B', 0.15, 'away', '0'],
   ['C', 0.3, 'door', '0'],
 ].map(([name, delay, behave, starts]) =>
-  run(['--script', 'res://tests/net_e2e_client.gd', '--', `url=${url}`, `secret=${SECRET}`, 'role=player', `name=${name}`, `delay=${delay}`, `behave=${behave}`, 'expect=3', `starts=${starts}`, 'timeout=200'], { timeout: 230 }),
+  run(['--script', 'res://tests/net_e2e_client.gd', '--', `url=${url}`, `secret=${SECRET}`, 'role=player', `name=${name}`, `delay=${delay}`, `behave=${behave}`, 'expect=3', `starts=${starts}`, 'timeout=200', `build=${BUILD}`], { timeout: 230 }),
 );
 const outs = await Promise.all(players.map((p) => p.done));
 const results = outs.map((o) => result(o.out));
@@ -81,7 +89,7 @@ check(results.every((r) => r && r.watchedMoves === 0), `the watched Orderly neve
 check(results.some((r) => r && r.watchedPairs > 30), 'not vacuous: a screen watched the Orderly for more than half a second');
 check(results.every((r) => r && r.caughtWhileSeen === 0), `nobody was caught while their own screen showed the Orderly (catches: ${results.map((r) => r?.catches).join(', ')})`);
 
-const probe = async (kind) => result((await run(['--script', 'res://tests/net_e2e_client.gd', '--', `url=${url}`, `secret=${SECRET}`, 'role=probe', `kind=${kind}`, 'timeout=60'], { timeout: 90 }).done).out);
+const probe = async (kind) => result((await run(['--script', 'res://tests/net_e2e_client.gd', '--', `url=${url}`, `secret=${SECRET}`, 'role=probe', `kind=${kind}`, 'timeout=60', `build=${BUILD}`], { timeout: 90 }).done).out);
 const ninth = await probe('ninth');
 check(ninth && ninth.admitted === 8 && ninth.code === 4002, `a ninth player is refused (8 admitted, the ninth closed with ${ninth?.code})`);
 const big = await probe('oversize');
@@ -90,11 +98,29 @@ const flood = await probe('flood');
 check(flood && flood.sent && flood.code === 4004, `a flood closes the connection (code ${flood?.code})`);
 const garbage = await probe('garbage');
 check(garbage && garbage.code === 4005, `a message outside the protocol closes the connection (code ${garbage?.code})`);
+// Before the wrong passphrases (which leave this address refused for a while).
+const oldBuild = await probe('oldbuild');
+check(oldBuild && oldBuild.code === 4007 && /out of date/.test(oldBuild.reason ?? ''), `a client of another build is refused with the out-of-date reason (code ${oldBuild?.code}, "${oldBuild?.reason}")`);
 const wrong = await probe('wrongpass');
 check(wrong && wrong.codes[0] === 4001 && wrong.codes[1] === 4001 && wrong.codes[3] !== 4001, `a wrong passphrase is refused (codes ${JSON.stringify(wrong?.codes)}: 4001, then refused before the handshake)`);
 
 server.p.kill();
 await server.done;
+// The night's log: one JSON object per line, among the server's plain lines.
+const out = server.out;
+const night = out.split(/\r?\n/).filter((l) => l.startsWith('{"gd":1')).map((l) => JSON.parse(l));
+const evs = (ev) => night.filter((d) => d.ev === ev);
+const names = ['A', 'B', 'C'];
+check(!out.includes(SECRET), `the passphrase is in no line the server printed (${out.split(/\r?\n/).length} lines)`);
+check(!out.replace(/listening on 127\.0\.0\.1:\d+/g, '').includes('127.0.0.1'), 'no address is written down (only salted tags)');
+check(names.every((n) => evs('join').some((d) => d.name === n && d.build === BUILD)), `the log has every join, with its build (${evs('join').length} joins)`);
+check(names.every((n) => ['hb', 'clog', 'report'].every((ev) => evs(ev).some((d) => d.name === n))), "the log has every player's heartbeat, error line and F9 report");
+check(evs('run').length >= 1 && evs('game').some((d) => d.type === 'banked'), `the log has the run and its events (${[...new Set(evs('game').map((d) => d.type))].join(', ')})`);
+check(evs('leave').length >= 3 && evs('tick').length >= 1, `the log has the leaves (${evs('leave').length}) and the tick cost (${evs('tick').length} lines)`);
+if (saveLog) {
+  writeFileSync(saveLog, out);
+  console.log(`the server's output is saved in ${saveLog}`);
+}
 const bad = checks.filter(([ok]) => !ok).length;
 console.log(`${checks.length - bad} passed, ${bad} failed`);
 process.exit(bad ? 1 : 0);

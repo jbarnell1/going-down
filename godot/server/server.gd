@@ -7,7 +7,9 @@
 # Arguments (after --): `server` (required: this is the server), `port=N` (default 4450),
 # `bind=ADDRESS` (default * for every interface; 127.0.0.1 for local tests), `seed=TEXT` (tests: every
 # run on this seed), `insecure=1` (no passphrase: local tests only, with a loud warning), `quit_after=S`
-# (tests: stop after S seconds), `stats=S` (seconds between cost lines in the log, default 60).
+# (tests: stop after S seconds), `stats=S` (seconds between cost lines in the log, default 60; the worst tick
+# is the worst since the last line), `build=ID` (tests: this server's build id, net/build_info.gd).
+# Beside the plain lines it writes the night's log, one JSON object per line (server/night_log.gd).
 # The passphrase: the environment variable GD_JOIN_SECRET, or the first line of the file named by
 # GD_JOIN_SECRET_FILE (keep it outside the repository). Without one the server refuses to start.
 extends Node
@@ -16,6 +18,7 @@ const WsServer = preload("res://net/ws_server.gd")
 const Room = preload("res://server/room.gd")
 const Session = preload("res://net/session.gd")
 const Places = preload("res://sim/places.gd")
+const NightLog = preload("res://server/night_log.gd")
 
 var _ws: WsServer
 var _room: Room
@@ -23,6 +26,7 @@ var _t0 := 0
 var _quit_after := -1.0
 var _stats_every := 60.0
 var _last_stats := 0.0
+var _night: NightLog
 
 static func say(text: String) -> void:
 	print("[%s] %s" % [Time.get_time_string_from_system(), text])
@@ -62,6 +66,8 @@ func _ready() -> void:
 	_stats_every = float(args.get("stats", "60"))
 	_ws = WsServer.new(secret, insecure, say)
 	secret = ""
+	if args.has("build"):
+		_ws.build = args["build"]
 	var err := _ws.listen(port, bind)
 	if err != OK:
 		say("not started: cannot listen on %s:%d (error %d)" % [bind, port, err])
@@ -74,7 +80,10 @@ func _ready() -> void:
 	# A server needs no frame rate of its own: 250 loops a second is a 4 ms step for the 20 Hz ticks.
 	Engine.max_fps = 250
 	_t0 = Time.get_ticks_usec()
-	say("Going Down server listening on %s:%d (one room, at most %d players)" % [bind, port, WsServer.MAX_PLAYERS])
+	say("Going Down server listening on %s:%d (one room, at most %d players), build %s" % [bind, port, WsServer.MAX_PLAYERS, _ws.build])
+	_night = NightLog.new()
+	OS.add_logger(_night.tap)
+	_night.started(_ws.build, port)
 
 func _now() -> float:
 	return (Time.get_ticks_usec() - _t0) / 1000000.0
@@ -84,12 +93,13 @@ func _process(_delta: float) -> void:
 		return
 	var now := _now()
 	_ws.poll(now)
-	_room.update(now)
+	_night.pump(_ws, _room, now)
 	if _stats_every > 0.0 and now - _last_stats >= _stats_every:
 		_last_stats = now
 		var mean := (_room.tick_us / 1000.0 / _room.ticks) if _room.ticks > 0 else 0.0
 		say("players %d, pending %d, run %s, ticks %d, %.3f ms a tick (worst %.2f ms), refused %s" % [_ws.players(), _ws.pending(),
 			str(_room.epoch) if _room.running() else "none", _room.ticks, mean, _room.tick_max_us / 1000.0, JSON.stringify(_ws.refused)])
+		_night.tick_stats(_room, _ws.players())
 	if _quit_after > 0.0 and now >= _quit_after:
 		say("stopping (quit_after)")
 		_ws.stop()

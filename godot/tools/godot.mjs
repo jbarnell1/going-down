@@ -60,6 +60,23 @@ function errorLines(out) {
   return out.split(/\r?\n/).filter((l) => /\b(ERROR|SCRIPT ERROR|Parse Error|Failed)\b/.test(l));
 }
 
+/**
+ * Writes godot/build_id.gd (not in git) for net/build_info.gd: the short commit, plus "-dirty" when godot/
+ * has changes not yet committed (the import's own churn of default_bus_layout.tres is not counted, so the
+ * game and the server exported from one commit always get the same id). The server refuses a client
+ * whose id differs from its own. Returns the id.
+ */
+function writeBuildId() {
+  const git = (args) => spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+  const head = git(['rev-parse', '--short=10', 'HEAD']);
+  let id = head.status === 0 ? head.stdout.trim() : `nogit-${Date.now().toString(36)}`;
+  const st = git(['status', '--porcelain', '--', 'godot']);
+  const changes = (st.stdout ?? '').split(/\r?\n/).filter((l) => l.trim() && !l.endsWith('godot/default_bus_layout.tres'));
+  if (changes.length > 0) id += '-dirty';
+  writeFileSync(join(project, 'build_id.gd'), `# Written by npm run godot:export (tools/godot.mjs); not in git. See net/build_info.gd.\nextends RefCounted\n\nconst BUILD := "${id}"\n`);
+  return id;
+}
+
 function importPass() {
   const seconds = Number(process.env.GODOT_TIMEOUT || 600);
   const t0 = Date.now();
@@ -123,6 +140,7 @@ if (command === 'reference') {
   // Which builds: `web`, `windows`, `server` (the Linux headless server), or web and windows (default).
   const which = rest.filter((a) => !a.startsWith('--'));
   const want = (k) => (which.length === 0 ? k !== 'server' : which.includes(k));
+  console.log(`build id: ${writeBuildId()}`);
   if (!importPass()) process.exit(1);
   const out = join(project, 'export');
   mkdirSync(out, { recursive: true });
