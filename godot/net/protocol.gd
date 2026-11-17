@@ -150,6 +150,13 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##  - events "downed" {playerId, until, by, at}, "healStart" {playerId (the healer), target, from, done},
 ##    "healStop" {playerId, target}, "healed" {playerId, by, at} and "out" {playerId, at, spot (null when the
 ##    car left without them)}. The resident's own "caught" still comes first, as before.
+## Relocation (sim/run.gd relocation, sim/relocate.gd; T19e). New in the Godot game, and only ever sent once the
+## floor's resident has relocated, so a run without it sends exactly what it did before:
+##  - the world gains a 22nd element, the relocation count ("reloc" decoded: relocations on this floor so far),
+##    with the 16th to 21st null when absent. A client whose two snapshots differ in it never blends between
+##    them (net/client.gd: it snaps to the new pose);
+##  - the event "relocated" {from, to (bodies), near (the player it went to), k, who (its body), reach (its
+##    arrival cue's reach, m), why}: its arrival cue.
 
 ## Limits on what a client may send (the server refuses anything outside them).
 const MAX_NAME := 32
@@ -307,6 +314,10 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < 20:
 			out.append(null)
 		out.append(enc_watch(w["watch"]))
+	if w.get("reloc") != null:
+		while out.size() < 21:
+			out.append(null)
+		out.append(w["reloc"])
 	return out
 
 ## The watch block (see the header) from its readable form {need, watchers: [ids]}.
@@ -601,7 +612,7 @@ static func _opt_num(c: _V, v: Variant) -> Variant:
 	return null if v == null else _f(c, v)
 
 static func dec_world(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 15, 21)
+	var a := _a(c, w, 15, 22)
 	if c.bad:
 		return {}
 	var blink: Variant = null
@@ -669,8 +680,10 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 		out["annex"] = dec_annex(c, a[18])
 	if a.size() > 19 and (a[19] != null or a.size() == 20):
 		out["downs"] = dec_downs(c, a[19])
-	if a.size() > 20:
+	if a.size() > 20 and (a[20] != null or a.size() == 21):
 		out["watch"] = dec_watch(c, a[20])
+	if a.size() > 21:
+		out["reloc"] = _i(c, a[21], 0, MAX_COUNT)
 	return out
 
 static func _dec_report(c: _V, w: Variant) -> Dictionary:

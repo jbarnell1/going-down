@@ -93,6 +93,10 @@
 #    or another player counted), even if that other watcher has looked away since: its screen lit every mark
 #    and held on what it was told. Otherwise it is one watcher's look, like "I can see it".
 # With one needed (one or two up players, or the rule off) everything is as it was.
+#
+# Relocation (sim/run.gd relocation, sim/relocate.gd; T19e): the run decides. Once the resident has relocated on
+# the floor every snapshot carries the count (Protocol "reloc"), and a seen report of a pose from before its last
+# relocation is stale (counted as such, nothing put back or held): it is of a place it has left.
 extends RefCounted
 
 const Run = preload("res://sim/run.gd")
@@ -916,6 +920,12 @@ func _apply_report(s: Run.RunState, player_id: String, r: Dictionary, extra: Arr
 	if int(r["depth"]) != s.depth:
 		stats.stale_reports += 1
 		return s
+	# Relocation (sim/relocate.gd): a sighting from before it relocated is of a place it has left, where nobody
+	# could see it; the client snaps to the new pose and never draws between (net/client.gd). Nothing to put back.
+	var hr: History = _hist.get(rb, _hist.get(ra))
+	if hr != null and hr.o.relocations != s.orderly.relocations:
+		stats.stale_reports += 1
+		return s
 	# Two watchers needed: honoured only if what this player had been sent let one look hold it.
 	if not _report_honoured(s, p, r):
 		reports_unheld += 1
@@ -971,6 +981,7 @@ func _apply_report(s: Run.RunState, player_id: String, r: Dictionary, extra: Arr
 	restored.ever_seen = true
 	restored.last_seen_at = o.t
 	Entity.keep_count(restored, o)
+	Entity.keep_relocation(restored, o)
 	restored.last_met_at = o.t
 	restored.replan_in = 0.0
 	restored.dormant_left = base.dormant_left if mode == &"dormant" else 0.0
@@ -1085,6 +1096,9 @@ func world(full: bool = false) -> Dictionary:
 	var watch: Variant = watch_block(s)
 	if watch != null:
 		out["watch"] = watch
+	# Relocation (T19e): the count, once it has relocated on this floor (Protocol "reloc").
+	if s.orderly.relocations > 0:
+		out["reloc"] = s.orderly.relocations
 	return out
 
 ## Two-watcher Stillness (T19a; Protocol.enc_watch): the count as the host has it this tick, {need,

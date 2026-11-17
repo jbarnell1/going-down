@@ -265,8 +265,10 @@ static func _repeat_key(entity_id: String, trait_name: StringName) -> String:
 static func feet_distance(a: Move.Body, b: Move.Body) -> float:
 	return M.hypot3(a.x - b.x, a.y - b.y, a.z - b.z)
 
-## Stillness: the Orderly moved this tick, or its wind-up advanced this tick.
+## Stillness: the Orderly moved this tick, or its wind-up advanced this tick. A relocation is not a move.
 static func stillness_acting(prev: Entity.OrderlyState, next: Entity.OrderlyState) -> bool:
+	if next.relocated:
+		return false
 	var a := prev.body
 	var b := next.body
 	if a.x != b.x or a.z != b.z or a.y != b.y or a.level != b.level:
@@ -275,8 +277,12 @@ static func stillness_acting(prev: Entity.OrderlyState, next: Entity.OrderlyStat
 		return false
 	return next.mode == &"windUp" or (prev.mode == &"windUp" and next.mode == &"dormant")
 
-## Whether the trait's dangerous behaviour is happening this tick.
+## Whether the trait's dangerous behaviour is happening this tick. Never on the tick it relocated (it left
+## one place and arrived at another: sim/relocate.gd) nor while it stands after arriving, whatever its trait:
+## the instrument never records a relocation, and an open reading on the old spot closes by the usual quiet.
 static func trait_acting(e: EntityTick) -> bool:
+	if e.next.relocated or e.next.stand_left > EPS:
+		return false
 	match e.trait_name:
 		&"stillness":
 			return stillness_acting(e.prev, e.next)

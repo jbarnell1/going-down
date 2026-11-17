@@ -77,6 +77,11 @@
 # mark of two: the figure is drawn as the snapshots say (it walks at a lone watcher; the "seeing" flag tells
 # the host it is one watcher), nothing is reported, and a hold already made is let go, in view, on the frame
 # the marks drop. So the figure never moves on a frame that shows every mark lit (Frame.eyes_all).
+#
+# Relocation (sim/relocate.gd; T19e). The host moves the resident from a place nobody can see to another nobody
+# can see; snapshots carry how often it has on this floor ("reloc"). Between two snapshots whose counts differ the
+# figure is never blended: it is drawn at the newer one's pose (a snap), so it is never seen sliding through
+# walls on the way. Its arrival cue is the "relocated" event, in `events` like any other.
 extends RefCounted
 
 const Move = preload("res://sim/move.gd")
@@ -721,7 +726,7 @@ func frame(now: float, local: LocalFrame) -> Frame:
 		if _pin != null and (int(_pin["depth"]) != a_depth or int(a.get("ackSeen", 0)) >= int(_pin["id"])):
 			_pin = null
 		var pinned := _pin != null
-		var cand: Dictionary = _pin["pose"] if pinned else Pose.lerp_pose(a["orderly"], b["orderly"], alpha)
+		var cand: Dictionary = _pin["pose"] if pinned else (Pose.quant_pose(b["orderly"]) if _moved_on(a, b) else Pose.lerp_pose(a["orderly"], b["orderly"], alpha))
 		var plan := Session.plan_for(seed, a_depth)
 		var open := Session.doors_open_in(a["phase"]) or Session.doors_open_in(b["phase"]) or (latest != null and Session.doors_open_in(latest["phase"]))
 		var same := _drawn != null and _drawn_depth == a_depth
@@ -860,6 +865,10 @@ func _set_eyes(eyes: Array, seeing_now: bool, free: bool) -> void:
 		elif all.is_empty() and seeing_now:
 			by = str(id)
 	_eyes_frame = [seeing_now, need, lit, by]
+
+## The resident relocated between snapshots `a` and `b` (their relocation counts differ): see the header.
+static func _moved_on(a: Dictionary, b: Dictionary) -> bool:
+	return int(a.get("reloc", 0)) != int(b.get("reloc", 0))
 
 ## Both snapshots drawn have the resident bent over a downed player.
 static func _bending(a: Dictionary, b: Dictionary) -> bool:
