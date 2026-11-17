@@ -59,6 +59,14 @@
       "title": "The waiting car and the empty day",
       "about": "Lines from docs/floors/findables-and-day.md whose triggers exist today: the car waiting for someone aboard (car_waiting) and nobody coming back (day_wiped). bank_refused and day_met wait for the BANK lock and the day's earned (FD2).",
       "audition": "One take each."
+    },
+    "tape": {
+      "title": "The orientation tape",
+      "about": "Continuance's induction video (docs/floors/story.md section 2), played once on joining by godot/client/orientation_tape.gd, by line id, never dealt by moment. One recording per beat; the tape's shots share it. A tape is an object in the world, recorded once, so only Bella reads it.",
+      "voices": [
+        "Bella"
+      ],
+      "audition": "One take of each beat. The tape cuts its pictures on the pauses between sentences, so a re-take needs the cue times rebuilt (node godot/tools/tape_cues.mjs)."
     }
   },
   "moments": {
@@ -305,6 +313,10 @@
     "day_wiped": {
       "priority": 3,
       "when": "home after a wipe, when the day took an upgrade from someone"
+    },
+    "tape": {
+      "priority": 1,
+      "when": "never dealt by the announcer: the orientation tape plays these by id (godot/client/orientation_tape.gd)"
     }
   },
   "lines": [
@@ -2221,6 +2233,66 @@
       },
       "takes": 1,
       "note": "Delighted at the empty car, then a small polite reach for your pocket."
+    },
+    {
+      "id": "tape_orient_a",
+      "moment": "tape",
+      "group": "tape",
+      "text": "[Bright, smiling announcer voice, unhurried] Hello! And welcome to Continuance. This is Lidgate, our city. Everything is measured from here. Below Lidgate, there is nothing. Almost nothing.",
+      "plain": "Hello! And welcome to Continuance. This is Lidgate, our city. Everything is measured from here. Below Lidgate, there is nothing. Almost nothing.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "note": "Shots 1 to 4. The welcome; \"Almost nothing.\" lands as a small correction, still smiling."
+    },
+    {
+      "id": "tape_orient_b",
+      "moment": "tape",
+      "group": "tape",
+      "text": "[warmly] This is you. You have been sentenced. Congratulations! This is your crew. Draw your own face. We insist. Each morning, the car takes you down.",
+      "plain": "This is you. You have been sentenced. Congratulations! This is your crew. Draw your own face. We insist. Each morning, the car takes you down.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "note": "Shots 5 to 7. \"Congratulations!\" is sincere."
+    },
+    {
+      "id": "tape_orient_c",
+      "moment": "tape",
+      "group": "tape",
+      "text": "[professional] Every floor has a resident. We do not know what they are. Point your instrument at it. Record what it does. Readings become credits. Credits keep the lights on upstairs. Each resident keeps one rule. We may not tell you what it is.",
+      "plain": "Every floor has a resident. We do not know what they are. Point your instrument at it. Record what it does. Readings become credits. Credits keep the lights on upstairs. Each resident keeps one rule. We may not tell you what it is.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "note": "Shots 8 to 12. A briefing: brisk, untroubled by what it is saying."
+    },
+    {
+      "id": "tape_orient_d",
+      "moment": "tape",
+      "group": "tape",
+      "text": "[Quick, light, playful pace] Meet the quota. Call the car. The car is not quiet. The floor will notice. Be aboard when the doors close. Please do not stay late. Staying late is... discouraged.",
+      "plain": "Meet the quota. Call the car. The car is not quiet. The floor will notice. Be aboard when the doors close. Please do not stay late. Staying late is... discouraged.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "note": "Shots 13 to 16. Quick and light; the ellipsis before \"discouraged\" is the only catch on the tape."
+    },
+    {
+      "id": "tape_orient_e",
+      "moment": "tape",
+      "group": "tape",
+      "text": "[warmly] Then choose. Up, to bank your day. Or down, for more. Bank enough, and your sentence will end. Many crews are well on their way! [delighted] Continuance. Leave it with us.",
+      "plain": "Then choose. Up, to bank your day. Or down, for more. Bank enough, and your sentence will end. Many crews are well on their way! Continuance. Leave it with us.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "note": "Shots 17 to 20. Ends on the slogan, delighted."
     }
   ]
 }

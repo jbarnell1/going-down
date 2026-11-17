@@ -231,6 +231,10 @@ func _ready() -> void:
 		process_mode = Node.PROCESS_MODE_DISABLED
 		get_tree().change_scene_to_file.call_deferred("res://client/prison_demo.tscn")
 		return
+	if OS.get_cmdline_user_args().has("scene=tape"):  # the orientation tape on its own (client/tape_demo.gd)
+		process_mode = Node.PROCESS_MODE_DISABLED
+		get_tree().change_scene_to_file.call_deferred("res://client/tape_demo.tscn")
+		return
 	var t0 := Time.get_ticks_msec()
 	_t0_us = Time.get_ticks_usec()
 	# Where the client makes its plans: every floor from the game's deck (the third floor down is the
@@ -549,6 +553,7 @@ func _leave_room() -> void:
 	_back_to_title()
 
 func _enter_game() -> void:
+	# HOOK (story.md ST1, for FD6's controls card): play client/orientation_tape.gd (start(), await finished) before the card, once per player (save tape_seen).
 	mode = "game"
 	start.show_screen("")
 	hud.osd_on = true

@@ -103,6 +103,11 @@ To add a third (for example Sarah, already shortlisted, whose three audition lin
 - A one-word clip runs 1.15 to 1.41 s (about 0.1 s before the word and a 0.25 s tail), so the check's estimate never goes below 1.0 s.
 - `godot/client/count_lines.gd` maps the count's events to these line ids for the count on screen (T15e).
 
+## Learned on 2026-11-17 (the orientation tape, ST2)
+
+- A group in `lines.json` may name its voices (`groups.tape.voices: ["Bella"]`): `--all`, `--publish`, the audition page and `check.mjs` then make, ship and check its lines in those voices only, the manifest lists them on the line (`"voices": ["bella"]`), and `check.mjs` fails if the ledger shows one recorded in another voice.
+- Five beats of the tape, one take each, 958 characters. Bella read them at 0.83 to 0.97 of the design's seconds. The tape cuts its pictures on the pauses between sentences (`node godot/tools/tape_cues.mjs`, which writes the cue times into `godot/data/tapes.json`); run it again after any re-take.
+
 ## Checks the loop can run
 
 - Every line id in `lines.json` has a file in `public/assets/voice/`.
