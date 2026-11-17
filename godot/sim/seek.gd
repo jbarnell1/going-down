@@ -54,6 +54,7 @@ const Sight = preload("res://sim/sight.gd")
 const Rng = preload("res://sim/rng.gd")
 const Playroom = preload("res://sim/playroom.gd")
 const M = preload("res://sim/jsmath.gd")
+const Settings = preload("res://sim/settings.gd")
 
 # ---------------------------------------------------------------------------------------------
 # Tuning (playarea.md).
@@ -640,7 +641,8 @@ static func create_seek(plan: Floor.FloorPlan, player_ids: Array[String], floor_
 # ---------------------------------------------------------------------------------------------
 # The step.
 
-static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: FloorInput = null) -> SeekStep:
+## `tuning`: live settings (sim/settings.gd; null: none), the host's search and run speeds.
+static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: FloorInput = null, tuning: Settings.Values = null) -> SeekStep:
 	if fl == null:
 		fl = FloorInput.new()
 	var s := prev.copy()
@@ -811,7 +813,7 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 		m.mode = &"cover"
 		m.anim = &"cover"
 	elif seeking:
-		_seek_step(s, m, input_of, dt, events)
+		_seek_step(s, m, input_of, dt, events, tuning)
 	elif s.tuned and (m.mode == &"grab" or m.mode == &"drag"):
 		_drag_step(s, m, t, dt, events)
 	else:
@@ -1085,7 +1087,7 @@ static func _wander_step(s: SeekState, m: MinderState, dt: float) -> void:
 		m.goal_kind = &""
 
 ## During a count, after the 6 s.
-static func _seek_step(s: SeekState, m: MinderState, input_of: Dictionary, dt: float, events: Array[Dictionary]) -> void:
+static func _seek_step(s: SeekState, m: MinderState, input_of: Dictionary, dt: float, events: Array[Dictionary], tuning: Settings.Values = null) -> void:
 	var plan := s.floor.plan
 	var t := s.t
 	if m.mode == &"cover" or m.mode == &"wander":
@@ -1150,7 +1152,7 @@ static func _seek_step(s: SeekState, m: MinderState, input_of: Dictionary, dt: f
 		m.anim = &"run"
 		var target := hide_front_body(plan, s.floor.hide_by_id[victim.hide]) if victim.phase != &"out" else victim.body
 		_goal_body(plan, m, &"victim", 0, target)
-		var r := _walk(plan, m, RUN_SPEED, dt, true)
+		var r := _walk(plan, m, Settings.f(tuning, &"minder.run_speed", RUN_SPEED), dt, true)
 		if r != 0 or M.hypot2(target.x - m.body.x, target.z - m.body.z) <= TOUCH_RANGE:
 			m.mode = &"catch"
 			m.timer = CATCH_TIME
@@ -1161,7 +1163,7 @@ static func _seek_step(s: SeekState, m: MinderState, input_of: Dictionary, dt: f
 	if m.replan_in <= EPS or m.goal_kind == &"" or m.goal_cell == null:
 		_choose(s, m, input_of)
 	var face := m.goal_kind == &"player"
-	var r2 := _walk(plan, m, SEARCH_SPEED, dt, face)
+	var r2 := _walk(plan, m, Settings.f(tuning, &"minder.search_speed", SEARCH_SPEED), dt, face)
 	if r2 == 0:
 		return
 	match m.goal_kind:
