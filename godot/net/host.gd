@@ -101,6 +101,7 @@ const JsJson = preload("res://net/jsjson.gd")
 const Transport = preload("res://net/transport.gd")
 const Day = preload("res://sim/day.gd")
 const Seek = preload("res://sim/seek.gd")
+const Hiding = preload("res://sim/hiding.gd")
 
 const EPS := 1e-9
 const TICK := Session.TICK
@@ -1013,7 +1014,7 @@ func world(full: bool = false) -> Dictionary:
 	}
 	if s.days:
 		out["day"] = day_block(s)
-	if s.seek != null:
+	if s.seek != null or s.hiding != null:
 		out["seek"] = seek_block(s)
 	if s.quota:
 		out["quota"] = quota_block(s)
@@ -1059,7 +1060,7 @@ static func quota_block(s: Run.RunState) -> Dictionary:
 ## peek, health and totals, plus the crew's noise. Null off the Playroom.
 static func seek_block(s: Run.RunState) -> Variant:
 	if s.seek == null:
-		return null
+		return hiding_block(s)
 	var ss: Seek.SeekState = s.seek
 	var players: Array = []
 	for sp in ss.players:
@@ -1068,6 +1069,22 @@ static func seek_block(s: Run.RunState) -> Variant:
 	return {"noise": ss.noise, "counting": ss.counting, "last": ss.last, "called": ss.called, "done": ss.done, "n": ss.counts,
 		"t0": ss.t0, "len": ss.len, "by": ss.by, "why": String(ss.why), "ended": ss.ended, "calmUntil": ss.calm_until,
 		"lastAt": ss.last_at, "players": players}
+
+## Hiding off the Playroom (sim/hiding.gd, T19b) in the seek block's shape (Protocol.enc_seek, no new
+## field): each player's hide, peek and phase, everyone "ok"; no count, nothing found, no health. Sent from
+## the first hide press on a Clinic or an Annex until the next floor. Null when nobody has hidden here.
+static func hiding_block(s: Run.RunState) -> Variant:
+	if s.hiding == null:
+		return null
+	var hs: Hiding.HidingState = s.hiding
+	var players: Array = []
+	for rp in s.players:
+		var hp := Hiding.player_of(hs, rp.id)
+		var inside := hp != null and hp.phase != &"out"
+		players.append({"id": rp.id, "hide": hp.hide if inside else -1, "peek": hp.peeking if hp != null else false,
+			"phase": String(hp.phase) if hp != null else "out", "status": "ok", "health": Seek.HEALTH_MAX, "sight": 0.0, "gap": 0.0, "seat": -1})
+	return {"noise": 0.0, "counting": false, "last": false, "called": false, "done": false, "n": 0,
+		"t0": 0.0, "len": 0.0, "by": "", "why": "", "ended": 0, "calmUntil": 0.0, "lastAt": null, "players": players}
 
 ## The day block of a run with days (Protocol.enc_day): host times, never durations, so every screen
 ## counts down to the same moment.

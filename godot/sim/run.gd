@@ -154,6 +154,20 @@
 #  - The car leaving without a downed player (a ride down or a BANK) puts them out ("out" with spot null).
 #  - The wipe waits while anyone is down: a crew all out is a wipe; a crew all down is not yet.
 #
+# Hiding off the Playroom (docs/floors/traits-and-hiding.md section 4; T19b). On a Clinic or an Annex the
+# run holds sim/hiding.gd's state (`hiding`), made at the first hide press on the floor (so a run where
+# nobody hides is exactly the run every stored result was recorded from) and dropped on the next floor.
+# The hides are sim/hides.gd's list, a pure function of the plan.
+#  - Stepped before the resident, every tick except while riding, with each active player out of the car
+#    on their feet: the hide key (PlayerInput.hide_use: F, or the client's Ctrl-walk into a desk; hide_fast),
+#    W held (peek), their instrument ticking. Events: hideStart, hideIn, hideLeave, hideOut, hideFull, flap,
+#    reason (sim/hiding.gd). Bodies: inside, the hide's inside spot; getting out, its front spot.
+#  - The resident's view of a player inside (sim/entity.gd "Hidden players"): hidden, so never hunted or
+#    reached for; sat back, blind; peeking, eyes at the hide's eye looking out of the gap (yaw clamped to
+#    it, pitch to HIDE_PEEK_PITCH), so a peeker in Stillness's sight holds it. With a reason it looks in and
+#    catches everyone inside ("caught", pulled out onto the front spot first); without one it stands where
+#    it lost them, then hunts someone else.
+#
 # Events are Dictionaries with the TypeScript shapes (see RunEvent in run.ts), carrying Move.Body,
 # TapeLib.Reading and RunSummary objects where TypeScript carries those objects.
 extends RefCounted
@@ -161,6 +175,7 @@ extends RefCounted
 const Entity = preload("res://sim/entity.gd")
 const Places = preload("res://sim/places.gd")
 const Seek = preload("res://sim/seek.gd")
+const Hiding = preload("res://sim/hiding.gd")
 const Day = preload("res://sim/day.gd")
 const Prison = preload("res://sim/prison.gd")
 const Upgrades = preload("res://sim/upgrades.gd")
@@ -733,6 +748,9 @@ class RunState:
 	var seek_drops: Array[String] = []
 	## Run time of the call that started the last count (-1 before).
 	var seek_call_at: float = -1.0
+	## Hiding off the Playroom (see the header): sim/hiding.gd's state on this floor (a Hiding.HidingState),
+	## made at the first hide press on a Clinic or an Annex, else null.
+	var hiding: Variant = null
 	## The floor quota (see the header). Off: everything below stays as it is made and is never read.
 	var quota: bool = false
 	## Recorded on this floor: every reading closed here (depth pay included), wherever its tape went since.
@@ -796,6 +814,7 @@ class RunState:
 		s.seek_off = seek_off
 		s.seek_drops = seek_drops
 		s.seek_call_at = seek_call_at
+		s.hiding = hiding
 		s.quota = quota
 		s.floor_earned = floor_earned
 		s.floor_by = floor_by
@@ -1407,6 +1426,114 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 	return et
 
 # ---------------------------------------------------------------------------------------------
+# Hiding off the Playroom (see the header).
+
+## Whether this floor has hides the run steps with sim/hiding.gd: a Clinic or an Annex with its resident.
+static func hides_here(s: RunState) -> bool:
+	return not at_home(s) and s.plan != null and (s.plan.place == Places.CLINIC or s.plan.place == Places.ANNEX) \
+		and Places.resident(s.plan.place).stillness
+
+## Drops `hiding` on any other floor (it is made at the first hide press: _step_hiding).
+static func _sync_hiding(s: RunState) -> void:
+	if s.hiding != null and (not hides_here(s) or (s.hiding as Hiding.HidingState).floor.plan != s.plan):
+		s.hiding = null
+
+## One tick of hiding, before the resident: presses, getting in and out, peeking, reasons. Updates `s`
+## (hiding) and `players` (the bodies the rules hold) and appends the events.
+static func _step_hiding(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t_prev: float, dt: float, events: Array[Dictionary]) -> void:
+	if not hides_here(s):
+		return
+	var inputs: Array[Hiding.HideInput] = []
+	var pressed := false
+	for p in players:
+		if p.status != &"ok" or not _is_active(p, input_of) or p.aboard:
+			continue
+		var i: PlayerInput = input_of[p.id]
+		var hi := Hiding.HideInput.make(p.id, i.body)
+		hi.use = i.hide_use
+		hi.fast = i.hide_fast
+		hi.peek = i.peek
+		var mem := Instr.member(s.crew, p.id)
+		hi.ticking = mem != null and mem.instrument.ticks > 0
+		inputs.append(hi)
+		pressed = pressed or i.hide_use
+	if s.hiding == null:
+		if not pressed:
+			return
+		s.hiding = Hiding.create(s.plan)
+	var base := (s.hiding as Hiding.HidingState).copy()
+	base.t = t_prev
+	var o := s.orderly
+	var w := Hiding.Watcher.make(o.body, o.yaw, Entity.kind_of(o).height)
+	var r := Hiding.step_hiding(base, inputs, w, dt)
+	s.hiding = r.state
+	events.append_array(r.events)
+	for k in players.size():
+		var hp := Hiding.player_of(r.state, players[k].id)
+		if hp == null or players[k].status != &"ok":
+			continue
+		var held := Hiding.held_body(r.state, hp)
+		if held != null:
+			var np := players[k].copy()
+			np.body = held
+			np.aboard = false
+			players[k] = np
+
+## The resident's view of a player in a hide (sim/entity.gd "Hidden players"), or null when they are not in
+## one. Sat back they see nothing; peeking, they look out of the gap from the hide's eye, turned only
+## within it (as client/play_link.gd hide_camera draws it).
+static func _hidden_view(s: RunState, inp: PlayerInput, blind: bool) -> Entity.PlayerView:
+	if s.hiding == null:
+		return null
+	var hs: Hiding.HidingState = s.hiding
+	var hp := Hiding.player_of(hs, inp.id)
+	if hp == null or hp.phase != &"inside":
+		return null
+	var h := Hiding.hide_of(hs, hp.hide)
+	var at := Hiding.inside_body(hs, h)
+	var gy := Seek.yaw_toward(float(Floor.dir_dx(h.gap)), float(Floor.dir_dy(h.gap)))
+	var half := deg_to_rad(float(h.gap_half))
+	var yaw := gy + clampf(_wrap_pi(inp.yaw - gy), -half, half)
+	var pitch := clampf(inp.pitch, -HIDE_PEEK_PITCH, HIDE_PEEK_PITCH)
+	var v := Entity.PlayerView.make(inp.id, at, h.eye / 100.0, yaw, pitch, inp.h_fov_deg, inp.v_fov_deg, true, blind or not hp.peeking)
+	v.hidden = true
+	v.hide = h.id
+	v.hide_reason = hs.reasons.has(h.id)
+	v.hide_front = Hiding.front_body(hs, h)
+	v.hide_at = at
+	v.hide_spot = hp.spot
+	return v
+
+## Peeking: how far up or down the gap lets you look (client/play_link.gd PEEK_PITCH).
+const HIDE_PEEK_PITCH := 0.35
+
+static func _wrap_pi(a: float) -> float:
+	var r := fmod(a, 2.0 * PI)
+	if r > PI:
+		r -= 2.0 * PI
+	if r < -PI:
+		r += 2.0 * PI
+	return r
+
+## After the resident's tick: players it caught out of a hide (its look-in) are pulled out, onto the hide's
+## front spot, before the catch puts them down or out.
+static func _release_caught(s: RunState, players: Array[RunPlayer], o_events: Array[Dictionary]) -> void:
+	if s.hiding == null:
+		return
+	for e in o_events:
+		if e["type"] != "caught":
+			continue
+		var r := Hiding.release(s.hiding, str(e["playerId"]))
+		s.hiding = r[0]
+		if r[1] == null:
+			continue
+		for k in players.size():
+			if players[k].id == str(e["playerId"]):
+				var np := players[k].copy()
+				np.body = r[1]
+				players[k] = np
+
+# ---------------------------------------------------------------------------------------------
 # The Annex: the crew's marks and the Temp's sticky notes (see the header).
 
 ## Whether this floor is the Annex (and the crew is not at home).
@@ -1853,6 +1980,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		np.aboard = in_car(car, np.body)
 		players.append(np)
 	_sync_seek(s)
+	_sync_hiding(s)
 	_sync_annex(s)
 	# Who called the car on the Playroom this tick (it starts the last count).
 	var seek_call_by := ""
@@ -2146,6 +2274,8 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		var none: Array[Dictionary] = []
 		entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, s.orderly, s.orderly, none)]
 	elif s.phase != &"riding":
+		# Hiding (sim/hiding.gd), before the resident: who is in a hide, peeking, or has given it a reason.
+		_step_hiding(s, players, input_of, prev.t, dt, events)
 		var blind := blinking(s)
 		var open := doors_open(s)
 		var views: Array[Entity.PlayerView] = []
@@ -2162,7 +2292,8 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				else:
 					views.append(_view_of(i, false, false))
 			else:
-				views.append(_view_of(i, true, blind or i.blind))
+				var hv := _hidden_view(s, i, blind or i.blind)
+				views.append(hv if hv != null else _view_of(i, true, blind or i.blind))
 		# The call pulls it toward the landing, until it gets there.
 		var s2 := float(s.plan.cell_size)
 		var lx := (s.plan.landing.x + 0.5) * s2
@@ -2204,6 +2335,8 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		for e in o_events:
 			events.append(_with_t(e, t))
 		entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, before, next, crew_events)]
+		# Caught out of a hide (its look-in): pulled out onto the hide's front spot first.
+		_release_caught(s, players, o_events)
 		for e in o_events:
 			if e["type"] != "caught":
 				continue
@@ -2338,6 +2471,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 
 	s.players = players
 	_sync_seek(s)
+	_sync_hiding(s)
 	_sync_annex(s)
 
 	# ---- A wipe: nobody left who can call or board.

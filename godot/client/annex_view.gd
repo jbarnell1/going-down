@@ -17,6 +17,11 @@
 # - Emergency lighting (Level.set_emergency, driven by the run's blackout as for the Clinic): green
 #   running-man signs over every door, green arrows under the LIFT signs (the same looping rule) and a
 #   pale green spotlight over every junction.
+# - Hiding places (sim/hides.gd, T19b; docs/floors/traits-and-hiding.md section 4): a desk in every office
+#   (it is the office's desk), four in the cubicles, one in the break room; a tall slatted cabinet in every
+#   closet and store (and wherever the rules topped one up); the meeting room's table is its hide. They
+#   come from the rules' list, which is the same for same-shaped rooms, so the dressing stays alike; the
+#   other props are laid out round them.
 # Not here yet: the Temp's light sag (needs the Temp), sound.
 #
 # Everything reuses Level's geometry helpers (its chunked SurfaceTools, wall slabs, door openings) and
@@ -56,6 +61,10 @@ const HAZE_DENSITY := 0.016
 ## n, e, s, w as plan steps (x right, y down the map).
 const DIRS: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
 const PLAQUES: Array[String] = ["301", "302", "304", "307", "311", "312", "315", "318"]
+const Playroom = preload("res://sim/playroom.gd")
+const Hides = preload("res://sim/hides.gd")
+const AnnexPlan = preload("res://sim/annex.gd")
+const FloorLib = preload("res://sim/floor.gd")
 
 var lv: Level
 var W := 0
@@ -69,6 +78,9 @@ var signs: Array[Dictionary] = []
 ## Junctions of three or more ways: {level, cell (Vector2i), exits (Array[Vector2i]), arrow (Vector2i)}.
 var junctions: Array[Dictionary] = []
 var centre := Vector2.ZERO
+## The floor's hiding places (sim/hides.gd), and the furniture drawn for them: {hide, kind, level, xf}.
+var hides: Array[Playroom.Hide] = []
+var hide_pieces: Array[Dictionary] = []
 
 var mat_wall: ShaderMaterial
 var mat_floor: ShaderMaterial
@@ -102,6 +114,7 @@ static func dress(level: Level) -> RefCounted:
 		v.shapes[int(r.id)] = shape_of(level, r)
 	v._panels_and_lights()
 	v._signs()
+	v.hides = Hides.hides_for(AnnexPlan.generate_annex(str(level.plan.seed), int(level.plan.depth)), str(level.plan.seed))
 	if level.props_on:
 		v._dress_rooms()
 	v._commit()
@@ -982,8 +995,9 @@ static func _pic(l: Layout, type: String, skip := 0) -> bool:
 		return true
 	return false
 
-static func layout_for(sh: Shape, kind: String, rng_seed: int) -> Layout:
+static func layout_for(sh: Shape, kind: String, rng_seed: int, pre: Array[Rect2] = [], desk_hidden := false) -> Layout:
 	var l := Layout.new()
+	l.taken.append_array(pre)
 	l.rng.seed = rng_seed
 	l.cwm = sh.cw * S
 	l.chm = sh.ch * S
@@ -1031,7 +1045,8 @@ static func layout_for(sh: Shape, kind: String, rng_seed: int) -> Layout:
 	var long_u := l.cwm >= l.chm
 	match kind:
 		"office":
-			_wall(l, "workstation")
+			if not desk_hidden:
+				_wall(l, "workstation")
 			_wall(l, "cabinet")
 			_wall(l, "plant", 0.3)
 			_pic(l, "poster", l.rng.randi_range(0, 1))
@@ -1047,6 +1062,7 @@ static func layout_for(sh: Shape, kind: String, rng_seed: int) -> Layout:
 			_pic(l, "poster", l.rng.randi_range(0, 1))
 			_pic(l, "clock")
 		"meeting":
+			# The meeting table is the room's hide (sim/hides.gd puts it in the middle).
 			_put(l, "table_meeting", mid, Vector2(0, -1) if long_u else Vector2(1, 0))
 			_wall(l, "plant", 0.3)
 			_wall(l, "cabinet_low")
@@ -1110,8 +1126,23 @@ func _dress_rooms() -> void:
 	for r: Dictionary in lv.plan.rooms:
 		var rid := int(r.id)
 		var sh: Shape = shapes[rid]
+		# The hiding places first (not the meeting table, which the layout draws): their footprints in the
+		# canonical frame, kept clear of the other props.
+		var pre: Array[Rect2] = []
+		var desk_hidden := false
+		for h in hides:
+			if h.room != rid or h.kind == &"table":
+				continue
+			desk_hidden = desk_hidden or h.kind == &"desk"
+			var foot := hide_foot(h)
+			var o := Vector2(int(r.x) * S, int(r.y) * S)
+			var a := local_to_canon(sh.sym, int(r.w) * S, int(r.h) * S, foot.position - o)
+			var b := local_to_canon(sh.sym, int(r.w) * S, int(r.h) * S, foot.end - o)
+			pre.append(Rect2(Vector2(minf(a.x, b.x), minf(a.y, b.y)), (b - a).abs()))
+			_draw_hide(h)
+			records.append({"room": rid, "type": "hide:" + String(h.kind), "xf": hide_xf(h)})
 		# The dressing's seed is the shape's key: never the room's position.
-		var l := layout_for(sh, str(r.kind), sh.key.hash())
+		var l := layout_for(sh, str(r.kind), sh.key.hash(), pre, desk_hidden and str(r.kind) == "office")
 		var rxf := room_xf(r, sh.sym)
 		var level := int(r.level)
 		for p: Array in l.props:
@@ -1135,6 +1166,96 @@ func _dress_rooms() -> void:
 			var into := (rxf.basis * Vector3(-n.x, 0, -n.y)).normalized()
 			picture(lv._st(level, at.x, at.z, "adecal"), at, into, float(dims[0]), float(dims[1]), atlas_uv(ATLAS[type]))
 			records.append({"room": rid, "type": "picture:" + type, "xf": Transform3D(Basis.looking_at(-into, Vector3.UP), at)})
+
+# --- the hiding places -----------------------------------------------------------------------------
+
+## A hide's own frame: the inside spot at the origin on its floor, the gap towards -z (into the room), the
+## wall behind it +z.
+static func hide_xf(h: Playroom.Hide) -> Transform3D:
+	var gx := float(FloorLib.dir_dx(h.gap))
+	var gz := float(FloorLib.dir_dy(h.gap))
+	return Transform3D(Basis(Vector3.UP, atan2(-gx, -gz)), Vector3(h.inside.x / 100.0, h.level * LH, h.inside.y / 100.0))
+
+## Half the footprint of a hide's furniture: across its gap (x) and from the gap to the wall (z).
+static func hide_half(kind: StringName) -> Vector2:
+	match kind:
+		&"bed":
+			return Vector2(1.0, 0.45)
+		&"cabinet":
+			return Vector2(0.45, 0.3)
+		&"desk":
+			return Vector2(0.8, 0.4)
+	return Vector2(0.9, 0.5)
+
+## The footprint on the floor (world x, z).
+static func hide_foot(h: Playroom.Hide) -> Rect2:
+	var xf := hide_xf(h)
+	var hh := hide_half(h.kind)
+	var a := xf * Vector3(-hh.x, 0, -hh.y)
+	var b := xf * Vector3(hh.x, 0, hh.y)
+	return Rect2(Vector2(minf(a.x, b.x), minf(a.z, b.z)), Vector2(absf(b.x - a.x), absf(b.z - a.z)))
+
+## The boxes of a hide's furniture in its own frame (hide_xf): a bed on legs with room under it, a tall
+## cabinet with slatted doors (you see out between the slats), a desk with a solid back panel and an
+## open kneehole, a table. `clinic`: the Clinic's colours (white and steel), else the Annex's.
+static func hide_boxes(kind: StringName, clinic: bool) -> Array:
+	var steel := Color(0.56, 0.6, 0.62)
+	var dark := Color(0.28, 0.3, 0.32)
+	match kind:
+		&"bed":
+			var out: Array = []
+			for x: float in [-0.95, 0.95]:
+				for z: float in [-0.4, 0.4]:
+					out.append(_b(0.05, 0.47, 0.05, x, 0, z, steel))
+					out.append(_b(0.1, 0.06, 0.1, x, 0, z, dark))
+			out.append(_b(2.0, 0.06, 0.9, 0, 0.45, 0, steel))
+			out.append(_b(1.96, 0.16, 0.86, 0, 0.51, 0, Color(0.9, 0.92, 0.9)))
+			out.append(_b(1.3, 0.03, 0.88, 0.3, 0.67, 0, Color(0.62, 0.76, 0.72)))
+			out.append(_b(0.45, 0.1, 0.6, -0.7, 0.67, 0.05, Color(0.95, 0.95, 0.93)))
+			out.append(_b(0.05, 0.55, 0.9, -1.0, 0.45, 0, steel))
+			out.append(_b(0.05, 0.4, 0.9, 1.0, 0.45, 0, steel))
+			out.append(_b(1.4, 0.04, 0.03, 0.2, 0.85, -0.44, steel))
+			return out
+		&"cabinet":
+			var body := Color(0.55, 0.62, 0.58) if clinic else CABINET
+			var trim := Color(0.42, 0.48, 0.45) if clinic else CABINET_DARK
+			var out: Array = [
+				_b(0.9, 2.0, 0.03, 0, 0, 0.285, body), _b(0.03, 2.0, 0.6, -0.435, 0, 0, body), _b(0.03, 2.0, 0.6, 0.435, 0, 0, body),
+				_b(0.9, 0.04, 0.6, 0, 1.96, 0, body), _b(0.9, 0.08, 0.6, 0, 0, 0, trim),
+				_b(0.03, 1.9, 0.03, 0, 0.08, -0.285, trim),
+				_b(0.84, 0.5, 0.02, 0, 0.08, -0.29, body),
+			]
+			# The doors' slats from the knees up: gaps you can see out of.
+			for i in 13:
+				out.append(_b(0.84, 0.05, 0.02, 0, 0.62 + i * 0.1, -0.29, body))
+			out.append(_b(0.84, 0.06, 0.02, 0, 1.92, -0.29, body))
+			out.append(_b(0.03, 0.14, 0.03, -0.06, 1.05, -0.31, dark))
+			out.append(_b(0.03, 0.14, 0.03, 0.06, 1.05, -0.31, dark))
+			return out
+		&"desk":
+			var out: Array = [
+				_b(1.6, 0.04, 0.8, 0, 0.72, 0, LAMINATE), _b(0.04, 0.72, 0.76, -0.78, 0, 0, DESK_EDGE),
+				_b(0.04, 0.72, 0.76, 0.78, 0, 0, DESK_EDGE), _b(1.52, 0.66, 0.03, 0, 0.04, 0.37, DESK_EDGE),
+				_b(0.42, 0.36, 0.42, 0.35, 0.76, 0.12, BEIGE), _b(0.34, 0.27, 0.012, 0.35, 0.805, -0.094, SCREEN),
+				_b(0.46, 0.025, 0.16, 0.3, 0.76, -0.25, BEIGE_DARK), _b(0.22, 0.02, 0.3, -0.5, 0.76, -0.05, PAPER),
+			]
+			# The chair pushed back to one side of the kneehole.
+			out.append_array(_turned(_chair(), PI, Vector3(-1.05, 0, -0.55)))
+			return out
+	var out: Array = [_b(1.8, 0.05, 1.0, 0, 0.71, 0, WOOD), _b(0.12, 0.71, 0.12, -0.8, 0, -0.4, WOOD_DARK),
+		_b(0.12, 0.71, 0.12, 0.8, 0, -0.4, WOOD_DARK), _b(0.12, 0.71, 0.12, -0.8, 0, 0.4, WOOD_DARK), _b(0.12, 0.71, 0.12, 0.8, 0, 0.4, WOOD_DARK)]
+	return out
+
+## Draws one hide's furniture into the level's `what` chunks.
+static func draw_hide_into(level: Level, h: Playroom.Hide, clinic: bool, what: String) -> void:
+	var xf := hide_xf(h)
+	var st := level._st(h.level, xf.origin.x, xf.origin.z, what)
+	for b: Array in hide_boxes(h.kind, clinic):
+		box(st, xf, b[0], b[1], b[2])
+
+func _draw_hide(h: Playroom.Hide) -> void:
+	draw_hide_into(lv, h, false, "aprops")
+	hide_pieces.append({"hide": h.id, "kind": String(h.kind), "level": h.level, "xf": hide_xf(h)})
 
 # --- the check: same-shaped rooms are dressed the same ---------------------------------------------
 

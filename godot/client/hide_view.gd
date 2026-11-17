@@ -23,6 +23,10 @@
 # party table, in a paper hat, watching); down (YOU WENT DOWN, main.gd). Other players at the table wear
 # paper hats too (drawn here, over their figures).
 #
+# Off the Playroom (the Clinic and the Annex, sim/hiding.gd; T19b) only the hiding is shown: the prompts for
+# a bed, a cabinet, the meeting table (F) and a desk (Ctrl and walk in), the dark inside and the gap's
+# frame (the cabinet's slats, the bed's frame). No count, no tune, no health, and no odds printed.
+#
 # test_break "arrival" (play_hide's deliberate break): the count is timed from the moment its event
 # arrived on this screen's own clock instead of the host's t0, so two screens with different delays go
 # dark at different moments.
@@ -58,7 +62,7 @@ const CATCH_FULL := 0.9
 const WHY := {"sprint": "SPRINTING", "squeaker": "A SQUEAKY TILE", "ballpit": "JUMPING IN THE BALL PIT", "flap": "LETTING A FLAP GO",
 	"tape": "A DROPPED TAPE", "emote": "A NOISE", "bump": "BUMPING INTO IT", "light": "A LIGHT ON IT", "voice": "A VOICE", "call": "CALLING THE LIFT"}
 const KIND_NAMES := {"pit": "BALL PIT", "slide": "TUBE SLIDE", "den": "CRAWL DEN", "playhouse": "PLAYHOUSE", "table": "UNDER THE TABLE",
-	"chest": "TOY CHEST", "cubby": "COAT CUBBY"}
+	"chest": "TOY CHEST", "cubby": "COAT CUBBY", "bed": "UNDER THE BED", "cabinet": "IN THE CABINET", "desk": "UNDER THE DESK"}
 const HEALTH_RATES := "WALK -3/S  SPRINT -8/S  STILL OR CREEP +1/S"
 
 static var test_break := ""
@@ -154,6 +158,17 @@ static func dark_at(ev: Dictionary, ht: float) -> float:
 ## draws: {on, dark, noise, look (a point to turn the camera to, or null), catch}.
 func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id: String, sfx: Sfx, ann: Announcer, hud: Hud, level: Level, others: Array) -> Dictionary:
 	var k: Variant = s.get("seek")
+	var place := str((level.plan as Dictionary).get("place", "clinic")) if level != null and level.plan is Dictionary else ""
+	if place == "clinic" or place == "annex":
+		# Hiding off the Playroom (sim/hiding.gd): the hides' prompts, the dark inside and the gap; no count.
+		if count_n != 0 or dark != 0.0 or not _hats.is_empty():
+			reset()
+		sfx.playroom(false, 0.0)
+		hud.health = -1.0
+		hud.count_by = ""
+		hud.count_text = ""
+		_hiding_only(s, hud)
+		return {"on": false}
 	if not k is Dictionary:
 		if count_n != 0 or dark != 0.0 or not _hats.is_empty():
 			reset()
@@ -312,6 +327,46 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 	_draw_hats(others)
 	return {"on": true, "dark": dark, "noise": maxf(noise_k, catch_k * 0.8), "look": look, "catch": catch_k}
 
+## The Clinic's and the Annex's hides (docs/floors/traits-and-hiding.md section 4): F at a bed, a cabinet
+## or the meeting table (SHIFT+F quick but loud); a desk by crawling under with Ctrl held (S or F gets you
+## out). Inside, sat back in the dark or leaning to the gap with W. Nothing is drawn by chance here, so no
+## odds are printed. The snapshot's seek block carries this player's row (net/host.gd's hiding block).
+func _hiding_only(s: Dictionary, hud: Hud) -> void:
+	var row: Variant = s.get("mySeek")
+	var phase := str(row["phase"]) if row is Dictionary else "out"
+	var hc: Dictionary = s.get("hideCam", {})
+	var note := ""
+	var ov_mode := ""
+	var ov_kind := ""
+	var me: Dictionary = s.get("me", {})
+	if str(me.get("status", "ok")) == "ok":
+		if phase == "inside":
+			ov_mode = "peek" if bool(hc.get("peek", false)) else "sat"
+			ov_kind = str(hc.get("kind", ""))
+			if ov_mode == "sat":
+				note = ("S OR F  CRAWL OUT" if ov_kind == "desk" else "F  GET OUT") + "    HOLD W  LEAN TO THE GAP"
+			else:
+				note = "LET GO OF W TO SIT BACK"
+			var inst: Variant = s.get("inst")
+			if inst is Dictionary and bool((inst as Dictionary)["raised"]):
+				note = "TICKING IN A HIDE WITHIN 5 M OF IT MAKES IT LOOK IN. (E)"
+		elif phase == "entering":
+			note = "GETTING IN..."
+		elif phase == "leaving":
+			note = "GETTING OUT..."
+		elif int(s.get("nearHide", -1)) >= 0:
+			var kind := str(s.get("nearHideKind", ""))
+			if kind == "desk":
+				note = "HOLD CTRL AND WALK IN: UNDER THE DESK"
+			else:
+				note = "F  HIDE: %s    SHIFT+F  QUICK BUT LOUD" % str(KIND_NAMES.get(kind, "HIDE"))
+	hud.seek_note = note
+	overlay.mode = ov_mode
+	overlay.kind = ov_kind
+	overlay.catch_k = 0.0
+	overlay.hat = false
+	overlay.queue_redraw()
+
 func _once(n: int, what: String) -> bool:
 	var key := "%d:%s" % [n, what]
 	if _said.has(key):
@@ -411,6 +466,16 @@ class HideOverlay:
 				"cubby":
 					draw_rect(Rect2(0, 0, w * 0.3, h), Color(0.15, 0.2, 0.35, 0.92))
 					draw_rect(Rect2(w * 0.7, 0, w * 0.3, h), Color(0.35, 0.12, 0.1, 0.92))
+				"cabinet":
+					# The door's slats across the gap.
+					for j in range(1, 9):
+						var y := hole.position.y + hole.size.y * j / 9.0
+						draw_rect(Rect2(hole.position.x, y - h * 0.012, hole.size.x, h * 0.024), Color(ink, 0.88))
+				"bed":
+					# The mattress's edge above, the frame's legs at the sides.
+					draw_rect(Rect2(0, hole.position.y, w, h * 0.04), Color(0.2, 0.22, 0.24, 0.95))
+					draw_rect(Rect2(w * 0.03, hole.position.y, w * 0.025, hole.size.y), Color(0.32, 0.34, 0.36, 0.95))
+					draw_rect(Rect2(w * 0.945, hole.position.y, w * 0.025, hole.size.y), Color(0.32, 0.34, 0.36, 0.95))
 		if catch_k > 0.0:
 			_mask(catch_k)
 		if hat:
@@ -433,6 +498,12 @@ class HideOverlay:
 				return Rect2(w * 0.3, h * 0.25, w * 0.4, h * 0.5)
 			"den":
 				return Rect2(w * 0.15, h * 0.2, w * 0.7, h * 0.6)
+			"bed":
+				return Rect2(0, h * 0.5, w, h * 0.24)
+			"cabinet":
+				return Rect2(w * 0.33, h * 0.22, w * 0.34, h * 0.42)
+			"desk":
+				return Rect2(w * 0.2, h * 0.3, w * 0.6, h * 0.55)
 		return Rect2(w * 0.1, h * 0.35, w * 0.8, h * 0.3)
 
 	## Everything but `r`, filled.
