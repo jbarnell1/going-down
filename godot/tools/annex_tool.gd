@@ -1,10 +1,8 @@
-# The Annex's two small tools, headless:
+# The Annex's text maps, headless:
 #   "$GODOT" --headless --path godot --script res://tools/annex_tool.gd -- maps     text maps of five floors
 #                                                                                   to godot/export/annex/
-#   "$GODOT" --headless --path godot --script res://tools/annex_tool.gd -- hashes   rewrite the stored plan
-#                                                                                   hashes, tests/annex_hashes.json
-# Run them under a timeout. Rewrite the hashes only when the Annex is meant to change; the file is
-# what prop_annex.gd compares against, here and on the Linux server build.
+# Run it under a timeout. The plan hashes prop_annex.gd compares against are a golden now
+# (tests/golden/annex.json): `npm run godot:golden -- prop_annex` records them.
 extends SceneTree
 
 const Annex = preload("res://sim/annex.gd")
@@ -18,10 +16,8 @@ func _init() -> void:
 	var mode := "maps" if args.is_empty() else args[0]
 	if mode == "maps":
 		_maps()
-	elif mode == "hashes":
-		_hashes()
 	else:
-		print("usage: -- maps | -- hashes")
+		print("usage: -- maps")
 		quit(2)
 		return
 	quit(0)
@@ -42,21 +38,3 @@ func _maps() -> void:
 		f.store_string(text)
 		f.close()
 		print("wrote %s" % path)
-
-func _hashes() -> void:
-	var out := {}
-	var keys: Array[String] = []
-	for depth: int in [1, 2, 3, 4]:
-		for i in 200:
-			var seed := "seed-%d" % i
-			var key := "%s/%d" % [seed, depth]
-			keys.append(key)
-			out[key] = Floor.hash_plan(Annex.generate_annex(seed, depth))
-	# One floor per line, in generation order, so a change shows as a readable diff.
-	var lines := PackedStringArray()
-	for k in keys:
-		lines.append("  %s: %s" % [JSON.stringify(k), JSON.stringify(out[k])])
-	var f := FileAccess.open("res://tests/annex_hashes.json", FileAccess.WRITE)
-	f.store_string("{\n" + ",\n".join(lines) + "\n}\n")
-	f.close()
-	print("wrote tests/annex_hashes.json: %d floors" % keys.size())

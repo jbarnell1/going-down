@@ -1,6 +1,6 @@
 # The Annex: an endless yellow office. Rooms repeat and corridors loop back on themselves.
 # Design: docs/floors/annex.md section 3 (kept off the public repository). No TypeScript twin: its
-# tests (tests/prop_annex.gd) and its stored hashes (tests/annex_hashes.json) are its proof.
+# tests (tests/prop_annex.gd) and its golden hashes (tests/golden/annex.json) are its proof.
 #
 # Constructive, cannot fail. In a canonical orientation (the lattice against the north margin), it:
 #   1. lays a lattice of one-cell corridors, a line every 7 cells, with 6 by 6 blocks between them
