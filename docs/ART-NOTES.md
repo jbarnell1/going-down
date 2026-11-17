@@ -695,7 +695,7 @@ atlas and the separate sheet material, plus the stapler (168 triangles) and the 
   4 mm off it, 1 cm askew at the tip. The lanyard is a ribbon snapped to the body and collar and
   smoothed, round the back of the neck, to a clip and a badge hung to the right (a grey square where the
   photo should be). Every shell is pushed clear of the body surface.
-- **The sheet** is a 10 x 16 grid, A4 by arc length: its middle follows a side profile from over the
+- **The sheet** (first version, replaced after round one, below) was a 10 x 16 grid, A4 by arc length: its middle follows a side profile from over the
   hairline, down the face to past the chin, and it is wrapped round a vertical axis gently (radius 11.5
   cm at the top to 19 cm at the bottom), with a nose under the paper. Round the two top staples it is
   pulled onto the head (into the hair at the temples); the bottom hangs free. Front on
@@ -711,6 +711,54 @@ Rules learned:
 36. **Weld a glb before binding it.** The glTF exporter splits vertices at every UV seam and hard
     edge; a re-imported figure falls apart into pieces (the Temp's 1,932 vertices came back as 3,014),
     and bone heat then leaves the forearms and legs with no weights. Remove doubles first.
-37. **A sheet over a face must stay a sheet.** Wrapped tightly it read as a hood or a helmet; a gentle
-    bend, the hair showing above it, the edges standing off the cheeks and the bottom hanging free read
-    as paper.
+37. **A sheet over a face must be worn, not held up.** My first sheet (a gentle bend standing off the
+    face) read to the judges as a cereal box floating in front of it: an air gap from the side, cheeks
+    and ears showing round its edges, its corners sticking out behind like blinkers.
+
+### Round one of blind judging on the Temp, and what changed
+
+Three judges saw only the pictures: 4, 3 and 4 out of 10 in the bright corridor, 6.5, 6 and 7 in the
+dark. All three liked the idea (a childish drawn face over a hidden real head, the head hung to one
+side, the dark silhouette). What they caught, and the owner's own note ("make the temp a little more
+dishevelled ... a coffee stain or half a shirt tail untucked ... tie half untied"):
+
+- **The sheet** is now draped over the head like cloth: springs hold the 12 x 18 grid at A4 (mean
+  error 3.6%), with skip-one springs for a paper's stiffness. The head pulls the sheet in and never lets
+  it through, and the page's nose row is held on the nose. The head has a nose and brow for it to
+  tent over. It runs from over the crown, down the face, to tucked under the jaw, and reaches from cheek
+  to cheek. Then it gets an old fold across the middle, crumples, free edges lifting up to 4.5 mm
+  between the corners, and corners pressed flat where the staples go. A string runs round the back of
+  the head, with masking tape where it meets the paper. Any face of the paper whose middle comes within
+  3.5 mm of the low-poly head is pushed out. The sample photocopy is 4 times finer (480 x 680, linear
+  filtering), so the copied lines are smooth close up.
+- **Not a mannequin.** The neck has a 12-sided ring with the pit of the throat, an Adam's apple and
+  the two tendons, and the collar throws a shadow on it. The forearm swells below the elbow and
+  flattens to a wrist bone. The left-forearm "seam" was the watch's geometry with no paint; it is now
+  a brown strap with a steel face. Fingers and palm are thicker. The one wrongness is the arms: the
+  forearm is 7 cm too long, so the hands hang to mid-thigh. The neck went back to normal and the head
+  up 5% so nothing else competes.
+- **Smaller fixes:** clean sock tops and a dark shoe lining by tag (not by normal); no hair parting
+  (it read as a crack); the shirt's back is free of the tuck folds that read as smudges. The stapler
+  is warm grey on a black base with a chrome strip and nose. The pad is 9 cm, fatter, with bigger
+  writing.
+- **Neglect, all on the body mesh so Mixamo skins it with the hips:** the shirt tail is out on the
+  left (its torso rows pushed out over the belt to a hem 7 cm below it, with a step in under the
+  hem), the right half tucked. Coffee runs down beside the tie with drops below it, and a mug ring sits
+  on the belly. Sweat rings under the arms and down the back, a grimy, creased collar with one point
+  curled up, the top button undone (the collar open, a V of throat painted), the tie knot pulled
+  7 cm down with its loop running up either side of the neck, the tie askew, grime at the hems, a
+  scuffed toe. The skin is warmer, so the green office light no longer turns it grey.
+- **The renders** use a stand-in pose with both arms hanging still, knees soft, standing on the floor
+  (grounded from the posed mesh), the stapler carried in the right fist and the pad pinched
+  in the left, a soft contact shadow under the feet.
+- **The Mixamo FBX is written from the welded mesh** (2,332 vertices; the glb route gave 3,606
+  split at every seam), with the same settings and pictures as `mixamo_export.py`.
+
+Rules learned:
+
+38. **Drape, don't place.** Anything worn over a body (paper, cloth, a bag) should be simulated onto
+    it: lengths kept, pulled in, never through, then creased. A shape modelled in the air keeps its gap.
+39. **Paint every bit of geometry.** A raised ring with skin colour on it reads as a seam; give it the
+    thing it is (a watch strap) or remove it.
+40. **Neglect is a list of small true things.** One coffee dribble, one ring, one untucked side, one
+    curled collar point, one loose knot. Each is cheap and each says the same thing.

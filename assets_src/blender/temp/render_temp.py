@@ -39,9 +39,9 @@ R = dict(cell=2.0, ceil=3.2, door_w=1.1, door_h=2.1, eye=1.62, vfov=70.0, haze=0
 def joints():
     """joint positions (Blender space, left side; the right is mirrored) from build_temp's tables"""
     J = dict(hips=(0, 0.0, 0.93), spine=(0, 0.0, 1.08), chest=(0, 0.0, 1.28), neck=(0, 0.0, 1.47),
-             head=(0, 0.0, 1.585), head_end=(0, 0.0, 1.80),
-             clav=(0.03, 0.0, 1.43), shoulder=(0.168, 0.0, 1.383), elbow=(0.455, 0.004, 1.380),
-             wrist=(0.722, 0.0, 1.380), hand_end=(BT.PALM[-1][0], 0.0, BT.HAND_Z),
+             head=(0, 0.0, BT.hz(1.588)), head_end=(0, 0.0, BT.hz(BT.HEAD_TOP_Z)),
+             clav=(0.03, 0.0, 1.43), shoulder=(0.168, 0.0, 1.383), elbow=(BT.ARM[BT.ELBOW - 2][0] + 0.012, 0.004, 1.380),
+             wrist=(BT.ARM[-1][0], 0.0, 1.380), hand_end=(BT.PALM[-1][0], 0.0, BT.HAND_Z),
              thigh=(0.097, 0.0, 0.86), knee=(0.100, -0.008, 0.49), ankle=(0.104, 0.012, 0.085),
              toe=(0.104, -0.15, 0.02))
     return J
@@ -230,25 +230,28 @@ def palm_frame(rig, sfx):
 
 
 def pose_standing(rig):
-    """Still, too upright, the head hung over to its right; the stapler held out in front at chest
-    height, the pad of notes pinched at its left side."""
+    """A stand-in for the Mixamo idle: standing still, the too-long arms hanging straight down, the head
+    hung over to its right, knees soft; the stapler gripped in the right hand, the pad of notes pinched in
+    the left."""
     pose_reset(rig)
-    rot_rest(rig, "chest", (1, 0, 0), 4)
-    rot_rest(rig, "neck", (1, 0, 0), 7)
+    rot_rest(rig, "chest", (1, 0, 0), 5)
+    rot_rest(rig, "neck", (1, 0, 0), 8)
     rot_rest(rig, "head", (0, 1, 0), -15)
     rot_rest(rig, "head", (1, 0, 0), 6)
-    curl(rig, ".R", (78, 70), (20, 25))
-    curl(rig, ".L", (28, 22), (10, 12))
-    rot_rest(rig, "clav.R", (0, 1, 0), 6)        # the right shoulder hitched up
-    aim(rig, "upper.L", (0.10, 0.04, -1))
-    aim(rig, "fore.L", (0.06, -0.05, -1))
-    aim(rig, "hand.L", (0.03, -0.08, -1))
-    aim(rig, "upper.R", (-0.16, -0.30, -1))
-    aim(rig, "fore.R", (-0.02, -1, 0.10))
-    aim(rig, "hand.R", (0.04, -1, 0.02))
-    for s, sx in ((".L", 1), (".R", -1)):
-        aim(rig, "thigh" + s, (sx * 0.015, 0.0, -1))
-        aim(rig, "shin" + s, (sx * 0.01, 0.02, -1))
+    curl(rig, ".R", (80, 75), (25, 30))
+    curl(rig, ".L", (35, 30), (20, 20))
+    rot_rest(rig, "clav.R", (0, 1, 0), 5)        # the right shoulder hitched up
+    rot_rest(rig, "clav.L", (0, 1, 0), 3)        # the left one dropped
+    aim(rig, "upper.L", (0.12, 0.03, -1))
+    aim(rig, "fore.L", (0.05, -0.03, -1))
+    aim(rig, "hand.L", (0.02, -0.04, -1))
+    aim(rig, "upper.R", (-0.12, 0.02, -1))
+    aim(rig, "fore.R", (-0.05, -0.05, -1))
+    aim(rig, "hand.R", (-0.02, -0.06, -1))
+    for s, sx in ((".L", 1), (".R", -1)):         # knees not locked: a little forward, the shins back
+        aim(rig, "thigh" + s, (sx * 0.02, -0.10, -1))
+        aim(rig, "shin" + s, (sx * 0.01, 0.06, -1))
+        aim(rig, "foot" + s, (sx * 0.08, -1, -0.12))
 
 
 def hold(rig, ob, sfx, offset, local_fn):
@@ -267,14 +270,76 @@ def hold(rig, ob, sfx, offset, local_fn):
 
 
 def stapler_frame(along, normal, across):
-    """nose (-Y) along the fingers, top (+Z) up"""
-    up = across if across.z >= 0 else -across
-    return frame3((-along).cross(up), -along, up)
+    """carried in the hanging fist: nose (-Y) forward across the palm, top (+Z) toward the wrist"""
+    fwd = across if across.y <= 0 else -across
+    y, z = -fwd, -along
+    return frame3(y.cross(z), y, z)
 
 
 def notes_frame(along, normal, across):
-    """flat against the palm, writing facing away from it, the sticky edge toward the wrist"""
-    return frame3(along.cross(normal), -along, -normal)
+    """pinched by its sticky edge (+Y, toward the wrist), the written face (+Z) turned forward"""
+    fwd = across if across.y <= 0 else -across
+    y, z = -along, fwd
+    return frame3(y.cross(z), y, z)
+
+
+def ground(rig, body):
+    """stand the posed figure on the floor"""
+    bpy.context.view_layer.update()
+    dg = bpy.context.evaluated_depsgraph_get()
+    ev = body.evaluated_get(dg)
+    me = ev.to_mesh()
+    low = min((ev.matrix_world @ v.co).z for v in me.vertices)
+    ev.to_mesh_clear()
+    rig.location.z -= low
+    bpy.context.view_layer.update()
+
+
+def contact_shadow(coll, rig):
+    """a soft dark pool on the floor under the feet, as overhead panels would leave"""
+    m = bpy.data.materials.new("contact")
+    m.use_nodes = True
+    nt = m.node_tree
+    for n_ in list(nt.nodes):
+        nt.nodes.remove(n_)
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    mix = nt.nodes.new("ShaderNodeMixShader")
+    tr = nt.nodes.new("ShaderNodeBsdfTransparent")
+    dk = nt.nodes.new("ShaderNodeBsdfDiffuse")
+    dk.inputs["Color"].default_value = (0.0, 0.0, 0.0, 1)
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    grad = nt.nodes.new("ShaderNodeTexGradient")
+    grad.gradient_type = "SPHERICAL"
+    mapn = nt.nodes.new("ShaderNodeMapping")
+    mapn.inputs["Scale"].default_value = (1.0, 1.0, 1.0)
+    ramp = nt.nodes.new("ShaderNodeMath")
+    ramp.operation = "POWER"
+    ramp.inputs[1].default_value = 1.6
+    mul = nt.nodes.new("ShaderNodeMath")
+    mul.operation = "MULTIPLY"
+    mul.inputs[1].default_value = 0.75
+    nt.links.new(tc.outputs["Object"], mapn.inputs["Vector"])
+    nt.links.new(mapn.outputs["Vector"], grad.inputs["Vector"])
+    nt.links.new(grad.outputs["Fac"], ramp.inputs[0])
+    nt.links.new(ramp.outputs[0], mul.inputs[0])
+    nt.links.new(mul.outputs[0], mix.inputs["Fac"])
+    nt.links.new(tr.outputs[0], mix.inputs[1])
+    nt.links.new(dk.outputs[0], mix.inputs[2])
+    nt.links.new(mix.outputs[0], out.inputs["Surface"])
+    if hasattr(m, "surface_render_method"):
+        m.surface_render_method = "BLENDED"
+    me = bpy.data.meshes.new("contact")
+    me.from_pydata([(-1, -1, 0), (1, -1, 0), (1, 1, 0), (-1, 1, 0)], [], [[0, 1, 2, 3]])
+    me.materials.append(m)
+    ob = bpy.data.objects.new("contact", me)
+    ob.scale = (0.30, 0.26, 1.0)
+    coll.objects.link(ob)
+    follow_shadow(ob, rig)
+    return ob
+
+
+def follow_shadow(ob, rig):
+    ob.location = (rig.location.x, rig.location.y - 0.03, 0.002)
 
 
 def frame3(x, y, z):
@@ -606,9 +671,11 @@ def main():
         stapler.hide_render = notes.hide_render = False
 
     pose_standing(rig)
-    # the stapler in the right fist, its nose forward; the pad pinched at the left side
-    hold(rig, stapler, ".R", (0.055, 0.030, 0.0), stapler_frame)
-    hold(rig, notes, ".L", (0.115, -0.006, 0.0), notes_frame)
+    ground(rig, body)
+    # the stapler carried in the right fist, its nose forward; the pad pinched by its edge in the left
+    hold(rig, stapler, ".R", (0.080, 0.030, 0.0), stapler_frame)
+    hold(rig, notes, ".L", (0.170, 0.012, 0.0), notes_frame)
+    shadow = contact_shadow(scn.collection, rig)
 
     if "turn" in only:
         show([backdrop], colls)
@@ -648,9 +715,11 @@ def main():
             m.node_tree.nodes["Principled BSDF"].inputs["Emission Strength"].default_value = 0.0
         set_world((0.15, 0.45, 0.20), 0.02, R["haze"] * 0.5)
         rig.location.y = 3.6
+        follow_shadow(shadow, rig)
         cam = camera("cam_dim", (-0.3, -3.0, R["eye"]), (0.0, 4.0, 1.3), R["vfov"])
         render(os.path.join(args.out, "annex_dim.png"), cam, (1280, 720))
         rig.location.y = 0.0
+        follow_shadow(shadow, rig)
 
 
 if __name__ == "__main__":
