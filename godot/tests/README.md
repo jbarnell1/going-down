@@ -16,7 +16,9 @@ Some design-rule files check only their rules and keep no counts: `prop_prison`,
 `prop_marks`, `prop_upgrades`, `prop_report`, `prop_day`, `prop_save` and `prop_face_net` (pure rules
 over seeded inputs, compared with oracles written in the test). `prop_annex` keeps one golden, every
 Annex floor's plan hash (`tests/golden/annex.json`, 800 floors; the quick set compares its 40). Each of
-these files also has a standalone runner (`tests/run_<name>.gd`) that runs it alone.
+these files also has a standalone runner (`tests/run_<name>.gd`) that runs it alone. `prop_downs` (down
+first, then out: 200 seeded bot runs against an oracle, the Playroom's down from health, and three clients
+on lossy links) keeps no counts either; run it alone with `npm run godot:test -- prop_downs`.
 
 The scenario inputs that are data rather than code (the bridge's requests, the network scripts, the
 maths samples, the literal table) are in `tests/inputs/` and never change when goldens are recorded.

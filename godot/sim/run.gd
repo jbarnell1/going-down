@@ -85,6 +85,75 @@
 #  - Every seek event is a run event, at its host time ("count" {n, t0, len, last, by, why}, "countEnd",
 #    hide*, "found", "taken", "down", ...: sim/seek.gd lists them).
 #
+# The floor quota (North Star C9; T5q), on only for a run made with it (create_run's `quota`, with_quota():
+# net/host_rules.gd turns it on for the game's rooms when the resident is on; tests and every stored result
+# leave it off, and then nothing below happens). The call button does nothing until the crew has recorded
+# enough on this floor:
+#  - Needed: floor_quota(depth, crew), one number for the crew together. It is set while the car arrives
+#    on the floor (with everyone in the run then, a player admitted at the stop included) and afterwards
+#    only shrinks, if a player leaves the game. Never at home.
+#  - Earned: every reading closed on this floor (its "readingClosed" value, depth pay included), whatever
+#    happens to its tape afterwards: a tape dropped, left on the floor or lost still counts, so a lost tape
+#    can never trap the crew. A reading still open counts once it closes.
+#  - The call (phase away, the Playroom's last count included) with floor(earned) < needed is refused:
+#    "callRefused" {playerId, earned, needed}, and nothing else happens (the resident does not hear it).
+#  - The tick floor(earned) first reaches needed: "quotaMet" {depth, earned, needed, top: who recorded
+#    the most here (for the Annex's note), or ""}, once per floor (not
+#    on the ride away). Earned and needed go back to 0 and the new floor's quota on every new floor
+#    ("rodeDown", "newDay"; at home needed is 0).
+# The day loop's DAY_FLOOR_QUOTA is floor 1's quota per player, so the day quota is a whole number of
+# floor 1 quotas for the morning's crew (docs/floors/prison.md section 2: one and a half on day 1).
+#
+# The Annex (docs/floors/annex.md sections 2 and 4; loop/NIGHT-PLAN.md A6, T16h). On a floor whose place is
+# the Annex the run holds `annex` (an AnnexFloor: the crew's marks and the Temp's sticky notes), made when
+# the crew reaches the floor and dropped on the next; on any other floor it is null and nothing below
+# happens. Everything in it is the host's, the same for everyone.
+#  - Marks (sim/marks.gd): ONE pad for the whole crew, Marks.DEFAULT_PAD a floor (a new floor, a full pad).
+#    PlayerInput.mark is a press of Q: the placing starts at the player's feet, pointing where they face
+#    (snapped to eight), and the run finishes it Marks.PLACE_SECONDS later by itself ("markStart", then
+#    "markPlaced" with the slap's radius, or "markRefused" {reason}: pad_empty, sprinting, down, in_car,
+#    busy, gone). PlayerInput.peel is the id of a mark the player has held F on for Marks.PEEL_SECONDS
+#    (the client times the hold): any player peels any mark within MARK_PEEL_REACH, and it goes back on
+#    the pad ("markPeeled", or "markRefused" far / no_such_mark / down). Marks are immune: nothing but a
+#    peel removes one, and nothing moves or changes one; the Temp never touches them.
+#  - Sticky notes (sim/notes.gd, data/annex_notes.json): triggers are this tick's events: the arrival
+#    doors opening ("lobby", posted at once on the wall nearest the lift doors), "startedHunting" ("wake"),
+#    every NOTE_HUNT_EVERY seconds the Temp hunts ("hunt"), "caught" ("catch"), "tapeDropped" ("tape"),
+#    "quotaMet" ("quota", by its top), "called" ("lift") and, with the down rule on, "healed" ("heal",
+#    naming who was healed and who healed them). The Temp posts them: a trigger waits in a queue until a tick the Temp is not held (Stillness:
+#    it never posts while anyone looks), one a tick, on the wall nearest the Temp. At most
+#    Notes.cap_per_floor() a floor. Each posting is a "note" event {id, n, trigger, template, text, x, z,
+#    level, yaw, t}: one loud click where the note is. The facts are true and the same for everyone:
+#    names (from `names`, the host's player names), who is alone, who stands very close, who is furthest
+#    from the lift, sprints this floor, notes per name, the pad's use; door passes and looking are not
+#    tracked yet, so their notes are never used. Note ids count up over the whole run (note_seq).
+#
+# Down first, then out (North Star B6; loop/NIGHT-PLAN.md A5, T8a), on only for a run made with it
+# (create_run's `downs`, with_downs(): net/host_rules.gd turns it on for the game's rooms; tests and every
+# stored result leave it off, and then nothing below happens and a catch is "caught" as before). With it on:
+#  - A catch ("caught", the resident's own event, kept for the screens and the Annex's note) puts the player
+#    down where they stood: status "down" ("downed" {playerId, until, by: "catch", at}). The tape stays with
+#    them for now. The resident bends over them (Entity.bend_over): while it has someone it goes after
+#    nobody else, and its bend is the one movement it makes while watched (sim/entity.gd's exception).
+#  - Health at 0 on the Playroom (sim/seek.gd "down") is the same down ("downed" by "health"); the Minder
+#    does not bend. Found and taken stay the Playroom's own rule (caught, as before).
+#  - A downed player crawls: their input body is followed at most CRAWL_SPEED, with the car's walls. They
+#    are not active (no call, vote, pick-up, instrument, mark) and the resident neither sees nor hunts them.
+#  - Healing: a player on their feet with F held (PlayerInput.use) within HEAL_REACH of the downed body, on
+#    its level. The hold counts from the start of the tick it began ("healStart" {playerId: the healer,
+#    target, from, done}: host times, the same on every screen); letting go, stepping out of reach or going
+#    down stops it and the count starts again ("healStop" {playerId, target}). A downed player has one
+#    healer at a time: the one already holding, else the nearest, and a healer heals one at a time. HEAL_TIME
+#    seconds held: "healed" {playerId, by, at}, back on their feet where they lie (the Playroom: health
+#    HEAL_HEALTH). The resident bent over them stands off, quiet (dormant) for HEAL_QUIET seconds.
+#  - Not healed by DOWN_TIME seconds after going down (the host's clock, alone or not): "out" {playerId, at,
+#    spot}: status "out", the tape drops where they lie (the instrument's "caught"), and a red spot is left
+#    there (`spots`, {playerId, x, z, level, y, t}, this floor's, cleared on the next). The resident hunts
+#    again from the next tick. Out is caught by another name: back on their feet when the car next rides
+#    down (or rides home), as a catch always was.
+#  - The car leaving without a downed player (a ride down or a BANK) puts them out ("out" with spot null).
+#  - The wipe waits while anyone is down: a crew all out is a wipe; a crew all down is not yet.
+#
 # Events are Dictionaries with the TypeScript shapes (see RunEvent in run.ts), carrying Move.Body,
 # TapeLib.Reading and RunSummary objects where TypeScript carries those objects.
 extends RefCounted
@@ -102,6 +171,9 @@ const Move = preload("res://sim/move.gd")
 const Rng = preload("res://sim/rng.gd")
 const TapeLib = preload("res://sim/tape.gd")
 const M = preload("res://sim/jsmath.gd")
+const Marks = preload("res://sim/marks.gd")
+const Notes = preload("res://sim/notes.gd")
+const Walls = preload("res://sim/walls.gd")
 
 # ---------------------------------------------------------------------------------------------
 # Tuning.
@@ -181,9 +253,37 @@ const LURE_ID := "#call"
 const RIDE_UP_TIME := 8.0
 ## Seconds F must be held on a bunk to lie down (prison.md section 6: "Hold F on any bunk").
 const BED_HOLD := 1.0
-## Each player's floor quota, the unit of the day quota (Day.quota_for). A stand-in until the floor quota
-## (T5q) is in the run; the day quota is 1.5 of these per player on day 1.
-const DAY_FLOOR_QUOTA := 150
+## The floor quota (North Star C9; see the header): what the crew must record on a floor before the call
+## button works. floor_quota(depth, crew) = QUOTA_PER_PLAYER x crew x QUOTA_DEPTH_STEP^(depth - 1),
+## rounded to the nearest QUOTA_ROUND. Measured with reading bots (tests/prop_quota_net.gd): on floor 1
+## a crew that reads well meets it in about 2 minutes (1:45 alone, 2:40 for four, slow floors nearer 4).
+## Each floor deeper pays DEPTH_PAY_STEP (1.35) more and asks QUOTA_DEPTH_STEP more: about 7% longer.
+const QUOTA_PER_PLAYER := 400
+const QUOTA_DEPTH_STEP := 1.45
+const QUOTA_ROUND := 5
+## Each player's floor quota, the unit of the day quota (Day.quota_for): floor 1's quota per player, so
+## Day.first_floor_quota(DAY_FLOOR_QUOTA, crew) is floor_quota(1, crew) exactly. The day quota is 1.5 of
+## floor 1's quota on day 1 (docs/floors/prison.md section 2).
+const DAY_FLOOR_QUOTA := QUOTA_PER_PLAYER
+## The Annex (see the header): how near a mark a player must stand to peel it (metres, feet to the
+## arrow); the Temp's "hunt" note every this many seconds of hunting; no crewmate within ALONE_DISTANCE
+## is "alone"; two crew within CLOSE_DISTANCE stand "very close".
+const MARK_PEEL_REACH := 1.5
+const NOTE_HUNT_EVERY := 25.0
+const ALONE_DISTANCE := 10.0
+const CLOSE_DISTANCE := 1.0
+## Down first, then out (see the header). Seconds a downed player has before they are out (B6: "about ten
+## seconds"); seconds F must be held beside them (B6: three); how near the healer's feet must be to the
+## downed body (metres, same level: "beside"); how fast a downed player crawls (m/s); how long a resident
+## that loses its downed player to a heal stays quiet (seconds); the health a heal gives back on the
+## Playroom; the body radius a crawl moves with (net/session.gd PLAYER_RADIUS).
+const DOWN_TIME := 10.0
+const HEAL_TIME := 3.0
+const HEAL_REACH := 1.5
+const CRAWL_SPEED := 0.6
+const HEAL_QUIET := 5.0
+const HEAL_HEALTH := 50.0
+const CRAWL_RADIUS := 0.3
 
 const EPS := 1e-9
 ## How far onto the landing side of the wall line the doorway channel reaches, beyond a body's radius.
@@ -498,6 +598,76 @@ class RunSummary:
 	var tapes: Array[String] = []
 	var wiped: bool
 
+## The Annex floor the crew is on (see the header): its marks and notes. Replaced, never edited, once in
+## a RunState (copy() first).
+class AnnexFloor:
+	## The plan it belongs to (a new plan is a new floor).
+	var plan: Floor.FloorPlan
+	## The crew's one pad and the marks down (sim/marks.gd).
+	var marks: Marks.MarksState
+	## Notes.post's state (count and templates used), and the notes posted, in order: {id, n, trigger,
+	## template, text, x, z, level, yaw, t}. Each Dictionary is never edited once posted.
+	var notes_state: Dictionary = {}
+	var notes: Array[Dictionary] = []
+	## RunState.note_seq when the crew reached the floor: this floor's note ids are notes_from + 1 on.
+	var notes_from: int = 0
+	## Triggers waiting for the Temp to be free to post: {trigger, facts}.
+	var queue: Array[Dictionary] = []
+	## The lobby note has been posted.
+	var lobby_done: bool = false
+	## Seconds the Temp has hunted since the last "hunt" note.
+	var hunt_clock: float = 0.0
+	## Sprints started this floor, {id: int}, whether each player sprinted last tick, {id: bool}, and notes
+	## naming each name so far, {name: int}.
+	var sprints: Dictionary = {}
+	var sprinting: Dictionary = {}
+	var named: Dictionary = {}
+
+	static func start(plan_: Floor.FloorPlan, note_seq: int) -> AnnexFloor:
+		var a := AnnexFloor.new()
+		a.plan = plan_
+		a.marks = Marks.MarksState.start_floor(Marks.DEFAULT_PAD)
+		a.notes_state = Notes.new_state()
+		a.notes_from = note_seq
+		return a
+
+	func copy() -> AnnexFloor:
+		var a := AnnexFloor.new()
+		a.plan = plan
+		a.marks = marks
+		a.notes_state = notes_state
+		a.notes = notes.duplicate()
+		a.notes_from = notes_from
+		a.queue = queue.duplicate()
+		a.lobby_done = lobby_done
+		a.hunt_clock = hunt_clock
+		a.sprints = sprints.duplicate()
+		a.sprinting = sprinting.duplicate()
+		a.named = named.duplicate()
+		return a
+
+## A downed player (see the header). Replaced, never edited, once in a RunState.
+class Downed:
+	var id: String
+	## Host time they went down, and when they are out unless healed first.
+	var at: float
+	var until: float
+	## &"catch" (the resident) or &"health" (the Playroom).
+	var by: StringName
+	## Who is holding F beside them ("" for nobody), and the host time that hold began (-1 for none).
+	var healer: String = ""
+	var heal_from: float = -1.0
+
+	func copy() -> Downed:
+		var d := Downed.new()
+		d.id = id
+		d.at = at
+		d.until = until
+		d.by = by
+		d.healer = healer
+		d.heal_from = heal_from
+		return d
+
 class RunState:
 	var seed: String
 	## Run time, seconds.
@@ -563,6 +733,28 @@ class RunState:
 	var seek_drops: Array[String] = []
 	## Run time of the call that started the last count (-1 before).
 	var seek_call_at: float = -1.0
+	## The floor quota (see the header). Off: everything below stays as it is made and is never read.
+	var quota: bool = false
+	## Recorded on this floor: every reading closed here (depth pay included), wherever its tape went since.
+	var floor_earned: float = 0.0
+	## The same per player, {id: value} (who did most of it: the Annex's note). Replaced, never edited.
+	var floor_by: Dictionary = {}
+	## What this floor asks for (floor_quota), 0 at home.
+	var floor_needed: int = 0
+	## "quotaMet" has been said on this floor.
+	var quota_met: bool = false
+	## The Annex (see the header): this floor's marks and notes (an AnnexFloor), else null.
+	var annex: AnnexFloor = null
+	## Notes posted over the whole run (a note's id is the count when it was posted).
+	var note_seq: int = 0
+	## The players' names as the notes write them, {id: name} (the host's; an id is its own name otherwise).
+	var names: Dictionary = {}
+	## Down first, then out (see the header). Off: everything below stays empty and is never read.
+	var downs: bool = false
+	## Who is down, {id: Downed}. Replaced, never edited.
+	var down: Dictionary = {}
+	## This floor's red spots, {playerId, x, z, level, y, t}, in the order left. Replaced, never edited.
+	var spots: Array[Dictionary] = []
 
 	func copy() -> RunState:
 		var s := RunState.new()
@@ -604,6 +796,17 @@ class RunState:
 		s.seek_off = seek_off
 		s.seek_drops = seek_drops
 		s.seek_call_at = seek_call_at
+		s.quota = quota
+		s.floor_earned = floor_earned
+		s.floor_by = floor_by
+		s.floor_needed = floor_needed
+		s.quota_met = quota_met
+		s.annex = annex
+		s.note_seq = note_seq
+		s.names = names
+		s.downs = downs
+		s.down = down
+		s.spots = spots
 		return s
 
 class PlayerInput:
@@ -642,6 +845,10 @@ class PlayerInput:
 	var horn: bool = false
 	## A lamp or flash (a Seek.Light), or null. A hook: lamps do not exist yet.
 	var light: Variant = null
+	## The Annex only (see the header). Q pressed this tick: start placing a mark from the shared pad.
+	var mark: bool = false
+	## The id of a mark to peel back onto the pad (F held on it for Marks.PEEL_SECONDS), or -1.
+	var peel: int = -1
 
 	static func make(id_: String, body_: Move.Body, eye_: float, yaw_: float, pitch_: float, h_fov: float, v_fov: float) -> PlayerInput:
 		var p := PlayerInput.new()
@@ -703,11 +910,76 @@ static func with_days(s0: RunState) -> RunState:
 static func at_home(s: RunState) -> bool:
 	return s.days and s.depth == 0
 
+## What floor `depth` asks a crew of `crew` to record before the call button works (see QUOTA_PER_PLAYER).
+## 0 at home (depth 0 or less).
+static func floor_quota(depth: int, crew: int) -> int:
+	if depth <= 0:
+		return 0
+	var raw := float(QUOTA_PER_PLAYER * maxi(1, crew)) * M.pow_js(QUOTA_DEPTH_STEP, float(depth - 1))
+	return maxi(QUOTA_ROUND, roundi(raw / QUOTA_ROUND) * QUOTA_ROUND)
+
+## The crew a floor quota is for: everyone in the run who has not left the game (the host marks those
+## who leave "leftBehind"; between floors nobody else is).
+static func quota_crew(players: Array[RunPlayer]) -> int:
+	var n := 0
+	for p in players:
+		if p.status != &"leftBehind":
+			n += 1
+	return n
+
+## Whether this floor's quota is met (always, with the quota off). Whole credits, as the call panel shows.
+static func quota_reached(s: RunState) -> bool:
+	return not s.quota or floori(s.floor_earned) >= s.floor_needed
+
+## Who recorded the most on this floor (the first by id on a tie), or "" if nobody recorded anything.
+static func quota_top(s: RunState) -> String:
+	var top := ""
+	var best := 0.0
+	for id: String in _sorted_keys(s.floor_by):
+		var v := float(s.floor_by[id])
+		if v > best:
+			best = v
+			top = id
+	return top
+
+## Turns the floor quota on for a run that has not ticked yet: nothing recorded, this floor's quota for
+## the crew in the run now.
+static func with_quota(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.quota = true
+	s.floor_earned = 0.0
+	s.floor_by = {}
+	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(s.players))
+	s.quota_met = false
+	return s
+
+## A new floor for the quota: nothing recorded yet, its quota for the crew aboard.
+static func _new_quota_floor(s: RunState, players: Array[RunPlayer]) -> void:
+	if not s.quota:
+		return
+	s.floor_earned = 0.0
+	s.floor_by = {}
+	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(players))
+	s.quota_met = false
+
 ## A new run: the crew in the car at floor 1's landing, doors about to open. `deck`: the places its
-## floors are drawn from (places.gd); empty means Clinic only. `days`: the day loop (see the header).
-static func create_run(seed: String, player_ids: Array[String], deck: Array = [], days: bool = false) -> RunState:
+## floors are drawn from (places.gd); empty means Clinic only. `days`: the day loop; `quota`: the floor
+## quota (see the header); `downs`: down first, then out.
+static func create_run(seed: String, player_ids: Array[String], deck: Array = [], days: bool = false, quota: bool = false, downs: bool = false) -> RunState:
 	var s := _create_run(seed, player_ids, deck)
-	return with_days(s) if days else s
+	if days:
+		s = with_days(s)
+	if downs:
+		s = with_downs(s)
+	return with_quota(s) if quota else s
+
+## Turns down first, then out on for a run (see the header): nobody down, no red spots.
+static func with_downs(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.downs = true
+	s.down = {}
+	s.spots = []
+	return s
 
 static func _create_run(seed: String, player_ids: Array[String], deck: Array = []) -> RunState:
 	assert(not player_ids.is_empty(), "a run needs at least one player")
@@ -790,7 +1062,10 @@ static func _move_step(plan: Floor.FloorPlan, car: CarGeometry, open: bool, cur:
 	var out := -(r + DOOR_ZONE_SLACK)
 	var here_in_channel := here[0] > out and absf(here[1]) <= band + EPS
 	var next_in_channel := next[0] > out and absf(next[1]) <= band + EPS
-	var zone := here[0] > 0.0 or here_in_channel
+	# Inside the car: past the wall line AND within its width and depth. Floor beside or behind the car, past
+	# the wall line's extension, is ordinary floor (it used to count as inside and snapped a body into the car).
+	var inside := here[0] > 0.0 and here[0] <= car.depth + EPS and absf(here[1]) <= car.width / 2.0 + EPS
+	var zone := inside or here_in_channel
 	if not zone:
 		if open and next_in_channel:
 			return car_body(car, next[0], next[1])
@@ -799,7 +1074,7 @@ static func _move_step(plan: Floor.FloorPlan, car: CarGeometry, open: bool, cur:
 	var max_u := car.depth - r
 	if open and absf(next[1]) <= band + EPS:
 		return car_body(car, minf(next[0], max_u), next[1])
-	if here[0] > 0.0:
+	if inside:
 		# Inside: the car's walls hold. In the open doorway, slide along it; otherwise stay clear of the front wall.
 		if open and here[0] < r:
 			return car_body(car, minf(next[0], max_u), _clamp(next[1], -band, band))
@@ -1012,7 +1287,8 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 			continue
 		if drops.has(p.id):
 			# Down last tick: their tape hits the floor now, and that is heard.
-			var di := Seek.SeekInput.make(p.id, sp.body if (sp != null and sp.body != null) else p.body, &"walk")
+			# (With the down rule: out last tick, where they had crawled to.)
+			var di := Seek.SeekInput.make(p.id, sp.body if (not s.downs and sp != null and sp.body != null) else p.body, &"walk")
 			di.dropped_tape = true
 			inputs.append(di)
 			continue
@@ -1072,10 +1348,17 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 		if sp == null:
 			continue
 		var np := p
+		# Down first, then out: down from health is a down like a catch's (they crawl; the rules do not hold them).
+		var crawls := s.downs and sp.status == &"down"
 		if sp.status != &"ok" and p.status == &"ok":
+			if crawls:
+				_go_down(s, players, k, t, &"health", events)
+				continue
 			np = p.copy()
 			np.status = &"caught"
 			np.side = null
+		if crawls:
+			continue
 		if _seek_holds(sp) and not (np.body.x == sp.body.x and np.body.z == sp.body.z and np.body.level == sp.body.level and np.body.y == sp.body.y):
 			if np == p:
 				np = p.copy()
@@ -1086,6 +1369,8 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 	# The instruments: found or down drops the tapes where they are (the instrument's "caught").
 	var caught: Array[Dictionary] = []
 	for e in r.events:
+		if e["type"] == "down" and s.downs:
+			continue  # Down first, then out: the tape drops (and is heard) when they are out.
 		if e["type"] == "found" or e["type"] == "down":
 			caught.append({"type": "caught", "t": t, "playerId": e["playerId"]})
 		if e["type"] == "down":
@@ -1121,6 +1406,422 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 			events.append({"type": "doorsOpened", "t": t, "depth": s.depth, "reason": "boarding"})
 	return et
 
+# ---------------------------------------------------------------------------------------------
+# The Annex: the crew's marks and the Temp's sticky notes (see the header).
+
+## Whether this floor is the Annex (and the crew is not at home).
+static func annexes(s: RunState) -> bool:
+	return not at_home(s) and s.plan != null and s.plan.place == Places.ANNEX
+
+## Keeps `annex` the state of this floor: a full pad and no notes when the crew reaches an Annex, null on
+## any other floor.
+static func _sync_annex(s: RunState) -> void:
+	if not annexes(s):
+		s.annex = null
+		return
+	if s.annex != null and s.annex.plan == s.plan:
+		return
+	s.annex = AnnexFloor.start(s.plan, s.note_seq)
+
+## A player's name as the notes write it: the host's name for them, without braces, else their id.
+static func name_of(s: RunState, id: String) -> String:
+	var n := str(s.names.get(id, "")).replace("{", "").replace("}", "").strip_edges()
+	if n.is_empty():
+		n = id.replace("{", "").replace("}", "")
+	return n if not n.is_empty() else "someone"
+
+## To the centimetre and the milliradian, as the wire carries them, so every list is the same everywhere.
+static func _cm(x: float) -> float:
+	var r := floorf(x * 100.0 + 0.5) / 100.0
+	return 0.0 if r == 0.0 else r
+
+static func _mrad(x: float) -> float:
+	var r := floorf(x * 1000.0 + 0.5) / 1000.0
+	return 0.0 if r == 0.0 else r
+
+## Where a note goes from a point: on the nearest wall (its nearest point), facing back toward the point;
+## with no wall near, at the point facing `yaw`. [x, z, yaw].
+static func note_spot(plan: Floor.FloorPlan, level: int, x: float, z: float, yaw: float) -> PackedFloat64Array:
+	var cs := float(plan.cell_size)
+	var segs := Walls.segments_near(plan, level, floori(x / cs), floori(z / cs))
+	var best := INF
+	var bx := x
+	var bz := z
+	var i := 0
+	while i < segs.size():
+		var ax := segs[i]
+		var az := segs[i + 1]
+		var ex := segs[i + 2] - ax
+		var ez := segs[i + 3] - az
+		var len2 := ex * ex + ez * ez
+		var k := minf(1.0, maxf(0.0, ((x - ax) * ex + (z - az) * ez) / len2)) if len2 > 0.0 else 0.0
+		var qx := ax + ex * k
+		var qz := az + ez * k
+		var d := M.hypot2(x - qx, z - qz)
+		if d < best - EPS:
+			best = d
+			bx = qx
+			bz = qz
+		i += 4
+	var face := yaw
+	if not is_inf(best) and best > 1e-6:
+		face = Entity.yaw_toward(x - bx, z - bz)
+	return PackedFloat64Array([_cm(bx), _cm(bz), _mrad(face)])
+
+static func _player_in(players: Array[RunPlayer], id: String) -> RunPlayer:
+	for p in players:
+		if p.id == id:
+			return p
+	return null
+
+static func _mark_by_id(ms: Marks.MarksState, id: int) -> Marks.Mark:
+	for m in ms.marks:
+		if m.id == id:
+			return m
+	return null
+
+## A mark as the events and the snapshot carry it.
+static func mark_plain(m: Marks.Mark) -> Dictionary:
+	return {"id": m.id, "x": m.x, "z": m.z, "level": m.level, "dir": m.dir, "player": m.player, "placedAt": m.placed_at}
+
+## The true facts a note may use (sim/notes.gd's dictionary), as they stand this tick.
+static func _note_facts(s: RunState, players: Array[RunPlayer], a: AnnexFloor) -> Dictionary:
+	var names: Array = []
+	var on_floor: Array[RunPlayer] = []
+	var standing: Array[RunPlayer] = []
+	for p in players:
+		if p.status == &"leftBehind":
+			continue
+		names.append(name_of(s, p.id))
+		if p.status == &"ok":
+			standing.append(p)
+			if not p.aboard:
+				on_floor.append(p)
+	var alone: Array = []
+	var close: Array = []
+	var furthest := ""
+	var far := 0.0
+	var cs := float(s.plan.cell_size)
+	var lx := (s.plan.landing.x + 0.5) * cs
+	var lz := (s.plan.landing.y + 0.5) * cs
+	for i in on_floor.size():
+		var p := on_floor[i]
+		var near := false
+		for q in standing:
+			if q != p and q.body.level == p.body.level and M.hypot2(q.body.x - p.body.x, q.body.z - p.body.z) < ALONE_DISTANCE:
+				near = true
+				break
+		if not near:
+			alone.append(name_of(s, p.id))
+		for j in range(i + 1, on_floor.size()):
+			var q := on_floor[j]
+			if q.body.level == p.body.level and M.hypot2(q.body.x - p.body.x, q.body.z - p.body.z) < CLOSE_DISTANCE:
+				close.append([name_of(s, p.id), name_of(s, q.id)])
+		var d := M.hypot2(p.body.x - lx, p.body.z - lz)
+		if d > far + EPS:
+			far = d
+			furthest = name_of(s, p.id)
+	var sprints := {}
+	for id: String in _sorted_keys(a.sprints):
+		if int(a.sprints[id]) > 0:
+			sprints[name_of(s, id)] = int(a.sprints[id])
+	var notes_for := {}
+	for n: String in names:
+		notes_for[n] = int(a.named.get(n, 0)) + 1
+	var facts := {"names": names, "alone": alone, "close_pairs": close, "sprints": sprints, "notes_for": notes_for,
+		"marks_used": a.marks.pad_size - a.marks.pad, "marks_cap": a.marks.pad_size}
+	if furthest != "":
+		facts["furthest"] = furthest
+	return facts
+
+## Posts one note for `trigger` at `spot` ([x, z, yaw] on `level`), if the floor's cap and the facts allow.
+static func _post_note(s: RunState, players: Array[RunPlayer], a: AnnexFloor, trigger: String, extra: Dictionary, level: int, spot: PackedFloat64Array, t: float, events: Array[Dictionary]) -> void:
+	var facts := _note_facts(s, players, a)
+	facts.merge(extra, true)
+	var r := Notes.post(s.seed, s.depth, trigger, facts, a.notes_state)
+	if not r["ok"]:
+		return
+	a.notes_state = r["state"]
+	s.note_seq += 1
+	var note := {"id": s.note_seq, "n": int(r["state"]["count"]), "trigger": trigger, "template": int(r["id"]), "text": String(r["text"]),
+		"x": spot[0], "z": spot[1], "level": level, "yaw": spot[2], "t": _mrad(t)}
+	a.notes.append(note)
+	for n: Variant in facts["names"]:
+		if String(r["text"]).contains(String(n)):
+			a.named[n] = int(a.named.get(n, 0)) + 1
+	var e := note.duplicate()
+	e["type"] = "note"
+	events.append(e)
+
+## One tick of the Annex: the marks (finishing, peeling, starting), then the notes (the triggers in this
+## tick's `events`, the lobby note, the Temp's queue). Updates `s.annex` and appends the events.
+static func _step_annex(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, dt: float, events: Array[Dictionary]) -> void:
+	if s.annex == null:
+		return
+	var a := s.annex.copy()
+	s.annex = a
+	var riding := s.phase == &"riding"
+
+	# The notes' triggers, from what happened this tick (before any mark event is added).
+	var lobby := false
+	for e in events:
+		match str(e["type"]):
+			"doorsOpened":
+				lobby = lobby or str(e["reason"]) == "arrival"
+			"startedHunting":
+				a.queue.append({"trigger": "wake", "facts": {}})
+			"caught":
+				a.queue.append({"trigger": "catch", "facts": {"caught": name_of(s, str(e["playerId"]))}})
+			"tapeDropped":
+				a.queue.append({"trigger": "tape", "facts": {"tape_dropper": name_of(s, str(e["playerId"]))}})
+			"quotaMet":
+				if str(e["top"]) != "":
+					a.queue.append({"trigger": "quota", "facts": {"quota_top": name_of(s, str(e["top"]))}})
+			"called":
+				a.queue.append({"trigger": "lift", "facts": {"lift_caller": name_of(s, str(e["playerId"]))}})
+			"healed":
+				a.queue.append({"trigger": "heal", "facts": {"healed": name_of(s, str(e["playerId"])), "healer": name_of(s, str(e["by"]))}})
+	if not riding and (s.orderly.mode == &"hunting" or s.orderly.mode == &"windUp"):
+		a.hunt_clock += dt
+		while a.hunt_clock >= NOTE_HUNT_EVERY - EPS:
+			a.hunt_clock -= NOTE_HUNT_EVERY
+			a.queue.append({"trigger": "hunt", "facts": {}})
+
+	# Sprints this floor (a fact for the notes): a sprint starts when the gait becomes sprint.
+	for p in players:
+		if not _is_active(p, input_of):
+			a.sprinting.erase(p.id)
+			continue
+		var sprint: bool = (input_of[p.id] as PlayerInput).gait == &"sprint"
+		if sprint and not bool(a.sprinting.get(p.id, false)):
+			a.sprints[p.id] = int(a.sprints.get(p.id, 0)) + 1
+		a.sprinting[p.id] = sprint
+
+	# The marks: placings due, then peels, then new placings.
+	var ms := a.marks
+	for pend: Marks.Pending in ms.pending.duplicate():
+		var p := _player_in(players, pend.player)
+		if p == null or not _is_active(p, input_of):
+			ms = Marks.cancel_place(ms, pend.player)
+			events.append({"type": "markRefused", "t": t, "playerId": pend.player, "reason": "gone"})
+			continue
+		var fr := Marks.finish_place(ms, pend.player, p.status, (input_of[p.id] as PlayerInput).gait, p.aboard, t)
+		if fr.ok:
+			ms = fr.state
+			events.append({"type": "markPlaced", "t": t, "playerId": pend.player, "mark": mark_plain(fr.mark), "pad": ms.pad, "radius": fr.noise.radius})
+		elif fr.reason != &"too_early":
+			ms = Marks.cancel_place(ms, pend.player)
+			events.append({"type": "markRefused", "t": t, "playerId": pend.player, "reason": String(fr.reason)})
+	for p in players:
+		if not _is_active(p, input_of):
+			continue
+		var inp: PlayerInput = input_of[p.id]
+		if inp.peel >= 0:
+			var m := _mark_by_id(ms, inp.peel)
+			var why := ""
+			if m == null:
+				why = "no_such_mark"
+			elif m.level != p.body.level or M.hypot2(m.x - p.body.x, m.z - p.body.z) > MARK_PEEL_REACH + EPS:
+				why = "far"
+			else:
+				var pr := Marks.peel(ms, inp.peel, p.id, p.status)
+				if pr.ok:
+					ms = pr.state
+					events.append({"type": "markPeeled", "t": t, "playerId": p.id, "id": pr.mark.id, "owner": pr.mark.player, "pad": ms.pad})
+				else:
+					why = String(pr.reason)
+			if why != "":
+				events.append({"type": "markRefused", "t": t, "playerId": p.id, "reason": why, "peel": inp.peel})
+		if inp.mark:
+			var at := Move.Body.make(_cm(p.body.x), _cm(p.body.z), p.body.level, p.body.y)
+			var br := Marks.begin_place(ms, p.id, at, inp.yaw, p.status, inp.gait, p.aboard, t)
+			if br.ok:
+				ms = br.state
+				events.append({"type": "markStart", "t": t, "playerId": p.id, "x": at.x, "z": at.z, "level": at.level, "dir": Marks.snap_dir(inp.yaw)})
+			else:
+				events.append({"type": "markRefused", "t": t, "playerId": p.id, "reason": String(br.reason)})
+	a.marks = ms
+
+	# The notes: the lobby's at once, as the doors open; the rest when the Temp is free to post them.
+	if lobby and not a.lobby_done:
+		a.lobby_done = true
+		var car := s.car
+		_post_note(s, players, a, "lobby", {}, car.level,
+			note_spot(s.plan, car.level, car.door_x - car.in_x, car.door_z - car.in_z, Entity.yaw_toward(-car.in_x, -car.in_z)), t, events)
+	var room := Notes.cap_per_floor() - int(a.notes_state.get("count", 0))
+	if a.queue.size() > room:
+		a.queue.resize(maxi(0, room))
+	if not riding and not a.queue.is_empty() and not s.orderly.held:
+		var job: Dictionary = a.queue.pop_front()
+		var o := s.orderly
+		_post_note(s, players, a, str(job["trigger"]), job["facts"], o.body.level, note_spot(s.plan, o.body.level, o.body.x, o.body.z, o.yaw), t, events)
+
+# ---------------------------------------------------------------------------------------------
+# Down first, then out (see the header).
+
+## Where a downed player gets to this tick: toward `want`, at most CRAWL_SPEED * dt, with the walls and the car.
+static func _crawl(prev: RunState, from: Move.Body, want: Move.Body, dt: float) -> Move.Body:
+	var dx := want.x - from.x
+	var dz := want.z - from.z
+	var d := M.hypot2(dx, dz)
+	if d <= 1e-9:
+		return from
+	var most := CRAWL_SPEED * dt
+	if d > most:
+		dx *= most / d
+		dz *= most / d
+	return move_in_run(prev, from, dx, dz, CRAWL_RADIUS)
+
+## Player `k` goes down where they are, now ("downed").
+static func _go_down(s: RunState, players: Array[RunPlayer], k: int, t: float, by: StringName, events: Array[Dictionary]) -> void:
+	var np := players[k].copy()
+	np.status = &"down"
+	np.side = null
+	players[k] = np
+	var d := Downed.new()
+	d.id = np.id
+	d.at = t
+	d.until = t + DOWN_TIME
+	d.by = by
+	var down := s.down.duplicate()
+	down[np.id] = d
+	s.down = down
+	events.append({"type": "downed", "t": t, "playerId": np.id, "until": d.until, "by": String(by), "at": np.body})
+
+## Whether player `id` may heal someone lying at `at` this tick: on their feet, F held, feet within
+## HEAL_REACH on the same level. Their distance, or -1 when they may not.
+static func _heal_reach(players: Array[RunPlayer], input_of: Dictionary, id: String, at: Move.Body) -> float:
+	var h := _player_in(players, id)
+	if h == null or not _is_active(h, input_of) or not (input_of[id] as PlayerInput).use or h.body.level != at.level:
+		return -1.0
+	var d := M.hypot2(h.body.x - at.x, h.body.z - at.z)
+	return d if d <= HEAL_REACH + EPS else -1.0
+
+## One tick of the downed: who holds F beside each, the heals that finish, and those whose time is up.
+## Updates `s` (down, spots, the resident, the Playroom's seek) and `players`; returns who went out.
+static func _step_downs(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, dt: float, events: Array[Dictionary]) -> Array[String]:
+	var down := s.down.duplicate()
+	var outs: Array[String] = []
+	var busy := {}
+	# Holds already going on keep their healer first (a healer heals one at a time).
+	for k in players.size():
+		var d: Downed = down.get(players[k].id)
+		if d != null and d.healer != "" and _heal_reach(players, input_of, d.healer, players[k].body) >= 0.0:
+			busy[d.healer] = players[k].id
+	for k in players.size():
+		var p := players[k]
+		var d: Downed = down.get(p.id)
+		if d == null:
+			continue
+		if p.status != &"down":
+			down.erase(p.id)
+			continue
+		var healer := ""
+		if d.healer != "" and busy.get(d.healer, "") == p.id:
+			healer = d.healer
+		else:
+			var best := INF
+			for q in players:
+				if q.id == p.id or busy.has(q.id):
+					continue
+				var r := _heal_reach(players, input_of, q.id, p.body)
+				if r >= 0.0 and r < best - EPS:
+					best = r
+					healer = q.id
+			if healer != "":
+				busy[healer] = p.id
+		var nd := d
+		if healer != d.healer:
+			nd = d.copy()
+			if d.healer != "":
+				events.append({"type": "healStop", "t": t, "playerId": d.healer, "target": p.id})
+			nd.healer = healer
+			nd.heal_from = t - dt if healer != "" else -1.0
+			if healer != "":
+				events.append({"type": "healStart", "t": t, "playerId": healer, "target": p.id, "from": nd.heal_from, "done": nd.heal_from + HEAL_TIME})
+		if healer != "" and t - nd.heal_from >= HEAL_TIME - EPS:
+			# Healed: back on their feet where they lie.
+			down.erase(p.id)
+			var np := p.copy()
+			np.status = &"ok"
+			np.side = null
+			players[k] = np
+			events.append({"type": "healed", "t": t, "playerId": p.id, "by": healer, "at": np.body})
+			if s.orderly.mode == &"bending" and str(s.orderly.bend_target) == p.id:
+				s.orderly = Entity.stand_off(s.orderly, HEAL_QUIET)
+			_seek_heal(s, np)
+			continue
+		if t >= nd.until - EPS:
+			# Out: the tape drops where they lie, and a red spot is left there.
+			down.erase(p.id)
+			var np := p.copy()
+			np.status = &"out"
+			np.side = null
+			players[k] = np
+			outs.append(p.id)
+			var b := np.body
+			var spot := {"playerId": p.id, "x": _cm(b.x), "z": _cm(b.z), "level": b.level, "y": _cm(b.y), "t": _mrad(t)}
+			var spots: Array[Dictionary] = s.spots.duplicate()
+			spots.append(spot)
+			s.spots = spots
+			events.append({"type": "out", "t": t, "playerId": p.id, "at": b, "spot": spot})
+			if s.orderly.mode == &"bending" and str(s.orderly.bend_target) == p.id:
+				s.orderly = Entity.stand_off(s.orderly, 0.0)
+			if s.seek != null:
+				s.seek_drops.append(p.id)
+			continue
+		down[p.id] = nd
+	s.down = down
+	return outs
+
+## The Playroom: a healed player is back in the seek on their feet, with HEAL_HEALTH, where they lie.
+static func _seek_heal(s: RunState, p: RunPlayer) -> void:
+	if s.seek == null:
+		return
+	var ss: Seek.SeekState = s.seek
+	var sp := Seek.player_of(ss, p.id)
+	if sp == null or sp.status != &"down":
+		return
+	var ns := ss.copy()
+	var list: Array[Seek.SeekPlayer] = []
+	for q in ss.players:
+		if q.id != p.id:
+			list.append(q)
+			continue
+		var nq := q.copy()
+		nq.status = &"ok"
+		nq.phase = &"out"
+		nq.hide = -1
+		nq.peeking = false
+		nq.health = HEAL_HEALTH
+		nq.body = p.body
+		nq.last = p.body
+		list.append(nq)
+	ns.players = list
+	s.seek = ns
+
+## The car leaves without the downed: they are out ("out", no spot: the floor is behind the crew).
+static func _leave_downs(s: RunState, players: Array[RunPlayer], t: float, events: Array[Dictionary]) -> void:
+	if s.down.is_empty():
+		return
+	for k in players.size():
+		var p := players[k]
+		if p.status != &"down":
+			continue
+		var np := p.copy()
+		np.status = &"out"
+		np.side = null
+		players[k] = np
+		events.append({"type": "out", "t": t, "playerId": p.id, "at": p.body, "spot": null})
+	s.down = {}
+
+## A new floor: nobody down, no red spots.
+static func _new_down_floor(s: RunState) -> void:
+	if not s.down.is_empty():
+		s.down = {}
+	if not s.spots.is_empty():
+		s.spots = []
+
 static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) -> RunStep:
 	var res := RunStep.new()
 	if prev.phase == &"ended":
@@ -1144,12 +1845,22 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	for p in prev.players:
 		var np := p.copy()
 		var given: PlayerInput = input_of.get(p.id)
-		np.body = given.body if given != null else p.body
+		if given != null and p.status == &"down" and prev.down.has(p.id):
+			# Down: they crawl, no faster than CRAWL_SPEED toward where they say they are.
+			np.body = _crawl(prev, p.body, given.body, dt)
+		else:
+			np.body = given.body if given != null else p.body
 		np.aboard = in_car(car, np.body)
 		players.append(np)
 	_sync_seek(s)
+	_sync_annex(s)
 	# Who called the car on the Playroom this tick (it starts the last count).
 	var seek_call_by := ""
+	# The floor quota for the crew as it is: set while the car arrives (so a player admitted at the stop
+	# counts), then it can only shrink (a player who leaves the game), never grow.
+	if s.quota and not at_home(s):
+		var want := floor_quota(s.depth, quota_crew(players))
+		s.floor_needed = want if (s.phase == &"arriving" or s.floor_needed <= 0) else mini(s.floor_needed, want)
 
 	# ---- 1. Run rules.
 	match s.phase:
@@ -1191,6 +1902,10 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 					and M.hypot2(p.body.x - car.door_x, p.body.z - car.door_z) <= CALL_REACH + EPS and p.body.level == car.level:
 					caller = p
 					break
+			if caller != null and not quota_reached(s):
+				# The floor quota (C9): the button does nothing until the crew has recorded enough here.
+				events.append({"type": "callRefused", "t": t, "playerId": caller.id, "earned": floori(s.floor_earned), "needed": s.floor_needed})
+				caller = null
 			if caller != null and s.seek != null and not (s.seek as Seek.SeekState).done:
 				# The Playroom: the call starts the last count; the car comes when it ends (see the header).
 				s.calls += 1
@@ -1357,6 +2072,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		if s.days:
 			# The day: settled on what got home, then the car rides up with whoever is aboard.
 			_settle_day(s, t, floori(summary.total), events)
+			_leave_downs(s, players, t, events)
 			_ride_up(s, players, aboard_ids, true)
 			events.append({"type": "carLeft", "t": t, "reason": "up"})
 			return res
@@ -1399,12 +2115,13 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		nc.floor = []
 		nc.next_tape = next_tape
 		s.crew = nc
+		_leave_downs(s, players, t, events)
 		for i in players.size():
 			var p := players[i]
 			if aboard_ids.has(p.id):
 				continue
 			var np := p.copy()
-			np.status = &"caught" if p.status == &"caught" else &"leftBehind"
+			np.status = p.status if (p.status == &"caught" or p.status == &"out") else &"leftBehind"
 			np.side = null
 			players[i] = np
 		s.phase = &"riding"
@@ -1469,23 +2186,56 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			next.body = before.body
 			next.moving = false
 			next.speed = 0.0
-		s.orderly = next
 		var o_events: Array[Dictionary] = []
 		for e in er.events:
 			if not e.has("playerId") or e["playerId"] != LURE_ID:
 				o_events.append(e)
+		# Down first, then out: a catch puts the player down, and the resident bends over them. Their tape
+		# stays with them until they are out (the instrument does not hear this catch).
+		var crew_events := o_events
+		if s.downs:
+			crew_events = []
+			for e in o_events:
+				if e["type"] == "caught":
+					next = Entity.bend_over(next, str(e["playerId"]))
+				else:
+					crew_events.append(e)
+		s.orderly = next
 		for e in o_events:
 			events.append(_with_t(e, t))
-		entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, before, next, o_events)]
+		entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, before, next, crew_events)]
 		for e in o_events:
 			if e["type"] != "caught":
 				continue
 			for k in players.size():
 				if players[k].id == e["playerId"]:
+					if s.downs:
+						if players[k].status == &"ok":
+							_go_down(s, players, k, t, &"catch", events)
+						continue
 					var np := players[k].copy()
 					np.status = &"caught"
 					np.side = null
 					players[k] = np
+
+	# ---- Down first, then out (see the header): heals, and the timer running out.
+	if s.downs and not s.down.is_empty() and s.phase != &"riding":
+		var outs := _step_downs(s, players, input_of, t, dt, events)
+		if not outs.is_empty():
+			# Out: the tape drops where they lie (the instrument's "caught").
+			var dropped: Array[Dictionary] = []
+			for id in outs:
+				dropped.append({"type": "caught", "t": t, "playerId": id})
+			if entity_ticks.is_empty():
+				entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, s.orderly, s.orderly, dropped)]
+			else:
+				var et0 := entity_ticks[0]
+				var evs: Array[Dictionary] = et0.events.duplicate()
+				evs.append_array(dropped)
+				var et := Instr.EntityTick.make(et0.id, et0.trait_name, et0.prev, et0.next, evs)
+				et.acting = et0.acting
+				et.holders = et0.holders
+				entity_ticks = [et]
 
 	# ---- 3. The crew.
 	var crew := s.crew
@@ -1501,6 +2251,12 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	s.crew = out.crew
 	for e in out.events:
 		events.append(_with_t(e, t))
+		# The floor quota counts what was recorded, not what is still held: a tape dropped later counts.
+		if s.quota and e["type"] == "readingClosed":
+			s.floor_earned += float(e["value"])
+			var by := s.floor_by.duplicate()
+			by[e["playerId"]] = float(by.get(e["playerId"], 0.0)) + float(e["value"])
+			s.floor_by = by
 	for p in players:
 		var given: PlayerInput = input_of.get(p.id)
 		if given == null or given.pick_up == null or not _is_active(p, input_of):
@@ -1524,6 +2280,14 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			s.crew = up.crew
 			if up.event != null:
 				events.append(_with_t(up.event, t))
+
+	# ---- The floor quota met: said once per floor, while the crew is still on it.
+	if s.quota and not s.quota_met and not at_home(s) and s.phase != &"riding" and s.floor_needed > 0 and quota_reached(s):
+		s.quota_met = true
+		events.append({"type": "quotaMet", "t": t, "depth": s.depth, "earned": floori(s.floor_earned), "needed": s.floor_needed, "top": quota_top(s)})
+
+	# ---- The Annex: the crew's marks and the Temp's notes (see the header).
+	_step_annex(s, players, input_of, t, dt, events)
 
 	# ---- Arriving home (the day loop).
 	if s.phase == &"riding" and s.timer <= EPS and s.going_up:
@@ -1568,15 +2332,19 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		s.crew = nc
 		s.phase = &"arriving"
 		s.timer = ARRIVE_DOOR_DELAY
+		_new_quota_floor(s, players)
+		_new_down_floor(s)
 		events.append({"type": "rodeDown", "t": t, "depth": depth, "bodies": bodies})
 
 	s.players = players
 	_sync_seek(s)
+	_sync_annex(s)
 
 	# ---- A wipe: nobody left who can call or board.
 	var everyone_out := true
 	for p in players:
-		if p.status == &"ok":
+		# A downed player is not out yet: the wipe waits for their ten seconds.
+		if p.status == &"ok" or p.status == &"down":
 			everyone_out = false
 	if s.phase != &"riding" and everyone_out and not at_home(s):
 		var no_tapes: Array[TapeLib.Tape] = []
@@ -1733,6 +2501,8 @@ static func _arrive_home(s: RunState, players: Array[RunPlayer], t: float, event
 	s.bed_hold = {}
 	s.use_prev = {}
 	s.lights_out_t = -1.0
+	_new_quota_floor(s, players)
+	_new_down_floor(s)
 	events.append({"type": "rodeUp", "t": t, "depth": 0, "day": s.day_state.day, "bodies": bodies})
 
 ## Bed, one tick: who leaves the count, who climbs in (F held BED_HOLD seconds on a bunk) or out (a new
@@ -1846,6 +2616,8 @@ static func _morning(s: RunState, players: Array[RunPlayer], t: float, events: A
 	s.bed_hold = {}
 	s.use_prev = {}
 	s.lights_out_t = -1.0
+	_new_quota_floor(s, players)
+	_new_down_floor(s)
 	events.append({"type": "newDay", "t": t, "day": s.day_state.day, "dayIndex": s.day_index, "depth": 1, "bodies": bodies})
 
 static func _inp(p: RunPlayer, input_of: Dictionary) -> PlayerInput:
