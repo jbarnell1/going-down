@@ -26,13 +26,14 @@ godot/
                       cameraSees), shared by the bridge, the local room and the server
   server/             the dedicated server (one room; server.tscn), its Dockerfile and README.md
   assets/, data/      models, textures, recorded lines, pixel font (synced; all from public/assets)
-  main.tscn, default_bus_layout.tres   the main scene and the Sfx, Squeak and Voice buses (synced)
+  main.tscn, default_bus_layout.tres   the main scene and the Voice, Entity, Scare, Effects, Ambience and UI buses (synced; see assets/sfx/MIX.md)
   tests/              run_tests.gd (the runner), ref_*.gd (sameness), prop_*.gd (design rules),
                       reference/*.json (written by the TypeScript rules), helpers
   tools/              godot.mjs (npm scripts); dump_reference.ts, property_counts.ts, bridge_script.ts and
                       rules_host.ts (write tests/reference); sync_client.mjs; the synced browser and
                       desktop checks (playthrough.mjs, play_web.mjs, play_desktop.mjs, sound_web.mjs,
-                      measure_web.mjs, serve.mjs); the network checks (net_local.mjs, play_net.mjs)
+                      measure_web.mjs, serve.mjs); the network checks (net_local.mjs, play_net.mjs); the
+                      mix (mix_check.gd + mix_check.mjs, sfx_levels.gd)
   export/             the builds and the playthroughs' pictures (ignored by git)
 ```
 
@@ -153,7 +154,10 @@ beside any of them; the game never captures the mouse under `auto=1` or `navigat
 
 ```sh
 node godot/tools/play_web.mjs 4440         # browser playthrough, 29 checks, pictures in godot/export/shots/
-node godot/tools/sound_web.mjs 4440        # browser sound after a real click: must PASS; with --query=&mute=1 must FAIL
+node godot/tools/sound_web.mjs 4440        # browser sound after a real click, then each recording against the rules
+                                           # (trolley only while it moves unseen, hum gone in the dark): must PASS;
+                                           # with --query=&mute=1 must FAIL
+node godot/tools/mix_check.mjs             # headless busy minute, every bus measured against the voice (GODOT set)
 node godot/tools/play_desktop.mjs          # Windows build in a 960x540 window, 33 checks incl. bus peaks
 node godot/tools/measure_web.mjs 4440      # sizes, cold first frame, frame times and the cost of playing alone
 node godot/tools/play_net.mjs --port=4460  # multiplayer: 27 checks, pictures in godot/export/shots/net/

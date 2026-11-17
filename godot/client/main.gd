@@ -513,6 +513,7 @@ func _clear_world() -> void:
 	sfx.ride(false)
 	sfx.set_hum(0.0)
 	sfx.update(0.0, {}, null, 0.0, 0.0, 0.0, false, 0.0, Vector3.ZERO)
+	sfx.clear_floor()
 
 # --- runs and floors ----------------------------------------------------------------------------
 
@@ -553,6 +554,7 @@ func _build_floor(plan: Dictionary) -> void:
 	level.props_on = props_on
 	world.add_child(level)
 	level.build(plan, str(snap.get("seed", seed)))
+	sfx.set_floor(plan, str(snap.get("seed", seed)))
 	lift = Lift.new()
 	lift.name = "Lift"
 	world.add_child(lift)
@@ -892,7 +894,8 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	elif warn:
 		light = 0.18 if ((now / 55) % 4 == 1 or (now / 140) % 3 == 2) else 0.6
 	level.set_light_level(light)
-	sfx.set_hum(light)
+	sfx.set_hum(light, dark)
+	sfx.world(dt, s, emergency)
 	level.set_emergency(emergency)
 	level.update_lights(dt, cam.global_position)
 	env.ambient_light_color = level.ambient_color(emergency)
@@ -942,8 +945,9 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		machine = (1.0 - float(cd["floorsAway"]) / maxf(1.0, float(cd["floors"]))) * (0.5 if bool(cd["falseStop"]) else 1.0) + 0.05
 	var car: Dictionary = link.plan_dict["car"]
 	sfx.update(dt, o["squeak"] if _resident_kind == "orderly" else {}, o.get("pose"), tick_hz, loud, float(me["exertion"]) if not still else 0.0, bool(me["winded"]), machine,
-		Vector3(float(car["doorX"]), float(car["floorY"]) + 1.5, float(car["doorZ"])))
+		Vector3(float(car["doorX"]), float(car["floorY"]) + 1.5, float(car["doorZ"])), float(o.get("speed", 0.0)))
 	announcer.update()
+	sfx.duck(announcer.player.playing, dt)
 
 	# The picture and the display.
 	var noise := _noise_on()
@@ -1115,7 +1119,10 @@ func _present(events: Array, now: int) -> void:
 			"blinkSoon":
 				sfx.play("blackout_warn" if bool(e["blackout"]) else "blink_warn")
 			"blinkStart":
-				sfx.play("blink")
+				# The blackout: a tube pops; a blink: the relay's thump. The warning's flicker stops with the lights.
+				sfx.stop("blink_warn")
+				sfx.stop("blackout_warn")
+				sfx.play("pop" if bool(e.get("blackout", false)) and sfx.recorded.has("pop") else "blink")
 			"blinkEnd":
 				sfx.play("blink", -8.0)
 			"carArrived":
@@ -1137,10 +1144,11 @@ func _present(events: Array, now: int) -> void:
 				if mine:
 					ending = {"kind": "leftBehind", "at": now}
 			"caught":
+				var op: Variant = (snap.get("orderly", {}) as Dictionary).get("pose")
+				sfx.caught(mine, Vector3(float(op["x"]), float(op["y"]) + 2.0, float(op["z"])) if op is Dictionary else null)
 				if mine:
 					caught_at = now
 					raise_latch = false
-					sfx.play("caught")
 			"slip":
 				if mine:
 					inst_view.print_slip(str(e["text"]))
@@ -1399,7 +1407,20 @@ func _command(c: String) -> String:
 		"quit":
 			get_tree().quit(0)
 		"sfx":
-			sfx.play(p[1])
+			# sfx <name> | sfx solo <group|-> (only that group sounds; the announcer is hushed) |
+			# sfx duck <0|1|-> (force the duck, or follow the voice) | sfx state
+			if p.size() < 2:
+				return "sfx what"
+			match p[1]:
+				"solo":
+					sfx.solo = "" if p.size() < 3 or p[2] == "-" else p[2]
+					announcer.player.volume_db = -80.0 if sfx.solo != "" else -5.0
+				"duck":
+					sfx.duck_forced = -1 if p.size() < 3 or p[2] == "-" else int(p[2])
+				"state":
+					return JSON.stringify(sfx.describe())
+				_:
+					sfx.play(p[1])
 		"say":
 			announcer.request(p[1], 9000)
 		"props":

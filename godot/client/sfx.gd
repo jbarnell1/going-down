@@ -1,30 +1,130 @@
-# The game's sounds, made here from a few lines of arithmetic (no files): the trolley squeak (in the
-# world, at the Orderly, louder and clearer the nearer and the more in view, from the rules'
-# audibility), the instrument's ticking, the lift's chimes, dings, doors, bell and machinery, the
-# lights failing, being taken, the ride, and breathing when winded. Stand-ins in the spirit of
-# src/game/audio.ts; nobody has listened to them yet.
+# The game's sounds. The owner's recordings (assets/sfx/, ElevenLabs sound effects, see SOURCES.md) where one
+# fits, and the stand-ins made here from a few lines of arithmetic where none exists yet or a file is
+# missing (so the game never goes silent): the Orderly's trolley (in the world, at the Orderly, from the
+# rules' audibility, only while it moves unseen), its breathing, rattle and reactions, its roar and
+# chewing when it takes someone, the Clinic's tube hum (gone in every blink and the blackout), the blink
+# warning's flicker, the tube popping at the blackout and the emergency lighting's drone, the vent, sparse
+# room tones placed and timed from the floor's seed and the host's clock (the same for every player),
+# the lift's chimes, dings, doors, bell, machinery and ride, the instrument's ticking, footsteps and
+# breathing when winded.
+#
+# The mix (assets/sfx/MIX.md): every file is normalised by loudness to its category's level relative to
+# the elevator voice, and every player here plays at the voice's own volume (BASE_DB), so the balance is
+# set in the files and only modulated here (distance, the rules' gain, the lights). Buses: Entity (never
+# ducked; its low-pass muffles the Orderly heard through walls), Scare, Effects, Ambience, UI, Voice,
+# into Master with a limiter. While the announcer speaks, Effects and Ambience duck by DUCK_DB.
+# Orchestration: at most one room tone at a time and ROOM_GAP seconds apart, room tones step aside while
+# the Orderly is near and moving or just after a scare, never two shrieks within SHRIEK_GAP seconds, and
+# each category has one 3D attenuation (CATS).
 class_name Sfx
 extends Node
 
 const RATE := 22050
+const DIR := "res://assets/sfx/"
+## The voice's own volume (announcer.gd): every sound plays relative to it.
+const BASE_DB := -5.0
+const DUCK_DB := -6.0
+const DUCK_RATE := 30.0         # dB per second, in and out
+const ROOM_GAP := 9.0           # seconds between room tones (at most one at a time)
+const SCARE_QUIET := 8.0        # room tones step aside this long after a scare
+const SHRIEK_GAP := 45.0
+const RATTLE_EVERY := Vector2(8.0, 18.0)
+const TONE_SLOT := 16.0         # host seconds per room-tone slot (one tone at most per slot)
+const S := 2.0                  # cell size (m)
+const LH := 3.2                 # storey height (m)
+const HUNT_SPEED := 3.7         # sim/entity.gd: the trolley's pitch follows its speed
+const APPROACH_DB := 7.0
+const MUFFLED_DB := 5.0
+## Per category: bus, 3D unit size (m, where it plays at its file's level) and max distance (m).
+const CATS := {
+	"entity": ["Entity", 2.0, 18.0],
+	"scare": ["Scare", 6.0, 45.0],
+	"room": ["Ambience", 3.0, 28.0],
+	"effect": ["Effects", 3.0, 30.0],
+	"steps": ["Effects", 3.0, 30.0],
+}
+## The recordings: name -> [category, files...]. Several files are takes, dealt in turn.
+const RECORDED := {
+	"roar": ["scare", "orderly/roar"],
+	"shriek": ["scare", "orderly/shriek_1", "orderly/shriek_2", "orderly/shriek_3"],
+	"chew": ["entity", "orderly/chew"],
+	"rattle": ["entity", "orderly/rattle"],
+	"breath_quick": ["entity", "orderly/breath_quick"],
+	"gown": ["entity", "orderly/gown"],
+	"instruments": ["entity", "orderly/instruments"],
+	"thud": ["entity", "orderly/thud"],
+	"blink_warn": ["effect", "clinic/flicker"],
+	"blackout_warn": ["effect", "clinic/flicker"],
+	"pop": ["effect", "clinic/pop"],
+	"slam": ["room", "clinic/slam_1", "clinic/slam_2"],
+	"intercom": ["room", "clinic/intercom_1", "clinic/intercom_2"],
+	"bed_roll": ["room", "clinic/bed_roll"],
+	"step": ["steps", "player/step_1", "player/step_2", "player/step_3", "player/step_4"],
+}
+## Gain (dB, on top of BASE_DB) that puts each generated stand-in at its category's level (measured with
+## tools/sfx_levels.gd; UI at the voice -8 LU, effects -6, scare short-term +2).
+## The "far" variants keep their own step down from the near ones. The ticking: a train at 12 a second at
+## full loudness reaches the UI level.
+const SYNTH_DB := {
+	"tick": -3.5, "chime": -12.1, "chime_far": -12.1, "ding": -5.7, "bell": -6.2, "bell_warn": -7.6, "closed": -8.6, "slip": -1.4,
+	"doors": -2.8, "doors_far": -2.8, "blink_warn": 0.3, "blackout_warn": -0.7, "blink": -3.4, "caught": -7.0,
+	"step": 0.8, "squeak": -4.0, "machinery": -7.6, "breath": -0.7, "hum": -13.9, "ride": -10.2,
+}
+const SYNTH_BUS := {
+	"tick": "UI", "chime": "UI", "chime_far": "UI", "ding": "UI", "bell": "UI", "bell_warn": "UI", "closed": "UI", "slip": "UI",
+	"doors": "Effects", "doors_far": "Effects", "blink_warn": "Effects", "blackout_warn": "Effects", "blink": "Effects", "caught": "Scare",
+}
 
-var streams := {}
+var streams := {}               # the generated stand-ins, by name
+var recorded := {}              # name -> {cat, streams: Array, next}
+var solo := ""                  # tests: only this group sounds ("" = all)
+var duck_forced := -1           # tests: -1 follow the voice, 0 never, 1 always
+var played: Array = []          # tests: the last one-shots, [{name, ms}]
 var _one_shots: Array[AudioStreamPlayer] = []
-var squeak: AudioStreamPlayer3D
+var _by_name := {}              # one-shot name -> the player it last went to
+var _shots3d: Array[AudioStreamPlayer3D] = []
+var _shot3d_next := 0
+var squeak: AudioStreamPlayer3D   # the trolley's squeaky wheel (or the stand-in)
+var roll: AudioStreamPlayer3D     # the trolley rolling over the tiles (recording only)
+var orderly_breath: AudioStreamPlayer3D
 var machinery: AudioStreamPlayer3D
 var breath: AudioStreamPlayer
 var ride_loop: AudioStreamPlayer
 var hum: AudioStreamPlayer
-## Other players' footsteps, heard from where they are (a few players in the world, reused).
+var vent: AudioStreamPlayer
+var drone: AudioStreamPlayer
+var drip: AudioStreamPlayer3D
+var monitor: AudioStreamPlayer3D
+var _room_player: AudioStreamPlayer3D   # the one room tone playing, if any
+var _loops := {}                # name -> [player, group]
 var _steps: Array[AudioStreamPlayer3D] = []
 var _step_next := 0
-var _squeak_bus := -1
+var _entity_bus := -1
+var _duck := 0.0
 var _tick_phase := 0.0
 var _rng := RandomNumberGenerator.new()
+# The floor.
+var _seed := ""
+var _depth := 0
+var _clinic := false
+var _plan := {}
+var _monitor_on := false
+var _drip_on := false
+var _tone_slot := -1
+var _tone_next := {}
+var _last := {}                 # what -> msec it last played
+var _later: Array = []          # [{at, name, pos (or null), gain}]
+var _rattle_in := 10.0
+var _prev := {}                 # the Orderly's last mode / moving / anim
+var _hunts := 0
+var _releases := 0
+var _shriek_pending_until := -1
 
 func setup(world_parent: Node3D) -> void:
 	_rng.seed = 7
-	_make_buses()
+	_entity_bus = AudioServer.get_bus_index("Entity")
+	if _entity_bus >= 0 and AudioServer.get_bus_effect_count(_entity_bus) == 0:
+		_entity_bus = -1
 	streams["tick"] = _wav(_tick(), false)
 	streams["chime"] = _wav(_tones([[660.0, 0.0], [880.0, 0.32]], 1.3, 0.5), false)
 	streams["chime_far"] = _wav(_tones([[660.0, 0.0], [880.0, 0.32]], 1.3, 0.18), false)
@@ -39,83 +139,227 @@ func setup(world_parent: Node3D) -> void:
 	streams["caught"] = _wav(_noise(2.0, 0.6), false)
 	streams["slip"] = _wav(_printer(), false)
 	streams["closed"] = _wav(_tones([[990.0, 0.0], [1480.0, 0.08]], 0.4, 0.25), false)
+	streams["step"] = _wav(_step(), false)
+	for name: String in RECORDED:
+		var spec: Array = RECORDED[name]
+		var list: Array = []
+		for i in range(1, spec.size()):
+			var st := _rec(str(spec[i]), false)
+			if st != null:
+				list.append(st)
+		if not list.is_empty():
+			recorded[name] = {"cat": spec[0], "streams": list, "next": 0}
 	for i in 6:
 		var p := AudioStreamPlayer.new()
-		p.bus = "Sfx"
+		p.bus = "Effects"
 		add_child(p)
 		_one_shots.append(p)
-	squeak = AudioStreamPlayer3D.new()
-	squeak.stream = _wav(_squeak(), true)
-	squeak.bus = "Squeak"
-	squeak.unit_size = 6.0
-	squeak.max_distance = 40.0
+	for i in 8:
+		var p3 := AudioStreamPlayer3D.new()
+		p3.max_db = 0.0
+		world_parent.add_child(p3)
+		_shots3d.append(p3)
+	# The trolley: ATTENUATION_DISABLED, its loudness is the rules' audibility (distance and walls).
+	squeak = _player3d(world_parent, _rec("orderly/trolley_squeak", true), "Entity", 6.0, 40.0)
+	if squeak.stream == null:
+		squeak.stream = _wav(_squeak(), true)
 	squeak.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
-	world_parent.add_child(squeak)
-	machinery = AudioStreamPlayer3D.new()
-	machinery.stream = _wav(_rumble(2.0, 55.0), true)
-	machinery.bus = "Sfx"
-	machinery.unit_size = 5.0
-	world_parent.add_child(machinery)
-	breath = AudioStreamPlayer.new()
-	breath.stream = _wav(_breathing(), true)
-	breath.bus = "Sfx"
-	add_child(breath)
-	# The ceiling tubes' hum: always there while the lights are on, gone in the dark.
-	hum = AudioStreamPlayer.new()
-	hum.stream = _wav(_hum(), true)
-	hum.bus = "Sfx"
-	hum.volume_db = -20.0
-	add_child(hum)
-	streams["step"] = _wav(_step(), false)
+	roll = _player3d(world_parent, _rec("orderly/trolley_roll", true), "Entity", 6.0, 40.0)
+	roll.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
+	# No air absorption either: walls and distance are in the rules' gain and the Entity bus' low-pass, and
+	# the engine's distance filter took the squeal out of a far trolley entirely.
+	squeak.attenuation_filter_db = 0.0
+	roll.attenuation_filter_db = 0.0
+	orderly_breath = _player3d(world_parent, _rec("orderly/breath_slow", true), "Entity", 1.5, 10.0)
+	machinery = _player3d(world_parent, _wav(_rumble(2.0, 55.0), true), "Effects", 2.0, 40.0)
+	breath = _player2d(_rec("player/breath_winded", true), "Effects")
+	if breath.stream == null:
+		breath.stream = _wav(_breathing(), true)
+	hum = _player2d(_rec("clinic/hum", true), "Ambience")
+	if hum.stream == null:
+		hum.stream = _wav(_hum(), true)
+	vent = _player2d(_rec("clinic/vent", true), "Ambience")
+	drone = _player2d(_rec("clinic/drone", true), "Ambience")
+	ride_loop = _player2d(_rec("lift/rumble", true), "Ambience")
+	if ride_loop.stream == null:
+		ride_loop.stream = _wav(_rumble(2.0, 42.0), true)
+	drip = _player3d(world_parent, _rec("clinic/drip", true), "Ambience", 1.5, 16.0)
+	monitor = _player3d(world_parent, _rec("clinic/monitor", true), "Ambience", 1.5, 18.0)
+	_loops = {"approach": [squeak, "approach"], "roll": [roll, "approach"], "orderly_breath": [orderly_breath, "orderly"],
+		"machinery": [machinery, "machinery"], "breath": [breath, "breath"], "hum": [hum, "hum"], "vent": [vent, "vent"],
+		"drone": [drone, "drone"], "ride": [ride_loop, "rumble"], "drip": [drip, "room"], "monitor": [monitor, "room"]}
 	for i in 6:
 		var sp := AudioStreamPlayer3D.new()
-		sp.stream = streams["step"]
-		sp.bus = "Sfx"
+		sp.bus = "Effects"
 		sp.unit_size = 3.0
 		sp.max_distance = 30.0
+		sp.max_db = 0.0
 		world_parent.add_child(sp)
 		_steps.append(sp)
-	ride_loop = AudioStreamPlayer.new()
-	ride_loop.stream = _wav(_rumble(2.0, 42.0), true)
-	ride_loop.bus = "Sfx"
-	add_child(ride_loop)
 
-## The buses (Sfx, Squeak with its low-pass, Voice as a ceiling speaker: band-limited and
-## compressed) are declared in res://default_bus_layout.tres, NOT added here at run time: in the
-## browser's "Sample" playback mode (the web default) buses added with AudioServer.add_bus left the
-## whole web audio graph silent (measured with tools/sound_web.mjs). In the browser the bus effects
-## do not apply (Sample mode plays through Web Audio directly); on the desktop they do.
-func _make_buses() -> void:
-	_squeak_bus = AudioServer.get_bus_index("Squeak")
-	if _squeak_bus >= 0 and AudioServer.get_bus_effect_count(_squeak_bus) == 0:
-		_squeak_bus = -1
+func _rec(path: String, loop: bool) -> AudioStream:
+	var p := DIR + path + ".ogg"
+	if not ResourceLoader.exists(p):
+		return null
+	var st := load(p) as AudioStreamOggVorbis
+	if st == null:
+		return null
+	st.loop = loop
+	return st
 
-func play(name: String, gain_db := 0.0) -> void:
-	if not streams.has(name):
+func _player2d(st: AudioStream, bus: String) -> AudioStreamPlayer:
+	var p := AudioStreamPlayer.new()
+	p.stream = st
+	p.bus = bus
+	add_child(p)
+	return p
+
+func _player3d(parent: Node3D, st: AudioStream, bus: String, unit: float, far: float) -> AudioStreamPlayer3D:
+	var p := AudioStreamPlayer3D.new()
+	p.stream = st
+	p.bus = bus
+	p.unit_size = unit
+	p.max_distance = far
+	p.max_db = 0.0   # never louder than its file's level, however close
+	parent.add_child(p)
+	return p
+
+func _ok(group: String) -> bool:
+	return solo == "" or solo == group
+
+## Keep a loop going at `db` (or stop it). Nothing happens for a loop with no stream.
+func _loop(p: Node, group: String, on: bool, db: float) -> void:
+	if p.get("stream") == null:
 		return
+	on = on and _ok(group)
+	if on:
+		p.set("volume_db", db)
+		if not p.get("playing"):
+			p.call("play")
+	elif p.get("playing"):
+		p.call("stop")
+
+static func _group_of(name: String, cat: String) -> String:
+	match name:
+		"roar", "shriek":
+			return "scare"
+		"step":
+			return "steps"
+	match cat:
+		"entity":
+			return "orderly"
+		"room":
+			return "room"
+	return "fx" if cat == "effect" or cat == "" else cat
+
+func _note(name: String) -> void:
+	_last[name] = Time.get_ticks_msec()
+	played.append({"name": name, "ms": Time.get_ticks_msec()})
+	if played.size() > 40:
+		played.pop_front()
+
+func _since(what: String) -> float:
+	return (Time.get_ticks_msec() - int(_last.get(what, -1000000))) / 1000.0
+
+func _take(name: String) -> AudioStream:
+	var r: Dictionary = recorded[name]
+	var list: Array = r["streams"]
+	var i := int(r["next"]) % list.size()
+	# Takes are dealt in turn from a random start, so a repeat is never the same take twice running.
+	r["next"] = i + 1 + (_rng.randi_range(0, list.size() - 2) if list.size() > 2 else 0)
+	return list[i]
+
+## A sound everywhere (not in the world): a recording if there is one, else the stand-in.
+func play(name: String, gain_db := 0.0) -> void:
+	var st: AudioStream = null
+	var bus := "Effects"
+	var group := "fx"
+	if recorded.has(name):
+		st = _take(name)
+		var cat := str(recorded[name]["cat"])
+		bus = str(CATS[cat][0])
+		group = _group_of(name, cat)
+		gain_db += BASE_DB
+	elif streams.has(name):
+		st = streams[name]
+		bus = str(SYNTH_BUS.get(name, "Effects"))
+		group = "ui" if bus == "UI" else ("scare" if bus == "Scare" else "fx")
+		gain_db += BASE_DB + float(SYNTH_DB.get(name, 0.0))
+	if st == null or not _ok(group):
+		return
+	_note(name)
+	var pick: AudioStreamPlayer = _one_shots[0]
 	for p in _one_shots:
 		if not p.playing:
-			p.stream = streams[name]
-			p.volume_db = gain_db
-			p.play()
-			return
-	_one_shots[0].stream = streams[name]
-	_one_shots[0].volume_db = gain_db
-	_one_shots[0].play()
+			pick = p
+			break
+	pick.stream = st
+	pick.bus = bus
+	pick.volume_db = gain_db
+	pick.play()
+	_by_name[name] = [pick, st]
 
-## Per frame: the squeak from the rules' audibility, the ticking, breathing, the lift's machinery.
-func update(delta: float, sq: Dictionary, pose: Variant, tick_hz: float, loudness: float, exertion: float, winded: bool, machine: float, door_pos: Vector3) -> void:
-	var g := float(sq.get("gain", 0.0))
-	if g > 0.001 and pose != null:
-		squeak.global_position = Vector3(float(pose.x), float(pose.y) + 0.4, float(pose.z))
-		squeak.volume_db = linear_to_db(g) + 2.0
-		if not squeak.playing:
-			squeak.play()
-		if _squeak_bus >= 0:
-			var lp := AudioServer.get_bus_effect(_squeak_bus, 0) as AudioEffectLowPassFilter
-			lp.cutoff_hz = 900.0 if sq.get("muffled", false) else 20000.0
-	elif squeak.playing:
-		squeak.stop()
+## Cut a one-shot short (the blink warning's flicker when the lights go), if it is still the one playing.
+func stop(name: String) -> void:
+	var e: Array = _by_name.get(name, [])
+	if e.size() == 2:
+		var p: AudioStreamPlayer = e[0]
+		if p.playing and p.stream == e[1]:
+			p.stop()
+	_by_name.erase(name)
+
+## A recording at a place in the world, with its category's attenuation. Returns the player (or null).
+func play_at(name: String, pos: Vector3, gain_db := 0.0) -> AudioStreamPlayer3D:
+	if not recorded.has(name):
+		return null
+	var cat := str(recorded[name]["cat"])
+	if not _ok(_group_of(name, cat)):
+		return null
+	var c: Array = CATS[cat]
+	var p: AudioStreamPlayer3D = null
+	for i in _shots3d.size():
+		var q := _shots3d[(_shot3d_next + i) % _shots3d.size()]
+		if not q.playing:
+			p = q
+			break
+	if p == null:
+		p = _shots3d[_shot3d_next]
+	_shot3d_next = (_shots3d.find(p) + 1) % _shots3d.size()
+	p.stream = _take(name)
+	p.bus = str(c[0])
+	p.unit_size = float(c[1])
+	p.max_distance = float(c[2])
+	p.global_position = pos
+	p.volume_db = BASE_DB + gain_db
+	p.pitch_scale = 1.0
+	p.play()
+	_note(name)
+	return p
+
+## Per frame: the trolley from the rules' audibility, the ticking, breathing, the lift's machinery.
+func update(delta: float, sq: Dictionary, pose: Variant, tick_hz: float, loudness: float, exertion: float, winded: bool, machine: float, door_pos: Vector3, speed := HUNT_SPEED) -> void:
+	var g := clampf(float(sq.get("gain", 0.0)), 0.0, 1.0)
+	if g > 0.0 and pose != null:
+		var at := Vector3(float(pose.x), float(pose.y) + 0.4, float(pose.z))
+		squeak.global_position = at
+		roll.global_position = at
+		# It is only ever heard unseen, so mostly from behind or round a corner, where the panning takes
+		# about 7 dB: +APPROACH_DB brings it back to the voice -3 LU right behind you, falling 3 dB to the edge
+		# of hearing; through a wall the low-pass takes more and MUFFLED_DB gives it back. Measured by
+		# tools/mix_check.mjs: never so quiet that it is not heard before it is seen (MIX.md).
+		var muffled := bool(sq.get("muffled", false))
+		var db := BASE_DB + APPROACH_DB - 3.0 * (1.0 - g) + (MUFFLED_DB if muffled else 0.0)
+		var pitch := clampf(0.75 + 0.25 * speed / HUNT_SPEED, 0.8, 1.05)
+		squeak.pitch_scale = pitch
+		roll.pitch_scale = pitch
+		_loop(squeak, "approach", true, db + (float(SYNTH_DB["squeak"]) if squeak.stream is AudioStreamWAV else 0.0))
+		_loop(roll, "approach", true, db - 4.0)
+		if _entity_bus >= 0:
+			var lp := AudioServer.get_bus_effect(_entity_bus, 0) as AudioEffectLowPassFilter
+			lp.cutoff_hz = 4000.0 if muffled else 20000.0
+	else:
+		_loop(squeak, "approach", false, 0.0)
+		_loop(roll, "approach", false, 0.0)
 	# Ticking: tickHz ticks a second at the given loudness.
 	if tick_hz > 0.0:
 		_tick_phase += tick_hz * delta
@@ -125,47 +369,260 @@ func update(delta: float, sq: Dictionary, pose: Variant, tick_hz: float, loudnes
 	else:
 		_tick_phase = 0.0
 	# Breathing that rises as the tank empties, ragged when winded.
-	if exertion > 0.15:
-		breath.volume_db = linear_to_db(clampf((exertion - 0.15) * 1.1, 0.0, 1.0)) - (0.0 if winded else 6.0)
-		breath.pitch_scale = 1.15 if winded else 1.0
-		if not breath.playing:
-			breath.play()
-	elif breath.playing:
-		breath.stop()
-	if machine > 0.0:
-		machinery.global_position = door_pos
-		machinery.volume_db = linear_to_db(clampf(machine, 0.05, 1.0)) - 4.0
-		if not machinery.playing:
-			machinery.play()
-	elif machinery.playing:
-		machinery.stop()
+	var bdb := BASE_DB + linear_to_db(clampf((exertion - 0.15) * 1.1, 0.001, 1.0)) - (0.0 if winded else 6.0)
+	if breath.stream is AudioStreamWAV:
+		bdb += float(SYNTH_DB["breath"])
+	breath.pitch_scale = 1.1 if winded else 1.0
+	_loop(breath, "breath", exertion > 0.15, bdb)
+	machinery.global_position = door_pos
+	_loop(machinery, "machinery", machine > 0.0, BASE_DB + float(SYNTH_DB["machinery"]) + linear_to_db(clampf(machine, 0.05, 1.0)))
+	_run_later()
 
 ## One footstep of another player at `pos` (gain in dB: a sprint is louder, a creep quieter).
 func step_at(pos: Vector3, gain_db: float) -> void:
-	if _steps.is_empty():
+	if _steps.is_empty() or not _ok("steps"):
 		return
 	var sp := _steps[_step_next]
 	_step_next = (_step_next + 1) % _steps.size()
+	if recorded.has("step"):
+		sp.stream = _take("step")
+		sp.volume_db = BASE_DB + gain_db
+	else:
+		sp.stream = streams["step"]
+		sp.volume_db = BASE_DB + float(SYNTH_DB["step"]) + gain_db
 	sp.global_position = pos
-	sp.volume_db = gain_db
-	sp.pitch_scale = 0.9 + _rng.randf() * 0.2
+	sp.pitch_scale = 0.92 + _rng.randf() * 0.16
 	sp.play()
 
-## The hum follows the lights (1 as built, 0 out).
-func set_hum(light: float) -> void:
-	if light < 0.05:
-		if hum.playing:
-			hum.stop()
-		return
-	hum.volume_db = -20.0 + linear_to_db(clampf(light, 0.05, 1.0))
-	if not hum.playing:
-		hum.play()
+## The tubes' hum follows the lights (1 as built), and is gone whenever it is dark (a blink or the
+## blackout cuts it at once).
+func set_hum(light: float, dark := false) -> void:
+	var db := BASE_DB + linear_to_db(clampf(light, 0.05, 1.0)) + (float(SYNTH_DB["hum"]) if hum.stream is AudioStreamWAV else 0.0)
+	_loop(hum, "hum", not dark and light >= 0.05, db)
 
 func ride(on: bool) -> void:
-	if on and not ride_loop.playing:
-		ride_loop.play()
-	elif not on:
-		ride_loop.stop()
+	_loop(ride_loop, "rumble", on, BASE_DB + 4.0 + (float(SYNTH_DB["ride"]) if ride_loop.stream is AudioStreamWAV else 0.0))
+
+## Effects and Ambience step down while the announcer speaks (bus volume, so it works in the browser too).
+func duck(voice_on: bool, delta: float) -> void:
+	var want := DUCK_DB if (voice_on if duck_forced < 0 else duck_forced == 1) else 0.0
+	_duck = move_toward(_duck, want, DUCK_RATE * delta)
+	for b: String in ["Effects", "Ambience"]:
+		var i := AudioServer.get_bus_index(b)
+		if i >= 0:
+			AudioServer.set_bus_volume_db(i, _duck)
+
+# --- the floor: where its room tones are ----------------------------------------------------------
+
+func set_floor(plan: Dictionary, seed_text: String) -> void:
+	_plan = plan
+	_seed = seed_text
+	_depth = int(plan.get("depth", 0))
+	_clinic = str(plan.get("place", "clinic")) == "clinic"
+	_tone_slot = -1
+	_tone_next = {}
+	_prev = {}
+	_hunts = 0
+	_releases = 0
+	_shriek_pending_until = -1
+	_rattle_in = 10.0
+	drip.stop()
+	monitor.stop()
+	_monitor_on = false
+	_drip_on = false
+	if not _clinic:
+		return
+	# The tap and the heart monitor: each in its own room, picked from the seed (the same for everyone).
+	var rng := RandomNumberGenerator.new()
+	rng.seed = ("%s:%d:rooms" % [seed_text, _depth]).hash()
+	var rooms: Array = plan.get("rooms", [])
+	var wards := rooms.filter(func(r: Dictionary) -> bool: return str(r["kind"]) in ["ward", "exam"])
+	var others := rooms.filter(func(r: Dictionary) -> bool: return str(r["kind"]) in ["closet", "station", "exam", "lobby"])
+	var mon: Variant = _pick(rng, wards if not wards.is_empty() else rooms)
+	if mon != null:
+		monitor.global_position = _room_point(mon, 1.1)
+	others.erase(mon)
+	var tap: Variant = _pick(rng, others if not others.is_empty() else rooms)
+	if tap != null and tap != mon:
+		drip.global_position = _room_point(tap, 0.9)
+	_monitor_on = mon != null
+	_drip_on = tap != null and tap != mon
+
+func clear_floor() -> void:
+	_clinic = false
+	_plan = {}
+	_later.clear()
+	for k: String in _loops:
+		var p: Node = _loops[k][0]
+		if p.get("playing"):
+			p.call("stop")
+
+static func _pick(rng: RandomNumberGenerator, list: Array) -> Variant:
+	if list.is_empty():
+		return null
+	return list[rng.randi_range(0, list.size() - 1)]
+
+static func _room_point(r: Dictionary, up: float) -> Vector3:
+	return Vector3((float(r["x"]) + float(r["w"]) * 0.5) * S, int(r["level"]) * LH + up, (float(r["y"]) + float(r["h"]) * 0.5) * S)
+
+## Per frame in a run: the beds, the Orderly's breathing and reactions, the room tones.
+## s: the frame (play_link.gd); emergency: the emergency lighting (0..1).
+func world(delta: float, s: Dictionary, emergency: float) -> void:
+	var dark := bool(s.get("dark", false))
+	var blackout := bool(s.get("blackout", false))
+	_loop(vent, "vent", true, BASE_DB - 4.0)
+	_loop(drone, "drone", blackout and emergency > 0.0, BASE_DB + linear_to_db(clampf(emergency, 0.05, 1.0)))
+	_loop(monitor, "room", _clinic and _monitor_on and not blackout, BASE_DB)
+	_loop(drip, "room", _clinic and _drip_on, BASE_DB)
+	var o: Dictionary = s.get("orderly", {})
+	_orderly(delta, o)
+	_room_tones(float(s.get("t", 0.0)), o, dark)
+
+func _held(o: Dictionary) -> bool:
+	return bool(o.get("held", false)) or bool(o.get("seeing", false))
+
+func _opos(o: Dictionary, up: float) -> Variant:
+	var pose: Variant = o.get("pose")
+	if pose == null:
+		return null
+	var pd: Dictionary = pose
+	return Vector3(float(pd["x"]), float(pd["y"]) + up, float(pd["z"]))
+
+## A chance from the seed: the same on every screen for the same moment of the rules.
+func _chance(kind: String, index: int) -> float:
+	return float(("%s:%d:%s:%d" % [_seed, _depth, kind, index]).hash() % 1000) / 1000.0
+
+func _orderly(delta: float, o: Dictionary) -> void:
+	var at: Variant = _opos(o, 2.2)
+	var held := _held(o)
+	# A Stillness entity that is seen makes no sound at all: it breathes only while nobody looks.
+	if at != null:
+		orderly_breath.global_position = at
+	_loop(orderly_breath, "orderly", at != null and not held and not bool(o.get("taken", false)), BASE_DB)
+	if at == null:
+		_prev = {}
+		return
+	var mode := str(o.get("mode", ""))
+	var moving := bool(o.get("moving", false)) and not held
+	var pose: Dictionary = o["pose"]
+	var anim := str(pose.get("anim", ""))
+	var near := float(o.get("distance", 99.0))
+	if not _prev.is_empty():
+		if str(_prev["mode"]) == "waiting" and mode == "hunting":
+			_hunts += 1
+			# The first wake on a floor may shriek, the moment it first moves unseen.
+			if _hunts == 1 and _chance("wake", _depth) < 0.6:
+				_shriek_pending_until = Time.get_ticks_msec() + 6000
+		if mode == "windUp" and str(_prev["mode"]) != "windUp" and not held:
+			play_at("breath_quick", at)
+			play_at("gown", at, -2.0)
+		if moving and not bool(_prev["moving"]):
+			_releases += 1
+			if _chance("tray", _releases) < 0.5:
+				play_at("instruments", _opos(o, 0.9))
+			if _chance("shriek", _releases) < 0.12:
+				_shriek_pending_until = Time.get_ticks_msec() + 1500
+		if moving and anim == "duck" and str(_prev["anim"]) != "duck" and _chance("thud", _releases) < 0.6:
+			play_at("thud", _opos(o, 0.6))
+	if _shriek_pending_until > 0 and moving:
+		if _since("shriek") >= SHRIEK_GAP and _since("roar") >= SCARE_QUIET:
+			play_at("shriek", at)
+		_shriek_pending_until = -1
+	elif _shriek_pending_until > 0 and Time.get_ticks_msec() > _shriek_pending_until:
+		_shriek_pending_until = -1
+	# The rattle in its throat, now and then, only near it and only unseen.
+	if not held and near < 14.0:
+		_rattle_in -= delta
+		if _rattle_in <= 0.0:
+			play_at("rattle", at)
+			_rattle_in = _rng.randf_range(RATTLE_EVERY.x, RATTLE_EVERY.y)
+	_prev = {"mode": mode, "moving": moving, "anim": anim}
+
+## Someone was taken. Mine: the roar in my face, then the chewing. Someone else's: heard from where it is.
+func caught(mine: bool, pos: Variant) -> void:
+	if mine or pos == null:
+		if recorded.has("roar"):
+			play("roar")
+			_later.append({"at": Time.get_ticks_msec() + 1300, "name": "chew", "pos": null, "gain": 0.0})
+		else:
+			play("caught")
+	else:
+		play_at("roar", pos)
+		_later.append({"at": Time.get_ticks_msec() + 1300, "name": "chew", "pos": pos, "gain": 0.0})
+	_last["scare"] = Time.get_ticks_msec()
+
+func _run_later() -> void:
+	var now := Time.get_ticks_msec()
+	for i in range(_later.size() - 1, -1, -1):
+		var l: Dictionary = _later[i]
+		if now >= int(l["at"]):
+			_later.remove_at(i)
+			if l["pos"] == null:
+				play(str(l["name"]), float(l["gain"]))
+			else:
+				play_at(str(l["name"]), l["pos"], float(l["gain"]))
+
+## Sparse room tones, the same for every player: host time is cut into TONE_SLOT slots and each slot's
+## tone (whether, when, which, where) is drawn from the floor's seed and the slot number.
+func _room_tones(t: float, o: Dictionary, dark: bool) -> void:
+	if not _clinic or _plan.is_empty():
+		return
+	var n := int(floorf(t / TONE_SLOT))
+	if n != _tone_slot:
+		_tone_slot = n
+		_tone_next = {}
+		var rng := RandomNumberGenerator.new()
+		rng.seed = ("%s:%d:tone:%d" % [_seed, _depth, n]).hash()
+		if rng.randf() < 0.6:
+			var when := n * TONE_SLOT + rng.randf_range(1.0, TONE_SLOT - 2.0)
+			var r := rng.randf()
+			var kind := "slam" if r < 0.45 else ("intercom" if r < 0.75 else "bed_roll")
+			var pos: Variant = null
+			if kind == "slam":
+				var doors: Array = _plan.get("doors", [])
+				var dv: Variant = _pick(rng, doors)
+				if dv != null:
+					var d: Dictionary = dv
+					pos = Vector3(((float(d["ax"]) + float(d["bx"])) * 0.5 + 0.5) * S, int(d["level"]) * LH + 1.0, ((float(d["ay"]) + float(d["by"])) * 0.5 + 0.5) * S)
+			else:
+				var rooms: Array = _plan.get("rooms", [])
+				var room: Variant = _pick(rng, rooms)
+				if room != null:
+					pos = _room_point(room, 2.6 if kind == "intercom" else 0.5)
+			if pos != null and when > t - 0.25:
+				_tone_next = {"at": when, "kind": kind, "pos": pos}
+	if _tone_next.is_empty() or t < float(_tone_next["at"]):
+		return
+	var tone := _tone_next
+	_tone_next = {}
+	# Room tones step aside: one at a time, ROOM_GAP apart, not just after a scare, not while the Orderly
+	# is close and coming, and the bed rolling only while it is watched (a rolling sound while it hunts
+	# unseen would lie about where it is).
+	if _room_player != null and _room_player.playing:
+		return
+	if _since("room") < ROOM_GAP or _since("scare") < SCARE_QUIET or _since("shriek") < SCARE_QUIET or _since("roar") < SCARE_QUIET:
+		return
+	var approaching := bool(o.get("moving", false)) and not _held(o) and float(o.get("distance", 99.0)) < 20.0
+	if approaching:
+		return
+	if str(tone["kind"]) == "bed_roll" and o.get("pose") != null and not _held(o):
+		return
+	if str(tone["kind"]) == "intercom" and dark:
+		return
+	_room_player = play_at(str(tone["kind"]), tone["pos"])
+	if _room_player != null:
+		_last["room"] = Time.get_ticks_msec()
+
+## Tests: every loop (playing, volume, bus), the bus volumes, the last one-shots.
+func describe() -> Dictionary:
+	var loops := {}
+	for k: String in _loops:
+		var p: Node = _loops[k][0]
+		loops[k] = {"playing": p.get("playing"), "db": p.get("volume_db"), "bus": p.get("bus"), "recorded": p.get("stream") is AudioStreamOggVorbis}
+	var buses := {}
+	for i in AudioServer.bus_count:
+		buses[AudioServer.get_bus_name(i)] = AudioServer.get_bus_volume_db(i)
+	return {"loops": loops, "buses": buses, "played": played.duplicate(), "solo": solo, "recorded": recorded.keys(), "duck": _duck}
 
 # --- synthesis ------------------------------------------------------------------------------------
 

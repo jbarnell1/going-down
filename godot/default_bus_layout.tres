@@ -1,8 +1,8 @@
-[gd_resource type="AudioBusLayout" load_steps=5 format=3]
+[gd_resource type="AudioBusLayout" load_steps=6 format=3]
 
-[sub_resource type="AudioEffectLowPassFilter" id="squeak_lp"]
-resource_name = "LowPassFilter"
-cutoff_hz = 20000.0
+[sub_resource type="AudioEffectHardLimiter" id="master_limit"]
+resource_name = "HardLimiter"
+ceiling_db = -1.0
 
 [sub_resource type="AudioEffectHighPassFilter" id="voice_hp"]
 resource_name = "HighPassFilter"
@@ -16,32 +16,62 @@ cutoff_hz = 5200.0
 resource_name = "Compressor"
 threshold = -18.0
 ratio = 4.0
-gain = 4.0
+gain = 12.8
+
+[sub_resource type="AudioEffectLowPassFilter" id="entity_lp"]
+resource_name = "LowPassFilter"
+cutoff_hz = 20000.0
 
 [resource]
-bus/1/name = &"Sfx"
+bus/0/name = &"Master"
+bus/0/solo = false
+bus/0/mute = false
+bus/0/bypass_fx = false
+bus/0/volume_db = 0.0
+bus/0/send = &""
+bus/0/effect/0/effect = SubResource("master_limit")
+bus/0/effect/0/enabled = true
+bus/1/name = &"Voice"
 bus/1/solo = false
 bus/1/mute = false
 bus/1/bypass_fx = false
 bus/1/volume_db = 0.0
 bus/1/send = &"Master"
-bus/2/name = &"Squeak"
+bus/1/effect/0/effect = SubResource("voice_hp")
+bus/1/effect/0/enabled = true
+bus/1/effect/1/effect = SubResource("voice_lp")
+bus/1/effect/1/enabled = true
+bus/1/effect/2/effect = SubResource("voice_comp")
+bus/1/effect/2/enabled = true
+bus/2/name = &"Entity"
 bus/2/solo = false
 bus/2/mute = false
 bus/2/bypass_fx = false
 bus/2/volume_db = 0.0
 bus/2/send = &"Master"
-bus/2/effect/0/effect = SubResource("squeak_lp")
+bus/2/effect/0/effect = SubResource("entity_lp")
 bus/2/effect/0/enabled = true
-bus/3/name = &"Voice"
+bus/3/name = &"Scare"
 bus/3/solo = false
 bus/3/mute = false
 bus/3/bypass_fx = false
 bus/3/volume_db = 0.0
 bus/3/send = &"Master"
-bus/3/effect/0/effect = SubResource("voice_hp")
-bus/3/effect/0/enabled = true
-bus/3/effect/1/effect = SubResource("voice_lp")
-bus/3/effect/1/enabled = true
-bus/3/effect/2/effect = SubResource("voice_comp")
-bus/3/effect/2/enabled = true
+bus/4/name = &"Effects"
+bus/4/solo = false
+bus/4/mute = false
+bus/4/bypass_fx = false
+bus/4/volume_db = 0.0
+bus/4/send = &"Master"
+bus/5/name = &"Ambience"
+bus/5/solo = false
+bus/5/mute = false
+bus/5/bypass_fx = false
+bus/5/volume_db = 0.0
+bus/5/send = &"Master"
+bus/6/name = &"UI"
+bus/6/solo = false
+bus/6/mute = false
+bus/6/bypass_fx = false
+bus/6/volume_db = 0.0
+bus/6/send = &"Master"
