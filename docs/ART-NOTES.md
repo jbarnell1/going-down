@@ -563,3 +563,37 @@ Rules learned:
     sock, a cuff or a joint of a doll. Pale or bruised colour goes on a few faces facing one way.
 31. **Check a simple face against well-known ones.** Two dots and a curve on a pale disc is someone
     else's mask. Make the eyes disagree and the smile wrong.
+
+### Round two on the Minder, and the final pass
+
+Three fresh judges: 6, 5 and 5 lit (up from 6, 4, 4), 7 to 8 in the dark, side-on or crawling. Kept:
+the lone glowing face in the dark, the mask as a lie over a fanged mouth, the crawl, the crouch holding
+the mask on, the badge. What they caught, and the fix:
+
+- **The mask still read as an emoji, a frog sticker, a lollipop.** It is dirty bone now, and green only
+  comes from the glow (emission 0.26, which reads in the dark and not in light). The eyes are holes cut
+  right through the card (alpha, on the printed front and on the plain back alike), uneven and torn, one
+  lower; behind them is a small dark plate of skin, so the holes show head, never the room. The mouth is
+  a thin flat printed line 85% of the width, ends not turned up, cracked through once. And the mask is
+  now a little too small for the skull, so from the front the cranium shows round it and the open jaw
+  hangs below: it can no longer read as a ball on a stick.
+- **A blockout.** The pelvis is narrow and tapered with two crest bumps, and the thighs begin inside it
+  and widen downward, so there is no ledge. The shoulders slope about 22 degrees from the neck. Limb
+  outlines are rough by half as much, and the pale and tan patches at the knees, ankles, feet and elbows
+  are gone. The skin noise is three times finer along each limb than round it, because a limb's texture
+  is stretched a metre along v: the old noise ran in long streaks that read as wood grain. Darker, wetter
+  patches (lower roughness) sit in the rib gaps and the crooks of the joints.
+- **A toy crocodile.** The lower jaw is a U-shaped bar of real thickness, from hinge round the chin to
+  hinge. It carries 26 thin needle teeth (18 below, 8 above), lengths 0.4 to 1.6 times a base, leaning
+  up to 15 degrees either way, bone-grey, front half only. A near-black floor sags between the two sides
+  of the jaw and a near-black wall closes the throat, so the open mouth has depth.
+- **The vest is still the brightest thing.** Faded a further half toward grey and darkened with grime;
+  the music box's star is a faded, dirty pink-beige.
+
+Rules learned:
+
+32. **A mask must be smaller than the head it is on.** If the face covers the whole silhouette from
+    the front, the figure is a face on a stick; let the skull and jaw show round it.
+33. **Holes beat paint for eyes.** Painted dots read as a sticker at any size; a hole with darkness
+    behind it reads as a mask with something wearing it.
+34. **Noise must be square on the body, not in the texture.** Scale it by how far the UVs stretch.
