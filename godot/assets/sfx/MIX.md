@@ -1,5 +1,7 @@
 # The mix
 
+The owner's rule (V21): "You need to make sure you're normalizing sound properly so that in game one sound doesn't come over another like orchestrate the sound well." So: scares sit about +3 LU over the elevator voice and never more than +4, nothing else goes over the voice, true peak at most -1 dBTP; every floor is measured in the game (tools/mix_check.mjs: the Clinic's busy minute, then the Annex and the Playroom).
+
 How every sound sits against the elevator voice, and why. Measured with ffmpeg `ebur128` (integrated loudness I, short-term max S over 3 s windows, loudness range LRA, true peak TP). Regenerate the files with the scratch pipeline described under *Method*; check the result in the game with `node godot/tools/mix_check.mjs` (GODOT set).
 
 ## The reference: the voice
@@ -23,7 +25,7 @@ The 54 elevator voice files average **V = -16.1 LUFS** integrated (each -16.0 to
 
 ## Buses and orchestration
 
-- Buses (default_bus_layout.tres): Voice, Entity, Scare, Effects, Ambience, UI, all into Master, which has a hard limiter at -1 dBTP. Entity carries the Orderly and is never ducked; its low-pass (4 kHz) is the muffling when the rules say a wall is in the way, and 5 dB is given back for it.
+- Buses (default_bus_layout.tres): Voice, Entity, Scare, Effects, Ambience, UI, all into Master, which has a hard limiter. The layout sets its ceiling at -1.0; Sfx.setup lowers it to -2.0 dBFS (Sfx.MASTER_CEILING) because it holds sample peaks and the true peaks between samples ran up to 0.8 dB over them (one mix check in three measured -0.7 dBTP at the -1.0 ceiling), so the -1 dBTP rule holds every run. Entity carries the Orderly and is never ducked; its low-pass (4 kHz) is the muffling when the rules say a wall is in the way, and 5 dB is given back for it.
 - While the announcer speaks, Effects and Ambience duck by 6 dB (the bus faders, 30 dB/s, so it works in the browser too; checked there by tools/sound_web.mjs).
 - Every 3D sound has its category's unit size and max distance and never plays louder than its file however close (`max_db` 0). The trolley has no distance attenuation of its own: its loudness is the rules' audibility.
 - Room tones: at most one at a time, at least 9 s apart, none for 8 s after a scare, none while the Orderly is coming within 20 m unseen, the bed only while the Orderly is watched, the intercom not in the dark. Timing and place come from the floor seed and the host's clock (16 s slots), so every player hears the same tone at the same moment from the same place.
@@ -71,6 +73,104 @@ Raw = the owner's WAV as delivered; final = the committed Ogg. Rel = final loudn
 | clinic/intercom_1.ogg | room | -11.9 / -12.2 / 20.0 / -0.7 | -26.3 / -26.3 / 0.0 / -12.7 | -10.2 | volume | 0.0 | - | 2.75 s |
 | clinic/intercom_2.ogg | room | -19.2 / -26.1 / 20.0 / -1.0 | -26.5 / -26.5 / 0.0 / -5.5 | -10.4 | volume | 0.0 | - | 0.9 s |
 | clinic/bed_roll.ogg | room | -31.7 / -32.6 / 4.7 / -9.0 | -26.4 / -27.2 / 1.8 / -2.7 | -10.3 | loudnorm-linear | 2.6 | - | 6.7 s |
+
+## The second batch (17 Nov): the Annex, the Playroom and the crew
+
+The same method, the same V, the same buses; files in annex/, playroom/ and player/ (SOURCES.md). New categories and why:
+
+| Category | Target | Why |
+|---|---|---|
+| The Temp's stapler click | momentary max V-9, played at BASE_DB +5 (temp_view.gd CLICK_REC_DB) | A click of 0.4 s cannot carry much momentary loudness without crushing it (9 dB of limiting at most); +5 in the game puts it at the voice -4 LU right at its hand, as the made-in-code click was, with the file's true peak still -1.5 on the bus. Then (1 - d/30)^2 and 0.45 through a wall, as before. |
+| The stapler going into you (catch) | momentary max V-5 | After the roar, in your face, under it. |
+| The Temp's steps, footsteps | momentary max V-8 | As the crew's footsteps; only within 8 m, so from further the Annex's sound stays dots. |
+| Beds: the office, the play centre | I = V-14, LRA under 1 | In the hum's place on their floor, following the lights; the vent is the Clinic's. |
+| Room tones: phone, photocopier | I = V-10 | As the Clinic's; the phone plays from everywhere at -6 (far off, no direction). |
+| Warnings: the Annex's sagging buzz | I = V-6 | As the Clinic's flicker. |
+| The music box, the Minder scrambling | I = V-3 (the box), V-8 (the scramble, peaky: 8.4 dB of limiting was the most it took) | The box is the Minder's heard-before-seen sound: played at BASE_DB +6 (minder_view.gd BOX_DB) for the 3D panning, about V-4 right at it, falling as (1 - d/30)^2. |
+| The Minder near: wheeze, huff | I = V-3 | As the Orderly's slow breath; 3D. |
+| The count bell (Voice bus) | momentary max V-5.7 | The made-in-code bell's own level (measured with tools/sfx_levels.gd), so the count sits where it did: never buried, never over the voice, +0.8 dB a stroke in the last five. |
+| The xylophone note (#19, still to come) | momentary max V-5.3 | The made-in-code three notes' level; one note played three times at pitch 1, 1.26, 1.5, 0.2 s apart (Sfx.XYLO_PITCH). |
+| Toys: squeaker tiles, net and flap | momentary max V-5 | A noise you made: plain, under the voice. |
+| The ball pit | jumping in: momentary max V-3 (it is a provocation); wading: I = V-8 | |
+| Crew one-shots: down, healed, into a hide, slide | I = V-6 | Yours, close, an event. |
+| Crew loops: your winded breath, crawling | I = V-8 | As before. |
+| The party horn | momentary max V-6 | Three takes. |
+| Sticky notes | slap: momentary max V-15 (a 0.26 s slap with 9 dB of limiting); peel: V-8 | Ready only; the slap wants +6 in the game when it is wired, as the stapler. |
+| The lift's chime (recorded two-tone bell) | momentary max V-8 | The UI stand-in's level; the false stop's 9 dB under it. |
+| The found-you sting | short-term max V+3 | A scare. |
+
+### Takes picked
+
+- Stapler click: all four takes kept (dealt in turn, never the same twice running). Each is one press-and-release ("ka-chunk", 0.4 s), not cut to a single transient: cut that short, a click cannot reach any useful loudness.
+- Stapler into something soft: #4. A clean silence before the punch, one strong punch with the release 0.3 s later 10 dB down (#3's release is nearly as loud as its punch, two hits), and mono-safe (L/R correlation 0.99 against 0.91).
+- Photocopier: #3. 3.4 dB more signal over the same room noise, and the warm-up then the page are both clear (LRA 2.5); #1 is mostly a steady drone.
+- Hand bell: #1. The strongest strike (momentary max 6.8 dB over #3's) and 30 dB down within 0.6 s, so a stroke a second stands out; both takes have the clapper's small bounce.
+- Squeaky toy: #1, #2 and #4's second squeak, three takes for the tiles (each one squeak).
+- Party blower: all three, as takes (the horn will be blown a lot).
+- Wheeze: #2. It starts and ends near silence (two whole breaths), so the loop's join is clean (seam 0.01); #1 starts mid-breath.
+- The found-you sting (the owner: "combine both noises"): **layered**, both at once from 0: #1 (the music-box note bending, lifted 4 dB so it is not lost) strikes first, and #2's deep breath swells in under it 0.2 s later (its own lead-in), 2.2 s in all, normalised as one scare to short-term V+2.6 (4.5 dB of limiting).
+- The out-of-breath file: the crew's own clean breath, so your winded breathing now uses it (the earlier wet breaths are the Orderly's); played at pitch 1, not sped up when winded as the made-in-code one is.
+
+### Every file (second batch)
+
+Columns as above; Rel = final loudness against V by the category's measure (I, M momentary max, or S short-term max).
+
+| File | Category | Raw I / Smax / LRA / TP | Final I / Smax / LRA / TP | Final Mmax | Rel to V | Method | Lim | Seam | Length |
+|---|---|---|---|---|---|---|---|---|---|
+| player/breath_winded.ogg | player | -42 / -40.7 / 1.6 / -21.1 | -24.3 / -23.1 / 1.4 / -6.1 | -20.4 | -8.2 (I) | gain +loop xfade | 0 | 0.18 | 5.50 s |
+| player/down.ogg | crew | -17.3 / -23.6 / 20 / -0.9 | -22.2 / -28.5 / 0 / -2 | -19.8 | -6.1 (I) | gain | 0 | - | 2.10 s |
+| player/crawl.ogg | player | -48.5 / -48.2 / 2.8 / -28.6 | -24.4 / -22.8 / 2.9 / -3.2 | -19.1 | -8.3 (I) | gain +loop xfade | 0 | 0.13 | 10.95 s |
+| player/healed.ogg | crew | -39.3 / -45.6 / 20 / -28.6 | -22.2 / -28.5 / 0 / -9 | -19.8 | -6.1 (I) | gain | 0 | - | 2.20 s |
+| player/hide_in.ogg | crew | -35.8 / -40.5 / 0 / -15.4 | -22.3 / -25.8 / 0 / -1.9 | -17.7 | -6.2 (I) | gain +limit | 4.4 | - | 1.95 s |
+| annex/staple_1.ogg | click | -24.9 / -33.7 / 0 / -1.7 | -70 / -34.8 / 0 / -2.5 | -26 | -9.9 (M) | gain +limit | 5.9 | - | 0.40 s |
+| annex/staple_2.ogg | click | -22.5 / -31.3 / 0 / -4.8 | -25.2 / -34 / 0 / -4.6 | -25.2 | -9.1 (M) | gain | 0 | - | 0.49 s |
+| annex/staple_3.ogg | click | -25.8 / -34.6 / 0 / -3.6 | -25.5 / -34.2 / 0 / -1.8 | -25.5 | -9.4 (M) | gain +limit | 4 | - | 0.45 s |
+| annex/staple_4.ogg | click | -24 / -32.8 / 0 / -2.3 | -26.3 / -35.1 / 0 / -1.7 | -26.3 | -10.2 (M) | gain +limit +encoder trim | 1.5 | - | 0.45 s |
+| annex/staple_soft.ogg | thunk | -23.5 / -29.1 / 0 / -1 | -25.4 / -30.9 / 0 / -1.6 | -22.2 | -6.1 (M) | gain +limit +encoder trim | 6.8 | - | 0.65 s |
+| annex/office.ogg | bed | -46 / -45.8 / 0.3 / -35.8 | -30.1 / -29.9 / 0.4 / -17.9 | -29.5 | -14 (I) | gain +loop xfade | 0 | 0.37 | 13.10 s |
+| annex/buzz.ogg | effect | -35.6 / -33.6 / 3.9 / -9.3 | -22.1 / -21.8 / 0.6 / -1.5 | -16.3 | -6 (I) | gain +limit | 7.2 | - | 3.55 s |
+| annex/phone.ogg | room | -40.6 / -42.5 / 20 / -28.3 | -26.2 / -29 / 4.9 / -12.8 | -23.8 | -10.1 (I) | gain | 0 | - | 3.90 s |
+| annex/copier.ogg | room | -34.7 / -33.6 / 2.5 / -20.1 | -26.3 / -25.2 / 2.4 / -8.8 | -21.4 | -10.2 (I) | gain | 0 | - | 6.00 s |
+| annex/note_slap.ogg | mark | -33.7 / -42.4 / 0 / -5.3 | -70 / -40.1 / 0 / -2.7 | -31.4 | -15.3 (M) | gain +limit | 9 | - | 0.26 s |
+| annex/note_peel.ogg | mark_small | -26.5 / -32.2 / 0 / -5.6 | -27.1 / -32.7 / 0 / -6.1 | -24.3 | -8.2 (M) | gain | 0 | - | 0.69 s |
+| annex/temp_steps.ogg | step | -52 / -52.3 / 1.6 / -28 | -27.2 / -27.7 / 1.7 / -1.5 | -24.1 | -8 (M) | gain +limit +loop xfade | 0.9 | 0.14 | 5.70 s |
+| annex/drag.ogg | entity_small | -48.4 / -48.2 / 0.8 / -35.1 | -22.3 / -21.3 / 0.9 / -5.8 | -18.8 | -6.2 (I) | gain +loop xfade | 0 | 0.06 | 3.80 s |
+| annex/lift_bell.ogg | ui | -18.7 / -21.3 / 0 / -9.6 | -27.5 / -30 / 0 / -15.5 | -24.1 | -8 (M) | gain | 0 | - | 2.00 s |
+| playroom/music_box.ogg | approach | -28.5 / -26.7 / 8.9 / -8.8 | -19.1 / -17.2 / 8.1 / -1.7 | -11.1 | -3 (I) | gain +limit +loop xfade | 5.8 | 0.01 | 11.70 s |
+| playroom/count_bell.ogg | bell | -17.1 / -21.7 / 0 / -4 | -25 / -30.5 / 0 / -10.2 | -21.8 | -5.7 (M) | gain | 0 | - | 0.90 s |
+| playroom/room.ogg | bed | -41.3 / -40.3 / 1.3 / -27.5 | -30.2 / -29.7 / 0.8 / -15.7 | -27.6 | -14.1 (I) | gain +loop xfade | 0 | 0.16 | 17.60 s |
+| playroom/squeak_1.ogg | toy | -15.8 / -23.1 / 0 / -1.7 | -70 / -30.1 / 0 / -6.4 | -21.3 | -5.2 (M) | gain | 0 | - | 0.23 s |
+| playroom/squeak_2.ogg | toy | -14.9 / -22.9 / 0 / -0.4 | -70 / -30 / 0 / -6.7 | -21.3 | -5.2 (M) | gain | 0 | - | 0.26 s |
+| playroom/squeak_3.ogg | toy | -13.7 / -20.6 / 0 / -1 | -70 / -30.2 / 0 / -6.6 | -21.4 | -5.3 (M) | gain | 0 | - | 0.22 s |
+| playroom/pit_wade.ogg | pit_quiet | -36 / -35.6 / 0.7 / -17.3 | -24.1 / -23.7 / 0.6 / -2.6 | -18 | -8 (I) | gain | 0 | - | 3.60 s |
+| playroom/pit_jump.ogg | pit_loud | -24.3 / -26.2 / 0 / -1 | -25.1 / -27.4 / 0 / -1.7 | -19.9 | -3.8 (M) | gain +limit +encoder trim | 5 | - | 2.00 s |
+| playroom/slide.ogg | effect | -30.6 / -33.8 / 0 / -16.7 | -22.2 / -25.3 / 0 / -5.9 | -20.2 | -6.1 (I) | gain | 0 | - | 1.95 s |
+| playroom/net_flap.ogg | toy | -21.5 / -29.3 / 0 / -5 | -21.5 / -30.2 / 0 / -3 | -21.5 | -5.4 (M) | gain | 0 | - | 1.95 s |
+| playroom/horn_1.ogg | horn | -17.4 / -19.4 / 0 / -6.5 | -25.1 / -27.2 / 0 / -10.6 | -22.2 | -6.1 (M) | gain | 0 | - | 1.85 s |
+| playroom/horn_2.ogg | horn | -28.6 / -30.9 / 0 / -14.3 | -27.2 / -29.4 / 0 / -9.9 | -22.2 | -6.1 (M) | gain | 0 | - | 1.85 s |
+| playroom/horn_3.ogg | horn | -36.1 / -38.7 / 0 / -25.2 | -25.1 / -28.1 / 0 / -11.6 | -22.2 | -6.1 (M) | gain | 0 | - | 1.65 s |
+| playroom/minder_run.ogg | run | -32.7 / -32.3 / 2 / -5.9 | -24.5 / -24.1 / 1.4 / -2.1 | -19.8 | -8.4 (I) | gain +limit +loop xfade | 8.4 | 0.03 | 3.73 s |
+| playroom/wheeze.ogg | entity | -31 / -30.5 / 1.6 / -16.4 | -19.2 / -19 / 0.5 / -1.7 | -14.8 | -3.1 (I) | gain +limit +loop xfade | 1.3 | 0.01 | 3.58 s |
+| playroom/huff.ogg | entity | -30.1 / -31.3 / 1.2 / -18.4 | -19.1 / -20.7 / 1.3 / -4.7 | -14.1 | -3 (I) | gain | 0 | - | 3.88 s |
+| playroom/found.ogg | scare | -18.4 / -20.1 / 0 / -5.2 (the layered pair) | -11.9 / -13.5 / 0 / -1.7 | -10.5 | +2.6 (S) | gain +limit +encoder trim | 4.5 | - | 2.20 s |
+
+Method as the first batch, with two differences: every file is a plain linear gain from ebur128 (to I, M or S as the category says, corrected until within 0.2 LU or the limiting cap), with a sample-peak limiter (ffmpeg alimiter at -1.8 dBFS) after the gain where the gain pushes peaks past it, at most 9 dB of it (where that is not enough the file stays short of its target: the clicks, the note slap, the scramble); and short files are padded with silence to be measured, so their momentary and short-term windows are whole. An -I of -70 means the file is too short for ebur128 to gate (a click).
+
+### What the game measured on the Annex and the Playroom (tools/mix_check_floors.gd)
+
+Headless, no walls, V = -18.0 LUFS on both (the Voice bus over four lines). Short-term max per bus against it, and where:
+
+| Bus | The Annex | The Playroom |
+|---|---|---|
+| Scare | +3.4 LU (the catch's roar) | +2.5 LU (the found-you sting) |
+| Entity | -13.1 (the stapler going in; the clicks are dots, short-term never sees them) | -4.3 (scrambling past at 3 m); the music box rises from about V-26 at 20 m to V-5 at 2 m; the wheeze at 2 m V-12 |
+| Effects | -5.6 (the blackout's sagging buzz) | -8.2 (the ball pit jumped into, here) |
+| Ambience | -11.0 (the bed with the phone over it) | -12.4 (the bed and the tune) |
+| UI | -14.0 (the lift's bell) | -12.8 (the count's three notes) |
+| Voice, the count bell | | -4.1 |
+| Master true peak | -1.9 dBTP | -4.3 dBTP |
+
+Breaks that turn it red: the office tone 12 dB up (`--break=office`: Ambience -1.7 LU under the voice, the "at least 8 LU under" check fails); the found-you sting 8 dB up (`--break=sting`: the Scare bus +10.5 LU over the voice, and Master's true peak -0.3 dBTP).
 
 ## The voice files
 

@@ -23,6 +23,17 @@
 # for the whole count; three toy xylophone notes at the call to hide; the count's bell, one stroke a
 # second on the Voice bus at the voice's own level (never buried), higher and louder in the last five;
 # and the toy-piano trill only you hear while your own sight or gap total rises (UI).
+#
+# The second batch (17 Nov, assets/sfx/annex, playroom and player; MIX.md): the Annex's office tone and the
+# Playroom's play-centre tone take the hum's place on their floors (following the lights the same way),
+# the vent belongs to the Clinic; on the Annex the blink warnings are its sagging tube buzz, a far-off
+# phone rings from everywhere and a photocopier warms up in a seeded copy room (room tones, as the
+# Clinic's), and a catch ends with the stapler going into you; the lift's chime is the recorded two-tone
+# bell from the ceiling speakers on every floor. The Playroom (driven by hide_view.gd from the host's
+# events): the found-you sting, going down, getting into and out of hides, squeaker tiles, wading or
+# jumping into the ball pit, the Minder's disappointed huff at an empty hide, the recorded count bell, and
+# the count's three rising notes from one recorded note when there is one. Your winded breathing is the
+# crew's own clean breath. Ready but with nothing in the game to trigger it yet: READY.
 class_name Sfx
 extends Node
 
@@ -31,6 +42,8 @@ const DIR := "res://assets/sfx/"
 ## The voice's own volume (announcer.gd): every sound plays relative to it.
 const BASE_DB := -5.0
 const DUCK_DB := -6.0
+## The Master limiter's ceiling (dBFS, sample peaks): 1 dB under the -1 dBTP rule for inter-sample peaks.
+const MASTER_CEILING := -2.0
 const DUCK_RATE := 30.0         # dB per second, in and out
 const ROOM_GAP := 9.0           # seconds between room tones (at most one at a time)
 const SCARE_QUIET := 8.0        # room tones step aside this long after a scare
@@ -49,6 +62,7 @@ const CATS := {
 	"room": ["Ambience", 3.0, 28.0],
 	"effect": ["Effects", 3.0, 30.0],
 	"steps": ["Effects", 3.0, 30.0],
+	"ui": ["UI", 3.0, 30.0],
 }
 ## The recordings: name -> [category, files...]. Several files are takes, dealt in turn.
 const RECORDED := {
@@ -67,7 +81,48 @@ const RECORDED := {
 	"intercom": ["room", "clinic/intercom_1", "clinic/intercom_2"],
 	"bed_roll": ["room", "clinic/bed_roll"],
 	"step": ["steps", "player/step_1", "player/step_2", "player/step_3", "player/step_4"],
+	# The crew.
+	"down": ["effect", "player/down"],
+	"healed": ["effect", "player/healed"],
+	"hide_in": ["effect", "player/hide_in"],
+	# The Annex.
+	"buzz": ["effect", "annex/buzz"],
+	"phone": ["room", "annex/phone"],
+	"copier": ["room", "annex/copier"],
+	"staple_soft": ["entity", "annex/staple_soft"],
+	"note_slap": ["effect", "annex/note_slap"],
+	"note_peel": ["effect", "annex/note_peel"],
+	"lift_bell": ["ui", "annex/lift_bell"],
+	# The Playroom.
+	"found": ["scare", "playroom/found"],
+	"squeak": ["effect", "playroom/squeak_1", "playroom/squeak_2", "playroom/squeak_3"],
+	"pit_wade": ["effect", "playroom/pit_wade"],
+	"pit_jump": ["effect", "playroom/pit_jump"],
+	"slide": ["effect", "playroom/slide"],
+	"net_flap": ["effect", "playroom/net_flap"],
+	"horn": ["effect", "playroom/horn_1", "playroom/horn_2", "playroom/horn_3"],
+	"huff": ["entity", "playroom/huff"],
+	## Still to come from the owner (#19): one toy note; the count's call to hide plays it three times
+	## rising (XYLO_PITCH). Until then the made-in-code three notes.
+	"xylo_note": ["ui", "playroom/xylo_note"],
 }
+## Recorded and loaded, but nothing in the game triggers them yet: name -> the event each needs.
+const READY := {
+	"healed": "a heal (downed-and-healed, T8): play('healed') for the one healed, play_at for the others",
+	"crawl": "a downed player moving (crawl(true) while they drag themselves along)",
+	"drag": "the Temp dragging someone by the ankle (T6): dragged(true) on the dragged player's screen",
+	"hide_in (Annex)": "getting into an Annex filing cabinet: the cabinet's hide event (the Playroom's chests and cubbies already use it)",
+	"note_slap": "a sticky note posted (T7, notes.gd): play_at('note_slap') where it is stuck",
+	"note_peel": "a sticky note taken down (no such action yet)",
+	"horn": "the party horn blown (T15h, inp.horn reaches the host but no event comes back to the screens)",
+}
+## The count's call to hide from one recorded note: three strokes this far apart, at these pitches.
+const XYLO_PITCH: Array[float] = [1.0, 1.26, 1.5]
+const XYLO_STEP := 0.2
+## The far-off phone on the Annex: from every direction at once, quieter than a near room tone.
+const PHONE_DB := -6.0
+## The stapler going into you at the end of a catch on the Annex, this long after the roar.
+const STAPLE_AFTER := 600
 ## Gain (dB, on top of BASE_DB) that puts each generated stand-in at its category's level (measured with
 ## tools/sfx_levels.gd; UI at the voice -8 LU, effects -6, scare short-term +2).
 ## The "far" variants keep their own step down from the near ones. The ticking: a train at 12 a second at
@@ -124,7 +179,12 @@ var _rng := RandomNumberGenerator.new()
 var _seed := ""
 var _depth := 0
 var _clinic := false
+var _place := ""
 var _plan := {}
+var _copier_at: Variant = null    # the Annex: the seeded copy room's photocopier (or null)
+var _hum_by_place := {}           # place -> the bed in the hum's place ("" = the Clinic's hum)
+var crawl_loop: AudioStreamPlayer   # ready: a downed player dragging themselves along
+var drag_loop: AudioStreamPlayer    # ready: being dragged across the carpet by the Temp
 var _monitor_on := false
 var _drip_on := false
 var _tone_slot := -1
@@ -148,6 +208,13 @@ var bells: Array = []
 
 func setup(world_parent: Node3D) -> void:
 	_rng.seed = 7
+	# The Master limiter holds sample peaks; true peaks between samples run up to about 0.8 dB over them
+	# (mix_check measured -0.7 dBTP once with the layout's -1.0 ceiling), so it holds MASTER_CEILING.
+	var mi := AudioServer.get_bus_index("Master")
+	for e in AudioServer.get_bus_effect_count(mi):
+		var hl := AudioServer.get_bus_effect(mi, e) as AudioEffectHardLimiter
+		if hl != null:
+			hl.ceiling_db = MASTER_CEILING
 	_entity_bus = AudioServer.get_bus_index("Entity")
 	if _entity_bus >= 0 and AudioServer.get_bus_effect_count(_entity_bus) == 0:
 		_entity_bus = -1
@@ -209,6 +276,13 @@ func setup(world_parent: Node3D) -> void:
 	hum = _player2d(_rec("clinic/hum", true), "Ambience")
 	if hum.stream == null:
 		hum.stream = _wav(_hum(), true)
+	# The Annex's and the Playroom's beds in the hum's place (the Clinic's hum where a file is missing).
+	_hum_by_place = {"": hum.stream}
+	for k: Array in [["annex", "annex/office"], ["playroom", "playroom/room"]]:
+		var st := _rec(str(k[1]), true)
+		_hum_by_place[k[0]] = st if st != null else hum.stream
+	crawl_loop = _player2d(_rec("player/crawl", true), "Effects")
+	drag_loop = _player2d(_rec("annex/drag", true), "Entity")
 	vent = _player2d(_rec("clinic/vent", true), "Ambience")
 	drone = _player2d(_rec("clinic/drone", true), "Ambience")
 	ride_loop = _player2d(_rec("lift/rumble", true), "Ambience")
@@ -216,7 +290,9 @@ func setup(world_parent: Node3D) -> void:
 		ride_loop.stream = _wav(_rumble(2.0, 42.0), true)
 	drip = _player3d(world_parent, _rec("clinic/drip", true), "Ambience", 1.5, 16.0)
 	monitor = _player3d(world_parent, _rec("clinic/monitor", true), "Ambience", 1.5, 18.0)
-	bell_player = _player2d(streams["count_bell"], "Voice")
+	bell_player = _player2d(_rec("playroom/count_bell", false), "Voice")
+	if bell_player.stream == null:
+		bell_player.stream = streams["count_bell"]
 	trill_player = _player2d(streams["trill"], "UI")
 	tune_player = _player2d(streams["tune"], "Ambience")
 	var amb := AudioServer.get_bus_index("Ambience")
@@ -228,7 +304,8 @@ func setup(world_parent: Node3D) -> void:
 		AudioServer.set_bus_effect_enabled(amb, _amb_lp, false)
 	_loops = {"tune": [tune_player, "tune"], "approach": [squeak, "approach"], "roll": [roll, "approach"], "orderly_breath": [orderly_breath, "orderly"],
 		"machinery": [machinery, "machinery"], "breath": [breath, "breath"], "hum": [hum, "hum"], "vent": [vent, "vent"],
-		"drone": [drone, "drone"], "ride": [ride_loop, "rumble"], "drip": [drip, "room"], "monitor": [monitor, "room"]}
+		"drone": [drone, "drone"], "ride": [ride_loop, "rumble"], "drip": [drip, "room"], "monitor": [monitor, "room"],
+		"crawl": [crawl_loop, "breath"], "drag": [drag_loop, "orderly"]}
 	for i in 6:
 		var sp := AudioStreamPlayer3D.new()
 		sp.bus = "Effects"
@@ -311,16 +388,35 @@ func _take(name: String) -> AudioStream:
 	return list[i]
 
 ## A sound everywhere (not in the world): a recording if there is one, else the stand-in.
-func play(name: String, gain_db := 0.0) -> void:
+func play(name: String, gain_db := 0.0, pitch := 1.0) -> void:
 	var st: AudioStream = null
 	var bus := "Effects"
 	var group := "fx"
-	if recorded.has(name):
-		st = _take(name)
-		var cat := str(recorded[name]["cat"])
+	# Recordings that stand in for a generated sound (the name stays the one asked for).
+	var rec := name
+	match name:
+		"chime", "chime_far":
+			if recorded.has("lift_bell"):
+				rec = "lift_bell"
+				gain_db += -9.0 if name == "chime_far" else 0.0   # the stand-ins' own step down
+		"blink_warn", "blackout_warn":
+			if _place == "annex" and recorded.has("buzz"):
+				rec = "buzz"
+		"xylo":
+			# One recorded note, three times, rising.
+			if recorded.has("xylo_note"):
+				for k in XYLO_PITCH.size():
+					_later.append({"at": Time.get_ticks_msec() + int(k * XYLO_STEP * 1000.0), "name": "xylo_note", "pos": null, "gain": gain_db, "pitch": XYLO_PITCH[k]})
+				_note(name)
+				return
+	if recorded.has(rec):
+		st = _take(rec)
+		var cat := str(recorded[rec]["cat"])
 		bus = str(CATS[cat][0])
-		group = _group_of(name, cat)
+		group = _group_of(rec, cat)
 		gain_db += BASE_DB
+		if cat == "scare":
+			_last["scare"] = Time.get_ticks_msec()
 	elif streams.has(name):
 		st = streams[name]
 		bus = str(SYNTH_BUS.get(name, "Effects"))
@@ -337,6 +433,7 @@ func play(name: String, gain_db := 0.0) -> void:
 	pick.stream = st
 	pick.bus = bus
 	pick.volume_db = gain_db
+	pick.pitch_scale = pitch
 	pick.play()
 	_by_name[name] = [pick, st]
 
@@ -413,7 +510,8 @@ func update(delta: float, sq: Dictionary, pose: Variant, tick_hz: float, loudnes
 	var bdb := BASE_DB + linear_to_db(clampf((exertion - 0.15) * 1.1, 0.001, 1.0)) - (0.0 if winded else 6.0)
 	if breath.stream is AudioStreamWAV:
 		bdb += float(SYNTH_DB["breath"])
-	breath.pitch_scale = 1.1 if winded else 1.0
+	# The recording is the crew's own clean breath, already winded: it is not sped up.
+	breath.pitch_scale = (1.1 if winded else 1.0) if breath.stream is AudioStreamWAV else 1.0
 	_loop(breath, "breath", exertion > 0.15, bdb)
 	machinery.global_position = door_pos
 	_loop(machinery, "machinery", machine > 0.0, BASE_DB + float(SYNTH_DB["machinery"]) + linear_to_db(clampf(machine, 0.05, 1.0)))
@@ -459,7 +557,21 @@ func set_floor(plan: Dictionary, seed_text: String) -> void:
 	_plan = plan
 	_seed = seed_text
 	_depth = int(plan.get("depth", 0))
-	_clinic = str(plan.get("place", "clinic")) == "clinic"
+	_place = str(plan.get("place", "clinic"))
+	_clinic = _place == "clinic"
+	# The bed in the hum's place: the office on the Annex, the play centre on the Playroom.
+	var bed: AudioStream = _hum_by_place.get(_place, _hum_by_place.get("", hum.stream))
+	if hum.stream != bed:
+		hum.stop()
+		hum.stream = bed
+	_copier_at = null
+	if _place == "annex":
+		var crng := RandomNumberGenerator.new()
+		crng.seed = ("%s:%d:copier" % [seed_text, _depth]).hash()
+		var copies: Array = (plan.get("rooms", []) as Array).filter(func(r: Dictionary) -> bool: return str(r["kind"]) == "copy")
+		var cr: Variant = _pick(crng, copies)
+		if cr != null:
+			_copier_at = _room_point(cr, 0.9)
 	_tone_slot = -1
 	_tone_next = {}
 	_prev = {}
@@ -491,6 +603,7 @@ func set_floor(plan: Dictionary, seed_text: String) -> void:
 
 func clear_floor() -> void:
 	_clinic = false
+	_place = ""
 	_plan = {}
 	_later.clear()
 	for k: String in _loops:
@@ -511,7 +624,9 @@ static func _room_point(r: Dictionary, up: float) -> Vector3:
 func world(delta: float, s: Dictionary, emergency: float) -> void:
 	var dark := bool(s.get("dark", false))
 	var blackout := bool(s.get("blackout", false))
-	_loop(vent, "vent", true, BASE_DB - 4.0)
+	# The vent is the Clinic's (and the lift's and prison's): the office and the play centre beds carry
+	# their own air.
+	_loop(vent, "vent", _place != "annex" and _place != "playroom", BASE_DB - 4.0)
 	_loop(drone, "drone", blackout and emergency > 0.0, BASE_DB + linear_to_db(clampf(emergency, 0.05, 1.0)))
 	_loop(monitor, "room", _clinic and _monitor_on and not blackout, BASE_DB)
 	_loop(drip, "room", _clinic and _drip_on, BASE_DB)
@@ -582,19 +697,31 @@ func _orderly(delta: float, o: Dictionary) -> void:
 	_prev = {"mode": mode, "moving": moving, "anim": anim}
 
 ## Someone was taken. Mine: the roar in my face, then the chewing. Someone else's: heard from where it is.
+## On the Playroom, found and down are client/hide_view.gd's (the found-you sting, the fall): nothing here.
 func caught(mine: bool, pos: Variant) -> void:
-	# The roar is the caught placeholder for every resident; the chewing after it is the Orderly's alone.
+	if _place == "playroom":
+		return
+	# The roar is the caught placeholder for every resident; after it, the Orderly chews and the Temp's
+	# stapler goes into you.
+	var after := ""
+	var wait := 0
+	if _clinic:
+		after = "chew"
+		wait = 1300
+	elif _place == "annex" and recorded.has("staple_soft"):
+		after = "staple_soft"
+		wait = STAPLE_AFTER
 	if mine or pos == null:
 		if recorded.has("roar"):
 			play("roar")
-			if _clinic:
-				_later.append({"at": Time.get_ticks_msec() + 1300, "name": "chew", "pos": null, "gain": 0.0})
+			if after != "":
+				_later.append({"at": Time.get_ticks_msec() + wait, "name": after, "pos": null, "gain": 0.0})
 		else:
 			play("caught")
 	else:
 		play_at("roar", pos)
-		if _clinic:
-			_later.append({"at": Time.get_ticks_msec() + 1300, "name": "chew", "pos": pos, "gain": 0.0})
+		if after != "":
+			_later.append({"at": Time.get_ticks_msec() + wait, "name": after, "pos": pos, "gain": 0.0})
 	_last["scare"] = Time.get_ticks_msec()
 
 func _run_later() -> void:
@@ -604,14 +731,14 @@ func _run_later() -> void:
 		if now >= int(l["at"]):
 			_later.remove_at(i)
 			if l["pos"] == null:
-				play(str(l["name"]), float(l["gain"]))
+				play(str(l["name"]), float(l["gain"]), float(l.get("pitch", 1.0)))
 			else:
 				play_at(str(l["name"]), l["pos"], float(l["gain"]))
 
 ## Sparse room tones, the same for every player: host time is cut into TONE_SLOT slots and each slot's
 ## tone (whether, when, which, where) is drawn from the floor's seed and the slot number.
 func _room_tones(t: float, o: Dictionary, dark: bool) -> void:
-	if not _clinic or _plan.is_empty():
+	if not (_clinic or _place == "annex") or _plan.is_empty():
 		return
 	var n := int(floorf(t / TONE_SLOT))
 	if n != _tone_slot:
@@ -624,7 +751,12 @@ func _room_tones(t: float, o: Dictionary, dark: bool) -> void:
 			var r := rng.randf()
 			var kind := "slam" if r < 0.45 else ("intercom" if r < 0.75 else "bed_roll")
 			var pos: Variant = null
-			if kind == "slam":
+			if not _clinic:
+				# The Annex: a phone nobody answers, from everywhere (no direction), or the photocopier in
+				# its copy room.
+				kind = "copier" if r >= 0.55 and _copier_at != null else "phone"
+				pos = _copier_at if kind == "copier" else Vector3.INF
+			elif kind == "slam":
 				var doors: Array = _plan.get("doors", [])
 				var dv: Variant = _pick(rng, doors)
 				if dv != null:
@@ -655,6 +787,11 @@ func _room_tones(t: float, o: Dictionary, dark: bool) -> void:
 		return
 	if str(tone["kind"]) == "intercom" and dark:
 		return
+	if tone["pos"] == Vector3.INF:
+		if recorded.has(str(tone["kind"])) and _ok("room"):
+			play(str(tone["kind"]), PHONE_DB)
+			_last["room"] = Time.get_ticks_msec()
+		return
 	_room_player = play_at(str(tone["kind"]), tone["pos"])
 	if _room_player != null:
 		_last["room"] = Time.get_ticks_msec()
@@ -677,7 +814,7 @@ func count_bell(left: int) -> void:
 	var rise := maxi(0, RISE_FROM + 1 - left) if left <= RISE_FROM else 0
 	bell_player.stop()
 	bell_player.pitch_scale = 1.0 + RISE_PITCH * rise
-	bell_player.volume_db = BASE_DB + float(SYNTH_DB["count_bell"]) + RISE_DB * rise
+	bell_player.volume_db = BASE_DB + (float(SYNTH_DB["count_bell"]) if bell_player.stream is AudioStreamWAV else 0.0) + RISE_DB * rise
 	bell_player.play()
 	_note("count_bell")
 	bells.append([Time.get_ticks_msec(), left])
@@ -700,6 +837,56 @@ func trill(total: float, delta: float) -> void:
 	trill_player.play()
 	_note("trill")
 
+## A one-shot here (pos null: this player's own) or at a place in the world.
+func _here_or_at(name: String, pos: Variant, gain_db := 0.0) -> void:
+	if pos == null:
+		play(name, gain_db)
+	else:
+		play_at(name, pos, gain_db)
+
+## The found-you sting, in your ear (both takes of the owner's sting layered, MIX.md). The stand-in noise
+## when the file is missing.
+func found_me() -> void:
+	play("found" if recorded.has("found") else "caught")
+	_last["scare"] = Time.get_ticks_msec()
+
+## Going down (health ran out): your own body hitting the floor, or someone else's where they fell.
+func went_down(pos: Variant) -> void:
+	_here_or_at("down", pos)
+
+## Getting into (or out of) a hide of `kind` (Playroom.Hide.kind): the ball pit waded (or jumped, the
+## quick way in), the tube slide, the netting and flaps of a den or playhouse, squeezing into a chest,
+## cubby or under the table. The quick way is louder; getting out a little quieter than getting in.
+func hide_move(kind: String, entering: bool, fast: bool, pos: Variant) -> void:
+	var name := "hide_in"
+	match kind:
+		"pit":
+			name = "pit_jump" if fast and entering else "pit_wade"
+		"slide":
+			name = "slide"
+		"den", "playhouse":
+			name = "net_flap"
+	_here_or_at(name, pos, (0.0 if fast else -6.0) - (0.0 if entering else 3.0))
+
+## A squeaker tile stepped on faster than a creep.
+func squeaker(pos: Variant) -> void:
+	_here_or_at("squeak", pos, 0.0 if pos == null else 2.0)
+
+## Into the ball pit off a walkway: wading at a creep (quiet), jumping in otherwise (loud: a noise).
+func ball_pit(loud: bool, pos: Variant) -> void:
+	_here_or_at("pit_jump" if loud else "pit_wade", pos, 0.0 if loud else -4.0)
+
+## The Minder's disappointed huff at an empty hide, from where it is.
+func huff_at(pos: Vector3) -> void:
+	play_at("huff", pos)
+
+## Ready (READY): a downed player crawling; being dragged off by the Temp.
+func crawl(on: bool) -> void:
+	_loop(crawl_loop, "breath", on, BASE_DB)
+
+func dragged(on: bool) -> void:
+	_loop(drag_loop, "orderly", on, BASE_DB)
+
 ## Tests: every loop (playing, volume, bus), the bus volumes, the last one-shots.
 func describe() -> Dictionary:
 	var loops := {}
@@ -709,7 +896,8 @@ func describe() -> Dictionary:
 	var buses := {}
 	for i in AudioServer.bus_count:
 		buses[AudioServer.get_bus_name(i)] = AudioServer.get_bus_volume_db(i)
-	return {"loops": loops, "buses": buses, "played": played.duplicate(), "solo": solo, "recorded": recorded.keys(), "duck": _duck}
+	return {"loops": loops, "buses": buses, "played": played.duplicate(), "solo": solo, "recorded": recorded.keys(), "duck": _duck, "place": _place,
+		"hum": str(hum.stream.resource_path) if hum.stream != null else ""}
 
 # --- synthesis ------------------------------------------------------------------------------------
 

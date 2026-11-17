@@ -31,7 +31,13 @@
 #
 # The music box: two or three notes of the floor's tune for every 1.5 m it walks (one per NOTE_STEP),
 # so slower when it walks slowly. Its own player, heard to 30 m, quieter and duller through walls, on
-# the "Entity" bus when the layout has one, otherwise "Sfx". The notes are made here, in code.
+# the "Entity" bus when the layout has one, otherwise "Sfx". The box is the owner's recorded wind-up
+# music box (assets/sfx/playroom/music_box.ogg): it plays while the notes come (every walked NOTE_STEP
+# keeps it going a moment) and pauses where it stopped when the Minder stands, running slower and flatter
+# as it walks slower, as a wound-down box does. Without the file, the notes are made here, in code.
+# Near it, its other sounds (recorded only): scrambling on all fours when it moves fast that way
+# (playroom/minder_run.ogg, to RUN_RANGE), and its slow rubbery wheeze while it stands (playroom/wheeze.ogg,
+# to WHEEZE_RANGE). All at Sfx.BASE_DB, the voice's own volume, so the files' levels hold (MIX.md).
 class_name MinderView
 extends Node3D
 
@@ -46,7 +52,21 @@ const STILLNESS := false
 const NOTE_STEP := 0.5          # metres walked per note: three per 1.5 m
 const HEAR_RANGE := 30.0
 const MUFFLED_GAIN := 0.45
-const NOTE_DB := -2.0
+## The made-in-code note: its momentary max at the voice -3 LU right at the box (it was 8 LU over the
+## voice at -2 dB; measured beside the recordings, MIX.md).
+const NOTE_DB := -13.0
+const BOX_FILE := "res://assets/sfx/playroom/music_box.ogg"
+const RUN_FILE := "res://assets/sfx/playroom/minder_run.ogg"
+const WHEEZE_FILE := "res://assets/sfx/playroom/wheeze.ogg"
+## The recorded box over its file (the voice -3 LU): the 3D panning takes about 6 dB of a source heard
+## in front (about 7 behind, as the trolley's APPROACH_DB in sfx.gd), so right at it the box is about the
+## voice -4 LU (measured: tools/mix_check.mjs).
+const BOX_DB := 6.0
+const BOX_HOLD_MS := 700        # each note keeps the box going this long
+const RUN_RANGE := 20.0
+const RUN_SPEED := 2.5          # m/s on all fours before it scrambles
+const WHEEZE_RANGE := 10.0
+const WALK_SPEED := 1.2         # sim/seek.gd WANDER_SPEED: the box at its own speed
 const BOX_HEIGHT := 1.55        # where the music box hangs, standing
 ## The floor's tune, our own: semitones above the box's note, one per note played, round and round.
 const TUNE: Array[int] = [7, 4, 0, 4, 7, 7, 9, 7, 4, 2, 4, 0, 2, 4, 2, -1, 0]
@@ -114,6 +134,15 @@ var _halo_mat: ShaderMaterial = null
 var _mask_lit_e := MASK_LIT_E
 var _mask_surface := -1
 var _player: AudioStreamPlayer3D
+var _box_rec := false               # the music box is the recording (else notes made here)
+var _box_until := 0
+var _box_db := -80.0
+var _run: AudioStreamPlayer3D = null
+var _wheeze: AudioStreamPlayer3D = null
+var _speed := 0.0                   # smoothed m/s of the drawn pose
+var _still_for := 0.0
+var _ear_check := 0
+var _muffled := false
 var _plan: Floor.FloorPlan = null
 var _link: Object = null
 var _dist := 0.0
@@ -135,10 +164,43 @@ func _init() -> void:
 	_player.max_polyphony = 4
 	_player.attenuation_filter_cutoff_hz = 20500.0
 	add_child(_player)
+	var box := _loop_file(BOX_FILE)
+	if box != null:
+		_player.stream = box
+		_player.max_polyphony = 1
+		_box_rec = true
+	var rs := _loop_file(RUN_FILE)
+	if rs != null:
+		_run = _loop_player("Scramble", rs, RUN_RANGE)
+	var ws := _loop_file(WHEEZE_FILE)
+	if ws != null:
+		_wheeze = _loop_player("Wheeze", ws, WHEEZE_RANGE)
 	visible = false
+
+static func _loop_file(path: String) -> AudioStream:
+	if not ResourceLoader.exists(path):
+		return null
+	var st := load(path) as AudioStreamOggVorbis
+	if st != null:
+		st.loop = true
+	return st
+
+func _loop_player(nm: String, st: AudioStream, far: float) -> AudioStreamPlayer3D:
+	var p := AudioStreamPlayer3D.new()
+	p.name = nm
+	p.stream = st
+	p.top_level = true
+	p.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
+	p.max_distance = far
+	p.attenuation_filter_cutoff_hz = 20500.0
+	add_child(p)
+	return p
 
 func _ready() -> void:
 	_player.bus = bus_name()
+	for p: AudioStreamPlayer3D in [_run, _wheeze]:
+		if p != null:
+			p.bus = _player.bus
 
 ## The card is lit as the body is: it follows the body's energy, which the Playroom's view sets.
 func _process(_delta: float) -> void:
@@ -155,6 +217,7 @@ func reset() -> void:
 	_dist = 0.0
 	_last = Vector3.INF
 	_note_k = 0
+	_quiet()
 	drawn = null
 	clip = ""
 	clip_time = 0.0
@@ -320,6 +383,7 @@ func show_pose(pose: Variant, show: bool) -> void:
 		unheld_frames += 1
 	if pose == null:
 		visible = false
+		_quiet()
 		return
 	var pd: Dictionary = pose
 	var p := Vector3(float(pd["x"]), float(pd["y"]), float(pd["z"]))
@@ -341,6 +405,7 @@ func show_pose(pose: Variant, show: bool) -> void:
 	if k > _note_k:
 		_note(p, k)
 	_note_k = k
+	_sounds(p, step, dt)
 	# The clocks run whether or not it is drawn, so a pose comes back where it would be.
 	_advance(anim, dt, step)
 	visible = show
@@ -637,6 +702,13 @@ func _note(feet: Vector3, k: int) -> void:
 				muffled = true
 				gain *= MUFFLED_GAIN
 	notes.append({"semi": semi, "gain": gain, "muffled": muffled, "at": at})
+	if _box_rec:
+		# The recorded box: this note keeps it playing a moment, at this note's loudness.
+		_box_db = linear_to_db(gain) + Sfx.BASE_DB + BOX_DB if gain > 0.0 else -80.0
+		_box_until = Time.get_ticks_msec() + BOX_HOLD_MS if gain > 0.0 else 0
+		_player.global_position = at
+		_player.attenuation_filter_cutoff_hz = 1500.0 if muffled else 20500.0
+		return
 	if gain <= 0.0 or not is_inside_tree():
 		return
 	_player.global_position = at
@@ -644,6 +716,69 @@ func _note(feet: Vector3, k: int) -> void:
 	_player.attenuation_filter_cutoff_hz = 1500.0 if muffled else 20500.0
 	_player.pitch_scale = pow(2.0, semi / 12.0)
 	_player.play()
+
+## Per drawn pose: the recorded box running or paused, the scramble and the wheeze.
+func _sounds(feet: Vector3, step: float, dt: float) -> void:
+	if not is_inside_tree():
+		return
+	if dt > 0.0:
+		_speed = lerpf(_speed, step / dt, clampf(dt * 6.0, 0.0, 1.0))
+	_still_for = _still_for + dt if step == 0.0 else 0.0
+	var now := Time.get_ticks_msec()
+	if _box_rec:
+		var on := now < _box_until
+		if on:
+			_player.volume_db = _box_db
+			# A wound-down box: slower and flatter as it walks slower.
+			_player.pitch_scale = clampf(0.8 + 0.2 * _speed / WALK_SPEED, 0.8, 1.05)
+			if not _player.playing:
+				_player.play()
+			_player.stream_paused = false
+		elif _player.playing:
+			_player.stream_paused = true
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam == null or (_run == null and _wheeze == null):
+		return
+	var ear := cam.global_position
+	var at := feet + Vector3(0, 0.7 if body_kind != "upright" else BOX_HEIGHT - 0.2, 0)
+	var d := ear.distance_to(at)
+	if now >= _ear_check:
+		_ear_check = now + 250
+		_muffled = false
+		if _plan != null and d < RUN_RANGE:
+			var e := Sight.Point3.make(ear.x, ear.y, ear.z, 1 if ear.y >= Move.LEVEL_HEIGHT else 0)
+			var s := Sight.Point3.make(at.x, at.y, at.z, 1 if at.y >= Move.LEVEL_HEIGHT else 0)
+			_muffled = not Sight.has_line_of_sight(_plan, e, s)
+	var k := MUFFLED_GAIN if _muffled else 1.0
+	if _run != null:
+		var run_on := body_kind == "fours" and _speed > RUN_SPEED and d < RUN_RANGE
+		_near_loop(_run, run_on, at, pow(1.0 - d / RUN_RANGE, 2.0) * k, clampf(_speed / 5.0, 0.85, 1.15))
+	if _wheeze != null:
+		var wheeze_on := _still_for > 0.5 and d < WHEEZE_RANGE
+		_near_loop(_wheeze, wheeze_on, at, pow(1.0 - d / WHEEZE_RANGE, 2.0) * k, 1.0)
+
+func _near_loop(p: AudioStreamPlayer3D, on: bool, at: Vector3, gain: float, pitch: float) -> void:
+	if not on or gain <= 0.0:
+		if p.playing:
+			p.stop()
+		return
+	p.global_position = at
+	p.volume_db = linear_to_db(gain) + Sfx.BASE_DB
+	p.attenuation_filter_cutoff_hz = 1500.0 if _muffled else 20500.0
+	p.pitch_scale = pitch
+	if not p.playing:
+		p.play()
+
+## Off the floor, or nothing to draw: all of it stops (the box from the top next time).
+func _quiet() -> void:
+	_box_until = 0
+	_speed = 0.0
+	_still_for = 0.0
+	if _player != null and _box_rec and _player.playing:
+		_player.stop()
+	for p: AudioStreamPlayer3D in [_run, _wheeze]:
+		if p != null and p.playing:
+			p.stop()
 
 static var _note_cache: AudioStreamWAV = null
 
