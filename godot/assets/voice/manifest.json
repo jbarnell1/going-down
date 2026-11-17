@@ -74,6 +74,126 @@
     },
     "count_done": {
       "priority": 4
+    },
+    "hint_job": {
+      "priority": 2
+    },
+    "hint_quiet_needle": {
+      "priority": 2
+    },
+    "hint_call_dead": {
+      "priority": 2
+    },
+    "hint_floor_not_day": {
+      "priority": 2
+    },
+    "hint_board": {
+      "priority": 3
+    },
+    "hint_straggler": {
+      "priority": 3
+    },
+    "hint_left_crew": {
+      "priority": 3
+    },
+    "hint_left_you": {
+      "priority": 4
+    },
+    "hint_car_stay": {
+      "priority": 2
+    },
+    "hint_car_no_record": {
+      "priority": 2
+    },
+    "hint_car_here": {
+      "priority": 2
+    },
+    "hint_vote": {
+      "priority": 2
+    },
+    "hint_bank_locked": {
+      "priority": 3
+    },
+    "hint_day": {
+      "priority": 2
+    },
+    "hint_stakes": {
+      "priority": 2
+    },
+    "hint_last_miss": {
+      "priority": 3
+    },
+    "hint_down_crew": {
+      "priority": 4
+    },
+    "hint_down_you": {
+      "priority": 4
+    },
+    "hint_out": {
+      "priority": 2
+    },
+    "hint_winded": {
+      "priority": 1
+    },
+    "hint_search": {
+      "priority": 1
+    },
+    "hint_note": {
+      "priority": 2
+    },
+    "hint_juice": {
+      "priority": 1
+    },
+    "hint_odds": {
+      "priority": 1
+    },
+    "hint_marks": {
+      "priority": 2
+    },
+    "hint_hide": {
+      "priority": 1
+    },
+    "hint_hide_idle": {
+      "priority": 1
+    },
+    "hint_play_arrive": {
+      "priority": 3
+    },
+    "hint_play_anger": {
+      "priority": 2
+    },
+    "hint_play_instruments": {
+      "priority": 4
+    },
+    "hint_play_no_run": {
+      "priority": 4
+    },
+    "hint_play_after": {
+      "priority": 3
+    },
+    "hint_play_table": {
+      "priority": 2
+    },
+    "hint_listen": {
+      "priority": 2
+    },
+    "hint_new_floor": {
+      "priority": 2
+    },
+    "hint_reroll": {
+      "priority": 2
+    },
+    "hint_home": {
+      "priority": 2
+    },
+    "hint_bed": {
+      "priority": 2
+    },
+    "car_waiting": {
+      "priority": 2
+    },
+    "day_wiped": {
+      "priority": 3
     }
   },
   "lines": [
@@ -451,6 +571,411 @@
       "id": "count_1",
       "moment": "count_number",
       "plain": "One."
+    },
+    {
+      "id": "hint_job_1",
+      "moment": "hint_job",
+      "plain": "Instruments out, please. We pay for readings, not for sightseeing."
+    },
+    {
+      "id": "hint_job_2",
+      "moment": "hint_job",
+      "plain": "Your instrument is on E. It is why we keep you."
+    },
+    {
+      "id": "hint_quiet_needle_1",
+      "moment": "hint_quiet_needle",
+      "plain": "The needle is quiet because you are safe. We do not pay for safe."
+    },
+    {
+      "id": "hint_quiet_needle_2",
+      "moment": "hint_quiet_needle",
+      "plain": "Nothing recorded yet! Safe people record nothing. Do think about that."
+    },
+    {
+      "id": "hint_call_dead_1",
+      "moment": "hint_call_dead",
+      "plain": "That button works when the floor quota is met. Not before."
+    },
+    {
+      "id": "hint_call_dead_2",
+      "moment": "hint_call_dead",
+      "plain": "Call refused. The panel shows what this floor still owes us."
+    },
+    {
+      "id": "hint_floor_not_day_1",
+      "moment": "hint_floor_not_day",
+      "plain": "This floor is paid. Today is not. See the top corner."
+    },
+    {
+      "id": "hint_floor_not_day_2",
+      "moment": "hint_floor_not_day",
+      "plain": "One floor does not make a day. Today's number is on your screen."
+    },
+    {
+      "id": "hint_board_1",
+      "moment": "hint_board",
+      "plain": "Do not delay in boarding. Miss the car, and we keep your credits."
+    },
+    {
+      "id": "hint_board_2",
+      "moment": "hint_board",
+      "plain": "Board promptly. Credits are for people who are inside the car."
+    },
+    {
+      "id": "hint_straggler_1",
+      "moment": "hint_straggler",
+      "plain": "Somebody is not aboard! Their pay is about to become ours."
+    },
+    {
+      "id": "hint_straggler_2",
+      "moment": "hint_straggler",
+      "plain": "We are short one passenger. The doors will not ask twice."
+    },
+    {
+      "id": "hint_left_crew_1",
+      "moment": "hint_left_crew",
+      "plain": "One of you missed the car. Their credits stay with us."
+    },
+    {
+      "id": "hint_left_crew_2",
+      "moment": "hint_left_crew",
+      "plain": "A colleague stayed behind! They will wake in their cell, unpaid."
+    },
+    {
+      "id": "hint_left_you_1",
+      "moment": "hint_left_you",
+      "plain": "You missed the car. No pay today. You will wake in your cell."
+    },
+    {
+      "id": "hint_left_you_2",
+      "moment": "hint_left_you",
+      "plain": "The car left without you. So did your credits. See you at home."
+    },
+    {
+      "id": "hint_car_stay_1",
+      "moment": "hint_car_stay",
+      "plain": "The car cannot leave while anyone is aboard. Step off."
+    },
+    {
+      "id": "hint_car_stay_2",
+      "moment": "hint_car_stay",
+      "plain": "Still aboard? The floor quota will not meet itself."
+    },
+    {
+      "id": "hint_car_no_record_1",
+      "moment": "hint_car_no_record",
+      "plain": "Nothing records from inside the car. Nice try."
+    },
+    {
+      "id": "hint_car_no_record_2",
+      "moment": "hint_car_no_record",
+      "plain": "The car is safe. That is why it pays nothing."
+    },
+    {
+      "id": "hint_car_here_1",
+      "moment": "hint_car_here",
+      "plain": "The car is already here. It must leave before you call."
+    },
+    {
+      "id": "hint_car_here_2",
+      "moment": "hint_car_here",
+      "plain": "You cannot call a car you are holding. Empty it first."
+    },
+    {
+      "id": "hint_vote_1",
+      "moment": "hint_vote",
+      "plain": "Stand on BANK for home. Stand on DOWN to deserve it."
+    },
+    {
+      "id": "hint_vote_2",
+      "moment": "hint_vote",
+      "plain": "Two sides of the car. One goes home. One goes deeper. A tie goes deeper."
+    },
+    {
+      "id": "hint_bank_locked_1",
+      "moment": "hint_bank_locked",
+      "plain": "That side is locked until today's quota is met. Stand there if it helps."
+    },
+    {
+      "id": "hint_bank_locked_2",
+      "moment": "hint_bank_locked",
+      "plain": "BANK is locked. The monitor says how much you still owe."
+    },
+    {
+      "id": "hint_day_1",
+      "moment": "hint_day",
+      "plain": "Today's quota is on the monitor. Meet it, or you do not go home."
+    },
+    {
+      "id": "hint_day_2",
+      "moment": "hint_day",
+      "plain": "You owe us a day's work. The number is on the monitor. It is not negotiable."
+    },
+    {
+      "id": "hint_stakes_1",
+      "moment": "hint_stakes",
+      "plain": "If nobody comes back, nobody is paid, and we take an upgrade from each of you."
+    },
+    {
+      "id": "hint_stakes_2",
+      "moment": "hint_stakes",
+      "plain": "An empty car costs each of you an upgrade. The odds are on the monitor."
+    },
+    {
+      "id": "hint_last_miss_1",
+      "moment": "hint_last_miss",
+      "plain": "Two days lost. A third, and you start from nothing."
+    },
+    {
+      "id": "hint_last_miss_2",
+      "moment": "hint_last_miss",
+      "plain": "One more empty car and your records are wiped. No pressure!"
+    },
+    {
+      "id": "hint_down_crew_1",
+      "moment": "hint_down_crew",
+      "plain": "Colleague down! Hold F beside them. They are on a timer."
+    },
+    {
+      "id": "hint_down_crew_2",
+      "moment": "hint_down_crew",
+      "plain": "A colleague is down. Hold F at their side before their time runs out."
+    },
+    {
+      "id": "hint_down_you_1",
+      "moment": "hint_down_you",
+      "plain": "You are down. A friend must hold F beside you."
+    },
+    {
+      "id": "hint_down_you_2",
+      "moment": "hint_down_you",
+      "plain": "Down already? Shout for someone who likes you. They hold F."
+    },
+    {
+      "id": "hint_out_1",
+      "moment": "hint_out",
+      "plain": "They return when the car next moves. Their tape is on the floor. Pick it up."
+    },
+    {
+      "id": "hint_out_2",
+      "moment": "hint_out",
+      "plain": "Gone until the car moves. Their tape is still worth money. Fetch it."
+    },
+    {
+      "id": "hint_winded_1",
+      "moment": "hint_winded",
+      "plain": "Out of breath already. Walking is free. Do budget accordingly."
+    },
+    {
+      "id": "hint_winded_2",
+      "moment": "hint_winded",
+      "plain": "You cannot sprint forever. Nothing down here needs to."
+    },
+    {
+      "id": "hint_search_1",
+      "moment": "hint_search",
+      "plain": "Drawers open if you hold F. What you find counts toward your day."
+    },
+    {
+      "id": "hint_search_2",
+      "moment": "hint_search",
+      "plain": "Go on, look inside. Hold F. Previous staff left quickly."
+    },
+    {
+      "id": "hint_note_1",
+      "moment": "hint_note",
+      "plain": "A previous crew left notes. The notes are true. The crew is gone."
+    },
+    {
+      "id": "hint_note_2",
+      "moment": "hint_note",
+      "plain": "Read it aloud to your colleagues. The last crew didn't."
+    },
+    {
+      "id": "hint_juice_1",
+      "moment": "hint_juice",
+      "plain": "Juice! Press G when your legs give out. One carton each."
+    },
+    {
+      "id": "hint_juice_2",
+      "moment": "hint_juice",
+      "plain": "A carton of juice. Press G when running stops working."
+    },
+    {
+      "id": "hint_odds_1",
+      "moment": "hint_odds",
+      "plain": "Read the signs. We are required to print your odds."
+    },
+    {
+      "id": "hint_odds_2",
+      "moment": "hint_odds",
+      "plain": "Everything here is posted in advance. Nobody can say we lied."
+    },
+    {
+      "id": "hint_marks_1",
+      "moment": "hint_marks",
+      "plain": "Every corridor here is the same corridor. Q leaves a mark."
+    },
+    {
+      "id": "hint_marks_2",
+      "moment": "hint_marks",
+      "plain": "Only your own arrows can be trusted here. Press Q to stick one."
+    },
+    {
+      "id": "hint_hide_1",
+      "moment": "hint_hide",
+      "plain": "Some furniture will hold a person. Get in gently."
+    },
+    {
+      "id": "hint_hide_2",
+      "moment": "hint_hide",
+      "plain": "Beds, cabinets, desks. You would fit. Slowly, though."
+    },
+    {
+      "id": "hint_hide_idle_1",
+      "moment": "hint_hide_idle",
+      "plain": "Hiding earns nothing. The quota is out there, with it."
+    },
+    {
+      "id": "hint_hide_idle_2",
+      "moment": "hint_hide_idle",
+      "plain": "Comfortable in there? We do not pay for furniture."
+    },
+    {
+      "id": "hint_play_arrive_1",
+      "moment": "hint_play_arrive",
+      "plain": "This floor is known to be... dangerous. Sneak, if you can."
+    },
+    {
+      "id": "hint_play_arrive_2",
+      "moment": "hint_play_arrive",
+      "plain": "Welcome to the Playroom! Quiet children last longest. Creep with Control."
+    },
+    {
+      "id": "hint_play_anger_1",
+      "moment": "hint_play_anger",
+      "plain": "It is getting cross. Whatever you are doing, do less."
+    },
+    {
+      "id": "hint_play_anger_2",
+      "moment": "hint_play_anger",
+      "plain": "That bar is its temper. You are filling it."
+    },
+    {
+      "id": "hint_play_instruments_1",
+      "moment": "hint_play_instruments",
+      "plain": "You have upset it! Hide, and get your instruments out. This part pays."
+    },
+    {
+      "id": "hint_play_instruments_2",
+      "moment": "hint_play_instruments",
+      "plain": "Now it is angry. Now it is worth recording. Instruments, please!"
+    },
+    {
+      "id": "hint_play_no_run_1",
+      "moment": "hint_play_no_run",
+      "plain": "It is hunting now. I would not run."
+    },
+    {
+      "id": "hint_play_no_run_2",
+      "moment": "hint_play_no_run",
+      "plain": "No running while it looks. Running is how it finds you."
+    },
+    {
+      "id": "hint_play_after_1",
+      "moment": "hint_play_after",
+      "plain": "It remembers you now. Walking costs health. Creeping is free."
+    },
+    {
+      "id": "hint_play_after_2",
+      "moment": "hint_play_after",
+      "plain": "Note the new bar. Hurry, it empties. Creep, it forgives."
+    },
+    {
+      "id": "hint_play_table_1",
+      "moment": "hint_play_table",
+      "plain": "You have been seated! Press F for the horn. A friend may fetch you."
+    },
+    {
+      "id": "hint_play_table_2",
+      "moment": "hint_play_table",
+      "plain": "Enjoy the party. A colleague can hold F at the table to bring you back."
+    },
+    {
+      "id": "hint_listen_1",
+      "moment": "hint_listen",
+      "plain": "You are not alone on this floor now. Listen. It is never silent."
+    },
+    {
+      "id": "hint_listen_2",
+      "moment": "hint_listen",
+      "plain": "Something is up and about. You will hear it first."
+    },
+    {
+      "id": "hint_new_floor_1",
+      "moment": "hint_new_floor",
+      "plain": "New floor, new colleague. What kept you alive upstairs may not."
+    },
+    {
+      "id": "hint_new_floor_2",
+      "moment": "hint_new_floor",
+      "plain": "Please do not assume this one behaves like the last one."
+    },
+    {
+      "id": "hint_reroll_1",
+      "moment": "hint_reroll",
+      "plain": "You may recognise the staff here. Do not trust the uniform."
+    },
+    {
+      "id": "hint_reroll_2",
+      "moment": "hint_reroll",
+      "plain": "Familiar face? Faces are reassigned. Habits are reassigned separately."
+    },
+    {
+      "id": "hint_home_1",
+      "moment": "hint_home",
+      "plain": "Home! Spend at the windows, then bed. No more car tonight."
+    },
+    {
+      "id": "hint_home_2",
+      "moment": "hint_home",
+      "plain": "Windows one and two sell. Three and four improve you. Then you sleep."
+    },
+    {
+      "id": "hint_bed_1",
+      "moment": "hint_bed",
+      "plain": "The day ends when everyone sleeps. Hold F on a bunk."
+    },
+    {
+      "id": "hint_bed_2",
+      "moment": "hint_bed",
+      "plain": "Nobody leaves until everybody sleeps. Bunks are F. Off you go."
+    },
+    {
+      "id": "car_waiting_1",
+      "moment": "car_waiting",
+      "plain": "No rush! The car leaves when you do."
+    },
+    {
+      "id": "car_waiting_2",
+      "moment": "car_waiting",
+      "plain": "Take your time. The floor has plenty."
+    },
+    {
+      "id": "car_waiting_3",
+      "moment": "car_waiting",
+      "plain": "Still aboard? The doors will wait. Other things may not."
+    },
+    {
+      "id": "day_wiped_1",
+      "moment": "day_wiped",
+      "plain": "Nobody has returned from today. The court has helped itself to something of yours."
+    },
+    {
+      "id": "day_wiped_2",
+      "moment": "day_wiped",
+      "plain": "An empty car! We'll take that as a no. And we'll take one other thing."
     }
   ]
 }

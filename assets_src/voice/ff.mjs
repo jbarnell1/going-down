@@ -36,18 +36,23 @@ export function normalise(src, dst) {
   const enc = ['-ar', '44100', '-ac', '1', '-c:a', 'libmp3lame', '-b:a', '128k', '-y', dst];
   ffmpeg(['-i', src, '-af', ln, ...enc]);
   let m = measure(dst);
-  if (Math.abs(m.lufs - TARGET_LUFS) <= 0.3) return m;
+  // Done when the loudness is on target and the encoded true peak is within the check's -1 dBTP.
+  const done = (x) => Math.abs(x.lufs - TARGET_LUFS) <= 0.3 && x.truePeak <= -1;
+  if (done(m)) return m;
   // loudnorm on short speech can land short of the target (its linear mode will not push past the
   // peak limit, and it measures differently from ebur128). Fall back to a plain gain from the source
-  // with a limiter, corrected against the measured result.
+  // with a limiter, corrected against the measured result. A sharp attack can still overshoot the
+  // limiter once encoded (hint_play_no_run_1 measured -0.6 dBTP): then the limit comes down 1 dB a pass.
   const s = measure(src);
   let gain = TARGET_LUFS - s.lufs;
-  for (let i = 0; i < 4; i++) {
-    const limit = 10 ** (TARGET_TP / 20);
+  let tp = TARGET_TP;
+  for (let i = 0; i < 6; i++) {
+    const limit = 10 ** (tp / 20);
     ffmpeg(['-i', src, '-af', `volume=${gain.toFixed(2)}dB,alimiter=limit=${limit.toFixed(4)}:attack=1:release=50:level=false`, ...enc]);
     m = measure(dst);
-    if (Math.abs(m.lufs - TARGET_LUFS) <= 0.3) break;
-    gain += TARGET_LUFS - m.lufs;
+    if (done(m)) break;
+    if (m.truePeak > -1) tp -= 1;
+    else gain += TARGET_LUFS - m.lufs;
   }
   return m;
 }
