@@ -29,6 +29,10 @@
 #
 # The run has the floor quota (`quota`, on unless a test turns it off: sim/run.gd, North Star C9): the
 # call button does nothing until the crew has recorded enough on the floor.
+#
+# The run has down first, then out (`downs`, on unless a test turns it off: sim/run.gd, North Star B6): a
+# catch puts the player down for ten seconds, a crewmate holding F beside them for three puts them back up,
+# and otherwise they are out until the car next rides down.
 extends RefCounted
 
 const Run = preload("res://sim/run.gd")
@@ -87,6 +91,8 @@ var days := true
 ## The floor quota in the next run (the game's; tests may turn it off): the call button does nothing
 ## until the crew has recorded enough on the floor (sim/run.gd quota).
 var quota := true
+## Down first, then out in the next run (the game's; tests may turn it off: sim/run.gd downs).
+var downs := true
 ## Tick cost, for the log: total and worst microseconds, and ticks.
 var tick_us := 0
 var tick_max_us := 0
@@ -177,7 +183,7 @@ func _start(now: float) -> void:
 	for id: String in people:
 		roster.append(id)
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
-	rules = HostRules.new(true, 1, Places.FULL, days, quota)
+	rules = HostRules.new(true, 1, Places.FULL, days, quota, downs)
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))

@@ -24,6 +24,12 @@
 #    resident off nothing can ever be recorded, so the quota would lock the lift for good: it stays off.
 #  - The Annex's marks and notes (sim/run.gd annex) are the run's own: the soft catch keeps them from the
 #    real tick (the catch's note), and a forced call passes the mark and peel keys on like the rest.
+#  - Down first, then out (sim/run.gd downs, North Star B6): off unless asked (`downs`); the game's rooms ask
+#    for it, so a catch puts the player down where they stood for ten seconds, a crewmate holding F beside
+#    them for three puts them back up, and otherwise they are out until the car next rides down. prepare()
+#    turns it on before the first tick. With it on the run's own down replaces the soft catch above (a catch
+#    is never a wipe on its own tick, so the soft catch never fires): a crew all out is a wipe, wherever the
+#    car is, because nobody is left to board it.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -50,13 +56,16 @@ var deck: Array[StringName]
 var days: bool
 ## The floor quota (off unless asked; never with the resident off).
 var quota: bool
+## Down first, then out (off unless asked).
+var downs: bool
 
-func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false) -> void:
+func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false) -> void:
 	_entity_on = entity_on
 	_depth = depth
 	deck = Run.deck_of(deck_)
 	days = days_
 	quota = quota_
+	downs = downs_
 
 ## Where player `i` of `n` stands in the car at the start (car-local u, v).
 static func start_spot(i: int, n: int) -> PackedFloat64Array:
@@ -125,6 +134,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s.seek_off = true
 	if quota and _entity_on and not s.quota:
 		s = Run.with_quota(s)
+	if downs and not s.downs:
+		s = Run.with_downs(s)
 	return s
 
 ## Tests: the next tick presses the call button for `id` from `body`.

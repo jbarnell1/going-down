@@ -72,6 +72,17 @@
 # how many notes the floor has), the welcome also every note so far (so a player who joins mid-floor has
 # them all), and the run's mark and note events reach every client like any other. Marks and notes go to
 # everyone alike: nothing is sent to one player only.
+#
+# Down first, then out (sim/run.gd downs; North Star B6; T8a): the run decides, the host passes keys on and
+# reports. A downed player's input still goes to the run, but only their body (they crawl: the run follows it
+# at its crawl speed) and their view, blind, with no presses: they call, pick up, hide and mark nothing, and
+# a press made while down is not saved up. F held ("use") is passed for everyone on their feet, as always:
+# held beside a downed player it heals them. The host places a player where they go down ("downed") and
+# where they get up ("healed"), so their screen has the run's body. When the run has the down rule every
+# snapshot carries the downs block (Protocol.enc_downs): who is down, until when, who is healing them since
+# when (host times, so every screen counts the same ten and three seconds), and this floor's red spots. The
+# run's "downed", "healStart", "healStop", "healed" and "out" reach every client like any other event. A run
+# without the down rule sends exactly what it did before.
 extends RefCounted
 
 const Run = preload("res://sim/run.gd")
@@ -635,6 +646,20 @@ func _step(now: float) -> void:
 	var inputs: Array[Run.PlayerInput] = []
 	for rp in s.players:
 		var p: HostPlayer = _players.get(rp.id)
+		if p != null and rp.status == &"down" and s.downs and p.in_run and p.connected and not p.left and p.input != null:
+			# Down: they crawl. Their body and view only, blind; nothing they press counts.
+			var dm: Dictionary = p.input
+			var di := Run.PlayerInput.make(p.id, p.body if p.body != null else rp.body, dm["eye"], dm["yaw"], dm["pitch"], dm["hFovDeg"], dm["vFovDeg"])
+			di.blind = true
+			di.gait = &"creep"
+			inputs.append(di)
+			p.call_pending = false
+			p.pick_pending = false
+			p.hide_pending = false
+			p.emote_pending = false
+			p.mark_pending = false
+			p.peel_pending = -1
+			continue
 		if p == null or not _playing(p) or p.input == null:
 			if p != null:
 				# Out of the run this tick: a press or an emote made meanwhile is not saved up for later.
@@ -693,8 +718,9 @@ func _step(now: float) -> void:
 			var bodies: Dictionary = e["bodies"]
 			for id: String in bodies:
 				_place(id, bodies[id], st.depth, st)
-		elif ty == "hideIn" or ty == "hideLeave" or ty == "found" or ty == "taken" or ty == "down":
-			# The Playroom: the rules hold the body (in a hide, at its front, rooted, at the table).
+		elif ty == "hideIn" or ty == "hideLeave" or ty == "found" or ty == "taken" or ty == "down" or ty == "downed" or ty == "healed":
+			# The Playroom: the rules hold the body (in a hide, at its front, rooted, at the table). Down first,
+			# then out: where they fell, and where they get up.
 			var hp := _find_run_player(st, str(e["playerId"]))
 			if hp != null:
 				_place(hp.id, hp.body, st.depth, st)
@@ -993,7 +1019,22 @@ func world(full: bool = false) -> Dictionary:
 		out["quota"] = quota_block(s)
 	if s.annex != null:
 		out["annex"] = annex_block(s, full)
+	if s.downs:
+		out["downs"] = downs_block(s)
 	return out
+
+## The downs block of a run with the down rule (Protocol.enc_downs): who is down (in the run's player order),
+## when they went down and when they are out unless healed, who holds F beside them and since when (host
+## times), and this floor's red spots.
+static func downs_block(s: Run.RunState) -> Dictionary:
+	var down: Array = []
+	for p in s.players:
+		var d: Run.Downed = s.down.get(p.id)
+		if d == null:
+			continue
+		down.append({"id": d.id, "at": d.at, "until": d.until, "by": String(d.by), "healer": d.healer,
+			"healFrom": d.heal_from if d.healer != "" else null})
+	return {"down": down, "spots": s.spots.duplicate()}
 
 ## The Annex's block (Protocol.enc_annex): the crew's pad, every mark down, and this floor's notes (how
 ## many, and with `full` every one). Null off the Annex.

@@ -58,6 +58,16 @@
 # annex block; notes() are the floor's notes from the welcome and the "note" events (each exactly once),
 # in the order posted. The events "markStart", "markPlaced", "markPeeled", "markRefused" and "note" arrive
 # in `events` like any other (for the sounds: the slap, the stapler's click where the note is).
+#
+# Down first, then out (sim/run.gd downs; North Star B6; T8a). Nothing is predicted: downs(), down_of() and
+# spots() are the newest snapshot's downs block, the host's, the same on every screen, with host times for
+# the ten seconds and the three (use clock.host_time(now) to count them). A downed player keeps sending
+# inputs: the host takes only their body (the crawl) and view. F held (LocalFrame.use) goes in every input
+# and heals a downed crewmate within reach. The events "downed", "healStart", "healStop", "healed" and "out"
+# arrive in `events` like any other, and the host places a player where they go down and where they get up.
+# The resident bent over a downed player ("bending") is drawn as the snapshots say even while it is seen: its
+# bend is the one movement it makes while watched. The taken latch treats "bending" as it treats "dormant"
+# (the catch was made).
 extends RefCounted
 
 const Move = preload("res://sim/move.gd")
@@ -330,6 +340,28 @@ func quota() -> Variant:
 	if latest == null:
 		return null
 	return latest.get("quota")
+
+## Down first, then out: who is down as the newest snapshot has it, [{id, at, until, by, healer, healFrom}]
+## (host times: out at `until` unless healed; a heal is done at healFrom + Run.HEAL_TIME). Empty when nobody
+## is down or the run has no down rule.
+func downs() -> Array:
+	if latest == null or latest.get("downs") == null:
+		return []
+	return latest["downs"]["down"]
+
+## One player's down as downs() has it, or null when they are not down.
+func down_of(player: String) -> Variant:
+	for d: Dictionary in downs():
+		if d["id"] == player:
+			return d
+	return null
+
+## This floor's red spots as the newest snapshot has them, [{playerId, x, z, level, y, t}]: where each
+## player who went out lay and their tape fell.
+func spots() -> Array:
+	if latest == null or latest.get("downs") == null:
+		return []
+	return latest["downs"]["spots"]
 
 ## The Annex's marks as the newest snapshot has them: [{id, x, z, level, dir (0..7: Marks.dir_vector),
 ## player, placedAt (host time)}], in the order placed. Empty off the Annex.
@@ -676,6 +708,14 @@ func frame(now: float, local: LocalFrame) -> Frame:
 			_pin = null
 			if _drawn == null or not Pose.same_pose(_drawn, cand):
 				_drawn = cand
+		elif not pinned and _bending(a, b) and (not _frozen or not same or _same_spot(_drawn, cand)):
+			# Bent over a downed player: its bend is the one movement it makes while watched (sim/entity.gd,
+			# "except while it has someone"), so it is drawn as the snapshots say, seen or not. It stands
+			# where it caught them; a held pose somewhere else keeps the usual rule below.
+			seeing_now = _sees(plan, cam, cand, open, blind)
+			_frozen = false
+			if _drawn == null or not Pose.same_pose(_drawn, cand):
+				_drawn = cand
 		elif _frozen and same and _sees(plan, cam, _drawn, open, blind):
 			# Seen: held exactly where it is, whatever the snapshots say.
 			seeing_now = true
@@ -758,6 +798,15 @@ func frame(now: float, local: LocalFrame) -> Frame:
 	f.placed = placed
 	return f
 
+## Both snapshots drawn have the resident bent over a downed player.
+static func _bending(a: Dictionary, b: Dictionary) -> bool:
+	return a["orderly"]["mode"] == "bending" and b["orderly"]["mode"] == "bending"
+
+## Two poses stand on the same spot, facing the same way (the animation aside).
+static func _same_spot(p: Dictionary, q: Dictionary) -> bool:
+	return int(p["level"]) == int(q["level"]) and absf(float(p["x"]) - float(q["x"])) < 0.011 and absf(float(p["z"]) - float(q["z"])) < 0.011 \
+		and absf(float(p["y"]) - float(q["y"])) < 0.011 and absf(_angle_diff(float(p["yaw"]), float(q["yaw"]))) < 0.002
+
 static func _sees(plan: Variant, cam: Pose.Camera, p: Dictionary, open: bool, blind: bool) -> bool:
 	return not blind and Session.camera_sees(plan, cam, p, open)
 
@@ -766,6 +815,12 @@ func _end_latch() -> void:
 	_wind_up_on = false
 	_wind_up_saw = false
 	_armed_end = null
+
+## The resident as a snapshot has it is past a catch: dormant (a catch without the down rule), or bent over
+## the one it caught (with it).
+static func _after_catch(w: Dictionary) -> bool:
+	var mode: String = w["orderly"]["mode"]
+	return mode == "dormant" or mode == "bending"
 
 func _mine(w: Variant) -> bool:
 	if w == null:
@@ -784,7 +839,7 @@ func _update_latch(show: Array, rt: float) -> bool:
 			if rt >= _caught_at - 1e-9:
 				_end_latch()
 			return false
-		var pending: bool = newest != null and int(newest["depth"]) == int(l["depth"]) and (_mine(newest) or newest["orderly"]["mode"] == "dormant")
+		var pending: bool = newest != null and int(newest["depth"]) == int(l["depth"]) and (_mine(newest) or _after_catch(newest))
 		var elapsed := rt - float(l["rt"])
 		if local_depth != int(l["depth"]) or not pending or (elapsed > LATCH_IDLE and not _mine(newest)) or elapsed > LATCH_MAX:
 			_end_latch()
@@ -811,7 +866,7 @@ func _update_latch(show: Array, rt: float) -> bool:
 	# The displayed wind-up has reached its end unseen. Only if the host's snapshots agree it ran to
 	# its end: still pending (held for our confirmation), or the catch made.
 	var due: bool = _wind_up_on and not _wind_up_saw and end != null and float(end) > _latched_end + 1e-6 and rt >= float(end) - 1e-6
-	var ran_to_end: bool = end != null and (_caught_at >= float(end) - 1e-6 or (newest != null and int(newest["depth"]) == int(a["depth"]) and (_mine(newest) or newest["orderly"]["mode"] == "dormant")))
+	var ran_to_end: bool = end != null and (_caught_at >= float(end) - 1e-6 or (newest != null and int(newest["depth"]) == int(a["depth"]) and (_mine(newest) or _after_catch(newest))))
 	if not on_me:
 		_wind_up_on = false
 		_wind_up_saw = false

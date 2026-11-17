@@ -119,14 +119,40 @@
 #  - Sticky notes (sim/notes.gd, data/annex_notes.json): triggers are this tick's events: the arrival
 #    doors opening ("lobby", posted at once on the wall nearest the lift doors), "startedHunting" ("wake"),
 #    every NOTE_HUNT_EVERY seconds the Temp hunts ("hunt"), "caught" ("catch"), "tapeDropped" ("tape"),
-#    "quotaMet" ("quota", by its top) and "called" ("lift"). Heals do not exist yet, so "heal" never
-#    fires. The Temp posts them: a trigger waits in a queue until a tick the Temp is not held (Stillness:
+#    "quotaMet" ("quota", by its top), "called" ("lift") and, with the down rule on, "healed" ("heal",
+#    naming who was healed and who healed them). The Temp posts them: a trigger waits in a queue until a tick the Temp is not held (Stillness:
 #    it never posts while anyone looks), one a tick, on the wall nearest the Temp. At most
 #    Notes.cap_per_floor() a floor. Each posting is a "note" event {id, n, trigger, template, text, x, z,
 #    level, yaw, t}: one loud click where the note is. The facts are true and the same for everyone:
 #    names (from `names`, the host's player names), who is alone, who stands very close, who is furthest
 #    from the lift, sprints this floor, notes per name, the pad's use; door passes and looking are not
 #    tracked yet, so their notes are never used. Note ids count up over the whole run (note_seq).
+#
+# Down first, then out (North Star B6; loop/NIGHT-PLAN.md A5, T8a), on only for a run made with it
+# (create_run's `downs`, with_downs(): net/host_rules.gd turns it on for the game's rooms; tests and every
+# stored result leave it off, and then nothing below happens and a catch is "caught" as before). With it on:
+#  - A catch ("caught", the resident's own event, kept for the screens and the Annex's note) puts the player
+#    down where they stood: status "down" ("downed" {playerId, until, by: "catch", at}). The tape stays with
+#    them for now. The resident bends over them (Entity.bend_over): while it has someone it goes after
+#    nobody else, and its bend is the one movement it makes while watched (sim/entity.gd's exception).
+#  - Health at 0 on the Playroom (sim/seek.gd "down") is the same down ("downed" by "health"); the Minder
+#    does not bend. Found and taken stay the Playroom's own rule (caught, as before).
+#  - A downed player crawls: their input body is followed at most CRAWL_SPEED, with the car's walls. They
+#    are not active (no call, vote, pick-up, instrument, mark) and the resident neither sees nor hunts them.
+#  - Healing: a player on their feet with F held (PlayerInput.use) within HEAL_REACH of the downed body, on
+#    its level. The hold counts from the start of the tick it began ("healStart" {playerId: the healer,
+#    target, from, done}: host times, the same on every screen); letting go, stepping out of reach or going
+#    down stops it and the count starts again ("healStop" {playerId, target}). A downed player has one
+#    healer at a time: the one already holding, else the nearest, and a healer heals one at a time. HEAL_TIME
+#    seconds held: "healed" {playerId, by, at}, back on their feet where they lie (the Playroom: health
+#    HEAL_HEALTH). The resident bent over them stands off, quiet (dormant) for HEAL_QUIET seconds.
+#  - Not healed by DOWN_TIME seconds after going down (the host's clock, alone or not): "out" {playerId, at,
+#    spot}: status "out", the tape drops where they lie (the instrument's "caught"), and a red spot is left
+#    there (`spots`, {playerId, x, z, level, y, t}, this floor's, cleared on the next). The resident hunts
+#    again from the next tick. Out is caught by another name: back on their feet when the car next rides
+#    down (or rides home), as a catch always was.
+#  - The car leaving without a downed player (a ride down or a BANK) puts them out ("out" with spot null).
+#  - The wipe waits while anyone is down: a crew all out is a wipe; a crew all down is not yet.
 #
 # Events are Dictionaries with the TypeScript shapes (see RunEvent in run.ts), carrying Move.Body,
 # TapeLib.Reading and RunSummary objects where TypeScript carries those objects.
@@ -246,6 +272,18 @@ const MARK_PEEL_REACH := 1.5
 const NOTE_HUNT_EVERY := 25.0
 const ALONE_DISTANCE := 10.0
 const CLOSE_DISTANCE := 1.0
+## Down first, then out (see the header). Seconds a downed player has before they are out (B6: "about ten
+## seconds"); seconds F must be held beside them (B6: three); how near the healer's feet must be to the
+## downed body (metres, same level: "beside"); how fast a downed player crawls (m/s); how long a resident
+## that loses its downed player to a heal stays quiet (seconds); the health a heal gives back on the
+## Playroom; the body radius a crawl moves with (net/session.gd PLAYER_RADIUS).
+const DOWN_TIME := 10.0
+const HEAL_TIME := 3.0
+const HEAL_REACH := 1.5
+const CRAWL_SPEED := 0.6
+const HEAL_QUIET := 5.0
+const HEAL_HEALTH := 50.0
+const CRAWL_RADIUS := 0.3
 
 const EPS := 1e-9
 ## How far onto the landing side of the wall line the doorway channel reaches, beyond a body's radius.
@@ -608,6 +646,28 @@ class AnnexFloor:
 		a.named = named.duplicate()
 		return a
 
+## A downed player (see the header). Replaced, never edited, once in a RunState.
+class Downed:
+	var id: String
+	## Host time they went down, and when they are out unless healed first.
+	var at: float
+	var until: float
+	## &"catch" (the resident) or &"health" (the Playroom).
+	var by: StringName
+	## Who is holding F beside them ("" for nobody), and the host time that hold began (-1 for none).
+	var healer: String = ""
+	var heal_from: float = -1.0
+
+	func copy() -> Downed:
+		var d := Downed.new()
+		d.id = id
+		d.at = at
+		d.until = until
+		d.by = by
+		d.healer = healer
+		d.heal_from = heal_from
+		return d
+
 class RunState:
 	var seed: String
 	## Run time, seconds.
@@ -689,6 +749,12 @@ class RunState:
 	var note_seq: int = 0
 	## The players' names as the notes write them, {id: name} (the host's; an id is its own name otherwise).
 	var names: Dictionary = {}
+	## Down first, then out (see the header). Off: everything below stays empty and is never read.
+	var downs: bool = false
+	## Who is down, {id: Downed}. Replaced, never edited.
+	var down: Dictionary = {}
+	## This floor's red spots, {playerId, x, z, level, y, t}, in the order left. Replaced, never edited.
+	var spots: Array[Dictionary] = []
 
 	func copy() -> RunState:
 		var s := RunState.new()
@@ -738,6 +804,9 @@ class RunState:
 		s.annex = annex
 		s.note_seq = note_seq
 		s.names = names
+		s.downs = downs
+		s.down = down
+		s.spots = spots
 		return s
 
 class PlayerInput:
@@ -895,12 +964,22 @@ static func _new_quota_floor(s: RunState, players: Array[RunPlayer]) -> void:
 
 ## A new run: the crew in the car at floor 1's landing, doors about to open. `deck`: the places its
 ## floors are drawn from (places.gd); empty means Clinic only. `days`: the day loop; `quota`: the floor
-## quota (see the header).
-static func create_run(seed: String, player_ids: Array[String], deck: Array = [], days: bool = false, quota: bool = false) -> RunState:
+## quota (see the header); `downs`: down first, then out.
+static func create_run(seed: String, player_ids: Array[String], deck: Array = [], days: bool = false, quota: bool = false, downs: bool = false) -> RunState:
 	var s := _create_run(seed, player_ids, deck)
 	if days:
 		s = with_days(s)
+	if downs:
+		s = with_downs(s)
 	return with_quota(s) if quota else s
+
+## Turns down first, then out on for a run (see the header): nobody down, no red spots.
+static func with_downs(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.downs = true
+	s.down = {}
+	s.spots = []
+	return s
 
 static func _create_run(seed: String, player_ids: Array[String], deck: Array = []) -> RunState:
 	assert(not player_ids.is_empty(), "a run needs at least one player")
@@ -1208,7 +1287,8 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 			continue
 		if drops.has(p.id):
 			# Down last tick: their tape hits the floor now, and that is heard.
-			var di := Seek.SeekInput.make(p.id, sp.body if (sp != null and sp.body != null) else p.body, &"walk")
+			# (With the down rule: out last tick, where they had crawled to.)
+			var di := Seek.SeekInput.make(p.id, sp.body if (not s.downs and sp != null and sp.body != null) else p.body, &"walk")
 			di.dropped_tape = true
 			inputs.append(di)
 			continue
@@ -1268,10 +1348,17 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 		if sp == null:
 			continue
 		var np := p
+		# Down first, then out: down from health is a down like a catch's (they crawl; the rules do not hold them).
+		var crawls := s.downs and sp.status == &"down"
 		if sp.status != &"ok" and p.status == &"ok":
+			if crawls:
+				_go_down(s, players, k, t, &"health", events)
+				continue
 			np = p.copy()
 			np.status = &"caught"
 			np.side = null
+		if crawls:
+			continue
 		if _seek_holds(sp) and not (np.body.x == sp.body.x and np.body.z == sp.body.z and np.body.level == sp.body.level and np.body.y == sp.body.y):
 			if np == p:
 				np = p.copy()
@@ -1282,6 +1369,8 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 	# The instruments: found or down drops the tapes where they are (the instrument's "caught").
 	var caught: Array[Dictionary] = []
 	for e in r.events:
+		if e["type"] == "down" and s.downs:
+			continue  # Down first, then out: the tape drops (and is heard) when they are out.
 		if e["type"] == "found" or e["type"] == "down":
 			caught.append({"type": "caught", "t": t, "playerId": e["playerId"]})
 		if e["type"] == "down":
@@ -1490,6 +1579,8 @@ static func _step_annex(s: RunState, players: Array[RunPlayer], input_of: Dictio
 					a.queue.append({"trigger": "quota", "facts": {"quota_top": name_of(s, str(e["top"]))}})
 			"called":
 				a.queue.append({"trigger": "lift", "facts": {"lift_caller": name_of(s, str(e["playerId"]))}})
+			"healed":
+				a.queue.append({"trigger": "heal", "facts": {"healed": name_of(s, str(e["playerId"])), "healer": name_of(s, str(e["by"]))}})
 	if not riding and (s.orderly.mode == &"hunting" or s.orderly.mode == &"windUp"):
 		a.hunt_clock += dt
 		while a.hunt_clock >= NOTE_HUNT_EVERY - EPS:
@@ -1565,6 +1656,172 @@ static func _step_annex(s: RunState, players: Array[RunPlayer], input_of: Dictio
 		var o := s.orderly
 		_post_note(s, players, a, str(job["trigger"]), job["facts"], o.body.level, note_spot(s.plan, o.body.level, o.body.x, o.body.z, o.yaw), t, events)
 
+# ---------------------------------------------------------------------------------------------
+# Down first, then out (see the header).
+
+## Where a downed player gets to this tick: toward `want`, at most CRAWL_SPEED * dt, with the walls and the car.
+static func _crawl(prev: RunState, from: Move.Body, want: Move.Body, dt: float) -> Move.Body:
+	var dx := want.x - from.x
+	var dz := want.z - from.z
+	var d := M.hypot2(dx, dz)
+	if d <= 1e-9:
+		return from
+	var most := CRAWL_SPEED * dt
+	if d > most:
+		dx *= most / d
+		dz *= most / d
+	return move_in_run(prev, from, dx, dz, CRAWL_RADIUS)
+
+## Player `k` goes down where they are, now ("downed").
+static func _go_down(s: RunState, players: Array[RunPlayer], k: int, t: float, by: StringName, events: Array[Dictionary]) -> void:
+	var np := players[k].copy()
+	np.status = &"down"
+	np.side = null
+	players[k] = np
+	var d := Downed.new()
+	d.id = np.id
+	d.at = t
+	d.until = t + DOWN_TIME
+	d.by = by
+	var down := s.down.duplicate()
+	down[np.id] = d
+	s.down = down
+	events.append({"type": "downed", "t": t, "playerId": np.id, "until": d.until, "by": String(by), "at": np.body})
+
+## Whether player `id` may heal someone lying at `at` this tick: on their feet, F held, feet within
+## HEAL_REACH on the same level. Their distance, or -1 when they may not.
+static func _heal_reach(players: Array[RunPlayer], input_of: Dictionary, id: String, at: Move.Body) -> float:
+	var h := _player_in(players, id)
+	if h == null or not _is_active(h, input_of) or not (input_of[id] as PlayerInput).use or h.body.level != at.level:
+		return -1.0
+	var d := M.hypot2(h.body.x - at.x, h.body.z - at.z)
+	return d if d <= HEAL_REACH + EPS else -1.0
+
+## One tick of the downed: who holds F beside each, the heals that finish, and those whose time is up.
+## Updates `s` (down, spots, the resident, the Playroom's seek) and `players`; returns who went out.
+static func _step_downs(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, dt: float, events: Array[Dictionary]) -> Array[String]:
+	var down := s.down.duplicate()
+	var outs: Array[String] = []
+	var busy := {}
+	# Holds already going on keep their healer first (a healer heals one at a time).
+	for k in players.size():
+		var d: Downed = down.get(players[k].id)
+		if d != null and d.healer != "" and _heal_reach(players, input_of, d.healer, players[k].body) >= 0.0:
+			busy[d.healer] = players[k].id
+	for k in players.size():
+		var p := players[k]
+		var d: Downed = down.get(p.id)
+		if d == null:
+			continue
+		if p.status != &"down":
+			down.erase(p.id)
+			continue
+		var healer := ""
+		if d.healer != "" and busy.get(d.healer, "") == p.id:
+			healer = d.healer
+		else:
+			var best := INF
+			for q in players:
+				if q.id == p.id or busy.has(q.id):
+					continue
+				var r := _heal_reach(players, input_of, q.id, p.body)
+				if r >= 0.0 and r < best - EPS:
+					best = r
+					healer = q.id
+			if healer != "":
+				busy[healer] = p.id
+		var nd := d
+		if healer != d.healer:
+			nd = d.copy()
+			if d.healer != "":
+				events.append({"type": "healStop", "t": t, "playerId": d.healer, "target": p.id})
+			nd.healer = healer
+			nd.heal_from = t - dt if healer != "" else -1.0
+			if healer != "":
+				events.append({"type": "healStart", "t": t, "playerId": healer, "target": p.id, "from": nd.heal_from, "done": nd.heal_from + HEAL_TIME})
+		if healer != "" and t - nd.heal_from >= HEAL_TIME - EPS:
+			# Healed: back on their feet where they lie.
+			down.erase(p.id)
+			var np := p.copy()
+			np.status = &"ok"
+			np.side = null
+			players[k] = np
+			events.append({"type": "healed", "t": t, "playerId": p.id, "by": healer, "at": np.body})
+			if s.orderly.mode == &"bending" and str(s.orderly.bend_target) == p.id:
+				s.orderly = Entity.stand_off(s.orderly, HEAL_QUIET)
+			_seek_heal(s, np)
+			continue
+		if t >= nd.until - EPS:
+			# Out: the tape drops where they lie, and a red spot is left there.
+			down.erase(p.id)
+			var np := p.copy()
+			np.status = &"out"
+			np.side = null
+			players[k] = np
+			outs.append(p.id)
+			var b := np.body
+			var spot := {"playerId": p.id, "x": _cm(b.x), "z": _cm(b.z), "level": b.level, "y": _cm(b.y), "t": _mrad(t)}
+			var spots: Array[Dictionary] = s.spots.duplicate()
+			spots.append(spot)
+			s.spots = spots
+			events.append({"type": "out", "t": t, "playerId": p.id, "at": b, "spot": spot})
+			if s.orderly.mode == &"bending" and str(s.orderly.bend_target) == p.id:
+				s.orderly = Entity.stand_off(s.orderly, 0.0)
+			if s.seek != null:
+				s.seek_drops.append(p.id)
+			continue
+		down[p.id] = nd
+	s.down = down
+	return outs
+
+## The Playroom: a healed player is back in the seek on their feet, with HEAL_HEALTH, where they lie.
+static func _seek_heal(s: RunState, p: RunPlayer) -> void:
+	if s.seek == null:
+		return
+	var ss: Seek.SeekState = s.seek
+	var sp := Seek.player_of(ss, p.id)
+	if sp == null or sp.status != &"down":
+		return
+	var ns := ss.copy()
+	var list: Array[Seek.SeekPlayer] = []
+	for q in ss.players:
+		if q.id != p.id:
+			list.append(q)
+			continue
+		var nq := q.copy()
+		nq.status = &"ok"
+		nq.phase = &"out"
+		nq.hide = -1
+		nq.peeking = false
+		nq.health = HEAL_HEALTH
+		nq.body = p.body
+		nq.last = p.body
+		list.append(nq)
+	ns.players = list
+	s.seek = ns
+
+## The car leaves without the downed: they are out ("out", no spot: the floor is behind the crew).
+static func _leave_downs(s: RunState, players: Array[RunPlayer], t: float, events: Array[Dictionary]) -> void:
+	if s.down.is_empty():
+		return
+	for k in players.size():
+		var p := players[k]
+		if p.status != &"down":
+			continue
+		var np := p.copy()
+		np.status = &"out"
+		np.side = null
+		players[k] = np
+		events.append({"type": "out", "t": t, "playerId": p.id, "at": p.body, "spot": null})
+	s.down = {}
+
+## A new floor: nobody down, no red spots.
+static func _new_down_floor(s: RunState) -> void:
+	if not s.down.is_empty():
+		s.down = {}
+	if not s.spots.is_empty():
+		s.spots = []
+
 static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) -> RunStep:
 	var res := RunStep.new()
 	if prev.phase == &"ended":
@@ -1588,7 +1845,11 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	for p in prev.players:
 		var np := p.copy()
 		var given: PlayerInput = input_of.get(p.id)
-		np.body = given.body if given != null else p.body
+		if given != null and p.status == &"down" and prev.down.has(p.id):
+			# Down: they crawl, no faster than CRAWL_SPEED toward where they say they are.
+			np.body = _crawl(prev, p.body, given.body, dt)
+		else:
+			np.body = given.body if given != null else p.body
 		np.aboard = in_car(car, np.body)
 		players.append(np)
 	_sync_seek(s)
@@ -1811,6 +2072,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		if s.days:
 			# The day: settled on what got home, then the car rides up with whoever is aboard.
 			_settle_day(s, t, floori(summary.total), events)
+			_leave_downs(s, players, t, events)
 			_ride_up(s, players, aboard_ids, true)
 			events.append({"type": "carLeft", "t": t, "reason": "up"})
 			return res
@@ -1853,12 +2115,13 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		nc.floor = []
 		nc.next_tape = next_tape
 		s.crew = nc
+		_leave_downs(s, players, t, events)
 		for i in players.size():
 			var p := players[i]
 			if aboard_ids.has(p.id):
 				continue
 			var np := p.copy()
-			np.status = &"caught" if p.status == &"caught" else &"leftBehind"
+			np.status = p.status if (p.status == &"caught" or p.status == &"out") else &"leftBehind"
 			np.side = null
 			players[i] = np
 		s.phase = &"riding"
@@ -1923,23 +2186,56 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			next.body = before.body
 			next.moving = false
 			next.speed = 0.0
-		s.orderly = next
 		var o_events: Array[Dictionary] = []
 		for e in er.events:
 			if not e.has("playerId") or e["playerId"] != LURE_ID:
 				o_events.append(e)
+		# Down first, then out: a catch puts the player down, and the resident bends over them. Their tape
+		# stays with them until they are out (the instrument does not hear this catch).
+		var crew_events := o_events
+		if s.downs:
+			crew_events = []
+			for e in o_events:
+				if e["type"] == "caught":
+					next = Entity.bend_over(next, str(e["playerId"]))
+				else:
+					crew_events.append(e)
+		s.orderly = next
 		for e in o_events:
 			events.append(_with_t(e, t))
-		entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, before, next, o_events)]
+		entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, before, next, crew_events)]
 		for e in o_events:
 			if e["type"] != "caught":
 				continue
 			for k in players.size():
 				if players[k].id == e["playerId"]:
+					if s.downs:
+						if players[k].status == &"ok":
+							_go_down(s, players, k, t, &"catch", events)
+						continue
 					var np := players[k].copy()
 					np.status = &"caught"
 					np.side = null
 					players[k] = np
+
+	# ---- Down first, then out (see the header): heals, and the timer running out.
+	if s.downs and not s.down.is_empty() and s.phase != &"riding":
+		var outs := _step_downs(s, players, input_of, t, dt, events)
+		if not outs.is_empty():
+			# Out: the tape drops where they lie (the instrument's "caught").
+			var dropped: Array[Dictionary] = []
+			for id in outs:
+				dropped.append({"type": "caught", "t": t, "playerId": id})
+			if entity_ticks.is_empty():
+				entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, s.orderly, s.orderly, dropped)]
+			else:
+				var et0 := entity_ticks[0]
+				var evs: Array[Dictionary] = et0.events.duplicate()
+				evs.append_array(dropped)
+				var et := Instr.EntityTick.make(et0.id, et0.trait_name, et0.prev, et0.next, evs)
+				et.acting = et0.acting
+				et.holders = et0.holders
+				entity_ticks = [et]
 
 	# ---- 3. The crew.
 	var crew := s.crew
@@ -2037,6 +2333,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		s.phase = &"arriving"
 		s.timer = ARRIVE_DOOR_DELAY
 		_new_quota_floor(s, players)
+		_new_down_floor(s)
 		events.append({"type": "rodeDown", "t": t, "depth": depth, "bodies": bodies})
 
 	s.players = players
@@ -2046,7 +2343,8 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	# ---- A wipe: nobody left who can call or board.
 	var everyone_out := true
 	for p in players:
-		if p.status == &"ok":
+		# A downed player is not out yet: the wipe waits for their ten seconds.
+		if p.status == &"ok" or p.status == &"down":
 			everyone_out = false
 	if s.phase != &"riding" and everyone_out and not at_home(s):
 		var no_tapes: Array[TapeLib.Tape] = []
@@ -2204,6 +2502,7 @@ static func _arrive_home(s: RunState, players: Array[RunPlayer], t: float, event
 	s.use_prev = {}
 	s.lights_out_t = -1.0
 	_new_quota_floor(s, players)
+	_new_down_floor(s)
 	events.append({"type": "rodeUp", "t": t, "depth": 0, "day": s.day_state.day, "bodies": bodies})
 
 ## Bed, one tick: who leaves the count, who climbs in (F held BED_HOLD seconds on a bunk) or out (a new
@@ -2318,6 +2617,7 @@ static func _morning(s: RunState, players: Array[RunPlayer], t: float, events: A
 	s.use_prev = {}
 	s.lights_out_t = -1.0
 	_new_quota_floor(s, players)
+	_new_down_floor(s)
 	events.append({"type": "newDay", "t": t, "day": s.day_state.day, "dayIndex": s.day_index, "depth": 1, "bodies": bodies})
 
 static func _inp(p: RunPlayer, input_of: Dictionary) -> PlayerInput:

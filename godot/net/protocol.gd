@@ -37,17 +37,24 @@ const PROTOCOL_VERSION := 1
 const PHASES: Array[String] = ["arriving", "unloading", "away", "coming", "boarding", "riding", "ended", "night"]
 ## The Orderly's poses and modes first (their codes are as they were), then the Playroom's Minder's
 ## (sim/seek.gd MinderState: anim and mode).
+## Then the bend over a downed player (sim/entity.gd "bending" / "bend").
 const ANIMS: Array[String] = ["idle", "walk", "duck", "reach",
-	"stand", "straighten", "cover", "prowl", "sweep", "look", "slump", "run", "catch"]
+	"stand", "straighten", "cover", "prowl", "sweep", "look", "slump", "run", "catch",
+	"bend"]
 const MODES: Array[String] = ["waiting", "hunting", "windUp", "dormant",
-	"wander", "cover", "search", "sweep", "look", "slump", "run", "catch"]
+	"wander", "cover", "search", "sweep", "look", "slump", "run", "catch",
+	"bending"]
 ## The Playroom's per-player states (sim/seek.gd SeekPlayer), for the seek block.
 const SEEK_STATUSES: Array[String] = ["ok", "found", "taken", "down"]
 const SEEK_PHASES: Array[String] = ["out", "entering", "inside", "leaving"]
 ## Emotes that play a sound: on the Playroom, a noise that starts a count (playarea.md section 3).
 const SOUND_EMOTES: Array[String] = ["button"]
 const NEEDLES: Array[String] = ["off", "idle", "dormant", "recording", "contaminated"]
-const STATUSES: Array[String] = ["ok", "caught", "leftBehind"]
+## A player's status (sim/run.gd RunPlayer.status). Its code rides in a player row's flags: the low two bits
+## at bit 5, the third at bit 9 ("out" is the first code that needs it), so the old codes are as they were.
+const STATUSES: Array[String] = ["ok", "caught", "leftBehind", "down", "out"]
+## How a player went down (the downs block).
+const DOWN_BY: Array[String] = ["catch", "health"]
 const GAITS: Array[String] = ["walk", "creep", "sprint"]
 ## The emote wheel's emotes (client/crew_view.gd plays them). Not in protocol.ts: the emote messages
 ## ("E" client -> host, "M" host -> the other clients) are new in the Godot game. They change nothing
@@ -130,6 +137,19 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    player, placedAt}, pad, radius (the slap carries this far)}, "markPeeled" {playerId, id, owner, pad},
 ##    "markRefused" {playerId, reason, peel (only for a peel)} and "note" {id, n, trigger, template, text,
 ##    x, z, level, yaw} (the Temp's stapler: one loud click where the note is).
+## Down first, then out (sim/run.gd downs; North Star B6; T8a). New in the Godot game, and only ever sent when
+## the run has the down rule on, so a run without it sends exactly what it did before:
+##  - player statuses "down" (code 3) and "out" (code 4: the flags' bit 9 is the code's third bit);
+##  - the resident's mode "bending" and pose "bend" (appended to MODES and ANIMS): bent over a downed player,
+##    the one movement it makes while watched (sim/entity.gd);
+##  - the world gains a 20th element, the downs block (enc_downs / "downs" decoded), with the 16th to 19th the
+##    day, seek, quota and annex blocks or null: [[[player id, host time down, host time out unless healed,
+##    DOWN_BY index, healer id or "", host time the heal hold began or null], ...], [[player id, x, z, level,
+##    y, host time], ...] (this floor's red spots, where each tape fell)]. Times are host times, never
+##    durations: a heal is done at healFrom + Run.HEAL_TIME, the timer runs out at the second time;
+##  - events "downed" {playerId, until, by, at}, "healStart" {playerId (the healer), target, from, done},
+##    "healStop" {playerId, target}, "healed" {playerId, by, at} and "out" {playerId, at, spot (null when the
+##    car left without them)}. The resident's own "caught" still comes first, as before.
 
 ## Limits on what a client may send (the server refuses anything outside them).
 const MAX_NAME := 32
@@ -243,8 +263,9 @@ static func enc_world(w: Dictionary) -> Array:
 	var players: Array = []
 	for p: Dictionary in w["players"]:
 		var side: Variant = p["side"]
+		var sc := STATUSES.find(String(p["status"]))
 		var flags := (1 if p["active"] else 0) | (2 if p["aboard"] else 0) | (4 if p["connected"] else 0) \
-			| (8 if side == "bank" else (16 if side == "down" else 0)) | (STATUSES.find(String(p["status"])) << 5) | (GAITS.find(String(p["gait"])) << 7)
+			| (8 if side == "bank" else (16 if side == "down" else 0)) | ((sc & 3) << 5) | (GAITS.find(String(p["gait"])) << 7) | ((sc >> 2) << 9)
 		var row: Array = [p["id"]]
 		row.append_array(_enc_body(p["body"]))
 		row.append(q3(p["yaw"]))
@@ -278,7 +299,42 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < 18:
 			out.append(null)
 		out.append(enc_annex(w["annex"]))
+	if w.get("downs") != null:
+		while out.size() < 19:
+			out.append(null)
+		out.append(enc_downs(w["downs"]))
 	return out
+
+## The downs block (see the header) from its readable form {down: [{id, at, until, by, healer, healFrom}],
+## spots: [{playerId, x, z, level, y, t}]}.
+static func enc_downs(k: Dictionary) -> Array:
+	var down: Array = []
+	for d: Dictionary in k["down"]:
+		down.append([d["id"], q3(d["at"]), q3(d["until"]), DOWN_BY.find(String(d["by"])), d["healer"], null if d["healFrom"] == null else q3(d["healFrom"])])
+	var spots: Array = []
+	for p: Dictionary in k["spots"]:
+		spots.append([p["playerId"], q2(p["x"]), q2(p["z"]), p["level"], q2(p["y"]), q3(p["t"])])
+	return [down, spots]
+
+static func dec_downs(c: _V, w: Variant) -> Dictionary:
+	var a := _a(c, w, 2, 2)
+	if c.bad:
+		return {}
+	var down: Array = []
+	for dw: Variant in _a(c, a[0], 0, 64):
+		var d := _a(c, dw, 6, 6)
+		if c.bad:
+			return {}
+		down.append({"id": _s(c, d[0]), "at": _f(c, d[1]), "until": _f(c, d[2]), "by": _code(c, DOWN_BY, d[3]), "healer": _s(c, d[4]),
+			"healFrom": _opt_num(c, d[5])})
+	var spots: Array = []
+	for pw: Variant in _a(c, a[1], 0, 256):
+		var p := _a(c, pw, 6, 6)
+		if c.bad:
+			return {}
+		spots.append({"playerId": _s(c, p[0]), "x": _f(c, p[1], -MAX_COORD, MAX_COORD), "z": _f(c, p[2], -MAX_COORD, MAX_COORD), "level": _i(c, p[3], 0, 1),
+			"y": _f(c, p[4], -MAX_COORD, MAX_COORD), "t": _f(c, p[5])})
+	return {"down": down, "spots": spots}
 
 ## The annex block (see the header) from its readable form {pad, padSize, marks: [{id, x, z, level, dir,
 ## player, placedAt}], notesFrom, noteCount} and, in the welcome, notes: [{id, n, trigger, template, text,
@@ -525,7 +581,7 @@ static func _opt_num(c: _V, v: Variant) -> Variant:
 	return null if v == null else _f(c, v)
 
 static func dec_world(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 15, 19)
+	var a := _a(c, w, 15, 20)
 	if c.bad:
 		return {}
 	var blink: Variant = null
@@ -554,7 +610,7 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 			"id": _s(c, p[0]), "body": _dec_body(c, p.slice(1, 5)), "yaw": _f(c, p[5]), "pitch": _f(c, p[6]),
 			"active": (f & 1) != 0, "aboard": (f & 2) != 0, "connected": (f & 4) != 0,
 			"side": "bank" if f & 8 else ("down" if f & 16 else null),
-			"status": _code(c, STATUSES, (f >> 5) & 3), "gait": _code(c, GAITS, (f >> 7) & 3),
+			"status": _code(c, STATUSES, ((f >> 5) & 3) | (((f >> 9) & 1) << 2)), "gait": _code(c, GAITS, (f >> 7) & 3),
 		})
 	var crew: Array = []
 	for mw: Variant in _a(c, a[12], 0, 64):
@@ -589,8 +645,10 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 		out["seek"] = dec_seek(c, a[16])
 	if a.size() > 17 and (a[17] != null or a.size() == 18):
 		out["quota"] = dec_quota(c, a[17])
-	if a.size() > 18:
+	if a.size() > 18 and (a[18] != null or a.size() == 19):
 		out["annex"] = dec_annex(c, a[18])
+	if a.size() > 19:
+		out["downs"] = dec_downs(c, a[19])
 	return out
 
 static func _dec_report(c: _V, w: Variant) -> Dictionary:
