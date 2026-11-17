@@ -16,7 +16,10 @@
 //   - the emote wheel: one aims and lets go, the other sees the emote on that figure;
 //   - a watched Orderly never moves on the watcher's screen (consecutive seeing frames) while the
 //     other looks away;
-//   - the call, boarding and the bank end the run for both, and both are back in the lobby after;
+//   - the call, boarding and BANK: the car rides UP to the prison for both (no end screen); both read
+//     the same banked total on the report board, the host's; each holds F at their own bunk (the count
+//     IN BED n OF 2 on both screens, F gets you up again); lights out on both at one host time; both
+//     wake on day 2 at depth 1 (the room never ends a run of days);
 // and, with --web (the default when export/web exists), that a browser client joins the same server
 // (its lobby lists three names; it leaves before the run).
 // Pictures in export/shots/net/. Prints `N passed, M failed`; exit code 1 on any failure.
@@ -415,17 +418,90 @@ try {
   check('everyone on their feet is aboard on BANK, and the host counts exactly those votes', standing.length > 0 && standing.every((s) => s.me.side === 'bank') && a.votes?.bank === standing.length && b.votes?.bank === standing.length && a.votes?.down === 0,
     `A ${a.me?.side} (${a.me?.status}), B ${b.me?.side} (${b.me?.status}), votes on A's screen ${JSON.stringify(a.votes)}, on B's ${JSON.stringify(b.votes)}`);
   await A.cmd(`look ${(Math.atan2(car.inX, car.inZ) * 180) / Math.PI + 180} 0`);
-  a = await until(A.state, (s) => s.phase === 'ended', 60000);
-  b = await until(B.state, (s) => s.phase === 'ended', 10000);
-  check('the bell, then banked, for both', a.phase === 'ended' && b.phase === 'ended' && a.summary && !a.summary.wiped && b.summary && !b.summary.wiped, `A ${a.phase}, B ${b.phase}, total ${a.summary?.total?.toFixed(1)}`);
-  a = await until(A.state, (s) => (s.client?.end ?? []).length > 0, 8000);
-  b = await until(B.state, (s) => (s.client?.end ?? []).length > 0, 8000);
-  check('both see the end screen', a.client.end[0] === 'BANKED' && b.client.end[0] === 'BANKED', `${a.client.end.join(' / ')}`);
-  await B.shot('11-bob-banked.png');
-  a = await until(A.state, (s) => scr(s).screen === 'lobby', 30000);
-  b = await until(B.state, (s) => scr(s).screen === 'lobby', 30000);
-  check('both are back in the lobby after the run', scr(a).screen === 'lobby' && scr(b).screen === 'lobby' && (scr(a).people ?? []).length === 2, `A ${scr(a).screen}, B ${scr(b).screen}`);
-  await A.shot('12-back-in-the-lobby.png');
+  // ---- 9. BANK rides UP to the prison for both (a run of days: no end screen, nobody back in a lobby).
+  a = await until(A.state, (s) => s.client?.goingUp === true || s.phase === 'ended', 60000);
+  b = await until(B.state, (s) => s.client?.goingUp === true || s.phase === 'ended', 10000);
+  const bankedTotal = a.summary?.total;
+  check('the bell, then banked: the car rides UP for both, no end screen', a.client.goingUp === true && b.client.goingUp === true && a.summary && !a.summary.wiped
+    && a.client.end.length === 0 && b.client.end.length === 0, `A ${a.phase}, B ${b.phase}, total ${bankedTotal?.toFixed(1)}, A's headline "${a.client.centerNote}"`);
+  await sleep(1500);
+  await A.shot('11-ann-riding-up.png');
+  a = await until(A.state, (s) => s.depth === 0 && s.client?.built === 0 && s.doorsOpen, 20000);
+  b = await until(B.state, (s) => s.depth === 0 && s.client?.built === 0, 20000);
+  check('both are home in the prison (depth 0), no resident drawn', a.depth === 0 && b.depth === 0 && a.client.residentDrawn === false && b.client.residentDrawn === false
+    && scr(a).screen === 'game' && scr(b).screen === 'game', `A depth ${a.depth} (${a.me.status}), B depth ${b.depth} (${b.me.status})`);
+  // ---- 9b. Both read the report board in the bank room: the same total, the host's. Whoever rode up
+  // steps out of the car first (paths start on the floor); whoever was left behind woke on their bunk.
+  for (const c of [A, B]) {
+    if (!(await c.state()).me.aboard) continue;
+    await c.cmd('move 1 0 0 0');
+    await until(c.state, (s) => !s.me.aboard, 4000, 30);
+    await sleep(300);
+    await c.cmd('stopmove');
+  }
+  await A.cmd('walkto 0 7 9 3');
+  await B.cmd('walkto 0 6 10 3');
+  await sleep(300);
+  a = await until(A.state, (s) => s.auto !== 'walking', 25000);
+  b = await until(B.state, (s) => s.auto !== 'walking', 25000);
+  await A.cmd('face 16 19 1.62');
+  await B.cmd('face 16 19 1.62');
+  await sleep(700);
+  a = await A.state();
+  b = await B.state();
+  const totalOn = (s) => { const l = (s.client.board ?? []).find((x) => /BANKED \d+/.test(x)); return l ? Number(l.match(/BANKED (\d+)/)[1]) : NaN; };
+  check('both read the same banked total on the board, and it is the host\'s', totalOn(a) === totalOn(b) && totalOn(a) === a.day.result.banked && totalOn(b) === b.day.result.banked
+    && a.day.result.banked === Math.floor(bankedTotal) && JSON.stringify(a.client.board) === JSON.stringify(b.client.board),
+    `A reads ${totalOn(a)}, B reads ${totalOn(b)}, the host settled ${a.day.result.banked} (banked ${bankedTotal?.toFixed(2)}); board: ${a.client.board.join(' / ')}`);
+  await A.shot('19-ann-reads-the-day-board.png');
+  // ---- 9c. Bed. Each walks to their own bunk; Ann lies down, gets up, lies down again; Bob lies down;
+  // lights out on both screens at the host's time; both wake on day 2 at depth 1.
+  const bunkA = a.bed.bunk;
+  const bunkB = b.bed.bunk;
+  await A.cmd(`walkto 0 ${bunkA[0]} ${bunkA[1]} 3`);
+  await B.cmd(`walkto 0 ${bunkB[0]} ${bunkB[1]} 3`);
+  await sleep(300);
+  a = await until(A.state, (s) => s.auto !== 'walking', 25000);
+  b = await until(B.state, (s) => s.auto !== 'walking', 25000);
+  for (const [c, bk] of [[A, bunkA], [B, bunkB]]) await c.cmd(`face ${bk[0] * 2 + 1} ${bk[1] < 8 ? bk[1] * 2 + 0.2 : bk[1] * 2 + 1.8} 0.5`);
+  a = await until(A.state, (s) => s.client.prompt === 'HOLD F TO SLEEP', 4000);
+  b = await until(B.state, (s) => s.client.prompt === 'HOLD F TO SLEEP', 4000);
+  check('each at their own bunk: HOLD F TO SLEEP', a.client.prompt === 'HOLD F TO SLEEP' && b.client.prompt === 'HOLD F TO SLEEP' && bunkA.join() !== bunkB.join(), `Ann's bunk (${bunkA}), Bob's (${bunkB})`);
+  await A.cmd('use 1');
+  await sleep(450);
+  await A.shot('20-ann-hold-f-to-sleep.png');
+  a = await until(A.state, (s) => s.bed?.inBed === true, 5000, 50);
+  b = await until(B.state, (s) => s.client.count === 'IN BED 1 OF 2', 5000, 50);
+  await sleep(300);
+  a = await A.state();
+  check('Ann lies down: IN BED 1 OF 2 on both screens, F TO GET UP for her', a.bed.inBed && a.client.count === 'IN BED 1 OF 2' && b.client.count === 'IN BED 1 OF 2' && a.client.prompt === 'F TO GET UP',
+    `Ann "${a.client.count}" "${a.client.prompt}", Bob "${b.client.count}"`);
+  await B.shot('21-bob-sees-in-bed-1-of-2.png');
+  await A.cmd('use 0');
+  await sleep(300);
+  await A.cmd('use 1');
+  a = await until(A.state, (s) => s.bed?.inBed === false, 4000, 50);
+  b = await until(B.state, (s) => s.client.count === 'IN BED 0 OF 2', 4000, 50);
+  check('a new press of F gets her up: IN BED 0 OF 2 on both screens', a.bed.inBed === false && b.client.count === 'IN BED 0 OF 2', `Ann "${a.client.count}", Bob "${b.client.count}"`);
+  await A.cmd('use 0');
+  await sleep(300);
+  await A.cmd('use 1');
+  await B.cmd('use 1');
+  a = await until(A.state, (s) => s.client.lightsOut === true, 8000, 50);
+  b = await until(B.state, (s) => s.client.lightsOut === true, 8000, 50);
+  check('everyone in bed: lights out on both screens, at one host time', a.client.lightsOut && b.client.lightsOut && a.day.lightsOutAt === b.day.lightsOutAt && a.hostNow >= a.day.lightsOutAt && b.hostNow >= b.day.lightsOutAt,
+    `lights out at ${a.day.lightsOutAt?.toFixed(3)} (A) and ${b.day.lightsOutAt?.toFixed(3)} (B); host now ${a.hostNow?.toFixed(3)}, ${b.hostNow?.toFixed(3)}`);
+  await sleep(600);
+  await A.shot('22-ann-lights-out.png');
+  a = await until(A.state, (s) => s.day?.index === 2 && s.depth === 1 && s.client?.built === 1, 15000);
+  b = await until(B.state, (s) => s.day?.index === 2 && s.depth === 1 && s.client?.built === 1, 15000);
+  await A.cmd('use 0');
+  await B.cmd('use 0');
+  check('both wake on day 2 at depth 1, in the car', a.day?.index === 2 && b.day?.index === 2 && a.depth === 1 && b.depth === 1 && a.me.aboard && b.me.aboard && a.seed === b.seed,
+    `A day ${a.day?.day} depth ${a.depth} seed ${a.seed}; B day ${b.day?.day} depth ${b.depth} seed ${b.seed}`);
+  a = await until(A.state, (s) => s.phase === 'unloading', 10000);
+  await sleep(300);
+  await A.shot('23-ann-wakes-day-2.png');
   writeFileSync(join(shots, 'play_net.json'), JSON.stringify({ results, statsA, statsB, server: server.lines.slice(-30) }, null, 2));
 } catch (e) {
   check('the session ran to the end', false, String(e?.stack ?? e));

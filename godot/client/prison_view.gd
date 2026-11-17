@@ -2,7 +2,10 @@
 # painted concrete, grey-green below and cream above; steel doors with wire glass; one orange night
 # light and a bunk in each of the eight cells, a number over each door; the bank room as the bright
 # spot, a white strip light over a brass counter and four teller windows behind glass; the report board
-# in the bank room and the day board beside the lift, both blank screens ready for text.
+# in the bank room and the day board beside the lift. In the day loop (client/main.gd) the report board
+# shows the settled day's facts as the host sent them (report_text), the day board the day, what is owed
+# and the bed count; the teller windows carry CLOSED TONIGHT cards; at lights out the ceiling lamps go
+# dark and only the cells' orange night lights stay on.
 # Level.build hands any plan whose place is "prison" here instead of the Clinic dressing. The walls,
 # floors and ceilings are the Level's own geometry (doorways, the lift opening) with this file's
 # materials; the rest is added as children of the Level. Nothing here is a rule.
@@ -33,6 +36,13 @@ const NIGHT_LIGHT_Y := 2.45
 const PLATE_Y := 2.48
 ## The SHOP and SKILLS signs' height (m): their letters are 14 of the plate's 20 texel rows.
 const SIGN_H := 0.4
+## The teller windows tonight (buying comes with T18l): the card on each, and what F there says.
+const CLOSED_TEXT := "CLOSED TONIGHT"
+## A board's text: font pixels between lines, the margin, the colours.
+const BOARD_LINE := 10
+const BOARD_PAD := 4
+const BOARD_INK := Color(0.72, 1.0, 0.78)
+const BOARD_HEAD := Color(1.0, 0.82, 0.45)
 
 const FACES := [
 	[Vector3.RIGHT, Vector3.BACK, Vector3.UP], [Vector3.LEFT, Vector3.BACK, Vector3.UP],
@@ -68,6 +78,13 @@ var kiosk_screen: MeshInstance3D
 var kiosk_face := ""
 var _kiosk_img: Image
 var _kiosk_tex: ImageTexture
+## The ceiling lamps' glowing fittings (the hall's and the bank room's strip), dark at lights out; the
+## cells' orange night lights stay on.
+var lamp_meshes: Array[MeshInstance3D] = []
+var lights_out := false
+## What each board shows now (one string per line), for the tests.
+var day_board_lines: Array[String] = []
+var report_lines: Array[String] = []
 
 var _sts := {}                         # Material -> SurfaceTool, static boxes merged per material
 var _steel: ShaderMaterial
@@ -414,7 +431,7 @@ func _hall() -> void:
 		var p := lv.cell_center(0, c.x, c.y)
 		var top := Level.LH
 		_box(_steel_dark, Vector3(p.x, top - 0.02, p.z), Vector3(0.46, 0.04, 0.32))
-		_lamp("HallLamp_%d" % c.x, Vector3(p.x, top - 0.065, p.z), Vector3(0.36, 0.05, 0.22), HALL_LAMP, 1.15)
+		lamp_meshes.append(_lamp("HallLamp_%d" % c.x, Vector3(p.x, top - 0.065, p.z), Vector3(0.36, 0.05, 0.22), HALL_LAMP, 1.15))
 		# A wire cage over the lens.
 		for k: float in [-0.12, 0.0, 0.12]:
 			_box(_steel_dark, Vector3(p.x + k, top - 0.1, p.z), Vector3(0.012, 0.012, 0.26))
@@ -442,6 +459,16 @@ static func prompt_for(cell: Vector2i) -> String:
 		&"kiosk":
 			return "F  CHANGE YOUR FACE"
 	return ""
+
+## The prompt tonight: the teller windows are closed (buying comes with T18l and the rules ignore F
+## there), so they say so; the kiosk is open.
+static func tonight_prompt_for(cell: Vector2i) -> String:
+	match Prison.station_at(cell):
+		&"shop":
+			return "SHOP  " + CLOSED_TEXT
+		&"skills":
+			return "SKILL TREE  " + CLOSED_TEXT
+	return prompt_for(cell)
 
 # The face kiosk against the hall wall on Prison.KIOSK_FACING's side of its stand cell: a steel cabinet
 # with a brass ledge, an upper housing with a lit screen showing your face and a camera lens over it,
@@ -609,6 +636,8 @@ func _bank_room(r: Dictionary) -> void:
 		_box(_steel_dark, Vector3(px, 1.58, gz + 0.3), Vector3(0.16, 0.16, 0.02))
 		window_centres.append(Vector3(px, 1.6, gz + 0.3))
 		_plate("WindowNumber_%d" % (i + 1), str(i + 1), Vector3(px, 2.64, gz + 0.3 - 0.06), Vector3(0, 0, -1), 0.24, BRASS, Color(0.12, 0.08, 0.03), 0.2)
+		# Buying is not wired yet (T18l): every window says so, on a card hung inside the glass.
+		_plate("WindowClosed_%d" % (i + 1), CLOSED_TEXT, Vector3(px, 1.92, gz + 0.3 - 0.015), Vector3(0, 0, -1), 0.11, Color(0.86, 0.84, 0.74), Color(0.55, 0.08, 0.05), 0.2)
 	_box(_brass, Vector3(cx, gy1 + 0.03, gz + 0.3), Vector3(x1 - x0, 0.06, 0.08))
 	_box(_wood, Vector3(cx, (gy1 + 0.06 + Level.LH) * 0.5, gz + 0.3), Vector3(x1 - x0, Level.LH - gy1 - 0.06, 0.1))
 	# What the windows are for, on the fascia over them: SHOP over windows 1-2, SKILLS over 3-4.
@@ -646,6 +675,7 @@ func _strip_light(x0: float, x1: float, gz: float) -> void:
 	var length := (x1 - x0) - 1.6
 	_box(_steel, Vector3(cx, top - 0.015, z), Vector3(length + 0.12, 0.03, 0.22))
 	bank_strip = _lamp("BankStrip", Vector3(cx, top - 0.05, z), Vector3(length, 0.05, 0.13), BANK_LAMP, 3.0)
+	lamp_meshes.append(bank_strip)
 	for k: float in [-0.36, 0.0, 0.36]:
 		bank_lights.append(_spot("BankLight_%d" % bank_lights.size(), Vector3(cx + k * length, top - 0.1, z), BANK_LAMP, 2.4, 8.0, 88.0))
 	var fill := OmniLight3D.new()
@@ -656,3 +686,96 @@ func _strip_light(x0: float, x1: float, gz: float) -> void:
 	fill.omni_range = 6.5
 	lv.add_child(fill)
 	bank_lights.append(fill)
+
+# --- the boards and the night (the day loop on screen) -------------------------------------------
+
+## The report board's lines from the settled day's facts (the host's day block "result": sim/day.gd
+## _facts plus "shares" and "credits"), every number as the host settled it. `names`: id -> name.
+static func report_text(result: Variant, names: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	if not result is Dictionary:
+		out.append("NO REPORT YET")
+		return out
+	var r: Dictionary = result
+	var kind := str(r.get("kind", ""))
+	var verdict := "MADE" if kind == "made" else ("GAME OVER" if kind == "game_over" else "SHORT")
+	out.append("DAY %d  %s" % [int(r["day"]), verdict])
+	out.append("OWED %d  BANKED %d" % [int(r["quota"]), int(r["banked"])])
+	out.append("SHORT BY %d" % int(r["short_by"]))
+	out.append("STREAK %d  MISSES LEFT %d" % [int(r["streak"]), int(r["misses_left"])])
+	# The odds of the roll a miss makes, always printed (promise 2): the rules' own words, with names.
+	var odds := str(r.get("odds", ""))
+	if kind == "made":
+		out.append("NO ROLL: THE DAY WAS MADE")
+	elif kind == "game_over":
+		out.append("THIRD MISS: ALL RESET")
+	else:
+		out.append("ROLL ODDS " + _named(odds, names).to_upper())
+	var taken: Array = r.get("taken", [])
+	if taken.is_empty():
+		out.append("TAKEN BY ROLL: NOTHING")
+	else:
+		for k: Dictionary in taken:
+			out.append("TAKEN: %s %s" % [_name(str(k["player"]), names), str(k.get("name", k["node"])).to_upper()])
+	out.append("SHARE  CREDITS")
+	var shares: Dictionary = r.get("shares", {})
+	var credits: Dictionary = r.get("credits", {})
+	var ids: Array = shares.keys()
+	ids.sort()
+	for id: Variant in ids:
+		out.append("%s %d  %d" % [_name(str(id), names).rpad(8).left(8), int(shares[id]), int(credits.get(id, 0))])
+	return out
+
+## The day board by the lift: the day, what is owed, and bed.
+static func day_text(day: Dictionary, count: String) -> Array[String]:
+	var out: Array[String] = ["DAY %d" % int(day["day"]), "OWED %d" % int(day["quota"])]
+	if count != "":
+		out.append(count)
+	return out
+
+static func _name(id: String, names: Dictionary) -> String:
+	return str(names.get(id, id)).to_upper()
+
+static func _named(text: String, names: Dictionary) -> String:
+	var t := text
+	for id: Variant in names:
+		t = t.replace("%s 1 in" % id, "%s 1 in" % str(names[id]))
+	return t.replace(",", " /")
+
+## Writes `lines` on the report board (in the bank room).
+func show_report(lines: Array[String]) -> void:
+	if lines == report_lines or report_board_image == null:
+		return
+	report_lines = lines.duplicate()
+	_write(report_board_image, report_board_texture, lines)
+
+## Writes `lines` on the day board (in the hall, by the lift).
+func show_day_board(lines: Array[String]) -> void:
+	if lines == day_board_lines or day_board_image == null:
+		return
+	day_board_lines = lines.duplicate()
+	_write(day_board_image, day_board_texture, lines, 2 if lines.size() <= 4 else 1)
+
+func _write(img: Image, tex: ImageTexture, lines: Array[String], sc := 1) -> void:
+	img.fill(SCREEN)
+	for i in lines.size():
+		var y := BOARD_PAD + i * BOARD_LINE * sc
+		if y + 7 * sc > img.get_height():
+			break
+		PixelFont.blit(img, lines[i], Vector2i(BOARD_PAD, y), BOARD_HEAD if i == 0 else BOARD_INK, Vector2i(sc, sc))
+	tex.update(img)
+
+## Lights out: the hall's and the bank room's lamps go dark (their lights follow the Level's light
+## level); the cells' orange night lights stay on.
+func set_lights_out(on: bool) -> void:
+	if on == lights_out:
+		return
+	lights_out = on
+	for m in lamp_meshes:
+		m.visible = not on
+	for l in bank_lights:
+		if l is OmniLight3D:
+			l.visible = not on
+	var teller := lv.get_node_or_null("TellerLamp")
+	if teller != null:
+		(teller as Node3D).visible = not on

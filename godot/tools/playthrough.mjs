@@ -2,8 +2,10 @@
 // The scripted playthrough, the same for the browser build (tools/play_web.mjs) and the Windows
 // build (tools/play_desktop.mjs): step out, the clean side, the corrupted side, the Orderly's corridor,
 // watch it (it does not move), turn away (it moves), take a reading, call the lift, flee at the blackout
-// warning, come back when the lights return, board on BANK, bank; then a second run rides DOWN, and
-// on that floor the camera drops for creeping and for being down (with the eye sent checked every frame).
+// warning, come back when the lights return, board on BANK, bank and ride UP to the prison; read the
+// report board, the closed teller windows, hold F at your bunk, the bed count, lights out, wake on day 2
+// at depth 1; that day rides DOWN, and on floor 2 the camera drops for creeping and for being down (with
+// the eye sent checked every frame).
 // Every step is asserted from the rules' state as the bridge reports it; a picture at each step.
 // driver: { cmd(text) -> reply, screenshot(path), wait(ms), close(), consoleLines: [] }
 // opts: { shots (folder), only, report (file name), firstFrameMs, busPeaks (desktop: assert sound by bus) }
@@ -322,20 +324,96 @@ await wait(500);
 await shot('vote-bank');
 await cmd('look ' + ((Math.atan2(plan.car.inX, plan.car.inZ) * 180) / Math.PI) + ' 0');
 
-// ---- 9. The bell; banked; the end screen.
+// ---- 9. The bell; banked; the car rides UP to the prison (the game's run is a run of days: no end
+// screen). The numbers on screen are the host's settled day (the snapshot's day block).
 await cmd('timescale 4');
-s = await until((s) => s.phase === 'ended', 30000, 100);
+s = await until((s) => s.client.goingUp === true || s.phase === 'ended', 30000, 100);
 await cmd('timescale 1');
-check('the bell, then banked', s.phase === 'ended' && s.summary && !s.summary.wiped, `total ${s.summary?.total?.toFixed(1)}`);
-s = await until((s) => s.client.end.length > 0, 8000, 100);
-check('the end screen', s.client.end[0] === 'BANKED', s.client.end.join(' / '));
-await shot('banked-end-screen');
+const bankedTotal = s.summary?.total;
+check('the bell, then banked: the car rides UP', s.client.goingUp === true && s.summary && !s.summary.wiped && s.day?.result != null, `total ${bankedTotal?.toFixed(1)}, phase ${s.phase}`);
+await wait(2500);
+s = await state();
+const r0 = s.day?.result ?? {};
+check('riding up: the arrow points up, the headline is the host\'s, no end screen', s.client.goingUp === true && s.client.end.length === 0 && s.client.centerNote.startsWith(`GOING UP.  BANKED ${r0.banked} OF ${r0.quota}`),
+  `indicator ${s.client.indicator}, "${s.client.centerNote}"`);
+await cmd(`look ${(Math.atan2(plan.car.inX, plan.car.inZ) * 180) / Math.PI + 180} 8`);
+await wait(300);
+await shot('riding-up');
+s = await until((s) => s.depth === 0 && s.client.built === 0 && s.doorsOpen && s.client.doors > 0.9, 20000, 100);
+check('home: the prison (depth 0), doors open, no resident drawn, no end screen', s.depth === 0 && s.client.built === 0 && s.client.residentDrawn === false && s.client.end.length === 0,
+  `depth ${s.depth}, phase ${s.phase}, resident drawn ${s.client.residentDrawn}`);
+await shot('arrived-in-the-prison');
 const spoken = s.client.spoken;
 check('the announcer spoke, never the same line twice running', spoken.length >= 3 && spoken.every((id, i) => i === 0 || id !== spoken[i - 1]), spoken.join(', '));
 
-// ---- 10. A second run: ride DOWN to floor 2.
-await cmd('newrun');
+// ---- 9b. The report board in the bank room (sim/prison.gd REPORT_BOARD (7,9), on the east wall).
+// Out of the car first (paths start on the floor).
+await cmd('move 1 0 0 0');
+await until((s) => !s.me.aboard, 4000, 30);
+await wait(300);
+await cmd('stopmove');
+s = await walk(0, 7, 9, 6);
+await cmd('face 16 19 1.62');
+await wait(700);
+s = await state();
+{
+  const r = s.day.result;
+  const b = s.client.board;
+  const has = (t) => b.includes(t);
+  const mine = `${(s.client.board.find((l) => l.endsWith(`${r.shares[s.me.id]}  ${r.credits[s.me.id]}`)) ?? '')}`;
+  check('the report board shows the host\'s day: owed, banked, short by, streak, misses left, the odds, share and credits',
+    has(`OWED ${r.quota}  BANKED ${r.banked}`) && has(`SHORT BY ${r.short_by}`) && has(`STREAK ${r.streak}  MISSES LEFT ${r.misses_left}`)
+      && b.some((l) => l.startsWith('NO ROLL') || l.startsWith('ROLL ODDS') || l.startsWith('THIRD MISS')) && mine !== '' && r.banked === Math.floor(bankedTotal)
+      && JSON.stringify(s.client.reportBoard) === JSON.stringify(b) && JSON.stringify(s.client.hudBoard) === JSON.stringify(b),
+    b.join(' / '));
+}
+await shot('day-board');
+// The teller windows: CLOSED TONIGHT (the rules ignore F there).
+s = await walk(0, 7, 11, 6);
+await cmd('face 15 24.3 1.9');
+await wait(500);
+s = await state();
+const shopPrompt = s.client.prompt;
+s = await walk(0, 4, 11, 6);
+s = await state();
+check('the windows say CLOSED TONIGHT', shopPrompt === 'SHOP  CLOSED TONIGHT' && s.client.prompt === 'SKILL TREE  CLOSED TONIGHT', `"${shopPrompt}", "${s.client.prompt}"`);
+await cmd('face 9 24.3 1.9');
+await wait(500);
+await shot('windows-closed-tonight');
+
+// ---- 9c. Bed: walk to your own bunk, HOLD F TO SLEEP, the count, lights out, and the morning.
+const bunk = s.bed.bunk;
+s = await walk(0, bunk[0], bunk[1], 6);
+await cmd(`face ${bunk[0] * 2 + 1} ${bunk[1] < 8 ? bunk[1] * 2 + 0.2 : bunk[1] * 2 + 1.8} 0.5`);
+s = await until((s) => s.client.prompt === 'HOLD F TO SLEEP', 3000, 50);
+check('at your bunk: HOLD F TO SLEEP', s.client.prompt === 'HOLD F TO SLEEP' && s.bed.atBunk === true, `bunk (${bunk}), at (${s.me.cell.x},${s.me.cell.y}), "${s.client.prompt}"`);
+await cmd('use 1');
+await wait(450);
+s = await state();
+const half = s.bed.hold;
+await shot('hold-f-to-sleep');
+s = await until((s) => s.bed.inBed === true, 4000, 30);
+await wait(300);
+s = await state();
+check('held F fills the prompt; the host lies you down; the count says IN BED 1 OF 1', half > 0.15 && half < 1 && s.bed.inBed && s.day.inBed.includes(s.me.id) && s.client.count === 'IN BED 1 OF 1' && s.client.camY - s.me.y < 1.0,
+  `fill ${half.toFixed(2)}, count "${s.client.count}", eye ${(s.client.camY - s.me.y).toFixed(2)} m`);
+await shot('in-bed-count');
+// Alone, everyone is in: lights out at once, by the host's time.
+s = await until((s) => s.client.lightsOut === true, 3000, 30);
+await wait(700);
+s = await state();
+check('lights out: the prison goes dark at the host\'s time', s.client.lightsOut === true && s.client.bigNote === 'LIGHTS OUT' && s.hostNow >= s.day.lightsOutAt && s.client.light === 0,
+  `lights out at ${s.day.lightsOutAt?.toFixed(2)}, host now ${s.hostNow?.toFixed(2)}`);
+await shot('lights-out');
+s = await until((s) => s.day?.index === 2 && s.depth === 1 && s.client.built === 1, 15000, 100);
+await cmd('use 0');
+check('the morning: day 2, in the car at depth 1 on a new floor', s.day?.index === 2 && s.depth === 1 && s.me.aboard === true && s.day.result === null && s.client.fade === 0,
+  `day ${s.day?.day} (index ${s.day?.index}), depth ${s.depth}, seed ${s.seed}, owed ${s.day?.quota}, "${s.client.bigNote}"`);
+
+// ---- 10. Day 2: ride DOWN to floor 2.
 s = await until((s) => s.phase === 'unloading', 15000);
+await wait(300);
+await shot('woke-day-2-depth-1');
 const p2 = JSON.parse(await cmd('plan'));
 await cmd('move 1 0 0 0');
 s = await until((s) => !s.me.aboard, 4000, 30);
