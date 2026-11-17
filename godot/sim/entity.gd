@@ -1,5 +1,7 @@
 # The Orderly: a 2.6 m figure pushing a squeaking trolley. Its trait is Stillness: it only moves
-# while nobody is looking at it. Pure, deterministic logic; the renderer plays `anim` and `yaw`,
+# while too few are looking at it: with one or two up players any one look stops it, with three or more
+# it takes two (see "Watchers" below; docs/floors/traits-and-hiding.md section 1). Below, "seen" means
+# seen by enough watchers. Pure, deterministic logic; the renderer plays `anim` and `yaw`,
 # the audio plays audibility(). Port of src/sim/entity.ts.
 #
 # The fairness contract: entities always obey their traits, and anything that depends on looking
@@ -261,9 +263,43 @@ class OrderlyState:
 	## Bending: the downed player it is bent over (sim/run.gd), else null.
 	var bend_target: Variant = null
 
+	## Two-watcher Stillness (see "Watchers" below). How many watchers hold it this tick (1 or 2, from the
+	## up players: watch_need); who the tick counted, with grace, in the order given; the host time of each
+	## player's last looking tick (never written to once made: replaced); the last tick the count was met.
+	var need: int = 1
+	var watchers: Array[String] = []
+	var looked_at: Dictionary = {}
+	var last_met_at: Variant = null
+
+	## Relocation (see "Relocation" below; sim/relocate.gd). It left and arrived this tick (the instrument never
+	## records that tick); relocations on this floor so far; seconds of the stand after arriving still to go;
+	## host time of the last arrival and of the next try after none passed; seconds it has been ready to leave
+	## and out of view without a break (sim/relocate.gd keeps it); seconds since a watcher last counted; and
+	## its dormant spell has ended since it last relocated or reached for anyone (the Stillness trigger).
+	var relocated: bool = false
+	var relocations: int = 0
+	var stand_left: float = 0.0
+	var arrived_at: float = -INF
+	var retry_at: float = -INF
+	var hidden_for: float = 0.0
+	var unwatched_for: float = 0.0
+	var reloc_wish: bool = false
+
 	## TypeScript: { ...state }.
 	func copy() -> OrderlyState:
 		var s := OrderlyState.new()
+		s.relocated = relocated
+		s.relocations = relocations
+		s.stand_left = stand_left
+		s.arrived_at = arrived_at
+		s.retry_at = retry_at
+		s.hidden_for = hidden_for
+		s.unwatched_for = unwatched_for
+		s.reloc_wish = reloc_wish
+		s.need = need
+		s.watchers = watchers
+		s.looked_at = looked_at
+		s.last_met_at = last_met_at
 		s.kind = kind
 		s.bend_target = bend_target
 		s.click_walk = click_walk
@@ -446,10 +482,11 @@ static func seen_by(plan: Floor.FloorPlan, body: Move.Body, players: Array[Playe
 	return null
 
 ## Advances the resident by dt seconds. Never mutates `prev`. (TypeScript HuntOptions: speed, creep.)
-## `hunt_speed` below 0 means its body's own.
-static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float = -1.0, creep: bool = true) -> StepResult:
+## `hunt_speed` below 0 means its body's own. `need`: watchers needed to hold it this tick (watch_need of
+## the up players; 1, the default, is the rule every stored result was made with).
+static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float = -1.0, creep: bool = true, need: int = 1) -> StepResult:
 	var k := kind_of(prev)
-	var res := _step_rules(plan, prev, players, dt, k.hunt_speed if hunt_speed < 0.0 else hunt_speed, creep, k)
+	var res := _step_rules(plan, prev, players, dt, k.hunt_speed if hunt_speed < 0.0 else hunt_speed, creep, k, need)
 	if k.clicks():
 		_stapler(prev, res, dt, k)
 	return res
@@ -474,12 +511,13 @@ static func _stapler(prev: OrderlyState, res: StepResult, dt: float, k: BodySett
 			s.clicks += 1
 			res.events.append({"type": "click", "t": s.t, "why": "wait"})
 
-static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool, k: BodySettings) -> StepResult:
+static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool, k: BodySettings, need: int = 1) -> StepResult:
 	var t := prev.t + dt
 	var s := prev.copy()
 	s.t = t
 	s.moving = false
 	s.speed = 0.0
+	s.relocated = false
 	var res := StepResult.new()
 	res.state = s
 	var events := res.events
@@ -491,9 +529,14 @@ static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 	if seen:
 		s.last_seen_at = t
 	# Held: seen now, or the time since it was last seen, measured from the start of this tick's
-	# movement interval, is still under GRACE.
-	var held := seen or (prev.last_seen_at != null and t - dt - float(prev.last_seen_at) < GRACE - EPS)
+	# movement interval, is still under GRACE. With two watchers needed, by the count (see "Watchers").
+	var held := _count_watchers(plan, prev, s, players, seer, dt, need, k)
 	s.held = held
+	# Relocation's clocks (see "Relocation"): no watcher since; the stand after an arrival runs down, seen or not.
+	s.unwatched_for = 0.0 if (seen or not s.watchers.is_empty()) else prev.unwatched_for + dt
+	var standing := prev.stand_left > EPS
+	if standing:
+		s.stand_left = maxf(0.0, prev.stand_left - dt)
 	if seer != null and not prev.ever_seen:
 		s.ever_seen = true
 		events.append({"type": "firstSeen", "t": t, "playerId": seer.id})
@@ -514,9 +557,11 @@ static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 			s.dormant_left = 0.0
 			s.mode = &"hunting"
 			s.replan_in = 0.0
+			# The end of a dormant spell (after a catch or a heal): the Stillness trigger to relocate.
+			s.reloc_wish = true
 			events.append({"type": "startedHunting", "t": t})
-	elif s.mode == &"windUp" and seer != null:
-		# Looking at it always saves you.
+	elif s.mode == &"windUp" and (seer != null if s.need <= 1 else _met(s)):
+		# Looking at it always saves you (enough eyes, when two are needed).
 		events.append({"type": "windUpCancelled", "t": t, "playerId": s.wind_up_target if s.wind_up_target != null else ""})
 		s.mode = &"hunting"
 		s.wind_up_target = null
@@ -540,6 +585,10 @@ static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 	if held:
 		if s.mode == &"waiting" or (s.mode == &"dormant" and s.anim != &"bend"):
 			s.anim = &"idle"
+		return res
+	# Just arrived (see "Relocation"): it stands. No move, no turn, no chase, no catch, its clip's clock stopped.
+	if standing:
+		s.anim = &"idle"
 		return res
 	s.anim_time += dt
 
@@ -584,6 +633,7 @@ static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 			victim_dist = d
 	if victim != null:
 		s.mode = &"windUp"
+		s.reloc_wish = false
 		s.wind_up_target = victim.id
 		s.wind_up_left = WIND_UP_TIME
 		s.anim = &"reach"
@@ -667,6 +717,163 @@ static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerV
 		s.anim = &"idle"
 
 # ---------------------------------------------------------------------------------------------
+# Watchers: two-watcher Stillness (docs/floors/traits-and-hiding.md section 1, T19a).
+#
+# It is held when enough up players look at it: watch_need(up) of them, 1 with one or two up players and
+# 2 with three or more (sim/run.gd counts the up players every tick, so a crew of three with one down needs
+# one). A watcher is a player the view list gives as active (sim/run.gd: up; never a down, taken or
+# left-behind player) whose view passes seen_by's test this tick (so never one who is blind), or did
+# within GRACE: each watcher keeps counting for GRACE after their own last looking tick, so two glances
+# that overlap by less than a frame still hold it. One player is one watcher, however long or well they look.
+#   - Two needed: held while the count is met, and for GRACE after the last tick it was met. A lone
+#     watcher does not hold it; a wind-up is cancelled the tick the count is met.
+#   - One needed: exactly the old rule (held while anyone looks, and for GRACE after), so every one- and
+#     two-player result is what it was. The count is kept all the same, for the screen.
+# The host's holds (net/host.gd) reach the count through note_look (a player whose own screen says it sees
+# it) and hold_met (a seen report it honours, a catch waiting for its victim's screen).
+
+## Up players from which two watchers are needed.
+const WATCH_CREW := 3
+
+## Watchers needed to hold it with `up` up players on the floor: 1, 1, then 2.
+static func watch_need(up: int) -> int:
+	return 2 if up >= WATCH_CREW else 1
+
+## The count this tick (s.watchers, s.need) is met.
+static func _met(s: OrderlyState) -> bool:
+	return s.watchers.size() >= s.need
+
+## Counts this tick's watchers into `s` (need, watchers, looked_at, last_met_at) and returns whether it is
+## held. `seer`: seen_by's answer this tick (the first player looking, in list order).
+static func _count_watchers(plan: Floor.FloorPlan, prev: OrderlyState, s: OrderlyState, players: Array[PlayerView], seer: PlayerView, dt: float, need: int, k: BodySettings) -> bool:
+	var t := s.t
+	s.need = maxi(1, need)
+	var looked := prev.looked_at
+	var copied := false
+	var watchers: Array[String] = []
+	var after := false
+	for p in players:
+		if not p.active:
+			continue
+		var looks := false
+		if seer != null:
+			if p == seer:
+				looks = true
+				after = true
+			elif after and not p.blind:
+				# seen_by stopped at the first; the ones before it did not look.
+				var one: Array[PlayerView] = [p]
+				looks = seen_by(plan, prev.body, one, k) != null
+		if looks:
+			if not copied:
+				looked = looked.duplicate()
+				copied = true
+			looked[p.id] = t
+			watchers.append(p.id)
+		elif looked.has(p.id) and t - dt - float(looked[p.id]) < GRACE - EPS:
+			watchers.append(p.id)
+	s.looked_at = looked
+	s.watchers = watchers
+	if watchers.size() >= s.need:
+		s.last_met_at = t
+	if s.need <= 1:
+		return s.seen or (prev.last_seen_at != null and t - dt - float(prev.last_seen_at) < GRACE - EPS)
+	return watchers.size() >= s.need or (prev.last_met_at != null and t - dt - float(prev.last_met_at) < GRACE - EPS)
+
+## The host's hold: the count met at host time `at` (it is held then and for GRACE after). Never mutates `o`.
+static func hold_met(o: OrderlyState, at: float) -> OrderlyState:
+	if o.last_met_at != null and float(o.last_met_at) >= at:
+		return o
+	var s := o.copy()
+	s.last_met_at = at
+	return s
+
+## Player `id` looked at it at host time `at` (their own screen says so): a watcher for GRACE after. Never
+## mutates `o`.
+static func note_look(o: OrderlyState, id: String, at: float) -> OrderlyState:
+	if o.looked_at.has(id) and float(o.looked_at[id]) >= at:
+		return o
+	var s := o.copy()
+	var l := o.looked_at.duplicate()
+	l[id] = at
+	s.looked_at = l
+	return s
+
+## Held by grace alone on the tick after `o`, whatever anyone does then.
+static func held_by_grace(o: OrderlyState) -> bool:
+	var last: Variant = o.last_seen_at if o.need <= 1 else o.last_met_at
+	return last != null and o.t - float(last) < GRACE - EPS
+
+## Keeps `from`'s count on `o` (a state rebuilt from an older one, the host's put-back). Mutates `o`.
+static func keep_count(o: OrderlyState, from: OrderlyState) -> void:
+	o.need = from.need
+	o.watchers = from.watchers
+	o.looked_at = from.looked_at
+	o.last_met_at = from.last_met_at
+
+# ---------------------------------------------------------------------------------------------
+# Relocation: losing track of it (docs/floors/traits-and-hiding.md section 5; T19e). sim/relocate.gd decides
+# when it leaves and where it arrives (sim/run.gd calls it after this step, only in a run with it on); what
+# the resident itself does about it lives here:
+#   - the Stillness trigger's clocks: unwatched_for (seconds since a watcher last counted, or it was seen) and
+#     reloc_wish (set when a dormant spell ends, after a catch or a heal; cleared by a wind-up or a relocation);
+#   - arrive(): the leaving and the arriving are one tick, `relocated` (the instrument never records it);
+#     its walking sound stops that tick (it is not moving) and its arrival cue plays at full reach
+#     (audibility, on that tick only);
+#   - the stand: RELOCATE_STAND seconds after arriving it does not move, turn, chase or catch, its clip's
+#     clock stopped, seen or not (the step above). Seen meanwhile, it is held as always.
+# With relocation off nothing here ever runs (relocated stays false, stand_left 0), so every stored result is
+# what it was.
+
+## Seconds it stands after arriving.
+const RELOCATE_STAND := 3.0
+
+## The resident gone from where it stood and arrived at `body` this tick (host time `t`), facing `yaw`, going for
+## `target` (a player id, or null). Never mutates `o`.
+static func arrive(o: OrderlyState, body: Move.Body, yaw: float, t: float, target: Variant) -> OrderlyState:
+	var s := o.copy()
+	s.body = body
+	s.yaw = yaw
+	s.relocated = true
+	s.relocations = o.relocations + 1
+	s.stand_left = RELOCATE_STAND
+	s.arrived_at = t
+	s.hidden_for = 0.0
+	s.unwatched_for = 0.0
+	s.reloc_wish = false
+	s.mode = &"hunting"
+	s.anim = &"idle"
+	s.anim_time = 0.0
+	s.moving = false
+	s.speed = 0.0
+	s.frozen = false
+	s.target_id = target
+	s.path = []
+	s.path_next = 0
+	s.replan_in = 0.0
+	s.wind_up_target = null
+	s.wind_up_left = 0.0
+	s.dormant_left = 0.0
+	s.prey_id = null
+	s.prey_speed = HUNT_SPEED
+	s.click_walk = 0.0
+	s.click_wait = 0.0
+	s.clicks = 0
+	return s
+
+## Keeps `from`'s relocation bookkeeping on `o` (a state rebuilt from an older one, the host's put-back).
+## Mutates `o`.
+static func keep_relocation(o: OrderlyState, from: OrderlyState) -> void:
+	o.relocated = false
+	o.relocations = from.relocations
+	o.stand_left = from.stand_left
+	o.arrived_at = from.arrived_at
+	o.retry_at = from.retry_at
+	o.hidden_for = 0.0
+	o.unwatched_for = 0.0
+	o.reloc_wish = from.reloc_wish
+
+# ---------------------------------------------------------------------------------------------
 # Sound.
 
 class Audibility:
@@ -685,9 +892,10 @@ class Audibility:
 ## moved this tick: squeaking means nobody is watching it; silence means it is watched, or standing
 ## still. A body with a stapler is heard only in a tick it clicked (never while held). Falls off with
 ## straight-line distance to nothing at its hearing range; muffled and quieter without line of sight.
+## On the tick it relocated (`relocated`) it is its arrival cue instead, at the same full reach (see "Relocation").
 static func audibility(plan: Floor.FloorPlan, state: OrderlyState, listener_body: Move.Body, listener_eye: float) -> Audibility:
 	var k := kind_of(state)
-	if not (state.clicks > 0 if k.clicks() else state.moving):
+	if not state.relocated and not (state.clicks > 0 if k.clicks() else state.moving):
 		return Audibility.make(0.0, false)
 	var ear := Sight.eye_point(listener_body, listener_eye)
 	var b := state.body

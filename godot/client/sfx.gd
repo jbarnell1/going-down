@@ -520,6 +520,62 @@ func world(delta: float, s: Dictionary, emergency: float) -> void:
 	# their own sounds (the Temp's stapler in client/temp_view.gd, the Minder's music box in minder_view.gd).
 	_orderly(delta, o if _clinic else {})
 	_room_tones(float(s.get("t", 0.0)), o, dark)
+	_arrival_cues(s)  # T19e relocation: see "Arrival cues" below
+
+# --- Arrival cues (T19e relocation; this block only) ------------------------------------------------
+# The rules' "relocated" event (sim/relocate.gd: the resident left where nobody could see it and arrived
+# where nobody can) is its arrival cue, played where it arrived, at its full reach (the event's `reach`:
+# the trolley's 34 m, the stapler's 30 m), falling off with distance as the rules' audibility does.
+# Existing sounds only: the Orderly's tray of instruments rattling (its trolley over a threshold; the
+# thump stand-in without the recording), the Temp's stapler twice (client/temp_view.gd's click).
+const ARRIVAL_DB := 2.0
+const STAPLE_GAP_MS := 180
+var _arrival: AudioStreamPlayer3D = null
+var _arrival_next: Array = []   # [{at (msec), pos, db}]: the Temp's second staple
+
+func _arrival_cues(s: Dictionary) -> void:
+	if _arrival == null:
+		_arrival = AudioStreamPlayer3D.new()
+		_arrival.bus = "Entity"
+		_arrival.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
+		_arrival.attenuation_filter_db = 0.0
+		_arrival.max_db = 0.0
+		squeak.get_parent().add_child(_arrival)
+	var now := Time.get_ticks_msec()
+	for i in range(_arrival_next.size() - 1, -1, -1):
+		var n: Dictionary = _arrival_next[i]
+		if now >= int(n["at"]):
+			_arrival_next.remove_at(i)
+			_arrival_play(TempView.click_stream(), n["pos"], float(n["db"]))
+	var me: Dictionary = s.get("me", {})
+	for ev: Variant in s.get("events", []):
+		if not ev is Dictionary or str(ev.get("type", "")) != "relocated" or not _ok("orderly"):
+			continue
+		var e: Dictionary = ev
+		var to: Dictionary = e["to"]
+		var pos := Vector3(float(to["x"]), float(to["y"]) + 0.6, float(to["z"]))
+		var reach := maxf(1.0, float(e.get("reach", 30.0)))
+		var d := pos.distance_to(Vector3(float(me.get("x", 0.0)), float(me.get("y", 0.0)) + 1.6, float(me.get("z", 0.0))))
+		if d >= reach:
+			continue
+		var db := BASE_DB + ARRIVAL_DB + linear_to_db(maxf(0.02, pow(1.0 - d / reach, 2.0)))
+		if str(e.get("who", "")) == "temp":
+			_arrival_play(TempView.click_stream(), pos, db)
+			_arrival_next.append({"at": now + STAPLE_GAP_MS, "pos": pos, "db": db})
+		elif recorded.has("instruments"):
+			_arrival_play(_take("instruments"), pos, db)
+		else:
+			_arrival_play(streams["blink"], pos, db + float(SYNTH_DB["blink"]))
+		_note("arrival")
+
+func _arrival_play(st: AudioStream, pos: Vector3, db: float) -> void:
+	if st == null:
+		return
+	_arrival.stream = st
+	_arrival.global_position = pos
+	_arrival.volume_db = db
+	_arrival.play()
+# --- end of arrival cues -----------------------------------------------------------------------------
 
 func _held(o: Dictionary) -> bool:
 	return bool(o.get("held", false)) or bool(o.get("seeing", false))

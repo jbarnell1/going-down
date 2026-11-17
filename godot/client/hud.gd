@@ -7,6 +7,10 @@ extends Control
 
 const JUMP_MS := 900
 const JUMP_BLINK_MS := 150
+## Two-watcher Stillness (docs/floors/traits-and-hiding.md section 1, "What the screen shows"; T19a): the eye
+## marks at the bottom of the picture. The owner has not yet said whether to show them: false hides them
+## everywhere, and nothing else changes.
+const EYE_MARKS := true
 
 var start_sec := 1500
 var t0 := 0
@@ -79,6 +83,10 @@ var down_line2 := ""
 var down_heal := -1.0
 var out_on := false
 var out_lines: Array = []
+## The eye marks (see EYE_MARKS), from the frame: {on (the resident is in your view), need (1 or 2), lit,
+## all}, or {} for none. One mark per watcher needed; one lit per watcher the host counts, your own the frame
+## you look; all lit, the row closes into a bar (it is held); one of two lit, the second pulses ("one more").
+var eyes: Dictionary = {}
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -168,6 +176,8 @@ func _draw() -> void:
 		_draw_health(px)
 	if down_head != "" and not black:
 		_draw_down(px)
+	if EYE_MARKS and not black and not eyes.is_empty() and bool(eyes.get("on", false)):
+		_draw_eyes(px, now)
 	if big_note != "" and not black:
 		var p3 := px * 2.0
 		PixelFont.draw_shadowed(self, big_note, Vector2(floorf((size.x - PixelFont.width(big_note) * p3) * 0.5), floorf(size.y * 0.42)), p3, Color("#f4f4ec"))
@@ -238,6 +248,53 @@ func _draw_out(px: float) -> void:
 		var lw := PixelFont.width(l) * sc
 		PixelFont.draw_shadowed(self, l, Vector2(floorf((size.x - lw) * 0.5), y), sc, Color("#ff7a6a") if i == 0 else Color("#d8ddd9"))
 		y += (24 if i == 0 else 13) * px
+## The eye marks, bottom middle (see `eyes`): a pale outline each, amber with a pupil when lit, joined by a
+## bar when every one is; a lone lit one of two makes the other pulse.
+func _draw_eyes(px: float, now: int) -> void:
+	var need := clampi(int(eyes.get("need", 1)), 1, 2)
+	var lit := clampi(int(eyes.get("lit", 0)), 0, need)
+	var all := lit >= need
+	var w := 13.0 * px
+	var h := 7.0 * px
+	var gap := 7.0 * px
+	var total := need * w + (need - 1) * gap
+	var y := floorf(size.y * 0.84)
+	if subtitle != "":
+		# Above the subtitles, never over them.
+		y = minf(y, floorf(_subtitle_top() - h * 0.5 - 6.0 * px))
+	var x0 := floorf((size.x - total) * 0.5)
+	var amber := Color("#ffd27a")
+	var pale := Color(0.96, 0.96, 0.92, 0.55)
+	if all:
+		var bar := Rect2(Vector2(x0 - 4.0 * px, y - h * 0.5 - 3.0 * px), Vector2(total + 8.0 * px, h + 6.0 * px))
+		draw_rect(bar, Color(0, 0, 0, 0.5))
+		draw_rect(bar, amber, false, px)
+		draw_rect(Rect2(Vector2(x0, y - px * 0.5), Vector2(total, px)), amber)
+	for i in need:
+		var c := Vector2(x0 + i * (w + gap) + w * 0.5, y)
+		var on := i < lit
+		var col := amber if on else pale
+		if not on and need == 2 and lit == 1:
+			col = Color(amber, 0.3 + 0.6 * (0.5 + 0.5 * sin(float(now) * 0.012)))
+		_draw_eye(c, w, h, col, on, px)
+
+## One almond eye centred on `c`, `w` by `h`: outlined, with a pupil when `open`.
+func _draw_eye(c: Vector2, w: float, h: float, col: Color, open: bool, px: float) -> void:
+	var n := 10
+	var pts := PackedVector2Array()
+	for k in n + 1:
+		var u := float(k) / n
+		pts.append(c + Vector2(-w * 0.5 + w * u, -h * 0.5 * sin(PI * u)))
+	for k in range(n - 1, 0, -1):
+		var u := float(k) / n
+		pts.append(c + Vector2(-w * 0.5 + w * u, h * 0.5 * sin(PI * u)))
+	var ring := pts.duplicate()
+	ring.append(pts[0])
+	draw_colored_polygon(pts, Color(0, 0, 0, 0.45))
+	draw_polyline(ring, Color(0, 0, 0, 0.7), px * 2.0)
+	draw_polyline(ring, col, px)
+	if open:
+		draw_circle(c, h * 0.3, col)
 
 ## The health bar, bottom left: HEALTH and the number, the bar, the rates under it.
 func _draw_health(px: float) -> void:
@@ -337,13 +394,27 @@ func _draw_menu() -> void:
 	if (Time.get_ticks_msec() / 600) % 2 == 0:
 		PixelFont.draw_shadowed(self, foot, origin + Vector2(floorf((w - PixelFont.width(foot)) / 2.0), 6 + (MENU_ROWS.size() + 3) * line) * sc, sc, amber)
 
-func _draw_subtitle(_px: float) -> void:
+## The subtitle's rows as drawn (upper case, only the font's characters, wrapped).
+func _subtitle_rows() -> PackedStringArray:
 	var text := subtitle.to_upper().replace("’", "'").replace("‘", "'").replace("…", "...")
 	var clean := ""
 	for ch: String in text:
 		if ch == " " or _known(ch):
 			clean += ch
-	var rows := PixelFont.wrap(clean, 38)
+	return PixelFont.wrap(clean, 38)
+
+## Where the subtitle box's top edge is (window pixels).
+func _subtitle_top() -> float:
+	var rows := _subtitle_rows()
+	var w := 10
+	for r in rows:
+		w = maxi(w, PixelFont.width(r))
+	w += 6
+	var sc := clampf(floor(size.x * 0.92 / w), 1.0, 4.0)
+	return size.y * 0.91 - (rows.size() * 10 + 4) * sc
+
+func _draw_subtitle(_px: float) -> void:
+	var rows := _subtitle_rows()
 	var w := 10
 	for r in rows:
 		w = maxi(w, PixelFont.width(r))

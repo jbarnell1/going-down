@@ -339,6 +339,76 @@ func test_heard_before_seen(t: T) -> void:
 		n, M.to_fixed(c["minSeeLead"], 2), M.to_fixed(c["medianSeeLead"], 2), M.to_fixed(c["minNearLead"], 2), M.to_fixed(c["medianNearLead"], 2),
 		"" if want.is_empty() else "; golden: min %s s / %s s" % [M.to_fixed(want["minSeeLead"], 2), M.to_fixed(want["minNearLead"], 2)]])
 
+## Two-watcher Stillness (sim/entity.gd "Watchers"; tests/prop_watchers.gd has the rest). Keeps no counts.
+##  - One needed is the old rule: the oracle runs above stepped with need 1 given are the same, tick by tick.
+##  - Two needed, for the Orderly and the Temp: under one watcher it moves and is heard (the squeak, the
+##    stapler's clicks: the tell), and with two it is held and silent.
+func test_two_needed_one_watcher_hears_it_two_hold_it_silent(t: T) -> void:
+	for i in 3:
+		var p := Plans.plan("orderly-%d" % i, 1 + (i % 4))
+		var rng := Rng.make_rng("orderly-%d" % i).fork("setup")
+		var bots: Array[Bot.Bot] = []
+		for b in 3:
+			bots.append(Bot.create_bot(p, "bot%d" % b, "orderly-%d:%d" % [i, b], rng.next(), false, p.landing if b == 0 else null))
+		var a := Entity.create_orderly(p)
+		var b1 := a
+		var same := true
+		for _k in roundi(20.0 / DT):
+			for b in bots:
+				Bot.step_bot(p, b, DT, a.body)
+			var views: Array[Entity.PlayerView] = []
+			for b in bots:
+				views.append(Bot.bot_view(b))
+			a = Entity.step_entity(p, a, views, DT).state
+			b1 = Entity.step_entity(p, b1, views, DT, -1.0, true, 1).state
+			same = same and a.body.x == b1.body.x and a.body.z == b1.body.z and a.yaw == b1.yaw and a.held == b1.held and a.mode == b1.mode
+		t.check(same, "orderly-%d: need 1 given is not the old rule" % i)
+	for kind: Entity.BodySettings in [Entity.orderly_body(), Entity.temp_body()]:
+		var heard_lone := 0
+		var held_two := 0
+		var tried := 0
+		for i in 30:
+			var p := Plans.plan("watch2-%d" % i, 1)
+			var o := Entity.create_orderly(p, kind)
+			o.mode = &"hunting"
+			# Three spots 6 to 12 m off that can see it (looking at it).
+			var spots: Array[Move.Body] = []
+			for idx in Floor.distances_from(p, Move.cell_of(p, o.body)).size():
+				var c := Floor.pos_from_index(p, idx)
+				if c.level != o.body.level or not Floor.is_walkable(p, c.level, c.x, c.y):
+					continue
+				var bb := Move.body_at_cell(p, c)
+				var d := M.hypot2(bb.x - o.body.x, bb.z - o.body.z)
+				var v := Entity.PlayerView.make("x", bb, Bot.BOT_EYE, Entity.yaw_toward(o.body.x - bb.x, o.body.z - bb.z), 0.0, Bot.BOT_HFOV_DEG, Bot.BOT_VFOV_DEG, true)
+				var one: Array[Entity.PlayerView] = [v]
+				if d >= 6.0 and d <= 12.0 and Entity.seen_by(p, o.body, one, kind) != null:
+					spots.append(bb)
+					if spots.size() == 3:
+						break
+			if spots.size() < 3:
+				continue
+			tried += 1
+			for k in roundi(6.0 / DT):
+				var lookers := 1 if k < 60 else 2
+				var views: Array[Entity.PlayerView] = []
+				for j in 3:
+					var bb := spots[j]
+					var yaw := Entity.yaw_toward(o.body.x - bb.x, o.body.z - bb.z) + (0.0 if j < lookers else PI)
+					views.append(Entity.PlayerView.make("b%d" % j, bb, Bot.BOT_EYE, yaw, 0.0, Bot.BOT_HFOV_DEG, Bot.BOT_VFOV_DEG, true))
+				var r := Entity.step_entity(p, o, views, DT, -1.0, true, 2)
+				o = r.state
+				var gain := Entity.audibility(p, o, spots[0], Bot.BOT_EYE).gain
+				if o.watchers.size() == 1 and o.mode == &"hunting" and (o.clicks > 0 if kind.clicks() else o.moving) and gain > 0.0:
+					heard_lone += 1
+				if o.watchers.size() >= 2:
+					held_two += 1
+					t.check(o.held and not o.moving and gain == 0.0 and o.clicks == 0, "%s watch2-%d t %.2f: two watchers but it moved or was heard" % [kind.name, i, o.t])
+			if tried >= 4:
+				break
+		t.check(tried >= 2, "%s: staged floors %d" % [kind.name, tried])
+		t.check(heard_lone > 0, "%s: never heard moving under one watcher of two" % kind.name)
+		t.check(held_two > 0, "%s: never held by two" % kind.name)
+
 static func _median(xs: Array[float]) -> float:
 	var s := xs.duplicate()
 	s.sort()

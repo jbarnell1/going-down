@@ -83,6 +83,20 @@
 # when (host times, so every screen counts the same ten and three seconds), and this floor's red spots. The
 # run's "downed", "healStart", "healStop", "healed" and "out" reach every client like any other event. A run
 # without the down rule sends exactly what it did before.
+#
+# Two-watcher Stillness (sim/run.gd two_watchers, sim/entity.gd "Watchers"; T19a): the run decides, the host
+# keeps it fair over the network. With two watchers needed (three or more up players):
+#  - every snapshot carries the count, the watch block (Protocol.enc_watch: need, and whom the host counts);
+#  - "I can see it" makes that player one watcher (Entity.note_look), not a hold: a lone one holds nothing;
+#  - a seen report is honoured (put back and held, as above) only if a snapshot the player had been sent and
+#    acknowledged, from the newer one it drew from up to its ackHt, said one more look was enough (one needed,
+#    or another player counted), even if that other watcher has looked away since: its screen lit every mark
+#    and held on what it was told. Otherwise it is one watcher's look, like "I can see it".
+# With one needed (one or two up players, or the rule off) everything is as it was.
+#
+# Relocation (sim/run.gd relocation, sim/relocate.gd; T19e): the run decides. Once the resident has relocated on
+# the floor every snapshot carries the count (Protocol "reloc"), and a seen report of a pose from before its last
+# relocation is stale (counted as such, nothing put back or held): it is of a place it has left.
 extends RefCounted
 
 const Run = preload("res://sim/run.gd")
@@ -233,6 +247,12 @@ var relay_faces := true
 ## Face changes ("C") taken, and ignored (not a valid face, or within FACE_GAP of the last one).
 var face_changes := 0
 var face_changes_ignored := 0
+## Two-watcher Stillness (T19a; not in HostStats, which the reference sessions compare): seen reports not
+## honoured because what their player had been sent listed no other watcher (they count as one look).
+var reports_unheld := 0
+## What each snapshot said of the count, by tick: [host time, need, watcher ids]. Never rewritten by a
+## put-back (it is what the clients were told).
+var _sent_watch := {}
 var _transport: Transport.Transport
 var _start_local: float
 var _players := {}  # id -> HostPlayer, in arrival order
@@ -620,13 +640,20 @@ func _step(now: float) -> void:
 		for item: Array in q:
 			s = _apply_report(s, item[0], item[1], extra, t_next)
 
-	# 2. Anyone saying they can see it now: held, and a wind-up is off.
+	# 2. Anyone saying they can see it now: held, and a wind-up is off. With two watchers needed, each
+	# is one watcher for the count instead (Entity.note_look): a lone one holds nothing.
 	var seeing := false
+	var two := s.orderly.need >= 2
 	for p: HostPlayer in _players.values():
 		if still and _playing(p) and p.input["seeing"] == true and ht - p.input_at <= Session.SEEING_TIMEOUT and _before_armed(p.input["renderTime"], true):
 			seeing = true
-			break
-	if seeing:
+			if not two:
+				break
+			var looked := Entity.note_look(s.orderly, p.id, s.orderly.t)
+			if looked != s.orderly:
+				s = s.copy()
+				s.orderly = looked
+	if seeing and not two:
 		s = _hold(s, true, extra, t_next, false)
 
 	# 3. A catch waits for its victim's screen.
@@ -762,6 +789,8 @@ func _record() -> void:
 	var s := state
 	_hist[tick] = History.make(s.orderly)
 	_hist.erase(tick - HISTORY_TICKS)
+	_sent_watch[tick] = [s.t, s.orderly.need, s.orderly.watchers]
+	_sent_watch.erase(tick - HISTORY_TICKS)
 	_states[tick] = s
 	_states.erase(tick - STATE_TICKS)
 
@@ -827,6 +856,8 @@ func _hold(s: Run.RunState, full: bool, extra: Array[Dictionary], t: float, by_r
 	if o.last_seen_at == null or float(o.last_seen_at) < last:
 		o = o.copy()
 		o.last_seen_at = last
+	# Two watchers needed: the same hold, on the count (Entity.hold_met; with one needed it changes nothing).
+	o = Entity.hold_met(o, last)
 	if full and o.mode == &"windUp":
 		extra.append({"type": "windUpCancelled", "t": t, "playerId": o.wind_up_target if o.wind_up_target != null else ""})
 		if by_report:
@@ -857,7 +888,7 @@ func _confirm_catch(s: Run.RunState, ht: float) -> Run.RunState:
 	if o.mode != &"windUp" or o.wind_up_left - TICK > EPS or o.wind_up_target == null or String(o.wind_up_target).is_empty():
 		return s
 	# Already held this tick by grace: it will not complete now anyway.
-	if o.last_seen_at != null and o.t - float(o.last_seen_at) < Entity.GRACE - EPS:
+	if Entity.held_by_grace(o):
 		return s
 	var victim := String(o.wind_up_target)
 	if _pending_catch == null or _pending_catch["victim"] != victim:
@@ -889,6 +920,21 @@ func _apply_report(s: Run.RunState, player_id: String, r: Dictionary, extra: Arr
 	if int(r["depth"]) != s.depth:
 		stats.stale_reports += 1
 		return s
+	# Relocation (sim/relocate.gd): a sighting from before it relocated is of a place it has left, where nobody
+	# could see it; the client snaps to the new pose and never draws between (net/client.gd). Nothing to put back.
+	var hr: History = _hist.get(rb, _hist.get(ra))
+	if hr != null and hr.o.relocations != s.orderly.relocations:
+		stats.stale_reports += 1
+		return s
+	# Two watchers needed: honoured only if what this player had been sent let one look hold it.
+	if not _report_honoured(s, p, r):
+		reports_unheld += 1
+		var looked := Entity.note_look(s.orderly, player_id, s.orderly.t)
+		if looked == s.orderly:
+			return s
+		var out0 := s.copy()
+		out0.orderly = looked
+		return out0
 	var ha: History = _hist.get(ra)
 	var hb: History = _hist.get(rb, ha)
 	if ha == null or hb == null:
@@ -934,6 +980,9 @@ func _apply_report(s: Run.RunState, player_id: String, r: Dictionary, extra: Arr
 	restored.speed = 0.0
 	restored.ever_seen = true
 	restored.last_seen_at = o.t
+	Entity.keep_count(restored, o)
+	Entity.keep_relocation(restored, o)
+	restored.last_met_at = o.t
 	restored.replan_in = 0.0
 	restored.dormant_left = base.dormant_left if mode == &"dormant" else 0.0
 	# The put-back freezes it outright, so the tick will not see the change: report it here.
@@ -954,6 +1003,29 @@ func _apply_report(s: Run.RunState, player_id: String, r: Dictionary, extra: Arr
 	var out := s.copy()
 	out.orderly = restored
 	return out
+
+## Two-watcher Stillness (T19a): whether a seen report may hold the resident. With one watcher needed,
+## always (the old rule). With two, only if a snapshot this player had been sent and acknowledged (from the
+## newer of the two it drew from, up to its ackHt) said one look was enough: one watcher needed, or another
+## player counted. That other watcher may have looked away since: the client held on what it was told, so
+## the host holds too. A report with nothing recorded to judge it by (older than the history) is honoured.
+func _report_honoured(s: Run.RunState, p: HostPlayer, r: Dictionary) -> bool:
+	if s.orderly.need <= 1:
+		return true
+	var judged := false
+	for k in range(int(r["b"]), tick + 1):
+		var w: Variant = _sent_watch.get(k)
+		if w == null:
+			continue
+		if float(w[0]) > p.ack_ht + 1e-6:
+			break
+		judged = true
+		if int(w[1]) <= 1:
+			return true
+		for id: String in w[2]:
+			if id != p.id:
+				return true
+	return not judged
 
 func _valid_spot(s: Run.RunState, b: Move.Body) -> bool:
 	var plan := s.plan
@@ -1021,7 +1093,24 @@ func world(full: bool = false) -> Dictionary:
 		out["annex"] = annex_block(s, full)
 	if s.downs:
 		out["downs"] = downs_block(s)
+	var watch: Variant = watch_block(s)
+	if watch != null:
+		out["watch"] = watch
+	# Relocation (T19e): the count, once it has relocated on this floor (Protocol "reloc").
+	if s.orderly.relocations > 0:
+		out["reloc"] = s.orderly.relocations
 	return out
+
+## Two-watcher Stillness (T19a; Protocol.enc_watch): the count as the host has it this tick, {need,
+## watchers (ids, with grace)}. Only in a run with two-watcher Stillness on and Entity.WATCH_CREW or more
+## players (null otherwise): with fewer, one watcher is always enough, and the snapshot is what it always was.
+static func watch_block(s: Run.RunState) -> Variant:
+	if not s.two_watchers or s.players.size() < Entity.WATCH_CREW:
+		return null
+	var ids: Array = []
+	for id in s.orderly.watchers:
+		ids.append(id)
+	return {"need": s.orderly.need, "watchers": ids}
 
 ## The downs block of a run with the down rule (Protocol.enc_downs): who is down (in the run's player order),
 ## when they went down and when they are out unless healed, who holds F beside them and since when (host

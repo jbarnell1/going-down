@@ -68,6 +68,20 @@
 # The resident bent over a downed player ("bending") is drawn as the snapshots say even while it is seen: its
 # bend is the one movement it makes while watched. The taken latch treats "bending" as it treats "dormant"
 # (the catch was made).
+#
+# Two-watcher Stillness (sim/entity.gd "Watchers"; docs/floors/traits-and-hiding.md section 1; T19a). The newest
+# snapshot's watch block says how many watchers hold it (need) and whom the host counts; without one, one look
+# is enough, as always. Rule 2 above applies only when this player's look would complete the count: one
+# needed, or another player listed. Then it lights every eye mark, holds at once and reports, as always (the
+# host honours the report against what this player had been sent: net/host.gd). Otherwise its look is one
+# mark of two: the figure is drawn as the snapshots say (it walks at a lone watcher; the "seeing" flag tells
+# the host it is one watcher), nothing is reported, and a hold already made is let go, in view, on the frame
+# the marks drop. So the figure never moves on a frame that shows every mark lit (Frame.eyes_all).
+#
+# Relocation (sim/relocate.gd; T19e). The host moves the resident from a place nobody can see to another nobody
+# can see; snapshots carry how often it has on this floor ("reloc"). Between two snapshots whose counts differ the
+# figure is never blended: it is drawn at the newer one's pose (a snap), so it is never seen sliding through
+# walls on the way. Its arrival cue is the "relocated" event, in `events` like any other.
 extends RefCounted
 
 const Move = preload("res://sim/move.gd")
@@ -139,6 +153,16 @@ class Frame:
 	var seeing := false
 	## Latched as taken: the screen is blind (also `dark`) until the catch is drawn or called off.
 	var taken := false
+	## Two-watcher Stillness (see the header): the eye marks. Shown only while the local player sees the
+	## figure (eyes_on, a Stillness resident); `eyes_need` marks (1 or 2), `eyes_lit` of them lit (this
+	## player's own the frame they look, then one per other watcher the host counts); `eyes_all`: every
+	## mark lit, and the drawing held.
+	var eyes_on := false
+	var eyes_need := 1
+	var eyes_lit := 0
+	var eyes_all := false
+	## The one watcher it walks at while it needs two and has one (the watched walk), else "".
+	var watched_by := ""
 	## Depth of the floor drawn.
 	var depth := 1
 	## Everyone else, interpolated: {id, body (Move.Body), yaw, pitch, active, status, gait}.
@@ -250,6 +274,8 @@ var _latched_end := -INF
 var _latch: Variant = null  # {rt, armed, depth}
 var _caught_at := -INF
 var _orderly_from := -1
+## This frame's eye marks: [shown, need, lit, watched by] (_set_eyes).
+var _eyes_frame: Array = [false, 1, 0, ""]
 
 ## `interp_delay` (default INTERP_DELAY) and `input_interval` (default INPUT_INTERVAL; 0 sends every frame).
 ## `face`: the player's drawn face (FaceCodec text) to send in the join, or "" for none.
@@ -684,6 +710,7 @@ func frame(now: float, local: LocalFrame) -> Frame:
 	var blind: bool = dk[0] or taken
 
 	# The Orderly.
+	_eyes_frame = [false, 1, 0, ""]
 	var seeing_now := false
 	var report: Variant = null
 	var orderly: Variant = null
@@ -692,12 +719,14 @@ func frame(now: float, local: LocalFrame) -> Frame:
 		var b: Dictionary = show[1]
 		var alpha: float = show[2]
 		var a_depth: int = a["depth"]
+		var eyes := _eyes()
+		var enough: bool = eyes[0] <= 1 or eyes[1].size() >= eyes[0] - 1
 		# Pinned: until the snapshots drawn show the host has handled our last report, they are the
 		# timeline it is about to abandon (it puts the Orderly back where we froze it), so keep that.
 		if _pin != null and (int(_pin["depth"]) != a_depth or int(a.get("ackSeen", 0)) >= int(_pin["id"])):
 			_pin = null
 		var pinned := _pin != null
-		var cand: Dictionary = _pin["pose"] if pinned else Pose.lerp_pose(a["orderly"], b["orderly"], alpha)
+		var cand: Dictionary = _pin["pose"] if pinned else (Pose.quant_pose(b["orderly"]) if _moved_on(a, b) else Pose.lerp_pose(a["orderly"], b["orderly"], alpha))
 		var plan := Session.plan_for(seed, a_depth)
 		var open := Session.doors_open_in(a["phase"]) or Session.doors_open_in(b["phase"]) or (latest != null and Session.doors_open_in(latest["phase"]))
 		var same := _drawn != null and _drawn_depth == a_depth
@@ -716,10 +745,10 @@ func frame(now: float, local: LocalFrame) -> Frame:
 			_frozen = false
 			if _drawn == null or not Pose.same_pose(_drawn, cand):
 				_drawn = cand
-		elif _frozen and same and _sees(plan, cam, _drawn, open, blind):
+		elif _frozen and same and enough and _sees(plan, cam, _drawn, open, blind):
 			# Seen: held exactly where it is, whatever the snapshots say.
 			seeing_now = true
-		elif _frozen and same and _sees(plan, cam, cand, open, blind):
+		elif _frozen and same and enough and _sees(plan, cam, cand, open, blind):
 			# The held pose has left the view but the snapshots' pose is in it: keep holding until
 			# neither is, so the jump between them never happens on screen.
 			pass
@@ -731,23 +760,30 @@ func frame(now: float, local: LocalFrame) -> Frame:
 				stats.max_release_jump = maxf(stats.max_release_jump, jump)
 				if jump > 0.25:
 					stats.big_releases += 1
-			if _sees(plan, cam, cand, open, blind):
+			if _sees(plan, cam, cand, open, blind) and enough:
 				_frozen = true
 				seeing_now = true
 				if not pinned:
 					report = _make_report(a, b, alpha, cand)
+			elif _sees(plan, cam, cand, open, blind):
+				# One mark of two: it walks on (at this player, perhaps), and this player is one watcher.
+				_frozen = false
+				seeing_now = true
 			else:
 				_frozen = false
 			if _drawn == null or not Pose.same_pose(_drawn, cand):
 				_drawn = cand
 		_drawn_depth = a_depth
 		orderly = _drawn
+		if Places.resident(plan.place).stillness:
+			_set_eyes(eyes, seeing_now, not pinned and not _bending(a, b))
 	else:
 		_drawn = null
 		_frozen = false
 	if seeing_now:
 		_seeing_latch = true
-	if seeing_now and _wind_up_on:
+	# A lone watcher of two saves nobody by looking: only a frame with every mark lit counts as seeing it.
+	if seeing_now and _wind_up_on and int(_eyes_frame[2]) >= int(_eyes_frame[1]):
 		_wind_up_saw = true
 
 	# Everyone else.
@@ -792,11 +828,47 @@ func frame(now: float, local: LocalFrame) -> Frame:
 	f.held = _frozen
 	f.seeing = seeing_now
 	f.taken = taken
+	f.eyes_on = bool(_eyes_frame[0]) and not blind
+	f.eyes_need = int(_eyes_frame[1])
+	f.eyes_lit = int(_eyes_frame[2]) if f.eyes_on else 0
+	f.eyes_all = f.eyes_on and f.eyes_lit >= f.eyes_need
+	f.watched_by = str(_eyes_frame[3]) if not blind else ""
 	f.depth = int(show[0]["depth"]) if not show.is_empty() else local_depth
 	f.players = players
 	f.render_time = rt
 	f.placed = placed
 	return f
+
+## Two-watcher Stillness: [need, the other players the newest snapshot counts as watchers, every one it
+## counts], from its watch block (none: [1, [], []]).
+func _eyes() -> Array:
+	var wb: Variant = latest.get("watch") if latest != null else null
+	if wb == null:
+		return [1, [], []]
+	var others: Array = []
+	for w: Variant in wb["watchers"]:
+		if str(w) != str(id):
+			others.append(str(w))
+	return [int(wb["need"]), others, wb["watchers"]]
+
+## This frame's eye marks ([shown, need, lit, watched by]) from the count (`eyes`, _eyes()) and the local look.
+## `free`: the figure may be walking (not pinned to a report, not bent over someone), for the watched walk.
+func _set_eyes(eyes: Array, seeing_now: bool, free: bool) -> void:
+	var need: int = eyes[0]
+	var others: Array = eyes[1]
+	var lit := mini(need, others.size() + (1 if seeing_now else 0))
+	var by := ""
+	if need >= 2 and free and lit < need:
+		var all: Array = eyes[2]
+		if all.size() == 1:
+			by = str(all[0])
+		elif all.is_empty() and seeing_now:
+			by = str(id)
+	_eyes_frame = [seeing_now, need, lit, by]
+
+## The resident relocated between snapshots `a` and `b` (their relocation counts differ): see the header.
+static func _moved_on(a: Dictionary, b: Dictionary) -> bool:
+	return int(a.get("reloc", 0)) != int(b.get("reloc", 0))
 
 ## Both snapshots drawn have the resident bent over a downed player.
 static func _bending(a: Dictionary, b: Dictionary) -> bool:

@@ -128,6 +128,24 @@
 #    from the lift, sprints this floor, notes per name, the pad's use; door passes and looking are not
 #    tracked yet, so their notes are never used. Note ids count up over the whole run (note_seq).
 #
+# Two-watcher Stillness (docs/floors/traits-and-hiding.md section 1; T19a), on only for a run made with it
+# (with_two_watchers(): net/host_rules.gd turns it on for the game's server rooms; tests and every stored
+# result leave it off, and then one watcher always holds a Stillness resident, as before). With it on, every
+# tick the run counts the up players (stillness_up_count: on their feet with an input) and gives the
+# resident Entity.watch_need of them: 1 with one or two up, 2 with three or more. A down, caught, out or
+# left-behind player is not up, so a crew of three with one down needs one (sim/entity.gd "Watchers").
+#
+# Relocation (docs/floors/traits-and-hiding.md section 5; T19e), on only for a run made with it (with_relocation():
+# net/host_rules.gd turns it on for the game's rooms; tests and every stored result leave it off, and then nothing
+# below happens). With it on, every tick after a Stillness resident is stepped, sim/relocate.gd may move it from a
+# place nobody can see to another nobody can see, near a player: "relocated" {from, to, near (the player it went
+# to), k (relocations on this floor), who (its body), reach (its arrival cue's reach, m), why (its trait's trigger:
+# Stillness "dormant" or "far")}, the tick it happens; the
+# event is its arrival cue. The run's part: the eyes (relocation_eyes: every player on their feet or down), the
+# bars (the lobby, the landing, the car's zone, stairs, hide spots) and when it is free to (relocation_free: no
+# blink, blackout or warning, the lift not boarding or riding). The trait decides the rest (sim/relocate.gd rows);
+# only Stillness has one yet.
+#
 # Down first, then out (North Star B6; loop/NIGHT-PLAN.md A5, T8a), on only for a run made with it
 # (create_run's `downs`, with_downs(): net/host_rules.gd turns it on for the game's rooms; tests and every
 # stored result leave it off, and then nothing below happens and a catch is "caught" as before). With it on:
@@ -174,6 +192,7 @@ const M = preload("res://sim/jsmath.gd")
 const Marks = preload("res://sim/marks.gd")
 const Notes = preload("res://sim/notes.gd")
 const Walls = preload("res://sim/walls.gd")
+const Relocate = preload("res://sim/relocate.gd")
 
 # ---------------------------------------------------------------------------------------------
 # Tuning.
@@ -755,9 +774,17 @@ class RunState:
 	var down: Dictionary = {}
 	## This floor's red spots, {playerId, x, z, level, y, t}, in the order left. Replaced, never edited.
 	var spots: Array[Dictionary] = []
+	## Two-watcher Stillness (T19a, with_two_watchers): with three or more up players it takes two watchers
+	## to hold a Stillness resident. Off: one always does, as every stored result has it.
+	var two_watchers: bool = false
+	## Relocation (T19e, with_relocation; sim/relocate.gd): the resident may leave where nobody can see it and
+	## arrive where nobody can. Off: it never does, as every stored result has it.
+	var relocation: bool = false
 
 	func copy() -> RunState:
 		var s := RunState.new()
+		s.two_watchers = two_watchers
+		s.relocation = relocation
 		s.seed = seed
 		s.t = t
 		s.depth = depth
@@ -979,6 +1006,19 @@ static func with_downs(s0: RunState) -> RunState:
 	s.downs = true
 	s.down = {}
 	s.spots = []
+	return s
+
+## The run with two-watcher Stillness on (sim/entity.gd "Watchers"; docs/floors/traits-and-hiding.md
+## section 1): from three up players on the floor it takes two watchers to hold a Stillness resident.
+static func with_two_watchers(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.two_watchers = true
+	return s
+
+## The run with relocation on (sim/relocate.gd; docs/floors/traits-and-hiding.md section 5): see the header.
+static func with_relocation(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.relocation = true
 	return s
 
 static func _create_run(seed: String, player_ids: Array[String], deck: Array = []) -> RunState:
@@ -2175,10 +2215,11 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		# In the blackout it runs its prey down: no creeping up on the still (that is for recording it,
 		# and nobody can see to time a turn in the dark), at BLACKOUT_HUNT_SPEED.
 		var er: Entity.StepResult
+		var need := Entity.watch_need(stillness_up_count(players, input_of)) if s.two_watchers else 1
 		if blacked_out(s):
-			er = Entity.step_entity(s.plan, before, views, dt, BLACKOUT_HUNT_SPEED, false)
+			er = Entity.step_entity(s.plan, before, views, dt, BLACKOUT_HUNT_SPEED, false, need)
 		else:
-			er = Entity.step_entity(s.plan, before, views, dt)
+			er = Entity.step_entity(s.plan, before, views, dt, -1.0, true, need)
 		var next := er.state
 		# Belt and braces: it can never end a tick in (or overlapping) the car.
 		if rect_distance(car.rect, next.body.x, next.body.z) < Entity.ORDERLY_RADIUS - 1e-3 and next.body.level == car.level:
@@ -2200,9 +2241,14 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 					next = Entity.bend_over(next, str(e["playerId"]))
 				else:
 					crew_events.append(e)
+		# Relocation (see the header): it may leave where nobody can see it and arrive where nobody can.
+		var moved_on: Array[Dictionary] = []
+		if s.relocation:
+			next = _relocate(s, next, who.trait_name, players, input_of, t, dt, moved_on)
 		s.orderly = next
 		for e in o_events:
 			events.append(_with_t(e, t))
+		events.append_array(moved_on)
 		entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, before, next, crew_events)]
 		for e in o_events:
 			if e["type"] != "caught":
@@ -2628,6 +2674,45 @@ static func _inp(p: RunPlayer, input_of: Dictionary) -> PlayerInput:
 
 static func _is_active(p: RunPlayer, input_of: Dictionary) -> bool:
 	return p.status == &"ok" and input_of.has(p.id)
+
+## Two-watcher Stillness (sim/entity.gd "Watchers"; T19a): the up players this tick, from which
+## Entity.watch_need says how many watchers hold a Stillness resident. Up: on their feet with an input
+## (aboard counts while the car is here); never a down, caught, out or left-behind player. A player
+## sitting back in a hide is up (they count here) but sees nothing, so is never a watcher.
+static func stillness_up_count(players: Array[RunPlayer], input_of: Dictionary) -> int:
+	var n := 0
+	for p in players:
+		if _is_active(p, input_of):
+			n += 1
+	return n
+
+## Relocation (see the header; sim/relocate.gd): the eyes, every player on their feet or down (caught, out and
+## left-behind players see nothing), each with the cell their walking is measured from (the landing for one in
+## the car) and whether it may go to them (on their feet, with an input, out of the car).
+static func relocation_eyes(s: RunState, players: Array[RunPlayer], input_of: Dictionary) -> Array[Relocate.Eye]:
+	var out: Array[Relocate.Eye] = []
+	for p in players:
+		if p.status != &"ok" and p.status != &"down":
+			continue
+		var i: PlayerInput = input_of.get(p.id)
+		var aboard := in_car(s.car, p.body)
+		var c := Move.cell_of(s.plan, p.body)
+		var walk: Floor.Pos = s.plan.landing if aboard else (c if Floor.is_walkable(s.plan, c.level, c.x, c.y) else null)
+		out.append(Relocate.Eye.make(p.id, p.body, i.eye if i != null else 1.65, walk, _is_active(p, input_of) and not aboard))
+	return out
+
+## Whether the run lets the resident relocate this tick: no blink, blackout or their warning, the lift not boarding.
+static func relocation_free(s: RunState) -> bool:
+	return s.phase != &"boarding" and s.phase != &"riding" and not (s.blink != null and (s.blink.announced or s.blink.ends_at != null))
+
+## One tick of relocation for the resident just stepped (`o`), its "relocated" event added to `events`.
+static func _relocate(s: RunState, o: Entity.OrderlyState, trait_name: StringName, players: Array[RunPlayer], input_of: Dictionary, t: float, dt: float, events: Array[Dictionary]) -> Entity.OrderlyState:
+	var r := s.car.rect
+	var bars := Relocate.barred(s.plan, s.plan.seed, PackedFloat64Array([r.x0, r.z0, r.x1, r.z1]), s.car.level)
+	var st := Relocate.step(s.plan, s.seed, s.depth, trait_name, o, relocation_eyes(s, players, input_of), bars, relocation_free(s), t, dt)
+	if st.event != null:
+		events.append(st.event)
+	return st.state
 
 static func _active_aboard(players: Array[RunPlayer], input_of: Dictionary) -> Array[RunPlayer]:
 	var out: Array[RunPlayer] = []
