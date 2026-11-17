@@ -3,7 +3,7 @@
 // export/windows/GoingDown.exe in a small window with `auto=1` (it never captures the mouse) and a
 // test channel on 127.0.0.1, sends the same commands the browser hook takes, saves pictures through the
 // game's own `shot` command (the window as drawn), and also asserts sound by measuring the audio buses
-// (Master, Sfx, Squeak, Voice peaks). Closes the game at the end.
+// (Master, Voice, Entity, Scare, Effects, Ambience, UI peaks). Closes the game at the end.
 // Usage: node play_desktop.mjs [--port=4461] [--quality=full] [--only=first]
 // Start .local/guard-mouse.ps1 beside it.
 import { spawn } from 'node:child_process';

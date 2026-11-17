@@ -15,7 +15,7 @@ run/flush_stdout_on_print.server=true
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [audio]
-; The Sfx, Squeak and Voice buses are declared in this file. Never add buses at run time
+; The Voice, Entity, Scare, Effects, Ambience and UI buses are declared in this file. Never add buses at run time
 ; (AudioServer.add_bus): in the browser's Sample playback mode that silences everything.
 buses/default_bus_layout="res://default_bus_layout.tres"
 driver/mix_rate.web=44100

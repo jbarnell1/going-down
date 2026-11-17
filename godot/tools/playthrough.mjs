@@ -99,7 +99,7 @@ check('steps out of the car with the rules moving the body', s.me.aboard === fal
 await wait(400);
 await shot('stepped-out-clean-side');
 await soundCheck("the announcer's welcome is heard", 'Voice', 2500);
-await soundCheck('the light hum is heard', 'Sfx', 1500);
+await soundCheck('the light hum is heard', 'Ambience', 1500);
 
 // ---- 3. The clean side and the corrupted side: sightlines by mean walking distance from the lift.
 const mean = (sl) => {
@@ -176,7 +176,7 @@ await cmd(`face ${2 * s.me.x - ePos.x} ${2 * s.me.z - ePos.z}`);
 await cmd('raise 1');
 s = await until((s) => s.orderly.moving === true, 4000, 50);
 const sq = s.orderly.squeak;
-await soundCheck('the squeak is heard while it moves unseen', 'Squeak', 500);
+await soundCheck('the squeak is heard while it moves unseen', 'Entity', 500);
 await wait(600);
 s = await state();
 const moved2 = Math.hypot(s.orderly.x - o0.x, s.orderly.z - o0.z);
