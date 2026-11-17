@@ -53,6 +53,9 @@ var panels: Array = []           # [{mat, col, dead}]
 var flickers: Array = []         # [{light, i, panel, phase, rate}]
 var emergency_lights: Array[Light3D] = []
 var emergency_nodes: Array[Node3D] = []
+## The ambient colour as lit, and in the dark with the emergency lighting on (see ambient_color).
+const AMBIENT_LIT := Color(0.55, 0.6, 0.6)
+var ambient_dark := Color(0.5, 0.08, 0.03)
 var _rng := RandomNumberGenerator.new()
 var _t := 0.0
 var _level := 1.0
@@ -106,9 +109,13 @@ func build(p: Dictionary, seed_text: String) -> void:
 	for d in dist:
 		max_dist = maxi(max_dist, d)
 	_index_rooms()
-	# The Prison hub has its own look (client/prison_view.gd); everything below is the Clinic's.
+	# The Prison hub and the Annex have their own looks (client/prison_view.gd, client/annex_view.gd);
+	# everything below is the Clinic's.
 	if str(p.get("place", "")) == "prison":
 		PRISON_VIEW.new().dress(self)
+		return
+	if str(p.get("place", "clinic")) == "annex":
+		preload("res://client/annex_view.gd").dress(self)
 		return
 	_make_materials()
 	_build_floors_and_ceilings()
@@ -571,6 +578,11 @@ func _build_lights() -> void:
 ## dark). Panels die faster than the room, as in src/render/lighting.ts.
 func set_light_level(k: float) -> void:
 	_level = clampf(k, 0.0, 1.0)
+
+## The ambient light's colour, lit (emergency 0) to the dark with the emergency lighting on (1). The
+## Clinic's dark is red; a place's dressing may set its own (the Annex: green, never red).
+func ambient_color(emergency: float) -> Color:
+	return AMBIENT_LIT.lerp(ambient_dark, emergency)
 
 ## The emergency lighting, 0 (off) to 1 (fully on).
 func set_emergency(k: float) -> void:

@@ -150,6 +150,10 @@ var _stats_t0 := 0.0
 var _stats_bytes := [0, 0]
 
 func _ready() -> void:
+	if OS.get_cmdline_user_args().has("scene=annex_demo"):
+		process_mode = Node.PROCESS_MODE_DISABLED
+		get_tree().change_scene_to_file.call_deferred("res://client/annex_demo.tscn")
+		return
 	# The Windows build doubles as the dedicated server: `GoingDown.exe --headless -- server port=N`.
 	if "server" in OS.get_cmdline_user_args():
 		get_tree().change_scene_to_file.call_deferred("res://server/server.tscn")
@@ -850,7 +854,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	sfx.set_hum(light)
 	level.set_emergency(emergency)
 	level.update_lights(dt, cam.global_position)
-	env.ambient_light_color = Color(0.55, 0.6, 0.6).lerp(Color(0.5, 0.08, 0.03), emergency)
+	env.ambient_light_color = level.ambient_color(emergency)
 	env.ambient_light_energy = lerpf(0.12, 0.05, emergency) * maxf(light, emergency)
 	env.background_color = Color(0.02, 0.025, 0.025) * light
 
