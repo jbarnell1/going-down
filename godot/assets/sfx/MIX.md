@@ -1,5 +1,7 @@
 # The mix
 
+The owner's rule (V21): "You need to make sure you're normalizing sound properly so that in game one sound doesn't come over another like orchestrate the sound well." So: scares sit about +3 LU over the elevator voice and never more than +4, nothing else goes over the voice, true peak at most -1 dBTP; every floor is measured in the game (tools/mix_check.mjs: the Clinic's busy minute, then the Annex and the Playroom).
+
 How every sound sits against the elevator voice, and why. Measured with ffmpeg `ebur128` (integrated loudness I, short-term max S over 3 s windows, loudness range LRA, true peak TP). Regenerate the files with the scratch pipeline described under *Method*; check the result in the game with `node godot/tools/mix_check.mjs` (GODOT set).
 
 ## The reference: the voice
@@ -23,7 +25,7 @@ The 54 elevator voice files average **V = -16.1 LUFS** integrated (each -16.0 to
 
 ## Buses and orchestration
 
-- Buses (default_bus_layout.tres): Voice, Entity, Scare, Effects, Ambience, UI, all into Master, which has a hard limiter at -1 dBTP. Entity carries the Orderly and is never ducked; its low-pass (4 kHz) is the muffling when the rules say a wall is in the way, and 5 dB is given back for it.
+- Buses (default_bus_layout.tres): Voice, Entity, Scare, Effects, Ambience, UI, all into Master, which has a hard limiter. The layout sets its ceiling at -1.0; Sfx.setup lowers it to -2.0 dBFS (Sfx.MASTER_CEILING) because it holds sample peaks and the true peaks between samples ran up to 0.8 dB over them (one mix check in three measured -0.7 dBTP at the -1.0 ceiling), so the -1 dBTP rule holds every run. Entity carries the Orderly and is never ducked; its low-pass (4 kHz) is the muffling when the rules say a wall is in the way, and 5 dB is given back for it.
 - While the announcer speaks, Effects and Ambience duck by 6 dB (the bus faders, 30 dB/s, so it works in the browser too; checked there by tools/sound_web.mjs).
 - Every 3D sound has its category's unit size and max distance and never plays louder than its file however close (`max_db` 0). The trolley has no distance attenuation of its own: its loudness is the rules' audibility.
 - Room tones: at most one at a time, at least 9 s apart, none for 8 s after a scare, none while the Orderly is coming within 20 m unseen, the bed only while the Orderly is watched, the intercom not in the dark. Timing and place come from the floor seed and the host's clock (16 s slots), so every player hears the same tone at the same moment from the same place.
@@ -32,6 +34,8 @@ The 54 elevator voice files average **V = -16.1 LUFS** integrated (each -16.0 to
 ## What the game measured (tools/mix_check.mjs, the busy minute)
 
 Desktop, headless, 76 s: V = -17.9 LUFS. Short-term max per bus against it: Entity -1.0 LU, Effects -3.9, Ambience -12.7, UI -13.4, Scare +3.3 (ceiling +4); Master true peak -2.0 dBTP; the Orderly coming on unseen never quieter than V-11.2 within hearing (at 33 m, the edge of the rules' range); Ambience at least 18.8 LU under the voice while it speaks. Breaks that turn it red: no duck (Ambience -12.9 LU under the voice while it speaks), the hum 12 dB up (-8.4), the roar 3 dB up (+6.4 LU over the voice).
+
+The recording itself (17 Nov): from the second batch on, "the beds duck" read 13.0 to 14.8 LU and failed two runs in three. The duck was fine; the Ambience recording was not in step. Its capture was added before the game, and the game's own Ambience low-pass, added after, emptied it (adding an effect to a bus starts its effects afresh), so the Ambience file was 2.1 to 2.3 s short and ran early: the beds seemed to come back up 1.5 to 2 s before the voice ended. With the captures added after the game, 0.28 s was still missing (the Ambience is quiet for the first moments, and a bus with nothing on it is not recorded), so every recording now starts on one frame a second in. Each run now checks that every bus recorded the same length (within 0.1 s). In step, the beds sit 18.4 to 19.1 LU under the voice while it speaks (three full runs in a row; Entity -0.5 to -0.9 LU, the scare +2.9 to +3.3, Master -1.9 to -2.0 dBTP), as in the first measurement above.
 
 Browser (tools/sound_web.mjs): the hum ducks 6.8-7.3 dB under the voice through the bus fader, so the duck works there too.
 
@@ -71,6 +75,136 @@ Raw = the owner's WAV as delivered; final = the committed Ogg. Rel = final loudn
 | clinic/intercom_1.ogg | room | -11.9 / -12.2 / 20.0 / -0.7 | -26.3 / -26.3 / 0.0 / -12.7 | -10.2 | volume | 0.0 | - | 2.75 s |
 | clinic/intercom_2.ogg | room | -19.2 / -26.1 / 20.0 / -1.0 | -26.5 / -26.5 / 0.0 / -5.5 | -10.4 | volume | 0.0 | - | 0.9 s |
 | clinic/bed_roll.ogg | room | -31.7 / -32.6 / 4.7 / -9.0 | -26.4 / -27.2 / 1.8 / -2.7 | -10.3 | loudnorm-linear | 2.6 | - | 6.7 s |
+
+## Carrying across the floor (the owner, playing build 0833)
+
+"The shrieks and roars and raspy breathing are too quiet when far away near the elevator; that should be scary to hear, a distant wail. The raspy breathing needs to happen much further away, before you get caught." So the scares and the Orderly's breathing have their own curves (Sfx.far_db), panned in 3D, losing their top with distance (a low-pass from open at 8 m to 2.5 kHz at 60 m: far off is muffled, never silenced). The levels at the file stay as above, so the ceiling (V+4) and the true peak are untouched.
+
+| Sound | Before | After |
+|---|---|---|
+| Scares (roar heard from the Orderly, shrieks) | the engine's inverse distance from 6 m: -12.4 dB at 25 m, cut off at 45 m | full within 8 m, -20 log(d/8) beyond, never below -10 dB out to 90 m (reached at 25 m) |
+| Slow breathing | inverse distance from 1.5 m: -10.5 dB at 5 m, -16.5 dB at 10 m, gone past 10 m | heard from 28 m at -22 dB, building evenly in dB to full at 2 m (-15.2 at 20 m, -6.8 at 10 m, -2.5 at 5 m) |
+| Throat rattle | tried within 14 m, inverse distance from 2 m, gone past 18 m | tried within 26 m, on the breathing's curve |
+
+While the trolley sounds (the Orderly coming on unseen; the trolley carries 34 m, past the breath's 28 m) the breathing steps back close in (Sfx.breath_db): nothing at 28 m, growing evenly to 9 dB at 6 m (Sfx.BREATH_UNDER_TROLLEY_DB, BREATH_DUCK_FULL) and holding 9 dB from there in. Close in the trolley is the warning, and with the breathing at full the Entity bus went 0.8 LU over the voice in the busy minute (-6 dB under it still left only 0.3 LU of room). The curve climbs 0.85 dB a metre and the step back grows 0.41 dB a metre, so under the trolley the breathing still builds all the way in: -18.5 dB at 20 m, -14.1 at 10 m, -11.5 at 5 m, -9 at 2 m (it was -9 dB at every distance at first: -24 at 20 m). The throat rattle steps back the same way but by 5 dB (Sfx.RATTLE_UNDER_TROLLEY_DB): on the breath's curve it was 5 dB louder at 5 m than before the change, and a rattle over the trolley there put the Entity bus 0.3 LU over the voice in one busy minute of three; under the trolley it is now -7.8 dB at 5 m, where it was.
+
+Measured (tools/mix_check.mjs, the far run: headless, behind you, no walls; V = -18.0): a roar at 25 m, short-term V-12.0 before, V-9.5 after; at 55 m (the lift from a far corner) silent before, V-9.3 after. The breathing (momentary against V) first heard at 8.8 m before, 26.8 m after; at 20 m silent before, V-18.4 after; at 10 m silent before, V-11.7 after; at 5 m V-21.0 before, V-4.6 after. The checks: the roar at 25 m at least V-11 and at 55 m at least V-20, both at most V+4; the breathing heard (momentary over V-35) from 20 m or further, louder at 5 m than at 20 m, never over the voice; and Sfx.breath_db, every half metre in from 40 m, never dropping as it nears (the breath alone, the breath under the trolley, the rattle under the trolley). "At 5 m" and "at 20 m" are the loudest momentary reading while it comes the last 3 m to that distance (1.5 s): the slow breath has a 0.6 s hush between breaths every 2.7 s, and a single 100 ms reading at the very metre could land in one and read 15 dB low, which made "louder at 5 m than at 20 m" fail now and then (5 m -24 against 20 m -19). Read that way, three runs give 20 m V-18.3 to -18.6, 5 m V-4.8 to -4.9. `--break=far` puts the old curves back (Sfx.old_falloff) and turns three of them red.
+
+## The second batch (17 Nov): the Annex, the Playroom and the crew
+
+The same method, the same V, the same buses; files in annex/, playroom/ and player/ (SOURCES.md). New categories and why:
+
+| Category | Target | Why |
+|---|---|---|
+| The Temp's stapler click | momentary max V-9, played at BASE_DB +5 (temp_view.gd CLICK_REC_DB) | A click of 0.4 s cannot carry much momentary loudness without crushing it (9 dB of limiting at most); +5 in the game puts it at the voice -4 LU right at its hand, as the made-in-code click was, with the file's true peak still -1.5 on the bus. Then (1 - d/30)^2 and 0.45 through a wall, as before. |
+| The stapler going into you (catch) | momentary max V-5 | After the roar, in your face, under it. |
+| The Temp's steps, footsteps | momentary max V-8 | As the crew's footsteps; only within 8 m, so from further the Annex's sound stays dots. |
+| Beds: the office, the play centre | I = V-14, LRA under 1 | In the hum's place on their floor, following the lights; the vent is the Clinic's. |
+| Room tones: phone, photocopier | I = V-10 | As the Clinic's; the phone plays from everywhere at -6 (far off, no direction). |
+| Warnings: the Annex's sagging buzz | I = V-6 | As the Clinic's flicker. |
+| The music box, the Minder scrambling | I = V-3 (the box), V-8 (the scramble, peaky: 8.4 dB of limiting was the most it took) | The box is the Minder's heard-before-seen sound: played at BASE_DB +6 (minder_view.gd BOX_DB) for the 3D panning, about V-4 right at it, falling as (1 - d/30)^2. |
+| The Minder near: wheeze, huff | I = V-3 | As the Orderly's slow breath; 3D. |
+| The count bell (Voice bus) | momentary max V-5.7 | The made-in-code bell's own level (measured with tools/sfx_levels.gd), so the count sits where it did: never buried, never over the voice, +0.8 dB a stroke in the last five. |
+| The count's note (#19) | momentary max V-5.3 | The made-in-code three notes' level; one note played three times at pitch 1, 1.26, 1.5, 0.2 s apart (Sfx.XYLO_PITCH). |
+| The call panel: refused buzz, quota met; the teller's ding | momentary max V-8 | The UI level (the made-in-code buzz was V-8). |
+| The ride up (the freight lift straining) | I = V-10 | Machinery, on the Effects bus as the call's made-in-code motor is, over the ride's rumble (V-10 on Ambience): on Ambience the two with the prison's bed reached V-5.9 in the mix check, over the beds' V-8 line. |
+| The prison's night | I = V-14 | A bed, in the hum's place; it stays through lights out. |
+| Lights out, a cell door, a teller window | I = V-6 | Effects. |
+| A bunk creaking, sliding under the table | I = V-8, V-6 | Crew. |
+| Toys: squeaker tiles, net and flap | momentary max V-5 | A noise you made: plain, under the voice. |
+| The ball pit | jumping in: momentary max V-3 (it is a provocation); wading: I = V-8 | |
+| Crew one-shots: down, healed, into a hide, slide | I = V-6 | Yours, close, an event. |
+| Crew loops: your winded breath, crawling | I = V-8 | As before. |
+| The party horn | momentary max V-6 | Three takes. |
+| Sticky notes | slap: momentary max V-15 (a 0.26 s slap with 9 dB of limiting); peel: V-8 | Ready only; the slap wants +6 in the game when it is wired, as the stapler. |
+| The lift's chime (recorded two-tone bell) | momentary max V-8 | The UI stand-in's level; the false stop's 9 dB under it. |
+| The found-you sting | short-term max V+3 | A scare. |
+
+### Takes picked
+
+- Stapler click: all four takes kept (dealt in turn, never the same twice running). Each is one press-and-release ("ka-chunk", 0.4 s), not cut to a single transient: cut that short, a click cannot reach any useful loudness.
+- Stapler into something soft: #4. A clean silence before the punch, one strong punch with the release 0.3 s later 10 dB down (#3's release is nearly as loud as its punch, two hits), and mono-safe (L/R correlation 0.99 against 0.91).
+- Photocopier: #3. 3.4 dB more signal over the same room noise, and the warm-up then the page are both clear (LRA 2.5); #1 is mostly a steady drone.
+- Hand bell: #1. The strongest strike (momentary max 6.8 dB over #3's) and 30 dB down within 0.6 s, so a stroke a second stands out; both takes have the clapper's small bounce.
+- Squeaky toy: #1, #2 and #4's second squeak, three takes for the tiles (each one squeak).
+- Party blower: all three, as takes (the horn will be blown a lot).
+- Wheeze: #2. It starts and ends near silence (two whole breaths), so the loop's join is clean (seam 0.01); #1 starts mid-breath.
+- The count's note (#19, three candidates): single_note_struck_o #4. The cleanest: one steady pitch from strike to end (its zero-crossing rate never moves), the strongest strike (momentary max 7 dB over the glockenspiel's and 16 over the toy piano's), a clean 0.8 s decay, and mono-safe (L/R correlation 0.76; the glockenspiel's is -0.06, so folding it to mono would hollow it out; the toy piano is noisy and wavers).
+- Sliding under (#6): layered: the jacket-and-jeans slide #2 from 0, #3 4 dB under it from 0.15 s (more cloth), and the shoulder bump #3 at 1.25 s as the slide stops.
+- The found-you sting (the owner: "combine both noises"): **layered**, both at once from 0: #1 (the music-box note bending, lifted 4 dB so it is not lost) strikes first, and #2's deep breath swells in under it 0.2 s later (its own lead-in), 2.2 s in all, normalised as one scare to short-term V+2.6 (4.5 dB of limiting).
+- The out-of-breath file: the crew's own clean breath, so your winded breathing now uses it (the earlier wet breaths are the Orderly's); played at pitch 1, not sped up when winded as the made-in-code one is.
+
+### Every file (second batch)
+
+Columns as above; Rel = final loudness against V by the category's measure (I, M momentary max, or S short-term max).
+
+| File | Category | Raw I / Smax / LRA / TP | Final I / Smax / LRA / TP | Final Mmax | Rel to V | Method | Lim | Seam | Length |
+|---|---|---|---|---|---|---|---|---|---|
+| player/breath_winded.ogg | player | -42 / -40.7 / 1.6 / -21.1 | -24.3 / -23.1 / 1.4 / -6.1 | -20.4 | -8.2 (I) | gain +loop xfade | 0 | 0.18 | 5.50 s |
+| player/down.ogg | crew | -17.3 / -23.6 / 20 / -0.9 | -22.2 / -28.5 / 0 / -2 | -19.8 | -6.1 (I) | gain | 0 | - | 2.10 s |
+| player/crawl.ogg | player | -48.5 / -48.2 / 2.8 / -28.6 | -24.4 / -22.8 / 2.9 / -3.2 | -19.1 | -8.3 (I) | gain +loop xfade | 0 | 0.13 | 10.95 s |
+| player/healed.ogg | crew | -39.3 / -45.6 / 20 / -28.6 | -22.2 / -28.5 / 0 / -9 | -19.8 | -6.1 (I) | gain | 0 | - | 2.20 s |
+| player/hide_in.ogg | crew | -35.8 / -40.5 / 0 / -15.4 | -22.3 / -25.8 / 0 / -1.9 | -17.7 | -6.2 (I) | gain +limit | 4.4 | - | 1.95 s |
+| annex/staple_1.ogg | click | -24.9 / -33.7 / 0 / -1.7 | -70 / -34.8 / 0 / -2.5 | -26 | -9.9 (M) | gain +limit | 5.9 | - | 0.40 s |
+| annex/staple_2.ogg | click | -22.5 / -31.3 / 0 / -4.8 | -25.2 / -34 / 0 / -4.6 | -25.2 | -9.1 (M) | gain | 0 | - | 0.49 s |
+| annex/staple_3.ogg | click | -25.8 / -34.6 / 0 / -3.6 | -25.5 / -34.2 / 0 / -1.8 | -25.5 | -9.4 (M) | gain +limit | 4 | - | 0.45 s |
+| annex/staple_4.ogg | click | -24 / -32.8 / 0 / -2.3 | -26.3 / -35.1 / 0 / -1.7 | -26.3 | -10.2 (M) | gain +limit +encoder trim | 1.5 | - | 0.45 s |
+| annex/staple_soft.ogg | thunk | -23.5 / -29.1 / 0 / -1 | -25.4 / -30.9 / 0 / -1.6 | -22.2 | -6.1 (M) | gain +limit +encoder trim | 6.8 | - | 0.65 s |
+| annex/office.ogg | bed | -46 / -45.8 / 0.3 / -35.8 | -30.1 / -29.9 / 0.4 / -17.9 | -29.5 | -14 (I) | gain +loop xfade | 0 | 0.37 | 13.10 s |
+| annex/buzz.ogg | effect | -35.6 / -33.6 / 3.9 / -9.3 | -22.1 / -21.8 / 0.6 / -1.5 | -16.3 | -6 (I) | gain +limit | 7.2 | - | 3.55 s |
+| annex/phone.ogg | room | -40.6 / -42.5 / 20 / -28.3 | -26.2 / -29 / 4.9 / -12.8 | -23.8 | -10.1 (I) | gain | 0 | - | 3.90 s |
+| annex/copier.ogg | room | -34.7 / -33.6 / 2.5 / -20.1 | -26.3 / -25.2 / 2.4 / -8.8 | -21.4 | -10.2 (I) | gain | 0 | - | 6.00 s |
+| annex/note_slap.ogg | mark | -33.7 / -42.4 / 0 / -5.3 | -70 / -40.1 / 0 / -2.7 | -31.4 | -15.3 (M) | gain +limit | 9 | - | 0.26 s |
+| annex/note_peel.ogg | mark_small | -26.5 / -32.2 / 0 / -5.6 | -27.1 / -32.7 / 0 / -6.1 | -24.3 | -8.2 (M) | gain | 0 | - | 0.69 s |
+| annex/temp_steps.ogg | step | -52 / -52.3 / 1.6 / -28 | -27.2 / -27.7 / 1.7 / -1.5 | -24.1 | -8 (M) | gain +limit +loop xfade | 0.9 | 0.14 | 5.70 s |
+| annex/drag.ogg | entity_small | -48.4 / -48.2 / 0.8 / -35.1 | -22.3 / -21.3 / 0.9 / -5.8 | -18.8 | -6.2 (I) | gain +loop xfade | 0 | 0.06 | 3.80 s |
+| annex/lift_bell.ogg | ui | -18.7 / -21.3 / 0 / -9.6 | -27.5 / -30 / 0 / -15.5 | -24.1 | -8 (M) | gain | 0 | - | 2.00 s |
+| playroom/music_box.ogg | approach | -28.5 / -26.7 / 8.9 / -8.8 | -19.1 / -17.2 / 8.1 / -1.7 | -11.1 | -3 (I) | gain +limit +loop xfade | 5.8 | 0.01 | 11.70 s |
+| playroom/count_bell.ogg | bell | -17.1 / -21.7 / 0 / -4 | -25 / -30.5 / 0 / -10.2 | -21.8 | -5.7 (M) | gain | 0 | - | 0.90 s |
+| playroom/room.ogg | bed | -41.3 / -40.3 / 1.3 / -27.5 | -30.2 / -29.7 / 0.8 / -15.7 | -27.6 | -14.1 (I) | gain +loop xfade | 0 | 0.16 | 17.60 s |
+| playroom/squeak_1.ogg | toy | -15.8 / -23.1 / 0 / -1.7 | -70 / -30.1 / 0 / -6.4 | -21.3 | -5.2 (M) | gain | 0 | - | 0.23 s |
+| playroom/squeak_2.ogg | toy | -14.9 / -22.9 / 0 / -0.4 | -70 / -30 / 0 / -6.7 | -21.3 | -5.2 (M) | gain | 0 | - | 0.26 s |
+| playroom/squeak_3.ogg | toy | -13.7 / -20.6 / 0 / -1 | -70 / -30.2 / 0 / -6.6 | -21.4 | -5.3 (M) | gain | 0 | - | 0.22 s |
+| playroom/pit_wade.ogg | pit_quiet | -36 / -35.6 / 0.7 / -17.3 | -24.1 / -23.7 / 0.6 / -2.6 | -18 | -8 (I) | gain | 0 | - | 3.60 s |
+| playroom/pit_jump.ogg | pit_loud | -24.3 / -26.2 / 0 / -1 | -25.1 / -27.4 / 0 / -1.7 | -19.9 | -3.8 (M) | gain +limit +encoder trim | 5 | - | 2.00 s |
+| playroom/slide.ogg | effect | -30.6 / -33.8 / 0 / -16.7 | -22.2 / -25.3 / 0 / -5.9 | -20.2 | -6.1 (I) | gain | 0 | - | 1.95 s |
+| playroom/net_flap.ogg | toy | -21.5 / -29.3 / 0 / -5 | -21.5 / -30.2 / 0 / -3 | -21.5 | -5.4 (M) | gain | 0 | - | 1.95 s |
+| playroom/horn_1.ogg | horn | -17.4 / -19.4 / 0 / -6.5 | -25.1 / -27.2 / 0 / -10.6 | -22.2 | -6.1 (M) | gain | 0 | - | 1.85 s |
+| playroom/horn_2.ogg | horn | -28.6 / -30.9 / 0 / -14.3 | -27.2 / -29.4 / 0 / -9.9 | -22.2 | -6.1 (M) | gain | 0 | - | 1.85 s |
+| playroom/horn_3.ogg | horn | -36.1 / -38.7 / 0 / -25.2 | -25.1 / -28.1 / 0 / -11.6 | -22.2 | -6.1 (M) | gain | 0 | - | 1.65 s |
+| playroom/minder_run.ogg | run | -32.7 / -32.3 / 2 / -5.9 | -24.5 / -24.1 / 1.4 / -2.1 | -19.8 | -8.4 (I) | gain +limit +loop xfade | 8.4 | 0.03 | 3.73 s |
+| playroom/wheeze.ogg | entity | -31 / -30.5 / 1.6 / -16.4 | -19.2 / -19 / 0.5 / -1.7 | -14.8 | -3.1 (I) | gain +limit +loop xfade | 1.3 | 0.01 | 3.58 s |
+| playroom/huff.ogg | entity | -30.1 / -31.3 / 1.2 / -18.4 | -19.1 / -20.7 / 1.3 / -4.7 | -14.1 | -3 (I) | gain | 0 | - | 3.88 s |
+| playroom/found.ogg | scare | -18.4 / -20.1 / 0 / -5.2 (the layered pair) | -11.9 / -13.5 / 0 / -1.7 | -10.5 | +2.6 (S) | gain +limit +encoder trim | 4.5 | - | 2.20 s |
+| player/slide_under.ogg | crew | -39.3 / -41.9 / 0 / -16 (the layers) | -22.5 / -25.4 / 0 / -1.9 | -19.1 | -6.4 (I) | gain +limit | 3.6 | - | 1.90 s |
+| playroom/xylo_note.ogg | xylo | -22.1 / -26.9 / 0 / -2 | -25.6 / -30.3 / 0 / -2.5 | -21.6 | -5.5 (M) | gain | 0 | - | 0.85 s |
+| lift/up.ogg | room | -32.7 / -31.5 / 3.6 / -17 | -26.2 / -25.1 / 3.5 / -7.6 | -21.1 | -10.1 (I) | gain | 0 | - | 8.00 s |
+| lift/refused.ogg | ui | -31.6 / -40.3 / 0 / -13.7 | -24.3 / -33 / 0 / -5.1 | -24.3 | -8.2 (M) | gain | 0 | - | 0.45 s |
+| lift/quota_met.ogg | ui | -12.9 / -16.4 / 0 / -2.5 | -26.6 / -30.1 / 0 / -13.3 | -24.1 | -8 (M) | gain | 0 | - | 1.62 s |
+| prison/night.ogg | bed | -39.9 / -39 / 1.4 / -26.5 | -30.2 / -28.7 / 2.8 / -13.2 | -25.8 | -14.1 (I) | gain +loop xfade | 0 | 0.13 | 18.60 s |
+| prison/bunk.ogg | player | -40.1 / -43.2 / 0 / -26.1 | -24.3 / -27.5 / 0 / -7.2 | -20.2 | -8.2 (I) | gain | 0 | - | 1.68 s |
+| prison/lights_out.ogg | effect | -16.5 / -15.1 / 22 / 0.4 | -22.5 / -21.3 / 19.9 / -1.6 | -15.3 | -6.4 (I) | gain +limit +encoder trim | 0.2 | - | 6.80 s |
+| prison/cell_door.ogg | effect | -18.5 / -23.7 / 0 / -2.9 | -22.3 / -27.9 / 0 / -3.8 | -19.7 | -6.2 (I) | gain | 0 | - | 1.80 s |
+| prison/teller_window.ogg | effect | -20 / -25 / 0 / -5.8 | -22.3 / -27.3 / 0 / -6.1 | -19.5 | -6.2 (I) | gain | 0 | - | 1.30 s |
+| prison/teller_ding.ogg | ui | -19.7 / -25.8 / 0 / -4.5 | -28.1 / -32.9 / 0 / -8.8 | -24.2 | -8.1 (M) | gain | 0 | - | 1.28 s |
+
+Method as the first batch, with two differences: every file is a plain linear gain from ebur128 (to I, M or S as the category says, corrected until within 0.2 LU or the limiting cap), with a sample-peak limiter (ffmpeg alimiter at -1.8 dBFS) after the gain where the gain pushes peaks past it, at most 9 dB of it (where that is not enough the file stays short of its target: the clicks, the note slap, the scramble); and short files are padded with silence to be measured, so their momentary and short-term windows are whole. An -I of -70 means the file is too short for ebur128 to gate (a click).
+
+### What the game measured on the Annex and the Playroom (tools/mix_check_floors.gd)
+
+Headless, no walls, V = -18.0 LUFS on both (the Voice bus over four lines). Short-term max per bus against it, and where:
+
+| Bus | The Annex | The Playroom | The prison and the lift's panel |
+|---|---|---|---|
+| Scare | +3.4 LU (the catch's roar) | +2.5 LU (the found-you sting) | silent |
+| Entity | -13.1 (the stapler going in; the clicks are dots, short-term never sees them) | -4.3 (scrambling past at 3 m); the music box rises from about V-26 at 20 m to V-5 at 2 m; the wheeze at 2 m V-12 | silent |
+| Effects | -5.6 to -5.9 (the blackout's sagging buzz) | -8.2 (the ball pit jumped into, here) | -5.1 (lights out) |
+| Ambience | -11.0 (the bed with the phone over it) | -12.3 (the bed and the tune) | -8.2 (the night bed under the ride's rumble) |
+| UI | -14.0 (the lift's bell) | -10.3 (the count's recorded note, three times) | -12.3 (refused, quota met) |
+| Voice, the count bell | | -4.0 | |
+| Master true peak | -1.9 to -2.4 dBTP | -4.3 to -4.6 dBTP | -4.9 dBTP |
+
+Breaks that turn it red: the office tone 12 dB up (`--break=office`: Ambience -1.7 LU under the voice, the "at least 8 LU under" check fails); the found-you sting 8 dB up (`--break=sting`: the Scare bus +10.5 LU over the voice, and Master's true peak -0.3 dBTP).
 
 ## The voice files
 
