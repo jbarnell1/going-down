@@ -4,9 +4,9 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 26 of 54.
+- **Gates passed:** 7 of 14. **Tasks done:** 28 of 54.
 - **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 42.
-- **Now:** T7f Draw your face. The face editor is built and checked (460 tests; two deliberate breaks both caught by a separate checker). Next: wiring it into the start screen and sending faces to the other players, after joining lands.
+- **Now:** nothing in progress
 - **Last CI result seen:** passed on d5f7819
 - **Answers applied up to:** 2026-11-17T00:28:33.398Z
 
@@ -69,7 +69,7 @@
   - To do: Props are in tools/props/: kenney-furniture-kit/x (glb), quaternius-house-interior/FBX, polyhaven/<id> (1k gltf, heavy: decimate hard and shrink textures to 256 or less). Hashes and LICENCE.txt in each folder; add credits to CREDITS.md.
   - To do: Props are built: public/assets/props/*.glb + manifest.json (name, size, mount floor/wall/ceiling, front faces +Z). Untested in three.js: vertex colours (COLOR_0 needs vertexColors on the material), linear samplers (set NearestFilter), double-sided materials, KHR_materials_specular. Wall lamp reads poorly; consider dropping it.
   - To do: Owner (2026-11-16): 'When do we work on the dynamic lighting and textures for the map? I wonder if one side of the hospital is more normal and one side is more corrupted.' Plan: every room and corridor gets a corruption value from the seed, low near the lift and high toward where the Orderly starts. It drives which wall/floor textures and stains are used, how many props are overturned, and the lights: steady and bright on the clean side, dimmer, flickering and some dead on the corrupted side. It doubles as a way to know which way the lift is.
-  - To do: On Windows the corrupted side is darker than in the browser and the Orderly is nearly invisible at 10 m; lift the darkest end to match the browser unless the owner prefers it this dark
+  - To do: You decided (16 Nov): the dim far side on Windows stays as it is
 - [x] **T6d** `done` Even voice loudness and thirty more announcer lines
   - Why: The owner found the voice much quieter after being caught than in the car, and the same lines get tiring
   - Evidence: The announcer is now even: the landing speaker never drops below 55 percent of its near level, and the taken, wipe, banked, blackout and lights lines always play at full level wherever you are. 35 new lines for both voices (54 in all); each moment cycles through all its lines before repeating. One bug found in my re-run and fixed: the thank-you-for-calling line sometimes expired while queued behind two long lines. Checked by numbers and by putting the old level back to see the test fail; nobody has heard it yet.
@@ -168,10 +168,12 @@
   - Why: The first playable has three places and two residents; the Annex and the Temp are next, so the crew meets a different kind of floor after the Clinic
 - [ ] **T16a** `doing` The Annex floor generator
   - Why: The repeating office with corridors that loop back: built from the seed, tested on 800 floors
-- [ ] **T16b** `doing` Crew marks in the Annex
+- [x] **T16b** `done` Crew marks in the Annex
   - Why: The only directions you can trust: a shared pad of 3 arrows per floor, more from the skill tree
-- [ ] **T16c** `doing` The Temp's sticky notes
+  - Evidence: The rules for crew marks in the Annex are built: one pad of 3 for the whole crew per floor, placing takes half a second and makes a slap heard about 8 metres away, refused while sprinting, down or in the lift, anyone can peel a mark back, and a skill-tree hook raises the pad. A separate checker re-ran its tests (7 of 7) and two deliberate breaks, an empty pad still placing and snapping to 16 directions, and both were caught. Not yet in the game: marks appear once the Annex is wired in.
+- [x] **T16c** `done` The Temp's sticky notes
   - Why: True notes about the crew by name, the same for everyone, never giving directions
+  - Evidence: The rules for the Temp's sticky notes are built: 20 notes in the building's voice, filled only from true facts about the crew by name, the same for everyone, at most 14 a floor, and never a direction word. A separate checker re-ran its tests (5 of 5) and two deliberate breaks, a count off by one and one note over the cap, and both were caught. Not yet in the game: the notes appear once the Temp and the Annex are wired in.
 - [ ] **T18** `doing` The prison: the bank room, upgrades, a day quota and beds
   - Why: You asked for a home between runs: choosing not to go deeper brings the crew back to the prison, where the bank room sells upgrades, a day's earnings must meet a quota, and the day ends when everyone climbs into bed
 - [ ] **S** `todo` Stretch: voice that fades with distance, a second trait, the Tenant, a second place
@@ -216,6 +218,14 @@
 
 ## Activity (newest first)
 
+- 2026-11-17 00:42Z Finished T16b: Crew marks in the Annex.
+- 2026-11-17 00:42Z Finished T16c: The Temp's sticky notes.
+- 2026-11-17 00:39Z Started T16b: Crew marks in the Annex. Built by its agent: one pad of 3 marks for the whole crew, placing takes half a second and makes a slap heard 8 metres away, anyone can peel one, and a skill-tree hook raises the pad. A separate checker re-runs it with the notes rules before it is committed.
+- 2026-11-17 00:38Z The prison design is ready: wake in the cells, read the day's quota by the lift, work floors, BANK rides up to the prison for the report and the bank room, and the day ends in bed. Eight choices wait on the Questions page.
+- 2026-11-17 00:38Z Started T18: The prison: the bank room, upgrades, a day quota and beds. Fable's design for the day and the prison is written (docs/floors/prison.md). Eight choices in it are on the Questions page; building starts after your answers.
+- 2026-11-17 00:35Z You decided the far side stays dim on Windows; no brightening.
+- 2026-11-17 00:34Z Started T7f: Draw your face. The face editor is committed and pushed (5873a41) after a separate checker re-ran its 460 tests and caught both deliberate breaks. Next: the start screen and sending faces to the others, after joining lands.
+- 2026-11-17 00:34Z Started T16c: The Temp's sticky notes. Built by its agent: 20 note templates in the building's voice, filled only from true facts, capped at 14 per floor, never a direction word. A separate checker re-runs it with the marks rules before it is committed.
 - 2026-11-17 00:33Z Started T7f: Draw your face. The face editor is built and checked (460 tests; two deliberate breaks both caught by a separate checker). Next: wiring it into the start screen and sending faces to the other players, after joining lands.
 - 2026-11-17 00:33Z New pictures for T7f: Draw your face.
 - 2026-11-17 00:32Z Started T7f: Draw your face. Finished by its agent: a Sonnet checker is re-running its 460 tests and two deliberate breaks before it is committed.
@@ -248,11 +258,3 @@
 - 2026-11-16 23:22Z Started P4: Light browser build and a download for friends. A Sonnet agent is making the zip for friends with a READ ME FIRST.
 - 2026-11-16 23:22Z Started T17: Godot tests on GitHub too. A Sonnet agent is adding the Godot tests to the checks on GitHub.
 - 2026-11-16 23:22Z Started T16: The Annex, the second place. Fable is designing the Annex and the Temp: how only marks the crew made can be trusted, the looping office layout, the Temp's caught scene and sticky notes. You will see the design before anything is built.
-- 2026-11-16 23:22Z Started T7f: Draw your face. An Opus agent is building the face editor: draw in under a minute, a compact format to send to other players, and the face shown on the crewmates' screen masks.
-- 2026-11-16 23:22Z Started T0g: Godot tests stand on their own results. An Opus agent, in its own copy of the code, is making the tests keep Godot's own results, so your rule changes (lift, crouch, quota, downed) can go in.
-- 2026-11-16 23:22Z Started P3: Playing together through the home server. An Opus agent is joining the game to the server: a start screen with Play alone and Join friends, a lobby, friends drawn as crewmates with name tags, and the emote wheel on R. The server itself is already running on the lab box.
-- 2026-11-16 23:19Z Linked TA to the North Star: H3, B11.
-- 2026-11-16 23:19Z Added task T17: Godot tests on GitHub too.
-- 2026-11-16 23:19Z Added task T16: The Annex, the second place.
-- 2026-11-16 23:08Z The game server is running on the lab box in a locked-down container, reachable only from the lab box itself. Two scripted players from this PC played a full session through it and a wrong passphrase was refused. Friends cannot reach it until you open its door with Funnel.
-- 2026-11-16 23:00Z Added task TA: Real sounds, and comedy sounds.

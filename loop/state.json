@@ -4,8 +4,8 @@
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
   "iteration": 42,
-  "now": "T7f",
-  "nowText": "The face editor is built and checked (460 tests; two deliberate breaks both caught by a separate checker). Next: wiring it into the start screen and sending faces to the other players, after joining lands.",
+  "now": null,
+  "nowText": "",
   "ci": {
     "status": "passed",
     "commit": "d5f7819",
@@ -903,7 +903,7 @@
         "Props are in tools/props/: kenney-furniture-kit/x (glb), quaternius-house-interior/FBX, polyhaven/<id> (1k gltf, heavy: decimate hard and shrink textures to 256 or less). Hashes and LICENCE.txt in each folder; add credits to CREDITS.md.",
         "Props are built: public/assets/props/*.glb + manifest.json (name, size, mount floor/wall/ceiling, front faces +Z). Untested in three.js: vertex colours (COLOR_0 needs vertexColors on the material), linear samplers (set NearestFilter), double-sided materials, KHR_materials_specular. Wall lamp reads poorly; consider dropping it.",
         "Owner (2026-11-16): 'When do we work on the dynamic lighting and textures for the map? I wonder if one side of the hospital is more normal and one side is more corrupted.' Plan: every room and corridor gets a corruption value from the seed, low near the lift and high toward where the Orderly starts. It drives which wall/floor textures and stains are used, how many props are overturned, and the lights: steady and bright on the clean side, dimmer, flickering and some dead on the corrupted side. It doubles as a way to know which way the lift is.",
-        "On Windows the corrupted side is darker than in the browser and the Orderly is nearly invisible at 10 m; lift the darkest end to match the browser unless the owner prefers it this dark"
+        "You decided (16 Nov): the dim far side on Windows stays as it is"
       ],
       "ns": [
         "A2"
@@ -1068,8 +1068,8 @@
         "H1"
       ],
       "startedAt": "2026-11-16T23:22:41.622Z",
-      "doingText": "The face editor is built and checked (460 tests; two deliberate breaks both caught by a separate checker). Next: wiring it into the start screen and sending faces to the other players, after joining lands.",
-      "doingAt": "2026-11-17T00:33:09.317Z",
+      "doingText": "The face editor is committed and pushed (5873a41) after a separate checker re-ran its 460 tests and caught both deliberate breaks. Next: the start screen and sending faces to the others, after joining lands.",
+      "doingAt": "2026-11-17T00:34:57.988Z",
       "media": [
         {
           "src": "T7f/20261117T003309-editor_drawn.png",
@@ -1598,29 +1598,37 @@
       "id": "T16b",
       "title": "Crew marks in the Annex",
       "why": "The only directions you can trust: a shared pad of 3 arrows per floor, more from the skill tree",
-      "status": "doing",
+      "status": "done",
       "gates": [],
       "ns": [
         "A2",
         "F1"
       ],
       "startedAt": "2026-11-17T00:32:45.706Z",
-      "doingText": "A Sonnet agent is writing the rules for crew marks: one pad of 3 for the whole crew per floor, place with Q, anyone can peel.",
-      "doingAt": "2026-11-17T00:32:45.707Z"
+      "doingText": "Built by its agent: one pad of 3 marks for the whole crew, placing takes half a second and makes a slap heard 8 metres away, anyone can peel one, and a skill-tree hook raises the pad. A separate checker re-runs it with the notes rules before it is committed.",
+      "doingAt": "2026-11-17T00:39:13.754Z",
+      "nsCheck": "A2: the only directions you can trust are marks the crew made. The owner's answer of 17 Nov: 3 marks shared by the whole crew, more from the skill tree (F1, Hands, beside Trackmaster). Nothing in the rules can fake, hide or move a mark.",
+      "finishedAt": "2026-11-17T00:42:11.573Z",
+      "summary": "The rules for crew marks in the Annex are built: one pad of 3 for the whole crew per floor, placing takes half a second and makes a slap heard about 8 metres away, refused while sprinting, down or in the lift, anyone can peel a mark back, and a skill-tree hook raises the pad. A separate checker re-ran its tests (7 of 7) and two deliberate breaks, an empty pad still placing and snapping to 16 directions, and both were caught. Not yet in the game: marks appear once the Annex is wired in.",
+      "todo": []
     },
     {
       "id": "T16c",
       "title": "The Temp's sticky notes",
       "why": "True notes about the crew by name, the same for everyone, never giving directions",
-      "status": "doing",
+      "status": "done",
       "gates": [],
       "ns": [
         "B11",
         "E3"
       ],
       "startedAt": "2026-11-17T00:32:45.905Z",
-      "doingText": "A Sonnet agent is writing the rules for the Temp's sticky notes: true facts by name, the same for everyone, never directions.",
-      "doingAt": "2026-11-17T00:32:45.905Z"
+      "doingText": "Built by its agent: 20 note templates in the building's voice, filled only from true facts, capped at 14 per floor, never a direction word. A separate checker re-runs it with the marks rules before it is committed.",
+      "doingAt": "2026-11-17T00:34:57.822Z",
+      "nsCheck": "B11: the Temp leaves sticky notes about the crew by name. E3 and the owner's answer of 17 Nov: every note is true and the same for everyone on game night. A2: no note gives directions, so only crew marks can be trusted.",
+      "finishedAt": "2026-11-17T00:42:11.468Z",
+      "summary": "The rules for the Temp's sticky notes are built: 20 notes in the building's voice, filled only from true facts about the crew by name, the same for everyone, at most 14 a floor, and never a direction word. A separate checker re-ran its tests (5 of 5) and two deliberate breaks, a count off by one and one note over the cap, and both were caught. Not yet in the game: the notes appear once the Temp and the Annex are wired in.",
+      "todo": []
     },
     {
       "id": "T18",
@@ -1636,8 +1644,8 @@
         "C9"
       ],
       "startedAt": "2026-11-17T00:32:46.095Z",
-      "doingText": "Fable is designing the day: going home to the prison, the bank room and its upgrades, the day's quota, and the beds. You will see it and answer its questions before anything is built.",
-      "doingAt": "2026-11-17T00:32:46.095Z"
+      "doingText": "Fable's design for the day and the prison is written (docs/floors/prison.md). Eight choices in it are on the Questions page; building starts after your answers.",
+      "doingAt": "2026-11-17T00:38:46.439Z"
     },
     {
       "id": "S",
@@ -1816,6 +1824,46 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-17T00:42:11.574Z",
+      "text": "Finished T16b: Crew marks in the Annex.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-17T00:42:11.469Z",
+      "text": "Finished T16c: The Temp's sticky notes.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-17T00:39:13.755Z",
+      "text": "Started T16b: Crew marks in the Annex. Built by its agent: one pad of 3 marks for the whole crew, placing takes half a second and makes a slap heard 8 metres away, anyone can peel one, and a skill-tree hook raises the pad. A separate checker re-runs it with the notes rules before it is committed.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T00:38:46.558Z",
+      "text": "The prison design is ready: wake in the cells, read the day's quota by the lift, work floors, BANK rides up to the prison for the report and the bank room, and the day ends in bed. Eight choices wait on the Questions page.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T00:38:46.440Z",
+      "text": "Started T18: The prison: the bank room, upgrades, a day quota and beds. Fable's design for the day and the prison is written (docs/floors/prison.md). Eight choices in it are on the Questions page; building starts after your answers.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T00:35:06.404Z",
+      "text": "You decided the far side stays dim on Windows; no brightening.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T00:34:57.989Z",
+      "text": "Started T7f: Draw your face. The face editor is committed and pushed (5873a41) after a separate checker re-ran its 460 tests and caught both deliberate breaks. Next: the start screen and sending faces to the others, after joining lands.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T00:34:57.823Z",
+      "text": "Started T16c: The Temp's sticky notes. Built by its agent: 20 note templates in the building's voice, filled only from true facts, capped at 14 per floor, never a direction word. A separate checker re-runs it with the marks rules before it is committed.",
+      "kind": "start"
+    },
     {
       "at": "2026-11-17T00:33:09.318Z",
       "text": "Started T7f: Draw your face. The face editor is built and checked (460 tests; two deliberate breaks both caught by a separate checker). Next: wiring it into the start screen and sending faces to the other players, after joining lands.",
@@ -2775,46 +2823,6 @@
       "at": "2026-11-16T10:55:22.661Z",
       "text": "You chose Brian and Bella as your top two voices. Recording Brian's full set now, about 5,150 characters, and adding a settings switch between them.",
       "kind": "note"
-    },
-    {
-      "at": "2026-11-16T10:55:22.588Z",
-      "text": "Multiplayer is proven in logic. Over 200 simulated sessions with delays up to 250 ms, lost and reordered messages, every frame of every player's screen was checked: 76,782 moments when a player could see the Orderly in two frames running, and it was never drawn in two different places. When delay let the host move it after a player had already seen it, the host put it back where that player saw it (1,532 times, 2 metres at most). No catch ever landed on a player whose own screen showed it. Blinks are dark on every screen for the whole time the host lets it move. Fable's deliberate break: turning screens back on 0.2 seconds early left 21,367 lit frames and failed the blink test.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T09:56:42.986Z",
-      "text": "Started T7: Playing together. An Opus agent is building the multiplayer layer as tested logic first: one player's browser hosts the run, the others send what they do and see, and the Orderly must never be seen to move on anyone's screen even with network delay.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T09:55:36.514Z",
-      "text": "Finished T6b: The elevator voice.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T09:54:24.468Z",
-      "text": "Gate G13 (The elevator speaks) is passed.",
-      "kind": "gate"
-    },
-    {
-      "at": "2026-11-16T09:26:03.381Z",
-      "text": "Voice T6b: 19 announcer lines recorded in ElevenLabs eleven_v4 (default voice Bella; Sarah and Brian auditioned). 7,833 characters counted, tags included (API billed header summed 3,444); game ledger 7,833 of 50,000.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T09:26:03.311Z",
-      "text": "New pictures for T6b: The elevator voice.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T09:26:03.238Z",
-      "text": "New pictures for T6b: The elevator voice.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T09:26:03.163Z",
-      "text": "New pictures for T6b: The elevator voice.",
-      "kind": "media"
     }
   ]
 }
