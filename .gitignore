@@ -45,3 +45,11 @@ assets_src/renders/crewmate/corridor_walk_08m.png
 assets_src/renders/crewmate/corridor_walk_15m.png
 # Floor designs, like the North Star: kept off the public repository.
 docs/floors/
+# Face demo pictures: 24 large files; only the editor shots and the line-up are tracked.
+godot/face/shots/crew_*_1m.png
+godot/face/shots/crew_*_2m.png
+godot/face/shots/crew_*_3m.png
+godot/face/shots/crew_*_6m.png
+godot/face/shots/crew_frown_all.png
+godot/face/shots/crew_shock_all.png
+godot/face/shots/crew_smile_all.png

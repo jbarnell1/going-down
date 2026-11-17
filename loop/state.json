@@ -3,15 +3,15 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 41,
-  "now": "TA",
-  "nowText": "A Sonnet agent is finding free sounds with their licences for your list, as links you can click; it downloads nothing. Files you grab go in assets_src/inbox/audio.",
+  "iteration": 42,
+  "now": "T7f",
+  "nowText": "The face editor is built and checked (460 tests; two deliberate breaks both caught by a separate checker). Next: wiring it into the start screen and sending faces to the other players, after joining lands.",
   "ci": {
     "status": "passed",
-    "commit": "f342e7f",
-    "at": "2026-11-16T23:02:18.554Z"
+    "commit": "d5f7819",
+    "at": "2026-11-17T00:23:48.871Z"
   },
-  "answersAppliedTo": "2026-11-16T20:44:47.437Z",
+  "answersAppliedTo": "2026-11-17T00:28:33.398Z",
   "tasks": [
     {
       "id": "T0",
@@ -1061,14 +1061,29 @@
       "status": "doing",
       "gates": [],
       "todo": [
-        "A small drawing pad in the lobby (about 48 x 48, one colour on dark, a few brush sizes, clear, and a random doodle for the lazy); sent to the crew as a few hundred bytes; shown on the mask screen (glowing), the crew list, the lift monitor, and later the standee where a player falls and the posters. Bots get generated doodles. Remembered in the browser between runs."
+        "A small drawing pad in the lobby (about 48 x 48, one colour on dark, a few brush sizes, clear, and a random doodle for the lazy); sent to the crew as a few hundred bytes; shown on the mask screen (glowing), the crew list, the lift monitor, and later the standee where a player falls and the posters. Bots get generated doodles. Remembered in the browser between runs.",
+        "Paused: the face editor, the compact face format (at most 515 characters) and 451 tests work. Faces drawn bright on a dark screen only read up close; dark ink on a lit screen reads at 3 metres, so the colours switch next"
       ],
       "ns": [
         "H1"
       ],
       "startedAt": "2026-11-16T23:22:41.622Z",
-      "doingText": "An Opus agent is building the face editor: draw in under a minute, a compact format to send to other players, and the face shown on the crewmates' screen masks.",
-      "doingAt": "2026-11-16T23:22:41.622Z"
+      "doingText": "The face editor is built and checked (460 tests; two deliberate breaks both caught by a separate checker). Next: wiring it into the start screen and sending faces to the other players, after joining lands.",
+      "doingAt": "2026-11-17T00:33:09.317Z",
+      "media": [
+        {
+          "src": "T7f/20261117T003309-editor_drawn.png",
+          "caption": "The face editor: a lit screen, seven bold colours, three starting faces",
+          "kind": "image",
+          "at": "2026-11-17T00:33:09.068Z"
+        },
+        {
+          "src": "T7f/20261117T003309-crew_drawn_all.png",
+          "caption": "Drawn faces on the crewmates' masks in the Clinic, at 1 to 6 metres",
+          "kind": "image",
+          "at": "2026-11-17T00:33:09.070Z"
+        }
+      ]
     },
     {
       "id": "TA",
@@ -1084,8 +1099,8 @@
         "Files go in assets_src/inbox/audio (folders: orderly, clinic, lift, player, instrument, scare, funny), with a line per file in SOURCES.txt saying where it came from and its licence"
       ],
       "startedAt": "2026-11-16T23:22:42.172Z",
-      "doingText": "A Sonnet agent is finding free sounds with their licences for your list, as links you can click; it downloads nothing. Files you grab go in assets_src/inbox/audio.",
-      "doingAt": "2026-11-16T23:22:42.172Z"
+      "doingText": "The sound shopping list is ready (assets_src/inbox/audio/WHERE-TO-GET.md): 82 sounds, 74 with a CC0 link, 2 meme clips for the friends' copy only, 5 not found. Waiting for the files you download.",
+      "doingAt": "2026-11-16T23:25:46.917Z"
     },
     {
       "id": "X1",
@@ -1287,11 +1302,12 @@
         "Public door: Tailscale Funnel, chosen by the owner. Funnel only works on ports 443, 8443 and 10000. On this PC 443 and 10000 are in use for tailnet-only pages and 8443 is already funnelled for another project by path. Cleanest: add ONE path for the game server on the existing funnelled port, with a command for the owner to run (path mount to the server's local port); the browser build then connects with wss to that path. The server runs on this PC for Friday (it is already the funnel node); the lab box later. Never touch the other paths on that port.",
         "Join secret: the owner sets a passphrase for the night on the server (never in the game file, never in git); friends type it or get it in the invite; the server refuses any connection without it before reading game traffic, with a limit on wrong tries, on connections and on message size",
         "Isolation: run the server on the lab box inside a Docker container with no folders shared, a read-only filesystem, no extra privileges and CPU and memory caps, listening only on the lab box itself; Funnel points at that one port, so friends reach the game server and nothing else",
-        "The one-minute test set did not notice the server ignoring what players see; only the 9-minute set did. Add a short watched-under-delay case to the quick set"
+        "The one-minute test set did not notice the server ignoring what players see; only the 9-minute set did. Add a short watched-under-delay case to the quick set",
+        "Paused at 16 of 18 multiplayer checks: the start screen, lobby, friends drawn as crewmates with name tags, the emote wheel and the browser joining all work; the dance check aims at the wrong emote and the boarding step starts too late. The older playthroughs have not been re-run on it yet"
       ],
       "startedAt": "2026-11-16T21:26:09.607Z",
-      "doingText": "An Opus agent is joining the game to the server: a start screen with Play alone and Join friends, a lobby, friends drawn as crewmates with name tags, and the emote wheel on R. The server itself is already running on the lab box.",
-      "doingAt": "2026-11-16T23:22:41.284Z"
+      "doingText": "Resumed after the usage reset: an Opus agent is fixing the last two multiplayer checks (the dance aim and boarding), then re-running every older playthrough and the sound check on the new build.",
+      "doingAt": "2026-11-17T00:25:03.989Z"
     },
     {
       "id": "T0g",
@@ -1302,8 +1318,11 @@
       "ns": [],
       "nsWhy": "Test tooling",
       "startedAt": "2026-11-16T22:57:56.509Z",
-      "doingText": "An Opus agent, in its own copy of the code, is making the tests keep Godot's own results, so your rule changes (lift, crouch, quota, downed) can go in.",
-      "doingAt": "2026-11-16T23:22:41.422Z"
+      "doingText": "Resumed: an Opus agent is running the new test layout for the first time in its own copy of the code, then proving it matches the old results and closing two test gaps.",
+      "doingAt": "2026-11-17T00:25:04.109Z",
+      "todo": [
+        "Paused: the new test layout is written in its own copy of the code but has not been run yet; the next step is the first recording run and fixing what it shows"
+      ]
     },
     {
       "id": "P4",
@@ -1325,13 +1344,17 @@
       "id": "T17",
       "title": "Godot tests on GitHub too",
       "why": "Today the Godot tests only run on this PC before each commit; a clean machine catches what this one hides",
-      "status": "doing",
+      "status": "done",
       "gates": [],
       "ns": [],
       "nsWhy": "Test tooling",
       "startedAt": "2026-11-16T23:22:41.895Z",
-      "doingText": "A Sonnet agent is adding the Godot tests to the checks on GitHub.",
-      "doingAt": "2026-11-16T23:22:41.896Z"
+      "doingText": "The Godot tests are added to GitHub's checks and pushed (d5f7819). Waiting for GitHub's first run to finish before marking this done.",
+      "doingAt": "2026-11-16T23:25:14.467Z",
+      "nsCheck": "Test tooling only; nothing in the design changes.",
+      "finishedAt": "2026-11-17T00:23:48.973Z",
+      "summary": "The Godot tests now run on GitHub's machines on every push, with the engine checked against its published fingerprint first. The first run passed 47 of 47 in 90 seconds, read from GitHub's log. A fresh copy of the code had passed them on this PC before that.",
+      "todo": []
     },
     {
       "id": "T14a",
@@ -1554,8 +1577,67 @@
         "B1"
       ],
       "startedAt": "2026-11-16T23:22:41.787Z",
-      "doingText": "Fable is designing the Annex and the Temp: how only marks the crew made can be trusted, the looping office layout, the Temp's caught scene and sticky notes. You will see the design before anything is built.",
-      "doingAt": "2026-11-16T23:22:41.787Z"
+      "doingText": "Fable's design for the Annex and the Temp is written (docs/floors/annex.md). Eight choices in it are proposals beyond the North Star: they are on the Questions page. Building starts after your answers, in five parallel pieces.",
+      "doingAt": "2026-11-16T23:28:43.737Z"
+    },
+    {
+      "id": "T16a",
+      "title": "The Annex floor generator",
+      "why": "The repeating office with corridors that loop back: built from the seed, tested on 800 floors",
+      "status": "doing",
+      "gates": [],
+      "ns": [
+        "A2",
+        "A6"
+      ],
+      "startedAt": "2026-11-17T00:32:45.526Z",
+      "doingText": "An Opus agent is building the Annex generator: a lattice of offices whose corridors loop back, two levels, an atrium, tested on 800 floors.",
+      "doingAt": "2026-11-17T00:32:45.527Z"
+    },
+    {
+      "id": "T16b",
+      "title": "Crew marks in the Annex",
+      "why": "The only directions you can trust: a shared pad of 3 arrows per floor, more from the skill tree",
+      "status": "doing",
+      "gates": [],
+      "ns": [
+        "A2",
+        "F1"
+      ],
+      "startedAt": "2026-11-17T00:32:45.706Z",
+      "doingText": "A Sonnet agent is writing the rules for crew marks: one pad of 3 for the whole crew per floor, place with Q, anyone can peel.",
+      "doingAt": "2026-11-17T00:32:45.707Z"
+    },
+    {
+      "id": "T16c",
+      "title": "The Temp's sticky notes",
+      "why": "True notes about the crew by name, the same for everyone, never giving directions",
+      "status": "doing",
+      "gates": [],
+      "ns": [
+        "B11",
+        "E3"
+      ],
+      "startedAt": "2026-11-17T00:32:45.905Z",
+      "doingText": "A Sonnet agent is writing the rules for the Temp's sticky notes: true facts by name, the same for everyone, never directions.",
+      "doingAt": "2026-11-17T00:32:45.905Z"
+    },
+    {
+      "id": "T18",
+      "title": "The prison: the bank room, upgrades, a day quota and beds",
+      "why": "You asked for a home between runs: choosing not to go deeper brings the crew back to the prison, where the bank room sells upgrades, a day's earnings must meet a quota, and the day ends when everyone climbs into bed",
+      "status": "doing",
+      "gates": [],
+      "ns": [
+        "C6",
+        "G1",
+        "F1",
+        "H2",
+        "C9"
+      ],
+      "startedAt": "2026-11-17T00:32:46.095Z",
+      "doingText": "Fable is designing the day: going home to the prison, the bank room and its upgrades, the day's quota, and the beds. You will see it and answer its questions before anything is built.",
+      "doingAt": "2026-11-17T00:32:46.095Z"
     },
     {
       "id": "S",
@@ -1734,6 +1816,131 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-17T00:33:09.318Z",
+      "text": "Started T7f: Draw your face. The face editor is built and checked (460 tests; two deliberate breaks both caught by a separate checker). Next: wiring it into the start screen and sending faces to the other players, after joining lands.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T00:33:09.070Z",
+      "text": "New pictures for T7f: Draw your face.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T00:32:46.279Z",
+      "text": "Started T7f: Draw your face. Finished by its agent: a Sonnet checker is re-running its 460 tests and two deliberate breaks before it is committed.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T00:32:46.096Z",
+      "text": "Started T18: The prison: the bank room, upgrades, a day quota and beds. Fable is designing the day: going home to the prison, the bank room and its upgrades, the day's quota, and the beds. You will see it and answer its questions before anything is built.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T00:32:45.905Z",
+      "text": "Started T16c: The Temp's sticky notes. A Sonnet agent is writing the rules for the Temp's sticky notes: true facts by name, the same for everyone, never directions.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T00:32:45.707Z",
+      "text": "Started T16b: Crew marks in the Annex. A Sonnet agent is writing the rules for crew marks: one pad of 3 for the whole crew per floor, place with Q, anyone can peel.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T00:32:45.527Z",
+      "text": "Started T16a: The Annex floor generator. An Opus agent is building the Annex generator: a lattice of offices whose corridors loop back, two levels, an atrium, tested on 800 floors.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T00:32:45.345Z",
+      "text": "Added task T16c: The Temp's sticky notes.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T00:32:45.164Z",
+      "text": "Added task T16b: Crew marks in the Annex.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T00:32:44.996Z",
+      "text": "Added task T16a: The Annex floor generator.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T00:31:06.293Z",
+      "text": "Your Annex answers are in: all eight accepted, and the marks become 3 shared by the whole crew, with more from the skill tree. The prison hub with the bank room, upgrades, a day quota and beds is now a task; Fable designs it first.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T00:31:06.170Z",
+      "text": "Added task T18: The prison: the bank room, upgrades, a day quota and beds.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T00:31:05.963Z",
+      "text": "Applied the owner's new answers.",
+      "kind": "answers"
+    },
+    {
+      "at": "2026-11-17T00:25:04.403Z",
+      "text": "Resumed after the usage reset. The Godot tests passed on GitHub for the first time (47 of 47). Three Opus agents are picking up exactly where they stopped.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T00:25:04.284Z",
+      "text": "Started T7f: Draw your face. Resumed: an Opus agent is switching faces to dark ink on a lit screen so they read at 3 metres, then the README and a proof the tests can fail.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T00:25:04.110Z",
+      "text": "Started T0g: Godot tests stand on their own results. Resumed: an Opus agent is running the new test layout for the first time in its own copy of the code, then proving it matches the old results and closing two test gaps.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T00:25:03.990Z",
+      "text": "Started P3: Playing together through the home server. Resumed after the usage reset: an Opus agent is fixing the last two multiplayer checks (the dance aim and boarding), then re-running every older playthrough and the sound check on the new build.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T00:23:48.974Z",
+      "text": "Finished T17: Godot tests on GitHub too.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-16T23:34:31.253Z",
+      "text": "All agents are paused for usage, each with notes on where it stopped. Pushed work is safe on GitHub; the joining, face and test work waits uncommitted until it is finished and checked.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T23:32:59.788Z",
+      "text": "Paused for usage: every running agent is writing what it has done and what is left to a file, so the work picks up cleanly after the reset. Nothing is lost; unfinished work stays uncommitted until it is checked.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T23:28:43.848Z",
+      "text": "The Annex design is ready: crew marks are the only trustworthy directions (sticky arrows you place with Q), the office repeats and its signs loop, and the Temp is heard by its stapler. Eight choices wait for you on the Questions page.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T23:28:43.739Z",
+      "text": "Started T16: The Annex, the second place. Fable's design for the Annex and the Temp is written (docs/floors/annex.md). Eight choices in it are proposals beyond the North Star: they are on the Questions page. Building starts after your answers, in five parallel pieces.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T23:25:47.000Z",
+      "text": "Sound shopping list ready: a link and licence for each of the 82 sounds, 74 of them CC0 (free to use anywhere). Freesound needs a free login to download. The vine boom and 'bruh' stay in the friends' copy only. No list of SMii7Y's sounds exists online that the agent could find.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-16T23:25:46.918Z",
+      "text": "Started TA: Real sounds, and comedy sounds. The sound shopping list is ready (assets_src/inbox/audio/WHERE-TO-GET.md): 82 sounds, 74 with a CC0 link, 2 meme clips for the friends' copy only, 5 not found. Waiting for the files you download.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-16T23:25:14.468Z",
+      "text": "Started T17: Godot tests on GitHub too. The Godot tests are added to GitHub's checks and pushed (d5f7819). Waiting for GitHub's first run to finish before marking this done.",
+      "kind": "start"
+    },
     {
       "at": "2026-11-16T23:23:35.691Z",
       "text": "The Godot tests will now also run on GitHub's machines on every push, with the engine checked against its published fingerprint. A fresh copy of the code passed them here first (47 of 47).",
@@ -2608,131 +2815,6 @@
       "at": "2026-11-16T09:26:03.163Z",
       "text": "New pictures for T6b: The elevator voice.",
       "kind": "media"
-    },
-    {
-      "at": "2026-11-16T09:16:31.303Z",
-      "text": "Started T6b: The elevator voice. An Opus agent is writing the announcer's first lines, recording three takes of each with ElevenLabs inside the character cap, and building an audition page so you can pick the voice by ear.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T09:15:15.493Z",
-      "text": "Added task T6c: Elevator polish.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T09:15:15.421Z",
-      "text": "Gate G6 (One player can finish a run) is passed.",
-      "kind": "gate"
-    },
-    {
-      "at": "2026-11-16T09:15:15.348Z",
-      "text": "Finished T6: The elevator.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T09:07:35.335Z",
-      "text": "New pictures for T6: The elevator.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T08:19:26.542Z",
-      "text": "Started T6: The elevator. The run's rules are proven. An Opus agent is now building the elevator into the game: the car, the call and its wait, the blinking lights, the vote, the ride down and the bank.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T08:17:52.894Z",
-      "text": "The run's rules are proven in logic: the car leaves after dropping you, calling it means a loud wait of 25 to 55 seconds, the lights blink while it comes, and you vote to bank or ride by where you stand. Fable changed two things. The blink was 0.35 seconds, which the agent found left a staring crew completely safe (0 of 320 caught); it is now one second, so a crew that only stands and stares is taken in about 1 wait in 5, and has to keep its distance. And the call now wakes the Orderly. Deliberate break: making a tied vote bank instead of ride fails the vote test.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T07:53:14.525Z",
-      "text": "Started T6: The elevator. An Opus agent is building the run's rules as tested logic: calling the elevator and its loud wait, lights that blink while it comes, voting to bank or ride down, and who gets left behind.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T07:51:25.137Z",
-      "text": "Added task T12: Orientation: the training floor.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T07:51:25.066Z",
-      "text": "Gate G3 (Rules hold over 500 simulated runs) is passed.",
-      "kind": "gate"
-    },
-    {
-      "at": "2026-11-16T07:51:24.993Z",
-      "text": "Finished T5: The instrument, the recording rule and tapes.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T07:42:08.607Z",
-      "text": "New pictures for T5: The instrument, the recording rule and tapes.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T07:42:08.529Z",
-      "text": "New pictures for T5: The instrument, the recording rule and tapes.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T07:42:08.449Z",
-      "text": "New pictures for T5: The instrument, the recording rule and tapes.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T07:42:08.371Z",
-      "text": "New pictures for T5: The instrument, the recording rule and tapes.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T07:42:08.294Z",
-      "text": "New pictures for T5: The instrument, the recording rule and tapes.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T07:42:08.218Z",
-      "text": "New pictures for T5: The instrument, the recording rule and tapes.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T07:42:08.137Z",
-      "text": "New pictures for T5: The instrument, the recording rule and tapes.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T07:41:48.634Z",
-      "text": "GitHub's checks failed again on a commit that changed nothing they test: two browser tests that depend on real time ran too slowly on GitHub's software-rendered machines. CI now runs only the tests that prove the game boots and draws on a clean machine, plus all 76 rule tests. The full set of browser tests runs on this PC before every push.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T07:40:17.047Z",
-      "text": "CI failed on 4a07340.",
-      "kind": "ci"
-    },
-    {
-      "at": "2026-11-16T07:13:23.103Z",
-      "text": "Design tuning by Fable: the Orderly now runs down anyone who runs but creeps up on anyone standing still, and the instrument pays far more in the last metres. Before, the final approach took about a second and a half, too fast to choose when to turn. Now it takes about four seconds, and turning at arm's length earns roughly double what turning at 2.5 metres does. The earning rule's independent checker verified 33,646 moments of recording with no violations.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T07:00:30.908Z",
-      "text": "Started T5: The instrument, the recording rule and tapes. An Opus agent is building the earning rule as tested logic: the instrument only records while the Orderly is moving near you, which means while nobody is looking at it.",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T06:58:33.209Z",
-      "text": "Gate G5 (Heard before seen) is passed.",
-      "kind": "gate"
-    },
-    {
-      "at": "2026-11-16T06:58:33.133Z",
-      "text": "Finished T4: The Orderly comes alive.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T06:58:23.304Z",
-      "text": "Correction: GitHub's checks have been failing since the tape look went in, four commits ago, and the public play link stopped updating. Twice I recorded them as passed without reading the result. The cause was frame-time limits that a software-rendered CI machine cannot meet; those now apply only on a real graphics card. The loop's rules now say to record a CI result only from what was actually printed.",
-      "kind": "note"
     }
   ]
 }
