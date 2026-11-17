@@ -941,6 +941,27 @@
       ]
     },
     {
+      "id": "save-rollback",
+      "title": "Saves: keeping an old copy",
+      "context": "Your save sits on your own PC and the server signs it, so a hand-edited save is refused. What the signature cannot stop: someone keeps a copy from before they lost an upgrade to the roll, and puts it back before the next game night. Stopping that means the server must remember each player's latest save between nights, which means writing a small file on the lab box (today it writes nothing).",
+      "type": "single",
+      "options": [
+        {
+          "id": "trust",
+          "label": "Trust your friends: allow it",
+          "note": "Recommended. The server keeps writing nothing, and the lab box stays read-only."
+        },
+        {
+          "id": "remember",
+          "label": "The server keeps one small file of each player's latest save stamp",
+          "note": "An old copy is refused. The container gets one writable folder."
+        }
+      ],
+      "default": [
+        "trust"
+      ]
+    },
+    {
       "id": "anything",
       "title": "Anything else for the loop?",
       "context": "Notes, ideas, things that felt wrong when you played. Update this as often as you like.",
