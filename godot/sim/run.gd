@@ -9,8 +9,10 @@
 #      huntable, and (while the car is coming) the call itself as a blind target at the landing;
 #   3. the crew's instruments, then pick-ups; readings that close are multiplied by the depth's pay.
 #
-# The car is the void 2 m cell on the far side of the landing's elevator wall (landing.gd says which
-# wall). It is outside the floor plan, so nothing that moves with the plan's collision (the Orderly)
+# The car is the void 4 m by 4 m space on the far side of the landing's elevator wall (landing.gd says
+# which wall): centred on the landing cell's wall, two cells deep (North Star C5, owner decision V9: "about
+# four metres square, so a full crew fits and has room to change sides before the bell"). The floor plans
+# keep that space void on both levels (clinic.gd, annex.gd, prison.gd). It is outside the floor plan, so nothing that moves with the plan's collision (the Orderly)
 # can ever enter it; run.gd checks that anyway every tick and puts it back if it ever ended inside.
 # Players get in and out through the doorway with move_in_run, which knows when the doors are open.
 #
@@ -49,12 +51,14 @@ const M = preload("res://sim/jsmath.gd")
 # ---------------------------------------------------------------------------------------------
 # Tuning.
 
-## Width of the car along the elevator wall, metres (one cell).
-const CAR_WIDTH := 2.0
-## Depth of the car away from the landing, metres (one cell).
-const CAR_DEPTH := 2.0
-## Width of the door opening, centred on the landing cell's elevator wall, metres.
-const CAR_DOOR_WIDTH := 1.2
+## Width of the car along the elevator wall, metres (two cells), centred on the landing cell: BANK and
+## DOWN are each half of it, 2 m wide.
+const CAR_WIDTH := 4.0
+## Depth of the car away from the landing, metres (two cells).
+const CAR_DEPTH := 4.0
+## Width of the door opening, centred on the landing cell's elevator wall, metres (so half of it opens
+## onto each half of the car).
+const CAR_DOOR_WIDTH := 1.8
 ## Seconds the car sits with its doors shut on arrival before they open.
 const ARRIVE_DOOR_DELAY := 1.0
 ## On arrival the doors close this long after the last active player stepped out (seconds)...
@@ -149,7 +153,7 @@ class CarGeometry:
 	var width: float
 	var depth: float
 	var door_width: float  # TypeScript: doorWidth
-	## The car's floor as an axis-aligned rectangle (it is one plan cell).
+	## The car's floor as an axis-aligned rectangle.
 	var rect: Rect
 	## The BANK half (left walking in) and the DOWN half (right walking in).
 	var bank: Rect
@@ -222,10 +226,10 @@ static func car_side(car: CarGeometry, b: Move.Body) -> Variant:
 		return null
 	return &"bank" if car_local(car, b.x, b.z)[1] < 0.0 else &"down"
 
-## Spawn spots inside the car, by player index.
+## Spawn spots inside the car, by player index: two rows, a metre either side of the middle line.
 static func _car_slot(car: CarGeometry, i: int) -> Move.Body:
-	var us: Array[float] = [0.7, 0.7, 1.4, 1.4]
-	var vs: Array[float] = [-0.5, 0.5, -0.5, 0.5]
+	var us: Array[float] = [1.3, 1.3, 2.7, 2.7]
+	var vs: Array[float] = [-1.0, 1.0, -1.0, 1.0]
 	return car_body(car, us[i % 4], vs[i % 4])
 
 ## Spots on the landing just outside the doors, by index.

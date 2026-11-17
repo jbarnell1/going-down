@@ -657,7 +657,7 @@ func _admit(s: Run.RunState) -> Run.RunState:
 	var crew := s.crew
 	for p in waiting:
 		var k := players.size()
-		var body := Run.car_body(s.car, 0.6 + 0.4 * (floori(k / 2.0) % 3), 0.55 if k % 2 == 1 else -0.55)
+		var body := Run.car_body(s.car, 0.9 + 0.9 * (floori(k / 2.0) % 3), 1.0 if k % 2 == 1 else -1.0)
 		var rp := Run.RunPlayer.new()
 		rp.id = p.id
 		rp.body = body

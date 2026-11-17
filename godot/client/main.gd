@@ -541,7 +541,7 @@ func _build_floor(plan: Dictionary) -> void:
 	lift = Lift.new()
 	lift.name = "Lift"
 	world.add_child(lift)
-	lift.build(plan["car"])
+	lift.build(plan["car"], level.lift_left_wall())
 	lift.set_doors(false, true)
 	lift.set_faces(link.crew_faces())
 	orderly.reset()
@@ -1384,6 +1384,16 @@ func _faces_state() -> Dictionary:
 		"kioskOpen": kiosk.is_open(), "changeWaiting": link.client().face_change_waiting() if link != null and link.client() != null else false}
 
 ## The start screen as a test sees it (the passphrase is never in it).
+## Tests: the lift as drawn on this screen (lift.gd drawn_car, measured from its meshes), in metres: the
+## car's width and depth inside its walls, the doorway, and the widths of the BANK and DOWN paint.
+func _lift_drawn() -> Dictionary:
+	if lift == null:
+		return {}
+	var d := lift.drawn_car()
+	var box: AABB = d["box"]
+	return {"width": box.size.x - 0.08, "depth": -box.position.z - 0.04, "doorway": d["doorway"],
+		"bank": (d["bank"] as AABB).size.x, "down": (d["down"] as AABB).size.x}
+
 func _screen_state() -> Dictionary:
 	return {"screen": mode, "error": start.error, "address": start.address, "name": start.player_name, "passTyped": not start.passphrase.is_empty(),
 		"people": start.people, "me": start.my_id, "runOn": start.run_on, "focus": start.focused_id(), "menu": menu_overlay,
@@ -1417,7 +1427,7 @@ func _test_state() -> Dictionary:
 			"raise": inst_view.raise, "needle": inst_view.needle, "needleAngle": inst_view.angle, "subtitle": announcer.subtitle,
 			"spoken": announcer.history.map(func(h: Dictionary) -> String: return str(h["id"])), "caught": caught_at >= 0, "noise": _noise_on(),
 			"wentDown": hud.went_down, "end": hud.end_lines.map(func(l: Dictionary) -> String: return str(l["text"])), "tapeText": hud.tape_text,
-			"prompt": hud.prompt, "menu": hud.menu_on, "built": built_depth, "hudSize": [hud.size.x, hud.size.y],
+			"prompt": hud.prompt, "menu": hud.menu_on, "built": built_depth, "hudSize": [hud.size.x, hud.size.y], "lift": _lift_drawn(),
 			"wheel": wheel_open, "wheelSel": hud.wheel_sel, "note": hud.note, "tags": hud.tags.map(func(t: Dictionary) -> String: return str(t["text"]))},
 		"events": event_counts,
 	}

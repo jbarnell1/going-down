@@ -113,7 +113,7 @@ func _build(plan: Dictionary) -> void:
 	level.build(plan, seed_text)
 	lift = Lift.new()
 	world.add_child(lift)
-	lift.build(plan["car"])
+	lift.build(plan["car"], level.lift_left_wall())
 	lift.set_doors(true, true)
 	view = level.get_meta("annex") if level.has_meta("annex") else null
 	light = 1.0

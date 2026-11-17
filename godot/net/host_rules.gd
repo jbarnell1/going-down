@@ -19,7 +19,7 @@ const Move = preload("res://sim/move.gd")
 const Instr = preload("res://sim/instrument.gd")
 
 ## Where a player stands alone in the car at the start: the middle, so the doorway is straight ahead.
-const START_U := 1.45
+const START_U := Run.CAR_DEPTH / 2.0
 
 ## Catches turned from a wipe into the placeholder (see the header). (TypeScript: softCatches)
 var soft_catches := 0
@@ -39,8 +39,8 @@ static func start_spot(i: int, n: int) -> PackedFloat64Array:
 	if n <= 1:
 		return PackedFloat64Array([START_U, 0.0])
 	var spots: Array[PackedFloat64Array] = [
-		PackedFloat64Array([1.0, -0.45]), PackedFloat64Array([1.0, 0.45]),
-		PackedFloat64Array([1.6, -0.45]), PackedFloat64Array([1.6, 0.45]),
+		PackedFloat64Array([1.3, -1.0]), PackedFloat64Array([1.3, 1.0]),
+		PackedFloat64Array([2.7, -1.0]), PackedFloat64Array([2.7, 1.0]),
 	]
 	return spots[i % spots.size()]
 
