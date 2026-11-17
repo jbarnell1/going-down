@@ -51,6 +51,13 @@
 #
 # Seen reports and "I can see it" hold only a Stillness resident (sim/places.gd resident). On a floor whose
 # resident is not one (the Playroom's Minder) looking does nothing, so they are dropped.
+#
+# The Playroom (sim/run.gd, sim/seek.gd; loop/NIGHT-PLAN.md A3): the host gives the run each player's
+# gait (the one the tank allowed), the hide key (a new "hides" count is a press; a new "fastHides" says it
+# was the quick way), W in a hide ("peek") and a sound emote it passed on (Protocol.SOUND_EMOTES). It
+# places a player where the rules hold them when they get into a hide, start getting out, are found, are
+# taken to the party table or go down, and adds the seek block to every snapshot (Protocol.enc_seek). The
+# count is the run's own event, stamped with the host's time: every client works the count out from it.
 extends RefCounted
 
 const Run = preload("res://sim/run.gd")
@@ -68,6 +75,7 @@ const Pose = preload("res://net/pose.gd")
 const JsJson = preload("res://net/jsjson.gd")
 const Transport = preload("res://net/transport.gd")
 const Day = preload("res://sim/day.gd")
+const Seek = preload("res://sim/seek.gd")
 
 const EPS := 1e-9
 const TICK := Session.TICK
@@ -121,6 +129,13 @@ class HostPlayer:
 	var face := ""
 	## Host time of the newest face change taken (the face change rate limit).
 	var last_face_change := -INF
+	## The Playroom: F presses for a hide counted so far (and those with sprint held); a press not yet
+	## given to the run, and whether it was the quick way; a sound emote not yet given to the run.
+	var hides := 0
+	var fast_hides := 0
+	var hide_pending := false
+	var hide_fast := false
+	var emote_pending := false
 
 class History:
 	var o: Entity.OrderlyState
@@ -411,6 +426,9 @@ func _relay_emote(p: HostPlayer, emote: String, ht: float) -> void:
 		emotes_dropped += 1
 		return
 	p.last_emote = ht
+	# A sound emote is heard on the floor (the Playroom: a noise). The run gets it with the next tick.
+	if emote in Protocol.SOUND_EMOTES:
+		p.emote_pending = true
 	var text := Protocol.encode({"type": "emoted", "player": p.id, "emote": emote, "t": ht})
 	for q: HostPlayer in _players.values():
 		if q != p and q.connected and not q.left and q.joined:
@@ -496,6 +514,11 @@ func _on_input(p: HostPlayer, m: Dictionary, ht: float) -> void:
 	if int(m["pickUps"]) > p.pick_ups:
 		p.pick_ups = m["pickUps"]
 		p.pick_pending = true
+	if int(m.get("hides", 0)) > p.hides:
+		p.hide_pending = true
+		p.hide_fast = int(m.get("fastHides", 0)) > p.fast_hides
+		p.hides = int(m["hides"])
+		p.fast_hides = int(m.get("fastHides", 0))
 	_step_gait(p, m)
 	# The body: not until the client has the latest placement; never further than they could go.
 	if p.place != null and int(m["placeAck"]) < int(p.place["seq"]):
@@ -573,6 +596,10 @@ func _step(now: float) -> void:
 	for rp in s.players:
 		var p: HostPlayer = _players.get(rp.id)
 		if p == null or not _playing(p) or p.input == null:
+			if p != null:
+				# Out of the run this tick: a press or an emote made meanwhile is not saved up for later.
+				p.hide_pending = false
+				p.emote_pending = false
 			continue
 		var m: Dictionary = p.input
 		var pc: Variant = _pending_catch
@@ -589,9 +616,17 @@ func _step(now: float) -> void:
 		inp.call = p.call_pending
 		inp.pick_up = true if p.pick_pending else null
 		inp.use = m.get("use", false) == true
+		# The Playroom (sim/run.gd): the gait the tank allowed, the hide key, W in a hide, a sound emote.
+		inp.gait = StringName(p.gait)
+		inp.hide_use = p.hide_pending
+		inp.hide_fast = p.hide_pending and p.hide_fast
+		inp.peek = m.get("peek", false) == true
+		inp.emote_sound = p.emote_pending
 		inputs.append(inp)
 		p.call_pending = false
 		p.pick_pending = false
+		p.hide_pending = false
+		p.emote_pending = false
 
 	# 5. The run.
 	var r: Run.RunStep = _step_fn.call(s, inputs, TICK)
@@ -611,6 +646,11 @@ func _step(now: float) -> void:
 			var bodies: Dictionary = e["bodies"]
 			for id: String in bodies:
 				_place(id, bodies[id], st.depth, st)
+		elif ty == "hideIn" or ty == "hideLeave" or ty == "found" or ty == "taken" or ty == "down":
+			# The Playroom: the rules hold the body (in a hide, at its front, rooted, at the table).
+			var hp := _find_run_player(st, str(e["playerId"]))
+			if hp != null:
+				_place(hp.id, hp.body, st.depth, st)
 		elif ty == "caught":
 			_last_catch_tick = tick + 1
 			if _pending_catch != null and _pending_catch["victim"] == e["playerId"]:
@@ -899,7 +939,23 @@ func world() -> Dictionary:
 	}
 	if s.days:
 		out["day"] = day_block(s)
+	if s.seek != null:
+		out["seek"] = seek_block(s)
 	return out
+
+## The Playroom's seek block (Protocol.enc_seek): the count in host times, and each player's hide,
+## peek, health and totals, plus the crew's noise. Null off the Playroom.
+static func seek_block(s: Run.RunState) -> Variant:
+	if s.seek == null:
+		return null
+	var ss: Seek.SeekState = s.seek
+	var players: Array = []
+	for sp in ss.players:
+		players.append({"id": sp.id, "hide": sp.hide, "peek": sp.peeking, "phase": String(sp.phase), "status": String(sp.status),
+			"health": sp.health, "sight": sp.sight, "gap": sp.gap, "seat": sp.seat})
+	return {"noise": ss.noise, "counting": ss.counting, "last": ss.last, "called": ss.called, "done": ss.done, "n": ss.counts,
+		"t0": ss.t0, "len": ss.len, "by": ss.by, "why": String(ss.why), "ended": ss.ended, "calmUntil": ss.calm_until,
+		"lastAt": ss.last_at, "players": players}
 
 ## The day block of a run with days (Protocol.enc_day): host times, never durations, so every screen
 ## counts down to the same moment.
