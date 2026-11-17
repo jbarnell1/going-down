@@ -3,15 +3,15 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 49,
-  "now": null,
-  "nowText": "",
+  "iteration": 50,
+  "now": "T15a",
+  "nowText": "An Opus builder is writing the Playroom floor generator (hides, squeaky tiles, zones, party-table seats)",
   "ci": {
     "status": "passed",
-    "commit": "88efc2d",
-    "at": "2026-11-17T04:03:17.269Z"
+    "commit": "9a66bfa",
+    "at": "2026-11-17T05:22:10.885Z"
   },
-  "answersAppliedTo": "2026-11-17T02:33:36.042Z",
+  "answersAppliedTo": "2026-11-17T05:04:17.919Z",
   "tasks": [
     {
       "id": "T0",
@@ -1133,8 +1133,8 @@
         "Your rule: the scare shrieks may be a little louder than the elevator voice (about 3 loudness units, never more than 4), never loud enough to hurt; nothing else is louder than the voice."
       ],
       "startedAt": "2026-11-16T23:22:42.172Z",
-      "doingText": "Opus is putting your 31 recorded sounds into the game: the Orderly's trolley squeak, breathing, footsteps and roar; the Clinic's fluorescent hum, flicker and pop, door slams, drips, heart monitor, intercom; the lift's rumble and emergency drone",
-      "doingAt": "2026-11-17T03:20:15.481Z"
+      "doingText": "A Sonnet agent is checking the recorded sounds and the mix, merged onto the current game (commit 92c77ee)",
+      "doingAt": "2026-11-17T04:31:10.897Z"
     },
     {
       "id": "X1",
@@ -1633,7 +1633,151 @@
       ],
       "ns": [
         "A11"
+      ],
+      "startedAt": "2026-11-17T04:41:56.981Z",
+      "waiting": "its pieces T15a to T15h; Fable's design is docs/floors/playarea.md"
+    },
+    {
+      "id": "T16e",
+      "title": "The place deck: the third floor down is the Annex",
+      "why": "Floors stop being all Clinic; the yellow office arrives at floor 3 and the Playroom at floor 4",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "A2"
       ]
+    },
+    {
+      "id": "T15a",
+      "title": "The Playroom floor generator",
+      "why": "Floor 4 becomes a soft-play centre with ball pits, crawl dens, a party room and places to hide",
+      "status": "doing",
+      "gates": [],
+      "ns": [
+        "A11",
+        "A2"
+      ],
+      "startedAt": "2026-11-17T04:55:51.342Z",
+      "doingText": "An Opus builder is writing the Playroom floor generator (hides, squeaky tiles, zones, party-table seats)",
+      "doingAt": "2026-11-17T04:55:51.343Z"
+    },
+    {
+      "id": "T16g",
+      "title": "The Temp's figure and its stapler",
+      "why": "Something actually lives in the Annex: an office worker with a crewmate's drawing for a face",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "B11"
+      ]
+    },
+    {
+      "id": "T16f",
+      "title": "The Temp's body in the rules",
+      "why": "The Temp is shorter, clicks a stapler, and stops the moment you look",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "B11"
+      ]
+    },
+    {
+      "id": "T18j",
+      "title": "The day in the run: bank, ride up, sleep, day 2",
+      "why": "Vote BANK and you ride up to the prison, go to bed, and wake to a new day going down",
+      "status": "todo",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "prison.md P7, designed beside the North Star (V16+)"
+    },
+    {
+      "id": "T15b",
+      "title": "The count, the Minder and health, as rules",
+      "why": "What makes the seeker fair and a real threat",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "A11"
+      ]
+    },
+    {
+      "id": "T15c",
+      "title": "The Playroom's look and a stand-in Minder",
+      "why": "Padded primary colours, a ball pit, netting and signs that print the hiding odds",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "A11"
+      ]
+    },
+    {
+      "id": "T15d",
+      "title": "The count in the run and over the network",
+      "why": "Somebody sprints, the lights die, and the ball pit actually saves you, the same for every player",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "A11"
+      ]
+    },
+    {
+      "id": "T15e",
+      "title": "The count on screen",
+      "why": "HIDE, the dark, climbing into hiding places and peeking at a glowing balloon",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "A11"
+      ]
+    },
+    {
+      "id": "T18k",
+      "title": "Bed and the day board on screen",
+      "why": "The prison shows what the crew banked and HOLD F TO SLEEP works",
+      "status": "todo",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "prison.md P7/P9, designed beside the North Star"
+    },
+    {
+      "id": "T15g",
+      "title": "The Minder, modelled, rigged and animated in Blender",
+      "why": "The stand-in becomes a tall padded attendant with a bobbing balloon head",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "B11",
+        "A11"
+      ]
+    },
+    {
+      "id": "T15h",
+      "title": "The party table for found players",
+      "why": "Found players sit in paper hats with a horn until a friend fetches them",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "A11"
+      ]
+    },
+    {
+      "id": "T8a",
+      "title": "Down first, then out",
+      "why": "Being caught drops you; a friend holding F puts you back up",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "B6"
+      ]
+    },
+    {
+      "id": "T11a",
+      "title": "A whole run with bots, headless",
+      "why": "Proof the build plays end to end, from the Clinic to day 2",
+      "status": "todo",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "test tooling"
     },
     {
       "id": "T16",
@@ -2152,9 +2296,137 @@
     {
       "at": "2026-11-17T02:21:59.752Z",
       "text": "Until you answer: the shop sells one-day items (flares, batteries, tape, extra marks) and the skill tree keeps the permanent upgrades; windows 1-2 the shop, 3-4 the skill tree, the face kiosk in the corridor by the cells."
+    },
+    {
+      "at": "2026-11-17T04:48:48.681Z",
+      "text": "Hide floor: a children's play area with a new seeker of our own design (owner's mood note: the entity from the subliminal game); any sprint, noise or light on it starts the count; after a count, faster than a creep drains health; build the whole thing even if it is not ready by morning."
+    },
+    {
+      "at": "2026-11-17T05:05:41.202Z",
+      "text": "The Minder: more animalistic and moves on all fours (owner's picture as direction, design kept original: a gaunt eyeless thing in tabard rags with a printed smiley party mask). Walking is quiet; the party horn never starts a count; floors 5+ are drawn by the seed."
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-17T05:05:41.203Z",
+      "text": "Took a default: The Minder: more animalistic and moves on all fours (owner's picture as direction, design kept original: a gaunt eyeless thing in tabard rags with a printed smiley party mask). Walking is quiet; the party horn never starts a count; floors 5+ are drawn by the seed.",
+      "kind": "decision"
+    },
+    {
+      "at": "2026-11-17T05:05:41.070Z",
+      "text": "Applied the owner's new answers.",
+      "kind": "answers"
+    },
+    {
+      "at": "2026-11-17T04:55:51.343Z",
+      "text": "Started T15a: The Playroom floor generator. An Opus builder is writing the Playroom floor generator (hides, squeaky tiles, zones, party-table seats)",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T04:55:51.186Z",
+      "text": "Paused T15: waiting for its pieces T15a to T15h; Fable's design is docs/floors/playarea.md",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:55:45.167Z",
+      "text": "Added task T11a: A whole run with bots, headless.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:55:45.055Z",
+      "text": "Added task T8a: Down first, then out.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:55:44.884Z",
+      "text": "Added task T15h: The party table for found players.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:55:44.713Z",
+      "text": "Added task T15g: The Minder, modelled, rigged and animated in Blender.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:55:44.543Z",
+      "text": "Added task T18k: Bed and the day board on screen.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:55:44.434Z",
+      "text": "Added task T15e: The count on screen.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:55:44.260Z",
+      "text": "Added task T15d: The count in the run and over the network.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:55:44.080Z",
+      "text": "Added task T15c: The Playroom's look and a stand-in Minder.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:55:43.892Z",
+      "text": "Added task T15b: The count, the Minder and health, as rules.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:55:43.719Z",
+      "text": "Added task T18j: The day in the run: bank, ride up, sleep, day 2.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:55:43.616Z",
+      "text": "Added task T16f: The Temp's body in the rules.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:55:43.441Z",
+      "text": "Added task T16g: The Temp's figure and its stapler.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:55:43.259Z",
+      "text": "Added task T15a: The Playroom floor generator.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:55:43.102Z",
+      "text": "Added task T16e: The place deck: the third floor down is the Annex.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:48:48.682Z",
+      "text": "Took a default: Hide floor: a children's play area with a new seeker of our own design (owner's mood note: the entity from the subliminal game); any sprint, noise or light on it starts the count; after a count, faster than a creep drains health; build the whole thing even if it is not ready by morning.",
+      "kind": "decision"
+    },
+    {
+      "at": "2026-11-17T04:48:48.569Z",
+      "text": "Applied the owner's new answers.",
+      "kind": "answers"
+    },
+    {
+      "at": "2026-11-17T04:41:56.982Z",
+      "text": "Started T15: A floor where you have to hide. Fable is designing the hide-and-seek floor (the floor after the Annex) and tonight's build order",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T04:40:22.048Z",
+      "text": "Overnight: Fable is planning tonight's build order and designing the floor after the Annex, so the builders can work through the night.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:38:26.136Z",
+      "text": "Owner: the players' winded breath must not use the wet entity breaths. It goes back to the made-in-code breathing until a clean, dry panting is recorded; added to the sound list.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T04:31:10.898Z",
+      "text": "Started TA: Real sounds, and comedy sounds. A Sonnet agent is checking the recorded sounds and the mix, merged onto the current game (commit 92c77ee)",
+      "kind": "start"
+    },
     {
       "at": "2026-11-17T04:09:35.173Z",
       "text": "Combined build checked (play_web 34/34, desktop 38, net 33, quick 56) and promoted: play/GoingDown-2026-11-16-2151.zip has the face kiosk, the Annex look and the lower camera when you creep. Lab-box server updated to the same code; a two-player game over the public address passed.",
@@ -3033,126 +3305,6 @@
     {
       "at": "2026-11-16T20:35:28.317Z",
       "text": "Finished P2b: Fixes from your first play of the Godot build.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T20:22:46.426Z",
-      "text": "Started P0: Godot project, tests and builds. Joining the Godot client to the moved rules, so one project makes the Windows file and the browser build and the Windows file needs nothing else installed",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T20:22:46.194Z",
-      "text": "Linked P0 to the North Star: A2, B8, C1, C5.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T20:22:08.085Z",
-      "text": "P0 is half done: the Godot project tests itself from one command (npm run godot:test). Still to do there: join the client so the project makes the Windows file and the browser build, and run a quick set of the Godot tests on every commit and in CI.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T20:22:07.969Z",
-      "text": "Finished P1: The rules, moved to Godot and proven identical.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T19:59:43.243Z",
-      "text": "Started P2b: Fixes from your first play of the Godot build. The agent that built the Godot client is finding why the browser is silent, moving the big room's lights onto a real ceiling, thickening walls and keeping props inside their rooms",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T19:59:43.091Z",
-      "text": "Added task P2b: Fixes from your first play of the Godot build.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T19:59:04.016Z",
-      "text": "You played the Godot build: the Orderly made you jump coming round a corner (keeping it as it is). To fix: no sound in the browser, ceiling lights floating in the big room, props poking through thin walls. From now on the downloaded Godot file is the main way to play and the browser is the backup.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T19:54:01.986Z",
-      "text": "Added task T6f: A bigger elevator.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T19:34:26.414Z",
-      "text": "The hub now sends the Godot build compressed and lets browsers keep it: 11.7 MB instead of 43 MB on a first visit, and a second visit is ready in under 2 seconds. Checked from the lab box and in a test browser.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T19:04:53.663Z",
-      "text": "Asked on the Questions page whether the loop should run past its 30-hour limit (about 3:40 Tuesday morning); it stops there unless you say otherwise.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T19:04:32.645Z",
-      "text": "Finished P2: Walking the Clinic in Godot.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T18:59:25.259Z",
-      "text": "New pictures for P2: Walking the Clinic in Godot.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T18:01:30.781Z",
-      "text": "Took a default: Owner, 2026-11-16: friends reach the home game server through Tailscale Funnel ('Let's do the funnel with tailscale'). Nothing is opened until the server exists; the owner runs the one admin command.",
-      "kind": "decision"
-    },
-    {
-      "at": "2026-11-16T18:00:20.434Z",
-      "text": "Started P2: Walking the Clinic in Godot. An agent is building the visible side in Godot: the floor, lighting, tape look, the Orderly, the lift",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T18:00:05.920Z",
-      "text": "Took a default: Owner, 2026-11-16: on Friday we play 'Whatever Godot has'. All effort goes into the Godot build; the frozen browser game stays up but is not the plan for game night.",
-      "kind": "decision"
-    },
-    {
-      "at": "2026-11-16T17:57:34.847Z",
-      "text": "Live build is now e100309 (tag good-13): the growing blackout with emergency lighting, even announcer levels and 35 new lines. Checked from the lab box. This is the last build of the current browser game: it stays playable as the fallback while the game moves to Godot.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:55:53.088Z",
-      "text": "Started P1: The rules, moved to Godot and proven identical. An agent is moving the rules into Godot and checking them seed by seed against the current game",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T17:55:48.334Z",
-      "text": "Started P0: Godot project, tests and builds. Setting up the Godot project and its command-line tests",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T17:55:48.250Z",
-      "text": "Added task P4: Light browser build and a download for friends.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:55:48.170Z",
-      "text": "Added task P3: Playing together through the home server.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:55:48.085Z",
-      "text": "Added task P2: Walking the Clinic in Godot.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:55:47.933Z",
-      "text": "Added task P1: The rules, moved to Godot and proven identical.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:55:47.760Z",
-      "text": "Added task P0: Godot project, tests and builds.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:55:47.674Z",
-      "text": "Finished X1: Trial: one Clinic floor in Godot.",
       "kind": "done"
     }
   ]
