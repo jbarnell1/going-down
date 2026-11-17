@@ -15,7 +15,7 @@ extends RefCounted
 
 const Run = preload("res://sim/run.gd")
 const Floor = preload("res://sim/floor.gd")
-const Clinic = preload("res://sim/clinic.gd")
+const Places = preload("res://sim/places.gd")
 const Move = preload("res://sim/move.gd")
 const Stamina = preload("res://sim/stamina.gd")
 const Pose = preload("res://net/pose.gd")
@@ -52,13 +52,18 @@ const CLOCK_JUMP := 0.5
 static var _plans := {}
 static var _plan_order: Array[String] = []
 static var _cars := {}
+## The places this machine's floors are drawn from, the same deck the host's run has (sim/places.gd):
+## Clinic only until the game says otherwise. The game sets Places.FULL at start (client/main.gd,
+## server/server.gd); tests leave it, or set it and put it back.
+static var deck: Array[StringName] = Places.CLINIC_ONLY
 
-## The floor plan of a depth (every machine builds the same one from the seed). Keeps the last 16.
+## The floor plan of a depth (every machine builds the same one from the seed and the deck, through
+## Places.generate, as the host's run does). Keeps the last 16.
 static func plan_for(seed: String, depth: int) -> Floor.FloorPlan:
-	var key := "%s/%d" % [seed, depth]
+	var key := "%s/%d/%s" % [seed, depth, ",".join(PackedStringArray(deck))]
 	if _plans.has(key):
 		return _plans[key]
-	var p := Clinic.generate_clinic(seed, depth)
+	var p := Places.generate(seed, depth, deck)
 	_plans[key] = p
 	_plan_order.append(key)
 	if _plan_order.size() > 16:

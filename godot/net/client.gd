@@ -38,6 +38,7 @@ const Stamina = preload("res://sim/stamina.gd")
 const M = preload("res://sim/jsmath.gd")
 const Protocol = preload("res://net/protocol.gd")
 const Session = preload("res://net/session.gd")
+const Places = preload("res://sim/places.gd")
 const Pose = preload("res://net/pose.gd")
 const Transport = preload("res://net/transport.gd")
 
@@ -514,7 +515,14 @@ func frame(now: float, local: LocalFrame) -> Frame:
 		var plan := Session.plan_for(seed, a_depth)
 		var open := Session.doors_open_in(a["phase"]) or Session.doors_open_in(b["phase"]) or (latest != null and Session.doors_open_in(latest["phase"]))
 		var same := _drawn != null and _drawn_depth == a_depth
-		if _frozen and same and _sees(plan, cam, _drawn, open, blind):
+		if not Places.resident(plan.place).stillness:
+			# Not a Stillness resident (the Playroom's Minder): looking does nothing, so it is drawn
+			# where the snapshots say, never held, and nothing is reported.
+			_frozen = false
+			_pin = null
+			if _drawn == null or not Pose.same_pose(_drawn, cand):
+				_drawn = cand
+		elif _frozen and same and _sees(plan, cam, _drawn, open, blind):
 			# Seen: held exactly where it is, whatever the snapshots say.
 			seeing_now = true
 		elif _frozen and same and _sees(plan, cam, cand, open, blind):

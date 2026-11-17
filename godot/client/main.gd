@@ -25,6 +25,8 @@
 extends Node
 
 const PlayLink = preload("res://client/play_link.gd")
+const Session = preload("res://net/session.gd")
+const Places = preload("res://sim/places.gd")
 const EyeHeight = preload("res://client/eye_height.gd")
 const RoomClient = preload("res://net/room_client.gd")
 const LocalRoom = preload("res://net/local_room.gd")
@@ -169,6 +171,9 @@ func _ready() -> void:
 		return
 	var t0 := Time.get_ticks_msec()
 	_t0_us = Time.get_ticks_usec()
+	# Where the client makes its plans: every floor from the game's deck (the third floor down is the
+	# Annex, the fourth the Playroom), the same deck the room it plays in gives the run (sim/places.gd).
+	Session.deck = Places.FULL
 	_reset_eye_stats()
 	_read_options()
 	_add_actions()

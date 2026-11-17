@@ -1,6 +1,8 @@
 # The game's own rules around the run, applied by the host. Port of src/game/runHost.ts (HostRules,
 # startSpot, startBody, parkedOrderly). Work-arounds for gaps in the run's logic, kept visible here:
 #  - create_run always starts at depth 1. A depth above 1 swaps in floor N's plan, car and Orderly.
+#  - The run's deck (sim/places.gd): Clinic only unless one is given; the game (server/room.gd,
+#    net/local_room.gd) gives Places.FULL. prepare() puts it on the run and makes floor N with it.
 #  - run.gd wipes the run when its last active player is caught. The design says a catch is a wipe
 #    only when the car is gone and nobody can call it; while the car is here or coming, a catch is
 #    the "YOU WENT DOWN" placeholder and the player must still be able to finish the run. So when a
@@ -14,7 +16,7 @@ extends RefCounted
 
 const Run = preload("res://sim/run.gd")
 const Entity = preload("res://sim/entity.gd")
-const Clinic = preload("res://sim/clinic.gd")
+const Places = preload("res://sim/places.gd")
 const Move = preload("res://sim/move.gd")
 const Instr = preload("res://sim/instrument.gd")
 
@@ -29,10 +31,13 @@ var _forced_id := ""
 var _forced_body: Move.Body = null
 var _entity_on: bool
 var _depth: int
+## The places the run's floors are drawn from.
+var deck: Array[StringName]
 
-func _init(entity_on: bool, depth: int) -> void:
+func _init(entity_on: bool, depth: int, deck_: Array = []) -> void:
 	_entity_on = entity_on
 	_depth = depth
+	deck = Run.deck_of(deck_)
 
 ## Where player `i` of `n` stands in the car at the start (car-local u, v).
 static func start_spot(i: int, n: int) -> PackedFloat64Array:
@@ -58,14 +63,17 @@ static func parked_orderly(state: Run.RunState) -> Entity.OrderlyState:
 ## The first state of a run (create_run's, adjusted).
 func prepare(s0: Run.RunState) -> Run.RunState:
 	var s := s0
+	if s.deck != deck:
+		s = s.copy()
+		s.deck = deck
 	if _depth > 1:
-		var plan := Clinic.generate_clinic(s.seed, _depth)
+		var plan := Places.generate(s.seed, _depth, deck)
 		s = s.copy()
 		s.depth = _depth
 		s.plan = plan
 		s.car = Run.car_geometry(plan)
-		s.orderly = Entity.create_orderly(plan)
-		s.entity_id = "orderly-%d" % _depth
+		s.orderly = Places.create_resident(plan)
+		s.entity_id = Places.entity_id(plan.place, _depth)
 	var n := s.players.size()
 	var bodies := {}
 	for i in n:
