@@ -788,7 +788,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	sfx.set_hum(light)
 	level.set_emergency(emergency)
 	level.update_lights(dt, cam.global_position)
-	env.ambient_light_color = Color(0.55, 0.6, 0.6).lerp(Color(0.5, 0.08, 0.03), emergency)
+	env.ambient_light_color = level.ambient_color(emergency)
 	env.ambient_light_energy = lerpf(0.12, 0.05, emergency) * maxf(light, emergency)
 	env.background_color = Color(0.02, 0.025, 0.025) * light
 

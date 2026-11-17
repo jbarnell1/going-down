@@ -33,8 +33,24 @@ const DOOR_H := 2.1
 const INSET := WALL_T * 0.5 + 0.06
 const PANEL_COL := Color(0.92, 1.0, 0.9)
 const LIGHT_COL := Color(0.9, 1.0, 0.86)
+## The real lights (see _panels_and_lights). A corridor run's lights stand about CORRIDOR_SPACING
+## apart: wide downward spots reaching CORRIDOR_REACH, falling off gently (decay 1 is Godot's default,
+## lower is flatter). A big room's one light is an omni. FLAT lifts the baked-in light to make up for
+## the fewer real lights.
+const CORRIDOR_SPACING := 12.0
+const CORRIDOR_REACH := 11.0
+const CORRIDOR_ENERGY := 0.45
+const LIGHT_DECAY := 0.5
+const ROOM_ENERGY := 0.13
+const SPOT_ENERGY := 0.25
+const FLAT := 1.2
+## The renderer's limit on lights a frame (project.godot limits/opengl/max_renderable_lights).
+const LIGHT_LIMIT := 256
 ## Brighter than white: Level sets every emergency light to the same low energy.
 const EMERGENCY_COL := Color(1.2, 1.7, 1.25)
+## The ambient light in the dark with the emergency lighting on (Level.ambient_color): green like the
+## emergency lights, where the Clinic's goes red. Nothing red in the Annex.
+const AMBIENT_DARK := Color(0.15, 0.45, 0.2)
 const HAZE := Color(0.64, 0.58, 0.36)
 const HAZE_DENSITY := 0.016
 ## n, e, s, w as plan steps (x right, y down the map).
@@ -76,6 +92,7 @@ static func dress(level: Level) -> RefCounted:
 	level.set_meta("annex", v)
 	# Flat, even light: no hard shadows from the panels.
 	level.shadows = false
+	level.ambient_dark = AMBIENT_DARK
 	v._materials()
 	v._floors_and_ceilings()
 	v._walls()
@@ -286,12 +303,12 @@ func _glow(col: Color, tex: Texture2D, haze: Color) -> ShaderMaterial:
 	return m
 
 func _materials() -> void:
-	mat_wall = _shade(wall_tex(), 0.42)
-	mat_floor = _shade(carpet_tex(), 0.34)
-	mat_ceiling = _shade(ceiling_tex(), 0.62)
-	mat_props = _shade(null, 0.36, true)
-	mat_stair = _shade(carpet_tex(), 0.34, false, true)
-	mat_decal = _shade(atlas_tex(), 0.5)
+	mat_wall = _shade(wall_tex(), 0.42 * FLAT)
+	mat_floor = _shade(carpet_tex(), 0.34 * FLAT)
+	mat_ceiling = _shade(ceiling_tex(), 0.62 * FLAT)
+	mat_props = _shade(null, 0.36 * FLAT, true)
+	mat_stair = _shade(carpet_tex(), 0.34 * FLAT, false, true)
+	mat_decal = _shade(atlas_tex(), 0.5 * FLAT)
 	mat_panel = _glow(PANEL_COL, null, HAZE)
 	lv.panels.append({"mat": mat_panel, "dead": false, "k": 1.0})
 	mat_exit = _glow(Color(1.4, 1.4, 1.4), atlas_tex(), Color.BLACK)
@@ -552,15 +569,31 @@ func _panel(level: int, pos: Vector3, along_x: bool) -> void:
 	var st := lv._st(level, pos.x, pos.z, "apanel")
 	box(st, Transform3D.IDENTITY, Vector3(1.2, 0.03, 0.6) if along_x else Vector3(0.6, 0.03, 1.2), pos, Color.WHITE)
 
-func _light(pos: Vector3, high: bool) -> void:
-	var light := SpotLight3D.new()
+## A real light. `kind`: "spot", a small room's one fitting (the spot every light used to be, dimmer);
+## "corridor", a wide spot reaching far along a corridor run; "room", an omni reaching `reach` metres,
+## the one light of a big room.
+func _light(pos: Vector3, high: bool, kind := "spot", reach := 0.0) -> void:
+	var light: Light3D
+	var energy := SPOT_ENERGY * (1.36 if high else 1.0)
+	if kind == "room":
+		var omni := OmniLight3D.new()
+		omni.omni_range = reach
+		omni.omni_attenuation = LIGHT_DECAY
+		energy = ROOM_ENERGY * (1.3 if high else 1.0)
+		light = omni
+	else:
+		var spot := SpotLight3D.new()
+		spot.rotation_degrees = Vector3(-90, 0, 0)
+		spot.spot_angle = 80.0
+		spot.spot_angle_attenuation = 0.9
+		spot.spot_range = 10.0 if high else 6.5
+		if kind == "corridor":
+			spot.spot_range = CORRIDOR_REACH + (LH if high else 0.0)
+			spot.spot_attenuation = LIGHT_DECAY
+			energy = CORRIDOR_ENERGY * (1.3 if high else 1.0)
+		light = spot
 	light.position = pos - Vector3(0, 0.05, 0)
-	light.rotation_degrees = Vector3(-90, 0, 0)
-	light.spot_angle = 80.0
-	light.spot_angle_attenuation = 0.9
-	light.spot_range = 10.0 if high else 6.5
 	light.light_color = LIGHT_COL
-	var energy := 0.75 if high else 0.55
 	light.light_energy = energy
 	light.shadow_enabled = false
 	light.distance_fade_enabled = true
@@ -574,8 +607,16 @@ func _ceiling_y(level: int, x: int, y: int) -> float:
 	var open_above := level == 0 and (lv.kind(1, x, y) == "atriumOpen" or lv.kind(1, x, y) == "stair")
 	return (2 * LH if open_above else level * LH + LH) - 0.02
 
+func _is_corridor(level: int, c: Vector2i) -> bool:
+	return lv.kind(level, c.x, c.y) == "corridor"
+
+## Every panel is drawn lit, but the real lights are few (the renderer draws at most 256 a frame):
+## wide spots along each straight corridor run between junctions, corners and ends (one in the middle
+## of a lattice segment, so about every 14 m) and one light per room, with the flat baked-in light
+## (`self_light`, lifted by FLAT) carrying the evenness. About 125 on a depth-3 floor, under 180 on
+## the biggest; annex_look_check.gd fails a floor over LIGHT_LIMIT.
 func _panels_and_lights() -> void:
-	# Corridors: a panel on every cell, a light on every other.
+	# Corridors: a panel on every cell.
 	for level in 2:
 		for y in H:
 			for x in W:
@@ -586,9 +627,31 @@ func _panels_and_lights() -> void:
 				var ew := int(lv.kind(level, x - 1, y) == "corridor") + int(lv.kind(level, x + 1, y) == "corridor")
 				var ns := int(lv.kind(level, x, y - 1) == "corridor") + int(lv.kind(level, x, y + 1) == "corridor")
 				_panel(level, pos, ew > ns)
-				if (x + y) % 2 == 0:
-					_light(pos, false)
-	# Rooms: panels on an even grid about 3.5 m apart, lights about 6 m apart, both centred.
+	# Corridor lights: along each straight run of through cells (two corridor neighbours, opposite),
+	# spread about CORRIDOR_SPACING apart.
+	for level in 2:
+		for y in H:
+			for x in W:
+				var c := Vector2i(x, y)
+				if not _is_corridor(level, c) or not _through(level, c):
+					continue
+				for d: Vector2i in [Vector2i(1, 0), Vector2i(0, 1)]:
+					# Start of a run along d: a through cell along d whose cell behind is not one.
+					if not (_is_corridor(level, c + d) and _is_corridor(level, c - d)):
+						continue
+					if _through(level, c - d):
+						continue
+					var n := 0
+					while _is_corridor(level, c + d * n) and _through(level, c + d * n):
+						n += 1
+					var a := lv.cell_center(level, c.x, c.y) - Vector3(d.x, 0, d.y) * (S * 0.5)
+					for t: float in spread(n * S, CORRIDOR_SPACING):
+						var p := a + Vector3(d.x, 0, d.y) * t
+						var cell := c + d * mini(int(t / S), n - 1)
+						p.y = _ceiling_y(level, cell.x, cell.y)
+						_light(p, p.y > level * LH + LH, "corridor")
+	# Rooms: panels on an even grid about 3.5 m apart; one light in the middle, a downward spot in a
+	# room about 6 m across or less, an omni reaching every corner in a bigger one.
 	for r: Dictionary in lv.plan.rooms:
 		var level := int(r.level)
 		var x0 := int(r.x) * S
@@ -602,9 +665,14 @@ func _panels_and_lights() -> void:
 		for u: float in spread(wm, 3.5):
 			for v: float in spread(hm, 3.5):
 				_panel(level, Vector3(x0 + u, y, z0 + v), wm > hm)
-		for u: float in spread(wm, 6.0):
-			for v: float in spread(hm, 6.0):
-				_light(Vector3(x0 + u, y, z0 + v), high)
+		var small := spread(wm, 6.0).size() == 1 and spread(hm, 6.0).size() == 1
+		_light(Vector3(x0 + wm * 0.5, y, z0 + hm * 0.5), high, "spot" if small else "room", Vector2(wm, hm).length() * 0.5 + 2.5)
+
+## A corridor cell that only carries the corridor straight on: exactly two corridor neighbours, opposite.
+func _through(level: int, c: Vector2i) -> bool:
+	var ew := int(_is_corridor(level, c + Vector2i(1, 0))) + int(_is_corridor(level, c - Vector2i(1, 0)))
+	var ns := int(_is_corridor(level, c + Vector2i(0, 1))) + int(_is_corridor(level, c - Vector2i(0, 1)))
+	return (ew == 2 and ns == 0) or (ew == 0 and ns == 2)
 
 # --- room shapes ------------------------------------------------------------------------------
 

@@ -126,19 +126,23 @@ func _process(delta: float) -> void:
 		level.set_light_level(light)
 		level.set_emergency(emergency)
 		level.update_lights(delta, cam.global_position)
-	# As main.gd does every frame.
-	env.ambient_light_color = Color(0.55, 0.6, 0.6).lerp(Color(0.5, 0.08, 0.03), emergency)
+		# As main.gd does every frame.
+		env.ambient_light_color = level.ambient_color(emergency)
 	env.ambient_light_energy = lerpf(0.12, 0.05, emergency) * maxf(light, emergency)
 	env.background_color = Color(0.02, 0.025, 0.025) * light
 
 # --- the same-shape check -------------------------------------------------------------------------
 
-## Builds each floor (not drawn), dresses it and compares same-shaped rooms. Returns the problems.
+## Builds each floor (not drawn), dresses it and compares same-shaped rooms. Also: every floor's real
+## lights (main and emergency) within the renderer's limit, and the blackout's ambient light never red
+## in the Annex (red no higher than green at any emergency level) while the Clinic's stays red.
+## Returns the problems.
 static func check_floors(floors: Array) -> Dictionary:
 	var problems: Array[String] = []
 	var groups := 0
 	var compared := 0
 	var props := 0
+	var max_lights := 0
 	for f: Array in floors:
 		var lv := Level.new()
 		lv.build(annex_plan(str(f[0]), int(f[1])), str(f[0]))
@@ -149,8 +153,24 @@ static func check_floors(floors: Array) -> Dictionary:
 		groups += int(stats.groups)
 		compared += int(stats.rooms_compared)
 		props += int(stats.props)
+		var lights := lv.main_lights.size() + lv.emergency_lights.size()
+		max_lights = maxi(max_lights, lights)
+		if lights > AnnexView.LIGHT_LIMIT:
+			problems.append("%s/%d: %d lights (%d main, %d emergency), over the limit of %d" % [f[0], f[1], lights, lv.main_lights.size(), lv.emergency_lights.size(), AnnexView.LIGHT_LIMIT])
+		for k: float in [0.25, 0.5, 0.75, 1.0]:
+			var c := lv.ambient_color(k)
+			if c.r > c.g:
+				problems.append("%s/%d: the blackout ambient is red at emergency %.2f (%s)" % [f[0], f[1], k, c])
+				break
 		lv.free()
-	return {"floors": floors.size(), "groups": groups, "rooms_compared": compared, "props": props, "problems": problems}
+	var clinic := Level.new()
+	clinic.props_on = false
+	clinic.build(clinic_plan("look-0", 1), "look-0")
+	var cc := clinic.ambient_color(1.0)
+	if not cc.is_equal_approx(Color(0.5, 0.08, 0.03)) or not clinic.ambient_color(0.0).is_equal_approx(Color(0.55, 0.6, 0.6)):
+		problems.append("the Clinic's ambient changed: %s lit, %s in the blackout" % [clinic.ambient_color(0.0), cc])
+	clinic.free()
+	return {"floors": floors.size(), "groups": groups, "rooms_compared": compared, "props": props, "max_lights": max_lights, "problems": problems}
 
 # --- pictures -------------------------------------------------------------------------------------
 

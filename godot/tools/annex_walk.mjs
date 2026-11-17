@@ -3,8 +3,10 @@
 // checks that same-shaped rooms are dressed alike, saves pictures from a scripted camera to
 // export/shots/annex/, then walks the camera on the Annex and on a Clinic floor of the same seed and
 // reports frame times (vsync off). Writes export/shots/annex/report.json. Exits non-zero if the
-// same-shape check fails, the Annex is slower than the Clinic (mean or p95, beyond 5 %), or the game
-// does not finish. It never captures the mouse; start .local/guard-mouse.ps1 beside it anyway.
+// same-shape check fails (with its light-count and blackout-colour checks, annex_demo.gd check_floors),
+// the Annex is slower than the Clinic (mean or p95, beyond 5 %), the Annex has more lights than the
+// renderer draws a frame (256), or the game does not finish. It never captures the mouse; start
+// .local/guard-mouse.ps1 beside it anyway.
 // Usage: node annex_walk.mjs [--seed=annex-1] [--depth=3] [--bench=6] [--rounds=2]
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -19,6 +21,7 @@ const bench = arg('bench', '6');
 const rounds = arg('rounds', '2');
 const dir = resolve(here, '../export/windows');
 const shots = resolve(here, '../export/shots/annex');
+const LIGHT_LIMIT = 256;
 mkdirSync(shots, { recursive: true });
 
 const lines = [];
@@ -51,6 +54,12 @@ const c = report.bench_clinic;
 if (a && c) {
   console.log(`frame time, Annex vs Clinic (seed ${seed}, depth ${depth}): mean ${a.mean_ms.toFixed(2)} vs ${c.mean_ms.toFixed(2)} ms, p95 ${a.p95_ms.toFixed(2)} vs ${c.p95_ms.toFixed(2)} ms`);
   if (a.mean_ms > c.mean_ms * 1.05 || a.p95_ms > c.p95_ms * 1.05) failures.push('the Annex is slower than the Clinic');
+}
+// The renderer draws at most 256 lights a frame (project.godot limits/opengl/max_renderable_lights).
+if (a) {
+  const lights = a.lights + a.emergency_lights;
+  console.log(`lights, Annex vs Clinic: ${a.lights} + ${a.emergency_lights} emergency vs ${c?.lights} + ${c?.emergency_lights} emergency (limit ${LIGHT_LIMIT}); at most ${report.check?.max_lights} on the ${report.check?.floors} checked Annex floors`);
+  if (lights > LIGHT_LIMIT) failures.push(`the Annex has ${lights} lights, over ${LIGHT_LIMIT}`);
 }
 report.errors = errors;
 report.failures = failures;
