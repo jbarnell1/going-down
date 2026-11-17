@@ -1406,6 +1406,162 @@
       "default": [
         "off"
       ]
+    },
+    {
+      "id": "day-counts",
+      "title": "What counts towards the day quota?",
+      "context": "BANK is now refused until the day quota is met. The day quota needs something it counts during the day, so you can see it rise on the HUD (DAY 1650/2400) and the lift monitor.",
+      "type": "single",
+      "options": [
+        {
+          "id": "earned",
+          "label": "Everything earned today: recordings plus credits found; it never goes down",
+          "note": "Recommended."
+        },
+        {
+          "id": "aboard",
+          "label": "Only what is aboard the car at the vote",
+          "note": ""
+        },
+        {
+          "id": "recordings",
+          "label": "Recordings only, not found credits",
+          "note": ""
+        }
+      ],
+      "default": [
+        "earned"
+      ]
+    },
+    {
+      "id": "wipe-cost",
+      "title": "What does a wipe cost now?",
+      "context": "A short BANK can no longer happen, so the old missed-day penalty needs a new home. Wipe = the whole crew taken before banking.",
+      "type": "single",
+      "options": [
+        {
+          "id": "miss",
+          "label": "No pay for the day, each upgrade owner loses one upgrade by a seeded roll, the third wipe of a night is game over",
+          "note": "Recommended: your earlier missed-day answer, moved to the wipe."
+        },
+        {
+          "id": "nopay",
+          "label": "Only no pay",
+          "note": ""
+        },
+        {
+          "id": "ifshort",
+          "label": "The upgrade loss only if the day quota had not been met",
+          "note": ""
+        }
+      ],
+      "default": [
+        "miss"
+      ]
+    },
+    {
+      "id": "sanity-juice",
+      "title": "Sanity juice on Friday?",
+      "context": "There is no sanity in the game yet. Juice cartons will be found in drawers and lockers.",
+      "type": "single",
+      "options": [
+        {
+          "id": "carton",
+          "label": "A carton you drink (G): full stamina, +40 health in the Playroom; a real sanity meter later",
+          "note": "Recommended: small, ready for Friday."
+        },
+        {
+          "id": "nerve",
+          "label": "Build a Nerve bar now that drops near monsters and in the dark",
+          "note": ""
+        },
+        {
+          "id": "health",
+          "label": "Playroom health only",
+          "note": ""
+        }
+      ],
+      "default": [
+        "carton"
+      ]
+    },
+    {
+      "id": "rushed-search",
+      "title": "A rushed search?",
+      "context": "Hold F to search carefully (2.5 s, silent). A rushed search is faster but loud.",
+      "type": "single",
+      "options": [
+        {
+          "id": "half",
+          "label": "Shift+F: 0.8 s, loud, half the credits",
+          "note": "Recommended."
+        },
+        {
+          "id": "full",
+          "label": "Fast and loud with full credits",
+          "note": ""
+        },
+        {
+          "id": "none",
+          "label": "No rushed search",
+          "note": ""
+        }
+      ],
+      "default": [
+        "half"
+      ]
+    },
+    {
+      "id": "who-starts",
+      "title": "Who starts the run from the ready-up screen?",
+      "context": "Everyone reads the controls card and presses READY; then everyone drops into the lift together.",
+      "type": "single",
+      "options": [
+        {
+          "id": "all-or-host",
+          "label": "5 s after everyone is ready; the host may start without stragglers after 30 s",
+          "note": "Recommended."
+        },
+        {
+          "id": "all",
+          "label": "Only when everyone is ready",
+          "note": ""
+        },
+        {
+          "id": "host",
+          "label": "The host starts whenever",
+          "note": ""
+        }
+      ],
+      "default": [
+        "all-or-host"
+      ]
+    },
+    {
+      "id": "car-wait",
+      "title": "How long does the car wait?",
+      "context": "The lift no longer pushes you out. While anyone stays aboard, the doors stay open and the announcer nags; a player in the car records nothing, so it is not a safe place to earn.",
+      "type": "single",
+      "options": [
+        {
+          "id": "forever",
+          "label": "As long as anyone is aboard",
+          "note": "Recommended."
+        },
+        {
+          "id": "idle",
+          "label": "An idle player (45 s) is left dozing in the car and it leaves",
+          "note": ""
+        },
+        {
+          "id": "first",
+          "label": "Unlimited wait only on the first floor of a day",
+          "note": ""
+        }
+      ],
+      "default": [
+        "forever"
+      ]
     }
   ]
 }
