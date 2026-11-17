@@ -29,8 +29,8 @@
 #  - Which place a floor is comes from the run's deck (places.gd): Clinic only unless the caller passes
 #    another, so a run made without one is the run every stored result was recorded from. The game
 #    passes Places.FULL. The floor's resident is driven by "the Orderly" below whoever it is: the Temp
-#    keeps the Orderly's rules for now (T16f); the Minder, not a Stillness resident, only wanders
-#    harmlessly (Places.wander_step) until the Playroom's count is wired in (T15d).
+#    keeps the Orderly's rules in its own body (T16f); the Playroom's Minder is stepped by sim/seek.gd
+#    (see "The Playroom" below), and `orderly` carries its pose so the network and the views are unchanged.
 #  - The lights while the car comes (dark_schedule): blinks that grow, then the blackout, ending on the
 #    tick the car arrives. A false stop (one floor above, in the last few seconds) always falls inside
 #    the blackout: it is heard in the dark, and the blackout still ends as the doors really open.
@@ -62,12 +62,79 @@
 #  - The tapes are numbered on across days (the crew's next_tape carries on), so every tape id is new.
 # The facts of the day just settled stay on the state (day_result) until the next morning.
 #
+# The Playroom (docs/floors/playarea.md; loop/NIGHT-PLAN.md A3, T15d). On a floor whose place is the
+# Playroom, with its resident on (seek_off false), the run holds sim/seek.gd's state (`seek`) and steps
+# it instead of the Orderly's rules, every tick except while riding (that floor is behind the crew):
+#  - Inputs: each active player who is out of the car, with their gait, the hide key (PlayerInput.hide_use,
+#    a press; hide_fast when sprint was held), W held (peek), a sound emote, the voice and a light; their
+#    instrument ticked on the tick before (Instr ticks), a reason inside a hide. Players in the car are
+#    not on the floor: they neither provoke nor are looked for.
+#  - Found players are rooted: their input is their found spot, so the Minder can run them down. Taken
+#    (at the party table) and down players give no input: their eyes and position count for nothing.
+#    The tick after a "down" their dropped tape is heard (dropped_tape).
+#  - Statuses: found, taken or down is the run's "caught" (out until the car next rides down, as any
+#    catch). Bodies: a player getting into, sitting in or getting out of a hide, found, taken or down is
+#    where the rules hold them (seek's body): the hide's inside or front spot, the found spot, the seat.
+#  - The tape drops where a player is found or goes down (the instrument's "caught", not a run event).
+#  - The instrument (playarea.md 11): trait "hearing", recording only during a count after the 6 s, and
+#    only for a player out of its view, or peeking from a hide (EntityTick.acting, .holders).
+#  - The call (phase away) starts the last count instead of the usual wait: phase "coming" with no call
+#    schedule and no blinks ("called" with floorsAway 0 and last true). The car arrives, doors open, on
+#    the tick of the last count's "countEnd". If the last count is already over (the car left empty), a
+#    call is the usual wait.
+#  - Every seek event is a run event, at its host time ("count" {n, t0, len, last, by, why}, "countEnd",
+#    hide*, "found", "taken", "down", ...: sim/seek.gd lists them).
+#
+# The floor quota (North Star C9; T5q), on only for a run made with it (create_run's `quota`, with_quota():
+# net/host_rules.gd turns it on for the game's rooms when the resident is on; tests and every stored result
+# leave it off, and then nothing below happens). The call button does nothing until the crew has recorded
+# enough on this floor:
+#  - Needed: floor_quota(depth, crew), one number for the crew together. It is set while the car arrives
+#    on the floor (with everyone in the run then, a player admitted at the stop included) and afterwards
+#    only shrinks, if a player leaves the game. Never at home.
+#  - Earned: every reading closed on this floor (its "readingClosed" value, depth pay included), whatever
+#    happens to its tape afterwards: a tape dropped, left on the floor or lost still counts, so a lost tape
+#    can never trap the crew. A reading still open counts once it closes.
+#  - The call (phase away, the Playroom's last count included) with floor(earned) < needed is refused:
+#    "callRefused" {playerId, earned, needed}, and nothing else happens (the resident does not hear it).
+#  - The tick floor(earned) first reaches needed: "quotaMet" {depth, earned, needed, top: who recorded
+#    the most here (for the Annex's note), or ""}, once per floor (not
+#    on the ride away). Earned and needed go back to 0 and the new floor's quota on every new floor
+#    ("rodeDown", "newDay"; at home needed is 0).
+# The day loop's DAY_FLOOR_QUOTA is floor 1's quota per player, so the day quota is a whole number of
+# floor 1 quotas for the morning's crew (docs/floors/prison.md section 2: one and a half on day 1).
+#
+# The Annex (docs/floors/annex.md sections 2 and 4; loop/NIGHT-PLAN.md A6, T16h). On a floor whose place is
+# the Annex the run holds `annex` (an AnnexFloor: the crew's marks and the Temp's sticky notes), made when
+# the crew reaches the floor and dropped on the next; on any other floor it is null and nothing below
+# happens. Everything in it is the host's, the same for everyone.
+#  - Marks (sim/marks.gd): ONE pad for the whole crew, Marks.DEFAULT_PAD a floor (a new floor, a full pad).
+#    PlayerInput.mark is a press of Q: the placing starts at the player's feet, pointing where they face
+#    (snapped to eight), and the run finishes it Marks.PLACE_SECONDS later by itself ("markStart", then
+#    "markPlaced" with the slap's radius, or "markRefused" {reason}: pad_empty, sprinting, down, in_car,
+#    busy, gone). PlayerInput.peel is the id of a mark the player has held F on for Marks.PEEL_SECONDS
+#    (the client times the hold): any player peels any mark within MARK_PEEL_REACH, and it goes back on
+#    the pad ("markPeeled", or "markRefused" far / no_such_mark / down). Marks are immune: nothing but a
+#    peel removes one, and nothing moves or changes one; the Temp never touches them.
+#  - Sticky notes (sim/notes.gd, data/annex_notes.json): triggers are this tick's events: the arrival
+#    doors opening ("lobby", posted at once on the wall nearest the lift doors), "startedHunting" ("wake"),
+#    every NOTE_HUNT_EVERY seconds the Temp hunts ("hunt"), "caught" ("catch"), "tapeDropped" ("tape"),
+#    "quotaMet" ("quota", by its top) and "called" ("lift"). Heals do not exist yet, so "heal" never
+#    fires. The Temp posts them: a trigger waits in a queue until a tick the Temp is not held (Stillness:
+#    it never posts while anyone looks), one a tick, on the wall nearest the Temp. At most
+#    Notes.cap_per_floor() a floor. Each posting is a "note" event {id, n, trigger, template, text, x, z,
+#    level, yaw, t}: one loud click where the note is. The facts are true and the same for everyone:
+#    names (from `names`, the host's player names), who is alone, who stands very close, who is furthest
+#    from the lift, sprints this floor, notes per name, the pad's use; door passes and looking are not
+#    tracked yet, so their notes are never used. Note ids count up over the whole run (note_seq).
+#
 # Events are Dictionaries with the TypeScript shapes (see RunEvent in run.ts), carrying Move.Body,
 # TapeLib.Reading and RunSummary objects where TypeScript carries those objects.
 extends RefCounted
 
 const Entity = preload("res://sim/entity.gd")
 const Places = preload("res://sim/places.gd")
+const Seek = preload("res://sim/seek.gd")
 const Day = preload("res://sim/day.gd")
 const Prison = preload("res://sim/prison.gd")
 const Upgrades = preload("res://sim/upgrades.gd")
@@ -78,6 +145,9 @@ const Move = preload("res://sim/move.gd")
 const Rng = preload("res://sim/rng.gd")
 const TapeLib = preload("res://sim/tape.gd")
 const M = preload("res://sim/jsmath.gd")
+const Marks = preload("res://sim/marks.gd")
+const Notes = preload("res://sim/notes.gd")
+const Walls = preload("res://sim/walls.gd")
 
 # ---------------------------------------------------------------------------------------------
 # Tuning.
@@ -157,9 +227,25 @@ const LURE_ID := "#call"
 const RIDE_UP_TIME := 8.0
 ## Seconds F must be held on a bunk to lie down (prison.md section 6: "Hold F on any bunk").
 const BED_HOLD := 1.0
-## Each player's floor quota, the unit of the day quota (Day.quota_for). A stand-in until the floor quota
-## (T5q) is in the run; the day quota is 1.5 of these per player on day 1.
-const DAY_FLOOR_QUOTA := 150
+## The floor quota (North Star C9; see the header): what the crew must record on a floor before the call
+## button works. floor_quota(depth, crew) = QUOTA_PER_PLAYER x crew x QUOTA_DEPTH_STEP^(depth - 1),
+## rounded to the nearest QUOTA_ROUND. Measured with reading bots (tests/prop_quota_net.gd): on floor 1
+## a crew that reads well meets it in about 2 minutes (1:45 alone, 2:40 for four, slow floors nearer 4).
+## Each floor deeper pays DEPTH_PAY_STEP (1.35) more and asks QUOTA_DEPTH_STEP more: about 7% longer.
+const QUOTA_PER_PLAYER := 400
+const QUOTA_DEPTH_STEP := 1.45
+const QUOTA_ROUND := 5
+## Each player's floor quota, the unit of the day quota (Day.quota_for): floor 1's quota per player, so
+## Day.first_floor_quota(DAY_FLOOR_QUOTA, crew) is floor_quota(1, crew) exactly. The day quota is 1.5 of
+## floor 1's quota on day 1 (docs/floors/prison.md section 2).
+const DAY_FLOOR_QUOTA := QUOTA_PER_PLAYER
+## The Annex (see the header): how near a mark a player must stand to peel it (metres, feet to the
+## arrow); the Temp's "hunt" note every this many seconds of hunting; no crewmate within ALONE_DISTANCE
+## is "alone"; two crew within CLOSE_DISTANCE stand "very close".
+const MARK_PEEL_REACH := 1.5
+const NOTE_HUNT_EVERY := 25.0
+const ALONE_DISTANCE := 10.0
+const CLOSE_DISTANCE := 1.0
 
 const EPS := 1e-9
 ## How far onto the landing side of the wall line the doorway channel reaches, beyond a body's radius.
@@ -474,6 +560,54 @@ class RunSummary:
 	var tapes: Array[String] = []
 	var wiped: bool
 
+## The Annex floor the crew is on (see the header): its marks and notes. Replaced, never edited, once in
+## a RunState (copy() first).
+class AnnexFloor:
+	## The plan it belongs to (a new plan is a new floor).
+	var plan: Floor.FloorPlan
+	## The crew's one pad and the marks down (sim/marks.gd).
+	var marks: Marks.MarksState
+	## Notes.post's state (count and templates used), and the notes posted, in order: {id, n, trigger,
+	## template, text, x, z, level, yaw, t}. Each Dictionary is never edited once posted.
+	var notes_state: Dictionary = {}
+	var notes: Array[Dictionary] = []
+	## RunState.note_seq when the crew reached the floor: this floor's note ids are notes_from + 1 on.
+	var notes_from: int = 0
+	## Triggers waiting for the Temp to be free to post: {trigger, facts}.
+	var queue: Array[Dictionary] = []
+	## The lobby note has been posted.
+	var lobby_done: bool = false
+	## Seconds the Temp has hunted since the last "hunt" note.
+	var hunt_clock: float = 0.0
+	## Sprints started this floor, {id: int}, whether each player sprinted last tick, {id: bool}, and notes
+	## naming each name so far, {name: int}.
+	var sprints: Dictionary = {}
+	var sprinting: Dictionary = {}
+	var named: Dictionary = {}
+
+	static func start(plan_: Floor.FloorPlan, note_seq: int) -> AnnexFloor:
+		var a := AnnexFloor.new()
+		a.plan = plan_
+		a.marks = Marks.MarksState.start_floor(Marks.DEFAULT_PAD)
+		a.notes_state = Notes.new_state()
+		a.notes_from = note_seq
+		return a
+
+	func copy() -> AnnexFloor:
+		var a := AnnexFloor.new()
+		a.plan = plan
+		a.marks = marks
+		a.notes_state = notes_state
+		a.notes = notes.duplicate()
+		a.notes_from = notes_from
+		a.queue = queue.duplicate()
+		a.lobby_done = lobby_done
+		a.hunt_clock = hunt_clock
+		a.sprints = sprints.duplicate()
+		a.sprinting = sprinting.duplicate()
+		a.named = named.duplicate()
+		return a
+
 class RunState:
 	var seed: String
 	## Run time, seconds.
@@ -531,6 +665,30 @@ class RunState:
 	var use_prev: Dictionary = {}
 	## Run time the lights went out in the prison, or -1.
 	var lights_out_t: float = -1.0
+	## The Playroom (see the header): sim/seek.gd's state on this floor (a Seek.SeekState), else null.
+	var seek: Variant = null
+	## The resident is off (net/host_rules.gd, entity off): no seek, the Minder stays parked.
+	var seek_off: bool = false
+	## Players whose tape hit the floor as they went down last tick: heard this tick.
+	var seek_drops: Array[String] = []
+	## Run time of the call that started the last count (-1 before).
+	var seek_call_at: float = -1.0
+	## The floor quota (see the header). Off: everything below stays as it is made and is never read.
+	var quota: bool = false
+	## Recorded on this floor: every reading closed here (depth pay included), wherever its tape went since.
+	var floor_earned: float = 0.0
+	## The same per player, {id: value} (who did most of it: the Annex's note). Replaced, never edited.
+	var floor_by: Dictionary = {}
+	## What this floor asks for (floor_quota), 0 at home.
+	var floor_needed: int = 0
+	## "quotaMet" has been said on this floor.
+	var quota_met: bool = false
+	## The Annex (see the header): this floor's marks and notes (an AnnexFloor), else null.
+	var annex: AnnexFloor = null
+	## Notes posted over the whole run (a note's id is the count when it was posted).
+	var note_seq: int = 0
+	## The players' names as the notes write them, {id: name} (the host's; an id is its own name otherwise).
+	var names: Dictionary = {}
 
 	func copy() -> RunState:
 		var s := RunState.new()
@@ -568,6 +726,18 @@ class RunState:
 		s.bed_hold = bed_hold
 		s.use_prev = use_prev
 		s.lights_out_t = lights_out_t
+		s.seek = seek
+		s.seek_off = seek_off
+		s.seek_drops = seek_drops
+		s.seek_call_at = seek_call_at
+		s.quota = quota
+		s.floor_earned = floor_earned
+		s.floor_by = floor_by
+		s.floor_needed = floor_needed
+		s.quota_met = quota_met
+		s.annex = annex
+		s.note_seq = note_seq
+		s.names = names
 		return s
 
 class PlayerInput:
@@ -591,6 +761,25 @@ class PlayerInput:
 	var blind: bool = false
 	## F is held (the use key): in the prison, held on a bunk it lies you down (days on only).
 	var use: bool = false
+	## The Playroom only (see the header). The gait the player has this tick (Stamina.gait_for): "walk",
+	## "creep" or "sprint".
+	var gait: StringName = &"walk"
+	## F pressed for a hide this tick (a press, not held): into the hide in reach, or out of the one
+	## you are in; `hide_fast`: sprint was held as it was pressed (quick, and the flap is let go).
+	var hide_use: bool = false
+	var hide_fast: bool = false
+	## W held inside a hide: leaning to the gap.
+	var peek: bool = false
+	## An emote that plays a sound, the voice (when the microphone exists), the party horn (harmless).
+	var emote_sound: bool = false
+	var voice: bool = false
+	var horn: bool = false
+	## A lamp or flash (a Seek.Light), or null. A hook: lamps do not exist yet.
+	var light: Variant = null
+	## The Annex only (see the header). Q pressed this tick: start placing a mark from the shared pad.
+	var mark: bool = false
+	## The id of a mark to peel back onto the pad (F held on it for Marks.PEEL_SECONDS), or -1.
+	var peel: int = -1
 
 	static func make(id_: String, body_: Move.Body, eye_: float, yaw_: float, pitch_: float, h_fov: float, v_fov: float) -> PlayerInput:
 		var p := PlayerInput.new()
@@ -652,11 +841,66 @@ static func with_days(s0: RunState) -> RunState:
 static func at_home(s: RunState) -> bool:
 	return s.days and s.depth == 0
 
+## What floor `depth` asks a crew of `crew` to record before the call button works (see QUOTA_PER_PLAYER).
+## 0 at home (depth 0 or less).
+static func floor_quota(depth: int, crew: int) -> int:
+	if depth <= 0:
+		return 0
+	var raw := float(QUOTA_PER_PLAYER * maxi(1, crew)) * M.pow_js(QUOTA_DEPTH_STEP, float(depth - 1))
+	return maxi(QUOTA_ROUND, roundi(raw / QUOTA_ROUND) * QUOTA_ROUND)
+
+## The crew a floor quota is for: everyone in the run who has not left the game (the host marks those
+## who leave "leftBehind"; between floors nobody else is).
+static func quota_crew(players: Array[RunPlayer]) -> int:
+	var n := 0
+	for p in players:
+		if p.status != &"leftBehind":
+			n += 1
+	return n
+
+## Whether this floor's quota is met (always, with the quota off). Whole credits, as the call panel shows.
+static func quota_reached(s: RunState) -> bool:
+	return not s.quota or floori(s.floor_earned) >= s.floor_needed
+
+## Who recorded the most on this floor (the first by id on a tie), or "" if nobody recorded anything.
+static func quota_top(s: RunState) -> String:
+	var top := ""
+	var best := 0.0
+	for id: String in _sorted_keys(s.floor_by):
+		var v := float(s.floor_by[id])
+		if v > best:
+			best = v
+			top = id
+	return top
+
+## Turns the floor quota on for a run that has not ticked yet: nothing recorded, this floor's quota for
+## the crew in the run now.
+static func with_quota(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.quota = true
+	s.floor_earned = 0.0
+	s.floor_by = {}
+	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(s.players))
+	s.quota_met = false
+	return s
+
+## A new floor for the quota: nothing recorded yet, its quota for the crew aboard.
+static func _new_quota_floor(s: RunState, players: Array[RunPlayer]) -> void:
+	if not s.quota:
+		return
+	s.floor_earned = 0.0
+	s.floor_by = {}
+	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(players))
+	s.quota_met = false
+
 ## A new run: the crew in the car at floor 1's landing, doors about to open. `deck`: the places its
-## floors are drawn from (places.gd); empty means Clinic only. `days`: the day loop (see the header).
-static func create_run(seed: String, player_ids: Array[String], deck: Array = [], days: bool = false) -> RunState:
+## floors are drawn from (places.gd); empty means Clinic only. `days`: the day loop; `quota`: the floor
+## quota (see the header).
+static func create_run(seed: String, player_ids: Array[String], deck: Array = [], days: bool = false, quota: bool = false) -> RunState:
 	var s := _create_run(seed, player_ids, deck)
-	return with_days(s) if days else s
+	if days:
+		s = with_days(s)
+	return with_quota(s) if quota else s
 
 static func _create_run(seed: String, player_ids: Array[String], deck: Array = []) -> RunState:
 	assert(not player_ids.is_empty(), "a run needs at least one player")
@@ -914,6 +1158,410 @@ static func _step_blink(s: RunState, t: float, events: Array[Dictionary]) -> voi
 		events.append({"type": "blinkEnd", "t": t, "blackout": d.blackout})
 		s.blink = _blink_of(s.call, d.n + 1) if (s.phase == &"coming" and s.call != null) else null
 
+# ---------------------------------------------------------------------------------------------
+# The Playroom (see the header).
+
+## Whether this floor's resident is the Minder stepped by seek.gd.
+static func seeks(s: RunState) -> bool:
+	return not s.seek_off and not at_home(s) and s.plan != null and s.plan.place == Places.PLAYROOM
+
+## Keeps `seek` the state of this floor: made when the crew reaches a Playroom (everyone at 100, the
+## Minder at its start facing its wall), dropped on any other floor.
+static func _sync_seek(s: RunState) -> void:
+	if not seeks(s):
+		if s.seek != null:
+			s.seek = null
+			s.seek_drops = []
+			s.seek_call_at = -1.0
+		return
+	if s.seek != null and (s.seek as Seek.SeekState).floor.plan == s.plan:
+		return
+	var ids: Array[String] = []
+	for p in s.players:
+		ids.append(p.id)
+	s.seek = Seek.create_seek(s.plan, ids)
+	(s.seek as Seek.SeekState).t = s.t
+	s.seek_drops = []
+	s.seek_call_at = -1.0
+
+## The run's view of a seek player: whether the rules hold their body (in a hide, found, taken, down).
+static func _seek_holds(sp: Seek.SeekPlayer) -> bool:
+	return sp != null and sp.body != null and (sp.status != &"ok" or sp.phase != &"out")
+
+## One tick of the Playroom's rules. Updates `s` (seek, orderly, seek_drops, the car on the last
+## count's end) and `players` (statuses and bodies), appends the events, and returns the Minder's tick
+## for the instruments.
+static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Dictionary, call_by: String, t_prev: float, t: float, dt: float, events: Array[Dictionary]) -> Instr.EntityTick:
+	var ss: Seek.SeekState = s.seek
+	var drops := s.seek_drops
+	s.seek_drops = []
+	var inputs: Array[Seek.SeekInput] = []
+	for p in players:
+		var sp := Seek.player_of(ss, p.id)
+		var status: StringName = sp.status if sp != null else &"ok"
+		if status == &"found" and sp.body != null:
+			# Rooted where found: the Minder is coming for them.
+			inputs.append(Seek.SeekInput.make(p.id, sp.body, &"walk"))
+			continue
+		if drops.has(p.id):
+			# Down last tick: their tape hits the floor now, and that is heard.
+			var di := Seek.SeekInput.make(p.id, sp.body if (sp != null and sp.body != null) else p.body, &"walk")
+			di.dropped_tape = true
+			inputs.append(di)
+			continue
+		if status != &"ok" or not _is_active(p, input_of) or p.aboard:
+			# Taken (at the party table), down, gone, or in the car: not on the floor for it.
+			continue
+		var i: PlayerInput = input_of[p.id]
+		var si := Seek.SeekInput.make(p.id, i.body, i.gait)
+		si.use = i.hide_use
+		si.fast = i.hide_fast
+		si.peek = i.peek
+		si.emote_sound = i.emote_sound
+		si.voice = i.voice
+		si.horn = i.horn
+		si.light = i.light
+		var mem := Instr.member(s.crew, p.id)
+		si.ticking = mem != null and mem.instrument.ticks > 0
+		inputs.append(si)
+	var fl := Seek.FloorInput.new()
+	fl.call = call_by != ""
+	fl.call_by = call_by
+	fl.boarding = s.phase == &"boarding"
+	fl.riding = s.phase == &"riding"
+	# The seek runs on the run's own clock: every time in its events and state is host time.
+	var base := ss.copy()
+	base.t = t_prev
+	var r := Seek.step_seek(base, inputs, dt, fl)
+	var ns := r.state
+	s.seek = ns
+	events.append_array(r.events)
+
+	# The Minder as the network and the views carry a resident: its pose, mode and speed.
+	var before := s.orderly
+	var o := before.copy()
+	var mm := ns.minder
+	o.t = before.t + dt
+	o.body = mm.body
+	o.yaw = mm.yaw
+	o.mode = mm.mode
+	o.anim = mm.anim
+	o.anim_time = mm.anim_time
+	o.speed = mm.speed
+	o.moving = mm.moving
+	o.seen = false
+	o.held = false
+	o.frozen = false
+	o.wind_up_left = 0.0
+	o.wind_up_target = null
+	o.target_id = null
+	s.orderly = o
+	s.lure = false
+
+	# Statuses and bodies: found, taken and down are out of the run (caught) where the rules hold them.
+	for k in players.size():
+		var p := players[k]
+		var sp := Seek.player_of(ns, p.id)
+		if sp == null:
+			continue
+		var np := p
+		if sp.status != &"ok" and p.status == &"ok":
+			np = p.copy()
+			np.status = &"caught"
+			np.side = null
+		if _seek_holds(sp) and not (np.body.x == sp.body.x and np.body.z == sp.body.z and np.body.level == sp.body.level and np.body.y == sp.body.y):
+			if np == p:
+				np = p.copy()
+			np.body = sp.body
+			np.aboard = in_car(s.car, np.body)
+		players[k] = np
+
+	# The instruments: found or down drops the tapes where they are (the instrument's "caught").
+	var caught: Array[Dictionary] = []
+	for e in r.events:
+		if e["type"] == "found" or e["type"] == "down":
+			caught.append({"type": "caught", "t": t, "playerId": e["playerId"]})
+		if e["type"] == "down":
+			s.seek_drops.append(String(e["playerId"]))
+	var who := Places.resident(s.plan.place)
+	var et := Instr.EntityTick.make(s.entity_id, who.trait_name, before, o, caught)
+	# Recording (playarea.md 11): only while it searches, after the 6 s; only for a player out of its
+	# view, or peeking from a hide. Sitting back in a hide, or standing in its view, records nothing.
+	et.acting = Seek.phase_of(ns) == &"seek"
+	var holders := {}
+	if et.acting:
+		for p in players:
+			var sp := Seek.player_of(ns, p.id)
+			if sp == null or sp.status != &"ok" or sp.body == null or not _is_active(p, input_of) or p.aboard:
+				continue
+			if sp.phase == &"inside":
+				if sp.peeking:
+					holders[p.id] = true
+			elif not Seek.in_view(s.plan, mm.body, mm.yaw, sp.body):
+				holders[p.id] = true
+	et.holders = holders
+
+	# The last count over: the car is here, doors open, boarding as on any floor.
+	for e in r.events:
+		if e["type"] == "countEnd" and bool(e["last"]) and s.phase == &"coming":
+			s.phase = &"boarding"
+			s.bell_left = BOARD_TIME
+			s.hold_left = HOLD_LIMIT
+			s.held = false
+			s.call = null
+			s.blink = null
+			events.append({"type": "carArrived", "t": t, "wait": t - s.seek_call_at if s.seek_call_at >= 0.0 else 0.0})
+			events.append({"type": "doorsOpened", "t": t, "depth": s.depth, "reason": "boarding"})
+	return et
+
+# ---------------------------------------------------------------------------------------------
+# The Annex: the crew's marks and the Temp's sticky notes (see the header).
+
+## Whether this floor is the Annex (and the crew is not at home).
+static func annexes(s: RunState) -> bool:
+	return not at_home(s) and s.plan != null and s.plan.place == Places.ANNEX
+
+## Keeps `annex` the state of this floor: a full pad and no notes when the crew reaches an Annex, null on
+## any other floor.
+static func _sync_annex(s: RunState) -> void:
+	if not annexes(s):
+		s.annex = null
+		return
+	if s.annex != null and s.annex.plan == s.plan:
+		return
+	s.annex = AnnexFloor.start(s.plan, s.note_seq)
+
+## A player's name as the notes write it: the host's name for them, without braces, else their id.
+static func name_of(s: RunState, id: String) -> String:
+	var n := str(s.names.get(id, "")).replace("{", "").replace("}", "").strip_edges()
+	if n.is_empty():
+		n = id.replace("{", "").replace("}", "")
+	return n if not n.is_empty() else "someone"
+
+## To the centimetre and the milliradian, as the wire carries them, so every list is the same everywhere.
+static func _cm(x: float) -> float:
+	var r := floorf(x * 100.0 + 0.5) / 100.0
+	return 0.0 if r == 0.0 else r
+
+static func _mrad(x: float) -> float:
+	var r := floorf(x * 1000.0 + 0.5) / 1000.0
+	return 0.0 if r == 0.0 else r
+
+## Where a note goes from a point: on the nearest wall (its nearest point), facing back toward the point;
+## with no wall near, at the point facing `yaw`. [x, z, yaw].
+static func note_spot(plan: Floor.FloorPlan, level: int, x: float, z: float, yaw: float) -> PackedFloat64Array:
+	var cs := float(plan.cell_size)
+	var segs := Walls.segments_near(plan, level, floori(x / cs), floori(z / cs))
+	var best := INF
+	var bx := x
+	var bz := z
+	var i := 0
+	while i < segs.size():
+		var ax := segs[i]
+		var az := segs[i + 1]
+		var ex := segs[i + 2] - ax
+		var ez := segs[i + 3] - az
+		var len2 := ex * ex + ez * ez
+		var k := minf(1.0, maxf(0.0, ((x - ax) * ex + (z - az) * ez) / len2)) if len2 > 0.0 else 0.0
+		var qx := ax + ex * k
+		var qz := az + ez * k
+		var d := M.hypot2(x - qx, z - qz)
+		if d < best - EPS:
+			best = d
+			bx = qx
+			bz = qz
+		i += 4
+	var face := yaw
+	if not is_inf(best) and best > 1e-6:
+		face = Entity.yaw_toward(x - bx, z - bz)
+	return PackedFloat64Array([_cm(bx), _cm(bz), _mrad(face)])
+
+static func _player_in(players: Array[RunPlayer], id: String) -> RunPlayer:
+	for p in players:
+		if p.id == id:
+			return p
+	return null
+
+static func _mark_by_id(ms: Marks.MarksState, id: int) -> Marks.Mark:
+	for m in ms.marks:
+		if m.id == id:
+			return m
+	return null
+
+## A mark as the events and the snapshot carry it.
+static func mark_plain(m: Marks.Mark) -> Dictionary:
+	return {"id": m.id, "x": m.x, "z": m.z, "level": m.level, "dir": m.dir, "player": m.player, "placedAt": m.placed_at}
+
+## The true facts a note may use (sim/notes.gd's dictionary), as they stand this tick.
+static func _note_facts(s: RunState, players: Array[RunPlayer], a: AnnexFloor) -> Dictionary:
+	var names: Array = []
+	var on_floor: Array[RunPlayer] = []
+	var standing: Array[RunPlayer] = []
+	for p in players:
+		if p.status == &"leftBehind":
+			continue
+		names.append(name_of(s, p.id))
+		if p.status == &"ok":
+			standing.append(p)
+			if not p.aboard:
+				on_floor.append(p)
+	var alone: Array = []
+	var close: Array = []
+	var furthest := ""
+	var far := 0.0
+	var cs := float(s.plan.cell_size)
+	var lx := (s.plan.landing.x + 0.5) * cs
+	var lz := (s.plan.landing.y + 0.5) * cs
+	for i in on_floor.size():
+		var p := on_floor[i]
+		var near := false
+		for q in standing:
+			if q != p and q.body.level == p.body.level and M.hypot2(q.body.x - p.body.x, q.body.z - p.body.z) < ALONE_DISTANCE:
+				near = true
+				break
+		if not near:
+			alone.append(name_of(s, p.id))
+		for j in range(i + 1, on_floor.size()):
+			var q := on_floor[j]
+			if q.body.level == p.body.level and M.hypot2(q.body.x - p.body.x, q.body.z - p.body.z) < CLOSE_DISTANCE:
+				close.append([name_of(s, p.id), name_of(s, q.id)])
+		var d := M.hypot2(p.body.x - lx, p.body.z - lz)
+		if d > far + EPS:
+			far = d
+			furthest = name_of(s, p.id)
+	var sprints := {}
+	for id: String in _sorted_keys(a.sprints):
+		if int(a.sprints[id]) > 0:
+			sprints[name_of(s, id)] = int(a.sprints[id])
+	var notes_for := {}
+	for n: String in names:
+		notes_for[n] = int(a.named.get(n, 0)) + 1
+	var facts := {"names": names, "alone": alone, "close_pairs": close, "sprints": sprints, "notes_for": notes_for,
+		"marks_used": a.marks.pad_size - a.marks.pad, "marks_cap": a.marks.pad_size}
+	if furthest != "":
+		facts["furthest"] = furthest
+	return facts
+
+## Posts one note for `trigger` at `spot` ([x, z, yaw] on `level`), if the floor's cap and the facts allow.
+static func _post_note(s: RunState, players: Array[RunPlayer], a: AnnexFloor, trigger: String, extra: Dictionary, level: int, spot: PackedFloat64Array, t: float, events: Array[Dictionary]) -> void:
+	var facts := _note_facts(s, players, a)
+	facts.merge(extra, true)
+	var r := Notes.post(s.seed, s.depth, trigger, facts, a.notes_state)
+	if not r["ok"]:
+		return
+	a.notes_state = r["state"]
+	s.note_seq += 1
+	var note := {"id": s.note_seq, "n": int(r["state"]["count"]), "trigger": trigger, "template": int(r["id"]), "text": String(r["text"]),
+		"x": spot[0], "z": spot[1], "level": level, "yaw": spot[2], "t": _mrad(t)}
+	a.notes.append(note)
+	for n: Variant in facts["names"]:
+		if String(r["text"]).contains(String(n)):
+			a.named[n] = int(a.named.get(n, 0)) + 1
+	var e := note.duplicate()
+	e["type"] = "note"
+	events.append(e)
+
+## One tick of the Annex: the marks (finishing, peeling, starting), then the notes (the triggers in this
+## tick's `events`, the lobby note, the Temp's queue). Updates `s.annex` and appends the events.
+static func _step_annex(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, dt: float, events: Array[Dictionary]) -> void:
+	if s.annex == null:
+		return
+	var a := s.annex.copy()
+	s.annex = a
+	var riding := s.phase == &"riding"
+
+	# The notes' triggers, from what happened this tick (before any mark event is added).
+	var lobby := false
+	for e in events:
+		match str(e["type"]):
+			"doorsOpened":
+				lobby = lobby or str(e["reason"]) == "arrival"
+			"startedHunting":
+				a.queue.append({"trigger": "wake", "facts": {}})
+			"caught":
+				a.queue.append({"trigger": "catch", "facts": {"caught": name_of(s, str(e["playerId"]))}})
+			"tapeDropped":
+				a.queue.append({"trigger": "tape", "facts": {"tape_dropper": name_of(s, str(e["playerId"]))}})
+			"quotaMet":
+				if str(e["top"]) != "":
+					a.queue.append({"trigger": "quota", "facts": {"quota_top": name_of(s, str(e["top"]))}})
+			"called":
+				a.queue.append({"trigger": "lift", "facts": {"lift_caller": name_of(s, str(e["playerId"]))}})
+	if not riding and (s.orderly.mode == &"hunting" or s.orderly.mode == &"windUp"):
+		a.hunt_clock += dt
+		while a.hunt_clock >= NOTE_HUNT_EVERY - EPS:
+			a.hunt_clock -= NOTE_HUNT_EVERY
+			a.queue.append({"trigger": "hunt", "facts": {}})
+
+	# Sprints this floor (a fact for the notes): a sprint starts when the gait becomes sprint.
+	for p in players:
+		if not _is_active(p, input_of):
+			a.sprinting.erase(p.id)
+			continue
+		var sprint: bool = (input_of[p.id] as PlayerInput).gait == &"sprint"
+		if sprint and not bool(a.sprinting.get(p.id, false)):
+			a.sprints[p.id] = int(a.sprints.get(p.id, 0)) + 1
+		a.sprinting[p.id] = sprint
+
+	# The marks: placings due, then peels, then new placings.
+	var ms := a.marks
+	for pend: Marks.Pending in ms.pending.duplicate():
+		var p := _player_in(players, pend.player)
+		if p == null or not _is_active(p, input_of):
+			ms = Marks.cancel_place(ms, pend.player)
+			events.append({"type": "markRefused", "t": t, "playerId": pend.player, "reason": "gone"})
+			continue
+		var fr := Marks.finish_place(ms, pend.player, p.status, (input_of[p.id] as PlayerInput).gait, p.aboard, t)
+		if fr.ok:
+			ms = fr.state
+			events.append({"type": "markPlaced", "t": t, "playerId": pend.player, "mark": mark_plain(fr.mark), "pad": ms.pad, "radius": fr.noise.radius})
+		elif fr.reason != &"too_early":
+			ms = Marks.cancel_place(ms, pend.player)
+			events.append({"type": "markRefused", "t": t, "playerId": pend.player, "reason": String(fr.reason)})
+	for p in players:
+		if not _is_active(p, input_of):
+			continue
+		var inp: PlayerInput = input_of[p.id]
+		if inp.peel >= 0:
+			var m := _mark_by_id(ms, inp.peel)
+			var why := ""
+			if m == null:
+				why = "no_such_mark"
+			elif m.level != p.body.level or M.hypot2(m.x - p.body.x, m.z - p.body.z) > MARK_PEEL_REACH + EPS:
+				why = "far"
+			else:
+				var pr := Marks.peel(ms, inp.peel, p.id, p.status)
+				if pr.ok:
+					ms = pr.state
+					events.append({"type": "markPeeled", "t": t, "playerId": p.id, "id": pr.mark.id, "owner": pr.mark.player, "pad": ms.pad})
+				else:
+					why = String(pr.reason)
+			if why != "":
+				events.append({"type": "markRefused", "t": t, "playerId": p.id, "reason": why, "peel": inp.peel})
+		if inp.mark:
+			var at := Move.Body.make(_cm(p.body.x), _cm(p.body.z), p.body.level, p.body.y)
+			var br := Marks.begin_place(ms, p.id, at, inp.yaw, p.status, inp.gait, p.aboard, t)
+			if br.ok:
+				ms = br.state
+				events.append({"type": "markStart", "t": t, "playerId": p.id, "x": at.x, "z": at.z, "level": at.level, "dir": Marks.snap_dir(inp.yaw)})
+			else:
+				events.append({"type": "markRefused", "t": t, "playerId": p.id, "reason": String(br.reason)})
+	a.marks = ms
+
+	# The notes: the lobby's at once, as the doors open; the rest when the Temp is free to post them.
+	if lobby and not a.lobby_done:
+		a.lobby_done = true
+		var car := s.car
+		_post_note(s, players, a, "lobby", {}, car.level,
+			note_spot(s.plan, car.level, car.door_x - car.in_x, car.door_z - car.in_z, Entity.yaw_toward(-car.in_x, -car.in_z)), t, events)
+	var room := Notes.cap_per_floor() - int(a.notes_state.get("count", 0))
+	if a.queue.size() > room:
+		a.queue.resize(maxi(0, room))
+	if not riding and not a.queue.is_empty() and not s.orderly.held:
+		var job: Dictionary = a.queue.pop_front()
+		var o := s.orderly
+		_post_note(s, players, a, str(job["trigger"]), job["facts"], o.body.level, note_spot(s.plan, o.body.level, o.body.x, o.body.z, o.yaw), t, events)
+
 static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) -> RunStep:
 	var res := RunStep.new()
 	if prev.phase == &"ended":
@@ -940,6 +1588,15 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		np.body = given.body if given != null else p.body
 		np.aboard = in_car(car, np.body)
 		players.append(np)
+	_sync_seek(s)
+	_sync_annex(s)
+	# Who called the car on the Playroom this tick (it starts the last count).
+	var seek_call_by := ""
+	# The floor quota for the crew as it is: set while the car arrives (so a player admitted at the stop
+	# counts), then it can only shrink (a player who leaves the game), never grow.
+	if s.quota and not at_home(s):
+		var want := floor_quota(s.depth, quota_crew(players))
+		s.floor_needed = want if (s.phase == &"arriving" or s.floor_needed <= 0) else mini(s.floor_needed, want)
 
 	# ---- 1. Run rules.
 	match s.phase:
@@ -981,7 +1638,21 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 					and M.hypot2(p.body.x - car.door_x, p.body.z - car.door_z) <= CALL_REACH + EPS and p.body.level == car.level:
 					caller = p
 					break
-			if caller != null:
+			if caller != null and not quota_reached(s):
+				# The floor quota (C9): the button does nothing until the crew has recorded enough here.
+				events.append({"type": "callRefused", "t": t, "playerId": caller.id, "earned": floori(s.floor_earned), "needed": s.floor_needed})
+				caller = null
+			if caller != null and s.seek != null and not (s.seek as Seek.SeekState).done:
+				# The Playroom: the call starts the last count; the car comes when it ends (see the header).
+				s.calls += 1
+				s.call = null
+				s.blink = null
+				s.lure = false
+				s.phase = &"coming"
+				s.seek_call_at = t
+				seek_call_by = caller.id
+				events.append({"type": "called", "t": t, "playerId": caller.id, "floorsAway": 0, "at": caller.body, "last": true})
+			elif caller != null:
 				var index := s.calls
 				var plan := call_plan(s.seed, index, s.last_floors, s.depth)
 				s.calls = index + 1
@@ -1199,19 +1870,15 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	var home := at_home(s)
 	if home:
 		pass  # The prison has no resident: nothing hunts there.
+	elif s.phase != &"riding" and s.seek != null:
+		# The Playroom: the count, the search, hiding, health (sim/seek.gd; see the header).
+		entity_ticks = [_step_seek(s, players, input_of, seek_call_by, prev.t, t, dt, events)]
 	elif s.phase != &"riding" and not who.stillness:
-		# Not a Stillness resident (the Minder): it wanders and never takes anyone. No events.
-		var before_w := s.orderly
-		var next_w := Places.wander_step(s.plan, before_w, dt, "%s:%s" % [s.seed, s.entity_id])
-		if rect_distance(car.rect, next_w.body.x, next_w.body.z) < Entity.ORDERLY_RADIUS - 1e-3 and next_w.body.level == car.level:
-			next_w = next_w.copy()
-			next_w.body = before_w.body
-			next_w.moving = false
-			next_w.speed = 0.0
-		s.orderly = next_w
+		# A resident that is not a Stillness one, with its rules off (seek_off: the resident parked): it
+		# stands where it is and takes nobody. No events.
 		s.lure = false
 		var none: Array[Dictionary] = []
-		entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, before_w, next_w, none)]
+		entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, s.orderly, s.orderly, none)]
 	elif s.phase != &"riding":
 		var blind := blinking(s)
 		var open := doors_open(s)
@@ -1285,6 +1952,12 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	s.crew = out.crew
 	for e in out.events:
 		events.append(_with_t(e, t))
+		# The floor quota counts what was recorded, not what is still held: a tape dropped later counts.
+		if s.quota and e["type"] == "readingClosed":
+			s.floor_earned += float(e["value"])
+			var by := s.floor_by.duplicate()
+			by[e["playerId"]] = float(by.get(e["playerId"], 0.0)) + float(e["value"])
+			s.floor_by = by
 	for p in players:
 		var given: PlayerInput = input_of.get(p.id)
 		if given == null or given.pick_up == null or not _is_active(p, input_of):
@@ -1308,6 +1981,14 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			s.crew = up.crew
 			if up.event != null:
 				events.append(_with_t(up.event, t))
+
+	# ---- The floor quota met: said once per floor, while the crew is still on it.
+	if s.quota and not s.quota_met and not at_home(s) and s.phase != &"riding" and s.floor_needed > 0 and quota_reached(s):
+		s.quota_met = true
+		events.append({"type": "quotaMet", "t": t, "depth": s.depth, "earned": floori(s.floor_earned), "needed": s.floor_needed, "top": quota_top(s)})
+
+	# ---- The Annex: the crew's marks and the Temp's notes (see the header).
+	_step_annex(s, players, input_of, t, dt, events)
 
 	# ---- Arriving home (the day loop).
 	if s.phase == &"riding" and s.timer <= EPS and s.going_up:
@@ -1352,9 +2033,12 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		s.crew = nc
 		s.phase = &"arriving"
 		s.timer = ARRIVE_DOOR_DELAY
+		_new_quota_floor(s, players)
 		events.append({"type": "rodeDown", "t": t, "depth": depth, "bodies": bodies})
 
 	s.players = players
+	_sync_seek(s)
+	_sync_annex(s)
 
 	# ---- A wipe: nobody left who can call or board.
 	var everyone_out := true
@@ -1516,6 +2200,7 @@ static func _arrive_home(s: RunState, players: Array[RunPlayer], t: float, event
 	s.bed_hold = {}
 	s.use_prev = {}
 	s.lights_out_t = -1.0
+	_new_quota_floor(s, players)
 	events.append({"type": "rodeUp", "t": t, "depth": 0, "day": s.day_state.day, "bodies": bodies})
 
 ## Bed, one tick: who leaves the count, who climbs in (F held BED_HOLD seconds on a bunk) or out (a new
@@ -1629,6 +2314,7 @@ static func _morning(s: RunState, players: Array[RunPlayer], t: float, events: A
 	s.bed_hold = {}
 	s.use_prev = {}
 	s.lights_out_t = -1.0
+	_new_quota_floor(s, players)
 	events.append({"type": "newDay", "t": t, "day": s.day_state.day, "dayIndex": s.day_index, "depth": 1, "bodies": bodies})
 
 static func _inp(p: RunPlayer, input_of: Dictionary) -> PlayerInput:

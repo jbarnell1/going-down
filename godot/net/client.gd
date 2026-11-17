@@ -38,6 +38,26 @@
 # placement carries the day index, as it carries the depth) and with the welcome. LocalFrame.use (F
 # held) goes to the host in every input. The newest snapshot's "day" block (latest["day"]) is the day
 # number, the quota, who is in bed, the count and lights out in host time, and the settled day's facts.
+#
+# The Playroom (sim/seek.gd; loop/NIGHT-PLAN.md A3): LocalFrame.hide (F pressed for a hide, hide_fast
+# with sprint held) is counted and the counts ride in every input, so no press is lost with a packet;
+# LocalFrame.peek (W held in a hide) goes with each input. The count is the host's "count" event with
+# the host's own t0: count_clock() works out its phase and seconds left at any host time (use the
+# clock's host_time(now)), so every screen starts the dark and the bell at the same moment. The newest
+# snapshot's "seek" block has each player's hide, peek, phase, status, health and totals, and the noise.
+#
+# The floor quota (sim/run.gd quota; North Star C9): quota() is the newest snapshot's quota block,
+# {earned, needed} in whole credits (null when the run has no quota), for the call panel. The host's
+# "callRefused" {playerId, earned, needed} and "quotaMet" {depth, earned, needed, top} arrive in `events` like
+# any other. Nothing is predicted here: the call is pressed as always and the host decides.
+#
+# The Annex (sim/run.gd annex; docs/floors/annex.md sections 2 and 4; T16h). LocalFrame.mark (Q pressed) and
+# LocalFrame.peel (the id of a mark F has been held on for Marks.PEEL_SECONDS) are counted, and the counts
+# ride in every input, so no press is lost with a packet. Nothing is predicted: marks(), mark_pad() and
+# notes() are the host's, the same on every screen. marks() and mark_pad() come from the newest snapshot's
+# annex block; notes() are the floor's notes from the welcome and the "note" events (each exactly once),
+# in the order posted. The events "markStart", "markPlaced", "markPeeled", "markRefused" and "note" arrive
+# in `events` like any other (for the sounds: the slap, the stapler's click where the note is).
 extends RefCounted
 
 const Move = preload("res://sim/move.gd")
@@ -49,6 +69,7 @@ const Places = preload("res://sim/places.gd")
 const Pose = preload("res://net/pose.gd")
 const Transport = preload("res://net/transport.gd")
 const Run = preload("res://sim/run.gd")
+const Seek = preload("res://sim/seek.gd")
 
 const TICK := Session.TICK
 const LAG_WINDOW := 60
@@ -82,6 +103,15 @@ class LocalFrame:
 	## F is held this frame (the day loop: held on a prison bunk it lies the player down; a new press
 	## gets them up). Only ever sent when true.
 	var use := false
+	## The Playroom: F pressed this frame for a hide (into the one in reach, or out of the one you are
+	## in); `hide_fast`: sprint was held as it was pressed (quick and loud). W held inside a hide (`peek`).
+	var hide := false
+	var hide_fast := false
+	var peek := false
+	## The Annex: Q pressed this frame (place a mark at your feet, pointing where you face), and the id of a
+	## mark to peel (F held on it for Marks.PEEL_SECONDS ended this frame) or -1.
+	var mark := false
+	var peel := -1
 
 ## One rendered frame: what to draw.
 class Frame:
@@ -186,6 +216,13 @@ var _last_send := -INF
 var _seeing_latch := false
 var _calls := 0
 var _pick_ups := 0
+var _hides := 0
+var _fast_hides := 0
+var _marks := 0
+var _peels := 0
+var _peel_id := -1
+## The Annex's notes this client has, by id (the welcome's and the "note" events).
+var _notes := {}
 var _ack_ht := -INF
 var _place_applied := 0
 var _pending_place: Variant = null
@@ -287,6 +324,79 @@ func blink_windows() -> Array[Dictionary]:
 		out.append({"start": float(k["at"]) - TICK - guard - off, "end": float(k["at"]) + float(k["len"]) + TICK + guard - off})
 	return out
 
+## The floor quota as the newest snapshot has it: {earned, needed} in whole credits, or null when the
+## run has no quota (or nothing has arrived yet). The call works once earned >= needed.
+func quota() -> Variant:
+	if latest == null:
+		return null
+	return latest.get("quota")
+
+## The Annex's marks as the newest snapshot has them: [{id, x, z, level, dir (0..7: Marks.dir_vector),
+## player, placedAt (host time)}], in the order placed. Empty off the Annex.
+func marks() -> Array:
+	if latest == null or latest.get("annex") == null:
+		return []
+	return latest["annex"]["marks"]
+
+## The crew's pad as the newest snapshot has it: {pad (marks left), size}, or null off the Annex.
+func mark_pad() -> Variant:
+	if latest == null or latest.get("annex") == null:
+		return null
+	var a: Dictionary = latest["annex"]
+	return {"pad": a["pad"], "size": a["padSize"]}
+
+## This floor's sticky notes, in the order posted: [{id, n, trigger, template, text, x, z, level, yaw, t}].
+## Empty off the Annex. A note posted this tick may come with a later snapshot.
+func notes() -> Array:
+	if latest == null or latest.get("annex") == null:
+		return []
+	var a: Dictionary = latest["annex"]
+	var from := int(a["notesFrom"])
+	var out: Array = []
+	for i in range(from + 1, from + int(a["noteCount"]) + 1):
+		if _notes.has(i):
+			out.append(_notes[i])
+	return out
+
+## Keeps a note (the welcome's or an event's), plain: {id, n, trigger, template, text, x, z, level, yaw, t}.
+func _keep_note(n: Dictionary) -> void:
+	var id := int(n["id"])
+	if _notes.has(id):
+		return
+	_notes[id] = {"id": id, "n": int(n["n"]), "trigger": str(n["trigger"]), "template": int(n["template"]), "text": str(n["text"]),
+		"x": float(n["x"]), "z": float(n["z"]), "level": int(n["level"]), "yaw": float(n["yaw"]), "t": float(n["t"])}
+	# Notes of floors left behind are dropped.
+	for k: int in _notes.keys():
+		if k < id - 256:
+			_notes.erase(k)
+
+## The Playroom's newest count as its host event ({n, t0, len, last, by, why}), or {} before any (or on
+## another floor): from the events, else from the newest snapshot's seek block (a player who joined
+## during it never got its event).
+func count_event() -> Dictionary:
+	for i in range(events.size() - 1, -1, -1):
+		var e: Dictionary = events[i]
+		if e.get("type") == "count":
+			return e
+		if e.get("type") == "rodeDown" or e.get("type") == "rodeUp" or e.get("type") == "newDay":
+			break
+	if latest != null and latest.get("seek") != null and int(latest["seek"]["n"]) > 0:
+		var k: Dictionary = latest["seek"]
+		return {"type": "count", "t": k["t0"], "n": k["n"], "t0": k["t0"], "len": k["len"], "last": k["last"], "by": k["by"], "why": k["why"]}
+	return {}
+
+## Where a count stands at host time `host_t`, worked out from its event alone (every screen agrees, as
+## the event is the host's): {phase: "hide" (the 6 s), "seek" or "over", left: seconds of that phase}.
+static func count_clock(ev: Dictionary, host_t: float) -> Dictionary:
+	var t0 := float(ev["t0"])
+	var hide_end := t0 + Seek.HIDE_TIME
+	var end := hide_end + float(ev["len"])
+	if host_t < hide_end:
+		return {"phase": "hide", "left": hide_end - host_t}
+	if host_t < end:
+		return {"phase": "seek", "left": end - host_t}
+	return {"phase": "over", "left": 0.0}
+
 # -------------------------------------------------------------------------------------------
 # Receiving.
 
@@ -316,6 +426,9 @@ func receive(now: float) -> void:
 				local_depth = w["depth"]
 				if w.get("day") != null:
 					_set_day(int(w["day"]["index"]))
+				if w.get("annex") != null and w["annex"].get("notes") != null:
+					for n: Dictionary in w["annex"]["notes"]:
+						_keep_note(n)
 				_insert(w)
 				_learn_blink(w)
 			"snap":
@@ -338,6 +451,8 @@ func receive(now: float) -> void:
 					var ev: Dictionary = _ev_buf[_ev_next]
 					if ev.get("type") == "caught" and ev.get("playerId") == id:
 						_caught_at = maxf(_caught_at, float(ev["t"]))
+					if ev.get("type") == "note":
+						_keep_note(ev)
 					events.append(ev)
 					_ev_buf.erase(_ev_next)
 					_ev_next += 1
@@ -491,6 +606,15 @@ func frame(now: float, local: LocalFrame) -> Frame:
 		_calls += 1
 	if local.pick_up:
 		_pick_ups += 1
+	if local.hide:
+		_hides += 1
+		if local.hide_fast:
+			_fast_hides += 1
+	if local.mark:
+		_marks += 1
+	if local.peel >= 0:
+		_peels += 1
+		_peel_id = local.peel
 	latch_released = false
 	if id == null or seed == null:
 		if now - _last_join >= 0.5:
@@ -754,6 +878,15 @@ func _send(now: float, cam: Pose.Camera, local: LocalFrame, rt: float) -> void:
 	}
 	if local.use:
 		m["use"] = true
+	if local.peek:
+		m["peek"] = true
+	if _hides > 0:
+		m["hides"] = _hides
+		m["fastHides"] = _fast_hides
+	if _marks > 0 or _peels > 0:
+		m["marks"] = _marks
+		m["peels"] = _peels
+		m["peelId"] = _peel_id
 	if local.stamina != null:
 		var copy := Stamina.Stamina.new()
 		copy.level = local.stamina.level
