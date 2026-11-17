@@ -85,6 +85,25 @@
 #  - Every seek event is a run event, at its host time ("count" {n, t0, len, last, by, why}, "countEnd",
 #    hide*, "found", "taken", "down", ...: sim/seek.gd lists them).
 #
+# The floor quota (North Star C9; T5q), on only for a run made with it (create_run's `quota`, with_quota():
+# net/host_rules.gd turns it on for the game's rooms when the resident is on; tests and every stored result
+# leave it off, and then nothing below happens). The call button does nothing until the crew has recorded
+# enough on this floor:
+#  - Needed: floor_quota(depth, crew), one number for the crew together. It is set while the car arrives
+#    on the floor (with everyone in the run then, a player admitted at the stop included) and afterwards
+#    only shrinks, if a player leaves the game. Never at home.
+#  - Earned: every reading closed on this floor (its "readingClosed" value, depth pay included), whatever
+#    happens to its tape afterwards: a tape dropped, left on the floor or lost still counts, so a lost tape
+#    can never trap the crew. A reading still open counts once it closes.
+#  - The call (phase away, the Playroom's last count included) with floor(earned) < needed is refused:
+#    "callRefused" {playerId, earned, needed}, and nothing else happens (the resident does not hear it).
+#  - The tick floor(earned) first reaches needed: "quotaMet" {depth, earned, needed, top: who recorded
+#    the most here (for the Annex's note), or ""}, once per floor (not
+#    on the ride away). Earned and needed go back to 0 and the new floor's quota on every new floor
+#    ("rodeDown", "newDay"; at home needed is 0).
+# The day loop's DAY_FLOOR_QUOTA is floor 1's quota per player, so the day quota is a whole number of
+# floor 1 quotas for the morning's crew (docs/floors/prison.md section 2: one and a half on day 1).
+#
 # Events are Dictionaries with the TypeScript shapes (see RunEvent in run.ts), carrying Move.Body,
 # TapeLib.Reading and RunSummary objects where TypeScript carries those objects.
 extends RefCounted
@@ -181,9 +200,18 @@ const LURE_ID := "#call"
 const RIDE_UP_TIME := 8.0
 ## Seconds F must be held on a bunk to lie down (prison.md section 6: "Hold F on any bunk").
 const BED_HOLD := 1.0
-## Each player's floor quota, the unit of the day quota (Day.quota_for). A stand-in until the floor quota
-## (T5q) is in the run; the day quota is 1.5 of these per player on day 1.
-const DAY_FLOOR_QUOTA := 150
+## The floor quota (North Star C9; see the header): what the crew must record on a floor before the call
+## button works. floor_quota(depth, crew) = QUOTA_PER_PLAYER x crew x QUOTA_DEPTH_STEP^(depth - 1),
+## rounded to the nearest QUOTA_ROUND. Measured with reading bots (tests/prop_quota_net.gd): on floor 1
+## a crew that reads well meets it in about 2 minutes (1:45 alone, 2:40 for four, slow floors nearer 4).
+## Each floor deeper pays DEPTH_PAY_STEP (1.35) more and asks QUOTA_DEPTH_STEP more: about 7% longer.
+const QUOTA_PER_PLAYER := 400
+const QUOTA_DEPTH_STEP := 1.45
+const QUOTA_ROUND := 5
+## Each player's floor quota, the unit of the day quota (Day.quota_for): floor 1's quota per player, so
+## Day.first_floor_quota(DAY_FLOOR_QUOTA, crew) is floor_quota(1, crew) exactly. The day quota is 1.5 of
+## floor 1's quota on day 1 (docs/floors/prison.md section 2).
+const DAY_FLOOR_QUOTA := QUOTA_PER_PLAYER
 
 const EPS := 1e-9
 ## How far onto the landing side of the wall line the doorway channel reaches, beyond a body's radius.
@@ -563,6 +591,16 @@ class RunState:
 	var seek_drops: Array[String] = []
 	## Run time of the call that started the last count (-1 before).
 	var seek_call_at: float = -1.0
+	## The floor quota (see the header). Off: everything below stays as it is made and is never read.
+	var quota: bool = false
+	## Recorded on this floor: every reading closed here (depth pay included), wherever its tape went since.
+	var floor_earned: float = 0.0
+	## The same per player, {id: value} (who did most of it: the Annex's note). Replaced, never edited.
+	var floor_by: Dictionary = {}
+	## What this floor asks for (floor_quota), 0 at home.
+	var floor_needed: int = 0
+	## "quotaMet" has been said on this floor.
+	var quota_met: bool = false
 
 	func copy() -> RunState:
 		var s := RunState.new()
@@ -604,6 +642,11 @@ class RunState:
 		s.seek_off = seek_off
 		s.seek_drops = seek_drops
 		s.seek_call_at = seek_call_at
+		s.quota = quota
+		s.floor_earned = floor_earned
+		s.floor_by = floor_by
+		s.floor_needed = floor_needed
+		s.quota_met = quota_met
 		return s
 
 class PlayerInput:
@@ -703,11 +746,66 @@ static func with_days(s0: RunState) -> RunState:
 static func at_home(s: RunState) -> bool:
 	return s.days and s.depth == 0
 
+## What floor `depth` asks a crew of `crew` to record before the call button works (see QUOTA_PER_PLAYER).
+## 0 at home (depth 0 or less).
+static func floor_quota(depth: int, crew: int) -> int:
+	if depth <= 0:
+		return 0
+	var raw := float(QUOTA_PER_PLAYER * maxi(1, crew)) * M.pow_js(QUOTA_DEPTH_STEP, float(depth - 1))
+	return maxi(QUOTA_ROUND, roundi(raw / QUOTA_ROUND) * QUOTA_ROUND)
+
+## The crew a floor quota is for: everyone in the run who has not left the game (the host marks those
+## who leave "leftBehind"; between floors nobody else is).
+static func quota_crew(players: Array[RunPlayer]) -> int:
+	var n := 0
+	for p in players:
+		if p.status != &"leftBehind":
+			n += 1
+	return n
+
+## Whether this floor's quota is met (always, with the quota off). Whole credits, as the call panel shows.
+static func quota_reached(s: RunState) -> bool:
+	return not s.quota or floori(s.floor_earned) >= s.floor_needed
+
+## Who recorded the most on this floor (the first by id on a tie), or "" if nobody recorded anything.
+static func quota_top(s: RunState) -> String:
+	var top := ""
+	var best := 0.0
+	for id: String in _sorted_keys(s.floor_by):
+		var v := float(s.floor_by[id])
+		if v > best:
+			best = v
+			top = id
+	return top
+
+## Turns the floor quota on for a run that has not ticked yet: nothing recorded, this floor's quota for
+## the crew in the run now.
+static func with_quota(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.quota = true
+	s.floor_earned = 0.0
+	s.floor_by = {}
+	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(s.players))
+	s.quota_met = false
+	return s
+
+## A new floor for the quota: nothing recorded yet, its quota for the crew aboard.
+static func _new_quota_floor(s: RunState, players: Array[RunPlayer]) -> void:
+	if not s.quota:
+		return
+	s.floor_earned = 0.0
+	s.floor_by = {}
+	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(players))
+	s.quota_met = false
+
 ## A new run: the crew in the car at floor 1's landing, doors about to open. `deck`: the places its
-## floors are drawn from (places.gd); empty means Clinic only. `days`: the day loop (see the header).
-static func create_run(seed: String, player_ids: Array[String], deck: Array = [], days: bool = false) -> RunState:
+## floors are drawn from (places.gd); empty means Clinic only. `days`: the day loop; `quota`: the floor
+## quota (see the header).
+static func create_run(seed: String, player_ids: Array[String], deck: Array = [], days: bool = false, quota: bool = false) -> RunState:
 	var s := _create_run(seed, player_ids, deck)
-	return with_days(s) if days else s
+	if days:
+		s = with_days(s)
+	return with_quota(s) if quota else s
 
 static func _create_run(seed: String, player_ids: Array[String], deck: Array = []) -> RunState:
 	assert(not player_ids.is_empty(), "a run needs at least one player")
@@ -1150,6 +1248,11 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	_sync_seek(s)
 	# Who called the car on the Playroom this tick (it starts the last count).
 	var seek_call_by := ""
+	# The floor quota for the crew as it is: set while the car arrives (so a player admitted at the stop
+	# counts), then it can only shrink (a player who leaves the game), never grow.
+	if s.quota and not at_home(s):
+		var want := floor_quota(s.depth, quota_crew(players))
+		s.floor_needed = want if (s.phase == &"arriving" or s.floor_needed <= 0) else mini(s.floor_needed, want)
 
 	# ---- 1. Run rules.
 	match s.phase:
@@ -1191,6 +1294,10 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 					and M.hypot2(p.body.x - car.door_x, p.body.z - car.door_z) <= CALL_REACH + EPS and p.body.level == car.level:
 					caller = p
 					break
+			if caller != null and not quota_reached(s):
+				# The floor quota (C9): the button does nothing until the crew has recorded enough here.
+				events.append({"type": "callRefused", "t": t, "playerId": caller.id, "earned": floori(s.floor_earned), "needed": s.floor_needed})
+				caller = null
 			if caller != null and s.seek != null and not (s.seek as Seek.SeekState).done:
 				# The Playroom: the call starts the last count; the car comes when it ends (see the header).
 				s.calls += 1
@@ -1501,6 +1608,12 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	s.crew = out.crew
 	for e in out.events:
 		events.append(_with_t(e, t))
+		# The floor quota counts what was recorded, not what is still held: a tape dropped later counts.
+		if s.quota and e["type"] == "readingClosed":
+			s.floor_earned += float(e["value"])
+			var by := s.floor_by.duplicate()
+			by[e["playerId"]] = float(by.get(e["playerId"], 0.0)) + float(e["value"])
+			s.floor_by = by
 	for p in players:
 		var given: PlayerInput = input_of.get(p.id)
 		if given == null or given.pick_up == null or not _is_active(p, input_of):
@@ -1524,6 +1637,11 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			s.crew = up.crew
 			if up.event != null:
 				events.append(_with_t(up.event, t))
+
+	# ---- The floor quota met: said once per floor, while the crew is still on it.
+	if s.quota and not s.quota_met and not at_home(s) and s.phase != &"riding" and s.floor_needed > 0 and quota_reached(s):
+		s.quota_met = true
+		events.append({"type": "quotaMet", "t": t, "depth": s.depth, "earned": floori(s.floor_earned), "needed": s.floor_needed, "top": quota_top(s)})
 
 	# ---- Arriving home (the day loop).
 	if s.phase == &"riding" and s.timer <= EPS and s.going_up:
@@ -1568,6 +1686,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		s.crew = nc
 		s.phase = &"arriving"
 		s.timer = ARRIVE_DOOR_DELAY
+		_new_quota_floor(s, players)
 		events.append({"type": "rodeDown", "t": t, "depth": depth, "bodies": bodies})
 
 	s.players = players
@@ -1733,6 +1852,7 @@ static func _arrive_home(s: RunState, players: Array[RunPlayer], t: float, event
 	s.bed_hold = {}
 	s.use_prev = {}
 	s.lights_out_t = -1.0
+	_new_quota_floor(s, players)
 	events.append({"type": "rodeUp", "t": t, "depth": 0, "day": s.day_state.day, "bodies": bodies})
 
 ## Bed, one tick: who leaves the count, who climbs in (F held BED_HOLD seconds on a bunk) or out (a new
@@ -1846,6 +1966,7 @@ static func _morning(s: RunState, players: Array[RunPlayer], t: float, events: A
 	s.bed_hold = {}
 	s.use_prev = {}
 	s.lights_out_t = -1.0
+	_new_quota_floor(s, players)
 	events.append({"type": "newDay", "t": t, "day": s.day_state.day, "dayIndex": s.day_index, "depth": 1, "bodies": bodies})
 
 static func _inp(p: RunPlayer, input_of: Dictionary) -> PlayerInput:
