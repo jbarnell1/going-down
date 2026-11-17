@@ -43,6 +43,8 @@ const MENU_ROWS: Array[Array] = [
 	["TAP R", "CLOSE THE WHEEL"],
 	["ESC", "THIS MENU"],
 ]
+## The menu's setting row: the announcer's hints (H; client/hints.gd, kept per player).
+var hints_on := true
 ## The line under the menu (the start screen says how to go back instead).
 var menu_foot := "CLICK TO PLAY"
 ## Name tags over other players: [{text, pos (window pixels, the text's bottom centre), alpha}].
@@ -389,10 +391,17 @@ func _draw_wheel(px: float) -> void:
 	var mid := "EMOTE"
 	PixelFont.draw_shadowed(self, mid, Vector2(floorf(c.x - PixelFont.width(mid) * px * 0.5), floorf(c.y - 3 * px)), px, Color("#f4f4ec"))
 
+## The menu's rows: the controls, then the settings.
+func menu_rows() -> Array[Array]:
+	var rows: Array[Array] = MENU_ROWS.duplicate()
+	rows.append(["H", "HINTS: ON" if hints_on else "HINTS: OFF"])
+	return rows
+
 func _draw_menu() -> void:
 	var key_w := 0
 	var act_w := 0
-	for row: Array in MENU_ROWS:
+	var all_rows := menu_rows()
+	for row: Array in all_rows:
 		var key: String = row[0]
 		var act: String = row[1]
 		key_w = maxi(key_w, PixelFont.width(key))
@@ -402,7 +411,7 @@ func _draw_menu() -> void:
 	var gap := 10
 	var w := key_w + gap + act_w + 16
 	var line := 12
-	var h := (MENU_ROWS.size() + 4) * line + 8
+	var h := (all_rows.size() + 4) * line + 8
 	var sc := maxf(1.0, floor(minf(size.x * 0.92 / w, size.y * 0.86 / h)))
 	var origin := Vector2(floorf((size.x - w * sc) * 0.5), floorf((size.y - h * sc) * 0.5))
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.5))
@@ -410,24 +419,28 @@ func _draw_menu() -> void:
 	var amber := Color("#ffd27a")
 	var pale := Color("#f4f4ec")
 	PixelFont.draw_shadowed(self, title, origin + Vector2(floorf((w - PixelFont.width(title)) / 2.0), 6) * sc, sc, amber)
-	for i in MENU_ROWS.size():
-		var row: Array = MENU_ROWS[i]
+	for i in all_rows.size():
+		var row: Array = all_rows[i]
 		var key: String = row[0]
 		var act: String = row[1]
 		var y := 6 + (i + 2) * line
 		PixelFont.draw_shadowed(self, key, origin + Vector2(8 + key_w - PixelFont.width(key), y) * sc, sc, amber)
 		PixelFont.draw_shadowed(self, act, origin + Vector2(8 + key_w + gap, y) * sc, sc, pale)
 	if (Time.get_ticks_msec() / 600) % 2 == 0:
-		PixelFont.draw_shadowed(self, foot, origin + Vector2(floorf((w - PixelFont.width(foot)) / 2.0), 6 + (MENU_ROWS.size() + 3) * line) * sc, sc, amber)
+		PixelFont.draw_shadowed(self, foot, origin + Vector2(floorf((w - PixelFont.width(foot)) / 2.0), 6 + (all_rows.size() + 3) * line) * sc, sc, amber)
 
 ## The subtitle's rows as drawn (upper case, only the font's characters, wrapped).
 func _subtitle_rows() -> PackedStringArray:
 	var text := subtitle.to_upper().replace("’", "'").replace("‘", "'").replace("…", "...")
-	var clean := ""
-	for ch: String in text:
-		if ch == " " or _known(ch):
-			clean += ch
-	return PixelFont.wrap(clean, 38)
+	# A second caption line (the waiting car's names) starts on its own row.
+	var rows := PackedStringArray()
+	for part: String in text.split("\n"):
+		var clean := ""
+		for ch: String in part:
+			if ch == " " or _known(ch):
+				clean += ch
+		rows.append_array(PixelFont.wrap(clean, 38))
+	return rows
 
 ## Where the subtitle box's top edge is (window pixels).
 func _subtitle_top() -> float:
