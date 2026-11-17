@@ -108,6 +108,10 @@
       "priority": 4,
       "when": "the lights come back after the blackout as the car arrives"
     },
+    "quota": {
+      "priority": 3,
+      "when": "the crew has recorded this floor's quota: the call button now works (North Star C9)"
+    },
     "count_last": {
       "priority": 4,
       "when": "Playroom: the call button is pressed, which starts the last count instead of the usual wait"
@@ -727,6 +731,39 @@
         "similarity_boost": 0.75
       },
       "note": "Cheerful about how far away that is."
+    },
+    {
+      "id": "quota_1",
+      "moment": "quota",
+      "text": "[professional] Quota met! The call button is now at your service.",
+      "plain": "Quota met! The call button is now at your service.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "note": "Customer service at its most polished: the good news read like a hotel concierge."
+    },
+    {
+      "id": "quota_2",
+      "moment": "quota",
+      "text": "[delighted] Quota met! Management is SO proud of you. You may now call the car.",
+      "plain": "Quota met! Management is so proud of you. You may now call the car.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "note": "Genuinely thrilled, a little too thrilled, as if the crew had won a prize."
+    },
+    {
+      "id": "quota_3",
+      "moment": "quota",
+      "text": "[warmly] That is quota, everyone! [short pause] Please call the car before anything else does.",
+      "plain": "That is quota, everyone! Please call the car before anything else does.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "note": "Warm and proud; the last clause is said just as warmly, as if it were a pleasantry."
     },
     {
       "id": "count_last_1",

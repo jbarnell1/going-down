@@ -26,6 +26,10 @@
 # The run has the day loop (`days`, on unless a test turns it off: sim/run.gd): BANK rides up to the
 # prison and bed starts the next day, so the run does not end on a bank or a wipe; the room goes back to
 # the lobby when everyone has gone. A run without days ends as before.
+#
+# The run has the floor quota (`quota`, on unless a test turns it off: sim/run.gd, North Star C9): the
+# call button does nothing until the crew has recorded enough on the floor. A server started with the
+# argument `quota=0` has none (test-only: tools/play_net.mjs passes it; HostRules.quota_off_by_arg).
 extends RefCounted
 
 const Run = preload("res://sim/run.gd")
@@ -81,6 +85,9 @@ var people := {}  # id -> name, in arrival order
 var fixed_seed := ""
 ## The day loop in the next run (the game's; tests may turn it off).
 var days := true
+## The floor quota in the next run (the game's; tests may turn it off): the call button does nothing
+## until the crew has recorded enough on the floor (sim/run.gd quota).
+var quota := true
 ## Tick cost, for the log: total and worst microseconds, and ticks.
 var tick_us := 0
 var tick_max_us := 0
@@ -171,7 +178,7 @@ func _start(now: float) -> void:
 	for id: String in people:
 		roster.append(id)
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
-	rules = HostRules.new(true, 1, Places.FULL, days)
+	rules = HostRules.new(true, 1, Places.FULL, days, quota and not HostRules.quota_off_by_arg(false))
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))
