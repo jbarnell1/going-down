@@ -1,7 +1,7 @@
 {
   "about": "Every ElevenLabs request the game has made. Never edit by hand.",
   "cap": 50000,
-  "total": 23036,
+  "total": 23994,
   "entries": [
     {
       "id": "arrived_1",
@@ -3093,6 +3093,61 @@
       "time": "2026-11-17T12:57:47.390Z",
       "hash": "d4c236baf3e6e8c89d8569a8",
       "file": "assets_src/voice/takes/brian/quota_3/take-1.mp3"
+    },
+    {
+      "id": "tape_orient_a",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 189,
+      "billed": 83,
+      "time": "2026-11-17T21:38:45.287Z",
+      "hash": "6a77158c0fe1be4ccf2fbc04",
+      "file": "assets_src/voice/takes/bella/tape_orient_a/take-1.mp3"
+    },
+    {
+      "id": "tape_orient_b",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 151,
+      "billed": 66,
+      "time": "2026-11-17T21:38:48.301Z",
+      "hash": "c061d149d176a113dd798e34",
+      "file": "assets_src/voice/takes/bella/tape_orient_b/take-1.mp3"
+    },
+    {
+      "id": "tape_orient_c",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 246,
+      "billed": 108,
+      "time": "2026-11-17T21:38:52.289Z",
+      "hash": "1daeccca3ba285facb30c512",
+      "file": "assets_src/voice/takes/bella/tape_orient_c/take-1.mp3"
+    },
+    {
+      "id": "tape_orient_d",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 192,
+      "billed": 84,
+      "time": "2026-11-17T21:38:55.379Z",
+      "hash": "37e614480d1e0b2dedca7791",
+      "file": "assets_src/voice/takes/bella/tape_orient_d/take-1.mp3"
+    },
+    {
+      "id": "tape_orient_e",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 180,
+      "billed": 79,
+      "time": "2026-11-17T21:38:59.017Z",
+      "hash": "3b09eefb284b6ef4f1f3249f",
+      "file": "assets_src/voice/takes/bella/tape_orient_e/take-1.mp3"
     }
   ]
 }

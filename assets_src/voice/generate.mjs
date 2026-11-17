@@ -159,12 +159,21 @@ export function takePath(voiceName, id, take) {
 /** How many takes a line gets: its own `takes`, or the file's default. */
 const takesOf = (cfg, line) => line.takes ?? cfg.takes;
 
+/** The voices a line is read in when its group names them (lines.json groups.<g>.voices, e.g. the tape:
+ *  Bella only); null for every voice. A line is never recorded or published in a voice its group leaves out. */
+export const voicesOf = (cfg, line) => line.voices ?? cfg.groups?.[line.group]?.voices ?? null;
+export const readBy = (cfg, line, voiceName) => {
+  const v = voicesOf(cfg, line);
+  return !v || v.some((x) => slug(x) === slug(voiceName));
+};
+
 function jobsFor(cfg, voices, ids) {
   const jobs = [];
   for (const v of voices) {
     for (const id of ids) {
       const line = cfg.lines.find((l) => l.id === id);
       if (!line) stop(`no line ${id} in lines.json`);
+      if (!readBy(cfg, line, v.name)) continue;
       for (let take = 1; take <= takesOf(cfg, line); take++) {
         const job = { id, voiceId: v.id, voiceName: v.name, take, text: line.text, settings: line.settings, model: cfg.model, format: cfg.outputFormat };
         job.hash = hashOf(job);
@@ -233,7 +242,7 @@ function publish(cfg) {
     voices: ship.map((name) => ({ id: slug(name), name })),
     default: slug(cfg.voices.default?.name ?? ship[0]),
     moments: {},
-    lines: cfg.lines.map((l) => ({ id: l.id, moment: l.moment, plain: l.plain })),
+    lines: cfg.lines.map((l) => ({ id: l.id, moment: l.moment, plain: l.plain, ...(voicesOf(cfg, l) ? { voices: voicesOf(cfg, l).map(slug) } : {}) })),
   };
   for (const [name, m] of Object.entries(cfg.moments)) manifest.moments[name] = { priority: m.priority };
   let missing = 0;
@@ -241,6 +250,7 @@ function publish(cfg) {
     const dir = path.join(PUBLIC, slug(name));
     mkdirSync(dir, { recursive: true });
     for (const line of cfg.lines) {
+      if (!readBy(cfg, line, name)) continue;
       // Take 1 unless lines.json "chosen" names another: chosen[<voice>][<id>] = take number.
       const take = cfg.chosen?.[slug(name)]?.[line.id] ?? 1;
       const src = takePath(name, line.id, take);
@@ -279,14 +289,15 @@ function page(cfg) {
   const ship = cfg.voices.ship ?? [];
   // Lines in a group (lines.json "groups") get their own section per voice, after the lift's own lines.
   const groups = cfg.groups ?? {};
-  const inGroup = (g) => cfg.lines.filter((l) => (l.group ?? '') === g);
+  const inGroup = (g, name) => cfg.lines.filter((l) => (l.group ?? '') === g && readBy(cfg, l, name));
   const full = ship
-    .filter((name) => cfg.lines.every((l) => existsSync(takePath(name, l.id, 1))))
+    .filter((name) => cfg.lines.every((l) => !readBy(cfg, l, name) || existsSync(takePath(name, l.id, 1))))
     .map(
       (name) =>
-        `<h2>Every line in ${esc(name)}</h2>${inGroup('').map((l) => lineBlock(name, l)).join('')}` +
+        `<h2>Every line in ${esc(name)}</h2>${inGroup('', name).map((l) => lineBlock(name, l)).join('')}` +
         Object.entries(groups)
-          .map(([g, info]) => `<h2>${esc(info.title ?? g)} in ${esc(name)}</h2><p class="desc">${esc(info.audition ?? '')}</p>${inGroup(g).map((l) => lineBlock(name, l)).join('')}`)
+          .filter(([g]) => inGroup(g, name).length > 0)
+          .map(([g, info]) => `<h2>${esc(info.title ?? g)} in ${esc(name)}</h2><p class="desc">${esc(info.audition ?? '')}</p>${inGroup(g, name).map((l) => lineBlock(name, l)).join('')}`)
           .join(''),
     )
     .join('');

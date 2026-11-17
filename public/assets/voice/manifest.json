@@ -74,6 +74,9 @@
     },
     "count_done": {
       "priority": 4
+    },
+    "tape": {
+      "priority": 1
     }
   },
   "lines": [
@@ -451,6 +454,46 @@
       "id": "count_1",
       "moment": "count_number",
       "plain": "One."
+    },
+    {
+      "id": "tape_orient_a",
+      "moment": "tape",
+      "plain": "Hello! And welcome to Continuance. This is Lidgate, our city. Everything is measured from here. Below Lidgate, there is nothing. Almost nothing.",
+      "voices": [
+        "bella"
+      ]
+    },
+    {
+      "id": "tape_orient_b",
+      "moment": "tape",
+      "plain": "This is you. You have been sentenced. Congratulations! This is your crew. Draw your own face. We insist. Each morning, the car takes you down.",
+      "voices": [
+        "bella"
+      ]
+    },
+    {
+      "id": "tape_orient_c",
+      "moment": "tape",
+      "plain": "Every floor has a resident. We do not know what they are. Point your instrument at it. Record what it does. Readings become credits. Credits keep the lights on upstairs. Each resident keeps one rule. We may not tell you what it is.",
+      "voices": [
+        "bella"
+      ]
+    },
+    {
+      "id": "tape_orient_d",
+      "moment": "tape",
+      "plain": "Meet the quota. Call the car. The car is not quiet. The floor will notice. Be aboard when the doors close. Please do not stay late. Staying late is... discouraged.",
+      "voices": [
+        "bella"
+      ]
+    },
+    {
+      "id": "tape_orient_e",
+      "moment": "tape",
+      "plain": "Then choose. Up, to bank your day. Or down, for more. Bank enough, and your sentence will end. Many crews are well on their way! Continuance. Leave it with us.",
+      "voices": [
+        "bella"
+      ]
     }
   ]
 }
