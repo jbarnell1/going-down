@@ -20,7 +20,7 @@ const FILES: Array[String] = [
 	"prop_stamina", "prop_clinic", "prop_entity", "prop_instrument", "prop_run", "prop_blackout", "prop_net",
 	"prop_lift", "prop_annex", "prop_prison", "prop_notes", "prop_marks", "prop_upgrades", "prop_report", "prop_day", "prop_save", "prop_face_net",
 	"prop_playroom", "prop_seek", "prop_places", "prop_temp", "prop_day_net", "prop_count_run", "prop_count_net", "prop_quota_net", "prop_marks_net",
-	"prop_downs", "prop_down_view",
+	"prop_downs", "prop_down_view", "prop_owner_0833",
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).

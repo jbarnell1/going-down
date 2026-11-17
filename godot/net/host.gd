@@ -312,6 +312,7 @@ func stamina_of(id: String) -> Stamina.Stamina:
 	var s := Stamina.Stamina.new()
 	s.level = p.stamina.level
 	s.winded = p.stamina.winded
+	s.tank = p.stamina.tank
 	return s
 
 ## The gait the host allowed a player on their newest input ("" for nobody).
@@ -587,6 +588,10 @@ func _step_gait(p: HostPlayer, m: Dictionary) -> void:
 	var ground := M.hypot2(mb.x - from.x, mb.z - from.z) / dt if (dt > 0.0 and from != null and from.level == mb.level) else 0.0
 	var want := String(m.get("gait", "walk"))
 	var cap := Instr.max_walk_speed(m["raised"], INF)
+	# The run's tank size (bigger in a paced run: sim/run.gd sprint_seconds).
+	var tank := Run.sprint_seconds(state)
+	if p.stamina.tank != tank:
+		p.stamina = Stamina.Stamina.make(p.stamina.level, p.stamina.winded, tank)
 	var gait := String(Stamina.gait_for(p.stamina, want == "sprint", want == "creep", ground > 0.0, cap))
 	p.allowance += (Session.MAX_PLAYER_SPEED if gait == "sprint" else Stamina.WALK_SPEED) * dt
 	p.stamina = Stamina.step_stamina(p.stamina, StringName(gait), ground, dt)

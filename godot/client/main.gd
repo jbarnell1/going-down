@@ -61,6 +61,11 @@ const LEAVE_FLOORS := 5
 const LEAVE_FLOOR_MS := 1300
 const RIDE_TIME := 6.0
 const BOARD_TIME := 20.0
+## The car waits (FD4): "CAR WAITING FOR: ..." shows once the arrival doors have stood open this long (ms),
+## so the ordinary step out of the car never flashes it.
+const CAR_WAIT_SHOW_MS := 4000
+## The car waits (FD4): the dark screen of a player the car left out for the day.
+const LEFT_OUT_LINES: Array = ["LEFT BEHIND", "", "YOU WAKE IN THE PRISON", "NO PAY TODAY"]
 ## The emote wheel, clockwise from the top (Protocol.EMOTES order).
 const EMOTE_LABELS: Array[String] = ["WAVE", "LOOK BEHIND", "PRAY", "DANCE SPIN", "DANCE SNAKE", "BUTTON"]
 ## The wheel's dead zone (window pixels of mouse travel): letting go inside it cancels.
@@ -167,6 +172,10 @@ var end_shown_at := -1
 var left_at := -1
 var ride_started := -1
 var prev_bell_left := BOARD_TIME
+## The car waits (FD4): what the call panel says while the car waits for someone aboard ("" for nothing),
+## and when (msec) the arrival doors were first seen open (-1 while they are not).
+var car_waiting := ""
+var _unload_since := -1
 var lifetime := 0.0
 var tick_acc := 0.0
 var event_counts: Dictionary = {}
@@ -955,7 +964,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	if not held:
 		_eye_check(me)
 
-	# The Orderly: drawn exactly as the frame says, never in the dark, never while taken.
+	# The Orderly: drawn exactly as the frame says (in the dark too, with nothing added: T20a), never while taken.
 	var o: Dictionary = s["orderly"]
 	orderly.call(&"show_pose", o.get("pose"), bool(o.get("visible", false)) and not _noise_on() and not _no_resident)
 
@@ -1068,7 +1077,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	# Down first, then out (client/down_view.gd): your own timer or the out screen, or a crewmate to help.
 	var holding: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and Input.is_action_pressed("use"))
 	down_view.update(s, link.my_id(), link.names(), holding)
-	var me_down := str(me["status"]) == "down" or str(me["status"]) == "out"
+	var me_down := str(me["status"]) == "down" or str(me["status"]) == "out" or _left_out(s)
 	if not ended and not noise and not kiosk.is_open() and not _lights_out and not me_down:
 		if down_view.prompt != "":
 			prompt = down_view.prompt
@@ -1111,6 +1120,36 @@ func _show_quota(now: int) -> void:
 	var c := link.client()
 	hud.quota_line = quota_view.update(c.quota() if c != null else null, lift, hud.prompt == "F  ▼ CALL", now)
 	hud.quota_tone = quota_view.tone
+	# The car waits (FD4): standing open on arrival for whoever is still aboard, the panel says who.
+	car_waiting = car_waiting_text(c.latest if c != null else null, link.names(), now)
+	if car_waiting != "":
+		lift.show_quota(car_waiting, "count", true)
+		hud.quota_line = car_waiting
+		hud.quota_tone = "count"
+
+## The car waits (FD4; sim/run.gd car_waits): once the arrival doors have stood open CAR_WAIT_SHOW_MS, the
+## words for the call panel and the HUD, "CAR WAITING FOR: DAVE" (everyone active still aboard, by name),
+## or "" when nobody keeps it. From the host's newest snapshot only.
+func car_waiting_text(latest: Variant, names: Dictionary, now: int) -> String:
+	if not latest is Dictionary or str((latest as Dictionary).get("phase", "")) != "unloading":
+		_unload_since = -1
+		return ""
+	if _unload_since < 0:
+		_unload_since = now
+	if now - _unload_since < CAR_WAIT_SHOW_MS:
+		return ""
+	var who: Array[String] = []
+	for p: Dictionary in (latest as Dictionary)["players"]:
+		if bool(p["aboard"]) and bool(p["active"]) and str(p["status"]) == "ok":
+			who.append(str(names.get(str(p["id"]), str(p["id"]))).to_upper())
+	if who.is_empty():
+		return ""
+	return "CAR WAITING FOR: " + ", ".join(who)
+
+## The car waits (FD4): this player was left out by the car today (status "leftBehind" in a run with days):
+## out of the run until the crew gets home.
+func _left_out(s: Dictionary) -> bool:
+	return s.get("day") != null and str((s["me"] as Dictionary)["status"]) == "leftBehind"
 
 ## Down first, then out (client/down_view.gd, already updated this frame): your timer and its lines (once
 ## the catch's noise has passed), the out screen, the red spots for everyone. Caught and down, the camera
@@ -1124,6 +1163,10 @@ func _show_down(s: Dictionary, now: int, dt: float, noise: bool) -> void:
 	hud.down_heal = down_view.heal
 	hud.out_on = down_view.out and hud.end_lines.is_empty()
 	hud.out_lines = down_view.out_lines
+	if _left_out(s) and hud.end_lines.is_empty():
+		# The car waits (FD4): left out, the screen goes dark until the crew gets home.
+		hud.out_on = true
+		hud.out_lines = LEFT_OUT_LINES
 	var block: Variant = s.get("downs")
 	down_view.show_spots(spots_root, (block as Dictionary)["spots"] if block is Dictionary else [])
 	if now < _turn_until and str((s["me"] as Dictionary)["status"]) == "down":
@@ -1880,7 +1923,7 @@ func _test_state() -> Dictionary:
 		"hide": hide_view.describe(), "hud": {"health": hud.health, "rates": hud.health_rates, "countText": hud.count_text, "countBy": hud.count_by,
 			"seekNote": hud.seek_note, "subtitle": hud.subtitle, "bigNote": hud.big_note, "centerNote": hud.center_note},
 		"quota": {"host": link.client().quota() if link.client() != null else null, "panel": lift.quota_text, "tone": lift.quota_tone,
-			"hud": hud.quota_line, "view": quota_view.describe(), "at": [lift.quota_point().x, lift.quota_point().y, lift.quota_point().z]},
+			"hud": hud.quota_line, "carWaiting": car_waiting, "view": quota_view.describe(), "at": [lift.quota_point().x, lift.quota_point().y, lift.quota_point().z]},
 		"downs": {"host": s.get("downs"), "view": down_view.describe(), "hud": {"head": hud.down_head, "left": hud.down_left, "line": hud.down_line,
 			"line2": hud.down_line2, "heal": hud.down_heal, "out": hud.out_on, "outLines": hud.out_lines, "prompt": hud.prompt, "fill": hud.prompt_fill},
 			"turning": _turn_until > Time.get_ticks_msec(), "bend": orderly.get("bend") if orderly != null else null},

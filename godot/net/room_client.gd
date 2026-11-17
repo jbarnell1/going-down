@@ -159,6 +159,8 @@ func _join_run(e: int, now: float) -> void:
 			rc.call("_queue", "n%d|%s" % [e, data])
 	_pipe = Transport.Pipe.new(my_id, func(_to: String, data: String) -> void: out.call(data), out)
 	client = Client.new(_pipe, "host", _name, now, Session.INTERP_DELAY, Session.INPUT_INTERVAL, _face)
+	# The game (client/main.gd sets the full deck) draws a Stillness resident in the dark too (T20a).
+	client.draw_in_dark = Session.deck == preload("res://sim/places.gd").FULL
 	status = "running"
 	_flush(now)
 
