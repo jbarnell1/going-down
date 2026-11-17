@@ -30,6 +30,9 @@
 #    turns it on before the first tick. With it on the run's own down replaces the soft catch above (a catch
 #    is never a wipe on its own tick, so the soft catch never fires): a crew all out is a wipe, wherever the
 #    car is, because nobody is left to board it.
+#  - Two-watcher Stillness (sim/run.gd two_watchers, T19a): off unless asked (`watchers`); the game's server
+#    room asks for it, so from three up players it takes two watchers to hold a Stillness resident. prepare()
+#    turns it on before the first tick.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -58,14 +61,17 @@ var days: bool
 var quota: bool
 ## Down first, then out (off unless asked).
 var downs: bool
+## Two-watcher Stillness (off unless asked).
+var watchers: bool
 
-func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false) -> void:
+func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false, watchers_: bool = false) -> void:
 	_entity_on = entity_on
 	_depth = depth
 	deck = Run.deck_of(deck_)
 	days = days_
 	quota = quota_
 	downs = downs_
+	watchers = watchers_
 
 ## Where player `i` of `n` stands in the car at the start (car-local u, v).
 static func start_spot(i: int, n: int) -> PackedFloat64Array:
@@ -136,6 +142,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_quota(s)
 	if downs and not s.downs:
 		s = Run.with_downs(s)
+	if watchers and not s.two_watchers:
+		s = Run.with_two_watchers(s)
 	return s
 
 ## Tests: the next tick presses the call button for `id` from `body`.
