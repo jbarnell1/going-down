@@ -1,0 +1,53 @@
+{
+  "pricing": {
+    "note": "Prices are in shares: one share is one made day's pay for one player. Node price = (price_shares + extra_per_owned * nodes already owned) * share. The first node costs about one share; each later node costs one share more than the last.",
+    "extra_per_owned": 1
+  },
+  "nodes": [
+    {
+      "id": "flashbulb",
+      "name": "Flashbulb",
+      "branch": "Lamp",
+      "price_shares": 1,
+      "requires": null,
+      "description": "Once a floor, fire a flash. For one second the dark ahead is lit, and that second counts as looking.",
+      "drawback": "Your own screen is white for two seconds after."
+    },
+    {
+      "id": "whistle",
+      "name": "Whistle",
+      "branch": "Ear",
+      "price_shares": 1,
+      "requires": null,
+      "description": "Whistle on a key. Your crewmates hear exactly where you are.",
+      "drawback": "It is a noise. A Hearing resident will come."
+    },
+    {
+      "id": "marker_pad",
+      "name": "Marker Pad",
+      "branch": "Hands",
+      "price_shares": 1,
+      "requires": null,
+      "description": "Your own pad of two marks, in your colour, on top of the crew's shared three.",
+      "drawback": "Only you can place them."
+    },
+    {
+      "id": "doorstop",
+      "name": "Doorstop",
+      "branch": "Hands",
+      "price_shares": 1,
+      "requires": null,
+      "description": "Hold the lift doors from the landing, not only from inside.",
+      "drawback": "Outside the car you can be caught."
+    },
+    {
+      "id": "second_wind",
+      "name": "Second Wind",
+      "branch": "Nerve",
+      "price_shares": 1,
+      "requires": null,
+      "description": "Once a floor, when winded, press sprint again to refill your stamina at once.",
+      "drawback": "You gasp loudly, and the next time you are winded lasts longer."
+    }
+  ]
+}
