@@ -8,7 +8,7 @@
 // duration is 0.4 to 1.6 times the estimate (words at 2.5 a second, plus the pauses its tags and
 // ellipses ask for; far outside that usually means a tag was read aloud or a sound effect produced);
 // no clipping (sample peak under -0.1 dBFS, true peak at most -1 dBTP); loudness within 1 LU of
-// -16 LUFS. And the ledger is under the cap.
+// -16 LUFS. The Godot copy in godot/assets/voice matches. And the ledger is under the cap.
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,6 +26,7 @@ const CAP = 50_000;
 
 const WORDS_PER_SECOND = 2.5;
 const PAUSE = { '[short pause]': 0.5, '[pause]': 1.6, '[long pause]': 2.5 };
+const MIN_CLIP = 1.0;
 
 /** Expected seconds for a line: its spoken words, plus its pauses. */
 export function estimate(line) {
@@ -35,7 +36,10 @@ export function estimate(line) {
   s += (line.text.match(/\.\.\./g) ?? []).length * 0.4;
   // A colon mid-sentence is read as a beat (measured 0.32 to 0.53 s in called_3, both voices).
   s += (line.plain.match(/:\s/g) ?? []).length * 0.35;
-  return s;
+  // A clip of a word or two still runs about a second: about 0.1 s of lead-in, the word drawn out
+  // alone, and a 0.25 s tail (the Playroom's one-word lines measured 1.15 to 1.41 s in both voices).
+  // Every other line's estimate is well over this floor.
+  return Math.max(s, MIN_CLIP);
 }
 
 const fails = [];
@@ -71,6 +75,24 @@ for (const voice of ship) for (const line of cfg.lines) {
   for (const b of bad) fails.push(`${name}: ${b}`);
 }
 for (const l of manifest.lines) if (!ids.has(l.id)) fails.push(`manifest.json has ${l.id}, which lines.json does not`);
+
+// The Godot game's copy (godot/assets/voice): the same manifest, and for each voice it has a folder
+// for, the same file for every line.
+const GODOT = path.join(ROOT, 'godot', 'assets', 'voice');
+const godotManifest = path.join(GODOT, 'manifest.json');
+if (!existsSync(godotManifest) || readFileSync(godotManifest, 'utf8') !== readFileSync(manifestFile, 'utf8')) fails.push('godot/assets/voice/manifest.json differs from public/assets/voice/manifest.json (run --publish)');
+let godotFiles = 0;
+for (const voice of ship) {
+  if (!existsSync(path.join(GODOT, voice))) continue;
+  for (const line of cfg.lines) {
+    const g = path.join(GODOT, voice, `${line.id}.mp3`);
+    const p = path.join(PUBLIC, voice, `${line.id}.mp3`);
+    if (!existsSync(g)) fails.push(`godot/assets/voice/${voice}/${line.id}.mp3 is missing (run --publish)`);
+    else if (existsSync(p) && !readFileSync(g).equals(readFileSync(p))) fails.push(`godot/assets/voice/${voice}/${line.id}.mp3 differs from the published file (run --publish)`);
+    else godotFiles++;
+  }
+}
+console.log(`godot copy: manifest and ${godotFiles} files match`);
 const sum = ledger.entries.reduce((n, e) => n + e.characters, 0);
 if (sum !== ledger.total) fails.push(`ledger total ${ledger.total} does not match its entries (${sum})`);
 if (ledger.total > CAP) fails.push(`ledger ${ledger.total} is over the cap ${CAP}`);

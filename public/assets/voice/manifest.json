@@ -53,6 +53,24 @@
     },
     "lights": {
       "priority": 4
+    },
+    "count_last": {
+      "priority": 4
+    },
+    "count_hide": {
+      "priority": 5
+    },
+    "count_coming": {
+      "priority": 5
+    },
+    "count_number": {
+      "priority": 5
+    },
+    "count_found": {
+      "priority": 4
+    },
+    "count_done": {
+      "priority": 4
     }
   },
   "lines": [
@@ -325,6 +343,96 @@
       "id": "lights_2",
       "moment": "lights",
       "plain": "Lights restored! Please make your way to the car. It is exactly where you left it."
+    },
+    {
+      "id": "count_last_1",
+      "moment": "count_last",
+      "plain": "Your car is on its way! One more round before we go!"
+    },
+    {
+      "id": "count_hide_1",
+      "moment": "count_hide",
+      "plain": "Hide."
+    },
+    {
+      "id": "count_coming_1",
+      "moment": "count_coming",
+      "plain": "Coming, ready or not!"
+    },
+    {
+      "id": "count_found_1",
+      "moment": "count_found",
+      "plain": "Found you!"
+    },
+    {
+      "id": "count_done_1",
+      "moment": "count_done",
+      "plain": "All done!"
+    },
+    {
+      "id": "count_40",
+      "moment": "count_number",
+      "plain": "Forty."
+    },
+    {
+      "id": "count_30",
+      "moment": "count_number",
+      "plain": "Thirty."
+    },
+    {
+      "id": "count_20",
+      "moment": "count_number",
+      "plain": "Twenty."
+    },
+    {
+      "id": "count_10",
+      "moment": "count_number",
+      "plain": "Ten."
+    },
+    {
+      "id": "count_9",
+      "moment": "count_number",
+      "plain": "Nine."
+    },
+    {
+      "id": "count_8",
+      "moment": "count_number",
+      "plain": "Eight."
+    },
+    {
+      "id": "count_7",
+      "moment": "count_number",
+      "plain": "Seven."
+    },
+    {
+      "id": "count_6",
+      "moment": "count_number",
+      "plain": "Six."
+    },
+    {
+      "id": "count_5",
+      "moment": "count_number",
+      "plain": "Five."
+    },
+    {
+      "id": "count_4",
+      "moment": "count_number",
+      "plain": "Four."
+    },
+    {
+      "id": "count_3",
+      "moment": "count_number",
+      "plain": "Three."
+    },
+    {
+      "id": "count_2",
+      "moment": "count_number",
+      "plain": "Two."
+    },
+    {
+      "id": "count_1",
+      "moment": "count_number",
+      "plain": "One."
     }
   ]
 }

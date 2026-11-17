@@ -96,6 +96,13 @@ To add a third (for example Sarah, already shortlisted, whose three audition lin
 - Duration estimate used by the check: words at 2.5 a second, plus 0.5 s per `[short pause]`, 1.6 s per `[pause]`, 2.5 s per `[long pause]`, 0.4 s per ellipsis.
 - ffmpeg's loudnorm on clips this short can land 0.5 to 1 LU low; the normaliser then falls back to a measured gain with a limiter and lands within 0.2 LU.
 
+## Learned on 2026-11-17 (the Playroom count, T15i)
+
+- 18 lines in a `playroom` group of `lines.json` (`groups` describes the group and its countdown scheme; each line has `"group": "playroom"`). A line's own `takes` overrides the file's default: three takes of each line, two of each number. 2,148 characters for both voices, 41 takes each.
+- `--publish` now also writes the manifest, and the files of each voice that already has a folder there (Bella), to `godot/assets/voice/`, which the Godot game reads; `check.mjs` checks that copy matches.
+- A one-word clip runs 1.15 to 1.41 s (about 0.1 s before the word and a 0.25 s tail), so the check's estimate never goes below 1.0 s.
+- `godot/client/count_lines.gd` maps the count's events to these line ids for the count on screen (T15e).
+
 ## Checks the loop can run
 
 - Every line id in `lines.json` has a file in `public/assets/voice/`.
