@@ -597,3 +597,120 @@ Rules learned:
 33. **Holes beat paint for eyes.** Painted dots read as a sticker at any size; a hole with darkness
     behind it reads as a mask with something wearing it.
 34. **Noise must be square on the body, not in the texture.** Scale it by how far the UVs stretch.
+
+## The Temp (Annex resident): two more tutorials (2026-11-17)
+
+The Temp is an ordinary office worker (short-sleeved shirt, tie, lanyard, trousers, office shoes) with
+an A4 sheet stapled over its face, built for Mixamo from the start. The owner found the Orderly's
+fingers mangled by Mixamo's rig where they touched, so the study was hands that rig cleanly, and
+clothing a low-poly human in a shirt and tie. Captions read in full; about twenty frames sampled
+evenly from each video (contact sheets, plus a few frames pulled at full size), then the downloads
+were deleted.
+
+### 7. "How to make Low Poly Hands for games (Blender Tutorial)", Thomas Potter Tutorials
+
+https://www.youtube.com/watch?v=7MNAS-LxL7Y (about 20 minutes)
+
+Three kinds of low-poly hand from one block: a mitten, three fingers joined plus one, and five
+fingers.
+
+- **Palm and fingers are about the same length.** "If your hand is really weird, it may just be that
+  you've made the hand too long and the fingers also too long." *Script: yes.* The Temp's palm
+  (wrist to knuckles) and middle finger are each about 9 cm; only the fingers are a little long, on
+  purpose.
+- **Turn the wrist ring so a vertex is on top, not a flat face.** Then the back of the hand rises to
+  a ridge and the detail sits at the sides where it shows. *Script: yes.* The forearm and wrist
+  rings are 8-sided with a vertex on top and on the bottom.
+- **Two segments per finger, not three, in low poly.** Three "doesn't really work that well in low
+  poly". *Script: yes.* Each finger is knuckle, one middle joint and a tip: rings at the knuckle,
+  just before and just after the middle joint, and a short blunt cap. (His pointed tips read as spikes
+  on the Temp's first try.)
+- **Diamond fingers.** His better five-finger hand turns each finger's square cross-section 45
+  degrees, so a finger has a ridge on top and underneath and reads round with four vertices; square
+  fingers "look a bit unprofessional". *Script: yes.* Every finger ring is four vertices on a
+  diamond, a little taller than wide.
+- **An edge loop at every joint, triangles only where nothing bends.** He moves the triangles needed
+  to split three finger roots into four out onto the palm, away from the knuckles. *Script: yes.*
+  The knuckle row of the palm has as many vertices as the four finger roots need, and the change
+  from the wrist ring is made in the middle of the palm.
+- **Straight for rigging; spread when they must stay apart.** "If you're going to be rigging, feel
+  free to make your hand fully straight." His curled hand is a style choice. *Applied:* for Mixamo
+  the fingers are straight in the plane of the palm, fanned about 7 degrees apart, with a clear gap
+  at the tips, and the thumb comes off the side of the palm, forward and a little down (rule 35).
+- **The thumb is extruded from the side face of the palm** and rotated to hang forward, not out in
+  line with the fingers. *Script: yes.*
+- **Thin fingers.** He thins every finger after blocking it out. *Script: yes.* About 1.7 cm wide at
+  the knuckle, tapering to about 1.1 cm before the tip.
+- **Sculpt grab and loop tools to tidy.** *Script: no, and not needed.* A table of numbers gives the
+  same even spacing.
+
+### 8. "Blender Clothing Modeling Tutorial | 05 Shirt" (with "| 06 Tie"), JAEY 3D
+
+https://www.youtube.com/watch?v=MRyksFkJ3ag (about 17 minutes); the tie is its companion,
+https://www.youtube.com/watch?v=Lci-9lw2Qc4 (about 6.5 minutes)
+
+A shirt and a tie made over a stylised base body in T-pose, by box modelling with a mirror.
+
+- **Block the shirt from a cube with a mirror, then cut the neckline as a V.** The front of the neck
+  is cut down into a V with the knife; the back stays high. *Script: yes.* The Temp's collar opens at
+  the front (a 32 degree gap, its points dropped) and the knot of the tie fills the opening.
+- **The collar is its own strip with thickness, folded down.** He separates a band from round the
+  neck, lifts it, gives it thickness (extrude along normals) and moves its inner edge up to make the
+  fold, then cuts the points with the knife and lets the two points overlap a little at the front.
+  *Script: yes.* The collar is a separate closed band laid over the neck: a stand going up, a fold,
+  and a fall coming down over the shirt with two points at the front.
+- **Small raised strips sell the shirt:** a placket down the front (two bevels and a push out), a
+  hem band, a shoulder seam line. *Script: partly.* The breast pocket is pushed out 3 mm; the placket,
+  buttons, seams and the pocket's hem are paint (too small for geometry at this budget).
+- **The sleeve end is a ring with thickness.** The last frames show a turned cuff: a ring that
+  flares out and steps back in. *Script: yes,* as on the Convict (a flare ring and a step-in ring).
+- **The tie starts as the patch of shirt it lies on.** He duplicates the faces under the tie,
+  reshapes them with a lattice into a narrow trapezoid, gives them thickness, and swells the knot at
+  the top. Then he finds it too big and shrinks it, and refits the collar over the knot. *Script:
+  yes.* The tie is a thin closed blade that follows the shirt's front rows 4 mm out, with a fat knot
+  under the collar points and a pointed tip above the belt.
+- **Delete hidden faces under the collar.** *Script: yes, by not making them;* and for Mixamo the
+  shirt is the body's surface, not a shell over a body (rule from tutorial 4).
+
+### How the Temp is built
+
+`assets_src/blender/temp/build_temp.py` makes everything from an empty scene: 3,812 triangles (the
+body 2,428, one closed surface with no non-manifold edges; twelve thin closed shells over it), a 512 px
+atlas and the separate sheet material, plus the stapler (168 triangles) and the pad of notes (108).
+`render_temp.py` poses it on a throwaway rig and renders it in an Annex corridor.
+
+- **The Convict's body scheme, new tables.** Torso rings of 14, arms from a 2 x 2 patch of the side
+  wall, legs from the bottom, neck from the top. Short sleeves end in a hem that flares and steps in;
+  the trousers end 13 cm up, a little short, over a strip of bare shin and dark socks; low office shoes
+  with a toe pulled out in three steps. The breast pocket is a face pushed out 3 mm.
+- **Hands for Mixamo** (tutorial 7). The palm is three 16-vertex rings; the knuckle end is a row of
+  seven quads, and the 1st, 3rd, 5th and 7th are pulled out as fingers, so 4 mm webs stay between the
+  roots. Each finger is a diamond section, rings at 9, 42, 52, 74, 84 and 95% of its length, fanned
+  -7, 0, 7 and 14 degrees, so the gaps widen toward the tips. The thumb comes out of the palm's front
+  face between the first two rings, pointing forward, out and 21 degrees down. Bending test on a
+  throwaway rig: every finger curls into a fist with no collapse.
+- **Clothes as shells laid on the body** (tutorial 8). The collar is a strip of 18 columns (a stand, a
+  fold and a fall) given 2.5 mm of thickness, its fall projected onto the shirt, its two points dropped
+  over the knot. The tie is a knot block and a three-column blade cast onto the shirt front by rays,
+  4 mm off it, 1 cm askew at the tip. The lanyard is a ribbon snapped to the body and collar and
+  smoothed, round the back of the neck, to a clip and a badge hung to the right (a grey square where the
+  photo should be). Every shell is pushed clear of the body surface.
+- **The sheet** is a 10 x 16 grid, A4 by arc length: its middle follows a side profile from over the
+  hairline, down the face to past the chin, and it is wrapped round a vertical axis gently (radius 11.5
+  cm at the top to 19 cm at the bottom), with a nose under the paper. Round the two top staples it is
+  pulled onto the head (into the hair at the temples); the bottom hangs free. Front on
+  `temp_face_sheet` with 0..1 UVs, back and edges plain paper on `temp_body`, 1.2 mm thick.
+- **Slightly wrong:** a head a little small (21 cm chin to crown) on a long neck, narrow sloping
+  shoulders, a long forearm, long fingers, trousers too short. Nothing a Mixamo rig would mistake for
+  a different body plan.
+
+Rules learned:
+
+35. **Spread fingers apart for Mixamo, with gaps from the root.** Fingers that touch get weighted
+    together. Keep webs between the roots, fan the fingers, and leave the thumb clear of the palm.
+36. **Weld a glb before binding it.** The glTF exporter splits vertices at every UV seam and hard
+    edge; a re-imported figure falls apart into pieces (the Temp's 1,932 vertices came back as 3,014),
+    and bone heat then leaves the forearms and legs with no weights. Remove doubles first.
+37. **A sheet over a face must stay a sheet.** Wrapped tightly it read as a hood or a helmet; a gentle
+    bend, the hair showing above it, the edges standing off the cheeks and the bottom hanging free read
+    as paper.
