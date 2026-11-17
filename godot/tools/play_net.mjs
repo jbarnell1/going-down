@@ -12,6 +12,7 @@
 //     at the prison's kiosk opens it): A sees B's new face on B's mask and on the lift's monitor;
 //   - each sees the other as a crewmate where the other really stands (the drawn figure's position
 //     against the other's own body), drawn, with a readable name tag; a picture from each;
+//   - one creeps: their camera drops, and the other sees their figure crouch with its mask at their eye;
 //   - the emote wheel: one aims and lets go, the other sees the emote on that figure;
 //   - a watched Orderly never moves on the watcher's screen (consecutive seeing frames) while the
 //     other looks away;
@@ -21,7 +22,7 @@
 // Pictures in export/shots/net/. Prints `N passed, M failed`; exit code 1 on any failure.
 //   node godot/tools/play_net.mjs [--port=4460] [--web=4464|0] [--keep]
 // The game windows' test channels are on port+1..port+3. Start .local/guard-mouse.ps1 beside it.
-// Ports 4460-4489 only; every process it starts is stopped.
+// Ports 4460-4499 only; every process it starts is stopped.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
@@ -40,7 +41,7 @@ const shots = resolve(here, '../export/shots/net');
 const SECRET = 'test-passphrase';
 const url = `ws://127.0.0.1:${port}`;
 const testPorts = [port + 1, port + 2, port + 3];
-for (const p of [port, ...testPorts, ...(webPort ? [webPort] : [])]) if (!(p >= 4460 && p <= 4489)) throw new Error(`port ${p} is outside 4460-4489`);
+for (const p of [port, ...testPorts, ...(webPort ? [webPort] : [])]) if (!(p >= 4460 && p <= 4499)) throw new Error(`port ${p} is outside 4460-4499`);
 if (webPort && [port, ...testPorts].includes(webPort)) throw new Error(`the web port ${webPort} is one of the game's ports`);
 if (!existsSync(exe)) throw new Error(`no Windows build at ${exe}: npm run godot:export first`);
 mkdirSync(shots, { recursive: true });
@@ -250,6 +251,28 @@ try {
   check('the change came as one face message (Ann still holds one face: Bob\'s)', fA2.received === 1, `Ann received ${fA2.received}`);
   await sleep(300);
   await A.shot('16-ann-sees-bobs-new-face.png');
+  a = await A.state();
+  b = await B.state();
+  // ---- 5c. B creeps (Ctrl held, in place): B's camera drops; on A's screen B's figure crouches, its mask
+  // where B's eye is (the eye B's rules use), within a few centimetres; standing, the same.
+  const eyeOf = (s) => s.client.camY - s.me.y;
+  const maskOn = (viewer, other) => (viewer.others ?? []).find((x) => x.id === other.me.id);
+  const standMask = maskOn(a, b);
+  check("standing: B's mask on A's screen is at B's eye height", standMask && Math.abs(standMask.maskY - eyeOf(b)) < 0.06,
+    `mask ${standMask?.maskY?.toFixed(3)} m, B's eye ${eyeOf(b).toFixed(3)} m, clip ${standMask?.clip}`);
+  await B.cmd('move 0 0 0 1');
+  await sleep(900);
+  a = await A.state();
+  b = await B.state();
+  const creepMask = maskOn(a, b);
+  check("B creeps: B's camera drops, and on A's screen B's figure crouches with its mask at B's eye", b.me.gait === 'creep' && eyeOf(b) < 1.3 && creepMask?.clip === 'sneak' && creepMask?.drawn && Math.abs(creepMask.maskY - eyeOf(b)) < 0.06,
+    `B's eye ${eyeOf(b).toFixed(3)} m (gait ${b.me.gait}); on A's screen: clip ${creepMask?.clip}, gait ${creepMask?.gait}, mask ${creepMask?.maskY?.toFixed(3)} m, drawn ${creepMask?.drawn}`);
+  await A.shot('17-ann-sees-bob-creeping.png');
+  await B.shot('18-bob-creeping-sees-ann.png');
+  await B.cmd('stopmove');
+  await sleep(600);
+  b = await B.state();
+  check("B stands up: B's camera back at standing height", Math.abs(eyeOf(b) - 1.65) < 0.005, `B's eye ${eyeOf(b).toFixed(3)} m`);
 
   // ---- 6. The emote wheel: A holds R, aims at WAVE (the top), lets go; B sees it on A's figure.
   await A.cmd('wheel open');

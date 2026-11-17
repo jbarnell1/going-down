@@ -44,6 +44,9 @@ var emote: StringName = &""
 var downed := false
 var raised := false
 var clip := ""                  # the clip playing now
+var _clip_t := 0.0              # seconds since it started
+var _mask_off := Vector3.ZERO   # the mask screen's middle in the Head bone's frame (from the bind pose)
+var _head := -1
 var _raise_w := 0.0
 var _down_t := 0.0
 var _mats := {}                 # material name -> ShaderMaterial (this figure's own)
@@ -81,6 +84,18 @@ func _ready() -> void:
 			_headwear[StringName(mi.name.trim_prefix("headwear_"))] = mi
 		elif mi.skin != null or mi.skeleton != NodePath():
 			body_mesh = mi
+	_head = skel.find_bone("Head")
+	if body_mesh != null and _head >= 0:
+		var m: Mesh = body_mesh.mesh
+		for i in m.get_surface_count():
+			var src := m.surface_get_material(i)
+			if src != null and src.resource_name == "face_screen":
+				var verts: PackedVector3Array = m.surface_get_arrays(i)[Mesh.ARRAY_VERTEX]
+				var c := Vector3.ZERO
+				for v in verts:
+					c += v
+				c /= maxf(1.0, verts.size())
+				_mask_off = skel.get_bone_global_rest(_head).affine_inverse() * (body_mesh.transform * c)
 	_face_default = default_face()
 	set_face(null)
 	set_number(0)
@@ -131,6 +146,14 @@ func face_hash() -> String:
 	var m: ShaderMaterial = _mats.get("face_screen")
 	return texture_hash(m.get_shader_parameter("tex") as Texture2D) if m else ""
 
+## Tests: how high the middle of the mask screen is above the feet in the pose drawn now (metres).
+## It should be the eye height the rules use for that player (eye_height.gd), within a few cm.
+func mask_height() -> float:
+	if _head < 0:
+		return 0.0
+	var p := skel.global_transform * skel.get_bone_global_pose(_head) * _mask_off
+	return p.y - global_position.y
+
 ## A short hash of a texture's top-level pixels ("" for none).
 static func texture_hash(tex: Texture2D) -> String:
 	if tex == null:
@@ -176,6 +199,7 @@ func _process(delta: float) -> void:
 	if _frozen:
 		_apply_raise(delta)
 		return
+	_clip_t += delta
 	var want := ""
 	var rate := 1.0
 	var fade := FADE
@@ -197,7 +221,12 @@ func _process(delta: float) -> void:
 	if want == "":
 		var moving := speed >= MOVING and gait != &"still"
 		if gait == &"creep" and not moving:
-			want = "crouch_idle"
+			# Creeping in place: the sneak held still, not the deeper crouch_idle (its mask is at 0.75 m),
+			# so the head stays where the creeping player's eye is (eye_height.gd CREEP: the sneak's mask).
+			# Held only once the cross-fade into it is over: the player's blend time runs at the
+			# playback rate, so a fade at rate 0 would never end.
+			want = "sneak"
+			rate = 0.0 if clip == "sneak" and _clip_t >= FADE else 1.0
 		elif not moving:
 			want = "idle"
 		else:
@@ -211,6 +240,7 @@ func _process(delta: float) -> void:
 
 func _play(which: String, fade: float) -> void:
 	clip = which
+	_clip_t = 0.0
 	ap.play(which, fade)
 
 # The instrument arm: a skeleton modifier aims the right upper arm forward and the forearm up so the

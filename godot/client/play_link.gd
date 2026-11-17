@@ -30,8 +30,8 @@ const Move = preload("res://sim/move.gd")
 const Sight = preload("res://sim/sight.gd")
 const Stamina = preload("res://sim/stamina.gd")
 const M = preload("res://sim/jsmath.gd")
+const EyeHeight = preload("res://client/eye_height.gd")
 
-const EYE_HEIGHT := 1.65
 const PLAYER_RADIUS := 0.3
 ## The door-hold button inside the car, car-local (src/render/elevator.ts HOLD_BUTTON; main.ts nearHoldButton).
 const HOLD_BUTTON_V := 0.84
@@ -45,6 +45,11 @@ var body: Move.Body = null
 var tank: Stamina.Stamina = Stamina.fresh_stamina()
 var gait: StringName = &"walk"
 var speed := 0.0
+## The eyes' height above the feet this frame (eye_height.gd: standing, creeping, down, eased). The
+## camera is drawn from it (snapshot `me.eye`, camera_point) and the client's frame carries the same
+## number to the rules, so what counts as looking is what the screen shows.
+var eye := EyeHeight.STAND
+var _eye := EyeHeight.new()
 ## The floor the player is on, and its dump (built once per floor).
 var plan: Floor.FloorPlan = null
 var car: Run.CarGeometry = null
@@ -164,12 +169,14 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 			speed = sp
 	if before != null and body != null and dt > 0.0:
 		tank = Stamina.step_stamina(tank, gait, M.hypot2(body.x - before.x, body.z - before.z) / dt, dt)
+	# The eyes: standing, creeping or down (a spectator stands), eased; this frame's camera height.
+	eye = _eye.update(EyeHeight.target(status, String(gait)) if body != null else EyeHeight.STAND, dt)
 
-	# 2. The client's frame: the real camera, the intents.
+	# 2. The client's frame: the real camera (drawn from this same eye), the intents.
 	var cam_yaw: float = placed_yaw if placed_yaw != null else in_yaw
 	var lf := Client.LocalFrame.new()
 	lf.body = body if body != null else _watch_body()
-	lf.eye = EYE_HEIGHT
+	lf.eye = eye
 	lf.yaw = cam_yaw
 	lf.pitch = in_pitch
 	lf.h_fov_deg = float(inp.get("hfov", 90.0))
@@ -219,6 +226,8 @@ func _new_run(c: Client) -> void:
 	tank = Stamina.fresh_stamina()
 	gait = &"walk"
 	speed = 0.0
+	_eye.reset()
+	eye = _eye.eye
 	_face_on_place = true
 	_call_floors = 0
 	_false_stop = false
@@ -334,7 +343,7 @@ func _snapshot(c: Client, f: Client.Frame, latest: Dictionary, me_row: Variant, 
 			var drawn := _orderly_tpl.copy()
 			drawn.body = Pose.pose_body(pd)
 			drawn.moving = true
-			var a := Entity.audibility(plan, drawn, vb, EYE_HEIGHT)
+			var a := Entity.audibility(plan, drawn, vb, eye)
 			squeak = {"gain": a.gain, "muffled": a.muffled}
 	var distance := M.hypot2(vb.x - ox, vb.z - oz)
 	# The instrument and the tapes.
@@ -392,7 +401,7 @@ func _snapshot(c: Client, f: Client.Frame, latest: Dictionary, me_row: Variant, 
 		"playing": c.playing,
 		"me": {
 			"id": mid,
-			"x": vb.x, "y": vb.y, "z": vb.z, "level": vb.level, "eye": EYE_HEIGHT,
+			"x": vb.x, "y": vb.y, "z": vb.z, "level": vb.level, "eye": eye,
 			"status": str(me_row["status"]) if me_row != null else "ok",
 			"aboard": in_car_now,
 			"side": me_row["side"] if me_row != null else null,
@@ -466,13 +475,18 @@ func crew_faces() -> Array[String]:
 		out.append(c.face if id == str(c.id) else str(c.faces.get(id, "")))
 	return out
 
+## Where the camera is drawn from, for a snapshot's `me`: the feet raised by this frame's eye height.
+## main.gd places the camera here; it is the eye point of the client's frame (what the rules are sent).
+static func camera_point(me: Dictionary) -> Vector3:
+	return Vector3(float(me["x"]), float(me["y"]) + float(me["eye"]), float(me["z"]))
+
 ## Whether a point can be seen from the camera through the floor's walls (the rules' own line of
 ## sight), and not hidden by the car's shut doors.
 func can_see_point(from_body: Move.Body, to: Vector3, to_level: int, doors_open: bool) -> bool:
 	if plan == null:
 		return false
-	var eye := Sight.eye_point(from_body, EYE_HEIGHT)
-	if not Sight.has_line_of_sight(plan, eye, Sight.Point3.make(to.x, to.y, to.z, to_level)):
+	var from := Sight.eye_point(from_body, eye)
+	if not Sight.has_line_of_sight(plan, from, Sight.Point3.make(to.x, to.y, to.z, to_level)):
 		return false
 	if not doors_open:
 		var tb := Move.Body.make(to.x, to.z, to_level, to.y)
@@ -491,6 +505,17 @@ func teleport(level: int, x: int, y: int) -> Dictionary:
 	auto_status = "idle"
 	rc.client.forget_orderly()
 	return {"ok": true, "placed": _body_plain(body)}
+
+## Alone only: put the player down (the host's "caught" status, which stands for being down until the
+## downed-and-healed rules come) or back on their feet, with no catch played. For the camera checks.
+func set_down(on: bool) -> Dictionary:
+	if not local or (rc as LocalRoom).host == null:
+		return {"ok": false, "error": "down is for playing alone"}
+	for p in (rc as LocalRoom).host.state.players:
+		if p.id == my_id():
+			p.status = &"caught" if on else &"ok"
+			return {"ok": true}
+	return {"ok": false, "error": "not in the run"}
 
 ## Moves the player by (dx, dz) metres with the rules' own collision.
 func nudge(dx: float, dz: float) -> Dictionary:
