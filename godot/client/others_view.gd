@@ -95,4 +95,4 @@ func describe(id: String) -> Dictionary:
 	var v: CrewView = fig["view"]
 	return {"drawn": v.visible and v.is_visible_in_tree(), "at": [v.position.x, v.position.y, v.position.z], "clip": v.clip, "emote": String(v.emote), "downed": v.downed, "raised": v.raised,
 		"index": fig["index"], "speed": fig["speed"], "gait": String(v.gait), "faceHash": v.face_hash(), "hasFace": str(fig["face"]) != "",
-		"maskY": v.mask_height()}
+		"maskY": v.mask_height(), "motion": v.motion()}

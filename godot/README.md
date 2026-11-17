@@ -122,9 +122,13 @@ opens the game, presses JOIN FRIENDS and types the address, a name and the passp
 
 Other players are drawn as crewmates by `client/others_view.gd`: interpolated by the network client,
 with their gait, the instrument raised, lying down while the host says they are caught, and skin,
-headwear and chest number from their place in the room; their footsteps are heard. A name tag over
-each fades from 5 to 16 m and is hidden by walls, by the car's shut doors, in the dark and while the
-emote wheel is open. Emotes (WAVE, LOOK BEHIND, PRAY, DANCE SPIN, DANCE SNAKE, BUTTON: clockwise from
+headwear and chest number from their place in the room; their footsteps are heard. The clip plays at
+the measured ground speed over the stride measured from the clip's planted toe, the body turns to
+where it moves (backwards it walks backwards) with the chest and mask twisted back to the look, and
+the creep is a shortened sneak (`client/crew_view.gd`; `tools/crew_check.gd` measures the foot slip).
+A name tag over each, crisp over the tape with a dark outline and half as big again within 4 m, is
+fully readable to 10 m, fades out by 18 m and is hidden by walls, by the car's shut doors, in the dark
+and while the emote wheel is open. Emotes (WAVE, LOOK BEHIND, PRAY, DANCE SPIN, DANCE SNAKE, BUTTON: clockwise from
 the top of the wheel, 60 degrees each) go to the host, which passes them on to everyone else (at most
 one every 0.4 s per player); they play on your figure on their screens. Every crewmate's mask screen
 shows the face that player drew (the host passes faces on once, `net/README.md` Faces), and the

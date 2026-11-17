@@ -52,9 +52,11 @@ const BOARD_TIME := 20.0
 const EMOTE_LABELS: Array[String] = ["WAVE", "LOOK BEHIND", "PRAY", "DANCE SPIN", "DANCE SNAKE", "BUTTON"]
 ## The wheel's dead zone (window pixels of mouse travel): letting go inside it cancels.
 const WHEEL_DEAD := 40.0
-## Name tags: fully readable to this distance (m), gone at TAG_FAR.
-const TAG_NEAR := 5.0
-const TAG_FAR := 16.0
+## Name tags: fully readable to this distance (m), gone at TAG_FAR; drawn half as big again up close
+## (TAG_BIG metres or nearer), the HUD's own size from 1.5 TAG_BIG on.
+const TAG_NEAR := 10.0
+const TAG_FAR := 18.0
+const TAG_BIG := 4.0
 ## Giving up on a connection that never opens (seconds).
 const CONNECT_TIMEOUT := 10.0
 
@@ -1024,14 +1026,15 @@ func _name_tags(s: Dictionary, dark: bool) -> void:
 			shown = link.can_see_point(vb, Vector3(head.x, float(o["y"]) + eye_h - 0.05, head.z), int(o["level"]), open)
 		var p := cam.unproject_position(head) * k
 		# Whole tags only: one cut by the edge of the picture reads as a glitch.
-		var hp := maxf(2.0, floorf(win.y / 320.0))   # the HUD's pixel (hud.gd _scale)
+		var tag_size := clampf(TAG_BIG * 1.5 / maxf(d, 0.1), 1.0, 1.5)
+		var hp := maxf(2.0, floorf(win.y / 320.0)) * tag_size   # the tag's pixel (hud.gd _scale, _draw_tags)
 		var half := (PixelFont.width(str(o["name"]).to_upper()) * 0.5 + 2.0) * hp
 		if shown and (p.x < half or p.y < 11.0 * hp or p.x > win.x - half or p.y > win.y):
 			shown = false
 		o["tagAlpha"] = a if shown else 0.0
 		o["tagPos"] = [p.x, p.y]
 		if shown:
-			tags.append({"text": str(o["name"]).to_upper(), "pos": p, "alpha": a})
+			tags.append({"text": str(o["name"]).to_upper(), "pos": p, "alpha": a, "size": tag_size})
 	hud.tags = tags
 
 func _emergency_level(seconds: float) -> float:
