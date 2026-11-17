@@ -121,6 +121,9 @@ func build(p: Dictionary, seed_text: String) -> void:
 	if str(p.get("place", "clinic")) == "annex":
 		preload("res://client/annex_view.gd").dress(self)
 		return
+	if str(p.get("place", "clinic")) == "playroom":  # the Playroom's look (client/playroom_view.gd)
+		preload("res://client/playroom_view.gd").dress(self)
+		return
 	_make_materials()
 	_build_floors_and_ceilings()
 	_build_walls()

@@ -161,6 +161,10 @@ func _ready() -> void:
 		process_mode = Node.PROCESS_MODE_DISABLED
 		get_tree().change_scene_to_file.call_deferred("res://client/annex_demo.tscn")
 		return
+	if OS.get_cmdline_user_args().has("scene=playroom_demo"):  # the Playroom's look and the Minder (client/playroom_demo.gd)
+		process_mode = Node.PROCESS_MODE_DISABLED
+		get_tree().change_scene_to_file.call_deferred("res://client/playroom_demo.tscn")
+		return
 	# The Windows build doubles as the dedicated server: `GoingDown.exe --headless -- server port=N`.
 	if "server" in OS.get_cmdline_user_args():
 		get_tree().change_scene_to_file.call_deferred("res://server/server.tscn")
@@ -569,8 +573,10 @@ func _use_resident(plan: Dictionary) -> void:
 	match str(plan.get("place", "")):
 		"annex":
 			kind = "temp"
+		"playroom":  # the Minder (client/minder_view.gd): not Stillness, so it follows the un-held pose
+			kind = "minder"
 	if kind != _resident_kind:
-		var view: Node3D = TempView.new() if kind == "temp" else OrderlyView.new()
+		var view: Node3D = TempView.new() if kind == "temp" else (MinderView.new() if kind == "minder" else OrderlyView.new())
 		view.name = kind.capitalize()
 		orderly.queue_free()
 		orderly = view
@@ -580,6 +586,9 @@ func _use_resident(plan: Dictionary) -> void:
 	if orderly is TempView:
 		(orderly as TempView).set_crew(str(snap.get("seed", seed)), link.crew_faces())
 		(orderly as TempView).set_floor(link.plan, level)
+	if orderly is MinderView:
+		(orderly as MinderView).set_floor(link.plan, level)
+		(orderly as MinderView).follow(link)
 
 # --- input --------------------------------------------------------------------------------------
 

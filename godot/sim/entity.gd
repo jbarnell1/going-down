@@ -12,6 +12,15 @@
 #   3. looking at it during a wind-up always cancels the wind-up.
 #
 # Modes: waiting (standing at plan.entity_start) -> hunting -> windUp -> dormant -> hunting ...
+#
+# Bodies. The trait logic above is shared; what differs between residents is a body setting
+# (BodySettings): its height, collision radius, the outline that counts as "seen", its speeds and its
+# sound. The state carries its body (`kind`); create_orderly(plan) makes the Orderly, the default, and
+# create_orderly(plan, temp_body()) makes the Temp (docs/floors/annex.md section 4): 1.8 m tall, and
+# a stapler instead of a trolley. The stapler clicks once per CLICK_STEP metres walked and once per
+# CLICK_WAIT seconds standing unwatched, as "click" events in the rules, so every player hears the
+# same clicks. A held body makes no sound and its click clocks stop: the clicking stops dead the
+# moment anyone looks.
 extends RefCounted
 
 const Floor = preload("res://sim/floor.gd")
@@ -76,11 +85,101 @@ const MUFFLED_GAIN := 0.45
 ## Height of the squeaking wheels above its feet (metres).
 const SQUEAK_HEIGHT := 0.4
 
+## The Temp (docs/floors/annex.md section 4). Where annex.md is silent it keeps the Orderly's
+## numbers: collision radius, hunting and creeping speeds, and the muffling through walls.
+const TEMP_HEIGHT := 1.8
+## The drawn figure (client/temp_view.gd): hair to about 1.81 m; in the reach the stapler arm comes
+## about 1 m forward of its centre; walking and standing, the hands, stapler and pad stay within
+## about 0.55 m. Generous, as the Orderly's are.
+const TEMP_SEEN_HEIGHT := 2.0
+const TEMP_SEEN_RADIUS := 1.1
+const TEMP_SEEN_RADIUS_WALK := 0.7
+## One stapler click per this many metres walked...
+const TEMP_CLICK_STEP := 1.2
+## ...and one per this many seconds standing unwatched.
+const TEMP_CLICK_WAIT := 4.0
+## The click is heard out to this straight-line distance (metres), from its hand.
+const TEMP_HEAR_RANGE := 30.0
+const TEMP_CLICK_HEIGHT := 1.0
+
 ## Below this, timers count as run out (float sums of dt are not exact).
 const EPS := 1e-9
 
 # ---------------------------------------------------------------------------------------------
 # Types.
+
+## A resident's body: everything about it that is not trait logic. Shared and read-only: get them
+## from orderly_body() and temp_body(), never change one.
+class BodySettings extends RefCounted:
+	var name: StringName
+	## Height and collision radius of the body (metres).
+	var height: float
+	var radius: float
+	## The larger outlines that also count as "seen" (see seen_by): any height with seen_radius, and
+	## the body's height with seen_radius_walk.
+	var seen_height: float
+	var seen_radius: float
+	var seen_radius_walk: float
+	## Hunting speed (step_entity's default) and the creep near still prey, m/s.
+	var hunt_speed: float
+	var creep_speed: float
+	## It ducks through doors (the "duck" animation hint).
+	var ducks: bool
+	## Its sound: heard to hear_range (metres) from sound_height above its feet.
+	var hear_range: float
+	var sound_height: float
+	## The stapler: a click per click_step metres walked and per click_wait seconds standing
+	## unwatched. Both 0: no clicks; it sounds while it moves (the Orderly's trolley).
+	var click_step: float = 0.0
+	var click_wait: float = 0.0
+
+	func clicks() -> bool:
+		return click_step > 0.0 or click_wait > 0.0
+
+static var _orderly_body: BodySettings = null
+static var _temp_body: BodySettings = null
+
+## The Orderly: the default body, made of the constants above.
+static func orderly_body() -> BodySettings:
+	if _orderly_body == null:
+		var k := BodySettings.new()
+		k.name = &"orderly"
+		k.height = ORDERLY_HEIGHT
+		k.radius = ORDERLY_RADIUS
+		k.seen_height = SEEN_HEIGHT
+		k.seen_radius = SEEN_RADIUS
+		k.seen_radius_walk = SEEN_RADIUS_WALK
+		k.hunt_speed = HUNT_SPEED
+		k.creep_speed = CREEP_SPEED
+		k.ducks = true
+		k.hear_range = HEAR_RANGE
+		k.sound_height = SQUEAK_HEIGHT
+		_orderly_body = k
+	return _orderly_body
+
+## The Temp (docs/floors/annex.md section 4).
+static func temp_body() -> BodySettings:
+	if _temp_body == null:
+		var k := BodySettings.new()
+		k.name = &"temp"
+		k.height = TEMP_HEIGHT
+		k.radius = ORDERLY_RADIUS
+		k.seen_height = TEMP_SEEN_HEIGHT
+		k.seen_radius = TEMP_SEEN_RADIUS
+		k.seen_radius_walk = TEMP_SEEN_RADIUS_WALK
+		k.hunt_speed = HUNT_SPEED
+		k.creep_speed = CREEP_SPEED
+		k.ducks = false
+		k.hear_range = TEMP_HEAR_RANGE
+		k.sound_height = TEMP_CLICK_HEIGHT
+		k.click_step = TEMP_CLICK_STEP
+		k.click_wait = TEMP_CLICK_WAIT
+		_temp_body = k
+	return _temp_body
+
+## A state's body (an unset one is the Orderly).
+static func kind_of(s: OrderlyState) -> BodySettings:
+	return s.kind if s.kind != null else orderly_body()
 
 # OrderlyMode: 'waiting' | 'hunting' | 'windUp' | 'dormant'
 # OrderlyAnim (what the renderer plays; a frozen Orderly keeps its last hint and its clock stops):
@@ -145,10 +244,21 @@ class OrderlyState:
 	var wind_up_left: float = 0.0
 	var wind_up_target: Variant = null  # String or null
 	var dormant_left: float = 0.0
+	## Its body (null: the Orderly). Never changes after create_orderly.
+	var kind: BodySettings = null
+	## The stapler: metres walked since the last walking click, seconds stood unwatched since the
+	## last click (both stop while it is held), and the clicks it made this tick.
+	var click_walk: float = 0.0
+	var click_wait: float = 0.0
+	var clicks: int = 0
 
 	## TypeScript: { ...state }.
 	func copy() -> OrderlyState:
 		var s := OrderlyState.new()
+		s.kind = kind
+		s.click_walk = click_walk
+		s.click_wait = click_wait
+		s.clicks = clicks
 		s.t = t
 		s.body = body
 		s.yaw = yaw
@@ -180,6 +290,7 @@ class OrderlyState:
 #   {type: "firstSeen", t, playerId} {type: "startedHunting", t} {type: "froze", t, playerId (or null)}
 #   {type: "released", t} {type: "windUp", t, playerId} {type: "windUpCancelled", t, playerId}
 #   {type: "caught", t, playerId}
+#   {type: "click", t, why: "walk" | "wait"}   (bodies with a stapler only)
 
 class StepResult:
 	var state: OrderlyState
@@ -241,10 +352,10 @@ static func _same_cell(a: Floor.Pos, b: Floor.Pos) -> bool:
 	return a.level == b.level and a.x == b.x and a.y == b.y
 
 ## Whether a body's centre is within DUCK_DISTANCE of a door on one of its cell's edges.
-static func near_door(plan: Floor.FloorPlan, body: Move.Body) -> bool:
+static func near_door(plan: Floor.FloorPlan, body: Move.Body, radius: float = ORDERLY_RADIUS) -> bool:
 	var s := float(plan.cell_size)
 	var c := Move.cell_of(plan, body)
-	var half := Walls.DOOR_WIDTH / 2.0 + ORDERLY_RADIUS
+	var half := Walls.DOOR_WIDTH / 2.0 + radius
 	var lx := body.x - c.x * s
 	var lz := body.z - c.y * s
 	var along_z := absf(lz - s / 2.0) <= half
@@ -268,17 +379,21 @@ static func _find_player(players: Array[PlayerView], id: Variant) -> PlayerView:
 # ---------------------------------------------------------------------------------------------
 # The state machine.
 
-## A waiting Orderly at plan.entity_start, facing the landing.
-static func create_orderly(plan: Floor.FloorPlan) -> OrderlyState:
+## A waiting resident at plan.entity_start, facing the landing: the Orderly, or the body given
+## (e.g. temp_body()).
+static func create_orderly(plan: Floor.FloorPlan, kind: BodySettings = null) -> OrderlyState:
 	var body := Move.body_at_cell(plan, plan.entity_start)
 	var s := plan.cell_size
 	var st := OrderlyState.new()
+	st.kind = kind if kind != null else orderly_body()
 	st.body = body
 	st.yaw = yaw_toward((plan.landing.x + 0.5) * s - body.x, (plan.landing.y + 0.5) * s - body.z)
 	return st
 
-## Whether any active player's screen could be showing it, and who (first in list order).
-static func seen_by(plan: Floor.FloorPlan, body: Move.Body, players: Array[PlayerView]) -> PlayerView:
+## Whether any active player's screen could be showing it, and who (first in list order). `kind` is
+## its body (null: the Orderly).
+static func seen_by(plan: Floor.FloorPlan, body: Move.Body, players: Array[PlayerView], kind: BodySettings = null) -> PlayerView:
+	var k := kind if kind != null else orderly_body()
 	for p in players:
 		if not p.active or p.blind:
 			continue
@@ -286,14 +401,42 @@ static func seen_by(plan: Floor.FloorPlan, body: Move.Body, players: Array[Playe
 		# only add sightings: checking the big outline INSTEAD of the body moved the sample points above
 		# door frames and missed real ones, which the independent oracle caught.
 		var look := Sight.look_of(p, Sight.SIGHT_MARGIN_DEG)
-		if Sight.can_see_with(plan, look, body, Sight.SIGHT_FAR, ORDERLY_HEIGHT, ORDERLY_RADIUS) \
-			or Sight.can_see_with(plan, look, body, Sight.SIGHT_FAR, ORDERLY_HEIGHT, SEEN_RADIUS_WALK) \
-			or Sight.can_see_with(plan, look, body, Sight.SIGHT_FAR, SEEN_HEIGHT, SEEN_RADIUS):
+		if Sight.can_see_with(plan, look, body, Sight.SIGHT_FAR, k.height, k.radius) \
+			or Sight.can_see_with(plan, look, body, Sight.SIGHT_FAR, k.height, k.seen_radius_walk) \
+			or Sight.can_see_with(plan, look, body, Sight.SIGHT_FAR, k.seen_height, k.seen_radius):
 			return p
 	return null
 
-## Advances the Orderly by dt seconds. Never mutates `prev`. (TypeScript HuntOptions: speed, creep.)
-static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float = HUNT_SPEED, creep: bool = true) -> StepResult:
+## Advances the resident by dt seconds. Never mutates `prev`. (TypeScript HuntOptions: speed, creep.)
+## `hunt_speed` below 0 means its body's own.
+static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float = -1.0, creep: bool = true) -> StepResult:
+	var k := kind_of(prev)
+	var res := _step_rules(plan, prev, players, dt, k.hunt_speed if hunt_speed < 0.0 else hunt_speed, creep, k)
+	if k.clicks():
+		_stapler(prev, res, dt, k)
+	return res
+
+## The stapler, after the tick's rules. Stillness: a held body makes no sound and its clocks stop.
+static func _stapler(prev: OrderlyState, res: StepResult, dt: float, k: BodySettings) -> void:
+	var s := res.state
+	s.clicks = 0
+	if s.held:
+		return
+	if s.moving:
+		s.click_wait = 0.0
+		s.click_walk += M.hypot2(s.body.x - prev.body.x, s.body.z - prev.body.z)
+		while k.click_step > 0.0 and s.click_walk >= k.click_step - EPS:
+			s.click_walk -= k.click_step
+			s.clicks += 1
+			res.events.append({"type": "click", "t": s.t, "why": "walk"})
+	elif k.click_wait > 0.0:
+		s.click_wait += dt
+		if s.click_wait >= k.click_wait - EPS:
+			s.click_wait -= k.click_wait
+			s.clicks += 1
+			res.events.append({"type": "click", "t": s.t, "why": "wait"})
+
+static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool, k: BodySettings) -> StepResult:
 	var t := prev.t + dt
 	var s := prev.copy()
 	s.t = t
@@ -304,7 +447,7 @@ static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 	var events := res.events
 
 	# 1. Is it seen? Decided before anything else, from where it stands now.
-	var seer := seen_by(plan, prev.body, players)
+	var seer := seen_by(plan, prev.body, players, k)
 	var seen := seer != null
 	s.seen = seen
 	if seen:
@@ -402,11 +545,11 @@ static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 		events.append({"type": "windUp", "t": t, "playerId": victim.id})
 		return res
 
-	_hunt(plan, s, players, dt, hunt_speed, creep)
+	_hunt(plan, s, players, dt, hunt_speed, creep, k)
 	return res
 
 ## One tick of walking toward the nearest player. Mutates the (already copied) state.
-static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool) -> void:
+static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool, k: BodySettings) -> void:
 	s.replan_in -= dt
 	if s.replan_in <= EPS or s.path.is_empty():
 		s.replan_in = REPLAN_INTERVAL
@@ -441,7 +584,7 @@ static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerV
 	s.prey_z = target.body.z
 	var gap := M.hypot2(target.body.x - before.x, target.body.z - before.z)
 	var creeping := creep and target.body.level == before.level and gap < CREEP_DISTANCE and s.prey_speed < CREEP_PREY_SPEED
-	var pace := CREEP_SPEED if creeping else hunt_speed
+	var pace := k.creep_speed if creeping else hunt_speed
 
 	var here := Move.cell_of(plan, before)
 	if _same_cell(here, Move.cell_of(plan, target.body)):
@@ -450,11 +593,11 @@ static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerV
 		var d := M.hypot2(dx, dz)
 		var step := minf(pace * dt, d - APPROACH_STOP)
 		if step > 1e-6:
-			s.body = Move.move_with_collision(plan, before, (dx / d) * step, (dz / d) * step, ORDERLY_RADIUS)
+			s.body = Move.move_with_collision(plan, before, (dx / d) * step, (dz / d) * step, k.radius)
 	else:
 		# step_path_walk only advances `next`; the path itself is never written to.
 		var walk := Follow.PathWalk.make(s.path, s.path_next)
-		s.body = Follow.step_path_walk(plan, walk, before, pace * dt, ORDERLY_RADIUS)
+		s.body = Follow.step_path_walk(plan, walk, before, pace * dt, k.radius)
 		s.path_next = walk.next
 	s.speed = M.hypot2(s.body.x - before.x, s.body.z - before.z) / maxf(dt, EPS)
 
@@ -473,7 +616,7 @@ static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerV
 	elif s.moving:
 		s.yaw = _turn_toward(s.yaw, yaw_toward(mx, mz), TURN_RATE * dt)
 	if s.moving:
-		s.anim = &"duck" if near_door(plan, s.body) else &"walk"
+		s.anim = &"duck" if k.ducks and near_door(plan, s.body, k.radius) else &"walk"
 	else:
 		s.anim = &"idle"
 
@@ -492,22 +635,24 @@ class Audibility:
 		a.muffled = muffled_
 		return a
 
-## How loud the trolley squeak is for a listener. Silent unless it moved this tick: squeaking means
-## nobody is watching it; silence means it is watched, or standing still. Falls off with straight-line
-## distance to nothing at HEAR_RANGE; muffled and quieter without line of sight.
+## How loud its sound is for a listener this tick. The Orderly's trolley squeak is silent unless it
+## moved this tick: squeaking means nobody is watching it; silence means it is watched, or standing
+## still. A body with a stapler is heard only in a tick it clicked (never while held). Falls off with
+## straight-line distance to nothing at its hearing range; muffled and quieter without line of sight.
 static func audibility(plan: Floor.FloorPlan, state: OrderlyState, listener_body: Move.Body, listener_eye: float) -> Audibility:
-	if not state.moving:
+	var k := kind_of(state)
+	if not (state.clicks > 0 if k.clicks() else state.moving):
 		return Audibility.make(0.0, false)
 	var ear := Sight.eye_point(listener_body, listener_eye)
 	var b := state.body
-	var d := M.hypot3(b.x - ear.x, b.y + SQUEAK_HEIGHT - ear.y, b.z - ear.z)
-	if d >= HEAR_RANGE:
+	var d := M.hypot3(b.x - ear.x, b.y + k.sound_height - ear.y, b.z - ear.z)
+	if d >= k.hear_range:
 		return Audibility.make(0.0, false)
-	var base := M.pow_js(1.0 - d / HEAR_RANGE, 2.0)
-	var src := Sight.Point3.make(b.x, b.y + SQUEAK_HEIGHT, b.z, b.level)
+	var base := M.pow_js(1.0 - d / k.hear_range, 2.0)
+	var src := Sight.Point3.make(b.x, b.y + k.sound_height, b.z, b.level)
 	var clear := Sight.has_line_of_sight(plan, ear, src)
 	if not clear:
-		for p in Sight.figure_points(b, ear.x, ear.z, ORDERLY_HEIGHT, ORDERLY_RADIUS):
+		for p in Sight.figure_points(b, ear.x, ear.z, k.height, k.radius):
 			if Sight.has_line_of_sight(plan, ear, p):
 				clear = true
 				break
