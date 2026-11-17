@@ -29,6 +29,10 @@ const HostRules = preload("res://net/host_rules.gd")
 const LocalRoom = preload("res://net/local_room.gd")
 const Client = preload("res://net/client.gd")
 const Golden = preload("res://tests/golden.gd")
+const Host = preload("res://net/host.gd")
+const Transport = preload("res://net/transport.gd")
+const Protocol = preload("res://net/protocol.gd")
+const Pose = preload("res://net/pose.gd")
 
 const ORDER: Array[StringName] = [&"prison", &"clinic", &"clinic", &"annex", &"playroom"]
 
@@ -379,3 +383,97 @@ func test_the_temp_keeps_the_orderlys_stillness(t: T) -> void:
 				t.check(s.orderly.body.x == before.body.x and s.orderly.body.z == before.body.z, "temp-%d: it moved in a tick it was seen" % i)
 	t.check(seen_ticks > 0, "the Temp was never seen (vacuous)")
 	t.note("%d Annexes: %d ticks seen, never moved while seen (the Orderly's rules until T16f)" % [n, seen_ticks])
+
+# ---------------------------------------------------------------------------------------------
+# The host never freezes the Minder: a client saying it sees it, with seen reports of the pose it drew,
+# changes nothing on the Playroom (looking does nothing to a Hearing resident). On the Annex the same
+# messages hold the Temp, as they hold the Orderly.
+
+## The host and one player over the in-memory network (tests/prop_net.gd Rig, cut down), on floor
+## `depth` of the full deck with the resident awake.
+class HostRig:
+	var net: Transport.MemoryNetwork
+	var host: Host
+	var me: Transport.Transport
+	var now := 0.0
+	var ct := 0.0
+	var seq := 0
+	var snaps := {}
+	var latest: Variant = null
+	var place_ack := 0
+	var body := Move.Body.make(0.0, 0.0, 0, 0.0)
+	var rules: HostRules
+
+	func _init(seed: String, depth: int) -> void:
+		rules = HostRules.new(true, depth, Places.FULL)
+		net = Transport.MemoryNetwork.new("places-rig")
+		var ht := net.connect_peer("host")
+		me = net.connect_peer("p0")
+		var roster: Array[String] = ["p0"]
+		host = Host.new(ht, seed, roster, 0.0, Callable(self, "_prepare"), Callable(rules, "step"))
+		me.send("host", Protocol.encode({"type": "join", "name": "p0", "ct": 0.0}))
+		tick()
+
+	func _prepare(s0: Run.RunState) -> Run.RunState:
+		var s := rules.prepare(s0)
+		s = s.copy()
+		var o := s.orderly.copy()
+		o.mode = &"hunting"
+		s.orderly = o
+		return s
+
+	func input(seeing: bool, seen: Array) -> void:
+		ct += Session.TICK
+		seq += 1
+		var lh: float = float(latest["ht"]) if latest != null else -1.0
+		me.send("host", Protocol.encode({"type": "input", "seq": seq, "ct": ct, "body": body, "eye": 1.65, "yaw": 0.0, "pitch": PI / 2.0,
+			"hFovDeg": 1.0, "vFovDeg": 1.0, "raised": false, "holdDoors": false, "gait": "walk", "seeing": seeing, "calls": 0, "pickUps": 0,
+			"ackEvent": 0, "ackHt": lh, "renderTime": lh, "placeAck": place_ack, "seen": seen}))
+
+	func tick() -> void:
+		now += Session.TICK
+		net.now = now
+		host.update(now)
+		for d: Dictionary in me.receive():
+			var m: Variant = Protocol.decode(d["data"])
+			if m == null or m["type"] != "snap":
+				continue
+			snaps[int(m["tick"])] = m
+			latest = m
+			if m["place"] != null and int(m["place"]["seq"]) > place_ack:
+				place_ack = m["place"]["seq"]
+				body = m["place"]["body"]
+
+	## A seen report of the pose drawn half way from snapshot `a` to `a + 1`.
+	func report(id: int, a: int) -> Dictionary:
+		var sa: Dictionary = snaps[a]
+		var sb: Dictionary = snaps[a + 1]
+		return {"id": id, "depth": host.state.depth, "a": a, "b": a + 1, "alpha": 0.5, "pose": Pose.lerp_pose(sa["orderly"], sb["orderly"], 0.5)}
+
+## 40 quiet ticks, then 60 ticks of "I see it" with a seen report of a pose 10 ticks old on every one.
+## Returns [metres walked while seen, put-backs, whether the host marked it seen].
+static func _stare(seed: String, depth: int) -> Array:
+	var r := HostRig.new(seed, depth)
+	for _k in 40:
+		r.input(false, [])
+		r.tick()
+	var path := 0.0
+	for i in 60:
+		r.input(true, [r.report(i + 1, r.host.tick - 10)])
+		var before := r.host.state.orderly.body
+		r.tick()
+		var after := r.host.state.orderly.body
+		path += Vector2(after.x - before.x, after.z - before.z).length()
+	return [path, r.host.stats.put_backs, r.host.state.orderly.last_seen_at != null]
+
+func test_the_host_never_freezes_the_minder(t: T) -> void:
+	var minder := _stare("host-minder", 4)
+	t.eq(r_int(minder[1]), 0, "the host put the Minder back to a pose a client reported")
+	t.check(not minder[2], "the host marked the Minder seen")
+	t.check(float(minder[0]) > 2.0, "the Minder walked only %.2f m in 3 s of being stared at and reported" % float(minder[0]))
+	var temp := _stare("host-temp", 3)
+	t.check(temp[2], "the control: the host never held the Temp it was told was seen")
+	t.note("3 s of seen reports and seeing=true: the Minder walked %.2f m, %d put-backs, never marked seen; the Temp was held (marked seen %s, %d put-backs, walked %.2f m)" % [minder[0], minder[1], str(temp[2]), temp[1], temp[0]])
+
+static func r_int(v: Variant) -> int:
+	return int(v)
