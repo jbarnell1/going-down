@@ -35,6 +35,9 @@
 #  - Two-watcher Stillness (sim/run.gd two_watchers, T19a): off unless asked (`watchers`); the game's server
 #    room asks for it, so from three up players it takes two watchers to hold a Stillness resident. prepare()
 #    turns it on before the first tick.
+#  - Relocation (sim/run.gd relocation, sim/relocate.gd, T19e): off unless asked (`relocation`); the game's rooms
+#    ask for it (the server's always, playing alone with the game's deck), so a resident may leave where nobody
+#    can see it and arrive where nobody can, near a player. prepare() turns it on before the first tick.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -67,8 +70,11 @@ var _quota_cap := 0
 var downs: bool
 ## Two-watcher Stillness (off unless asked).
 var watchers: bool
+## Relocation (off unless asked).
+var relocation: bool
 
-func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false, watchers_: bool = false) -> void:
+func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false, watchers_: bool = false, relocation_: bool = false) -> void:
+	relocation = relocation_
 	_entity_on = entity_on
 	_depth = depth
 	deck = Run.deck_of(deck_)
@@ -149,6 +155,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_downs(s)
 	if watchers and not s.two_watchers:
 		s = Run.with_two_watchers(s)
+	if relocation and not s.relocation:
+		s = Run.with_relocation(s)
 	return _capped(s)
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web

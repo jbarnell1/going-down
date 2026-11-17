@@ -37,6 +37,9 @@
 #
 # The run has two-watcher Stillness (`watchers`, on unless a test turns it off: sim/run.gd two_watchers;
 # T19a): from three up players on the floor it takes two of them looking to hold a Stillness resident.
+#
+# The run has relocation (`relocation`, on unless a test turns it off: sim/run.gd, sim/relocate.gd; T19e): a
+# resident may leave where nobody can see it and arrive where nobody can, near a player, heard as it arrives.
 extends RefCounted
 
 const Run = preload("res://sim/run.gd")
@@ -100,6 +103,8 @@ var downs := true
 ## Two-watcher Stillness in the next run (the game's; tests may turn it off: sim/run.gd two_watchers):
 ## from three up players it takes two watchers to hold a Stillness resident.
 var watchers := true
+## Relocation in the next run (the game's; tests may turn it off: sim/run.gd relocation, sim/relocate.gd).
+var relocation := true
 ## Tick cost, for the log: total and worst microseconds, and ticks.
 var tick_us := 0
 var tick_max_us := 0
@@ -190,7 +195,7 @@ func _start(now: float) -> void:
 	for id: String in people:
 		roster.append(id)
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
-	rules = HostRules.new(true, 1, Places.FULL, days, quota and not HostRules.quota_off_by_arg(false), downs, watchers)
+	rules = HostRules.new(true, 1, Places.FULL, days, quota and not HostRules.quota_off_by_arg(false), downs, watchers, relocation)
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))
