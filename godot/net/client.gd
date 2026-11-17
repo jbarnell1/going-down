@@ -135,6 +135,9 @@ var input_sizes: Array[int] = []
 var host_stamina: Stamina.Stamina = null
 ## A false latch was let go on the last frame (the game shows it as a drop-out).
 var latch_released := false
+## Other players' emotes as the host passed them on, in arrival order: {player, emote, t (host time)}.
+## Keep your own index into it, as with `events`.
+var emotes: Array[Dictionary] = []
 
 var host_id: String
 var name: String
@@ -186,6 +189,11 @@ func _init(transport: Transport.Transport, host_id_: String, name_: String, now:
 func _send_join(now: float) -> void:
 	_last_join = now
 	_transport.send(host_id, Protocol.encode({"type": "join", "name": name, "ct": now}))
+
+## Plays an emote for the others (one of Protocol.EMOTES; the host passes it on, rate limited).
+func emote(which: String) -> void:
+	if id != null and not ended and which in Protocol.EMOTES:
+		_transport.send(host_id, Protocol.encode({"type": "emote", "emote": which}))
 
 ## Leaves the session.
 func leave() -> void:
@@ -295,6 +303,9 @@ func receive(now: float) -> void:
 				_learn_blink(world)
 			"pong":
 				clock.sample(m["ct"], float(m["st"]) - float(m["hr"]), m["st"], now)
+			"emoted":
+				if id != null and m["player"] != id:
+					emotes.append({"player": m["player"], "emote": m["emote"], "t": m["t"]})
 
 func _insert(w: Dictionary) -> void:
 	var s := _snaps

@@ -8,6 +8,8 @@
 # (cycling through the clips) instead of taking pictures and quitting.
 extends Node
 
+const Session = preload("res://net/session.gd")
+const PlanDump = preload("res://client/plan_dump.gd")
 const VFOV := 70.0
 const EYE := 1.65
 const CLIP_ORDER: Array[String] = ["idle", "walk", "run", "sneak", "crouch_idle", "look_behind", "button",
@@ -104,18 +106,13 @@ func _build_view() -> void:
 # A real floor: tries seeds until it has a room at least 3 x 4 cells and a straight corridor at least
 # 9 cells long, both on the ground level and near the lift (clean light).
 func _build_floor() -> void:
-	var bridge := RulesBridge.new()
-	add_child(bridge)
-	if not bridge.open():
-		push_error("rules not connected: " + bridge.error)
-		return
 	for k in 40:
 		var seed_text := "crew-%d" % k
-		bridge.start(seed_text, 1, false)
+		var fp := Session.plan_for(seed_text, 1)
 		var lv := Level.new()
 		lv.shadows = true
 		lv.props_on = false
-		lv.build(bridge.plan, seed_text)
+		lv.build(PlanDump.dump(fp, Session.car_for(fp)), seed_text)
 		var r := _find_room(lv)
 		var h := _find_hall(lv)
 		if not r.is_empty() and not h.is_empty():
@@ -128,7 +125,6 @@ func _build_floor() -> void:
 			print("crew demo: floor '%s', room at %s, corridor %d cells from %s" % [seed_text, r["centre"], h["cells"], h["start"]])
 			break
 		lv.free()
-	bridge.close()
 
 func _find_room(lv: Level) -> Dictionary:
 	var best: Dictionary = {}

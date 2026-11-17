@@ -1,15 +1,30 @@
-# Going Down, the Godot client. Draws and plays what the rules say (rules_bridge.gd); computes no
-# rule itself. Per frame, like src/main.ts for the host's own player:
-#   input -> bridge.step (the rules move the body, tick the run, decide what Orderly to draw)
-#   -> events (doors, chimes, the announcer, the slip, being taken, the end) -> the picture.
+# Going Down, the Godot client. Draws and plays what the host says; computes no rule itself. It talks
+# to ONE thing, alone or with friends: the network client, through play_link.gd. Playing alone is a
+# room on this machine (net/local_room.gd: the server's host code over in-memory pipes); playing
+# together is the same client over a WebSocket to the server (net/room_client.gd). Per frame:
+#   input -> link.step (moves your own body with the rules, the client's frame with the real camera)
+#   -> events (doors, chimes, the announcer, the slip, being taken, the end) -> the picture, the
+#   other players, their emotes and footsteps.
+# Before the game: the start screen (start_screen.gd): Play alone, Join friends, the lobby.
 # The 3D is drawn at 480x270 in a SubViewport and shown through the tape shader; the on-screen
-# display, subtitles and end screen are drawn crisp on top.
+# display, name tags, subtitles, menus and end screen are drawn crisp on top.
 #
 # URL parameters (browser) / user args after `--` (desktop):
-#   seed=<text> (default alpha)  quality=light|full (browser default light, desktop full)
-#   auto=1 (never capture the mouse; also when navigator.webdriver)  props=0  entity=0
-# Test hook (browser): window.gdCmd("<command>") -> window.gdResult; see _command().
+#   seed=<text> (default alpha; playing alone)  quality=light|full (browser default light, desktop full)
+#   auto=1 (never capture the mouse; also when navigator.webdriver or testport=)  props=0  entity=0
+#   join=<address> name=<text>: open the join form filled in (quick joining)
+#   pass=<text>: FOR LOCAL TESTS ONLY. With join= and name= it joins at once, through the form's own
+#     Join. It shows in the address bar, the browser history and the process list: never put a real
+#     passphrase there.
+#   server port=N ...: the Windows build starts the dedicated server instead (server/server.gd).
+# Test hook (browser): window.gdCmd("<command>") -> window.gdResult; desktop: testport=N; see _command().
 extends Node
+
+const PlayLink = preload("res://client/play_link.gd")
+const RoomClient = preload("res://net/room_client.gd")
+const LocalRoom = preload("res://net/local_room.gd")
+const Protocol = preload("res://net/protocol.gd")
+const Move = preload("res://sim/move.gd")
 
 const VFOV := 70.0
 const SENS := 0.0022
@@ -25,8 +40,17 @@ const LEAVE_FLOORS := 5
 const LEAVE_FLOOR_MS := 1300
 const RIDE_TIME := 6.0
 const BOARD_TIME := 20.0
+## The emote wheel, clockwise from the top (Protocol.EMOTES order).
+const EMOTE_LABELS: Array[String] = ["WAVE", "LOOK BEHIND", "PRAY", "DANCE SPIN", "DANCE SNAKE", "BUTTON"]
+## The wheel's dead zone (window pixels of mouse travel): letting go inside it cancels.
+const WHEEL_DEAD := 40.0
+## Name tags: fully readable to this distance (m), gone at TAG_FAR.
+const TAG_NEAR := 5.0
+const TAG_FAR := 16.0
+## Giving up on a connection that never opens (seconds).
+const CONNECT_TIMEOUT := 10.0
 
-var bridge: RulesBridge
+var link: PlayLink = null
 var sub: SubViewport
 var env: Environment
 var cam: Camera3D
@@ -34,9 +58,11 @@ var world: Node3D
 var level: Level
 var lift: Lift
 var orderly: OrderlyView
+var others: OthersView
 var sfx: Sfx
 var announcer: Announcer
 var hud: Hud
+var start: StartScreen
 var inst_view: InstrumentView
 var screen: TextureRect
 var tape_mat: ShaderMaterial
@@ -50,7 +76,16 @@ var yaw := 0.0
 var pitch := 0.0
 var snap: Dictionary = {}
 var built_depth := -1
-var runs := 0
+## "title", "join", "connecting", "lobby", "game".
+var mode := "title"
+var join_arg := ""
+var name_arg := ""
+var pass_arg := ""
+var _t0_us := 0
+var _connect_at := 0.0
+var _ever_connected := false
+var _leaving := false
+var _client_seen: Object = null
 
 # Test overrides (empty / null = from the keyboard and mouse).
 var t_move: Array = []     # [f, r, sprint, creep]
@@ -58,11 +93,16 @@ var t_raise: Variant = null
 ## Tests: show the menu although the mouse is never captured under automation.
 var t_menu := false
 var t_hold: Variant = null
-var time_scale := 1.0
 var pending_call := false
 var pending_pick := false
 ## The instrument is out: E toggles it (the right mouse button still raises it while held).
 var raise_latch := false
+## The emote wheel (hold R): open, the aim (window pixels from the middle).
+var wheel_open := false
+var wheel_vec := Vector2.ZERO
+var _note_until := 0
+## The controls over the start screen (Esc).
+var menu_overlay := false
 
 # Presentation state.
 var dark_since := -1
@@ -78,11 +118,14 @@ var lifetime := 0.0
 var tick_acc := 0.0
 var event_counts: Dictionary = {}
 var event_log: Array = []
+var emotes_seen: Array = []
 var frames := 0
+var game_frames := 0
 var _ft_sum := 0.0
 var _ft_n := 0
 var _ft_max := 0.0
-var bridge_ms_sum := 0.0
+var rules_ms_sum := 0.0
+var rules_ms_max := 0.0
 var load_ms := 0
 var _js_cb: JavaScriptObject
 var error_text := ""
@@ -93,20 +136,19 @@ var _test_server: TCPServer
 var _test_peers: Array[StreamPeerTCP] = []
 var _test_bufs: Array[String] = []
 var _welcome_pending := false
+var _stats_t0 := 0.0
+var _stats_bytes := [0, 0]
 
 func _ready() -> void:
+	# The Windows build doubles as the dedicated server: `GoingDown.exe --headless -- server port=N`.
+	if "server" in OS.get_cmdline_user_args():
+		get_tree().change_scene_to_file.call_deferred("res://server/server.tscn")
+		return
 	var t0 := Time.get_ticks_msec()
+	_t0_us = Time.get_ticks_usec()
 	_read_options()
 	_add_actions()
 	_build_view()
-	bridge = RulesBridge.new()
-	bridge.name = "RulesBridge"
-	add_child(bridge)
-	if not bridge.open():
-		error_text = "RULES NOT CONNECTED: " + bridge.error.to_upper()
-		push_error(error_text)
-	else:
-		_new_run()
 	if OS.has_feature("web"):
 		_js_cb = JavaScriptBridge.create_callback(_on_js)
 		var window: JavaScriptObject = JavaScriptBridge.get_interface("window")
@@ -117,22 +159,36 @@ func _ready() -> void:
 		_test_server = TCPServer.new()
 		var err := _test_server.listen(_test_port, "127.0.0.1")
 		print("test channel on 127.0.0.1:%d %s" % [_test_port, "ready" if err == OK else "FAILED %d" % err])
+	start.remember = not automated
+	if not join_arg.is_empty():
+		start.address = join_arg
+	if not name_arg.is_empty():
+		start.player_name = name_arg.left(StartScreen.MAX_NAME)
+	if not join_arg.is_empty():
+		start.passphrase = pass_arg
+		pass_arg = ""
+		_show_start("join")
+		if not start.address.is_empty() and not start.player_name.is_empty() and not start.passphrase.is_empty():
+			start.submit.call_deferred()
+	else:
+		_show_start("title")
 	load_ms = Time.get_ticks_msec() - t0
-	print("client ready in %d ms; rules via %s; quality %s" % [load_ms, bridge.mode, quality])
+	print("client ready in %d ms; quality %s" % [load_ms, quality])
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--bench="):
 			_bench(float(a.substr(8)))
 
-# Desktop measurement: stand in the clean corridor nearest the lift for `secs`, print frame times, quit.
+# Desktop measurement: play alone, stand in the clean corridor nearest the lift for `secs`, print frame
+# times (and the in-process room's cost per frame), quit.
 func _bench(secs: float) -> void:
 	automated = true
-	await get_tree().create_timer(1.0).timeout
-	var pl := bridge.plan
+	_play_alone()
+	await get_tree().create_timer(1.5).timeout
+	var pl := link.plan_dict
 	var best: Dictionary = {}
 	var best_d := INF
 	var lift_dist: Array = pl["liftDist"]
 	var w := int(pl["width"])
-	var h := int(pl["height"])
 	for sl: Dictionary in pl["sightlines"]:
 		if int(sl["level"]) != 0 or int(sl["length"]) < 6:
 			continue
@@ -141,17 +197,14 @@ func _bench(secs: float) -> void:
 			best_d = d
 			best = sl
 	if not best.is_empty():
-		bridge.teleport(0, int(best["x1"]), int(best["y1"]))
+		link.teleport(0, int(best["x1"]), int(best["y1"]))
 		yaw = atan2(-(float(best["x2"]) - float(best["x1"])), -(float(best["y2"]) - float(best["y1"])))
 	await get_tree().create_timer(1.5).timeout
-	_ft_sum = 0.0
-	_ft_n = 0
-	_ft_max = 0.0
-	bridge_ms_sum = 0.0
-	var f0 := frames
+	_reset_stats()
+	var f0 := game_frames
 	await get_tree().create_timer(secs).timeout
-	print("bench (%s): %d frames, mean %.2f ms, max %.2f ms, rules %.3f ms/frame, draw calls %d" % [quality, _ft_n, 1000.0 * _ft_sum / maxi(_ft_n, 1), 1000.0 * _ft_max,
-		bridge_ms_sum / maxi(frames - f0, 1), RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME)])
+	print("bench (%s): %d frames, mean %.2f ms, max %.2f ms, rules (in-process room) %.3f ms/frame, draw calls %d" % [quality, _ft_n, 1000.0 * _ft_sum / maxi(_ft_n, 1), 1000.0 * _ft_max,
+		rules_ms_sum / maxi(game_frames - f0, 1), RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME)])
 	get_tree().quit(0)
 
 # Sound diagnostics (URL parameters / user args): playback=stream|sample forces every player's
@@ -180,16 +233,16 @@ func _audio_options() -> void:
 	AudioServer.set_bus_mute(0, mute)
 
 func _url(key: String, fallback: String) -> String:
-	return str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('%s') ?? '%s'" % [key, fallback], true))
+	return str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('%s') ?? '%s'" % [key, fallback.replace("\\", "").replace("'", "")], true))
 
 func _read_options() -> void:
 	var args := OS.get_cmdline_user_args()
 	quality = "light" if OS.has_feature("web") else "full"
-	# Desktop: `-- seed=x quality=full auto=1 props=0 entity=0 testport=4460` (a leading -- is fine too).
+	# Desktop: `-- seed=x quality=full auto=1 props=0 entity=0 testport=4460 join=... name=...` (a leading -- is fine too).
 	for raw in args:
 		var a := raw.trim_prefix("--")
 		var key := a.get_slice("=", 0)
-		var val := a.get_slice("=", 1) if a.contains("=") else "1"
+		var val := a.substr(key.length() + 1) if a.contains("=") else "1"
 		match key:
 			"seed": seed = val
 			"quality": quality = val
@@ -197,11 +250,17 @@ func _read_options() -> void:
 			"props": props_on = val != "0"
 			"entity": entity_on = val != "0"
 			"testport": _test_port = int(val)
+			"join": join_arg = val
+			"name": name_arg = val
+			"pass": pass_arg = val
 	if OS.has_feature("web"):
 		seed = _url("seed", seed)
 		quality = _url("quality", quality)
 		props_on = _url("props", "1") != "0"
 		entity_on = _url("entity", "1") != "0"
+		join_arg = _url("join", "")
+		name_arg = _url("name", "")
+		pass_arg = _url("pass", "")
 		automated = str(JavaScriptBridge.eval("(navigator.webdriver || /[?&]auto=1/.test(location.search)) ? 'y' : 'n'", true)) == "y"
 
 func _add_actions() -> void:
@@ -253,6 +312,9 @@ func _build_view() -> void:
 	orderly = OrderlyView.new()
 	orderly.name = "Orderly"
 	sub.add_child(orderly)
+	others = OthersView.new()
+	others.name = "Others"
+	sub.add_child(others)
 	# The instrument, drawn into the picture so the tape lies over it.
 	var layer := CanvasLayer.new()
 	sub.add_child(layer)
@@ -272,29 +334,141 @@ func _build_view() -> void:
 	add_child(screen)
 	hud = Hud.new()
 	add_child(hud)
+	start = StartScreen.new()
+	start.name = "StartScreen"
+	add_child(start)
+	start.alone_pressed.connect(_play_alone)
+	start.join_pressed.connect(_join)
+	start.back_pressed.connect(_back_to_title)
+	start.start_pressed.connect(_lobby_start)
+	start.leave_pressed.connect(_leave_room)
 	sfx = Sfx.new()
 	add_child(sfx)
 	var audio3d := Node3D.new()
 	audio3d.name = "Audio3D"
 	sub.add_child(audio3d)
 	sfx.setup(audio3d)
+	others.sfx = sfx
 	announcer = Announcer.new()
 	add_child(announcer)
 
+func _now() -> float:
+	return (Time.get_ticks_usec() - _t0_us) / 1000000.0
+
+# --- the start screen and the room ----------------------------------------------------------------
+
+func _show_start(which: String) -> void:
+	mode = which
+	start.show_screen(which)
+	hud.end_lines = []
+	hud.tags = []
+	hud.prompt = ""
+	hud.subtitle = ""
+	hud.osd_on = false
+	hud.wheel_on = false
+	wheel_open = false
+	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+## "Play alone": a room on this machine, a run at once.
+func _play_alone() -> void:
+	var lr := LocalRoom.new()
+	var nm := start.player_name if not start.player_name.is_empty() else "YOU"
+	lr.open_local(seed, nm, entity_on)
+	lr.start_run()
+	link = PlayLink.new(lr, true)
+	start.error = ""
+	_enter_game()
+
+## "Join friends": the form's Join.
+func _join(address: String, player_name: String, passphrase: String) -> void:
+	var url := ws_url(address)
+	var rc := RoomClient.new()
+	var err := rc.connect_to(url, passphrase, player_name)
+	if err != OK:
+		start.error = "THAT ADDRESS DOES NOT LOOK RIGHT: " + url.to_upper()
+		_show_start("join")
+		return
+	print("joining %s as %s" % [url, player_name])
+	link = PlayLink.new(rc, false)
+	_connect_at = _now()
+	_ever_connected = false
+	_leaving = false
+	_show_start("connecting")
+
+## An address as a friend types it: ws:// or wss:// kept; http(s):// turned into ws(s)://; a bare host
+## gets ws:// on a home network (localhost, 127.x, 10.x, 192.168.x, 172.16-31.x, a name with no dot)
+## and wss:// otherwise.
+static func ws_url(address: String) -> String:
+	var a := address.strip_edges()
+	if a.begins_with("http://"):
+		return "ws://" + a.substr(7)
+	if a.begins_with("https://"):
+		return "wss://" + a.substr(8)
+	if a.contains("://"):
+		return a
+	var host := a.get_slice("/", 0).get_slice(":", 0)
+	var home := host == "localhost" or host.begins_with("127.") or host.begins_with("10.") or host.begins_with("192.168.") or not host.contains(".")
+	if host.begins_with("172.") and host.get_slice(".", 1).is_valid_int():
+		var b := int(host.get_slice(".", 1))
+		home = home or (b >= 16 and b <= 31)
+	return ("ws://" if home else "wss://") + a
+
+func _back_to_title() -> void:
+	if link != null:
+		_leaving = true
+		link.rc.leave()
+		link = null
+	_clear_world()
+	start.error = ""   # the error belonged to the join form the player just left
+	_show_start("title")
+
+func _lobby_start() -> void:
+	if link != null:
+		link.rc.start_run()
+
+func _leave_room() -> void:
+	_back_to_title()
+
+func _enter_game() -> void:
+	mode = "game"
+	start.show_screen("")
+	hud.osd_on = true
+	snap = {}
+	_client_seen = null
+
+## Plain words for why the connection closed.
+func _close_words(code: int) -> String:
+	match code:
+		4001:
+			return "WRONG PASSPHRASE. ASK WHOEVER RUNS THE SERVER FOR TONIGHT'S."
+		4002:
+			return "THE ROOM IS FULL: 8 PLAYERS ARE IN."
+		4003, 4004, 4005, 4006:
+			return "THE SERVER DROPPED THIS GAME: CODE %d." % code
+	if not _ever_connected:
+		return "CANNOT REACH THE SERVER. CHECK THE ADDRESS. AFTER WRONG PASSPHRASES IT REFUSES THIS PC FOR UP TO A MINUTE."
+	if code == 1001:
+		return "THE SERVER STOPPED."
+	return "CONNECTION LOST."
+
+func _clear_world() -> void:
+	for c: Node in world.get_children():
+		c.queue_free()
+	level = null
+	lift = null
+	built_depth = -1
+	orderly.reset()
+	others.clear()
+	snap = {}
+	sfx.ride(false)
+	sfx.set_hum(0.0)
+	sfx.update(0.0, {}, null, 0.0, 0.0, 0.0, false, 0.0, Vector3.ZERO)
+
 # --- runs and floors ----------------------------------------------------------------------------
 
-func _new_run() -> void:
-	var run_seed := seed if runs == 0 else "%s-%d" % [seed, runs]
-	runs += 1
-	snap = bridge.start(run_seed, 1, entity_on)
-	if snap.has("error"):
-		error_text = "RULES: " + str(snap["error"]).left(60).to_upper()
-		return
-	hud.set_seed(run_seed)
-	_build_floor(bridge.plan)
-	var placed: Variant = snap.get("placed")
-	if placed is Dictionary:
-		yaw = float((placed as Dictionary).get("yaw", 0.0))
+## A run has begun on this screen (alone or with friends): the presentation starts fresh.
+func _on_new_run() -> void:
 	pitch = 0.0
 	raise_latch = false
 	ending = {}
@@ -304,14 +478,22 @@ func _new_run() -> void:
 	left_at = -1
 	ride_started = -1
 	prev_bell_left = BOARD_TIME
-	lift.set_doors(false, true)
+	built_depth = -1
+	others.clear()
 	sfx.ride(false)
+	hud.set_seed(str(link.client().seed) if link.client().seed != null else seed)
 	# In a browser nothing is heard before the first click or key (autoplay rules): the welcome
 	# waits for it rather than being spoken to a muted page.
 	if _gesture or not OS.has_feature("web"):
 		announcer.start_run()
 	else:
 		_welcome_pending = true
+
+## Alone: a new run (the end screen's key, the test hook).
+func _new_run() -> void:
+	if link == null or not link.local:
+		return
+	link.rc.start_run()
 
 func _build_floor(plan: Dictionary) -> void:
 	for c: Node in world.get_children():
@@ -326,6 +508,7 @@ func _build_floor(plan: Dictionary) -> void:
 	lift.name = "Lift"
 	world.add_child(lift)
 	lift.build(plan["car"])
+	lift.set_doors(false, true)
 	orderly.reset()
 	built_depth = int(plan["depth"])
 	level.set_emergency(0.0)
@@ -340,21 +523,45 @@ func _input(event: InputEvent) -> void:
 		if _welcome_pending:
 			_welcome_pending = false
 			announcer.start_run()
+	if mode != "game":
+		# The start screen: Esc shows the controls; everything else is the screen's.
+		if event is InputEventKey:
+			var k0 := event as InputEventKey
+			if k0.pressed and not k0.echo and k0.physical_keycode == KEY_ESCAPE:
+				menu_overlay = not menu_overlay
+			elif not menu_overlay:
+				start.key(k0)
+			get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		# The mouse is captured only after a real click, never under automation.
-		if mb.pressed and not automated and mb.button_index == MOUSE_BUTTON_LEFT and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		if mb.pressed and not automated and mb.button_index == MOUSE_BUTTON_LEFT and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not wheel_open:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	elif event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+	elif event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
-		yaw -= mm.relative.x * SENS
-		pitch = clampf(pitch - mm.relative.y * SENS, -MAX_PITCH, MAX_PITCH)
+		if wheel_open:
+			# The wheel takes the mouse: captured, its travel; free, where it points from the middle.
+			if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+				wheel_vec = (wheel_vec + mm.relative).limit_length(300.0)
+			else:
+				wheel_vec = mm.position - get_viewport().get_visible_rect().size * 0.5
+		elif Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+			yaw -= mm.relative.x * SENS
+			pitch = clampf(pitch - mm.relative.y * SENS, -MAX_PITCH, MAX_PITCH)
 	elif event is InputEventKey:
 		var k := event as InputEventKey
+		if k.physical_keycode == KEY_R and not k.echo:
+			if k.pressed:
+				_wheel_open()
+			else:
+				_wheel_release()
+			return
 		if not k.pressed or k.echo:
 			return
 		if k.physical_keycode == KEY_ESCAPE:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+			wheel_open = false
 		elif not hud.end_lines.is_empty() and Time.get_ticks_msec() - end_shown_at > 1200:
 			_new_run()
 		elif k.physical_keycode == KEY_E:
@@ -365,6 +572,39 @@ func _input(event: InputEvent) -> void:
 		elif k.physical_keycode == KEY_T:
 			var st: float = tape_mat.get_shader_parameter("strength")
 			tape_mat.set_shader_parameter("strength", 0.0 if st > 0.5 else 1.0)
+
+func _wheel_open() -> void:
+	if mode != "game" or snap.is_empty() or snap.has("waiting"):
+		return
+	wheel_open = true
+	wheel_vec = Vector2.ZERO
+
+## The emote aimed at (-1 inside the dead zone).
+func _wheel_sel() -> int:
+	if wheel_vec.length() < WHEEL_DEAD:
+		return -1
+	var n := EMOTE_LABELS.size()
+	var a := atan2(wheel_vec.y, wheel_vec.x) + PI / 2.0
+	return posmod(int(roundf(a / (TAU / n))), n)
+
+## Letting go of R: the emote aimed at, or nothing (a tap closes the wheel).
+func _wheel_release() -> String:
+	if not wheel_open:
+		return ""
+	wheel_open = false
+	var sel := _wheel_sel()
+	if sel < 0:
+		return ""
+	var which: String = Protocol.EMOTES[sel]
+	_send_emote(which)
+	return which
+
+func _send_emote(which: String) -> void:
+	if link == null or link.client() == null:
+		return
+	link.client().emote(which)
+	hud.note = "> " + EMOTE_LABELS[Protocol.EMOTES.find(which)]
+	_note_until = Time.get_ticks_msec() + 1500
 
 func _noise_on() -> bool:
 	var now := Time.get_ticks_msec()
@@ -401,11 +641,63 @@ func _process(delta: float) -> void:
 		_ft_max = maxf(_ft_max, delta)
 	if OS.has_feature("web") and frames == 3:
 		JavaScriptBridge.eval("window.gdReady = true; window.gdFirstFrameMs = performance.now();", true)
-	if bridge.mode == "" or snap.is_empty() or snap.has("error"):
-		hud.center_note = error_text
+	hud.menu_foot = "CLICK TO PLAY" if mode == "game" else "ESC TO GO BACK"
+	if Time.get_ticks_msec() > _note_until:
+		hud.note = ""
+	if link == null:
+		hud.menu_on = menu_overlay
 		return
+	var now := _now()
 	var dt := minf(delta, 0.1)
-	var now := Time.get_ticks_msec()
+	var s := link.step(now, _game_input(dt))
+	if link == null:
+		return
+	var rc := link.rc
+	if rc.status == "closed":
+		var words := "" if _leaving else _close_words(rc.close_code)
+		print("connection closed (code %d)" % rc.close_code)
+		link = null
+		_clear_world()
+		start.error = words
+		_show_start("join" if words != "" else "title")
+		return
+	if s.is_empty():
+		# No run: connecting, or the lobby.
+		if rc.status == "connecting":
+			if mode != "connecting":
+				_show_start("connecting")
+			if now - _connect_at > CONNECT_TIMEOUT:
+				rc.leave()
+				link = null
+				start.error = _close_words(-1)
+				_show_start("join")
+			return
+		_ever_connected = true
+		if mode != "lobby":
+			_clear_world()
+			_show_start("lobby")
+		start.people = rc.people
+		start.my_id = rc.my_id
+		start.run_on = rc.run_on
+		hud.menu_on = menu_overlay
+		return
+	_ever_connected = true
+	if mode != "game":
+		_enter_game()
+	if link.client() != _client_seen:
+		_client_seen = link.client()
+		_on_new_run()
+	if s.has("waiting"):
+		hud.center_note = "JOINING THE RUN..."
+		return
+	_game_frame(s, dt)
+	game_frames += 1
+	var ms := link.last_ms
+	rules_ms_sum += ms
+	rules_ms_max = maxf(rules_ms_max, ms)
+
+## The player's intents this frame (keyboard and mouse, or the test's overrides).
+func _game_input(dt: float) -> Dictionary:
 	var ended := not hud.end_lines.is_empty() or str(snap.get("phase", "")) == "ended"
 	var still := _noise_on() or ended
 	var f := 0.0
@@ -417,27 +709,25 @@ func _process(delta: float) -> void:
 		r = t_move[1]
 		sprint = t_move[2]
 		creep = t_move[3]
-	else:
+	elif mode == "game":
 		f = Input.get_action_strength("forward") - Input.get_action_strength("back")
 		r = Input.get_action_strength("right") - Input.get_action_strength("left")
 		sprint = Input.is_action_pressed("sprint")
 		creep = Input.is_action_pressed("creep")
-	var raised: bool = t_raise if t_raise != null else (raise_latch or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT))
+	var raised: bool = t_raise if t_raise != null else (raise_latch or (mode == "game" and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)))
 	var me: Dictionary = snap.get("me", {})
-	var hold: bool = t_hold if t_hold != null else (Input.is_action_pressed("use") and bool(me.get("nearHold", false)))
+	var hold: bool = t_hold if t_hold != null else (mode == "game" and Input.is_action_pressed("use") and bool(me.get("nearHold", false)))
 	var call: bool = pending_call and bool(me.get("canCall", false))
 	var pick: bool = pending_pick and not call
 	pending_call = false
 	pending_pick = false
 	var aspect := 480.0 / 270.0
 	var hfov := rad_to_deg(2.0 * atan(tan(deg_to_rad(VFOV) * 0.5) * aspect))
-	var s := bridge.step({"dt": dt, "f": f, "r": r, "sprint": sprint, "creep": creep, "yaw": yaw, "pitch": pitch,
-		"hfov": hfov, "vfov": VFOV, "raised": raised and not still, "call": call, "hold": hold, "pickUp": pick,
-		"still": still, "timeScale": time_scale})
-	bridge_ms_sum += bridge.last_ms
-	if s.has("error"):
-		hud.center_note = "RULES ERROR"
-		return
+	return {"dt": dt, "f": f, "r": r, "sprint": sprint, "creep": creep, "yaw": yaw, "pitch": pitch,
+		"hfov": hfov, "vfov": VFOV, "raised": raised and not still, "call": call, "hold": hold, "pickUp": pick, "still": still}
+
+func _game_frame(s: Dictionary, dt: float) -> void:
+	var now := Time.get_ticks_msec()
 	snap = s
 	if s.get("autoYaw") != null:
 		yaw = float(s["autoYaw"])
@@ -446,23 +736,33 @@ func _process(delta: float) -> void:
 		yaw = float((placed as Dictionary)["yaw"])
 		pitch = 0.0
 	if s.has("plan"):
-		var plan: Dictionary = s["plan"]
-		if int(plan["depth"]) != built_depth:
-			_build_floor(plan)
-			lift.set_doors(false, true)
+		_build_floor(s["plan"])
+	if level == null:
+		return
 	_present(s.get("events", []), now)
-	me = s["me"]
+	for em: Dictionary in s.get("emotes", []):
+		others.play_emote(str(em["player"]), str(em["emote"]))
+		emotes_seen.append({"player": em["player"], "emote": em["emote"]})
+		if emotes_seen.size() > 40:
+			emotes_seen.pop_front()
+	var me: Dictionary = s["me"]
+	var ended := not hud.end_lines.is_empty() or str(s.get("phase", "")) == "ended"
+	var still := _noise_on() or ended
 
 	# The camera.
 	cam.position = Vector3(float(me["x"]), float(me["y"]) + float(me["eye"]), float(me["z"]))
 	cam.rotation = Vector3(pitch, yaw, 0)
 
-	# The Orderly: drawn exactly as the rules say, never in the dark, never while taken.
+	# The Orderly: drawn exactly as the frame says, never in the dark, never while taken.
 	var o: Dictionary = s["orderly"]
 	orderly.show_pose(o.get("pose"), bool(o.get("visible", false)) and not _noise_on())
 
-	# The lights: a blink's warning flickers, the dark is deep, the emergency lighting comes up.
+	# Everyone else, and their name tags (not through walls, fading with distance, not in the dark).
 	var dark: bool = s["dark"]
+	others.update(dt, s["others"], cam.position)
+	_name_tags(s, dark)
+
+	# The lights: a blink's warning flickers, the dark is deep, the emergency lighting comes up.
 	var warn: bool = s["warn"]
 	if not dark:
 		dark_since = -1
@@ -523,7 +823,7 @@ func _process(delta: float) -> void:
 	if phase == "coming" and cl is Dictionary:
 		var cd: Dictionary = cl
 		machine = (1.0 - float(cd["floorsAway"]) / maxf(1.0, float(cd["floors"]))) * (0.5 if bool(cd["falseStop"]) else 1.0) + 0.05
-	var car: Dictionary = bridge.plan["car"]
+	var car: Dictionary = link.plan_dict["car"]
 	sfx.update(dt, o["squeak"], o.get("pose"), tick_hz, loud, float(me["exertion"]) if not still else 0.0, bool(me["winded"]), machine,
 		Vector3(float(car["doorX"]), float(car["floorY"]) + 1.5, float(car["doorZ"])))
 	announcer.update()
@@ -540,9 +840,12 @@ func _process(delta: float) -> void:
 	var tapes: Dictionary = s["tapes"]
 	hud.set_tapes(int(tapes["count"]), float(tapes["value"]))
 	hud.subtitle = announcer.subtitle
-	hud.center_note = error_text
+	hud.center_note = error_text if error_text != "" else ("WATCHING: YOU JOIN AT THE NEXT STOP" if not bool(s.get("playing", true)) else "")
+	hud.wheel_on = wheel_open
+	hud.wheel_labels = EMOTE_LABELS
+	hud.wheel_sel = _wheel_sel() if wheel_open else -1
 	# The menu (the controls) shows whenever the mouse is free: after Esc, and before the first click.
-	hud.menu_on = t_menu or (error_text == "" and not automated and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and hud.end_lines.is_empty())
+	hud.menu_on = t_menu or (error_text == "" and not automated and not wheel_open and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and hud.end_lines.is_empty())
 	var prompt := ""
 	if not ended and not noise:
 		if bool(me.get("canCall", false)):
@@ -553,6 +856,35 @@ func _process(delta: float) -> void:
 			prompt = "F  PICK UP"
 	hud.prompt = prompt
 	_show_end(now)
+
+## Name tags over the other players: projected from the head into the window, readable to TAG_NEAR
+## metres and gone at TAG_FAR, never through walls (the rules' line of sight), not in the dark.
+func _name_tags(s: Dictionary, dark: bool) -> void:
+	var tags: Array = []
+	var win := get_viewport().get_visible_rect().size
+	var k := Vector2(win.x / 480.0, win.y / 270.0)
+	var vb := link.view_body()
+	var open: bool = s["doorsOpen"]
+	for o: Dictionary in s["others"]:
+		# Over the head; a crewmate lying down (caught) has it just above the body, not 2 m over the floor.
+		var lying := str(o["status"]) == "caught"
+		var head := Vector3(float(o["x"]), float(o["y"]) + (0.75 if lying else 2.05), float(o["z"]))
+		var d := head.distance_to(cam.position)
+		var a := clampf(1.0 - (d - TAG_NEAR) / (TAG_FAR - TAG_NEAR), 0.0, 1.0)
+		var shown := not dark and a > 0.0 and not cam.is_position_behind(head) and d > 0.4
+		if shown:
+			shown = link.can_see_point(vb, Vector3(head.x, float(o["y"]) + (0.4 if lying else 1.6), head.z), int(o["level"]), open)
+		var p := cam.unproject_position(head) * k
+		# Whole tags only: one cut by the edge of the picture reads as a glitch.
+		var hp := maxf(2.0, floorf(win.y / 320.0))   # the HUD's pixel (hud.gd _scale)
+		var half := (PixelFont.width(str(o["name"]).to_upper()) * 0.5 + 2.0) * hp
+		if shown and (p.x < half or p.y < 11.0 * hp or p.x > win.x - half or p.y > win.y):
+			shown = false
+		o["tagAlpha"] = a if shown else 0.0
+		o["tagPos"] = [p.x, p.y]
+		if shown:
+			tags.append({"text": str(o["name"]).to_upper(), "pos": p, "alpha": a})
+	hud.tags = tags
 
 func _emergency_level(seconds: float) -> float:
 	if seconds < EMERGENCY_DELAY:
@@ -602,13 +934,14 @@ func _present(events: Array, now: int) -> void:
 	if events.is_empty():
 		return
 	announcer.on_events(events, 1)
+	var my := link.my_id()
 	for e: Dictionary in events:
 		var ty := str(e["type"])
 		event_counts[ty] = int(event_counts.get(ty, 0)) + 1
 		event_log.append({"type": ty, "t": e.get("t", 0.0)})
 		if event_log.size() > 80:
 			event_log.pop_front()
-		var mine := str(e.get("playerId", "")) == "me"
+		var mine := str(e.get("playerId", "")) == my
 		match ty:
 			"doorsOpened", "doorsClosed":
 				sfx.play("doors")
@@ -642,7 +975,7 @@ func _present(events: Array, now: int) -> void:
 			"banked":
 				var summary: Dictionary = e["summary"]
 				var shares: Dictionary = summary["shares"]
-				lifetime += float(shares.get("me", 0.0))
+				lifetime += float(shares.get(my, 0.0))
 				ending = {"kind": "banked", "at": now, "summary": summary}
 				sfx.ride(true)
 			"wiped":
@@ -671,13 +1004,14 @@ func _show_end(now: int) -> void:
 	if now - int(ending["at"]) < wait:
 		return
 	sfx.ride(false)
-	var again := {"text": "PRESS A KEY FOR A NEW RUN"}
+	var again := {"text": "PRESS A KEY FOR A NEW RUN" if link.local else "BACK TO THE ROOM IN A MOMENT"}
+	var my := link.my_id()
 	if kind == "banked":
 		var sm: Dictionary = ending["summary"]
 		var shares: Dictionary = sm["shares"]
 		hud.end_lines = [{"text": "BANKED", "strong": true}, {"text": ""}, {"text": "FLOORS %d" % int(sm["depth"])},
 			{"text": "READINGS %d" % int(sm["readings"])}, {"text": "TOTAL " + _n4(float(sm["total"])), "strong": true},
-			{"text": "YOUR SHARE " + _n4(float(shares.get("me", 0.0))), "strong": true}, {"text": ""},
+			{"text": "YOUR SHARE " + _n4(float(shares.get(my, 0.0))), "strong": true}, {"text": ""},
 			{"text": "LIFETIME " + _n4(lifetime)}, {"text": ""}, again]
 	elif kind == "wiped":
 		hud.end_lines = [{"text": "NOBODY CAME BACK UP", "strong": true}, {"text": ""}, {"text": "FLOORS %d" % int(snap["depth"])},
@@ -700,6 +1034,20 @@ func _bus_peaks() -> Dictionary:
 func _n4(v: float) -> String:
 	return "%04d" % int(floorf(v))
 
+func _reset_stats() -> void:
+	_ft_sum = 0.0
+	_ft_n = 0
+	_ft_max = 0.0
+	rules_ms_sum = 0.0
+	rules_ms_max = 0.0
+	frames = 6
+	game_frames = 0
+	_stats_t0 = _now()
+	if link != null:
+		_stats_bytes = [link.rc.bytes_in, link.rc.bytes_out]
+		if link.local:
+			(link.rc as LocalRoom).host_us = 0
+
 # --- the test hook ------------------------------------------------------------------------------
 
 func _on_js(args: Array) -> void:
@@ -710,28 +1058,75 @@ func _on_js(args: Array) -> void:
 ## Commands (space separated): state | stats | resetstats | move f r sprint creep | stopmove |
 ## look yawDeg pitchDeg | face x z [y] | raise 0|1|- | hold 0|1|- | call | pick | teleport level x y |
 ## walkto level x y [pace] | stopwalk | timescale k | newrun | tape 0|1 | debug | floortapes | plan
+## The start screen and the room: alone | ui <alone|join|go|back|start|leave> | type <address|name> <text> |
+## start | leave | emote <name> | wheel open | wheel aim dx dy | wheel release | screen
 func _command(c: String) -> String:
 	var p := c.split(" ", false)
 	if p.is_empty():
 		return "empty"
+	var in_game := link != null and not snap.is_empty() and not snap.has("waiting") and level != null
 	match p[0]:
 		"state":
 			return JSON.stringify(_test_state())
+		"screen":
+			return JSON.stringify(_screen_state())
 		"stats":
+			var secs := maxf(0.001, _now() - _stats_t0)
+			var host_ms := 0.0
+			if link != null and link.local:
+				host_ms = (link.rc as LocalRoom).host_us / 1000.0 / maxi(game_frames, 1)
 			return JSON.stringify({"frames": frames, "avg_ms": 1000.0 * _ft_sum / maxi(_ft_n, 1), "max_ms": 1000.0 * _ft_max,
-				"fps": Engine.get_frames_per_second(), "load_ms": load_ms, "bridge_ms_avg": bridge_ms_sum / maxi(frames, 1),
+				"fps": Engine.get_frames_per_second(), "load_ms": load_ms, "rules_ms_avg": rules_ms_sum / maxi(game_frames, 1),
+				"bridge_ms_avg": rules_ms_sum / maxi(game_frames, 1), "rules_ms_max": rules_ms_max, "host_ms_avg": host_ms, "game_frames": game_frames,
+				"bytes_in_per_s": (link.rc.bytes_in - int(_stats_bytes[0])) / secs if link != null else 0.0,
+				"bytes_out_per_s": (link.rc.bytes_out - int(_stats_bytes[1])) / secs if link != null else 0.0, "seconds": secs,
 				"draw_calls": RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
 				"objects": RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME),
 				"prims": RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME),
-				"quality": quality, "renderer": RenderingServer.get_current_rendering_method(), "rules": bridge.mode, "peaks": _bus_peaks()})
+				"quality": quality, "renderer": RenderingServer.get_current_rendering_method(),
+				"rules": ("local room" if link != null and link.local else "network") if link != null else "none", "peaks": _bus_peaks()})
 		"peaks":
 			return JSON.stringify(_bus_peaks())
 		"resetstats":
-			_ft_sum = 0.0
-			_ft_n = 0
-			_ft_max = 0.0
-			bridge_ms_sum = 0.0
-			frames = 6
+			_reset_stats()
+		"alone":
+			if mode == "game":
+				return "already playing"
+			start.press("alone")
+		"ui":
+			if p.size() < 2:
+				return "ui what"
+			start.press(p[1])
+		"type":
+			if p.size() < 2:
+				return "type what"
+			var text := c.substr(c.find(p[1]) + p[1].length() + 1) if p.size() > 2 else ""
+			if p[1] == "address":
+				start.address = text
+			elif p[1] == "name":
+				start.player_name = text
+			else:
+				return "only address or name"
+		"start":
+			_lobby_start()
+		"leave":
+			_back_to_title()
+		"emote":
+			if p.size() < 2 or not p[1] in Protocol.EMOTES:
+				return "unknown emote"
+			_send_emote(p[1])
+		"wheel":
+			if p.size() < 2:
+				return "wheel what"
+			match p[1]:
+				"open":
+					_wheel_open()
+				"aim":
+					wheel_vec = Vector2(float(p[2]), float(p[3]))
+				"release":
+					return JSON.stringify({"sent": _wheel_release()})
+				"cancel":
+					wheel_open = false
 		"move":
 			t_move = [float(p[1]), float(p[2]), p.size() > 3 and p[3] == "1", p.size() > 4 and p[4] == "1"]
 		"menu":
@@ -758,19 +1153,31 @@ func _command(c: String) -> String:
 		"pick":
 			pending_pick = true
 		"teleport":
-			return JSON.stringify(bridge.teleport(int(p[1]), int(p[2]), int(p[3])))
+			if not in_game:
+				return JSON.stringify({"ok": false, "error": "no run"})
+			return JSON.stringify(link.teleport(int(p[1]), int(p[2]), int(p[3])))
 		"walkto":
-			return JSON.stringify(bridge.walk_to(int(p[1]), int(p[2]), int(p[3]), float(p[4]) if p.size() > 4 else 3.0))
+			if not in_game:
+				return JSON.stringify({"ok": false, "error": "no run"})
+			return JSON.stringify(link.walk_to(int(p[1]), int(p[2]), int(p[3]), float(p[4]) if p.size() > 4 else 3.0))
 		"stopwalk":
-			return JSON.stringify(bridge.stop_walk())
+			if link == null:
+				return JSON.stringify({"ok": false})
+			return JSON.stringify(link.stop_walk())
 		"timescale":
-			time_scale = float(p[1])
+			if link == null or not link.local:
+				return "timescale is for playing alone"
+			(link.rc as LocalRoom).time_scale = float(p[1])
 		"newrun":
+			if link == null or not link.local:
+				return "newrun is for playing alone (with friends: start, from the room)"
 			_new_run()
 		"tape":
 			tape_mat.set_shader_parameter("strength", float(p[1]))
 		"debug":
-			return JSON.stringify(bridge.debug_info())
+			if link == null:
+				return JSON.stringify({"error": "no run"})
+			return JSON.stringify(link.debug_info())
 		"shot":
 			# The whole window as drawn (tape, display, subtitles), to a PNG path.
 			var img := get_viewport().get_texture().get_image()
@@ -788,36 +1195,59 @@ func _command(c: String) -> String:
 		"say":
 			announcer.request(p[1], 9000)
 		"props":
-			return JSON.stringify(level.prop_spots)
+			return JSON.stringify(level.prop_spots if level != null else [])
 		"nudge":
-			return JSON.stringify(bridge.nudge(float(p[1]), float(p[2])))
+			if not in_game:
+				return JSON.stringify({"ok": false, "error": "no run"})
+			return JSON.stringify(link.nudge(float(p[1]), float(p[2])))
 		"floortapes":
 			return JSON.stringify(snap.get("floorTapes", []))
 		"plan":
-			var pl := bridge.plan
+			if link == null or link.plan_dict.is_empty():
+				return JSON.stringify({"error": "no run"})
+			var pl := link.plan_dict
 			return JSON.stringify({"width": pl["width"], "height": pl["height"], "landing": pl["landing"], "entityStart": pl["entityStart"],
 				"sightlines": pl["sightlines"], "car": pl["car"], "elevatorWall": pl["elevatorWall"], "landingFacing": pl["landingFacing"],
-				"cells": pl["cells"], "liftDist": pl["liftDist"], "rooms": pl["rooms"], "doors": pl["doors"]})
+				"cells": pl["cells"], "liftDist": pl["liftDist"], "rooms": pl["rooms"], "doors": pl["doors"], "depth": pl["depth"]})
 		_:
 			return "unknown command"
 	return "ok"
 
+## The start screen as a test sees it (the passphrase is never in it).
+func _screen_state() -> Dictionary:
+	return {"screen": mode, "error": start.error, "address": start.address, "name": start.player_name, "passTyped": not start.passphrase.is_empty(),
+		"people": start.people, "me": start.my_id, "runOn": start.run_on, "focus": start.focused_id(), "menu": menu_overlay,
+		"status": link.rc.status if link != null else "none", "closeCode": link.rc.close_code if link != null else 0}
+
 func _test_state() -> Dictionary:
 	var s := snap
+	if mode != "game" or s.is_empty() or s.has("waiting") or level == null:
+		return {"screen": _screen_state(), "client": {"menu": hud.menu_on}}
 	var o: Dictionary = s["orderly"]
+	var oth: Array = []
+	for x: Dictionary in s["others"]:
+		var d := x.duplicate()
+		d.merge(others.describe(str(x["id"])))
+		oth.append(d)
 	return {
+		"screen": _screen_state(),
 		"phase": s.get("phase"), "depth": s.get("depth"), "t": s.get("t"), "dark": s.get("dark"), "warn": s.get("warn"),
 		"blackout": s.get("blackout"), "blink": s.get("blink"), "call": s.get("call"), "doorsOpen": s.get("doorsOpen"),
-		"bellLeft": s.get("bellLeft"), "votes": s.get("votes"), "summary": s.get("summary"),
+		"bellLeft": s.get("bellLeft"), "votes": s.get("votes"), "summary": s.get("summary"), "playing": s.get("playing"),
 		"me": s.get("me"), "inst": s.get("inst"), "tapes": s.get("tapes"), "auto": s.get("auto"),
 		"orderly": {"mode": o["mode"], "held": o["held"], "seeing": o["seeing"], "visible": o["visible"],
 			"moving": o["moving"], "frozen": o["frozen"], "distance": o["distance"], "x": o["x"], "z": o["z"],
-			"level": o["level"], "drawn": orderly.visible, "pose": o.get("pose"), "squeak": o["squeak"]},
+			"level": o["level"], "drawn": orderly.visible, "pose": o.get("pose"), "squeak": o["squeak"], "taken": o["taken"]},
+		"others": oth,
+		"emotesSeen": emotes_seen,
+		"net": {"local": link.local, "id": link.my_id(), "bytesIn": link.rc.bytes_in, "bytesOut": link.rc.bytes_out, "now": _now(),
+			"watchedPairs": link.watched_pairs, "watchedMoves": link.watched_moves},
 		"client": {"yaw": yaw, "pitch": pitch, "emergency": emergency, "light": light, "doors": lift.doors if lift else 0.0,
 			"indicator": lift.indicator_text if lift else "", "slip": inst_view.slip_text, "slipShown": inst_view.slip_shown(),
 			"raise": inst_view.raise, "needle": inst_view.needle, "needleAngle": inst_view.angle, "subtitle": announcer.subtitle,
 			"spoken": announcer.history.map(func(h: Dictionary) -> String: return str(h["id"])), "caught": caught_at >= 0, "noise": _noise_on(),
 			"wentDown": hud.went_down, "end": hud.end_lines.map(func(l: Dictionary) -> String: return str(l["text"])), "tapeText": hud.tape_text,
-			"prompt": hud.prompt, "menu": hud.menu_on, "built": built_depth, "timeScale": time_scale, "hudSize": [hud.size.x, hud.size.y]},
+			"prompt": hud.prompt, "menu": hud.menu_on, "built": built_depth, "hudSize": [hud.size.x, hud.size.y],
+			"wheel": wheel_open, "wheelSel": hud.wheel_sel, "note": hud.note, "tags": hud.tags.map(func(t: Dictionary) -> String: return str(t["text"]))},
 		"events": event_counts,
 	}

@@ -54,7 +54,12 @@ sock.on('data', (d) => {
   }
 });
 const cmd = (c) => new Promise((res) => { waiting.push(res); sock.write(c + '\n'); });
-// Ready once the rules answer.
+// The start screen comes first: press its PLAY ALONE (the button's own code path), then ready once the
+// run answers.
+for (let i = 0; i < 200; i++) {
+  if ((await cmd('alone')) !== 'unknown command') break;
+  await new Promise((r) => setTimeout(r, 100));
+}
 let ready = false;
 for (let i = 0; i < 200 && !ready; i++) {
   try { ready = JSON.parse(await cmd('state')).phase !== undefined; } catch { /* not yet */ }

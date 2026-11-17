@@ -22,6 +22,9 @@ var client: Client = null
 ## Tests: seconds added to every message in each direction (a slow link), and how many arrived.
 var delay := 0.0
 var received := 0
+## Bytes of WebSocket text received and sent (the game's measurement of what a player costs the link).
+var bytes_in := 0
+var bytes_out := 0
 
 var _ws := WebSocketPeer.new()
 var _secret: String
@@ -65,6 +68,7 @@ func _flush(now: float) -> void:
 	while not _out.is_empty() and float(_out[0][0]) <= now:
 		if _ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
 			_ws.send_text(_out[0][1])
+			bytes_out += String(_out[0][1]).length()
 		_out.pop_front()
 
 ## Pumps the socket and the lobby, and takes in the run's messages. `now`: local seconds.
@@ -88,8 +92,10 @@ func poll(now: float) -> void:
 		_ws.send_text(JSON.stringify(["hello", 1, _secret, _name]))
 		_secret = ""
 	while _ws.get_available_packet_count() > 0:
-		var text := _ws.get_packet().get_string_from_utf8()
+		var pkt := _ws.get_packet()
+		var text := pkt.get_string_from_utf8()
 		received += 1
+		bytes_in += pkt.size()
 		_in.append([now + delay, text])
 	while not _in.is_empty() and float(_in[0][0]) <= now:
 		_on_text(_in.pop_front()[1], now)

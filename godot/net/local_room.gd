@@ -1,0 +1,124 @@
+# Playing alone: the room a server runs, on this machine. The same host (net/host.gd stepping the rules
+# through net/host_rules.gd, exactly as server/room.gd does) and the same NetClient (net/client.gd) the
+# game uses with friends, joined by two in-memory pipes (net/transport.gd Pipe) instead of a WebSocket:
+# no socket, no passphrase, no delay beyond one frame. The game talks to it exactly as it talks to a
+# RoomClient (it is one: poll, start_run, frame, client, status, people, my_id).
+#
+# What differs from the server's room, all of it for one player on their own machine:
+#  - The player's own body is trusted (net/host.gd `trusted`: no speed check), so the test hooks
+#    (teleport, walk at any pace) work alone; with friends the server checks every body.
+#  - A run starts at once when asked (no lobby, nobody to wait for), and the next run's seed is the
+#    seed with "-1", "-2", ... appended (as the single-player game always did).
+#  - `time_scale` runs the room's clock (host and client together) faster or slower: tests only.
+extends "res://net/room_client.gd"
+
+const Host = preload("res://net/host.gd")
+const HostRules = preload("res://net/host_rules.gd")
+const Move = preload("res://sim/move.gd")
+
+## The local player's id in every run (events say "playerId": "me").
+const ME := "me"
+## A frame longer than this (seconds of real time) moves the room's clock only this far.
+const MAX_STEP := 0.25
+
+var host: Host = null
+var rules: HostRules = null
+var seed := "alpha"
+var run_seed := ""
+var runs := 0
+var entity_on := true
+var time_scale := 1.0
+## Cost of the host's ticks on this machine (microseconds, summed), for the stats hook.
+var host_us := 0
+var _vt := 0.0
+var _last_real := -1.0
+var _host_pipe: Transport.Pipe = null
+var _client_pipe: Transport.Pipe = null
+
+## Opens the room (no run yet: start_run() starts one).
+func open_local(seed_: String, player_name: String, entity: bool) -> void:
+	seed = seed_
+	_name = player_name
+	entity_on = entity
+	my_id = ME
+	people = [[ME, player_name]]
+	status = "lobby"
+
+## The room's clock: local seconds, scaled by time_scale.
+func room_time() -> float:
+	return _vt
+
+## A new run (the previous one, if any, is closed).
+func start_run() -> void:
+	_close_run()
+	run_seed = seed if runs == 0 else "%s-%d" % [seed, runs]
+	runs += 1
+	epoch += 1
+	rules = HostRules.new(entity_on, 1)
+	# Method callables hold no reference to this object, so the pipes do not keep it alive.
+	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
+	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))
+	var roster: Array[String] = [ME]
+	host = Host.new(_host_pipe, run_seed, roster, _vt, Callable(rules, "prepare"), Callable(rules, "step"), roster)
+	# A trusted player gets no placement from the host at the start; send the start spot as one, as the
+	# server's room does for its players, so the game takes its body from the same place either way.
+	for p in host.state.players:
+		if p.id == ME:
+			host.place_player(ME, p.body)
+	client = Client.new(_client_pipe, "host", _name, _vt)
+	run_on = true
+	status = "running"
+
+func _to_client(to: String, data: String) -> void:
+	if to == ME and _client_pipe != null:
+		bytes_in += data.length()
+		_client_pipe.push("host", data)
+
+func _to_client_all(data: String) -> void:
+	_to_client(ME, data)
+
+func _from_client(_to: String, data: String) -> void:
+	_to_host(data)
+
+func _to_host(data: String) -> void:
+	if _host_pipe != null:
+		bytes_out += data.length()
+		_host_pipe.push(ME, data)
+
+func _close_run() -> void:
+	if client != null and not client.ended:
+		client.leave()
+	if host != null:
+		host.update(_vt)
+		host.close()
+	host = null
+	client = null
+	run_on = false
+
+func poll(now: float) -> void:
+	if _last_real < 0.0:
+		_last_real = now
+	_vt += clampf(now - _last_real, 0.0, MAX_STEP) * maxf(0.0, time_scale)
+	_last_real = now
+	_now = _vt
+	if host != null:
+		var t0 := Time.get_ticks_usec()
+		host.update(_vt)
+		host_us += Time.get_ticks_usec() - t0
+	if client != null:
+		client.receive(_vt)
+
+func frame(_now_real: float, local: Client.LocalFrame) -> Client.Frame:
+	if client == null:
+		return null
+	return client.frame(_vt, local)
+
+func leave() -> void:
+	_close_run()
+	status = "closed"
+	close_code = 1000
+
+## Test hook: moves the local player (the host takes a trusted body as it comes).
+func place(body: Move.Body) -> void:
+	if host != null:
+		host.place_player(ME, body)

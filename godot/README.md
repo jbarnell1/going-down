@@ -2,8 +2,11 @@
 
 This folder is the game, in Godot 4.7: the rules, ported from `src/sim/*.ts` to typed GDScript and
 proved to behave exactly like the TypeScript rules; the client that draws and plays them (copied in
-from `spikes/godot-client`); and the bridge between the two, in GDScript. It plays with no TypeScript
-and no Node at run time. The Windows build is the main way to play; the browser build is the backup.
+from `spikes/godot-client`); the network (`net/`) and the home server (`server/`). It plays with no
+TypeScript and no Node at run time. The Windows build is the main way to play; the browser build is
+the backup. Alone or with friends the game runs the same way: the client talks to a host through the
+network client. Alone, that host is a room inside the game (`net/local_room.gd`); with friends it is
+the server.
 
 ```
 godot/
@@ -13,11 +16,14 @@ godot/
                       "Linux Server" (headless, feature "server": project.godot starts server/server.tscn)
   sim/                the rules, one file per src/sim module (rng, floor, clinic, walls, landing, move,
                       follow, sight, stamina, tape, entity, instrument, run, bot) plus jsmath.gd
-  client/             rules_bridge.gd (THE boundary: the only client script that calls sim/), and the
-                      client's scripts and shaders (main.gd, level.gd, lift.gd, sfx.gd, ...: synced)
+  client/             main.gd (the game), play_link.gd (THE boundary: the only client script that talks
+                      to the room), start_screen.gd (title, join form, lobby), others_view.gd (the other
+                      players), plan_dump.gd, and the drawing scripts and shaders (level.gd, lift.gd,
+                      sfx.gd, hud.gd, ...); rules_bridge.gd is no longer used by the game (ref_bridge only)
   net/                the network (port of src/net, see net/README.md): protocol, NetHost, NetClient,
-                      transports, the room client, the server's door; host_rules.gd (src/game/runHost.ts
-                      HostRules) and pose.gd (lerpPose, samePose, cameraSees), shared by bridge and server
+                      transports, the room client, the local room (playing alone), the server's door;
+                      host_rules.gd (src/game/runHost.ts HostRules) and pose.gd (lerpPose, samePose,
+                      cameraSees), shared by the bridge, the local room and the server
   server/             the dedicated server (one room; server.tscn), its Dockerfile and README.md
   assets/, data/      models, textures, recorded lines, pixel font (synced; all from public/assets)
   main.tscn, default_bus_layout.tres   the main scene and the Sfx, Squeak and Voice buses (synced)
@@ -26,7 +32,7 @@ godot/
   tools/              godot.mjs (npm scripts); dump_reference.ts, property_counts.ts, bridge_script.ts and
                       rules_host.ts (write tests/reference); sync_client.mjs; the synced browser and
                       desktop checks (playthrough.mjs, play_web.mjs, play_desktop.mjs, sound_web.mjs,
-                      measure_web.mjs, serve.mjs)
+                      measure_web.mjs, serve.mjs); the network checks (net_local.mjs, play_net.mjs)
   export/             the builds and the playthroughs' pictures (ignored by git)
 ```
 
@@ -44,6 +50,7 @@ npm run godot:reference                  # regenerate tests/reference/ from src/
 npm run godot:export                     # import, export export/web and export/windows/GoingDown.exe, precompress
 npm run godot:export -- server           # the Linux headless server: export/server/GoingDownServer.x86_64
 node godot/tools/net_local.mjs 4451      # the network end to end on this PC (server + 3 players + probes, ~2 min)
+node godot/tools/play_net.mjs --port=4460  # two game windows and a browser on one server (see Playing together)
 node godot/tools/godot.mjs import        # only the import pass (assets, the client's class names)
 node godot/tools/sync_client.mjs         # copy the client in again from spikes/godot-client
 ```
@@ -84,10 +91,52 @@ node godot/tools/serve.mjs godot/export/web 4440 &      # then open http://127.0
 godot/export/windows/GoingDown.exe                      # the main build: nothing else needed beside it
 ```
 
+The game opens on the start screen: PLAY ALONE (in the middle of the screen) starts a run at once in
+a room inside the game; JOIN FRIENDS opens the form (the server's address, your name, the passphrase
+for the night), then the lobby, which lists everyone in the room. Anyone can press START, and everyone
+in the lobby goes down together; LEAVE goes back. Errors are said in plain words on the form (wrong
+passphrase, room full, server not answering, an address that does not look right); BACK clears them.
+The address and the name are remembered in `user://join.cfg` (not under automation); the passphrase
+is kept in memory only, never written or printed. A bare address gets `ws://` on a home network
+(localhost, 127.x, 10.x, 192.168.x, 172.16-31.x, a name with no dot) and `wss://` otherwise, e.g.
+`wss://your-server.example`. After a run everyone is back in the lobby.
+
 Controls: WASD or arrows walk, Shift sprints, Ctrl (or C) creeps, mouse looks (click to capture the
-mouse, Esc frees it), E brings the instrument out and puts it away (the right mouse button raises it
-while held), F calls the lift, holds the doors from inside the car and picks up a dropped tape, T
+mouse, Esc frees it and shows the controls), E brings the instrument out and puts it away (the right
+mouse button raises it while held), F calls the lift, holds the doors from inside the car and picks up
+a dropped tape, R held opens the emote wheel (aim with the mouse, let go to send; a tap closes it), T
 toggles the tape look. In a browser use C to creep: Ctrl+W closes the tab.
+
+### Playing together
+
+```sh
+GD_JOIN_SECRET='the passphrase for tonight' godot/export/windows/GoingDown.exe --headless -- server port=4450
+```
+
+The Windows exe given `-- server ...` runs the dedicated server instead of the game (the arguments of
+`server/server.tscn`, see `server/README.md`; the passphrase only in the environment). Each player
+opens the game, presses JOIN FRIENDS and types the address, a name and the passphrase.
+
+Other players are drawn as crewmates by `client/others_view.gd`: interpolated by the network client,
+with their gait, the instrument raised, lying down while the host says they are caught, and skin,
+headwear and chest number from their place in the room; their footsteps are heard. A name tag over
+each fades from 5 to 16 m and is hidden by walls, by the car's shut doors, in the dark and while the
+emote wheel is open. Emotes (WAVE, LOOK BEHIND, PRAY, DANCE SPIN, DANCE SNAKE, BUTTON: clockwise from
+the top of the wheel, 60 degrees each) go to the host, which passes them on to everyone else (at most
+one every 0.4 s per player); they play on your figure on their screens. A face drawn on your mask
+will come through `CrewView.set_face` (`face/`, being built separately).
+
+A caught crewmate is out until the car next rides down (the run's rule). The soft catch of
+`net/host_rules.gd` applies only when a catch would wipe the run, which is why playing alone you are
+put back on your feet. The last stretch of every wait is the blackout, when the Orderly hunts unseen,
+so with friends whoever is nearest it is usually taken there. The state comes from the host
+(`status` "caught" in the snapshot): the downed-and-healed rules will change what the host says, and
+the client already draws whatever it says.
+
+Desktop arguments (after `--`) and URL parameters, besides the ones below: `join=<address>` and
+`name=<text>` fill the form in; `pass=<text>` (with both) joins at once through the form's own Join.
+**`pass=` is for local tests only**: it shows in the process list, the address bar and the browser
+history. Never put a real passphrase there.
 
 `npm run godot:export -- web` or `-- windows` builds one. URL parameters and desktop
 arguments (`seed=`, `quality=`, `entity=0`, `auto=1`, `testport=`, `--bench=`) are the client's,
@@ -102,8 +151,29 @@ beside any of them; the game never captures the mouse under `auto=1` or `navigat
 node godot/tools/play_web.mjs 4440         # browser playthrough, 29 checks, pictures in godot/export/shots/
 node godot/tools/sound_web.mjs 4440        # browser sound after a real click: must PASS; with --query=&mute=1 must FAIL
 node godot/tools/play_desktop.mjs          # Windows build in a 960x540 window, 33 checks incl. bus peaks
-node godot/tools/measure_web.mjs 4440      # sizes, cold first frame, frame times
+node godot/tools/measure_web.mjs 4440      # sizes, cold first frame, frame times and the cost of playing alone
+node godot/tools/play_net.mjs --port=4460  # multiplayer: 22 checks, pictures in godot/export/shots/net/
 ```
+
+The playthroughs start with the start screen's PLAY ALONE (play_web clicks it, play_desktop and
+measure_web send `alone`). Because the screen is drawn a little behind the host and the client keeps a
+blink dark one tick past its end, "the lights come back as the car arrives" allows 0.3 s of host time
+(measured: 0.15 s).
+
+`play_net.mjs` starts the server from the Windows exe on 127.0.0.1 (the test passphrase
+`test-passphrase` in its environment; ports 4460-4469 only: the server, three test channels and the
+web page) and two 640x360 game windows that join through the form (the `join=`, `name=`, `pass=`
+arguments). From both clients' own state it asserts: a wrong passphrase gives the plain-words error,
+and Back returns to the title; the lobby lists both names; a browser client joins the same server
+(skip with `--web=0`); Start starts the run for both; each sees the other where the other really
+stands, drawn, with a readable name tag, dressed differently; nobody sees their own figure; the wheel
+(WAVE aimed at the top, a tap sends nothing, DANCE SPIN straight down) and each emote seen by the
+other; the call; the watched Orderly never moving on the watcher's screen while the other looks away
+(not vacuous); a crewmate caught in the blackout is caught on both screens (their own plays the
+catch, the other draws them lying where they were taken); everyone on their feet boards on BANK and
+the host counts exactly those votes; the bank and the end screen for both; both back in the lobby.
+It prints the bytes per second each client used (about 7.2 KB in and 2.0 KB out with two players).
+With the server's seed `alpha` the blackout takes Bob every time; the checks hold whoever is taken.
 
 ## The client, and re-syncing it
 
@@ -123,9 +193,11 @@ Sound: the buses are declared in `default_bus_layout.tres` (`audio/buses/default
 add buses at run time with `AudioServer.add_bus`: in the browser's Sample playback mode that
 silences everything.
 
-## The bridge
+## The bridge (no longer used by the game)
 
-`client/rules_bridge.gd` keeps the public calls and reply shapes of the spike's bridge (`open`,
+The game now plays through `client/play_link.gd` and the network client, alone too. The bridge is
+kept, unchanged, because `tests/ref_bridge.gd` proves the GDScript rules against the reference host
+through it. `client/rules_bridge.gd` keeps the public calls and reply shapes of the spike's bridge (`open`,
 `start`, `step`, `teleport`, `walk_to`, `nudge`, `stop_walk`, `debug_info`, and `plan`, `state`,
 `last_ms`, `mode` = `"gdscript"`), so the client scripts are used unchanged. It is a port of the
 interim TypeScript host (`tools/rules_host.ts`, kept as the reference) and of the glue that host used
@@ -262,3 +334,13 @@ The bridge, natively (ref_bridge): about 0.45 ms a frame on average, at most abo
 ordinary frame; the frame on which a ride ends costs about 60 ms (generating the next floor, about
 35 ms, and its plan dump), while the doors are shut. In the browser build the client's `stats`
 hook reported 0.48 to 0.59 ms a frame on average (the Windows build: 0.28 to 0.38 ms).
+
+Playing alone through the local room (16 Nov, the `stats` hook's `rules_ms_avg`: the whole of
+`play_link.step`, host ticks included; standing in the clean corridor nearest the lift, as
+measure_web does): the Windows build 0.82 ms a frame at 60 fps (host 0.32), 0.58 ms at 144 fps,
+0.52 ms uncapped (274 fps), worst frame about 2.7 ms; the browser build 1.16 to 1.25 ms a frame at
+60 fps (host 0.44 to 0.48), 0.73 to 0.77 ms uncapped (160 fps), worst frame about 6 ms. About twice
+the bridge: every snapshot and input is written and read as exact JavaScript JSON (`net/jsjson.gd`)
+even in memory, and the client runs the sight test for the hold every frame. The whole browser
+playthrough averaged 1.34 ms (floor generation on the ride included). With a server the client's
+cost on Windows was about 0.4 ms a frame.

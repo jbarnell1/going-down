@@ -1,7 +1,7 @@
 // First copied from the client trial on 16 Nov 2026; this file is now edited here (see godot/README.md).
 // The scripted playthrough (tools/playthrough.mjs) on the browser build, through the page's test hook
 // (window.gdCmd). Chromium runs under its REAL autoplay rules, and the run starts with a real click on
-// the picture, as a person's would (under ?auto=1 the click never captures the mouse).
+// the start screen's PLAY ALONE, as a person's would (under ?auto=1 the click never captures the mouse).
 // Usage (server already running on <port>): node play_web.mjs <port> [--query=&quality=full] [--only=first]
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
@@ -26,7 +26,10 @@ await page.goto(`http://127.0.0.1:${port}/index.html?auto=1${query}`);
 await page.waitForFunction(() => window.gdReady === true, null, { timeout: 180000 });
 const firstFrameMs = await page.evaluate(() => window.gdFirstFrameMs);
 console.log(`first frame ${Math.round(firstFrameMs)} ms (page ${Date.now() - t0} ms)`);
+// The start screen comes first; the click lands on its PLAY ALONE button (the middle of the page), so
+// the run starts with a real click as before. Wait until the room on this page has started it.
 await page.mouse.click(640, 360);
+await page.waitForFunction(() => { window.gdCmd('state'); try { return JSON.parse(window.gdResult).phase !== undefined; } catch { return false; } }, null, { timeout: 60000 });
 
 await playthrough(
   {

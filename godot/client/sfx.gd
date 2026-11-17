@@ -15,6 +15,9 @@ var machinery: AudioStreamPlayer3D
 var breath: AudioStreamPlayer
 var ride_loop: AudioStreamPlayer
 var hum: AudioStreamPlayer
+## Other players' footsteps, heard from where they are (a few players in the world, reused).
+var _steps: Array[AudioStreamPlayer3D] = []
+var _step_next := 0
 var _squeak_bus := -1
 var _tick_phase := 0.0
 var _rng := RandomNumberGenerator.new()
@@ -63,6 +66,15 @@ func setup(world_parent: Node3D) -> void:
 	hum.bus = "Sfx"
 	hum.volume_db = -20.0
 	add_child(hum)
+	streams["step"] = _wav(_step(), false)
+	for i in 6:
+		var sp := AudioStreamPlayer3D.new()
+		sp.stream = streams["step"]
+		sp.bus = "Sfx"
+		sp.unit_size = 3.0
+		sp.max_distance = 30.0
+		world_parent.add_child(sp)
+		_steps.append(sp)
 	ride_loop = AudioStreamPlayer.new()
 	ride_loop.stream = _wav(_rumble(2.0, 42.0), true)
 	ride_loop.bus = "Sfx"
@@ -127,6 +139,17 @@ func update(delta: float, sq: Dictionary, pose: Variant, tick_hz: float, loudnes
 			machinery.play()
 	elif machinery.playing:
 		machinery.stop()
+
+## One footstep of another player at `pos` (gain in dB: a sprint is louder, a creep quieter).
+func step_at(pos: Vector3, gain_db: float) -> void:
+	if _steps.is_empty():
+		return
+	var sp := _steps[_step_next]
+	_step_next = (_step_next + 1) % _steps.size()
+	sp.global_position = pos
+	sp.volume_db = gain_db
+	sp.pitch_scale = 0.9 + _rng.randf() * 0.2
+	sp.play()
 
 ## The hum follows the lights (1 as built, 0 out).
 func set_hum(light: float) -> void:
@@ -252,6 +275,16 @@ func _printer() -> PackedFloat32Array:
 	for i in a.size():
 		var t := float(i) / RATE
 		a[i] = (_rng.randf() - 0.5) * 0.25 * (1.0 if fmod(t * 38.0, 1.0) < 0.5 else 0.3)
+	return a
+
+func _step() -> PackedFloat32Array:
+	# A shoe on hard floor: a low knock and a short scuff.
+	var a := _buf(0.16)
+	var lp := 0.0
+	for i in a.size():
+		var t := float(i) / RATE
+		lp += ((_rng.randf() - 0.5) - lp) * 0.25
+		a[i] = sin(TAU * 85.0 * t) * exp(-t * 45.0) * 0.6 + lp * exp(-t * 30.0) * 1.2
 	return a
 
 func _squeak() -> PackedFloat32Array:

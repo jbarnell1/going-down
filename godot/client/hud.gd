@@ -33,8 +33,20 @@ const MENU_ROWS: Array[Array] = [
 	["RIGHT MOUSE", "HOLD THE INSTRUMENT UP"],
 	["F", "CALL LIFT / HOLD DOORS / PICK UP"],
 	["T", "TAPE LOOK ON / OFF"],
+	["HOLD R", "EMOTE WHEEL: AIM, LET GO"],
+	["TAP R", "CLOSE THE WHEEL"],
 	["ESC", "THIS MENU"],
 ]
+## The line under the menu (the start screen says how to go back instead).
+var menu_foot := "CLICK TO PLAY"
+## Name tags over other players: [{text, pos (window pixels, the text's bottom centre), alpha}].
+var tags: Array = []
+## The emote wheel: open, the labels clockwise from the top, the one aimed at (-1: none).
+var wheel_on := false
+var wheel_labels: Array = []
+var wheel_sel := -1
+## A short line under the prompt (the emote you just sent).
+var note := ""
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -97,12 +109,54 @@ func _draw() -> void:
 		var t := "YOU WENT DOWN"
 		var p2 := px * 2.0
 		PixelFont.draw_shadowed(self, t, Vector2((size.x - PixelFont.width(t) * p2) * 0.5, size.y * 0.42), p2, Color("#f4f4ec"))
+	if not black and not wheel_on:   # the wheel's labels sit where the tags would
+		_draw_tags(px)
+	if note != "" and not black:
+		PixelFont.draw_shadowed(self, note, Vector2((size.x - PixelFont.width(note) * px) * 0.5, size.y * 0.7), px, Color("#ffd27a"))
 	if center_note != "":
 		PixelFont.draw_shadowed(self, center_note, Vector2((size.x - PixelFont.width(center_note) * px) * 0.5, size.y * 0.3), px, Color("#ffd27a"))
 	if subtitle != "":
 		_draw_subtitle(px)
+	if wheel_on and not black:
+		_draw_wheel(px)
 	if menu_on and not black:
 		_draw_menu()
+
+func _draw_tags(px: float) -> void:
+	for t: Dictionary in tags:
+		var text: String = t["text"]
+		var a := float(t["alpha"])
+		if a <= 0.01:
+			continue
+		var w := PixelFont.width(text) * px
+		var p: Vector2 = t["pos"]
+		var at := Vector2(floorf(p.x - w * 0.5), floorf(p.y - 9 * px))
+		draw_rect(Rect2(at - Vector2(2, 2) * px, Vector2(w + 4 * px, 11 * px)), Color(0, 0, 0, 0.45 * a))
+		PixelFont.draw_shadowed(self, text, at, px, Color(0.96, 0.96, 0.92, a), Color(0, 0, 0, 0.6 * a))
+
+## Six labels round the middle of the screen, the one aimed at lit; a line toward it.
+func _draw_wheel(px: float) -> void:
+	var c := size * 0.5
+	var n := wheel_labels.size()
+	if n == 0:
+		return
+	var r := minf(size.x, size.y) * 0.3
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.35))
+	draw_arc(c, r * 0.22, 0.0, TAU, 32, Color(0.95, 0.95, 0.9, 0.5), px)
+	for i in n:
+		var ang := -PI / 2.0 + TAU * i / n
+		var p := c + Vector2(cos(ang), sin(ang)) * r
+		var label: String = wheel_labels[i]
+		var w := PixelFont.width(label) * px
+		var on := i == wheel_sel
+		var box := Rect2(p - Vector2(w * 0.5 + 4 * px, 6 * px), Vector2(w + 8 * px, 13 * px))
+		draw_rect(box, Color(0.02, 0.02, 0.025, 0.85))
+		draw_rect(box, Color("#ffd27a") if on else Color(0.55, 0.57, 0.55), false, px)
+		PixelFont.draw_shadowed(self, label, Vector2(floorf(p.x - w * 0.5), floorf(p.y - 3 * px)), px, Color("#ffd27a") if on else Color("#f4f4ec"))
+		if on:
+			draw_line(c + Vector2(cos(ang), sin(ang)) * r * 0.22, c + Vector2(cos(ang), sin(ang)) * (r - 10 * px), Color("#ffd27a"), px)
+	var mid := "EMOTE"
+	PixelFont.draw_shadowed(self, mid, Vector2(floorf(c.x - PixelFont.width(mid) * px * 0.5), floorf(c.y - 3 * px)), px, Color("#f4f4ec"))
 
 func _draw_menu() -> void:
 	var key_w := 0
@@ -113,7 +167,7 @@ func _draw_menu() -> void:
 		key_w = maxi(key_w, PixelFont.width(key))
 		act_w = maxi(act_w, PixelFont.width(act))
 	var title := "CONTROLS"
-	var foot := "CLICK TO PLAY"
+	var foot := menu_foot
 	var gap := 10
 	var w := key_w + gap + act_w + 16
 	var line := 12

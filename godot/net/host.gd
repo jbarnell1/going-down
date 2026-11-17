@@ -29,6 +29,9 @@
 # in the client's own clock, with the gait the tank allows and the ground the bodies covered. Each
 # snapshot carries the player's own tank back.
 #
+# Emotes (protocol "E") are passed on to every other player at once ("M"), at most one per player per
+# EMOTE_GAP seconds; they never touch the run.
+#
 # Events are numbered and kept; each snapshot carries the events after the ones its client has
 # acknowledged (up to EVENT_BUDGET bytes), so they arrive exactly once and in order.
 extends RefCounted
@@ -52,6 +55,8 @@ const TICK := Session.TICK
 const HISTORY_TICKS := 60  # ceil(HISTORY_SECONDS / TICK)
 ## Run states kept for inspection (tests compare clients against the host at a given tick).
 const STATE_TICKS := 200
+## A player's emotes are passed on at most once per this many seconds; the rest are dropped.
+const EMOTE_GAP := 0.4
 
 class HostPlayer:
 	var id: String
@@ -87,6 +92,8 @@ class HostPlayer:
 	## Client time and claimed body of the newest input (for the tank's clock and ground speed).
 	var last_ct: Variant = null
 	var claim: Move.Body = null
+	## Host time of the newest emote passed on (the emote rate limit).
+	var last_emote := -INF
 
 class History:
 	var o: Entity.OrderlyState
@@ -140,6 +147,10 @@ var stats := HostStats.new()
 ## Every snapshot's size in bytes, by number of players in the run, when a test asks: [players, bytes].
 var keep_sizes := false
 var snapshot_sizes: Array = []
+## Emotes passed on to the other players, and dropped by the rate limit (not in HostStats, which the
+## reference sessions compare).
+var emotes_relayed := 0
+var emotes_dropped := 0
 var _transport: Transport.Transport
 var _start_local: float
 var _players := {}  # id -> HostPlayer, in arrival order
@@ -327,6 +338,23 @@ func _on_message(from: String, data: String, now: float) -> void:
 			var p: HostPlayer = _players.get(id) if id != null else null
 			if p != null and p.connected and not p.left:
 				_on_input(p, m, ht)
+		"emote":
+			var id: Variant = _by_peer.get(from)
+			var p: HostPlayer = _players.get(id) if id != null else null
+			if p != null and p.connected and not p.left and p.joined:
+				_relay_emote(p, m["emote"], ht)
+
+## An emote: passed on to every other player in the room (not back to its sender), rate limited.
+func _relay_emote(p: HostPlayer, emote: String, ht: float) -> void:
+	if ht - p.last_emote < EMOTE_GAP:
+		emotes_dropped += 1
+		return
+	p.last_emote = ht
+	var text := Protocol.encode({"type": "emoted", "player": p.id, "emote": emote, "t": ht})
+	for q: HostPlayer in _players.values():
+		if q != p and q.connected and not q.left and q.joined:
+			_transport.send(q.peer, text)
+			emotes_relayed += 1
 
 ## A join (or a repeated one, when the welcome was lost): the welcome carries the whole state.
 func _join(peer: String) -> void:

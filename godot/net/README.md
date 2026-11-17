@@ -5,7 +5,8 @@ A port of `src/net` (the old browser game's networking) to typed GDScript, prove
 against the TypeScript) and `tests/prop_net.gd` (the fairness rules of `tests/net/rule.test.ts`
 over bot sessions on a hostile network, counts equal to TypeScript's). What changed from the old
 game: the host is the home server (`server/`), not a player's browser; the transport is a
-WebSocket to that server; nothing else.
+WebSocket to that server; nothing else. The game uses it alone too: `local_room.gd` is the same host
+and client in one process, so there is one way to play.
 
 ```
 jsjson.gd       JSON exactly as JavaScript writes and reads it (Godot's own float text is not exact)
@@ -17,11 +18,34 @@ host.gd         NetHost: the authoritative host (host.ts); the server runs it
 client.gd       NetClient: the own body moved locally by the game with the rules (instant), interpolation, the pose hold, the put-back pin,
                 the taken latch, blink guards, inputs, the tank (client.ts)
 transport.gd    the Transport interface, MemoryNetwork (seeded delay/jitter/loss for tests), Pipe
-room_client.gd  what the game uses: the WebSocket to the server, the passphrase, the lobby, a NetClient per run
+room_client.gd  what the game uses: the WebSocket to the server, the passphrase, the lobby, a NetClient per run;
+                bytes_in / bytes_out (what a player costs the link)
+local_room.gd   playing alone: a RoomClient running host.gd + host_rules.gd in-process over two
+                Transport.Pipes (the local player's body trusted, a run at once, `time_scale` for tests)
 ws_server.gd    the server's door (passphrase, limits)
 ```
 
-## Joining the real client to the network (the next task)
+## Emotes
+
+Two messages beside the run's (they never touch the run, and the scripted sessions of `ref_net` and
+`prop_net` never send them):
+
+- `[1, "E", k]` client to host: this player plays emote `k`, an index into `Protocol.EMOTES`
+  (`wave`, `look_behind`, `pray`, `dance_spin`, `dance_snake`, `button`). `Client.emote(name)`.
+- `[1, "M", player, k, t]` host to every OTHER player in the room: `player` played emote `k` at host
+  time `t`. The client appends `{player, emote, t}` to `client.emotes` (keep your own index into it).
+
+`NetHost` passes on at most one emote per player every `EMOTE_GAP` (0.4 s) and drops the rest; its
+counters `emotes_relayed` and `emotes_dropped` are kept outside `HostStats`, so the stats the tests
+compare are unchanged. `server/room.gd` accepts "emote" from a joined player; `decode` validates both
+messages like every other (a bad index is a protocol error).
+
+## The client API (what `client/play_link.gd` does)
+
+The game is joined: `client/play_link.gd` is the only client script that talks to the room, alone
+(`LocalRoom`) or with friends (`RoomClient`); `client/main.gd` draws its snapshot and
+`client/start_screen.gd` is the join form and the lobby (`rc.people`, `rc.start_run()`, `rc.leave()`,
+`rc.status`, `rc.close_code`). What it does each frame is the pattern below.
 
 The game talks to one object, `RoomClient`. Call `poll(now)` every frame (local seconds, any
 monotonic clock), then, while `client` is not null, `frame(now, local)` once per rendered frame with
@@ -89,11 +113,33 @@ What the frame and the client give you:
   the doorway are in `Session.move_local(plan, phase, body, dx, dz)` (exactly what the host checks).
   The host refuses a body further than the player could have gone (sprint only while its own copy of
   the tank allows), so move the body with the rules' speeds.
-- Downed players: the old host keeps what the run does (a catch while the car is here or coming is the
-  soft catch of `host_rules.gd`; the player is put back on their feet). The camera view is not built.
+- Caught players: the host keeps what the run does. A caught player's `status` is "caught" until the
+  car next rides down; only a catch that would wipe the run while the car is here or coming is the
+  soft catch of `host_rules.gd` (the player is put back on their feet; `HostRules.revived` is not used
+  by `host.gd`, so nobody is moved). The game draws a caught crewmate lying where they were taken
+  (`others_view.gd`, from `status`), and a caught player's own screen plays the catch (`f.taken`, the
+  "caught" event). The downed-and-healed rules (B6 as amended) will change the run and the host; the
+  client follows `status`.
 - `rc.status == "closed"`: `rc.close_code` says why (4001 passphrase, 4002 room full, 4003-4006
   limits, 1000 normal).
 
 Things to keep: call `frame` every rendered frame (the hold is per frame); pass the real camera and
 fields of view (the sight test is the logic's own, widened); do not smooth or tween the Orderly's
-pose; do not draw the Orderly on a dark frame.
+pose; do not draw the Orderly on a dark frame. The game draws `f.orderly` exactly (the old bridge's
+"frozen close to you is drawn reaching" pose swap is gone for that reason). `latest["phase"]` is the
+newest snapshot's; the screen (`f.dark`, the Orderly, the others) is drawn about 0.1 s behind it, and
+a blink stays dark one tick past its end, so the lights come back about 0.15 s after the phase turns.
+
+The sight test is generous on purpose (the larger outlines of `Entity.seen_by`): a figure just behind
+a door frame can count as seen and stay frozen though the picture does not show it. That errs on the
+safe side of the fairness rule.
+
+## Checks
+
+- `tools/net_local.mjs` (10 checks): the headless server and three headless GDScript players over
+  real WebSockets with injected delay, then hostile probes.
+- `tools/play_net.mjs` (22 checks): the real Windows game, two windows and a browser, through the start
+  screen, the lobby, the run and back (see `godot/README.md`, Checks). To prove it can fail, replace
+  `_transport.send(q.peer, text)` in `host.gd` `_relay_emote` with
+  `pass  # BREAK: _transport.send(q.peer, text)`, export Windows (`npm run godot:export -- windows`)
+  and run it: the two emote checks fail (18 passed, 2 failed, exit 1). Undo it and export again.

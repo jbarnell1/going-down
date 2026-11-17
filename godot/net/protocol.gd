@@ -37,6 +37,10 @@ const MODES: Array[String] = ["waiting", "hunting", "windUp", "dormant"]
 const NEEDLES: Array[String] = ["off", "idle", "dormant", "recording", "contaminated"]
 const STATUSES: Array[String] = ["ok", "caught", "leftBehind"]
 const GAITS: Array[String] = ["walk", "creep", "sprint"]
+## The emote wheel's emotes (client/crew_view.gd plays them). Not in protocol.ts: the emote messages
+## ("E" client -> host, "M" host -> the other clients) are new in the Godot game. They change nothing
+## in the other messages, and a session that never emotes sends exactly what it did before.
+const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dance_snake", "button"]
 
 ## Limits on what a client may send (the server refuses anything outside them).
 const MAX_NAME := 32
@@ -188,7 +192,7 @@ static func snapshot_text(head: Dictionary, event_texts: PackedStringArray, worl
 	])
 	return "[%d,\"S\",[%s],%s]" % [PROTOCOL_VERSION, ",".join(parts), world]
 
-## Serialises a message (input, join, welcome, leave, ping, pong) to its wire text.
+## Serialises a message (input, join, welcome, leave, ping, pong, emote, emoted) to its wire text.
 static func encode(m: Dictionary) -> String:
 	match String(m["type"]):
 		"input":
@@ -208,6 +212,14 @@ static func encode(m: Dictionary) -> String:
 			return JsJson.stringify([PROTOCOL_VERSION, "P", m["ct"]])
 		"pong":
 			return JsJson.stringify([PROTOCOL_VERSION, "O", m["ct"], m["hr"], m["st"]])
+		"emote":
+			var k := EMOTES.find(String(m["emote"]))
+			if k >= 0:
+				return JsJson.stringify([PROTOCOL_VERSION, "E", k])
+		"emoted":
+			var k := EMOTES.find(String(m["emote"]))
+			if k >= 0:
+				return JsJson.stringify([PROTOCOL_VERSION, "M", m["player"], k, m["t"]])
 	push_error("protocol: cannot encode %s" % str(m["type"]))
 	return ""
 
@@ -428,6 +440,16 @@ static func decode(text: String) -> Variant:
 			if a.size() != 5:
 				return null
 			out = {"type": "pong", "ct": _f(c, a[2]), "hr": _f(c, a[3]), "st": _f(c, a[4])}
+		"E":
+			# A player's emote: [1, "E", index into EMOTES].
+			if a.size() != 3:
+				return null
+			out = {"type": "emote", "emote": _code(c, EMOTES, a[2])}
+		"M":
+			# The host passes an emote on: [1, "M", player id, index into EMOTES, host time].
+			if a.size() != 5:
+				return null
+			out = {"type": "emoted", "player": _s(c, a[2]), "emote": _code(c, EMOTES, a[3]), "t": _f(c, a[4])}
 		_:
 			return null
 	return null if c.bad else out

@@ -260,8 +260,15 @@ s = await until((s) => {
   return s.phase !== 'coming';
 }, 40000, 50);
 await cmd('stopwalk');
-check('never drawn while dark (heard, not seen)', drawnInDark === false);
-check('the lights come back as the car arrives', s.phase === 'boarding' && !s.dark, `phase ${s.phase}, caught ${s.events.caught ?? 0} times so far`);
+// The screen is drawn a little behind the host (interpolation) and the client keeps a blink dark one
+// tick past its end (net/client.gd _is_dark), so the lights come back a moment after the phase turns:
+// within 0.3 s of host time.
+{
+  const lit = s.dark ? await until((s) => { if (s.dark && s.orderly.drawn) drawnInDark = true; return !s.dark; }, 3000, 20) : s;
+  const late = lit.t - s.t;
+  check('never drawn while dark (heard, not seen)', drawnInDark === false);
+  check('the lights come back as the car arrives', s.phase === 'boarding' && !lit.dark && late <= 0.3, `phase ${s.phase}, lit ${late.toFixed(2)} s of host time after it turned, caught ${s.events.caught ?? 0} times so far`);
+}
 
 // ---- 8. The dash back. If it took us at some point, our tape is on the floor where it happened: get it.
 if (s.client.noise) s = await until((s) => !s.client.noise, 4000);

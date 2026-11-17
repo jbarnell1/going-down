@@ -1,7 +1,9 @@
 // First copied from the client trial on 16 Nov 2026; this file is now edited here (see godot/README.md).
 // Measures the browser build: download sizes, first frame on a first visit (a fresh browser profile,
-// so nothing cached) at both quality levels, and frame times (vsync-capped and uncapped) standing in
-// the clean corridor looking down it. Writes shots/web-metrics.json.
+// so nothing cached; the first frame is the start screen's) at both quality levels, and frame times
+// (vsync-capped and uncapped) playing alone, standing in the clean corridor looking down it; `engine`
+// carries the client's `stats` (rules_ms_avg: the cost per frame of playing alone, the in-page room
+// included). Writes shots/web-metrics.json.
 // Usage (server already running): node measure_web.mjs <port>
 import { createRequire } from 'node:module';
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
@@ -44,6 +46,10 @@ async function load(quality, extra = []) {
 const cmd = (page, c) => page.evaluate((c) => { window.gdCmd(c); return window.gdResult; }, c);
 
 async function frameTimes(page) {
+  // The start screen comes first: press PLAY ALONE (the room runs in the page) and wait for the run.
+  await cmd(page, 'alone');
+  await page.waitForFunction(() => { window.gdCmd('state'); try { return JSON.parse(window.gdResult).phase !== undefined; } catch { return false; } }, null, { timeout: 60000 });
+  await page.waitForTimeout(500);
   // Stand in the clean corridor nearest the lift, looking down it (the most lights in view).
   const plan = JSON.parse(await cmd(page, 'plan'));
   const W = plan.width;
