@@ -318,6 +318,10 @@ try {
   await A.cmd('call');
   a = await until(A.state, (s) => s.phase === 'coming', 5000, 50);
   check('A calls the lift: the car is coming for both', a.phase === 'coming' && (await B.state()).phase === 'coming', `A ${a.phase}`);
+  // Both hold their instruments up through the wait, so there are readings to bank (the board's total
+  // must not be a vacuous 0).
+  await A.cmd('raise 1');
+  await B.cmd('raise 1');
   // B steps a little to the side (out of A's line toward the corridor), then looks at the doors.
   await B.cmd(`face ${car.doorX} ${car.doorZ} 1.6`);
   await B.cmd('move 0 1 0 0');
@@ -389,6 +393,7 @@ try {
   const t8 = Date.now();
   const say = (c, what, s) => console.log(`  [${((Date.now() - t8) / 1000).toFixed(1)} s] ${c.label} ${what}: phase ${s.phase}, bell ${s.bellLeft?.toFixed?.(1)}, at ${s.me ? `${s.me.x.toFixed(2)},${s.me.z.toFixed(2)} (${s.me.status}) aboard ${s.me.aboard} side ${s.me.side}` : 'not in a run'}, auto ${s.auto}`);
   const board = async (c) => {
+    await c.cmd('raise 0');
     const s0 = await c.state();
     say(c, 'boarding starts', s0);
     if (s0.me?.status !== 'ok') return;
@@ -450,7 +455,7 @@ try {
   a = await A.state();
   b = await B.state();
   const totalOn = (s) => { const l = (s.client.board ?? []).find((x) => /BANKED \d+/.test(x)); return l ? Number(l.match(/BANKED (\d+)/)[1]) : NaN; };
-  check('both read the same banked total on the board, and it is the host\'s', totalOn(a) === totalOn(b) && totalOn(a) === a.day.result.banked && totalOn(b) === b.day.result.banked
+  check('both read the same banked total on the board, and it is the host\'s (not vacuous: more than 0)', a.day.result.banked > 0 && totalOn(a) === totalOn(b) && totalOn(a) === a.day.result.banked && totalOn(b) === b.day.result.banked
     && a.day.result.banked === Math.floor(bankedTotal) && JSON.stringify(a.client.board) === JSON.stringify(b.client.board),
     `A reads ${totalOn(a)}, B reads ${totalOn(b)}, the host settled ${a.day.result.banked} (banked ${bankedTotal?.toFixed(2)}); board: ${a.client.board.join(' / ')}`);
   await A.shot('19-ann-reads-the-day-board.png');

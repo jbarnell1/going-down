@@ -1282,7 +1282,8 @@ func _show_day(s: Dictionary, now: int) -> void:
 		pv.call("show_day_board", lines)
 	var me: Dictionary = s["me"]
 	var cell := Vector2i(floori(float(me["x"]) / Prison.CELL_SIZE), floori(float(me["z"]) / Prison.CELL_SIZE))
-	if int(me["level"]) == 0 and Prison.BANK_ROOM.has_point(cell) and not _lights_out:
+	# Anywhere in the bank room but right in front of the board itself (there the board is read on the wall).
+	if int(me["level"]) == 0 and Prison.BANK_ROOM.has_point(cell) and cell != Prison.REPORT_BOARD and not _lights_out:
 		hud.board_lines = _board
 
 ## The ride up's headline from the settled day (the host's facts).

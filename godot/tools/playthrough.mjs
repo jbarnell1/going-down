@@ -364,7 +364,7 @@ s = await state();
   check('the report board shows the host\'s day: owed, banked, short by, streak, misses left, the odds, share and credits',
     has(`OWED ${r.quota}  BANKED ${r.banked}`) && has(`SHORT BY ${r.short_by}`) && has(`STREAK ${r.streak}  MISSES LEFT ${r.misses_left}`)
       && b.some((l) => l.startsWith('NO ROLL') || l.startsWith('ROLL ODDS') || l.startsWith('THIRD MISS')) && mine !== '' && r.banked === Math.floor(bankedTotal)
-      && JSON.stringify(s.client.reportBoard) === JSON.stringify(b) && JSON.stringify(s.client.hudBoard) === JSON.stringify(b),
+      && JSON.stringify(s.client.reportBoard) === JSON.stringify(b),
     b.join(' / '));
 }
 await shot('day-board');
@@ -376,7 +376,8 @@ s = await state();
 const shopPrompt = s.client.prompt;
 s = await walk(0, 4, 11, 6);
 s = await state();
-check('the windows say CLOSED TONIGHT', shopPrompt === 'SHOP  CLOSED TONIGHT' && s.client.prompt === 'SKILL TREE  CLOSED TONIGHT', `"${shopPrompt}", "${s.client.prompt}"`);
+check('the windows say CLOSED TONIGHT; the board is read on screen in the bank room', shopPrompt === 'SHOP  CLOSED TONIGHT' && s.client.prompt === 'SKILL TREE  CLOSED TONIGHT'
+  && JSON.stringify(s.client.hudBoard) === JSON.stringify(s.client.board), `"${shopPrompt}", "${s.client.prompt}"`);
 await cmd('face 9 24.3 1.9');
 await wait(500);
 await shot('windows-closed-tonight');
