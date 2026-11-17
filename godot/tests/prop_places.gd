@@ -149,6 +149,12 @@ func test_residents(t: T) -> void:
 	t.eq(Places.resident(&"prison").name, "", "the prison has no resident")
 	t.eq(Places.entity_id(&"clinic", 2), "orderly-2", "the Clinic's entity id is as recorded")
 	t.eq(Places.entity_id(&"annex", 3), "temp-3", "the Annex's entity id")
+	t.check(Places.resident(&"annex").body == Entity.temp_body(), "the Temp has its own body (entity.gd temp_body)")
+	t.check(Places.create_resident(Places.generate("body", 3)).kind == Entity.temp_body(), "the Annex's resident starts in the Temp's body")
+	t.check(Places.create_resident(Places.generate("body", 1)).kind == Entity.orderly_body(), "the Clinic's resident starts in the Orderly's body")
+	var ids: Array[String] = ["a"]
+	var deep := HostRules.new(true, 3, Places.FULL).prepare(Run.create_run("body", ids))
+	t.check(Entity.kind_of(deep.orderly) == Entity.temp_body(), "a run's Annex floor carries the Temp's body")
 
 func test_a_run_takes_a_deck(t: T) -> void:
 	var ids: Array[String] = ["a", "b"]

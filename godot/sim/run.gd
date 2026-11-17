@@ -1112,7 +1112,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				# Never huntable inside the car. With the doors open and the lights on, they still watch the floor.
 				var w := _threshold_view(car, i)
 				var just_w: Array[Entity.PlayerView] = [w]
-				if open and not blind and not i.blind and Entity.seen_by(s.plan, s.orderly.body, just_w) != null:
+				if open and not blind and not i.blind and Entity.seen_by(s.plan, s.orderly.body, just_w, Entity.kind_of(s.orderly)) != null:
 					views.append(w)
 				else:
 					views.append(_view_of(i, false, false))

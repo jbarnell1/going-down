@@ -53,9 +53,10 @@ static func start_body(car: Run.CarGeometry, i: int, n: int) -> Move.Body:
 	var uv := start_spot(i, n)
 	return Run.car_body(car, uv[0], uv[1])
 
-## A dormant Orderly that never wakes, standing where the floor's Orderly would start.
+## A dormant Orderly that never wakes, standing where the floor's Orderly would start (the floor's own
+## resident, in its own body).
 static func parked_orderly(state: Run.RunState) -> Entity.OrderlyState:
-	var o := Entity.create_orderly(state.plan)
+	var o := Places.create_resident(state.plan)
 	o.mode = &"dormant"
 	o.dormant_left = INF
 	return o

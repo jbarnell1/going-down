@@ -53,12 +53,12 @@ class Resident:
 	var stillness: bool
 	## What the instruments call its trait (instrument.gd records only "stillness" so far).
 	var trait_name: StringName
-	## Its body numbers (height, seen size, speeds), or null for the Orderly's. Filled when entity.gd has
-	## them (T16f): Entity.orderly_body() for the Clinic, Entity.temp_body() for the Annex; create_resident
-	## then passes it to Entity.create_orderly, and everything after reads it from the state.
-	var body: Variant = null
+	## Its body numbers (entity.gd BodySettings: height, seen size, speeds, sound), or null where none is
+	## made yet (the Minder stands in with the Orderly's). create_resident gives it to the floor's state,
+	## and everything after reads it from there (Entity.kind_of).
+	var body: Entity.BodySettings = null
 
-	static func make(name_: String, stillness_: bool, trait_: StringName, body_: Variant = null) -> Resident:
+	static func make(name_: String, stillness_: bool, trait_: StringName, body_: Entity.BodySettings = null) -> Resident:
 		var r := Resident.new()
 		r.name = name_
 		r.stillness = stillness_
@@ -66,13 +66,13 @@ class Resident:
 		r.body = body_
 		return r
 
-## The resident of a place. The Temp runs the Orderly's rules and body until its own numbers land (T16f).
+## The resident of a place. The Temp keeps the Orderly's Stillness rules, in its own body (T16f).
 static func resident(place: StringName) -> Resident:
 	match place:
 		CLINIC:
-			return Resident.make("Orderly", true, &"stillness")
+			return Resident.make("Orderly", true, &"stillness", Entity.orderly_body())
 		ANNEX:
-			return Resident.make("Temp", true, &"stillness")
+			return Resident.make("Temp", true, &"stillness", Entity.temp_body())
 		PLAYROOM:
 			return Resident.make("Minder", false, &"hearing")
 	return Resident.make("", false, &"")
@@ -124,11 +124,10 @@ static func generate(seed: String, depth: int, deck: Array = FULL) -> Floor.Floo
 			return Playroom.generate_playroom(seed, depth)
 	return Clinic.generate_clinic(seed, depth)
 
-## The resident a floor starts with: the Orderly's state at plan.entity_start, whoever lives there.
-## THE one place a floor's resident is made (run.gd, net/host_rules.gd): when the Temp's body lands
-## (T16f) this becomes Entity.create_orderly(plan, resident(plan.place).body).
+## The resident a floor starts with, at plan.entity_start in its own body. THE one place a floor's
+## resident is made (run.gd, net/host_rules.gd).
 static func create_resident(plan: Floor.FloorPlan) -> Entity.OrderlyState:
-	return Entity.create_orderly(plan)
+	return Entity.create_orderly(plan, resident(plan.place).body)
 
 # ---------------------------------------------------------------------------------------------
 # The Minder's wander. seek.gd holds the Playroom's real rules (the count, the search, being found);
