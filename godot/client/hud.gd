@@ -128,11 +128,16 @@ func _draw_tags(px: float) -> void:
 		var a := float(t["alpha"])
 		if a <= 0.01:
 			continue
-		var w := PixelFont.width(text) * px
+		# Half as big again as the HUD (main.gd), whole pixels; a dark outline all round reads on any wall.
+		var tp := roundf(px * float(t.get("size", 1.0)))
+		var w := PixelFont.width(text) * tp
 		var p: Vector2 = t["pos"]
-		var at := Vector2(floorf(p.x - w * 0.5), floorf(p.y - 9 * px))
-		draw_rect(Rect2(at - Vector2(2, 2) * px, Vector2(w + 4 * px, 11 * px)), Color(0, 0, 0, 0.45 * a))
-		PixelFont.draw_shadowed(self, text, at, px, Color(0.96, 0.96, 0.92, a), Color(0, 0, 0, 0.6 * a))
+		var at := Vector2(floorf(p.x - w * 0.5), floorf(p.y - 9 * tp))
+		var o := maxf(1.0, floorf(tp * 0.5))
+		var ink := Color(0, 0, 0, 0.8 * a)
+		for dv: Vector2 in [Vector2(-o, 0), Vector2(o, 0), Vector2(0, -o), Vector2(0, o), Vector2(-o, -o), Vector2(o, -o), Vector2(-o, o), Vector2(o, o)]:
+			PixelFont.draw(self, text, at + dv, tp, ink)
+		PixelFont.draw(self, text, at, tp, Color(0.96, 0.96, 0.92, a))
 
 ## Six labels round the middle of the screen, the one aimed at lit; a line toward it.
 func _draw_wheel(px: float) -> void:

@@ -123,9 +123,13 @@ opens the game, presses JOIN FRIENDS and types the address, a name and the passp
 
 Other players are drawn as crewmates by `client/others_view.gd`: interpolated by the network client,
 with their gait, the instrument raised, lying down while the host says they are caught, and skin,
-headwear and chest number from their place in the room; their footsteps are heard. A name tag over
-each fades from 5 to 16 m and is hidden by walls, by the car's shut doors, in the dark and while the
-emote wheel is open. Emotes (WAVE, LOOK BEHIND, PRAY, DANCE SPIN, DANCE SNAKE, BUTTON: clockwise from
+headwear and chest number from their place in the room; their footsteps are heard. The clip plays at
+the measured ground speed over the stride measured from the clip's planted toe, the body turns to
+where it moves (backwards it walks backwards) with the chest and mask twisted back to the look, and
+the creep is a shortened sneak (`client/crew_view.gd`; `tools/crew_check.gd` measures the foot slip).
+A name tag over each, crisp over the tape with a dark outline, shows only up close (`main.gd`
+TAG_RANGE, 2 m: further off you cannot tell who is who without asking or walking up) and is hidden by
+walls, by the car's shut doors, in the dark and while the emote wheel is open. Emotes (WAVE, LOOK BEHIND, PRAY, DANCE SPIN, DANCE SNAKE, BUTTON: clockwise from
 the top of the wheel, 60 degrees each) go to the host, which passes them on to everyone else (at most
 one every 0.4 s per player); they play on your figure on their screens. Every crewmate's mask screen
 shows the face that player drew (the host passes faces on once, `net/README.md` Faces), and the
@@ -178,7 +182,7 @@ comes first and Enter keeps the face; a wrong passphrase gives the plain-words e
 to the title; each player draws a different face (the editor's buttons and mouse drags); the lobby
 lists both names; a browser client joins the same server
 (skip with `--web=0`); Start starts the run for both; the lift's monitor shows both faces on both screens; each sees the
-other where the other really stands, drawn, with a readable name tag, dressed differently, wearing the
+other where the other really stands, drawn, its name tag only up close, dressed differently, wearing the
 face the other drew on the mask (the mask's picture hashed against the face the other sent), each
 face received exactly once; nobody sees their own figure; the wheel
 (WAVE aimed at the top, a tap sends nothing, DANCE SPIN straight down) and each emote seen by the

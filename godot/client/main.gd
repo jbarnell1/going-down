@@ -54,9 +54,9 @@ const BOARD_TIME := 20.0
 const EMOTE_LABELS: Array[String] = ["WAVE", "LOOK BEHIND", "PRAY", "DANCE SPIN", "DANCE SNAKE", "BUTTON"]
 ## The wheel's dead zone (window pixels of mouse travel): letting go inside it cancels.
 const WHEEL_DEAD := 40.0
-## Name tags: fully readable to this distance (m), gone at TAG_FAR.
-const TAG_NEAR := 5.0
-const TAG_FAR := 16.0
+## Name tags show only this close (m, body to body; 0 = never). Not knowing who is who further off is
+## part of the fear (a teammate may wear the wrong face): ask, or walk up to them.
+const TAG_RANGE := 2.0
 ## Giving up on a connection that never opens (seconds).
 const CONNECT_TIMEOUT := 10.0
 
@@ -1014,8 +1014,8 @@ func _reset_eye_stats() -> void:
 	for st: String in ["stand", "creep", "down"]:
 		eye_stats[st] = {"frames": 0, "min": 99.0, "max": -99.0}
 
-## Name tags over the other players: projected from the head into the window, readable to TAG_NEAR
-## metres and gone at TAG_FAR, never through walls (the rules' line of sight), not in the dark.
+## Name tags over the other players: projected from the head into the window, only within TAG_RANGE,
+## never through walls (the rules' line of sight), not in the dark.
 func _name_tags(s: Dictionary, dark: bool) -> void:
 	var tags: Array = []
 	var win := get_viewport().get_visible_rect().size
@@ -1027,20 +1027,23 @@ func _name_tags(s: Dictionary, dark: bool) -> void:
 		var eye_h := EyeHeight.target(str(o["status"]), str(o["gait"]))
 		var head := Vector3(float(o["x"]), float(o["y"]) + eye_h + 0.4, float(o["z"]))
 		var d := head.distance_to(cam.position)
-		var a := clampf(1.0 - (d - TAG_NEAR) / (TAG_FAR - TAG_NEAR), 0.0, 1.0)
+		# Full within the nearer 85 % of TAG_RANGE, fading out over the rest (no pop at the edge).
+		var near := Vector2(head.x - cam.position.x, head.z - cam.position.z).length()
+		var a := clampf((TAG_RANGE - near) / (0.15 * TAG_RANGE), 0.0, 1.0) if TAG_RANGE > 0.0 else 0.0
 		var shown := not dark and a > 0.0 and not cam.is_position_behind(head) and d > 0.4
 		if shown:
 			shown = link.can_see_point(vb, Vector3(head.x, float(o["y"]) + eye_h - 0.05, head.z), int(o["level"]), open)
 		var p := cam.unproject_position(head) * k
 		# Whole tags only: one cut by the edge of the picture reads as a glitch.
-		var hp := maxf(2.0, floorf(win.y / 320.0))   # the HUD's pixel (hud.gd _scale)
+		var tag_size := 1.5   # half as big again as the HUD's text: it is only ever seen up close
+		var hp := maxf(2.0, floorf(win.y / 320.0)) * tag_size   # the tag's pixel (hud.gd _scale, _draw_tags)
 		var half := (PixelFont.width(str(o["name"]).to_upper()) * 0.5 + 2.0) * hp
 		if shown and (p.x < half or p.y < 11.0 * hp or p.x > win.x - half or p.y > win.y):
 			shown = false
 		o["tagAlpha"] = a if shown else 0.0
 		o["tagPos"] = [p.x, p.y]
 		if shown:
-			tags.append({"text": str(o["name"]).to_upper(), "pos": p, "alpha": a})
+			tags.append({"text": str(o["name"]).to_upper(), "pos": p, "alpha": a, "size": tag_size})
 	hud.tags = tags
 
 func _emergency_level(seconds: float) -> float:
@@ -1531,7 +1534,7 @@ func _test_state() -> Dictionary:
 			"spoken": announcer.history.map(func(h: Dictionary) -> String: return str(h["id"])), "caught": caught_at >= 0, "noise": _noise_on(),
 			"wentDown": hud.went_down, "end": hud.end_lines.map(func(l: Dictionary) -> String: return str(l["text"])), "tapeText": hud.tape_text,
 			"prompt": hud.prompt, "menu": hud.menu_on, "built": built_depth, "hudSize": [hud.size.x, hud.size.y], "lift": _lift_drawn(),
-			"wheel": wheel_open, "wheelSel": hud.wheel_sel, "note": hud.note, "tags": hud.tags.map(func(t: Dictionary) -> String: return str(t["text"])),
+			"wheel": wheel_open, "wheelSel": hud.wheel_sel, "note": hud.note, "tags": hud.tags.map(func(t: Dictionary) -> String: return str(t["text"])), "tagRange": TAG_RANGE,
 			"camY": cam.position.y},
 		"events": event_counts,
 	}
