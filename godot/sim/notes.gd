@@ -22,8 +22,11 @@
 #   "tape_dropper": String          who dropped a tape         (trigger "tape")
 #   "quota_top":    String          who did most of the quota  (trigger "quota")
 #   "lift_caller":  String          who called the lift        (trigger "lift")
+#   "gone_to":      String          who it relocated near      (trigger "relocate")
 # Counts must be ints, at least 1 (marks_used at least 0). Names must be non-empty and hold no braces.
-# Triggers: "lobby", "wake", "hunt" (every 25 s of hunting), "catch", "heal", "tape", "quota", "lift".
+# Triggers: "lobby", "wake", "hunt" (every 25 s of hunting), "catch", "heal", "tape", "quota", "lift", and the
+# Lonely Temp's two (sim/lonely.gd, T19c): "chase" (it started chasing someone alone: "alone" is just them, and
+# the note goes where it stood) and "relocate" (it left to go near someone: "Gone to see {name}.", where it left).
 #
 # THE STATE: new_state() gives {"count": int, "used": Array of template ids}. post() returns a new state;
 # keep it with the run and pass it back, so the cap and the no-repeat rule hold.

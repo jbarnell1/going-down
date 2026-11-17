@@ -97,6 +97,11 @@
 # Relocation (sim/run.gd relocation, sim/relocate.gd; T19e): the run decides. Once the resident has relocated on
 # the floor every snapshot carries the count (Protocol "reloc"), and a seen report of a pose from before its last
 # relocation is stale (counted as such, nothing put back or held): it is of a place it has left.
+#
+# Lonely (sim/run.gd lonely, sim/lonely.gd; T19c): the Temp is not a Stillness resident then (Run.resident_of), so
+# no seen report or "I can see it" is applied to it: looking does nothing. The catch still waits for its
+# victim's screen (_confirm_catch), which the Lonely step honours. Every snapshot on its floor carries who it
+# chases (Protocol "lonely"), which also tells each client not to hold the figure.
 extends RefCounted
 
 const Run = preload("res://sim/run.gd")
@@ -639,7 +644,8 @@ func _step(now: float) -> void:
 	var t_next := s.t + TICK
 
 	# 1. What the clients saw.
-	var still := Places.resident(s.plan.place).stillness
+	# A Lonely Temp (sim/lonely.gd) is not Stillness: looking does nothing, so no report is applied to it.
+	var still := Run.resident_of(s).stillness
 	var q := _queue
 	_queue = []
 	if still:
@@ -1105,6 +1111,10 @@ func world(full: bool = false) -> Dictionary:
 	# Relocation (T19e): the count, once it has relocated on this floor (Protocol "reloc").
 	if s.orderly.relocations > 0:
 		out["reloc"] = s.orderly.relocations
+	# Lonely (T19c): on a Lonely resident's floor, who it chases ("" for nobody; Protocol "lonely").
+	if not Run.at_home(s) and Run.resident_of(s).trait_name == &"lonely":
+		var o := s.orderly
+		out["lonely"] = str(o.lonely_target) if o.lonely_phase == &"chase" and o.lonely_target != null else ""
 	return out
 
 ## Two-watcher Stillness (T19a; Protocol.enc_watch): the count as the host has it this tick, {need,

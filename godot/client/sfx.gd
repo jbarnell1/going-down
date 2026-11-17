@@ -737,6 +737,56 @@ func world(delta: float, s: Dictionary, emergency: float) -> void:
 	_orderly(delta, o if _clinic else {})
 	_room_tones(float(s.get("t", 0.0)), o, dark)
 	_arrival_cues(s)  # T19e relocation: see "Arrival cues" below
+	_phones(s)  # T19c Lonely: see "The phones" below
+
+# --- The phones (T19c the Temp's Lonely; this block only) ---------------------------------------------------
+# While the Temp chases someone who is alone (the rules' "chaseStarted" until "chaseEnded": sim/lonely.gd), every
+# desk phone on the floor rings: a double trill every PHONE_EVERY_MS, from everywhere (not placed in the world, so
+# it gives no direction), telling the whole crew that someone is alone. Existing sounds only: the lift's warning
+# tone ("bell_warn"), twice. It stops on "chaseEnded", on any relocation, catch or new floor.
+const PHONE_EVERY_MS := 2600
+const PHONE_GAP_MS := 240
+const PHONE_DB := -4.0
+var _phone: AudioStreamPlayer = null
+var _phone_on := false
+var _phone_depth := -1
+var _phone_next := 0
+var _phone_second := 0
+
+func _phones(s: Dictionary) -> void:
+	if _phone == null:
+		_phone = _player2d(streams["bell_warn"], "Effects")
+	var depth := int(s.get("depth", -1))
+	if depth != _phone_depth:
+		_phone_depth = depth
+		_phone_on = false
+	var now := Time.get_ticks_msec()
+	for ev: Variant in s.get("events", []):
+		if not ev is Dictionary:
+			continue
+		match str((ev as Dictionary).get("type", "")):
+			"chaseStarted":
+				if not _phone_on:
+					_phone_next = now
+				_phone_on = true
+			"chaseEnded", "relocated", "caught", "rodeDown", "wiped", "banked":
+				_phone_on = false
+	if not _phone_on or not _ok("fx"):
+		_phone_second = 0
+		return
+	if now >= _phone_next:
+		_phone_ring()
+		_phone_second = now + PHONE_GAP_MS
+		_phone_next = now + PHONE_EVERY_MS
+	elif _phone_second > 0 and now >= _phone_second:
+		_phone_ring()
+		_phone_second = 0
+
+func _phone_ring() -> void:
+	_phone.volume_db = BASE_DB + float(SYNTH_DB["bell_warn"]) + PHONE_DB
+	_phone.play()
+	_note("phone")
+# --- end of the phones -------------------------------------------------------------------------------------
 
 # --- Arrival cues (T19e relocation; this block only) ------------------------------------------------
 # The rules' "relocated" event (sim/relocate.gd: the resident left where nobody could see it and arrived

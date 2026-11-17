@@ -88,6 +88,11 @@
 # can see; snapshots carry how often it has on this floor ("reloc"). Between two snapshots whose counts differ the
 # figure is never blended: it is drawn at the newer one's pose (a snap), so it is never seen sliding through
 # walls on the way. Its arrival cue is the "relocated" event, in `events` like any other.
+#
+# Lonely (sim/lonely.gd; T19c). On a floor whose Temp is Lonely the snapshots carry "lonely" (who it chases, or
+# ""): looking does nothing to it, so it is drawn where the snapshots say, never held, nothing is reported and
+# no eye marks show, as for the Minder. The events "chaseStarted" and "chaseEnded" arrive in `events` (the
+# phones: client/sfx.gd).
 extends RefCounted
 
 const Move = preload("res://sim/move.gd")
@@ -738,8 +743,8 @@ func frame(now: float, local: LocalFrame) -> Frame:
 		var plan := Session.plan_for(seed, a_depth)
 		var open := Session.doors_open_in(a["phase"]) or Session.doors_open_in(b["phase"]) or (latest != null and Session.doors_open_in(latest["phase"]))
 		var same := _drawn != null and _drawn_depth == a_depth
-		if not Places.resident(plan.place).stillness:
-			# Not a Stillness resident (the Playroom's Minder): looking does nothing, so it is drawn
+		if not _still(plan.place, a, b):
+			# Not a Stillness resident (the Playroom's Minder, the Lonely Temp): looking does nothing, so it is drawn
 			# where the snapshots say, never held, and nothing is reported.
 			_frozen = false
 			_pin = null
@@ -783,7 +788,7 @@ func frame(now: float, local: LocalFrame) -> Frame:
 				_drawn = cand
 		_drawn_depth = a_depth
 		orderly = _drawn
-		if Places.resident(plan.place).stillness:
+		if _still(plan.place, a, b):
 			_set_eyes(eyes, seeing_now, not pinned and not _bending(a, b))
 	else:
 		_drawn = null
@@ -874,6 +879,11 @@ func _set_eyes(eyes: Array, seeing_now: bool, free: bool) -> void:
 		elif all.is_empty() and seeing_now:
 			by = str(id)
 	_eyes_frame = [seeing_now, need, lit, by]
+
+## The floor's resident is held by looking (Stillness): not the Playroom's Minder, and not a Lonely Temp (its
+## floor's snapshots carry "lonely": see the header).
+static func _still(place: StringName, a: Dictionary, b: Dictionary) -> bool:
+	return Places.resident(place).stillness and not a.has("lonely") and not b.has("lonely")
 
 ## The resident relocated between snapshots `a` and `b` (their relocation counts differ): see the header.
 static func _moved_on(a: Dictionary, b: Dictionary) -> bool:

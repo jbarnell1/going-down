@@ -4,7 +4,9 @@
 # Pay comes from holding the instrument near an entity. It works by closeness, not by aim, and
 # holding it is not looking (nothing here touches a PlayerView). It only records the scary part:
 # a trait records only while the entity is doing the thing its safety rule protects you from. For
-# the Orderly's Stillness that is "while it moves", which is only while nobody is looking at it.
+# the Orderly's Stillness that is "while it moves", which is only while nobody is looking at it. For
+# the Temp's Lonely (sim/lonely.gd, T19c) it is "while it chases", and only on the instrument of the
+# player it chases: the run says so (EntityTick.acting and holders), as it does for Hearing.
 #
 # Per tick, AFTER the entity has been stepped, the game calls step_crew once. Each raised
 # instrument decides its needle and grows its current reading; a reading closes after a short gap
@@ -76,7 +78,8 @@ const INSTRUMENT_HEIGHT := 1.2
 ## Height above the entity's feet that line of sight across levels aims at.
 const ENTITY_CHEST := 1.7
 ## What the slip says, per trait. Printed the first time a trait is recorded in a run.
-const SLIP_TEXT := {&"stillness": "recorded while: subject moving", &"hearing": "recorded while: subject searching"}
+const SLIP_TEXT := {&"stillness": "recorded while: subject moving", &"hearing": "recorded while: subject searching",
+	&"lonely": "recorded while: subject pursuing. operator alone."}
 
 const EPS := 1e-9
 
@@ -153,7 +156,8 @@ class EntityTick:
 	## the 6 s). The run says so; nothing here can tell from the poses. Unused by Stillness.
 	var acting: bool = false
 	## The holders who may record it this tick ({player id: true}), or null for every holder. The run
-	## gates Hearing per player (docs/floors/playarea.md section 11). Stillness leaves it null.
+	## gates Hearing per player (docs/floors/playarea.md section 11) and Lonely to the chased player
+	## (sim/lonely.gd). Stillness leaves it null.
 	var holders: Variant = null
 
 	static func make(id_: String, trait_: StringName, prev_: Entity.OrderlyState, next_: Entity.OrderlyState, events_: Array[Dictionary]) -> EntityTick:
@@ -286,7 +290,7 @@ static func trait_acting(e: EntityTick) -> bool:
 	match e.trait_name:
 		&"stillness":
 			return stillness_acting(e.prev, e.next)
-		&"hearing":
+		&"hearing", &"lonely":
 			return e.acting
 	return false
 

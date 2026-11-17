@@ -1,6 +1,6 @@
 {
   "cap_per_floor": 14,
-  "triggers": ["lobby", "wake", "hunt", "catch", "heal", "tape", "quota", "lift"],
+  "triggers": ["lobby", "wake", "hunt", "catch", "heal", "tape", "quota", "lift", "chase", "relocate"],
   "templates": [
     {"id": 1, "triggers": ["lobby"], "text": "Welcome, {name}. Your desk is ready. It has always been ready.", "slots": {"name": "any:names"}},
     {"id": 2, "triggers": ["lobby", "hunt"], "text": "{name} has walked past this door {n} times. It is the same door.", "slots": {"name": "any:names", "n": "by:door_passes:name"}},
@@ -8,7 +8,7 @@
     {"id": 4, "triggers": ["hunt", "lift"], "text": "{name} is furthest from the lift. Somebody has to be.", "slots": {"name": "fact:furthest"}},
     {"id": 5, "triggers": ["wake", "hunt"], "text": "Has anyone seen {name}? We have.", "slots": {"name": "any:names"}},
     {"id": 6, "triggers": ["hunt"], "text": "{name} looked at us for {n} seconds. Eye contact builds trust.", "slots": {"name": "any:names", "n": "by:look_seconds:name"}},
-    {"id": 7, "triggers": ["hunt", "wake"], "text": "{name} is alone. We thought the rest of you should know.", "slots": {"name": "any:alone"}},
+    {"id": 7, "triggers": ["hunt", "wake", "chase"], "text": "{name} is alone. We thought the rest of you should know.", "slots": {"name": "any:alone"}},
     {"id": 8, "triggers": ["hunt"], "text": "{name} and {name2}: you are standing very close. HR has been informed.", "slots": {"name": "pair:close_pairs:0", "name2": "pair:close_pairs:1"}},
     {"id": 9, "triggers": ["hunt", "lobby"], "text": "We never touch your marks, {name}. We do read them.", "slots": {"name": "any:names"}},
     {"id": 10, "triggers": ["hunt", "lift"], "text": "The crew has used {n} of {cap} marks. Stationery is not unlimited.", "slots": {"n": "fact:marks_used", "cap": "fact:marks_cap"}, "min": 0},
@@ -21,6 +21,7 @@
     {"id": 17, "triggers": ["hunt", "wake", "lobby"], "text": "All signs on this floor are correct. All signs on this floor are correct.", "slots": {}},
     {"id": 18, "triggers": ["hunt", "catch"], "text": "This is note {n} for {name}. Collect ten for a one-to-one.", "slots": {"name": "any:names", "n": "by:notes_for:name"}},
     {"id": 19, "triggers": ["catch"], "text": "{name}, your face is in the copier. It came out well.", "slots": {"name": "fact:caught"}},
-    {"id": 20, "triggers": ["wake", "hunt"], "text": "Thank you for your patience, {name}. We are never far on this.", "slots": {"name": "any:names"}}
+    {"id": 20, "triggers": ["wake", "hunt"], "text": "Thank you for your patience, {name}. We are never far on this.", "slots": {"name": "any:names"}},
+    {"id": 21, "triggers": ["relocate"], "text": "Gone to see {name}.", "slots": {"name": "fact:gone_to"}}
   ]
 }

@@ -8,9 +8,9 @@ const T = preload("res://tests/t.gd")
 const Notes = preload("res://sim/notes.gd")
 const Rng = preload("res://sim/rng.gd")
 
-const TRIGGERS: Array[String] = ["lobby", "wake", "hunt", "catch", "heal", "tape", "quota", "lift"]
+const TRIGGERS: Array[String] = ["lobby", "wake", "hunt", "catch", "heal", "tape", "quota", "lift", "chase", "relocate"]
 const POOL: Array[String] = ["Ada", "Bram", "Cleo", "Dov", "Edda", "Finn"]
-const FACT_KEYS: Array[String] = ["names", "alone", "close_pairs", "door_passes", "sprints", "look_seconds", "notes_for", "furthest", "marks_used", "marks_cap", "caught", "healed", "healer", "tape_dropper", "quota_top", "lift_caller"]
+const FACT_KEYS: Array[String] = ["names", "alone", "close_pairs", "door_passes", "sprints", "look_seconds", "notes_for", "furthest", "marks_used", "marks_cap", "caught", "healed", "healer", "tape_dropper", "quota_top", "lift_caller", "gone_to"]
 ## The words and signs a note must never hold (A2: the only directions to trust are the crew's own marks).
 const DIRECTION_WORDS: Array[String] = ["left", "right", "ahead", "behind", "north", "south", "east", "west", "northeast", "northwest", "southeast", "southwest", "forward", "forwards", "backward", "backwards", "upstairs", "downstairs", "clockwise", "anticlockwise", "arrow", "arrows", "direction", "this way", "that way", "turn"]
 const ARROW_SIGNS: Array[String] = ["->", "<-", "=>", "<=", "→", "←", "↑", "↓", "↔", "➜", "➔", "➡", "⬅", "⬆", "⬇", "▶", "◀", "^", ">>", "<<"]
@@ -38,7 +38,7 @@ func _rand_facts(rng: Rng) -> Dictionary:
 	f["furthest"] = rng.pick(names)
 	f["marks_used"] = rng.int_in(0, 3)
 	f["marks_cap"] = rng.int_in(3, 9)
-	for k: String in ["caught", "healed", "healer", "tape_dropper", "quota_top", "lift_caller"]:
+	for k: String in ["caught", "healed", "healer", "tape_dropper", "quota_top", "lift_caller", "gone_to"]:
 		if rng.chance(0.7):
 			f[k] = rng.pick(names)
 	# Knock out whole facts at random: a template that needs one must be skipped.
@@ -110,6 +110,8 @@ func _matches_facts(id: int, g: Dictionary, f: Dictionary, trigger: String) -> b
 			return true
 		18:
 			return (f["names"] as Array).has(g["name"]) and f["notes_for"][g["name"]] == int(g["n"])
+		21:
+			return trigger == "relocate" and f["gone_to"] == g["name"]
 	return false
 
 func _floor_notes(seed: String, floor_number: int, facts: Dictionary, rng: Rng, tries: int) -> Array[Dictionary]:
@@ -125,7 +127,7 @@ func _floor_notes(seed: String, floor_number: int, facts: Dictionary, rng: Rng, 
 
 func test_every_name_and_number_equals_the_fact(t: T) -> void:
 	var by_id := _templates_by_id()
-	t.eq(by_id.size(), 20, "templates in the file")
+	t.eq(by_id.size(), 21, "templates in the file")
 	var runs := 300 if t.quick else 1500
 	var made := 0
 	var seen_ids := {}
@@ -151,8 +153,8 @@ func test_every_name_and_number_equals_the_fact(t: T) -> void:
 				t.check(false, "run %d, template %d, trigger %s: '%s' does not match the facts %s" % [run, id, r["trigger"], r["text"], str(facts)])
 	t.eq(bad, 0, "notes that differ from their facts")
 	t.check(made > runs * 4, "notes made: %d" % made)
-	t.check(seen_ids.size() == 20, "every one of the twenty templates was used at least once (%d)" % seen_ids.size())
-	t.note("%d notes over %d runs, all twenty templates seen, every name and number equal to its fact" % [made, runs])
+	t.check(seen_ids.size() == 21, "every one of the twenty-one templates was used at least once (%d)" % seen_ids.size())
+	t.note("%d notes over %d runs, all twenty-one templates seen, every name and number equal to its fact" % [made, runs])
 
 func test_no_directions_and_no_arrows(t: T) -> void:
 	var word_re := RegEx.new()
@@ -198,7 +200,7 @@ func test_same_inputs_same_notes(t: T) -> void:
 
 func test_the_cap_holds(t: T) -> void:
 	var rng := Rng.make_rng("notes-cap")
-	var facts := {"names": ["Ada", "Bram", "Cleo"], "alone": ["Ada"], "close_pairs": [["Bram", "Cleo"]], "door_passes": {"Ada": 4, "Bram": 2, "Cleo": 9}, "sprints": {"Ada": 3, "Bram": 1, "Cleo": 5}, "look_seconds": {"Ada": 2, "Bram": 6, "Cleo": 1}, "notes_for": {"Ada": 1, "Bram": 2, "Cleo": 3}, "furthest": "Cleo", "marks_used": 2, "marks_cap": 3, "caught": "Ada", "healed": "Ada", "healer": "Bram", "tape_dropper": "Cleo", "quota_top": "Bram", "lift_caller": "Ada"}
+	var facts := {"names": ["Ada", "Bram", "Cleo"], "alone": ["Ada"], "close_pairs": [["Bram", "Cleo"]], "door_passes": {"Ada": 4, "Bram": 2, "Cleo": 9}, "sprints": {"Ada": 3, "Bram": 1, "Cleo": 5}, "look_seconds": {"Ada": 2, "Bram": 6, "Cleo": 1}, "notes_for": {"Ada": 1, "Bram": 2, "Cleo": 3}, "furthest": "Cleo", "marks_used": 2, "marks_cap": 3, "caught": "Ada", "healed": "Ada", "healer": "Bram", "tape_dropper": "Cleo", "quota_top": "Bram", "lift_caller": "Ada", "gone_to": "Cleo"}
 	var cap := Notes.cap_per_floor()
 	t.eq(cap, 14, "the cap")
 	for run in 40:
