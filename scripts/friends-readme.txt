@@ -27,7 +27,7 @@ CONTROLS
 - Right mouse button: hold the instrument up
 - F: call the lift, hold the doors, pick up a tape
 - T: switch the tape look on and off
-- R: emotes
+- R: hold for the emote wheel, move the mouse to pick one, let go to play it
 - Esc: free the mouse and show these controls
 
 If something breaks, tell the person who sent you this.

@@ -195,7 +195,7 @@ switch (cmd) {
   case 'unblock': { const t = task(s, pos[0]); t.status = 'todo'; delete t.blocked; break; }
   // Nobody is working on it this minute: back to the queue, with what it waits for. Only steps an agent
   // is actually running stay "doing", so the Progress page's "Right now" list is true.
-  case 'wait': { const t = task(s, pos[0]); t.status = 'todo'; t.waiting = pos[1] ?? die('say what it waits for'); delete t.doingText; delete t.doingAt; if (s.now === t.id) { s.now = null; s.nowText = ''; } feed(s, `Paused ${t.id}: waiting for ${t.waiting}`); break; }
+  case 'wait': { const t = task(s, pos[0]); if (t.status === 'done') die(`${t.id} is done; wait is only for unfinished steps`); t.status = 'todo'; t.waiting = pos[1] ?? die('say what it waits for'); delete t.doingText; delete t.doingAt; if (s.now === t.id) { s.now = null; s.nowText = ''; } feed(s, `Paused ${t.id}: waiting for ${t.waiting}`); break; }
   case 'decision': s.decisions.push({ at: now(), text: pos[0] ?? die('decision needs text') }); feed(s, `Took a default: ${pos[0]}`, 'decision'); break;
   case 'ci': s.ci = { status: pos[0], commit: pos[1] ?? '', at: now() }; if (pos[0] !== 'passed') feed(s, `CI ${pos[0]} on ${pos[1] ?? ''}.`, 'ci'); break;
   case 'deadline': {

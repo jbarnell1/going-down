@@ -4,9 +4,9 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 35 of 61.
+- **Gates passed:** 7 of 14. **Tasks done:** 37 of 61.
 - **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 44.
-- **Now:** T18g The prison's look: the corridor, the bank room and the cells you come home to. Opus is building the prison's look in its own copy of the code: painted concrete corridor, a bright bank room with four teller windows, eight cells with bunks
+- **Now:** T7f Draw your face. Opus is putting your drawn face into the game: a draw-your-face step on the start screen, the face sent to the others when you join, shown on your crewmate's mask and on the lift's monitor
 - **Last CI result seen:** passed on 5323a22
 - **Answers applied up to:** 2026-11-17T01:16:41.572Z
 
@@ -88,7 +88,7 @@
   - To do: Mesh is FINAL (2,216 triangles, one closed symmetric mesh, T-pose, 1.78 m) after two blind judging rounds and the owner's steer: 'we don't need a lot of those fixes because the filter makes everything so grainy we get a lot for free... Mittens are perfectly acceptable.' Upload file: assets_src/inbox/convict-for-mixamo.fbx (fallback .zip). Waiting on the owner's Mixamo clips in assets_src/inbox/mixamo/.
   - To do: R opens a wheel of emotes (hold R, move the mouse to pick, let go): wave, the two dances, pray, look behind
   - To do: Put the crewmates into the real game once the networking is joined (other players drawn with crew_view), then watch walk, run and sneak in motion for foot sliding; sneak at creep speed plays at about half speed and may look like slow motion
-- [ ] **T7f** `todo` Draw your face
+- [ ] **T7f** `doing` Draw your face
   - Why: North Star H1: each player doodles a face before the run and it shows on the screen mask their crewmate figure wears, glowing in the dark, and on the lift monitor
   - To do: A small drawing pad in the lobby (about 48 x 48, one colour on dark, a few brush sizes, clear, and a random doodle for the lazy); sent to the crew as a few hundred bytes; shown on the mask screen (glowing), the crew list, the lift monitor, and later the standee where a player falls and the posters. Bots get generated doodles. Remembered in the browser between runs.
   - To do: Paused: the face editor, the compact face format (at most 515 characters) and 451 tests work. Faces drawn bright on a dark screen only read up close; dark ink on a lit screen reads at 3 metres, so the colours switch next
@@ -118,20 +118,15 @@
   - Why: Creeping should feel like ducking, and what you can see over things should change with it
 - [ ] **T5q** `todo` A quota before the lift can be called
   - Why: You cannot just ride straight back up: the crew has to earn a set amount on the instrument on each floor before the call button works
-- [ ] **P3** `doing` Playing together through the home server
+- [x] **P3** `done` Playing together through the home server
   - Why: One small server at home runs the rules and keeps everyone in sync, so friends in their own houses can join and nobody's browser has to host
-  - To do: Public door: Tailscale Funnel, chosen by the owner. Funnel only works on ports 443, 8443 and 10000. On this PC 443 and 10000 are in use for tailnet-only pages and 8443 is already funnelled for another project by path. Cleanest: add ONE path for the game server on the existing funnelled port, with a command for the owner to run (path mount to the server's local port); the browser build then connects with wss to that path. The server runs on this PC for Friday (it is already the funnel node); the lab box later. Never touch the other paths on that port.
-  - To do: Join secret: the owner sets a passphrase for the night on the server (never in the game file, never in git); friends type it or get it in the invite; the server refuses any connection without it before reading game traffic, with a limit on wrong tries, on connections and on message size
-  - To do: Isolation: run the server on the lab box inside a Docker container with no folders shared, a read-only filesystem, no extra privileges and CPU and memory caps, listening only on the lab box itself; Funnel points at that one port, so friends reach the game server and nothing else
-  - To do: The one-minute test set did not notice the server ignoring what players see; only the 9-minute set did. Add a short watched-under-delay case to the quick set
-  - To do: Paused at 16 of 18 multiplayer checks: the start screen, lobby, friends drawn as crewmates with name tags, the emote wheel and the browser joining all work; the dance check aims at the wrong emote and the boarding step starts too late. The older playthroughs have not been re-run on it yet
+  - Evidence: Playing together works through the home server. The game opens on a start screen: Play alone, or Join friends with the server address, your name and tonight's passphrase. Friends appear as crewmates with name tags, the emote wheel on R plays for everyone, and a caught crewmate lies where they were taken on every screen. An independent checker re-ran every playthrough: browser 29/29, desktop 33/33, two players 22/22, three players over real connections 10/10, sound audible (and silent when muted). Removing the emote relay on purpose turned the two-player check red. Committed 3d13505 and promoted to play/GoingDown.exe.
 - [ ] **T0g** `doing` Godot tests stand on their own results
   - Why: Any rule change made only in Godot (bigger lift, crouch height, being downed) would fail today's comparison with the old game, so the tests must first keep Godot's own results as the reference
   - To do: Paused: the new test layout is written in its own copy of the code but has not been run yet; the next step is the first recording run and fixing what it shows
-- [ ] **P4** `todo` Light browser build and a download for friends
+- [x] **P4** `done` Light browser build and a download for friends
   - Why: Friends either click a link that loads in a few seconds or run a small downloaded file
-  - To do: Run the Godot quick tests on GitHub as well (the runner must download Godot 4.7.2); today they only run on this PC before each commit
-  - To do: Friends' zip is ready (npm run godot:package writes play/GoingDown-<date>.zip with READ ME FIRST). Its start-screen wording must be checked against the real screen once joining is built; then rebuild the zip from a checked build
+  - Evidence: The download for friends: play/GoingDown-2026-11-16-1943.zip (54 MB) holds the Windows game and a READ ME FIRST. I checked the READ ME's wording against the real start screen and keys. The browser build is compressed (24.6 MB sent) and GitHub runs the quick Godot tests on every push.
 - [x] **T17** `done` Godot tests on GitHub too
   - Why: Today the Godot tests only run on this PC before each commit; a clean machine catches what this one hides
   - Evidence: The Godot tests now run on GitHub's machines on every push, with the engine checked against its published fingerprint first. The first run passed 47 of 47 in 90 seconds, read from GitHub's log. A fresh copy of the code had passed them on this PC before that.
@@ -238,6 +233,12 @@
 
 ## Activity (newest first)
 
+- 2026-11-17 01:49Z Paused T7e: waiting for a free agent to watch the crewmates walk, run and sneak in the real game for foot sliding. They are already in the game as your friends' figures (committed 3d13505).
+- 2026-11-17 01:49Z Finished P4: Light browser build and a download for friends.
+- 2026-11-17 01:48Z Paused P4: waiting for nothing; done
+- 2026-11-17 01:48Z Started T7f: Draw your face. Opus is putting your drawn face into the game: a draw-your-face step on the start screen, the face sent to the others when you join, shown on your crewmate's mask and on the lift's monitor
+- 2026-11-17 01:48Z Finished P4: Light browser build and a download for friends.
+- 2026-11-17 01:48Z Finished P3: Playing together through the home server.
 - 2026-11-17 01:28Z Started T18g: The prison's look: the corridor, the bank room and the cells you come home to. Opus is building the prison's look in its own copy of the code: painted concrete corridor, a bright bank room with four teller windows, eight cells with bunks
 - 2026-11-17 01:28Z Added task T18g: The prison's look: the corridor, the bank room and the cells you come home to.
 - 2026-11-17 01:28Z Applied the owner's new answers.
@@ -272,9 +273,3 @@
 - 2026-11-17 01:01Z Started T18c: The incident report's awards. Built by its agent (one award per player, every number true, 2,000 seeded days tested). Being changed so the narrator's lost-upgrade line uses the game's one roll instead of rolling again, so the report and the game always agree.
 - 2026-11-17 01:00Z Started T16a: The Annex floor generator. Built by its agent: the Annex generator passes all eight properties on 800 floors (repeating offices, every corridor on a loop, atrium, stairs, lobby). A separate checker is re-running it with breaks before it is committed.
 - 2026-11-17 01:00Z Started T18d: The day rules. An Opus agent is writing the day rules: the quota, the preview the lift monitor shows before BANK, a missed day's roll, game over on the third, shares and bedtime.
-- 2026-11-17 01:00Z Added task T18d: The day rules.
-- 2026-11-17 00:59Z Started T18b: The prison's floor plan. Built by its agent: a small prison on one level (a 20-metre hall with the lift at one end, the bank room first on the right with four teller windows, eight cells with a bunk each, all within 20 metres of the lift). Waiting for a separate check with the upgrades and the report.
-- 2026-11-17 00:58Z Started T18a: Upgrade rules. Built by its agent: five upgrades from your own share, price rising with each one you own, one-step undo before bed, and a seeded roll that takes one owned upgrade on a missed day with its odds first. Waiting for a separate check together with the prison plan and the report.
-- 2026-11-17 00:57Z The North Star now has your prison answers: no clocking out, a missed day costs one upgrade by a roll that the narrator announces, three misses is game over, and the stakes and odds are shown before BANK.
-- 2026-11-17 00:57Z Started T18: The prison: the bank room, upgrades, a day quota and beds. Your answers are in. Three rules pieces are being built now (upgrades, the prison's plan, the report). The day rules, the save and the prison's look start when an Opus builder frees up.
-- 2026-11-17 00:57Z Started T18c: The incident report's awards. A Sonnet agent is writing the report's awards: one for every player, every number true.

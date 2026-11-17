@@ -4,8 +4,8 @@
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
   "iteration": 44,
-  "now": "T18g",
-  "nowText": "Opus is building the prison's look in its own copy of the code: painted concrete corridor, a bright bank room with four teller windows, eight cells with bunks",
+  "now": "T7f",
+  "nowText": "Opus is putting your drawn face into the game: a draw-your-face step on the start screen, the face sent to the others when you join, shown on your crewmate's mask and on the lift's monitor",
   "ci": {
     "status": "passed",
     "commit": "5323a22",
@@ -1053,13 +1053,13 @@
         "H1",
         "F4"
       ],
-      "waiting": "the friend-joining work to be committed (it just finished). Then the crewmates go into the real game and I watch them walk, run and sneak. The crewmates themselves were finished and committed earlier today."
+      "waiting": "a free agent to watch the crewmates walk, run and sneak in the real game for foot sliding. They are already in the game as your friends' figures (committed 3d13505)."
     },
     {
       "id": "T7f",
       "title": "Draw your face",
       "why": "North Star H1: each player doodles a face before the run and it shows on the screen mask their crewmate figure wears, glowing in the dark, and on the lift monitor",
-      "status": "todo",
+      "status": "doing",
       "gates": [],
       "todo": [
         "A small drawing pad in the lobby (about 48 x 48, one colour on dark, a few brush sizes, clear, and a random doodle for the lazy); sent to the crew as a few hundred bytes; shown on the mask screen (glowing), the crew list, the lift monitor, and later the standee where a player falls and the posters. Bots get generated doodles. Remembered in the browser between runs.",
@@ -1083,7 +1083,8 @@
           "at": "2026-11-17T00:33:09.070Z"
         }
       ],
-      "waiting": "the friend-joining work to be committed. Then your face goes on your mask and is sent to the others. The face editor is finished and committed."
+      "doingText": "Opus is putting your drawn face into the game: a draw-your-face step on the start screen, the face sent to the others when you join, shown on your crewmate's mask and on the lift's monitor",
+      "doingAt": "2026-11-17T01:48:59.795Z"
     },
     {
       "id": "TA",
@@ -1289,7 +1290,7 @@
       "id": "P3",
       "title": "Playing together through the home server",
       "why": "One small server at home runs the rules and keeps everyone in sync, so friends in their own houses can join and nobody's browser has to host",
-      "status": "doing",
+      "status": "done",
       "gates": [],
       "ns": [
         "B1",
@@ -1297,16 +1298,39 @@
         "C5"
       ],
       "nsWhy": "Foundations, amended by the owner: 'server should just be responsible for handling client updates and keeping everyone in sync'; the fairness contract still applies in full",
-      "todo": [
-        "Public door: Tailscale Funnel, chosen by the owner. Funnel only works on ports 443, 8443 and 10000. On this PC 443 and 10000 are in use for tailnet-only pages and 8443 is already funnelled for another project by path. Cleanest: add ONE path for the game server on the existing funnelled port, with a command for the owner to run (path mount to the server's local port); the browser build then connects with wss to that path. The server runs on this PC for Friday (it is already the funnel node); the lab box later. Never touch the other paths on that port.",
-        "Join secret: the owner sets a passphrase for the night on the server (never in the game file, never in git); friends type it or get it in the invite; the server refuses any connection without it before reading game traffic, with a limit on wrong tries, on connections and on message size",
-        "Isolation: run the server on the lab box inside a Docker container with no folders shared, a read-only filesystem, no extra privileges and CPU and memory caps, listening only on the lab box itself; Funnel points at that one port, so friends reach the game server and nothing else",
-        "The one-minute test set did not notice the server ignoring what players see; only the 9-minute set did. Add a short watched-under-delay case to the quick set",
-        "Paused at 16 of 18 multiplayer checks: the start screen, lobby, friends drawn as crewmates with name tags, the emote wheel and the browser joining all work; the dance check aims at the wrong emote and the boarding step starts too late. The older playthroughs have not been re-run on it yet"
-      ],
+      "todo": [],
       "startedAt": "2026-11-16T21:26:09.607Z",
       "doingText": "The friend-joining work is finished: the game now runs through the network client alone or with friends, and all its own playthroughs pass. An independent checker is re-running every playthrough and a deliberate break before I commit it.",
-      "doingAt": "2026-11-17T01:25:12.177Z"
+      "doingAt": "2026-11-17T01:25:12.177Z",
+      "nsCheck": "Foundations: one server runs the rules for friends each in their own house, behind a passphrase that is never saved. The watched Orderly still never moves (the two-player run checks it). Tested on this PC only, not yet over the internet: that needs your Funnel command.",
+      "finishedAt": "2026-11-17T01:48:44.719Z",
+      "summary": "Playing together works through the home server. The game opens on a start screen: Play alone, or Join friends with the server address, your name and tonight's passphrase. Friends appear as crewmates with name tags, the emote wheel on R plays for everyone, and a caught crewmate lies where they were taken on every screen. An independent checker re-ran every playthrough: browser 29/29, desktop 33/33, two players 22/22, three players over real connections 10/10, sound audible (and silent when muted). Removing the emote relay on purpose turned the two-player check red. Committed 3d13505 and promoted to play/GoingDown.exe.",
+      "media": [
+        {
+          "src": "P3/20261117T014844-01-start-screen.png",
+          "caption": "Start screen",
+          "kind": "image",
+          "at": "2026-11-17T01:48:44.723Z"
+        },
+        {
+          "src": "P3/20261117T014844-05-ann-sees-bob.png",
+          "caption": "Ann sees Bob, with his name tag",
+          "kind": "image",
+          "at": "2026-11-17T01:48:44.724Z"
+        },
+        {
+          "src": "P3/20261117T014844-09-ann-sees-bob-dance.png",
+          "caption": "Bob dances; Ann sees it",
+          "kind": "image",
+          "at": "2026-11-17T01:48:44.726Z"
+        },
+        {
+          "src": "P3/20261117T014844-10c-ann-sees-the-caught-crewmate.png",
+          "caption": "A caught crewmate, as the other player sees it",
+          "kind": "image",
+          "at": "2026-11-17T01:48:44.727Z"
+        }
+      ]
     },
     {
       "id": "T0g",
@@ -1327,16 +1351,16 @@
       "id": "P4",
       "title": "Light browser build and a download for friends",
       "why": "Friends either click a link that loads in a few seconds or run a small downloaded file",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [],
       "nsWhy": "Foundations, amended by the owner: a light browser build, or a packaged download",
-      "todo": [
-        "Run the Godot quick tests on GitHub as well (the runner must download Godot 4.7.2); today they only run on this PC before each commit",
-        "Friends' zip is ready (npm run godot:package writes play/GoingDown-<date>.zip with READ ME FIRST). Its start-screen wording must be checked against the real screen once joining is built; then rebuild the zip from a checked build"
-      ],
+      "todo": [],
       "startedAt": "2026-11-16T23:22:41.993Z",
-      "waiting": "the friend-joining check. Then a new build, the zip for friends rebuilt, and its READ ME checked against the real start screen. The zip tool itself is done."
+      "waiting": "nothing; done",
+      "nsCheck": "The downloaded game is the main way to play and the browser is the backup, as you decided on 16 November.",
+      "finishedAt": "2026-11-17T01:49:08.559Z",
+      "summary": "The download for friends: play/GoingDown-2026-11-16-1943.zip (54 MB) holds the Windows game and a READ ME FIRST. I checked the READ ME's wording against the real start screen and keys. The browser build is compressed (24.6 MB sent) and GitHub runs the quick Godot tests on every push."
     },
     {
       "id": "T17",
@@ -1944,6 +1968,36 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-17T01:49:36.883Z",
+      "text": "Paused T7e: waiting for a free agent to watch the crewmates walk, run and sneak in the real game for foot sliding. They are already in the game as your friends' figures (committed 3d13505).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T01:49:08.560Z",
+      "text": "Finished P4: Light browser build and a download for friends.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-17T01:48:59.902Z",
+      "text": "Paused P4: waiting for nothing; done",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T01:48:59.796Z",
+      "text": "Started T7f: Draw your face. Opus is putting your drawn face into the game: a draw-your-face step on the start screen, the face sent to the others when you join, shown on your crewmate's mask and on the lift's monitor",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T01:48:44.832Z",
+      "text": "Finished P4: Light browser build and a download for friends.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-17T01:48:44.727Z",
+      "text": "Finished P3: Playing together through the home server.",
+      "kind": "done"
+    },
     {
       "at": "2026-11-17T01:28:52.813Z",
       "text": "Started T18g: The prison's look: the corridor, the bank room and the cells you come home to. Opus is building the prison's look in its own copy of the code: painted concrete corridor, a bright bank room with four teller windows, eight cells with bunks",
@@ -2913,36 +2967,6 @@
       "at": "2026-11-16T16:46:55.080Z",
       "text": "Started T7e: Better-looking crewmates and readable name tags. An agent is building the crewmate figure (a convict in a jumpsuit) so the owner can upload it to Mixamo for real movement",
       "kind": "start"
-    },
-    {
-      "at": "2026-11-16T16:29:42.094Z",
-      "text": "Took a default: Everyone plays from their own house (owner, 2026-11-16), so playing across home networks moves up to right after the blackout work, ahead of room dressing.",
-      "kind": "decision"
-    },
-    {
-      "at": "2026-11-16T16:29:41.774Z",
-      "text": "Applied the owner's new answers.",
-      "kind": "answers"
-    },
-    {
-      "at": "2026-11-16T15:58:33.523Z",
-      "text": "Started T6e: Blinks that grow into a blackout. An agent is making the blinks grow into a long blackout with a chase and a dash back, fixing the uneven voice, and stopping the tests from grabbing the mouse",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T15:50:11.826Z",
-      "text": "Live build is now c9e549d (tag good-12): sprint, creep and stamina. Checked from the lab box: the play page loads and the status page reports c9e549d.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T15:47:53.780Z",
-      "text": "Finished T7c: Sprint, creep and stamina.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-16T15:45:34.258Z",
-      "text": "Added task T15: A floor where you have to hide.",
-      "kind": "note"
     }
   ]
 }
