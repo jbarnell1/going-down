@@ -39,12 +39,38 @@
 #    short blinks it hunts exactly as before.
 #  - BANK is the left half of the car as you walk in, DOWN the right half.
 #
+# The day (docs/floors/prison.md P7; loop/NIGHT-PLAN.md A2), on only for a run made with days
+# (create_run's `days`, with_days(): the game's rooms turn it on; tests and every stored result leave it
+# off, and then nothing below happens). With it on a run is a run of days:
+#  - BANK banks the tapes aboard exactly as before ("banked"), then settles the day with sim/day.gd
+#    (Day.end_day on the banked total floored to whole credits: "dayEnded" with its facts), and the car
+#    rides UP for RIDE_UP_TIME ("carLeft" reason "up"). Everyone gets a fresh empty tape at once, so no
+#    tape can be banked twice; tapes on the floor and those of players not aboard are lost, as on a ride.
+#  - A wipe settles the day with nothing banked, and the empty car rides up the same way.
+#  - Arriving home: depth 0, the prison plan (Places.generate at depth 0), no resident (it is parked and
+#    never stepped). Players aboard step out of the car; everyone else (left behind, caught, or all of
+#    them after a wipe) wakes on their own bunk (Day.bunk_of), on their feet ("rodeUp", with bodies).
+#    The doors open as on any floor; when they close the phase is "night" and the car cannot be called.
+#  - Bed: hold F (PlayerInput.use) for BED_HOLD seconds standing on any bunk's cell to lie down; a new
+#    press of F gets you up. The count is Day's: lights out LIGHTS_OUT_DELAY after more than half the
+#    crew is in bed, or as soon as everyone is; once started it cannot be stopped ("bed", "bedCount",
+#    "lightsOut"). A player who is no longer on their feet (left the game) leaves the count.
+#  - Day.LIGHTS_OUT_SECONDS after lights out the next day starts as day 1 did: the crew in the car at
+#    depth 1, doors about to open, the floors drawn from the day's seed day_seed(seed, n) =
+#    "<seed>:day<n>" (day 1 keeps the run's seed). n counts every day of the run, so a seed never
+#    comes back, even after a game over resets the day number ("newDay", with bodies).
+#  - The tapes are numbered on across days (the crew's next_tape carries on), so every tape id is new.
+# The facts of the day just settled stay on the state (day_result) until the next morning.
+#
 # Events are Dictionaries with the TypeScript shapes (see RunEvent in run.ts), carrying Move.Body,
 # TapeLib.Reading and RunSummary objects where TypeScript carries those objects.
 extends RefCounted
 
 const Entity = preload("res://sim/entity.gd")
 const Places = preload("res://sim/places.gd")
+const Day = preload("res://sim/day.gd")
+const Prison = preload("res://sim/prison.gd")
+const Upgrades = preload("res://sim/upgrades.gd")
 const Floor = preload("res://sim/floor.gd")
 const Instr = preload("res://sim/instrument.gd")
 const Landing = preload("res://sim/landing.gd")
@@ -125,6 +151,15 @@ const LURE_DROP_DISTANCE := 3.0
 const MAX_TICK := 0.1
 ## Id the call uses as a target in the Orderly's player list. Never a real player id.
 const LURE_ID := "#call"
+
+## The day (only with days on). Seconds the ride up to the prison takes (prison.md section 3: "about
+## eight seconds").
+const RIDE_UP_TIME := 8.0
+## Seconds F must be held on a bunk to lie down (prison.md section 6: "Hold F on any bunk").
+const BED_HOLD := 1.0
+## Each player's floor quota, the unit of the day quota (Day.quota_for). A stand-in until the floor quota
+## (T5q) is in the run; the day quota is 1.5 of these per player on day 1.
+const DAY_FLOOR_QUOTA := 150
 
 const EPS := 1e-9
 ## How far onto the landing side of the wall line the doorway channel reaches, beyond a body's radius.
@@ -469,8 +504,33 @@ class RunState:
 	var bell_left: float = 0.0  # TypeScript: bellLeft
 	var hold_left: float = 0.0  # TypeScript: holdLeft
 	var held: bool = false
-	## Set when the run ends (banked or wiped).
+	## Set when the run ends (banked or wiped). With days on: the last bank or wipe, until the next morning.
 	var summary: RunSummary = null
+	## The day loop (see the header). Off: everything below stays as it is made and is never read.
+	var days: bool = false
+	## The run's own seed (day 1's); `seed` is the day's (day_seed(base_seed, day_index)).
+	var base_seed: String = ""
+	## Every day of this run counted from 1 (never reset): the day's seed comes from it.
+	var day_index: int = 1
+	## Today's day rules (sim/day.gd): day number, streak, misses, quota level, crew size.
+	var day_state: Day.DayState = null
+	## Once today is settled (BANK or a wipe): the next day's state, until the morning. Else null.
+	var day_next: Day.DayState = null
+	## The facts of the day just settled (Day.DayResult.facts plus "shares" and "credits"), until the
+	## next morning; else null.
+	var day_result: Variant = null
+	## Every player's wallet, {id: Upgrades.UpgradeState}.
+	var wallets: Dictionary = {}
+	## The car is riding up to the prison (phase riding).
+	var going_up: bool = false
+	## The bedtime count in the prison (null on the floors).
+	var bed: Day.BedState = null
+	## Seconds each player has held F on a bunk (-1: waiting for them to let go first), and whether F
+	## was held on their previous input.
+	var bed_hold: Dictionary = {}
+	var use_prev: Dictionary = {}
+	## Run time the lights went out in the prison, or -1.
+	var lights_out_t: float = -1.0
 
 	func copy() -> RunState:
 		var s := RunState.new()
@@ -496,6 +556,18 @@ class RunState:
 		s.hold_left = hold_left
 		s.held = held
 		s.summary = summary
+		s.days = days
+		s.base_seed = base_seed
+		s.day_index = day_index
+		s.day_state = day_state
+		s.day_next = day_next
+		s.day_result = day_result
+		s.wallets = wallets
+		s.going_up = going_up
+		s.bed = bed
+		s.bed_hold = bed_hold
+		s.use_prev = use_prev
+		s.lights_out_t = lights_out_t
 		return s
 
 class PlayerInput:
@@ -517,6 +589,8 @@ class PlayerInput:
 	var pick_up: Variant = null  # TypeScript: pickUp
 	## Sees nothing this tick, though present and huntable (the host's call).
 	var blind: bool = false
+	## F is held (the use key): in the prison, held on a bunk it lies you down (days on only).
+	var use: bool = false
 
 	static func make(id_: String, body_: Move.Body, eye_: float, yaw_: float, pitch_: float, h_fov: float, v_fov: float) -> PlayerInput:
 		var p := PlayerInput.new()
@@ -557,9 +631,34 @@ static func deck_of(deck: Array) -> Array[StringName]:
 		out.append(StringName(p))
 	return out if not out.is_empty() else Places.CLINIC_ONLY
 
+## The seed of the run's `index`-th day (1-based): day 1 is the run's own seed, then "<seed>:day<n>".
+static func day_seed(base: String, index: int) -> String:
+	return base if index <= 1 else "%s:day%d" % [base, index]
+
+## Turns the day loop on for a run that has not ticked yet (create_run's state): day 1 with the crew
+## that rides down now.
+static func with_days(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.days = true
+	s.base_seed = s0.seed
+	s.day_index = 1
+	s.day_state = Day.morning(Day.start_night(), s0.players.size())
+	s.day_next = null
+	s.day_result = null
+	s.wallets = {}
+	return s
+
+## Whether the crew is at home: the day loop is on and the run is in the prison.
+static func at_home(s: RunState) -> bool:
+	return s.days and s.depth == 0
+
 ## A new run: the crew in the car at floor 1's landing, doors about to open. `deck`: the places its
-## floors are drawn from (places.gd); empty means Clinic only.
-static func create_run(seed: String, player_ids: Array[String], deck: Array = []) -> RunState:
+## floors are drawn from (places.gd); empty means Clinic only. `days`: the day loop (see the header).
+static func create_run(seed: String, player_ids: Array[String], deck: Array = [], days: bool = false) -> RunState:
+	var s := _create_run(seed, player_ids, deck)
+	return with_days(s) if days else s
+
+static func _create_run(seed: String, player_ids: Array[String], deck: Array = []) -> RunState:
 	assert(not player_ids.is_empty(), "a run needs at least one player")
 	var d := deck_of(deck)
 	var f := _floor_for(seed, 1, d)
@@ -868,9 +967,13 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 					np.body = body
 					np.aboard = false
 					players[i] = np
-				s.phase = &"away"
 				events.append({"type": "doorsClosed", "t": t, "aboard": [], "pushedOut": pushed_out})
-				events.append({"type": "carLeft", "t": t, "reason": "unloaded"})
+				if at_home(s):
+					# Home: the car stays shut until the morning, and nobody can call it.
+					s.phase = &"night"
+				else:
+					s.phase = &"away"
+					events.append({"type": "carLeft", "t": t, "reason": "unloaded"})
 		&"away":
 			var caller: RunPlayer = null
 			for p in players:
@@ -1029,9 +1132,15 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		s.players = players
 		var summary := _summarize(s, dep.carried, false)
 		s.summary = summary
-		s.phase = &"ended"
 		s.blink = null
 		events.append({"type": "banked", "t": t, "summary": summary})
+		if s.days:
+			# The day: settled on what got home, then the car rides up with whoever is aboard.
+			_settle_day(s, t, floori(summary.total), events)
+			_ride_up(s, players, aboard_ids, true)
+			events.append({"type": "carLeft", "t": t, "reason": "up"})
+			return res
+		s.phase = &"ended"
 		return res
 
 	if departing == &"ride":
@@ -1087,7 +1196,10 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	# ---- 2. The Orderly (not while riding: that floor is behind the crew).
 	var entity_ticks: Array[Instr.EntityTick] = []
 	var who := Places.resident(s.plan.place)
-	if s.phase != &"riding" and not who.stillness:
+	var home := at_home(s)
+	if home:
+		pass  # The prison has no resident: nothing hunts there.
+	elif s.phase != &"riding" and not who.stillness:
 		# Not a Stillness resident (the Minder): it wanders and never takes anyone. No events.
 		var before_w := s.orderly
 		var next_w := Places.wander_step(s.plan, before_w, dt, "%s:%s" % [s.seed, s.entity_id])
@@ -1197,8 +1309,16 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			if up.event != null:
 				events.append(_with_t(up.event, t))
 
+	# ---- Arriving home (the day loop).
+	if s.phase == &"riding" and s.timer <= EPS and s.going_up:
+		_arrive_home(s, players, t, events)
+	# ---- Bed and the morning (the day loop).
+	elif home:
+		_step_bed(s, players, input_of, t, dt, events)
+		if s.lights_out_t >= 0.0 and t >= s.lights_out_t + Day.LIGHTS_OUT_SECONDS - EPS:
+			_morning(s, players, t, events)
 	# ---- Arriving on the next floor.
-	if s.phase == &"riding" and s.timer <= EPS:
+	elif s.phase == &"riding" and s.timer <= EPS:
 		var depth := s.depth + 1
 		var f := _floor_for(s.seed, depth, s.deck)
 		var bodies := {}
@@ -1241,14 +1361,275 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	for p in players:
 		if p.status == &"ok":
 			everyone_out = false
-	if s.phase != &"riding" and everyone_out:
+	if s.phase != &"riding" and everyone_out and not at_home(s):
 		var no_tapes: Array[TapeLib.Tape] = []
 		var summary := _summarize(s, no_tapes, true)
 		s.summary = summary
-		s.phase = &"ended"
 		s.blink = null
 		events.append({"type": "wiped", "t": t, "summary": summary})
+		if s.days:
+			# The day: settled with nothing banked; the empty car rides up and everyone wakes on a bunk.
+			_settle_day(s, t, 0, events)
+			# The tapes are kept as they are this tick (net/host_rules.gd's soft catch reads them back);
+			# they are lost on arrival.
+			var nobody: Array[String] = []
+			_ride_up(s, players, nobody, false)
+		else:
+			s.phase = &"ended"
 	return res
+
+# ---------------------------------------------------------------------------------------------
+# The day loop (days on only; see the header).
+
+## Settles today with `banked` whole credits (Day.end_day): wallets paid, any loss rolled, the next day's
+## state kept for the morning, the facts kept for the snapshot ("dayEnded").
+static func _settle_day(s: RunState, t: float, banked: int, events: Array[Dictionary]) -> void:
+	var crew: Array[String] = []
+	for p in s.players:
+		crew.append(p.id)
+	var r := Day.end_day(s.day_state, banked, crew, s.wallets, DAY_FLOOR_QUOTA, s.seed)
+	s.wallets = r.wallets
+	s.day_next = r.state
+	var result: Dictionary = r.facts.duplicate(true)
+	result["shares"] = r.shares.duplicate()
+	var credits := {}
+	for id: String in _sorted_keys(r.wallets):
+		credits[id] = (r.wallets[id] as Upgrades.UpgradeState).credits
+	result["credits"] = credits
+	s.day_result = result
+	events.append({"type": "dayEnded", "t": t, "result": result})
+
+static func _sorted_keys(d: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	for k: Variant in d.keys():
+		out.append(String(k))
+	out.sort()
+	return out
+
+## The crew as it is, each with a fresh empty tape (numbered on) and a fresh instrument; nothing on the
+## floor. What a day's tapes become once they are banked or lost.
+static func _fresh_crew(crew: Instr.CrewState) -> Instr.CrewState:
+	var c := crew.copy()
+	var next_tape := crew.next_tape
+	c.members = []
+	for m in crew.members:
+		var nm := m.copy()
+		nm.instrument = Instr.create_instrument()
+		nm.tape = TapeLib.empty_tape("tape-%d" % next_tape, m.id)
+		next_tape += 1
+		nm.carrying = []
+		nm.active = true
+		c.members.append(nm)
+	c.floor = []
+	c.next_tape = next_tape
+	return c
+
+## Whether any tape with readings is held by a member or lies on the floor.
+static func _holds_tapes(crew: Instr.CrewState) -> bool:
+	if not crew.floor.is_empty():
+		return true
+	for m in crew.members:
+		if not _held_tapes(m).is_empty():
+			return true
+	return false
+
+## The car leaves for the prison with `aboard`: everyone else stays behind (they wake on their bunks).
+## `fresh`: everyone gets a fresh tape now (a bank: what was aboard is banked, the rest is lost).
+static func _ride_up(s: RunState, players: Array[RunPlayer], aboard: Array[String], fresh: bool) -> void:
+	for i in players.size():
+		var p := players[i]
+		var np := p.copy()
+		np.side = null
+		if not aboard.has(p.id) and p.status == &"ok":
+			np.status = &"leftBehind"
+		players[i] = np
+	if fresh:
+		s.crew = _fresh_crew(s.crew)
+	s.phase = &"riding"
+	s.going_up = true
+	s.timer = RIDE_UP_TIME
+	s.blink = null
+	s.lure = false
+	s.call = null
+	s.held = false
+
+## The body of player `id` standing on their own bunk (Day.bunk_of over the run's players).
+static func bunk_body(plan: Floor.FloorPlan, crew: Array[String], id: String) -> Move.Body:
+	var cell := Day.bunk_of(crew, id)
+	return Move.body_at_cell(plan, Floor.Pos.make(0, cell.x, cell.y))
+
+## Whether a body stands on a bunk's cell.
+static func at_bunk(plan: Floor.FloorPlan, body: Move.Body) -> bool:
+	if body == null or body.level != 0:
+		return false
+	var c := Move.cell_of(plan, body)
+	return Prison.bunk_positions().has(Vector2i(c.x, c.y))
+
+## The car arrives at the prison: depth 0, no resident. Those aboard step out of the car as on any floor;
+## everyone else wakes on their own bunk, on their feet. The bedtime count starts empty.
+static func _arrive_home(s: RunState, players: Array[RunPlayer], t: float, events: Array[Dictionary]) -> void:
+	var old_car := s.car
+	var plan := Places.generate(s.seed, 0, s.deck)
+	var car := car_geometry(plan)
+	var ids: Array[String] = []
+	for p in players:
+		ids.append(p.id)
+	var bodies := {}
+	for i in players.size():
+		var p := players[i]
+		var body: Move.Body
+		var aboard := p.status == &"ok" and in_car(old_car, p.body)
+		if aboard:
+			var l := car_local(old_car, p.body.x, p.body.z)
+			body = car_body(car, l[0], l[1])
+		else:
+			body = bunk_body(plan, ids, p.id)
+		bodies[p.id] = body
+		var np := p.copy()
+		np.body = body
+		np.status = &"ok"
+		np.aboard = aboard
+		np.side = null
+		players[i] = np
+	s.depth = 0
+	s.plan = plan
+	s.car = car
+	var o := Places.create_resident(plan)
+	o.mode = &"dormant"
+	o.dormant_left = INF
+	s.orderly = o
+	s.entity_id = Places.entity_id(plan.place, 0)
+	# After a wipe the day's tapes are still held: they are lost now (a bank gave fresh ones as it left).
+	var nc := _fresh_crew(s.crew) if _holds_tapes(s.crew) else s.crew.copy()
+	var members: Array[Instr.CrewMember] = []
+	for m in nc.members:
+		var nm := m.copy()
+		nm.body = bodies.get(m.id, m.body)
+		nm.active = true
+		members.append(nm)
+	nc.members = members
+	s.crew = nc
+	s.going_up = false
+	s.phase = &"arriving"
+	s.timer = ARRIVE_DOOR_DELAY
+	s.bed = Day.BedState.make(ids)
+	s.bed_hold = {}
+	s.use_prev = {}
+	s.lights_out_t = -1.0
+	events.append({"type": "rodeUp", "t": t, "depth": 0, "day": s.day_state.day, "bodies": bodies})
+
+## Bed, one tick: who leaves the count, who climbs in (F held BED_HOLD seconds on a bunk) or out (a new
+## press of F), the count starting, and lights out.
+static func _step_bed(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, dt: float, events: Array[Dictionary]) -> void:
+	var b := s.bed
+	if b == null:
+		return
+	var before := b
+	var hold := s.bed_hold.duplicate()
+	var prev := s.use_prev.duplicate()
+	for p in players:
+		if b.crew.has(p.id) and p.status != &"ok":
+			var nb := Day.leave(b, p.id, t)
+			if nb != b:
+				b = nb
+				events.append({"type": "bed", "t": t, "playerId": p.id, "inBed": false, "left": true, "count": Day.count_text(b)})
+			hold.erase(p.id)
+			prev.erase(p.id)
+		elif not b.crew.has(p.id) and p.status == &"ok" and not Day.is_lights_out(b, t):
+			# Joined at the prison's stop (the host admits newcomers as the car arrives): in the count too.
+			var nb := b.copy()
+			nb.crew.append(p.id)
+			nb.crew.sort()
+			if nb.all_in_at >= 0.0:
+				nb.all_in_at = -1.0
+			b = nb
+	for p in players:
+		if not b.crew.has(p.id):
+			continue
+		var inp: PlayerInput = input_of.get(p.id)
+		var use := inp != null and inp.use and p.status == &"ok"
+		var was: bool = prev.get(p.id, false)
+		prev[p.id] = use
+		if b.in_bed.has(p.id):
+			if use and not was:
+				var nb := Day.climb_out(b, p.id, t)
+				if nb != b:
+					b = nb
+					hold[p.id] = -1.0
+					events.append({"type": "bed", "t": t, "playerId": p.id, "inBed": false, "count": Day.count_text(b)})
+			continue
+		if not use:
+			hold.erase(p.id)
+			continue
+		var h := float(hold.get(p.id, 0.0))
+		if h < 0.0:
+			continue  # got up with this press: let go of F first
+		if not at_bunk(s.plan, p.body):
+			hold.erase(p.id)
+			continue
+		h += dt
+		if h >= BED_HOLD - EPS:
+			var nb := Day.climb_in(b, p.id, t)
+			hold.erase(p.id)
+			if nb != b:
+				b = nb
+				events.append({"type": "bed", "t": t, "playerId": p.id, "inBed": true, "count": Day.count_text(b)})
+		else:
+			hold[p.id] = h
+	if before.count_from < 0.0 and b.count_from >= 0.0:
+		events.append({"type": "bedCount", "t": t, "lightsOutAt": Day.lights_out_at(b)})
+	s.bed = b
+	s.bed_hold = hold
+	s.use_prev = prev
+	if s.lights_out_t < 0.0 and Day.is_lights_out(b, t):
+		s.lights_out_t = t
+		events.append({"type": "lightsOut", "t": t, "assisted": Day.assisted(b), "morningAt": t + Day.LIGHTS_OUT_SECONDS})
+
+## The next morning: a new day, started as day 1 was (create_run), on the next day's seed.
+static func _morning(s: RunState, players: Array[RunPlayer], t: float, events: Array[Dictionary]) -> void:
+	var crew_size := s.bed.crew.size() if s.bed != null else players.size()
+	s.day_index += 1
+	s.seed = day_seed(s.base_seed, s.day_index)
+	s.day_state = Day.morning(s.day_next if s.day_next != null else s.day_state, crew_size)
+	s.day_next = null
+	s.day_result = null
+	s.summary = null
+	var f := _floor_for(s.seed, 1, s.deck)
+	var bodies := {}
+	for i in players.size():
+		var p := players[i]
+		var np := p.copy()
+		np.body = _car_slot(f.car, i)
+		np.status = &"ok"
+		np.aboard = true
+		np.side = null
+		players[i] = np
+		bodies[p.id] = np.body
+	s.depth = 1
+	s.plan = f.plan
+	s.car = f.car
+	s.orderly = f.orderly
+	s.entity_id = f.entity_id
+	var nc := _fresh_crew(s.crew)
+	for m in nc.members:
+		m.body = bodies.get(m.id, m.body)
+	s.crew = nc
+	s.phase = &"arriving"
+	s.timer = ARRIVE_DOOR_DELAY
+	s.empty_for = 0.0
+	s.calls = 0
+	s.last_floors = -1
+	s.call = null
+	s.blink = null
+	s.lure = false
+	s.bell_left = 0.0
+	s.hold_left = 0.0
+	s.held = false
+	s.bed = null
+	s.bed_hold = {}
+	s.use_prev = {}
+	s.lights_out_t = -1.0
+	events.append({"type": "newDay", "t": t, "day": s.day_state.day, "dayIndex": s.day_index, "depth": 1, "bodies": bodies})
 
 static func _inp(p: RunPlayer, input_of: Dictionary) -> PlayerInput:
 	var given: PlayerInput = input_of.get(p.id)

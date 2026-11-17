@@ -31,8 +31,12 @@ const Sight = preload("res://sim/sight.gd")
 const Stamina = preload("res://sim/stamina.gd")
 const M = preload("res://sim/jsmath.gd")
 const EyeHeight = preload("res://client/eye_height.gd")
+const Day = preload("res://sim/day.gd")
+const Prison = preload("res://sim/prison.gd")
 
 const PLAYER_RADIUS := 0.3
+## The eyes of a player lying on their bunk (whole centimetres: it goes to the host as the frame's eye).
+const BED_EYE := 0.8
 ## The door-hold button inside the car, car-local v: where client/lift.gd draws it.
 const HOLD_BUTTON_V := Lift.HOLD_BUTTON.x
 ## Where a spectator's camera stands until the host admits them (car-local u): the middle of the car.
@@ -77,6 +81,10 @@ var _auto_pace := 0.0
 var _orderly_tpl: Entity.OrderlyState = null
 var _prev_seeing := false
 var _prev_pose: Variant = null
+## The bunk prompt's fill: seconds F has been held on a bunk (display only: the host decides), and
+## whether F must be let go first (it was held when the player got up, as the rules want).
+var _bed_hold := 0.0
+var _bed_release := false
 
 func _init(room: RoomClient, is_local: bool) -> void:
 	rc = room
@@ -100,8 +108,11 @@ func names() -> Dictionary:
 # --- the frame ------------------------------------------------------------------------------------
 
 ## One frame. `inp` as the bridge took it: dt, f, r, sprint, creep, yaw, pitch, hfov, vfov, raised,
-## call, hold, pickUp, still. Returns {} while there is no run (lobby, connecting, closed), {"waiting":
-## true} until the run's welcome has come, else the snapshot (see the file header).
+## call, hold, pickUp, still, use (F held: on a prison bunk it lies you down). Returns {} while there is
+## no run (lobby, connecting, closed), {"waiting": true} until the run's welcome has come, else the
+## snapshot (see the file header). With days the snapshot also has "day" (the host's day block),
+## "hostNow" (the host clock as estimated here), "goingUp" (riding up to the prison) and "bed" (in bed,
+## at a bunk, the hold prompt's fill 0..1, this player's bunk cell).
 func step(now: float, inp: Dictionary) -> Dictionary:
 	var t0 := Time.get_ticks_usec()
 	rc.poll(now)
@@ -124,6 +135,9 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	var dt := clampf(float(inp.get("dt", 0.0)), 0.0, 0.1)
 	var still: bool = inp.get("still") == true
 	var playing := c.playing and body != null and not still and phase != "ended" and status == "ok"
+	# The day loop: lying on your bunk you stay put (F gets you up: the host's call).
+	var day: Variant = latest.get("day")
+	var in_bed := day != null and int(latest["depth"]) == 0 and ((day as Dictionary)["inBed"] as Array).has(str(c.id))
 	var in_yaw := float(inp.get("yaw", 0.0))
 	var in_pitch := float(inp.get("pitch", 0.0))
 	var want_raised: bool = playing and inp.get("raised") == true
@@ -153,8 +167,8 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 		gait = &"walk"
 		speed = M.hypot2(body.x - b0.x, body.z - b0.z) / dt if dt > 0.0 else 0.0
 	elif body != null:
-		var fw := clampf(float(inp.get("f", 0.0)), -1.0, 1.0) if playing else 0.0
-		var rt := clampf(float(inp.get("r", 0.0)), -1.0, 1.0) if playing else 0.0
+		var fw := clampf(float(inp.get("f", 0.0)), -1.0, 1.0) if playing and not in_bed else 0.0
+		var rt := clampf(float(inp.get("r", 0.0)), -1.0, 1.0) if playing and not in_bed else 0.0
 		var moving := fw != 0.0 or rt != 0.0
 		var cap := Instr.max_walk_speed(true, Stamina.WALK_SPEED) if want_raised else INF
 		gait = Stamina.gait_for(tank, inp.get("sprint") == true, inp.get("creep") == true, moving, cap)
@@ -170,7 +184,22 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	if before != null and body != null and dt > 0.0:
 		tank = Stamina.step_stamina(tank, gait, M.hypot2(body.x - before.x, body.z - before.z) / dt, dt)
 	# The eyes: standing, creeping or down (a spectator stands), eased; this frame's camera height.
-	eye = _eye.update(EyeHeight.target(status, String(gait)) if body != null else EyeHeight.STAND, dt)
+	var want_eye := EyeHeight.target(status, String(gait)) if body != null else EyeHeight.STAND
+	eye = _eye.update(BED_EYE if in_bed else want_eye, dt)
+	# F held (the bunk): only sent when the run has days, as the protocol says.
+	var use: bool = day != null and playing and inp.get("use") == true
+	var at_bunk := day != null and int(latest["depth"]) == 0 and body != null and Run.at_bunk(plan, body)
+	if not use or in_bed:
+		_bed_hold = 0.0
+		_bed_release = use and in_bed
+	if _bed_release and not use:
+		_bed_release = false
+	if use and at_bunk and not in_bed and not _bed_release:
+		_bed_hold += dt
+	elif not in_bed:
+		_bed_hold = 0.0
+	var depth_before := c.local_depth
+	var day_before := c.day_index
 
 	# 2. The client's frame: the real camera (drawn from this same eye), the intents.
 	var cam_yaw: float = placed_yaw if placed_yaw != null else in_yaw
@@ -186,6 +215,7 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	lf.gait = String(gait)
 	lf.call = playing and inp.get("call") == true
 	lf.pick_up = playing and inp.get("pickUp") == true
+	lf.use = use
 	lf.stamina = tank if body != null else null
 	var f := rc.frame(now, lf)
 	frame = f
@@ -193,13 +223,18 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	if f.placed != null:
 		body = f.placed
 		placed = _body_plain(body)
-		if _face_on_place:
+		var moved_on := c.local_depth != depth_before or c.day_index != day_before
+		_use_floor(str(c.seed), c.local_depth)
+		if _face_on_place or (moved_on and Run.in_car(car, body)):
+			# A new floor, a new day or home: in the car, face out of its doors.
 			_face_on_place = false
-			placed["yaw"] = _want_dir(Landing.landing_facing(Session.plan_for(str(c.seed), c.local_depth)))
+			placed["yaw"] = _want_dir(Landing.landing_facing(plan))
+		elif moved_on and c.local_depth == 0:
+			# Woken on your bunk (left behind, or a wipe): face the hall.
+			placed["yaw"] = 0.0 if body.z > (Prison.HALL_ROW + 0.5) * Prison.CELL_SIZE else PI
 		if _auto != null:
 			auto_status = "interrupted"
 		_auto = null
-		_use_floor(str(c.seed), c.local_depth)
 	# What this screen showed (the fairness rule, counted for the tests).
 	if f.seeing and _prev_seeing and f.orderly != null and _prev_pose != null:
 		watched_pairs += 1
@@ -212,6 +247,16 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	var snap := _snapshot(c, f, latest, me_row, phase, want_raised)
 	snap["placed"] = placed
 	snap["autoYaw"] = placed_yaw
+	# The day loop, as the host has it (null in a run without days). Host-timed things (the bedtime count,
+	# lights out, the morning) are shown against the host clock as this client estimates it.
+	snap["day"] = day
+	snap["hostNow"] = c.clock.host_time(rc._now)
+	snap["goingUp"] = day != null and phase == "riding" and (day as Dictionary)["result"] != null
+	var ids: Array[String] = []
+	for p: Dictionary in latest["players"]:
+		ids.append(str(p["id"]))
+	var bunk := Day.bunk_of(ids, str(c.id))
+	snap["bed"] = {"inBed": in_bed, "atBunk": at_bunk, "hold": clampf(_bed_hold / Run.BED_HOLD, 0.0, 1.0), "bunk": [bunk.x, bunk.y]}
 	if plan_dict.has("_new"):
 		plan_dict.erase("_new")
 		snap["plan"] = plan_dict
@@ -238,6 +283,8 @@ func _new_run(c: Client) -> void:
 	watched_moves = 0
 	_prev_seeing = false
 	_prev_pose = null
+	_bed_hold = 0.0
+	_bed_release = false
 
 func _use_floor(seed: String, depth: int) -> void:
 	var p := Session.plan_for(seed, depth)
