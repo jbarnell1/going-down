@@ -5,6 +5,7 @@ extends RefCounted
 
 const Client = preload("res://net/client.gd")
 const Transport = preload("res://net/transport.gd")
+const Session = preload("res://net/session.gd")
 
 ## "connecting", "lobby" (connected; no run, or a run this client is not in yet), "running" (a NetClient
 ## for the current run exists), "closed" (see close_code / close_reason).
@@ -29,6 +30,9 @@ var bytes_out := 0
 var _ws := WebSocketPeer.new()
 var _secret: String
 var _name: String
+## The player's drawn face (FaceCodec text) sent in every run's join, or "". It goes only to the host,
+## which passes it to the other players in the run.
+var _face := ""
 var _hello_sent := false
 var _epoch_joined := 0
 var _pipe: Transport.Pipe = null
@@ -37,10 +41,12 @@ var _in: Array = []  # [due, text]
 var _last_ping := 0.0
 var _now := 0.0
 
-## Connects to `url` (ws://host:port or wss://...). Call poll() every frame from then on.
-func connect_to(url: String, secret: String, name: String) -> Error:
+## Connects to `url` (ws://host:port or wss://...). Call poll() every frame from then on. `face`: the
+## player's drawn face, sent with the join of every run ("" for none).
+func connect_to(url: String, secret: String, name: String, face: String = "") -> Error:
 	_secret = secret
 	_name = name
+	_face = face
 	_ws.inbound_buffer_size = 1 << 20
 	_ws.outbound_buffer_size = 1 << 16
 	return _ws.connect_to_url(url)
@@ -140,7 +146,7 @@ func _join_run(e: int, now: float) -> void:
 		if rc != null:
 			rc.call("_queue", "n%d|%s" % [e, data])
 	_pipe = Transport.Pipe.new(my_id, func(_to: String, data: String) -> void: out.call(data), out)
-	client = Client.new(_pipe, "host", _name, now)
+	client = Client.new(_pipe, "host", _name, now, Session.INTERP_DELAY, Session.INPUT_INTERVAL, _face)
 	status = "running"
 	_flush(now)
 

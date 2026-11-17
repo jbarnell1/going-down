@@ -28,6 +28,7 @@ const Entity = preload("res://sim/entity.gd")
 const Run = preload("res://sim/run.gd")
 const TapeLib = preload("res://sim/tape.gd")
 const Stamina = preload("res://sim/stamina.gd")
+const Face = preload("res://face/face_codec.gd")
 
 const PROTOCOL_VERSION := 1
 
@@ -41,6 +42,14 @@ const GAITS: Array[String] = ["walk", "creep", "sprint"]
 ## ("E" client -> host, "M" host -> the other clients) are new in the Godot game. They change nothing
 ## in the other messages, and a session that never emotes sends exactly what it did before.
 const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dance_snake", "button"]
+## Drawn faces (face/README.md, North Star H1 and V7). Also new in the Godot game, and also optional:
+##  - the join may carry the player's face as a fifth element, [1, "J", name, ct, face]. A join of four
+##    elements is still a join; a fifth that is not a valid face (FaceCodec.check, at most
+##    FaceCodec.MAX_LENGTH characters) counts as no face, and the player still joins. A join without a
+##    face decodes exactly as before (no "face" key);
+##  - the host passes each face on to the other players in the run, once: [1, "F", player id, face]
+##    (host -> client only; the room server refuses it from a client). Never in the 20 Hz snapshot.
+## The face goes only to the other players in the same run: nothing else stores or logs it.
 
 ## Limits on what a client may send (the server refuses anything outside them).
 const MAX_NAME := 32
@@ -192,7 +201,7 @@ static func snapshot_text(head: Dictionary, event_texts: PackedStringArray, worl
 	])
 	return "[%d,\"S\",[%s],%s]" % [PROTOCOL_VERSION, ",".join(parts), world]
 
-## Serialises a message (input, join, welcome, leave, ping, pong, emote, emoted) to its wire text.
+## Serialises a message (input, join, welcome, leave, ping, pong, emote, emoted, face) to its wire text.
 static func encode(m: Dictionary) -> String:
 	match String(m["type"]):
 		"input":
@@ -203,7 +212,13 @@ static func encode(m: Dictionary) -> String:
 			return JsJson.stringify([PROTOCOL_VERSION, "I", m["seq"], floor3(m["ct"]), _enc_body(m["body"]), q2(m["eye"]), q3(m["yaw"]), q3(m["pitch"]),
 				q2(m["hFovDeg"]), q2(m["vFovDeg"]), flags, m["calls"], m["pickUps"], m["ackEvent"], m["ackHt"], floor3(m["renderTime"]), m["placeAck"], seen])
 		"join":
-			return JsJson.stringify([PROTOCOL_VERSION, "J", m["name"], m["ct"]])
+			var j: Array = [PROTOCOL_VERSION, "J", m["name"], m["ct"]]
+			var jf: Variant = m.get("face", "")
+			if jf is String and not (jf as String).is_empty():
+				j.append(jf)
+			return JsJson.stringify(j)
+		"face":
+			return JsJson.stringify([PROTOCOL_VERSION, "F", m["player"], m["face"]])
 		"welcome":
 			return JsJson.stringify([PROTOCOL_VERSION, "W", m["you"], m["seed"], 1 if m["playing"] else 0, m["evFrom"], enc_world(m["world"])])
 		"leave":
@@ -421,9 +436,22 @@ static func decode(text: String) -> Variant:
 				"ackHt": _f(c, a[14]), "renderTime": _f(c, a[15]), "placeAck": _i(c, a[16], 0, MAX_COUNT), "seen": seen,
 			}
 		"J":
-			if a.size() != 4:
+			# [1, "J", name, ct] or [1, "J", name, ct, face]; a face that is not valid is no face.
+			if a.size() != 4 and a.size() != 5:
 				return null
 			out = {"type": "join", "name": _s(c, a[2], MAX_NAME), "ct": _f(c, a[3])}
+			if a.size() == 5:
+				var jf := valid_face(a[4])
+				if jf != "":
+					out["face"] = jf
+		"F":
+			# The host passes a player's face on: [1, "F", player id, face]. Only valid faces.
+			if a.size() != 4:
+				return null
+			var ff := valid_face(a[3])
+			if ff == "":
+				return null
+			out = {"type": "face", "player": _s(c, a[2]), "face": ff}
 		"W":
 			if a.size() != 7:
 				return null
@@ -453,6 +481,13 @@ static func decode(text: String) -> Variant:
 		_:
 			return null
 	return null if c.bad else out
+
+## `v` if it is a valid face (a String of at most Face.MAX_LENGTH characters that FaceCodec accepts),
+## else "". The length is checked before anything is read.
+static func valid_face(v: Variant) -> String:
+	if not v is String or (v as String).length() > Face.MAX_LENGTH or (v as String).is_empty():
+		return ""
+	return v if Face.check(v) == "" else ""
 
 ## Size of a message on the wire in bytes (its UTF-8 text).
 static func message_bytes(text: String) -> int:

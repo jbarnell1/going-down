@@ -4,11 +4,11 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 37 of 61.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 44.
-- **Now:** T7f Draw your face. Opus is putting your drawn face into the game: a draw-your-face step on the start screen, the face sent to the others when you join, shown on your crewmate's mask and on the lift's monitor
-- **Last CI result seen:** passed on 5323a22
-- **Answers applied up to:** 2026-11-17T01:16:41.572Z
+- **Gates passed:** 7 of 14. **Tasks done:** 38 of 64.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 45.
+- **Now:** T7f Draw your face. Built: draw your face on the start screen, it is sent when you join, shown on your mask and the lift monitor. Two-player check 27/27. An independent checker is re-running every playthrough and a break.
+- **Last CI result seen:** passed on a010230
+- **Answers applied up to:** 2026-11-17T02:33:36.042Z
 
 ## Tasks
 
@@ -170,6 +170,8 @@
 - [x] **T16c** `done` The Temp's sticky notes
   - Why: True notes about the crew by name, the same for everyone, never giving directions
   - Evidence: The rules for the Temp's sticky notes are built: 20 notes in the building's voice, filled only from true facts about the crew by name, the same for everyone, at most 14 a floor, and never a direction word. A separate checker re-ran its tests (5 of 5) and two deliberate breaks, a count off by one and one note over the cap, and both were caught. Not yet in the game: the notes appear once the Temp and the Annex are wired in.
+- [ ] **T16d** `doing` The Annex's look: the endless yellow office, built and pictured
+  - Why: Floor 3 must look like nowhere you have been, and every repeated room must look exactly the same
 - [ ] **T18** `todo` The prison: the bank room, upgrades, a day quota and beds
   - Why: You asked for a home between runs: choosing not to go deeper brings the crew back to the prison, where the bank room sells upgrades, a day's earnings must meet a quota, and the day ends when everyone climbs into bed
 - [x] **T18a** `done` Upgrade rules
@@ -189,8 +191,15 @@
   - Evidence: The save slip: each player's save is one line on their own PC, signed by the server (HMAC-SHA256). 6,886 hand-edited saves and wrong keys were all refused; an independent check made five deliberate breaks and each went red. Committed 764e488. Not wired into the server yet.
 - [x] **T18f** `done` Your answers on the day: every owner loses an upgrade on a missed day, and the bedtime count can't be stopped
   - Evidence: Missed days now take one upgrade from every owner, each by their own seeded roll, with each owner's odds on the lift monitor before BANK. The bedtime count can't be stopped once started. An independent check made six deliberate breaks and each went red. Committed 5323a22.
-- [ ] **T18g** `doing` The prison's look: the corridor, the bank room and the cells you come home to
+- [ ] **T18g** `todo` The prison's look: the corridor, the bank room and the cells you come home to
   - Why: Banking takes the crew home; the prison has to feel dull and safe, the opposite of the floors below
+  - To do: Fix in the prison plan: players can walk through the teller counter (row 12 is open); the windows read 4-3-2-1 left to right; bunk spots are at the cell doors while the bunks are drawn on the back wall.
+  - To do: The 'bank room brighter than the corridor' picture check passes by only about 1% (ratio 1.617 against 1.60): settle the threshold or the lights before it flickers red.
+- [ ] **T18i** `todo` A face kiosk in the prison, and a window each for the shop and the skill tree
+  - Why: You can redraw your face between days, and buying is laid out the way you asked: every service at its own window or kiosk
+- [x] **T18h** `done` The day rules: a test for when nobody owns an upgrade
+  - Why: The lift monitor must say NOTHING TO TAKE, and nobody may lose anything, when nobody owns an upgrade
+  - Evidence: Added a test: when nobody owns an upgrade the lift monitor says NOTHING TO TAKE and nobody loses anything, and in a mixed crew only owners can lose one. Day tests 10 passed; a deliberate break turned it red. Committed 514d0e2.
 - [ ] **S** `todo` Stretch: voice that fades with distance, a second trait, the Tenant, a second place
   - Why: Only if every gate is green with time left.
   - To do: Owner (2026-11-16): 'multiple different types of entities once we program other levels'. Each new place brings its own entity with its own rule.
@@ -230,9 +239,34 @@
 - 2026-11-16: Owner's decision, 2026-11-16: move the game to the Godot engine, one codebase. Their words: 'I don't want to keep logic in two places. Let's run a light version of godot in the browser, otherwise we can give friends a packaged game file to download, which they'll also be fine with.' The current browser game is frozen at its last green build as the fallback; all new work goes into the Godot project.
 - 2026-11-16: Owner, 2026-11-16: on Friday we play 'Whatever Godot has'. All effort goes into the Godot build; the frozen browser game stays up but is not the plan for game night.
 - 2026-11-16: Owner, 2026-11-16: friends reach the home game server through Tailscale Funnel ('Let's do the funnel with tailscale'). Nothing is opened until the server exists; the owner runs the one admin command.
+- 2026-11-17: Until you answer: the shop sells one-day items (flares, batteries, tape, extra marks) and the skill tree keeps the permanent upgrades; windows 1-2 the shop, 3-4 the skill tree, the face kiosk in the corridor by the cells.
 
 ## Activity (newest first)
 
+- 2026-11-17 02:33Z Paused T18i: waiting for the prison merge (right after the face work lands). Decided with you: windows 1-2 the shop (one-day items), 3-4 the skill tree, the face kiosk in the corridor by the cells.
+- 2026-11-17 02:33Z Applied the owner's new answers.
+- 2026-11-17 02:23Z P3
+- 2026-11-17 02:21Z Took a default: Until you answer: the shop sells one-day items (flares, batteries, tape, extra marks) and the skill tree keeps the permanent upgrades; windows 1-2 the shop, 3-4 the skill tree, the face kiosk in the corridor by the cells.
+- 2026-11-17 02:21Z Paused T18i: waiting for the prison merge and your answer on what the shop sells (Questions page).
+- 2026-11-17 02:21Z Added task T18i: A face kiosk in the prison, and a window each for the shop and the skill tree.
+- 2026-11-17 02:18Z Started T7f: Draw your face. Built: draw your face on the start screen, it is sent when you join, shown on your mask and the lift monitor. Two-player check 27/27. An independent checker is re-running every playthrough and a break.
+- 2026-11-17 02:18Z New pictures for T7f: Draw your face.
+- 2026-11-17 02:16Z Started T16d: The Annex's look: the endless yellow office, built and pictured. Opus is building the Annex's look in its own copy: yellowed walls, mustard carpet, even pale light, props chosen by room shape so repeated rooms match, repeating signs
+- 2026-11-17 02:16Z Added task T16d: The Annex's look: the endless yellow office, built and pictured.
+- 2026-11-17 02:16Z Paused T18g: waiting for the face work to land; then I merge the prison branch (two commits) into the main game and make a new build.
+- 2026-11-17 02:16Z T18g
+- 2026-11-17 02:13Z Started T18g: The prison's look: the corridor, the bank room and the cells you come home to. An independent checker is re-running the prison's tests, walk and three deliberate breaks
+- 2026-11-17 02:13Z T18g
+- 2026-11-17 02:07Z Finished T18h: The day rules: a test for when nobody owns an upgrade.
+- 2026-11-17 02:04Z Started T18h: The day rules: a test for when nobody owns an upgrade. Sonnet is adding the missing test and breaking it on purpose
+- 2026-11-17 02:04Z Added task T18h: The day rules: a test for when nobody owns an upgrade.
+- 2026-11-17 02:04Z North Star republished (version 11): your three answers of tonight folded in as V20, and its 'where the build stands' section rewritten for tonight.
+- 2026-11-17 02:03Z P3
+- 2026-11-17 01:57Z Started T18g: The prison's look: the corridor, the bank room and the cells you come home to. Opus is fixing three things in the prison's floor plan in the same copy: no walking through the teller counter, windows numbered 1 to 4 left to right, and each bunk's spot where the bunk is drawn.
+- 2026-11-17 01:56Z Paused T18g: waiting for the face work to finish, then I merge it into the main copy (both changed the game's main script) and make a new build.
+- 2026-11-17 01:56Z T18g
+- 2026-11-17 01:52Z Started T18g: The prison's look: the corridor, the bank room and the cells you come home to. Built in its own copy: walk from lift to farthest bunk 7.3 s, frame time half the Clinic's. An independent checker is re-running the walk, the tests and a break that unlights the bank room.
+- 2026-11-17 01:52Z New pictures for T18g: The prison's look: the corridor, the bank room and the cells you come home to.
 - 2026-11-17 01:49Z Paused T7e: waiting for a free agent to watch the crewmates walk, run and sneak in the real game for foot sliding. They are already in the game as your friends' figures (committed 3d13505).
 - 2026-11-17 01:49Z Finished P4: Light browser build and a download for friends.
 - 2026-11-17 01:48Z Paused P4: waiting for nothing; done
@@ -249,27 +283,3 @@
 - 2026-11-17 01:25Z Paused P4: waiting for the friend-joining check. Then a new build, the zip for friends rebuilt, and its READ ME checked against the real start screen. The zip tool itself is done.
 - 2026-11-17 01:25Z Paused TA: waiting for you: the sound files from the shopping list (assets_src/inbox/audio/WHERE-TO-GET.md). Nothing is being built on this until they arrive.
 - 2026-11-17 01:25Z Paused T7f: waiting for the friend-joining work to be committed. Then your face goes on your mask and is sent to the others. The face editor is finished and committed.
-- 2026-11-17 01:25Z Paused T7e: waiting for the friend-joining work to be committed (it just finished). Then the crewmates go into the real game and I watch them walk, run and sneak. The crewmates themselves were finished and committed earlier today.
-- 2026-11-17 01:24Z Finished T18f: Your answers on the day: every owner loses an upgrade on a missed day, and the bedtime count can't be stopped.
-- 2026-11-17 01:20Z Finished T18e: The stamped save: your progress kept on your own PC, signed by the server.
-- 2026-11-17 01:18Z Started T18f: Your answers on the day: every owner loses an upgrade on a missed day, and the bedtime count can't be stopped. An independent checker is breaking the new day rules six ways
-- 2026-11-17 01:18Z T18f
-- 2026-11-17 01:16Z Started T18e: The stamped save: your progress kept on your own PC, signed by the server. An independent checker is breaking the save stamp five ways to prove its tests
-- 2026-11-17 01:16Z T18e
-- 2026-11-17 01:14Z Started T18f: Your answers on the day: every owner loses an upgrade on a missed day, and the bedtime count can't be stopped. Sonnet is changing the day rules and the report to your two answers, with tests and deliberate breaks
-- 2026-11-17 01:14Z Added task T18f: Your answers on the day: every owner loses an upgrade on a missed day, and the bedtime count can't be stopped.
-- 2026-11-17 01:14Z Applied the owner's new answers.
-- 2026-11-17 01:13Z Finished T18d: The day rules.
-- 2026-11-17 01:13Z Finished T18c: The incident report's awards.
-- 2026-11-17 01:13Z Finished T18b: The prison's floor plan.
-- 2026-11-17 01:13Z Finished T18a: Upgrade rules.
-- 2026-11-17 01:13Z Finished T16a: The Annex floor generator.
-- 2026-11-17 01:09Z Started T18e: The stamped save: your progress kept on your own PC, signed by the server. Opus is building the save slip and the server's stamp, with tests that change one character and expect it refused
-- 2026-11-17 01:09Z Added task T18e: The stamped save: your progress kept on your own PC, signed by the server.
-- 2026-11-17 01:07Z Started T18c: The incident report's awards. An independent checker is re-running the report's tests and breaking them on purpose
-- 2026-11-17 01:07Z Started T18d: The day rules. An independent checker is re-running the day rules' tests and breaking them on purpose
-- 2026-11-17 01:07Z T18d
-- 2026-11-17 01:01Z Started T18c: The incident report's awards. Fixed: the narrator's lost-upgrade line now uses the game's one roll and never rolls itself. Its 4 tests pass; it waits for a separate check.
-- 2026-11-17 01:01Z Started T18c: The incident report's awards. Built by its agent (one award per player, every number true, 2,000 seeded days tested). Being changed so the narrator's lost-upgrade line uses the game's one roll instead of rolling again, so the report and the game always agree.
-- 2026-11-17 01:00Z Started T16a: The Annex floor generator. Built by its agent: the Annex generator passes all eight properties on 800 floors (repeating offices, every corridor on a loop, atrium, stairs, lobby). A separate checker is re-running it with breaks before it is committed.
-- 2026-11-17 01:00Z Started T18d: The day rules. An Opus agent is writing the day rules: the quota, the preview the lift monitor shows before BANK, a missed day's roll, game over on the third, shares and bedtime.

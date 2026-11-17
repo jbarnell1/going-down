@@ -1,5 +1,8 @@
 # Before the game: the title, "Play alone" and "Join friends" (the server's address, your name, the
-# passphrase), the plain-words errors, and the lobby (who is here, Start for everyone, Leave). Drawn
+# passphrase), the plain-words errors, and the lobby (who is here, Start for everyone, Leave). After
+# either button comes "draw your face" (face/face_editor.tscn, North Star H1): it opens on this
+# computer's last face, so Enter keeps it; Cancel keeps the last saved face (or none). The face is kept
+# for the session (`face_code`) and sent only to the other players in the same run. Drawn
 # crisp in the camcorder's pixel font over the taped picture, like the HUD. Keyboard (Tab / arrows,
 # Enter, typing, Backspace, Ctrl+V) and mouse both work. It decides nothing about the network: main.gd
 # connects and tells it what happened.
@@ -14,6 +17,8 @@ signal join_pressed(address: String, player_name: String, passphrase: String)
 signal back_pressed
 signal start_pressed
 signal leave_pressed
+## The screen shown changed ("" while playing): main.gd keeps its mode in step.
+signal screen_shown(which: String)
 
 const SETTINGS := "user://join.cfg"
 const MAX_ADDRESS := 200
@@ -24,7 +29,7 @@ const AMBER := Color("#ffd27a")
 const DIM := Color("#8f958f")
 const WARN := Color("#ff8a6a")
 
-## "title", "join", "connecting", "lobby" (hidden while playing).
+## "title", "face", "join", "connecting", "lobby" (hidden while playing).
 var screen := "title"
 var address := ""
 var player_name := ""
@@ -38,6 +43,11 @@ var run_on := false
 ## Under automation the address and name are not saved (a test must not change the player's own).
 var remember := true
 var focus := 0
+## The face for this session (FaceCodec text, "" for none), and what comes after the face step:
+## "alone" (the run), "join" (the form) or "join_submit" (the form, filled in by arguments, pressed).
+var face_code := ""
+var face_next := ""
+var editor: FaceEditor = null
 var _hover := -1
 ## The focusable items on the screen drawn last: [{kind: "button"|"field", id, rect}].
 var _items: Array[Dictionary] = []
@@ -67,6 +77,8 @@ func show_screen(which: String) -> void:
 	screen = which
 	visible = which != ""
 	focus = 0
+	if editor != null:
+		editor.visible = which == "face"
 	if which == "join":
 		# Start on the first empty field.
 		var vals := [address, player_name, passphrase]
@@ -77,6 +89,43 @@ func show_screen(which: String) -> void:
 		if focus == 0 and not address.is_empty() and not player_name.is_empty() and not passphrase.is_empty():
 			focus = 3
 	queue_redraw()
+	screen_shown.emit(which)
+
+## The face step, then `next` ("alone", "join" or "join_submit"). The editor opens on this session's
+## face, else this computer's last one, else the smile: a returning player presses Enter.
+func open_face(next: String) -> void:
+	face_next = next
+	if editor == null:
+		editor = (load("res://face/face_editor.tscn") as PackedScene).instantiate() as FaceEditor
+		editor.name = "FaceEditor"
+		editor.remember = true
+		editor.start_code = face_code
+		editor.set_anchors_preset(Control.PRESET_FULL_RECT)
+		editor.done.connect(_face_done)
+		editor.cancelled.connect(_face_cancelled)
+		add_child(editor)
+	else:
+		editor.begin(face_code)
+	show_screen("face")
+
+func _face_done(code: String, _texture: ImageTexture) -> void:
+	face_code = code
+	_after_face()
+
+func _face_cancelled() -> void:
+	face_code = FaceCodec.load_last()
+	_after_face()
+
+func _after_face() -> void:
+	match face_next:
+		"alone":
+			alone_pressed.emit()
+		"join":
+			error = ""
+			show_screen("join")
+		"join_submit":
+			show_screen("join")
+			submit()
 
 func _process(delta: float) -> void:
 	var want := get_viewport_rect().size
@@ -93,6 +142,8 @@ func _order() -> Array[String]:
 	match screen:
 		"title":
 			return ["alone", "join"]
+		"face":
+			return []
 		"join":
 			return ["address", "name", "pass", "go", "back"]
 		"connecting":
@@ -109,10 +160,10 @@ func focused_id() -> String:
 func press(id: String) -> void:
 	match id:
 		"alone":
-			alone_pressed.emit()
+			open_face("alone")
 		"join":
 			error = ""
-			show_screen("join")
+			open_face("join")
 		"go":
 			submit()
 		"back":
@@ -165,6 +216,10 @@ func _item_at(p: Vector2) -> int:
 
 ## Keys while the screen is up (main.gd passes them here; Esc is main's: the controls).
 func key(k: InputEventKey) -> void:
+	if screen == "face":
+		if editor != null:
+			editor.key(k)
+		return
 	if not k.pressed:
 		return
 	var o := _order()
@@ -276,6 +331,8 @@ func _draw() -> void:
 	_items.clear()
 	if screen == "":
 		return
+	if screen == "face":
+		return   # the editor draws the whole screen
 	var px := _scale()
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.35))
 	var big := px * 2.0

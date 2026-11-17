@@ -67,6 +67,10 @@ await page.waitForFunction(() => window.gdReady === true, null, { timeout: 18000
 const before = await page.evaluate(() => window.__peak());
 // A person's first gestures: a click on the picture, a key.
 await page.mouse.click(640, 360);
+// The click lands on PLAY ALONE; the draw-your-face step follows, and Enter keeps the face shown.
+await page.waitForTimeout(500);
+await page.keyboard.press('Enter');
+await page.waitForTimeout(500);
 await page.keyboard.press('KeyW');
 await page.waitForTimeout(300);
 if (process.argv.includes('--probe')) {

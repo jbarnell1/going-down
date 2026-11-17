@@ -91,8 +91,11 @@ node godot/tools/serve.mjs godot/export/web 4440 &      # then open http://127.0
 godot/export/windows/GoingDown.exe                      # the main build: nothing else needed beside it
 ```
 
-The game opens on the start screen: PLAY ALONE (in the middle of the screen) starts a run at once in
-a room inside the game; JOIN FRIENDS opens the form (the server's address, your name, the passphrase
+The game opens on the start screen: PLAY ALONE (in the middle of the screen) starts a run in a room
+inside the game; JOIN FRIENDS opens the form. Either first opens "draw your face" (`face/`): the editor
+starts on this computer's last face, so a returning player presses Enter (or DONE) to keep it; CANCEL
+keeps the last saved face (or none: the mask then shows the plain default face). The face is kept for
+the session and sent in the join, only to the other players in the same run. JOIN FRIENDS then opens the form (the server's address, your name, the passphrase
 for the night), then the lobby, which lists everyone in the room. Anyone can press START, and everyone
 in the lobby goes down together; LEAVE goes back. Errors are said in plain words on the form (wrong
 passphrase, room full, server not answering, an address that does not look right); BACK clears them.
@@ -123,8 +126,9 @@ headwear and chest number from their place in the room; their footsteps are hear
 each fades from 5 to 16 m and is hidden by walls, by the car's shut doors, in the dark and while the
 emote wheel is open. Emotes (WAVE, LOOK BEHIND, PRAY, DANCE SPIN, DANCE SNAKE, BUTTON: clockwise from
 the top of the wheel, 60 degrees each) go to the host, which passes them on to everyone else (at most
-one every 0.4 s per player); they play on your figure on their screens. A face drawn on your mask
-will come through `CrewView.set_face` (`face/`, being built separately).
+one every 0.4 s per player); they play on your figure on their screens. Every crewmate's mask screen
+shows the face that player drew (the host passes faces on once, `net/README.md` Faces), and the
+monitor on the back wall inside the lift shows the whole crew's faces side by side, yours included.
 
 A caught crewmate is out until the car next rides down (the run's rule). The soft catch of
 `net/host_rules.gd` applies only when a catch would wipe the run, which is why playing alone you are
@@ -152,21 +156,27 @@ node godot/tools/play_web.mjs 4440         # browser playthrough, 29 checks, pic
 node godot/tools/sound_web.mjs 4440        # browser sound after a real click: must PASS; with --query=&mute=1 must FAIL
 node godot/tools/play_desktop.mjs          # Windows build in a 960x540 window, 33 checks incl. bus peaks
 node godot/tools/measure_web.mjs 4440      # sizes, cold first frame, frame times and the cost of playing alone
-node godot/tools/play_net.mjs --port=4460  # multiplayer: 22 checks, pictures in godot/export/shots/net/
+node godot/tools/play_net.mjs --port=4460  # multiplayer: 27 checks, pictures in godot/export/shots/net/
 ```
 
-The playthroughs start with the start screen's PLAY ALONE (play_web clicks it, play_desktop and
-measure_web send `alone`). Because the screen is drawn a little behind the host and the client keeps a
+The playthroughs start with the start screen's PLAY ALONE and the face step (play_web clicks PLAY
+ALONE and presses Enter; play_desktop sends `ui alone` then `draw done`, the editor's Enter;
+measure_web sends `alone`, which does both). Under automation the face is saved to
+`user://face/test_last_face.txt`, never over the player's own. Because the screen is drawn a little behind the host and the client keeps a
 blink dark one tick past its end, "the lights come back as the car arrives" allows 0.3 s of host time
 (measured: 0.15 s).
 
 `play_net.mjs` starts the server from the Windows exe on 127.0.0.1 (the test passphrase
-`test-passphrase` in its environment; ports 4460-4469 only: the server, three test channels and the
-web page) and two 640x360 game windows that join through the form (the `join=`, `name=`, `pass=`
-arguments). From both clients' own state it asserts: a wrong passphrase gives the plain-words error,
-and Back returns to the title; the lobby lists both names; a browser client joins the same server
-(skip with `--web=0`); Start starts the run for both; each sees the other where the other really
-stands, drawn, with a readable name tag, dressed differently; nobody sees their own figure; the wheel
+`test-passphrase` in its environment; ports 4460-4479 only: the server, three test channels just above
+it and the web page) and two 640x360 game windows that join through the form (the `join=`, `name=`,
+`pass=` arguments; the face step comes first). From both clients' own state it asserts: the face step
+comes first and Enter keeps the face; a wrong passphrase gives the plain-words error, and Back returns
+to the title; each player draws a different face (the editor's buttons and mouse drags); the lobby
+lists both names; a browser client joins the same server
+(skip with `--web=0`); Start starts the run for both; the lift's monitor shows both faces on both screens; each sees the
+other where the other really stands, drawn, with a readable name tag, dressed differently, wearing the
+face the other drew on the mask (the mask's picture hashed against the face the other sent), each
+face received exactly once; nobody sees their own figure; the wheel
 (WAVE aimed at the top, a tap sends nothing, DANCE SPIN straight down) and each emote seen by the
 other; the call; the watched Orderly never moving on the watcher's screen while the other looks away
 (not vacuous); a crewmate caught in the blackout is caught on both screens (their own plays the

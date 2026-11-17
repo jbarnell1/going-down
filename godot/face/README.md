@@ -1,12 +1,13 @@
 # Draw your face
 
 Each player draws a face before the run. It shows on the screen of the mask their crewmate wears
-(North Star H1 and amendment V7), and later on the elevator monitor, the standee left where they
-fall, and posters. This folder holds the format, the editor, the tests and a demo. It is not wired
-into the start screen or the network yet; the last section lists what that takes.
+(North Star H1 and amendment V7) and on the elevator monitor, and later on the standee left where
+they fall, and posters. This folder holds the format, the editor, the tests and a demo. The start
+screen, the network, the mask and the monitor are wired (the last section); the standee, posters and
+the scared face are not yet.
 
-Nothing here touches the network. The face stays on the player's machine until the game sends it
-to the other players in the same room, and it is never uploaded anywhere else.
+Nothing in this folder touches the network. The game sends the face only to the other players in the
+same run (in the join, `net/README.md` Faces), and it is never uploaded or logged anywhere else.
 
 ## Files
 
@@ -139,9 +140,15 @@ dark marks: you can tell someone is wearing a face, not which one. That is the l
 screen in a 480 x 270 view, so it is not worth polishing further. The tape filter pushes red a
 little to the right of where it was drawn; that is the filter, not the face.
 
-## Wiring left for later
+## Wiring
 
-None of this is done. The pieces it needs are all here.
+Steps 1 to 4 are done (16 November 2026): `client/start_screen.gd` (the face step after PLAY ALONE or
+JOIN FRIENDS, `face_code` for the session), `net/protocol.gd` and `net/host.gd` (the join's fifth
+element, the "F" message), `client/others_view.gd` (the mask) and `client/lift.gd` (the monitor on the
+back wall inside the car, `set_faces`). Under automation the game saves to
+`user://face/test_last_face.txt` instead of the player's face. Checks: `tests/run_face_net.gd`, and
+`tools/play_net.mjs` (each player sees the other's face on the mask; the monitor shows both). Steps 5
+to 7 are left.
 
 1. **Start screen, before the run.** Add a "draw your face" step to the start screen (or the lobby)
    before the elevator: instance `face_editor.tscn`, full rect, with `remember = true`; it opens on

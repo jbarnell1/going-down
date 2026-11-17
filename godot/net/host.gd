@@ -32,6 +32,10 @@
 # Emotes (protocol "E") are passed on to every other player at once ("M"), at most one per player per
 # EMOTE_GAP seconds; they never touch the run.
 #
+# Faces: a join may carry the player's drawn face (protocol "J", fifth element). The host keeps it and
+# passes it to the other players once ("F"); a joiner (also a late one) gets everyone else's faces after
+# its welcome. Faces never go in the snapshot and never touch the run.
+#
 # Events are numbered and kept; each snapshot carries the events after the ones its client has
 # acknowledged (up to EVENT_BUDGET bytes), so they arrive exactly once and in order.
 extends RefCounted
@@ -94,6 +98,8 @@ class HostPlayer:
 	var claim: Move.Body = null
 	## Host time of the newest emote passed on (the emote rate limit).
 	var last_emote := -INF
+	## The face this player drew (FaceCodec text, already validated by the protocol), or "".
+	var face := ""
 
 class History:
 	var o: Entity.OrderlyState
@@ -151,6 +157,10 @@ var snapshot_sizes: Array = []
 ## reference sessions compare).
 var emotes_relayed := 0
 var emotes_dropped := 0
+## Faces sent to players ("F" messages), and whether faces are passed on at all (tests turn it off to
+## show the check that would catch it).
+var faces_sent := 0
+var relay_faces := true
 var _transport: Transport.Transport
 var _start_local: float
 var _players := {}  # id -> HostPlayer, in arrival order
@@ -328,7 +338,7 @@ func _on_message(from: String, data: String, now: float) -> void:
 	var ht := host_time(now)
 	match String(m["type"]):
 		"join":
-			_join(from)
+			_join(from, str(m.get("face", "")))
 		"leave":
 			_leave(from)
 		"ping":
@@ -356,8 +366,9 @@ func _relay_emote(p: HostPlayer, emote: String, ht: float) -> void:
 			_transport.send(q.peer, text)
 			emotes_relayed += 1
 
-## A join (or a repeated one, when the welcome was lost): the welcome carries the whole state.
-func _join(peer: String) -> void:
+## A join (or a repeated one, when the welcome was lost): the welcome carries the whole state. `face`:
+## the face the join carried ("" for none; the protocol has already refused anything not a face).
+func _join(peer: String, face: String = "") -> void:
 	var id: Variant = _by_peer.get(peer)
 	var p: HostPlayer = _players.get(id) if id != null else null
 	if p != null and p.left:
@@ -375,6 +386,26 @@ func _join(peer: String) -> void:
 	p.joined = true
 	var ev_from := p.ack_event + 1
 	_transport.send(peer, Protocol.encode({"type": "welcome", "you": p.id, "seed": seed, "playing": p.in_run, "evFrom": ev_from, "world": world()}))
+	_share_faces(p, face)
+
+## Faces, after a (repeated) welcome: the joiner gets every other player's face (so a late joiner has
+## everyone's), and the others get the joiner's, once: only when it is new or changed. Never in the
+## snapshot.
+func _share_faces(p: HostPlayer, face: String) -> void:
+	if not relay_faces:
+		return
+	for q: HostPlayer in _players.values():
+		if q != p and q.face != "":
+			_transport.send(p.peer, Protocol.encode({"type": "face", "player": q.id, "face": q.face}))
+			faces_sent += 1
+	if face == "" or face == p.face:
+		return
+	p.face = face
+	var text := Protocol.encode({"type": "face", "player": p.id, "face": face})
+	for q: HostPlayer in _players.values():
+		if q != p and q.connected and not q.left and q.joined:
+			_transport.send(q.peer, text)
+			faces_sent += 1
 
 func _leave(peer: String) -> void:
 	var id: Variant = _by_peer.get(peer)

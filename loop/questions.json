@@ -962,6 +962,58 @@
       ]
     },
     {
+      "id": "shop-vs-tree",
+      "title": "The prison: the shop and the skill tree",
+      "context": "You asked for a face kiosk separate from the shop and the skill tree, each at its own teller window or kiosk. So far the design had one kind of purchase: the five upgrades (Flashbulb, Whistle, Marker Pad, Doorstop, Second Wind), which are the first skill-tree nodes and are kept between days. What does the shop sell that the skill tree does not?",
+      "type": "single",
+      "options": [
+        {
+          "id": "consumables",
+          "label": "The shop sells things for one day: flares, batteries, spare tape, extra marks",
+          "note": "Recommended. The skill tree keeps the permanent upgrades. Spending is two decisions: what to keep, what to burn today."
+        },
+        {
+          "id": "same",
+          "label": "They are the same upgrades, just two windows to queue at",
+          "note": ""
+        },
+        {
+          "id": "cosmetic",
+          "label": "The shop sells looks: hats, mask frames, jumpsuit colours",
+          "note": "Fun to show off, changes nothing about play."
+        }
+      ],
+      "default": [
+        "consumables"
+      ]
+    },
+    {
+      "id": "prison-stations",
+      "title": "The prison: where each service stands",
+      "context": "Three services: the shop, the skill tree, the face kiosk. The bank room has four teller windows behind glass today.",
+      "type": "single",
+      "options": [
+        {
+          "id": "split",
+          "label": "Bank room: windows 1-2 the shop, windows 3-4 the skill tree; the face kiosk in the corridor by the cells",
+          "note": "Recommended. Two friends can use each at once, and the face kiosk is on the way to bed."
+        },
+        {
+          "id": "kiosks",
+          "label": "Three kiosks in the corridor, the bank room only for the report",
+          "note": ""
+        },
+        {
+          "id": "all-bank",
+          "label": "All three in the bank room: two windows and a kiosk",
+          "note": ""
+        }
+      ],
+      "default": [
+        "split"
+      ]
+    },
+    {
       "id": "anything",
       "title": "Anything else for the loop?",
       "context": "Notes, ideas, things that felt wrong when you played. Update this as often as you like.",

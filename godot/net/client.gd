@@ -138,6 +138,10 @@ var latch_released := false
 ## Other players' emotes as the host passed them on, in arrival order: {player, emote, t (host time)}.
 ## Keep your own index into it, as with `events`.
 var emotes: Array[Dictionary] = []
+## This player's drawn face (FaceCodec text, sent in the join) or "", and the other players' faces as
+## the host passed them on: player id -> FaceCodec text (only valid faces get this far).
+var face := ""
+var faces := {}
 
 var host_id: String
 var name: String
@@ -178,17 +182,22 @@ var _caught_at := -INF
 var _orderly_from := -1
 
 ## `interp_delay` (default INTERP_DELAY) and `input_interval` (default INPUT_INTERVAL; 0 sends every frame).
-func _init(transport: Transport.Transport, host_id_: String, name_: String, now: float, interp_delay: float = Session.INTERP_DELAY, input_interval: float = Session.INPUT_INTERVAL) -> void:
+## `face`: the player's drawn face (FaceCodec text) to send in the join, or "" for none.
+func _init(transport: Transport.Transport, host_id_: String, name_: String, now: float, interp_delay: float = Session.INTERP_DELAY, input_interval: float = Session.INPUT_INTERVAL, face_: String = "") -> void:
 	_transport = transport
 	host_id = host_id_
 	name = name_
+	face = Protocol.valid_face(face_)
 	_interp_delay = interp_delay
 	_input_interval = input_interval
 	_send_join(now)
 
 func _send_join(now: float) -> void:
 	_last_join = now
-	_transport.send(host_id, Protocol.encode({"type": "join", "name": name, "ct": now}))
+	var m := {"type": "join", "name": name, "ct": now}
+	if face != "":
+		m["face"] = face
+	_transport.send(host_id, Protocol.encode(m))
 
 ## Plays an emote for the others (one of Protocol.EMOTES; the host passes it on, rate limited).
 func emote(which: String) -> void:
@@ -306,6 +315,10 @@ func receive(now: float) -> void:
 			"emoted":
 				if id != null and m["player"] != id:
 					emotes.append({"player": m["player"], "emote": m["emote"], "t": m["t"]})
+			"face":
+				# Before or after the welcome (it follows the welcome, but a repeated join may cross it).
+				if m["player"] != id:
+					faces[m["player"]] = m["face"]
 
 func _insert(w: Dictionary) -> void:
 	var s := _snaps

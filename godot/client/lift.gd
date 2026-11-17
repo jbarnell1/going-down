@@ -3,7 +3,8 @@
 # you walk in) and a DOWN half, a door-hold button inside, and on the landing a call button and the
 # indicator above the doors. Built in the car's frame: origin at the middle of the doorway on the wall
 # line at floor height, x to the right walking in, z OUT of the car (the car is z = -2 .. 0), y up.
-# Like src/render/elevator.ts. It only shows what the rules say (doors open, indicator, votes).
+# Like src/render/elevator.ts. It only shows what the rules say (doors open, indicator, votes), and on
+# a monitor on the back wall every crewmate's drawn face (set_faces).
 class_name Lift
 extends Node3D
 
@@ -19,6 +20,14 @@ const HOLD_BUTTON := Vector2(0.84, 1.15)
 const CALL_BUTTON := Vector2(-0.9, 1.12)
 ## The landing's wall face (the wall is drawn Level.WALL_T thick, centred on the wall line).
 const LAND := Level.WALL_T * 0.5
+## The monitor on the back wall inside the car: every crewmate's drawn face side by side (North Star
+## H1), seen from inside and through the open doors. Its picture is MON_W x MON_H pixels, faces 32 x 32
+## (64 x 64 for one or two players) with a 2-pixel gap, four to a row, drawn with nearest filtering.
+const MON_W := 138
+const MON_H := 70
+const MON_SIZE := Vector2(0.9, 0.9 * MON_H / MON_W)
+const MON_Y := 1.98
+const MON_BG := Color("#0b0f0e")
 
 var doors := 0.0          # 0 shut .. 1 open, as drawn
 var doors_target := 0.0
@@ -37,6 +46,13 @@ var _lamp_panel: ShaderMaterial
 var _t := 0.0
 var _vote := ""
 var _light := 1.0
+## The monitor: its picture, texture, the faces it shows (FaceCodec text, "" = the default face) and
+## where each sits in the picture.
+var monitor_faces: Array[String] = []
+var _mon_img: Image
+var _mon_tex: ImageTexture
+var _mon_key := "-"
+var _mon_slots: Array[Rect2i] = []
 
 func build(car: Dictionary) -> void:
 	position = Vector3(float(car.doorX), float(car.floorY), float(car.doorZ))
@@ -105,6 +121,21 @@ func build(car: Dictionary) -> void:
 	ind_in.scale = Vector3(0.8, 0.8, 0.8)
 	add_child(ind_in)
 	show_indicator("", false, 0)
+	# The monitor on the back wall, above the handrail, facing the doors.
+	_mon_img = Image.create(MON_W, MON_H, false, Image.FORMAT_RGB8)
+	_mon_img.fill(MON_BG)
+	_mon_tex = ImageTexture.create_from_image(_mon_img)
+	_box(Vector3(0, MON_Y, -DEPTH + 0.015), Vector3(MON_SIZE.x + 0.08, MON_SIZE.y + 0.08, 0.03), dark)
+	var mq := QuadMesh.new()
+	mq.size = MON_SIZE
+	var mon := MeshInstance3D.new()
+	mon.name = "Monitor"
+	mon.mesh = mq
+	mon.material_override = Level.glow_material(Color.WHITE, 0.95, _mon_tex)
+	mon.position = Vector3(0, MON_Y, -DEPTH + 0.032)
+	add_child(mon)
+	var none: Array[String] = []
+	set_faces(none)
 	# Call button on the landing wall, hold button inside.
 	_box(Vector3(CALL_BUTTON.x, CALL_BUTTON.y, LAND + 0.02), Vector3(0.14, 0.26, 0.03), dark)
 	_call_mat = Level.glow_material(Color(1.0, 0.55, 0.15), 0.25)
@@ -169,6 +200,48 @@ func show_indicator(label: String, lit: bool, arrow: int) -> void:
 	var lw := PixelFont.width(label)
 	PixelFont.blit(_ind_img, label, Vector2i(24 - lw, 2), on)
 	_ind_tex.update(_ind_img)
+
+## The monitor shows these faces (FaceCodec text each, "" for a crewmate who drew none) side by side.
+func set_faces(codes: Array[String]) -> void:
+	var key := "|".join(codes)
+	if key == _mon_key or _mon_img == null:
+		return
+	_mon_key = key
+	monitor_faces = codes.duplicate()
+	_mon_slots.clear()
+	_mon_img.fill(MON_BG)
+	var n := mini(codes.size(), 8)
+	var k := 2 if n <= 2 else 1
+	var side := FaceCodec.SIZE * k
+	var cols := mini(n, 4)
+	var rows := ceili(n / 4.0)
+	var x0 := (MON_W - (cols * (side + 2) - 2)) / 2
+	var y0 := (MON_H - (rows * (side + 2) - 2)) / 2
+	for i in n:
+		var px := FaceCodec.decode_indices(codes[i])
+		var img: Image = FaceCodec.to_image(px) if not px.is_empty() else _default_face_image()
+		if k != 1:
+			img.resize(side, side, Image.INTERPOLATE_NEAREST)
+		var at := Vector2i(x0 + (i % 4) * (side + 2), y0 + (i / 4) * (side + 2))
+		_mon_img.blit_rect(img, Rect2i(0, 0, side, side), at)
+		_mon_slots.append(Rect2i(at, Vector2i(side, side)))
+	_mon_tex.update(_mon_img)
+
+## Tests: a short hash of each face as drawn on the monitor (at 32 x 32, comparable with
+## CrewView.texture_hash of the decoded face).
+func monitor_hashes() -> Array[String]:
+	var out: Array[String] = []
+	for r in _mon_slots:
+		var img := _mon_img.get_region(r)
+		img.resize(FaceCodec.SIZE, FaceCodec.SIZE, Image.INTERPOLATE_NEAREST)
+		out.append(CrewView.image_hash(img))
+	return out
+
+static func _default_face_image() -> Image:
+	var img := CrewView.default_face().get_image()
+	img.resize(FaceCodec.SIZE, FaceCodec.SIZE, Image.INTERPOLATE_NEAREST)
+	img.convert(Image.FORMAT_RGB8)
+	return img
 
 func set_doors(open: bool, instant := false) -> void:
 	doors_target = 1.0 if open else 0.0

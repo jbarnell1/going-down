@@ -35,10 +35,11 @@ var _last_real := -1.0
 var _host_pipe: Transport.Pipe = null
 var _client_pipe: Transport.Pipe = null
 
-## Opens the room (no run yet: start_run() starts one).
-func open_local(seed_: String, player_name: String, entity: bool) -> void:
+## Opens the room (no run yet: start_run() starts one). `face`: the player's drawn face ("" for none).
+func open_local(seed_: String, player_name: String, entity: bool, face: String = "") -> void:
 	seed = seed_
 	_name = player_name
+	_face = face
 	entity_on = entity
 	my_id = ME
 	people = [[ME, player_name]]
@@ -65,7 +66,7 @@ func start_run() -> void:
 	for p in host.state.players:
 		if p.id == ME:
 			host.place_player(ME, p.body)
-	client = Client.new(_client_pipe, "host", _name, _vt)
+	client = Client.new(_client_pipe, "host", _name, _vt, Session.INTERP_DELAY, Session.INPUT_INTERVAL, _face)
 	run_on = true
 	status = "running"
 

@@ -54,12 +54,19 @@ sock.on('data', (d) => {
   }
 });
 const cmd = (c) => new Promise((res) => { waiting.push(res); sock.write(c + '\n'); });
-// The start screen comes first: press its PLAY ALONE (the button's own code path), then ready once the
-// run answers.
+// The start screen comes first: press its PLAY ALONE (the button's own code path), then the face step
+// (Enter keeps the face it opens on: the editor's own key path), then ready once the run answers.
 for (let i = 0; i < 200; i++) {
-  if ((await cmd('alone')) !== 'unknown command') break;
+  if ((await cmd('ui alone')) === 'ok') break;
   await new Promise((r) => setTimeout(r, 100));
 }
+let faceStep = '';
+for (let i = 0; i < 50 && faceStep !== 'face'; i++) {
+  faceStep = JSON.parse(await cmd('screen')).screen;
+  if (faceStep !== 'face') await new Promise((r) => setTimeout(r, 100));
+}
+if (faceStep !== 'face') console.log(`FAIL the face step did not come after PLAY ALONE (screen ${faceStep})`);
+await cmd('draw done');
 let ready = false;
 for (let i = 0; i < 200 && !ready; i++) {
   try { ready = JSON.parse(await cmd('state')).phase !== undefined; } catch { /* not yet */ }

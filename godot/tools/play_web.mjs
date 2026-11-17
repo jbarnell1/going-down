@@ -27,8 +27,12 @@ await page.waitForFunction(() => window.gdReady === true, null, { timeout: 18000
 const firstFrameMs = await page.evaluate(() => window.gdFirstFrameMs);
 console.log(`first frame ${Math.round(firstFrameMs)} ms (page ${Date.now() - t0} ms)`);
 // The start screen comes first; the click lands on its PLAY ALONE button (the middle of the page), so
-// the run starts with a real click as before. Wait until the room on this page has started it.
+// the run starts with a real click as before. Then the face step: it opens on the last face (or the
+// smile), and a returning player's one key, Enter, keeps it. Wait until the room on this page has
+// started the run.
 await page.mouse.click(640, 360);
+await page.waitForFunction(() => { window.gdCmd('screen'); try { return JSON.parse(window.gdResult).screen === 'face'; } catch { return false; } }, null, { timeout: 10000 });
+await page.keyboard.press('Enter');
 await page.waitForFunction(() => { window.gdCmd('state'); try { return JSON.parse(window.gdResult).phase !== undefined; } catch { return false; } }, null, { timeout: 60000 });
 
 await playthrough(

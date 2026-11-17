@@ -444,13 +444,26 @@ func _others(f: Client.Frame, latest: Dictionary) -> Array:
 	for m: Dictionary in latest["crew"]:
 		raised[m["id"]] = m["raised"]
 	var nm := names()
+	var faces: Dictionary = rc.client.faces if rc.client != null else {}
 	var out: Array = []
 	for p: Dictionary in f.players:
 		var id := str(p["id"])
 		var b: Move.Body = p["body"]
 		out.append({"id": id, "name": nm.get(id, id), "index": int(order.get(id, 0)), "x": b.x, "y": b.y, "z": b.z, "level": b.level,
 			"yaw": p["yaw"], "pitch": p["pitch"], "gait": p["gait"], "status": p["status"], "active": p["active"],
-			"raised": bool(raised.get(id, false))})
+			"raised": bool(raised.get(id, false)), "face": str(faces.get(id, ""))})
+	return out
+
+## Every crewmate's face in the run's player order, this player's own included (FaceCodec text, ""
+## for one who sent none): what the lift's monitor shows.
+func crew_faces() -> Array[String]:
+	var out: Array[String] = []
+	var c := rc.client
+	if c == null or c.latest == null:
+		return out
+	for p: Dictionary in c.latest["players"]:
+		var id := str(p["id"])
+		out.append(c.face if id == str(c.id) else str(c.faces.get(id, "")))
 	return out
 
 ## Whether a point can be seen from the camera through the floor's walls (the rules' own line of

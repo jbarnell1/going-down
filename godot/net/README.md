@@ -40,6 +40,27 @@ counters `emotes_relayed` and `emotes_dropped` are kept outside `HostStats`, so 
 compare are unchanged. `server/room.gd` accepts "emote" from a joined player; `decode` validates both
 messages like every other (a bad index is a protocol error).
 
+## Faces
+
+The face each player draws before the run (`face/`, North Star H1 and V7) goes only to the other
+players in the same run, and nothing stores or logs it on the way:
+
+- `[1, "J", name, ct, face]` client to host: the join's optional fifth element, the face as
+  `FaceCodec` text (at most 515 characters). A four-element join is still a join and decodes exactly as
+  before (no `face` key, so the reference digests are unchanged). A fifth element that is not a valid
+  face (not text, longer than `FaceCodec.MAX_LENGTH`, or refused by `FaceCodec.check`) counts as no
+  face, and the player still joins. A join with the worst-case face and a 32-character name is 571
+  bytes (the server's limit is 4096). `Client.new(..., face)`, `RoomClient.connect_to(url, secret,
+  name, face)`, `LocalRoom.open_local(seed, name, entity, face)`.
+- `[1, "F", player, face]` host to client: `player`'s face. After each welcome the joiner gets every
+  other player's face (so a late joiner has everyone's), and the others get the joiner's once (when it
+  is new or changed). Never in the 20 Hz snapshot. The client keeps them in `client.faces` (player id
+  -> text); its own is `client.face`. `server/room.gd` refuses "F" from a client.
+
+`NetHost.faces_sent` counts the face messages (outside `HostStats`); `relay_faces = false` stops
+them (tests use it to show the checks can fail). `tests/prop_face_net.gd` (run alone with
+`tests/run_face_net.gd`) checks all of the above.
+
 ## The client API (what `client/play_link.gd` does)
 
 The game is joined: `client/play_link.gd` is the only client script that talks to the room, alone
@@ -138,8 +159,10 @@ safe side of the fairness rule.
 
 - `tools/net_local.mjs` (10 checks): the headless server and three headless GDScript players over
   real WebSockets with injected delay, then hostile probes.
-- `tools/play_net.mjs` (22 checks): the real Windows game, two windows and a browser, through the start
-  screen, the lobby, the run and back (see `godot/README.md`, Checks). To prove it can fail, replace
-  `_transport.send(q.peer, text)` in `host.gd` `_relay_emote` with
+- `tools/play_net.mjs` (27 checks): the real Windows game, two windows and a browser, through the start
+  screen, the face step, the lobby, the run and back (see `godot/README.md`, Checks). To prove it can
+  fail, replace `_transport.send(q.peer, text)` in `host.gd` `_relay_emote` with
   `pass  # BREAK: _transport.send(q.peer, text)`, export Windows (`npm run godot:export -- windows`)
-  and run it: the two emote checks fail (18 passed, 2 failed, exit 1). Undo it and export again.
+  and run it: the two emote checks fail. Likewise `var relay_faces := false` in `host.gd`: the face
+  checks (the monitor, the masks, faces received) fail. Undo it and export again.
+- `tests/run_face_net.gd` (7 tests): the face in the join and the host passing it on, in memory.

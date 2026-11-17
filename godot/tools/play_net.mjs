@@ -4,7 +4,10 @@
 // mouse) that join through the start screen's own Join (the join=, name= and pass= arguments fill the
 // form and press it). Asserts from BOTH clients' own state:
 //   - a wrong passphrase shows the plain-words error on the start screen;
+//   - each player draws a face in the face step after Join (the editor's own controls and mouse drags);
 //   - the lobby lists both names; Start (pressed by one) starts the run for both;
+//   - each sees the OTHER player's drawn face on that crewmate's mask (the picture on the mask, hashed,
+//     against the face the other drew), and the lift's monitor shows both faces;
 //   - each sees the other as a crewmate where the other really stands (the drawn figure's position
 //     against the other's own body), drawn, with a readable name tag; a picture from each;
 //   - the emote wheel: one aims and lets go, the other sees the emote on that figure;
@@ -15,7 +18,8 @@
 // (its lobby lists three names; it leaves before the run).
 // Pictures in export/shots/net/. Prints `N passed, M failed`; exit code 1 on any failure.
 //   node godot/tools/play_net.mjs [--port=4460] [--web=4464|0] [--keep]
-// Start .local/guard-mouse.ps1 beside it. Ports 4460-4469 only; every process it starts is stopped.
+// The game windows' test channels are on port+1..port+3. Start .local/guard-mouse.ps1 beside it.
+// Ports 4460-4479 only; every process it starts is stopped.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
@@ -34,7 +38,8 @@ const shots = resolve(here, '../export/shots/net');
 const SECRET = 'test-passphrase';
 const url = `ws://127.0.0.1:${port}`;
 const testPorts = [port + 1, port + 2, port + 3];
-for (const p of [port, ...testPorts, ...(webPort ? [webPort] : [])]) if (!(p >= 4460 && p <= 4469)) throw new Error(`port ${p} is outside 4460-4469`);
+for (const p of [port, ...testPorts, ...(webPort ? [webPort] : [])]) if (!(p >= 4460 && p <= 4479)) throw new Error(`port ${p} is outside 4460-4479`);
+if (webPort && [port, ...testPorts].includes(webPort)) throw new Error(`the web port ${webPort} is one of the game's ports`);
 if (!existsSync(exe)) throw new Error(`no Windows build at ${exe}: npm run godot:export first`);
 mkdirSync(shots, { recursive: true });
 
@@ -85,6 +90,14 @@ async function until(fn, pred, ms = 30000, every = 100) {
 }
 const inGame = (s) => s.phase !== undefined;
 const scr = (s) => s.screen ?? {};
+/** The face step after Join: waits for it, runs the drawing commands, then Done (the editor's Enter). */
+async function drawFace(c, steps, shot = '') {
+  const s = await until(c.state, (x) => scr(x).screen === 'face', 20000);
+  if (scr(s).screen !== 'face') return false;
+  for (const st of steps) await c.cmd(`draw ${st}`);
+  if (shot) { await sleep(150); await c.shot(shot); }
+  return (await c.cmd('draw done')) === 'ok';
+}
 
 // ---- The server.
 const server = launch(['--headless', '--', 'server', `port=${port}`, 'bind=127.0.0.1', 'seed=alpha', 'stats=10'], { env: { GD_JOIN_SECRET: SECRET }, echo: 'server' });
@@ -96,6 +109,7 @@ let B = null;
 try {
   // ---- 1. A wrong passphrase: the plain-words error on the join form; then back to the title.
   const W = await game('wrong', testPorts[2], [`join=${url}`, 'name=Wrong', 'pass=not-the-passphrase'], '40,440');
+  check('the face step comes first, and Enter keeps the face it opens on', await drawFace(W, []));
   let w = await until(W.state, (s) => /WRONG PASSPHRASE/.test(scr(s).error ?? ''), 20000);
   check('a wrong passphrase shows the plain-words error on the start screen', scr(w).screen === 'join' && /WRONG PASSPHRASE/.test(scr(w).error), `screen ${scr(w).screen}, close code ${scr(w).closeCode}, "${scr(w).error}"`);
   await W.shot('02-join-form-wrong-passphrase.png');
@@ -109,6 +123,11 @@ try {
   // ---- 2. Two players join through the form's own Join (arguments fill it in).
   A = await game('A', testPorts[0], [`join=${url}`, 'name=Ann', `pass=${SECRET}`], '40,40');
   B = await game('B', testPorts[1], [`join=${url}`, 'name=Bob', `pass=${SECRET}`], '700,40');
+  // Each draws a different face: Ann starts from the shock and adds red cheeks, Bob from the frown with
+  // a blue tear and a green brow (the editor's own buttons; strokes as mouse drags across the canvas).
+  const drewA = await drawFace(A, ['press starter:shock', 'press colour:2', 'press brush:2', 'line 4 20 7 20', 'line 25 20 28 20'], '00-ann-draws-her-face.png');
+  const drewB = await drawFace(B, ['press starter:frown', 'press colour:3', 'press brush:1', 'line 22 14 22 21', 'press colour:4', 'line 6 5 13 7']);
+  check('both draw a face in the face step after Join', drewA && drewB);
   const lobbyOf = async (c, n) => until(c.state, (s) => scr(s).screen === 'lobby' && (scr(s).people ?? []).length >= n, 20000);
   let a = await lobbyOf(A, 2);
   let b = await lobbyOf(B, 2);
@@ -128,6 +147,9 @@ try {
       const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
       await page.goto(`http://127.0.0.1:${webPort}/index.html?auto=1&join=${encodeURIComponent(url)}&name=Web&pass=${SECRET}`);
       await page.waitForFunction(() => window.gdReady === true, null, { timeout: 180000 });
+      // The face step first (Enter keeps the face it opens on).
+      await page.waitForFunction(() => { window.gdCmd('screen'); try { return JSON.parse(window.gdResult).screen === 'face'; } catch { return false; } }, null, { timeout: 20000 });
+      await page.evaluate(() => window.gdCmd('draw done'));
       const webScreen = async () => page.evaluate(() => { window.gdCmd('screen'); return JSON.parse(window.gdResult); });
       const ws = await until(webScreen, (s) => s.screen === 'lobby' && s.people.length >= 3, 30000);
       a = await lobbyOf(A, 3);
@@ -152,6 +174,20 @@ try {
   const planA = JSON.parse(await A.cmd('plan'));
   const car = planA.car;
   await until(A.state, (s) => s.phase === 'unloading' && s.client.doors > 0.95, 15000);
+  // ---- 4b. The lift's monitor (back wall, inside): both faces side by side, on both screens.
+  a = await A.state();
+  const yaw0 = (a.client.yaw * 180) / Math.PI;
+  await A.cmd(`face ${car.doorX + car.inX * 3} ${car.doorZ + car.inZ * 3} ${car.floorY + 1.98}`);
+  await sleep(500);
+  const facesA0 = JSON.parse(await A.cmd('faces'));
+  const facesB0 = JSON.parse(await B.cmd('faces'));
+  const onMonitor = (f, own, other) => f.monitor.length === 2 && f.monitor.includes(own) && f.monitor.includes(other);
+  check("the lift's monitor shows both crew faces (own and the other's) on both screens", facesA0.hasFace && facesB0.hasFace && facesA0.own !== facesB0.own
+    && onMonitor(facesA0, facesA0.own, facesB0.own) && onMonitor(facesB0, facesB0.own, facesA0.own),
+    `A's monitor ${JSON.stringify(facesA0.monitor)}, B's ${JSON.stringify(facesB0.monitor)}; Ann drew ${facesA0.own}, Bob drew ${facesB0.own}`);
+  await A.shot('14-lift-monitor-faces.png');
+  await A.cmd(`look ${yaw0} 0`);
+  await sleep(200);
   await A.cmd('resetstats');
   await B.cmd('resetstats');
 
@@ -184,6 +220,16 @@ try {
   check('nobody sees their own figure', !(a.others ?? []).some((x) => x.id === a.me.id) && !(b.others ?? []).some((x) => x.id === b.me.id));
   await A.shot('05-ann-sees-bob.png');
   await B.shot('06-bob-sees-ann.png');
+  // Each sees the OTHER's drawn face on that crewmate's mask: the picture on the mask (read back from
+  // its material) against the picture decoded from the face the other player drew and sent.
+  const facesA = JSON.parse(await A.cmd('faces'));
+  const facesB = JSON.parse(await B.cmd('faces'));
+  const maskOk = (f, otherId, otherOwn) => f.masks[otherId] === otherOwn && otherOwn !== '' && otherOwn !== f.default;
+  const apart = Math.hypot(a.me.x - b.me.x, a.me.z - b.me.z);
+  check("A sees the face B drew on B's mask, and B sees A's on A's", maskOk(facesA, b.me.id, facesB.own) && maskOk(facesB, a.me.id, facesA.own) && facesA.own !== facesB.own,
+    `on A's screen B's mask shows ${facesA.masks[b.me.id]} (B drew ${facesB.own}); on B's screen A's mask shows ${facesB.masks[a.me.id]} (A drew ${facesA.own}); default face ${facesA.default}; ${apart.toFixed(2)} m apart`);
+  check("faces came once each from the host (each received exactly the other's)", facesA.received === 1 && facesB.received === 1, `A received ${facesA.received}, B ${facesB.received}`);
+  await A.shot('13-ann-sees-bobs-face.png');
 
   // ---- 6. The emote wheel: A holds R, aims at WAVE (the top), lets go; B sees it on A's figure.
   await A.cmd('wheel open');

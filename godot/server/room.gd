@@ -6,12 +6,15 @@
 #   server -> client  m|{"t":"you","id":"c3"}                                       once, after the hello
 #                     m|{"t":"lobby","epoch":E,"running":true|false,"people":[[id,name],...]}
 #                                                                                   on every change and every 2 s
-#                     n<E>|<protocol text>                                           the run's messages (net/protocol.gd)
+#                     n<E>|<protocol text>                                           the run's messages (net/protocol.gd),
+#                                                                                   including the other players' drawn faces ("F")
 #   client -> server  m|{"t":"start"}        start a run (in the lobby; ignored while one runs)
 #                     m|{"t":"name","name":"..."}
 #                     m|{"t":"ping"}         keeps a lobby connection alive (any message does)
 #                     n<E>|<protocol text>   input, join, leave, ping or emote of run E (the host passes
-#                                            emotes on to the others, rate limited); anything else, or a
+#                                            emotes on to the others, rate limited; a join may carry the
+#                                            player's drawn face, which the host passes on once and
+#                                            nothing logs; a client may not send "F"); anything else, or a
 #                                            message that does not decode exactly (net/protocol.gd
 #                                            decode validates every field), closes the connection.
 # A client's run messages are passed to the host as coming from that connection's own id, so it can

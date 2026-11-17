@@ -3,15 +3,15 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 44,
+  "iteration": 45,
   "now": "T7f",
-  "nowText": "Opus is putting your drawn face into the game: a draw-your-face step on the start screen, the face sent to the others when you join, shown on your crewmate's mask and on the lift's monitor",
+  "nowText": "Built: draw your face on the start screen, it is sent when you join, shown on your mask and the lift monitor. Two-player check 27/27. An independent checker is re-running every playthrough and a break.",
   "ci": {
     "status": "passed",
-    "commit": "5323a22",
-    "at": "2026-11-17T01:28:23.469Z"
+    "commit": "a010230",
+    "at": "2026-11-17T02:03:47.391Z"
   },
-  "answersAppliedTo": "2026-11-17T01:16:41.572Z",
+  "answersAppliedTo": "2026-11-17T02:33:36.042Z",
   "tasks": [
     {
       "id": "T0",
@@ -1081,10 +1081,28 @@
           "caption": "Drawn faces on the crewmates' masks in the Clinic, at 1 to 6 metres",
           "kind": "image",
           "at": "2026-11-17T00:33:09.070Z"
+        },
+        {
+          "src": "T7f/20261117T021855-14-lift-monitor-faces.png",
+          "caption": "The lift's monitor showing both players' drawn faces",
+          "kind": "image",
+          "at": "2026-11-17T02:18:55.534Z"
+        },
+        {
+          "src": "T7f/20261117T021855-13-ann-sees-bobs-face.png",
+          "caption": "Bob's drawn face on his mask, seen by Ann",
+          "kind": "image",
+          "at": "2026-11-17T02:18:55.535Z"
+        },
+        {
+          "src": "T7f/20261117T021855-00-ann-draws-her-face.png",
+          "caption": "Drawing your face on the start screen",
+          "kind": "image",
+          "at": "2026-11-17T02:18:55.536Z"
         }
       ],
-      "doingText": "Opus is putting your drawn face into the game: a draw-your-face step on the start screen, the face sent to the others when you join, shown on your crewmate's mask and on the lift's monitor",
-      "doingAt": "2026-11-17T01:48:59.795Z"
+      "doingText": "Built: draw your face on the start screen, it is sent when you join, shown on your mask and the lift monitor. Two-player check 27/27. An independent checker is re-running every playthrough and a break.",
+      "doingAt": "2026-11-17T02:18:55.693Z"
     },
     {
       "id": "TA",
@@ -1656,6 +1674,19 @@
       "todo": []
     },
     {
+      "id": "T16d",
+      "title": "The Annex's look: the endless yellow office, built and pictured",
+      "why": "Floor 3 must look like nowhere you have been, and every repeated room must look exactly the same",
+      "status": "doing",
+      "gates": [],
+      "ns": [
+        "A2"
+      ],
+      "startedAt": "2026-11-17T02:16:43.466Z",
+      "doingText": "Opus is building the Annex's look in its own copy: yellowed walls, mustard carpet, even pale light, props chosen by room shape so repeated rooms match, repeating signs",
+      "doingAt": "2026-11-17T02:16:43.467Z"
+    },
+    {
       "id": "T18",
       "title": "The prison: the bank room, upgrades, a day quota and beds",
       "why": "You asked for a home between runs: choosing not to go deeper brings the crew back to the prison, where the bank room sells upgrades, a day's earnings must meet a quota, and the day ends when everyone climbs into bed",
@@ -1781,15 +1812,68 @@
       "id": "T18g",
       "title": "The prison's look: the corridor, the bank room and the cells you come home to",
       "why": "Banking takes the crew home; the prison has to feel dull and safe, the opposite of the floors below",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "C6",
         "H1"
       ],
       "startedAt": "2026-11-17T01:28:52.813Z",
-      "doingText": "Opus is building the prison's look in its own copy of the code: painted concrete corridor, a bright bank room with four teller windows, eight cells with bunks",
-      "doingAt": "2026-11-17T01:28:52.813Z"
+      "media": [
+        {
+          "src": "T18g/20261117T015201-02_bank_room_windows.png",
+          "caption": "The bank room: four teller windows behind wire glass, a brass counter, a white strip light",
+          "kind": "image",
+          "at": "2026-11-17T01:52:01.482Z"
+        },
+        {
+          "src": "T18g/20261117T015201-04_cell_inside.png",
+          "caption": "A cell: bunk under the orange night light",
+          "kind": "image",
+          "at": "2026-11-17T01:52:01.484Z"
+        },
+        {
+          "src": "T18g/20261117T015201-01_lift_doors_down_corridor.png",
+          "caption": "From the lift down the corridor",
+          "kind": "image",
+          "at": "2026-11-17T01:52:01.486Z"
+        }
+      ],
+      "todo": [
+        "Fix in the prison plan: players can walk through the teller counter (row 12 is open); the windows read 4-3-2-1 left to right; bunk spots are at the cell doors while the bunks are drawn on the back wall.",
+        "The 'bank room brighter than the corridor' picture check passes by only about 1% (ratio 1.617 against 1.60): settle the threshold or the lights before it flickers red."
+      ],
+      "waiting": "the face work to land; then I merge the prison branch (two commits) into the main game and make a new build."
+    },
+    {
+      "id": "T18i",
+      "title": "A face kiosk in the prison, and a window each for the shop and the skill tree",
+      "why": "You can redraw your face between days, and buying is laid out the way you asked: every service at its own window or kiosk",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "H1",
+        "C6",
+        "F1"
+      ],
+      "waiting": "the prison merge (right after the face work lands). Decided with you: windows 1-2 the shop (one-day items), 3-4 the skill tree, the face kiosk in the corridor by the cells."
+    },
+    {
+      "id": "T18h",
+      "title": "The day rules: a test for when nobody owns an upgrade",
+      "why": "The lift monitor must say NOTHING TO TAKE, and nobody may lose anything, when nobody owns an upgrade",
+      "status": "done",
+      "gates": [],
+      "ns": [
+        "C6"
+      ],
+      "startedAt": "2026-11-17T02:04:48.247Z",
+      "doingText": "Sonnet is adding the missing test and breaking it on purpose",
+      "doingAt": "2026-11-17T02:04:48.247Z",
+      "nsCheck": "C6/V20: odds and stakes shown before BANK match what happens, including when nothing is at stake.",
+      "finishedAt": "2026-11-17T02:07:26.764Z",
+      "summary": "Added a test: when nobody owns an upgrade the lift monitor says NOTHING TO TAKE and nobody loses anything, and in a mixed crew only owners can lose one. Day tests 10 passed; a deliberate break turned it red. Committed 514d0e2.",
+      "todo": []
     },
     {
       "id": "S",
@@ -1965,9 +2049,133 @@
     {
       "at": "2026-11-16T18:01:30.780Z",
       "text": "Owner, 2026-11-16: friends reach the home game server through Tailscale Funnel ('Let's do the funnel with tailscale'). Nothing is opened until the server exists; the owner runs the one admin command."
+    },
+    {
+      "at": "2026-11-17T02:21:59.752Z",
+      "text": "Until you answer: the shop sells one-day items (flares, batteries, tape, extra marks) and the skill tree keeps the permanent upgrades; windows 1-2 the shop, 3-4 the skill tree, the face kiosk in the corridor by the cells."
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-17T02:33:36.269Z",
+      "text": "Paused T18i: waiting for the prison merge (right after the face work lands). Decided with you: windows 1-2 the shop (one-day items), 3-4 the skill tree, the face kiosk in the corridor by the cells.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T02:33:36.177Z",
+      "text": "Applied the owner's new answers.",
+      "kind": "answers"
+    },
+    {
+      "at": "2026-11-17T02:23:57.055Z",
+      "text": "P3",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T02:21:59.753Z",
+      "text": "Took a default: Until you answer: the shop sells one-day items (flares, batteries, tape, extra marks) and the skill tree keeps the permanent upgrades; windows 1-2 the shop, 3-4 the skill tree, the face kiosk in the corridor by the cells.",
+      "kind": "decision"
+    },
+    {
+      "at": "2026-11-17T02:21:48.838Z",
+      "text": "Paused T18i: waiting for the prison merge and your answer on what the shop sells (Questions page).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T02:21:48.746Z",
+      "text": "Added task T18i: A face kiosk in the prison, and a window each for the shop and the skill tree.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T02:18:55.694Z",
+      "text": "Started T7f: Draw your face. Built: draw your face on the start screen, it is sent when you join, shown on your mask and the lift monitor. Two-player check 27/27. An independent checker is re-running every playthrough and a break.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T02:18:55.536Z",
+      "text": "New pictures for T7f: Draw your face.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T02:16:43.467Z",
+      "text": "Started T16d: The Annex's look: the endless yellow office, built and pictured. Opus is building the Annex's look in its own copy: yellowed walls, mustard carpet, even pale light, props chosen by room shape so repeated rooms match, repeating signs",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T02:16:43.304Z",
+      "text": "Added task T16d: The Annex's look: the endless yellow office, built and pictured.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T02:16:27.348Z",
+      "text": "Paused T18g: waiting for the face work to land; then I merge the prison branch (two commits) into the main game and make a new build.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T02:16:27.179Z",
+      "text": "T18g",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T02:13:02.089Z",
+      "text": "Started T18g: The prison's look: the corridor, the bank room and the cells you come home to. An independent checker is re-running the prison's tests, walk and three deliberate breaks",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T02:13:01.887Z",
+      "text": "T18g",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T02:07:26.765Z",
+      "text": "Finished T18h: The day rules: a test for when nobody owns an upgrade.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-17T02:04:48.247Z",
+      "text": "Started T18h: The day rules: a test for when nobody owns an upgrade. Sonnet is adding the missing test and breaking it on purpose",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T02:04:48.082Z",
+      "text": "Added task T18h: The day rules: a test for when nobody owns an upgrade.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T02:04:34.413Z",
+      "text": "North Star republished (version 11): your three answers of tonight folded in as V20, and its 'where the build stands' section rewritten for tonight.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T02:03:19.264Z",
+      "text": "P3",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T01:57:19.186Z",
+      "text": "Started T18g: The prison's look: the corridor, the bank room and the cells you come home to. Opus is fixing three things in the prison's floor plan in the same copy: no walking through the teller counter, windows numbered 1 to 4 left to right, and each bunk's spot where the bunk is drawn.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T01:56:57.744Z",
+      "text": "Paused T18g: waiting for the face work to finish, then I merge it into the main copy (both changed the game's main script) and make a new build.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T01:56:57.640Z",
+      "text": "T18g",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T01:52:01.694Z",
+      "text": "Started T18g: The prison's look: the corridor, the bank room and the cells you come home to. Built in its own copy: walk from lift to farthest bunk 7.3 s, frame time half the Clinic's. An independent checker is re-running the walk, the tests and a break that unlights the bank room.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T01:52:01.486Z",
+      "text": "New pictures for T18g: The prison's look: the corridor, the bank room and the cells you come home to.",
+      "kind": "media"
+    },
     {
       "at": "2026-11-17T01:49:36.883Z",
       "text": "Paused T7e: waiting for a free agent to watch the crewmates walk, run and sneak in the real game for foot sliding. They are already in the game as your friends' figures (committed 3d13505).",
@@ -2847,126 +3055,6 @@
       "at": "2026-11-16T17:14:50.910Z",
       "text": "Linked T12 to the North Star: A3, H4.",
       "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:50.757Z",
-      "text": "Linked T9 to the North Star: B8, A6.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:50.606Z",
-      "text": "Linked T6c to the North Star: C5, C6.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:50.442Z",
-      "text": "Linked T7f to the North Star: H1.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:50.290Z",
-      "text": "Linked T7e to the North Star: H1, F4.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:50.132Z",
-      "text": "Linked T8 to the North Star: B6, B7, F3.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:49.959Z",
-      "text": "Linked T6d to the North Star: H5.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:49.794Z",
-      "text": "Linked T14 to the North Star: A2.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:49.655Z",
-      "text": "Linked T6e to the North Star: C5.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:49.510Z",
-      "text": "Linked T3b to the North Star: B8.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:49.363Z",
-      "text": "Linked T14a to the North Star: A2.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:49.218Z",
-      "text": "Linked T6b to the North Star: H5.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:49.069Z",
-      "text": "Linked T6 to the North Star: A1, C5, C6.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:48.923Z",
-      "text": "Linked T5 to the North Star: C1, C2, C3, C4.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:48.772Z",
-      "text": "Linked T4 to the North Star: B1, B8, A6.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:48.627Z",
-      "text": "Linked T3 to the North Star: B8.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:48.472Z",
-      "text": "Linked T2a to the North Star: A2.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:14:48.317Z",
-      "text": "Linked T1 to the North Star: A2.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:11:56.478Z",
-      "text": "Added task T7f: Draw your face.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:07:20.184Z",
-      "text": "Crewmate figure, judging round one: both blind judges ranked the face worst (smeared, mannequin-like), then the pale paddle hands, then identical stiff clones that read as a threat, plus knees and shoulders losing volume when bent. Sent back: a modelled face, work gloves, better proportions and worn cloth, volume at the joints, and four different people through swappable headwear and faces.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T17:06:09.767Z",
-      "text": "New pictures for T7e: Better-looking crewmates and readable name tags.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-16T16:58:52.250Z",
-      "text": "Took a default: Until the owner answers server-door: build the game server and test it on the tailnet only; open nothing to the internet.",
-      "kind": "decision"
-    },
-    {
-      "at": "2026-11-16T16:58:48.821Z",
-      "text": "Started X1: Trial: one Clinic floor in Godot. An agent is building one Clinic floor in the Godot engine, in its own folder, to compare lighting, browser play and testing with what we have",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-16T16:58:48.731Z",
-      "text": "Added task X1: Trial: one Clinic floor in Godot.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-16T16:46:55.080Z",
-      "text": "Started T7e: Better-looking crewmates and readable name tags. An agent is building the crewmate figure (a convict in a jumpsuit) so the owner can upload it to Mixamo for real movement",
-      "kind": "start"
     }
   ]
 }

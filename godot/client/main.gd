@@ -5,7 +5,9 @@
 #   input -> link.step (moves your own body with the rules, the client's frame with the real camera)
 #   -> events (doors, chimes, the announcer, the slip, being taken, the end) -> the picture, the
 #   other players, their emotes and footsteps.
-# Before the game: the start screen (start_screen.gd): Play alone, Join friends, the lobby.
+# Before the game: the start screen (start_screen.gd): Play alone, Join friends, draw your face, the
+# lobby. The face drawn goes in the join (net/protocol.gd); every crewmate wears the face their player
+# drew on their mask (others_view.gd), and the lift's monitor shows the whole crew's (lift.gd).
 # The 3D is drawn at 480x270 in a SubViewport and shown through the tape shader; the on-screen
 # display, name tags, subtitles, menus and end screen are drawn crisp on top.
 #
@@ -160,6 +162,9 @@ func _ready() -> void:
 		var err := _test_server.listen(_test_port, "127.0.0.1")
 		print("test channel on 127.0.0.1:%d %s" % [_test_port, "ready" if err == OK else "FAILED %d" % err])
 	start.remember = not automated
+	if automated:
+		# A test draws its own faces and must never change the player's saved one.
+		FaceCodec.save_path = "user://face/test_last_face.txt"
 	if not join_arg.is_empty():
 		start.address = join_arg
 	if not name_arg.is_empty():
@@ -167,9 +172,10 @@ func _ready() -> void:
 	if not join_arg.is_empty():
 		start.passphrase = pass_arg
 		pass_arg = ""
+		# Quick joining: the face step first, then the form (pressed at once when it is filled in).
 		_show_start("join")
-		if not start.address.is_empty() and not start.player_name.is_empty() and not start.passphrase.is_empty():
-			start.submit.call_deferred()
+		var filled := not start.address.is_empty() and not start.player_name.is_empty() and not start.passphrase.is_empty()
+		start.open_face("join_submit" if filled else "join")
 	else:
 		_show_start("title")
 	load_ms = Time.get_ticks_msec() - t0
@@ -342,6 +348,7 @@ func _build_view() -> void:
 	start.back_pressed.connect(_back_to_title)
 	start.start_pressed.connect(_lobby_start)
 	start.leave_pressed.connect(_leave_room)
+	start.screen_shown.connect(_on_screen_shown)
 	sfx = Sfx.new()
 	add_child(sfx)
 	var audio3d := Node3D.new()
@@ -370,11 +377,16 @@ func _show_start(which: String) -> void:
 	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
+## The start screen moved on by itself (the face step to the form): keep the mode in step.
+func _on_screen_shown(which: String) -> void:
+	if which != "" and mode != "game":
+		mode = which
+
 ## "Play alone": a room on this machine, a run at once.
 func _play_alone() -> void:
 	var lr := LocalRoom.new()
 	var nm := start.player_name if not start.player_name.is_empty() else "YOU"
-	lr.open_local(seed, nm, entity_on)
+	lr.open_local(seed, nm, entity_on, start.face_code)
 	lr.start_run()
 	link = PlayLink.new(lr, true)
 	start.error = ""
@@ -384,7 +396,7 @@ func _play_alone() -> void:
 func _join(address: String, player_name: String, passphrase: String) -> void:
 	var url := ws_url(address)
 	var rc := RoomClient.new()
-	var err := rc.connect_to(url, passphrase, player_name)
+	var err := rc.connect_to(url, passphrase, player_name, start.face_code)
 	if err != OK:
 		start.error = "THAT ADDRESS DOES NOT LOOK RIGHT: " + url.to_upper()
 		_show_start("join")
@@ -509,6 +521,7 @@ func _build_floor(plan: Dictionary) -> void:
 	world.add_child(lift)
 	lift.build(plan["car"])
 	lift.set_doors(false, true)
+	lift.set_faces(link.crew_faces())
 	orderly.reset()
 	built_depth = int(plan["depth"])
 	level.set_emergency(0.0)
@@ -527,7 +540,7 @@ func _input(event: InputEvent) -> void:
 		# The start screen: Esc shows the controls; everything else is the screen's.
 		if event is InputEventKey:
 			var k0 := event as InputEventKey
-			if k0.pressed and not k0.echo and k0.physical_keycode == KEY_ESCAPE:
+			if k0.pressed and not k0.echo and k0.physical_keycode == KEY_ESCAPE and start.screen != "face":
 				menu_overlay = not menu_overlay
 			elif not menu_overlay:
 				start.key(k0)
@@ -796,6 +809,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	lift.set_call_lit(phase == "coming")
 	lift.set_hold_lit(bool(s["held"]))
 	lift.set_light(1.0 if not dark else 0.1)
+	lift.set_faces(link.crew_faces())
 	lift.update(dt)
 	if phase == "boarding":
 		var bell_left := float(s["bellLeft"])
@@ -1058,8 +1072,10 @@ func _on_js(args: Array) -> void:
 ## Commands (space separated): state | stats | resetstats | move f r sprint creep | stopmove |
 ## look yawDeg pitchDeg | face x z [y] | raise 0|1|- | hold 0|1|- | call | pick | teleport level x y |
 ## walkto level x y [pace] | stopwalk | timescale k | newrun | tape 0|1 | debug | floortapes | plan
-## The start screen and the room: alone | ui <alone|join|go|back|start|leave> | type <address|name> <text> |
-## start | leave | emote <name> | wheel open | wheel aim dx dy | wheel release | screen
+## The start screen and the room: alone (PLAY ALONE, then Enter on the face) | ui <alone|join|go|back|start|leave> |
+## type <address|name> <text> | start | leave | emote <name> | wheel open | wheel aim dx dy | wheel release | screen
+## The face step: draw done | draw cancel | draw press <editor control id> | draw line x0 y0 x1 y1 (cells, with
+## the mouse events a player's drag sends) | faces (what is on every mask and on the monitor)
 func _command(c: String) -> String:
 	var p := c.split(" ", false)
 	if p.is_empty():
@@ -1093,6 +1109,31 @@ func _command(c: String) -> String:
 			if mode == "game":
 				return "already playing"
 			start.press("alone")
+			if start.screen == "face" and start.editor != null:
+				start.editor.key(_enter_key())   # a returning player's Enter keeps the face
+		"draw":
+			if start.screen != "face" or start.editor == null:
+				return "no face step"
+			if p.size() < 2:
+				return "draw what"
+			var ed := start.editor
+			match p[1]:
+				"done":
+					ed.key(_enter_key())
+				"cancel":
+					ed.press("cancel")
+				"press":
+					if p.size() < 3:
+						return "press what"
+					ed.press(p[2])
+				"line":
+					if p.size() < 6:
+						return "line x0 y0 x1 y1"
+					_drag_on_editor(ed, Vector2(float(p[2]), float(p[3])), Vector2(float(p[4]), float(p[5])))
+				_:
+					return "unknown draw command"
+		"faces":
+			return JSON.stringify(_faces_state())
 		"ui":
 			if p.size() < 2:
 				return "ui what"
@@ -1212,6 +1253,43 @@ func _command(c: String) -> String:
 		_:
 			return "unknown command"
 	return "ok"
+
+static func _enter_key() -> InputEventKey:
+	var k := InputEventKey.new()
+	k.pressed = true
+	k.keycode = KEY_ENTER
+	k.physical_keycode = KEY_ENTER
+	return k
+
+## A drag across the face editor's canvas from cell `a` to cell `b`, as the mouse sends it.
+func _drag_on_editor(ed: FaceEditor, a: Vector2, b: Vector2) -> void:
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	down.position = ed.cell_to_screen(a)
+	ed._gui_input(down)
+	for i in range(1, 9):
+		var mv := InputEventMouseMotion.new()
+		mv.position = ed.cell_to_screen(a.lerp(b, i / 8.0))
+		ed._gui_input(mv)
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	up.position = ed.cell_to_screen(b)
+	ed._gui_input(up)
+
+## Faces as a test sees them: a hash of this player's own face (the picture decoded from what it
+## sends), of the picture on each other crewmate's mask, and of each face on the lift's monitor. The
+## face itself is never in it.
+func _faces_state() -> Dictionary:
+	var mine := FaceCodec.decode(start.face_code)
+	var masks := {}
+	for id: String in others.figures:
+		masks[id] = (others.figures[id]["view"] as CrewView).face_hash()
+	return {"own": CrewView.texture_hash(mine) if mine != null else "", "hasFace": start.face_code != "",
+		"default": CrewView.texture_hash(CrewView.default_face()), "masks": masks,
+		"monitor": lift.monitor_hashes() if lift != null else [],
+		"received": link.client().faces.size() if link != null and link.client() != null else 0}
 
 ## The start screen as a test sees it (the passphrase is never in it).
 func _screen_state() -> Dictionary:

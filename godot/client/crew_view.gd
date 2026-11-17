@@ -125,6 +125,27 @@ func set_face(texture: Texture2D) -> void:
 		m.set_shader_parameter("tex", texture if texture else _face_default)
 		m.set_shader_parameter("emit", SCREEN_GLOW)
 
+## Tests: a short hash of the picture on the mask screen right now (read back from its material), to
+## compare with texture_hash() of the face the player drew.
+func face_hash() -> String:
+	var m: ShaderMaterial = _mats.get("face_screen")
+	return texture_hash(m.get_shader_parameter("tex") as Texture2D) if m else ""
+
+## A short hash of a texture's top-level pixels ("" for none).
+static func texture_hash(tex: Texture2D) -> String:
+	if tex == null:
+		return ""
+	return image_hash(tex.get_image())
+
+## A short hash of an image's top-level pixels as RGB ("" for none).
+static func image_hash(src: Image) -> String:
+	if src == null:
+		return ""
+	var img := src.duplicate() as Image
+	img.clear_mipmaps()
+	img.convert(Image.FORMAT_RGB8)
+	return img.get_data().hex_encode().md5_text().substr(0, 10)
+
 func set_skin(index: int) -> void:
 	var m: ShaderMaterial = _mats.get("convict_skin")
 	if m:

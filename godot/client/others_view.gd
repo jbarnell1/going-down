@@ -2,7 +2,8 @@
 # frame's interpolated bodies (play_link.gd `others`), with their gait, the instrument raised or not,
 # being caught (set_downed for as long as the host says so), their emotes, and their footsteps from
 # where they are. Each is dressed from their player index (skin, headwear, the number on the patch)
-# so friends can tell each other apart; the name tag is the HUD's (main.gd projects it).
+# so friends can tell each other apart; the name tag is the HUD's (main.gd projects it). Each wears the
+# face that player drew on their mask's screen (the host passes faces on; play_link.gd `face`).
 # Your own figure is never here: the frame lists everyone else, and a figure standing at the camera
 # is hidden.
 class_name OthersView
@@ -31,7 +32,7 @@ func update(dt: float, others: Array, cam: Vector3) -> void:
 			var v := CrewView.new()
 			v.name = "Crew_%s" % id
 			add_child(v)
-			fig = {"view": v, "index": -1, "last": Vector3.INF, "speed": 0.0, "steps": 0.0}
+			fig = {"view": v, "index": -1, "last": Vector3.INF, "speed": 0.0, "steps": 0.0, "face": ""}
 			figures[id] = fig
 		var view: CrewView = fig["view"]
 		var index := int(o["index"])
@@ -40,6 +41,11 @@ func update(dt: float, others: Array, cam: Vector3) -> void:
 			view.set_skin(index % 4)
 			view.set_headwear(HEADWEAR[index % 3])
 			view.set_number(index + 1)
+		# The face that player drew, on their mask's screen (decoded once, when it arrives or changes).
+		var face := str(o.get("face", ""))
+		if face != str(fig["face"]):
+			fig["face"] = face
+			view.set_face(FaceCodec.decode(face))
 		var pos := Vector3(float(o["x"]), float(o["y"]), float(o["z"]))
 		var last: Vector3 = fig["last"]
 		var sp := float(fig["speed"])
@@ -88,4 +94,4 @@ func describe(id: String) -> Dictionary:
 		return {}
 	var v: CrewView = fig["view"]
 	return {"drawn": v.visible and v.is_visible_in_tree(), "at": [v.position.x, v.position.y, v.position.z], "clip": v.clip, "emote": String(v.emote), "downed": v.downed, "raised": v.raised,
-		"index": fig["index"], "speed": fig["speed"], "gait": String(v.gait)}
+		"index": fig["index"], "speed": fig["speed"], "gait": String(v.gait), "faceHash": v.face_hash(), "hasFace": str(fig["face"]) != ""}
