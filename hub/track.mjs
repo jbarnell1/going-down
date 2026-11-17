@@ -135,7 +135,7 @@ switch (cmd) {
     const t = task(s, pos[0]);
     if (!t.ns) die(`${t.id} has no North Star link. Look first:  node hub/ns.mjs find <words>   then:  node hub/track.mjs link ${t.id} <ids>   (or: link ${t.id} none --why "...")`);
     if (t.ns.length) spawnSync(process.execPath, [path.join(ROOT, 'hub', 'ns.mjs'), 'show', ...t.ns], { stdio: 'inherit' });
-    t.status = 'doing'; t.startedAt ??= now(); delete t.blocked;
+    t.status = 'doing'; t.startedAt ??= now(); delete t.blocked; delete t.waiting;
     // Several steps can be in progress at once (parallel agents): each keeps its own line.
     if (pos[1]) { t.doingText = pos[1]; t.doingAt = now(); }
     s.now = t.id; s.nowText = pos[1] ?? '';
@@ -193,6 +193,9 @@ switch (cmd) {
   case 'todo-clear': task(s, pos[0]).todo = []; break;
   case 'blocked': { const t = task(s, pos[0]); t.status = 'blocked'; t.blocked = pos[1] ?? die('say why'); feed(s, `Blocked on ${t.id}: ${t.blocked}`, 'blocked'); break; }
   case 'unblock': { const t = task(s, pos[0]); t.status = 'todo'; delete t.blocked; break; }
+  // Nobody is working on it this minute: back to the queue, with what it waits for. Only steps an agent
+  // is actually running stay "doing", so the Progress page's "Right now" list is true.
+  case 'wait': { const t = task(s, pos[0]); t.status = 'todo'; t.waiting = pos[1] ?? die('say what it waits for'); delete t.doingText; delete t.doingAt; if (s.now === t.id) { s.now = null; s.nowText = ''; } feed(s, `Paused ${t.id}: waiting for ${t.waiting}`); break; }
   case 'decision': s.decisions.push({ at: now(), text: pos[0] ?? die('decision needs text') }); feed(s, `Took a default: ${pos[0]}`, 'decision'); break;
   case 'ci': s.ci = { status: pos[0], commit: pos[1] ?? '', at: now() }; if (pos[0] !== 'passed') feed(s, `CI ${pos[0]} on ${pos[1] ?? ''}.`, 'ci'); break;
   case 'deadline': {

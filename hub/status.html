@@ -208,6 +208,7 @@ function render(d) {
       if (t.why) card.append(el('p', { text: t.why }));
     }
     if (t.blocked) card.append(el('p', { class: 'sum', text: 'Blocked: ' + t.blocked }));
+    if (t.waiting && t.status !== 'done') card.append(el('p', { class: 'sum', text: 'Waiting for: ' + t.waiting }));
     if (t.todo && t.todo.length) card.append(el('ul', {}, ...t.todo.map((x) => el('li', { text: x }))));
     if (t.media && t.media.length) {
       card.append(el('div', { class: 'strip' }, ...t.media.slice().reverse().map((m) =>
