@@ -409,6 +409,7 @@ func _draw_wheel(px: float) -> void:
 func menu_rows() -> Array[Array]:
 	var rows: Array[Array] = MENU_ROWS.duplicate()
 	rows.append(["H", "HINTS: ON" if hints_on else "HINTS: OFF"])
+	rows.append(["B", "BRIGHTNESS"])
 	return rows
 
 func _draw_menu() -> void:

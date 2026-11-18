@@ -14,12 +14,14 @@ extends RefCounted
 const Notes = preload("res://sim/notes.gd")
 const Report = preload("res://sim/report.gd")
 const Upgrades = preload("res://sim/upgrades.gd")
+const Findables = preload("res://sim/findables.gd")
 
 ## Every data file the rules (sim/, net/, server/) read at run time.
 const FILES: Array[String] = [
 	"res://data/annex_notes.json",  # sim/notes.gd: the Temp's sticky notes
 	"res://data/report_awards.json",  # sim/report.gd: the day's report awards
 	"res://data/upgrades.json",  # sim/upgrades.gd: the upgrade tree
+	"res://data/poems.json",  # sim/findables.gd: the poem notes and lore pages found by searching
 ]
 
 ## How much of `path` the rules' own loader read: the count of its entries (templates, awards, nodes);
@@ -32,6 +34,8 @@ static func read(path: String) -> int:
 			return (Report.data().get("awards", []) as Array).size()
 		"res://data/upgrades.json":
 			return Upgrades.nodes().size()
+		"res://data/poems.json":
+			return (Findables.data().get("poems", []) as Array).size()
 	return -1
 
 ## Reads every file in FILES. Returns {"ok": bool, "files": int (read), "missing": "<file name>" (the

@@ -46,7 +46,7 @@
   "groups": {
     "playroom": {
       "title": "The Playroom count",
-      "about": "The lift's voice running hide-and-seek on the Playroom floor (docs/floors/playarea.md sections 3 and 10). Played by the count on screen (T15e) by line id, not dealt by moment: godot/client/count_lines.gd maps each count event to its line id.",
+      "about": "The lift's voice running hide-and-seek on the Playroom floor (docs/floors/playarea.md sections 3 and 10). Played by the count on screen (T15e) by line id, not dealt by moment: godot/client/count_lines.gd maps each count event to its line id. The one exception is the Minder's grab outside a count (grab_1 to grab_3, moment grab): one is dealt per grab, never the same twice running (godot/client/announcer.gd say_grab).",
       "countdown": "Numbers recorded: one to ten, and twenty, thirty, forty. The voice says forty, thirty and twenty as they pass (never on the count's first second, which belongs to 'Coming, ready or not!'), then every second from ten to one. The bell carries the seconds in between. 13 clips cover every count length (30, 35, 40, 45 s) instead of 45, and the last ten are the part worth hearing every second: the bell rises over the last five.",
       "audition": "Three takes of each line and two of each number. For the numbers, pick one take that sounds the same across all thirteen, since they play one after another. Until you choose, take 1 plays."
     },
@@ -149,6 +149,10 @@
     "count_found": {
       "priority": 4,
       "when": "Playroom: a player is found; the caption carries their name"
+    },
+    "grab": {
+      "priority": 4,
+      "when": "Playroom, outside a count: the Minder grabs a player within 1 m (a found event with cause grab); one line dealt per grab, never the same twice running, the caption is the line"
     },
     "count_done": {
       "priority": 4,
@@ -1008,6 +1012,45 @@
       "note": "Pleased for them, as if they won. The caption adds the name: 'Found you, {name}!'"
     },
     {
+      "id": "grab_1",
+      "moment": "grab",
+      "group": "playroom",
+      "text": "[delighted] Oh! It only wanted a hug.",
+      "plain": "Oh! It only wanted a hug.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "The grab outside a count: snide and cheerful, charmed by it, not sorry for anyone."
+    },
+    {
+      "id": "grab_2",
+      "moment": "grab",
+      "group": "playroom",
+      "text": "[warmly] Aww. Somebody made a friend.",
+      "plain": "Aww. Somebody made a friend.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "The grab outside a count: sweet on the surface, a smirk under it."
+    },
+    {
+      "id": "grab_3",
+      "moment": "grab",
+      "group": "playroom",
+      "text": "[mischievously] Off to the party, then! Do save me a seat.",
+      "plain": "Off to the party, then! Do save me a seat.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "The grab outside a count: bright, a little too pleased, as if it were an invitation."
+    },
+    {
       "id": "count_done_1",
       "moment": "count_done",
       "group": "playroom",
@@ -1863,7 +1906,8 @@
         "similarity_boost": 0.75
       },
       "takes": 2,
-      "note": "Bright read: pleased to give the news, whatever it is. Take 1 ran 1.6-1.7x the estimate in both voices (a slow, spaced list), so a second take was made."
+      "slow": 1.8,
+      "note": "Bright read: pleased to give the news, whatever it is. Take 1 ran 1.6-1.7x the estimate in both voices (a slow, spaced list), so a second take was made. Four takes agree the slow, spaced read is right and the owner kept take 1 (18 Nov), so this line is read slowly on purpose: \"slow\" lets check.mjs allow up to 1.8x its estimate for this line only."
     },
     {
       "id": "hint_hide_idle_1",
@@ -2051,8 +2095,8 @@
       "id": "hint_listen_1",
       "moment": "hint_listen",
       "group": "hints",
-      "text": "[Low, confidential, still smiling] You are not alone on this floor now. Listen. It is never silent.",
-      "plain": "You are not alone on this floor now. Listen. It is never silent.",
+      "text": "[Low, confidential, still smiling] Listen. Something on this floor has started to move.",
+      "plain": "Listen. Something on this floor has started to move.",
       "settings": {
         "stability": 0.35,
         "similarity_boost": 0.75

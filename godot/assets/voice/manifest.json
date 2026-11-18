@@ -72,6 +72,9 @@
     "count_found": {
       "priority": 4
     },
+    "grab": {
+      "priority": 4
+    },
     "count_done": {
       "priority": 4
     },
@@ -512,6 +515,21 @@
       "plain": "Found you!"
     },
     {
+      "id": "grab_1",
+      "moment": "grab",
+      "plain": "Oh! It only wanted a hug."
+    },
+    {
+      "id": "grab_2",
+      "moment": "grab",
+      "plain": "Aww. Somebody made a friend."
+    },
+    {
+      "id": "grab_3",
+      "moment": "grab",
+      "plain": "Off to the party, then! Do save me a seat."
+    },
+    {
       "id": "count_done_1",
       "moment": "count_done",
       "plain": "All done!"
@@ -914,7 +932,7 @@
     {
       "id": "hint_listen_1",
       "moment": "hint_listen",
-      "plain": "You are not alone on this floor now. Listen. It is never silent."
+      "plain": "Listen. Something on this floor has started to move."
     },
     {
       "id": "hint_listen_2",

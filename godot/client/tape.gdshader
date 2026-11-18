@@ -11,6 +11,9 @@ uniform float darkness = 0.0;
 uniform float tired = 0.0;
 uniform float glitch = 0.0;
 uniform float snow = 0.0;
+// The player's brightness (client/brightness.gd): black level and gamma, the very last step.
+uniform float bright_lift = 0.0;
+uniform float bright_gamma = 1.0;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 vec3 to_yiq(vec3 c) { return vec3(dot(c, vec3(0.299, 0.587, 0.114)), dot(c, vec3(0.596, -0.274, -0.322)), dot(c, vec3(0.211, -0.523, 0.312))); }
@@ -65,5 +68,8 @@ void fragment() {
 	float sn = hash(floor(UV * src_size * vec2(0.5, 1.0)) + fract(TIME * 7.0) * 113.0);
 	col = mix(col, vec3(sn * 0.85 + 0.05 * sin(line * 0.5 + TIME * 40.0)), snow);
 	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) col = vec3(0.02);
+	// Last, after everything: the player's brightness (client/brightness.gd apply, the same sum; clamped
+	// there). 0 and 1 leave the picture as it is, also with the tape look off (T).
+	col = clamp(bright_lift + (1.0 - bright_lift) * pow(clamp(col, 0.0, 1.0), vec3(bright_gamma)), 0.0, 1.0);
 	COLOR = vec4(col, 1.0);
 }

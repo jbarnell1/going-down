@@ -29,6 +29,7 @@ const Run = preload("res://sim/run.gd")
 const TapeLib = preload("res://sim/tape.gd")
 const Stamina = preload("res://sim/stamina.gd")
 const Face = preload("res://face/face_codec.gd")
+const Findables = preload("res://sim/findables.gd")
 const Settings = preload("res://sim/settings.gd")
 
 const PROTOCOL_VERSION := 1
@@ -184,6 +185,21 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ## with it, so a run without it sends exactly what it did before:
 ##  - the world gains a 24th element, 1 ("solid" decoded: 1), with the 16th to 23rd null when absent: each client
 ##    then moves its own body round the floor's solid pieces (net/session.gd move_local).
+## Findables (sim/run.gd findables, sim/findables.gd; FD9). New in the Godot game, and only ever sent in a run with
+## them, so a run without them sends exactly what it did before:
+##  - the input's flags gain bit 128, "search" (F held to search the piece in reach), and bit 256, "searchFast"
+##    (sprint held with it: the rushed search). Decoded as true only when set (no keys otherwise);
+##  - the world gains a 26th element, the find block (enc_find / "find" decoded), with the 16th to 25th null when
+##    absent: [[[piece id, player id, what (Findables.WHAT index), credits, note or page id or "", fast (0/1),
+##    host time], ...] (what has been opened on this floor, by piece id), [[player id, piece id, fast (0/1), host
+##    time it began, host time it ends], ...] (searches under way: the bar is (now - from) / (done - from)),
+##    [[player id, cartons], ...] (what each player carries), base (the floor's quota as set on arrival: the fill's
+##    unit is 1% of it, Findables.fill_for)]. Sent on a Clinic or an Annex, or while anyone carries a carton;
+##  - a tape (in the crew's rows and on the floor) gains a 5th element, the credits found on it, only when there are
+##    any (decoded as "found"; a floor tape's body stays last). They are in its total too;
+##  - events "searchStart" {playerId, piece, kind, fast, from, done}, "searchStop" {playerId, piece, why: let_go,
+##    moved, interrupted, taken}, "searchNoise" {playerId, piece, at} (the rushed search's noise) and "searchDone"
+##    {playerId, piece, kind, what, credits, note, fast}.
 ## Live settings (docs/floors/live-settings.md LS2; net/tuning_desk.gd). New in the Godot game, and only ever sent once
 ## the host has changed a setting (the revision is above 0), so a run without a change sends exactly what it did:
 ##  - the world gains a 25th element, the tune block ("tune" decoded): [rev] or, in the welcome, for a second after
@@ -296,7 +312,11 @@ static func _enc_pose(p: Dictionary) -> Array:
 	return [p["x"], p["z"], p["y"], p["level"], p["yaw"], ANIMS.find(String(p["anim"])), p["animTime"]]
 
 static func _enc_tape(t: Dictionary) -> Array:
-	return [t["id"], t["owner"], t["readings"], q2(t["total"])]
+	var a: Array = [t["id"], t["owner"], t["readings"], q2(t["total"])]
+	if t.get("found") != null:
+		# Findables (see the header): the credits found on the tape, only when there are any.
+		a.append(q2(t["found"]))
+	return a
 
 static func enc_world(w: Dictionary) -> Array:
 	var o: Dictionary = w["orderly"]
@@ -374,7 +394,50 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < 24:
 			out.append(null)
 		out.append(enc_tune(w["tune"]))
+	if w.get("find") != null:
+		while out.size() < 25:
+			out.append(null)
+		out.append(enc_find(w["find"]))
 	return out
+
+## The find block (see the header) from its readable form {opened: [{piece, by, what, credits, note, fast, t}],
+## searching: [{playerId, piece, fast, from, done}], items: [{playerId, juice}], base}.
+static func enc_find(k: Dictionary) -> Array:
+	var opened: Array = []
+	for o: Dictionary in k["opened"]:
+		opened.append([o["piece"], o["by"], Findables.WHAT.find(String(o["what"])), o["credits"], o["note"], 1 if o["fast"] else 0, q3(o["t"])])
+	var searching: Array = []
+	for s: Dictionary in k["searching"]:
+		searching.append([s["playerId"], s["piece"], 1 if s["fast"] else 0, q3(s["from"]), q3(s["done"])])
+	var items: Array = []
+	for i: Dictionary in k["items"]:
+		items.append([i["playerId"], i["juice"]])
+	return [opened, searching, items, k["base"]]
+
+static func dec_find(c: _V, w: Variant) -> Dictionary:
+	var a := _a(c, w, 4, 4)
+	if c.bad:
+		return {}
+	var opened: Array = []
+	for ow: Variant in _a(c, a[0], 0, 1024):
+		var o := _a(c, ow, 7, 7)
+		if c.bad:
+			return {}
+		opened.append({"piece": _i(c, o[0], 0, MAX_COUNT), "by": _s(c, o[1]), "what": _code(c, Findables.WHAT, o[2]), "credits": _i(c, o[3], 0, MAX_COUNT),
+			"note": _s(c, o[4], 16), "fast": _i(c, o[5], 0, 1) == 1, "t": _f(c, o[6])})
+	var searching: Array = []
+	for sw: Variant in _a(c, a[1], 0, 64):
+		var s := _a(c, sw, 5, 5)
+		if c.bad:
+			return {}
+		searching.append({"playerId": _s(c, s[0]), "piece": _i(c, s[1], 0, MAX_COUNT), "fast": _i(c, s[2], 0, 1) == 1, "from": _f(c, s[3]), "done": _f(c, s[4])})
+	var items: Array = []
+	for iw: Variant in _a(c, a[2], 0, 64):
+		var i := _a(c, iw, 2, 2)
+		if c.bad:
+			return {}
+		items.append({"playerId": _s(c, i[0]), "juice": _i(c, i[1], 0, MAX_COUNT)})
+	return {"opened": opened, "searching": searching, "items": items, "base": _i(c, a[3], 0, MAX_COUNT)}
 
 ## The tune block (see the header) from its readable form [rev] or [rev, [[id, value], ...]].
 static func enc_tune(k: Array) -> Array:
@@ -629,7 +692,8 @@ static func encode(m: Dictionary) -> String:
 			for r: Dictionary in m["seen"]:
 				seen.append([r["id"], r["depth"], r["a"], r["b"], q3(r["alpha"]), _enc_pose(r["pose"])])
 			var flags := (1 if m["raised"] else 0) | (2 if m["holdDoors"] else 0) | (4 if m["seeing"] else 0) | (GAITS.find(String(m.get("gait", "walk"))) << 3) \
-				| (32 if m.get("use", false) == true else 0) | (64 if m.get("peek", false) == true else 0)
+				| (32 if m.get("use", false) == true else 0) | (64 if m.get("peek", false) == true else 0) \
+				| (128 if m.get("search", false) == true else 0) | (256 if m.get("searchFast", false) == true else 0)
 			var inp: Array = [PROTOCOL_VERSION, "I", m["seq"], floor3(m["ct"]), _enc_body(m["body"]), q2(m["eye"]), q3(m["yaw"]), q3(m["pitch"]),
 				q2(m["hFovDeg"]), q2(m["vFovDeg"]), flags, m["calls"], m["pickUps"], m["ackEvent"], m["ackHt"], floor3(m["renderTime"]), m["placeAck"], seen]
 			var marks := int(m.get("marks", 0))
@@ -731,16 +795,19 @@ static func _dec_pose(c: _V, w: Variant, min_size: int = 7, max_size: int = 7) -
 		"level": _i(c, a[3], 0, 1), "yaw": _f(c, a[4], -MAX_COORD, MAX_COORD), "anim": _code(c, ANIMS, a[5]), "animTime": _f(c, a[6])}
 
 static func _dec_tape(c: _V, w: Variant, min_size: int = 4) -> Dictionary:
-	var a := _a(c, w, min_size, min_size)
+	var a := _a(c, w, min_size, min_size + 1)
 	if c.bad:
 		return {}
-	return {"id": _s(c, a[0]), "owner": _s(c, a[1]), "readings": _i(c, a[2], 0, MAX_COUNT), "total": _f(c, a[3])}
+	var out := {"id": _s(c, a[0]), "owner": _s(c, a[1]), "readings": _i(c, a[2], 0, MAX_COUNT), "total": _f(c, a[3])}
+	if a.size() > min_size:
+		out["found"] = _f(c, a[min_size], 0.0, MAX_CLOCK)
+	return out
 
 static func _opt_num(c: _V, v: Variant) -> Variant:
 	return null if v == null else _f(c, v)
 
 static func dec_world(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 15, 25)
+	var a := _a(c, w, 15, 26)
 	if c.bad:
 		return {}
 	var blink: Variant = null
@@ -783,11 +850,11 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 			"rate": _f(c, m[4]), "tickHz": _f(c, m[5]), "tape": _dec_tape(c, m[6]), "carrying": carrying})
 	var fl: Array = []
 	for fw: Variant in _a(c, a[13], 0, 1024):
-		var fa := _a(c, fw, 5, 5)
+		var fa := _a(c, fw, 5, 6)
 		if c.bad:
 			return {}
-		var t := _dec_tape(c, fa.slice(0, 4))
-		t["at"] = _dec_body(c, fa[4])
+		var t := _dec_tape(c, fa.slice(0, fa.size() - 1))
+		t["at"] = _dec_body(c, fa[fa.size() - 1])
 		fl.append(t)
 	var summary: Variant = a[14]
 	if summary != null and not summary is Dictionary:
@@ -816,8 +883,10 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 		out["lonely"] = _s(c, a[22], MAX_NAME * 2)
 	if a.size() > 23 and (a[23] != null or a.size() == 24):
 		out["solid"] = _i(c, a[23], 1, 1)
-	if a.size() > 24:
+	if a.size() > 24 and (a[24] != null or a.size() == 25):
 		out["tune"] = dec_tune(c, a[24])
+	if a.size() > 25:
+		out["find"] = dec_find(c, a[25])
 	return out
 
 static func _dec_report(c: _V, w: Variant) -> Dictionary:
@@ -882,7 +951,7 @@ static func decode(text: String) -> Variant:
 		"I":
 			if a.size() != 18 and a.size() != 20 and a.size() != 23:
 				return null
-			var f := _i(c, a[10], 0, 127)
+			var f := _i(c, a[10], 0, 511)
 			var gait := (f >> 3) & 3
 			if gait > 2:
 				return null
@@ -901,6 +970,10 @@ static func decode(text: String) -> Variant:
 				out["use"] = true
 			if f & 64:
 				out["peek"] = true
+			if f & 128:
+				out["search"] = true
+			if f & 256:
+				out["searchFast"] = true
 			if a.size() == 20 or (a.size() == 23 and not (_is_num(a[18]) and float(a[18]) == 0.0)):
 				out["hides"] = _i(c, a[18], 1, MAX_COUNT)
 				out["fastHides"] = _i(c, a[19], 0, out["hides"])

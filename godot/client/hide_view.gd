@@ -11,7 +11,8 @@
 #   - the floor's tune sags to half speed through a low-pass for the whole count (client/sfx.gd);
 #   - the count: one bell stroke a second on the Voice bus, rising in the last five, the number on screen
 #     and in a caption; "COMING, READY OR NOT." as it starts; "ALL DONE." at the end;
-#   - "FOUND YOU, {NAME}." for every found event; the last count's line when the call starts it.
+#   - "FOUND YOU, {NAME}." for every found event in a count, the grab's own line for the Minder's grab
+#     outside one (announcer.gd say_grab); the last count's line when the call starts it.
 # Every line is a caption in the pixel font, and its recording (T15i, client/count_lines.gd) plays by id
 # (client/announcer.gd say_count; the numbers on their own player).
 #
@@ -364,7 +365,10 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 				var key := "%d:%s" % [n, who]
 				if not _found_ids.has(key):
 					_found_ids[key] = true
-					ann.say_count("found", "FOUND YOU, %s!" % name_of.call(who), LINE_MS)
+					# The Minder's grab outside a count has its own lines (announcer.gd say_grab); a count's
+					# find says "Found you".
+					if str(e.get("cause", "")) != "grab" or ann.say_grab(LINE_MS) == "":
+						ann.say_count("found", "FOUND YOU, %s!" % name_of.call(who), LINE_MS)
 					if who == my_id:
 						sfx.found_me()
 			"called":
