@@ -108,6 +108,7 @@ const Pose = preload("res://net/pose.gd")
 const Transport = preload("res://net/transport.gd")
 const Run = preload("res://sim/run.gd")
 const Seek = preload("res://sim/seek.gd")
+const Settings = preload("res://sim/settings.gd")
 
 const TICK := Session.TICK
 const LAG_WINDOW := 60
@@ -229,6 +230,12 @@ var input_sizes: Array[int] = []
 var host_stamina: Stamina.Stamina = null
 ## Draw the resident on a dark frame too (see the header). Off unless the game turns it on.
 var draw_in_dark := false
+## Live settings (docs/floors/live-settings.md LS2): the revision the host has in force (0: never tuned), and its
+## list ({id: number}) as a tuning for this client's own predicted numbers (Settings.f; null for none). The
+## snapshots carry the revision always and the list now and then (Protocol "tune"): a lost one heals within a second.
+var tune_rev := 0
+var tune_in_force := {}
+var tuning: Settings.Values = null
 ## A false latch was let go on the last frame (the game shows it as a drop-out).
 var latch_released := false
 ## Other players' emotes as the host passed them on, in arrival order: {player, emote, t (host time)}.
@@ -525,6 +532,7 @@ func receive(now: float) -> void:
 						_keep_note(n)
 				_insert(w)
 				_learn_blink(w)
+				_take_tune(w)
 			"snap":
 				if id == null:
 					continue
@@ -572,6 +580,7 @@ func receive(now: float) -> void:
 							playing = true
 							break
 				_learn_blink(world)
+				_take_tune(world)
 			"pong":
 				clock.sample(m["ct"], float(m["st"]) - float(m["hr"]), m["st"], now)
 			"emoted":
@@ -581,6 +590,22 @@ func receive(now: float) -> void:
 				# Before or after the welcome (it follows the welcome, but a repeated join may cross it).
 				if m["player"] != id:
 					faces[m["player"]] = m["face"]
+
+## Live settings: a snapshot's tune block. The newest revision's list is this client's tuning.
+func _take_tune(w: Dictionary) -> void:
+	var k: Variant = w.get("tune")
+	if k == null or (k as Array).is_empty():
+		return
+	var rev := int(k[0])
+	if rev < tune_rev or (k as Array).size() < 2:
+		tune_rev = maxi(tune_rev, rev)
+		return
+	tune_rev = rev
+	var given := {}
+	for e: Array in k[1]:
+		given[StringName(e[0])] = float(e[1])
+	tune_in_force = given
+	tuning = Settings.make(given) if not given.is_empty() else null
 
 ## The local player is on day `index` of the run: its seed is the one their floors are made from.
 func _set_day(index: int) -> void:

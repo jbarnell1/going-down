@@ -62,6 +62,8 @@ const GROUPS: Array = [
 	[&"players", "PLAYERS"],
 	[&"earning", "EARNING"],
 	[&"hiding", "HIDING"],
+	# The owner, 17 Nov: player speeds come last.
+	[&"speeds", "PLAYER SPEEDS"],
 ]
 
 ## The sections inside the groups, in order: [id, group, title].
@@ -72,12 +74,12 @@ const SECTIONS: Array = [
 	[&"minder", &"residents", "THE MINDER (THE PLAYROOM)"],
 	[&"groundskeeper", &"residents", "THE GROUNDSKEEPER (THE ARBORETUM)"],
 	[&"lift", &"lift", "THE LIFT AND THE DARK"],
-	[&"moving", &"players", "MOVING"],
 	[&"stamina", &"players", "STAMINA"],
 	[&"down", &"players", "DOWN AND HEALING"],
 	[&"health", &"players", "HEALTH (THE PLAYROOM)"],
 	[&"earning", &"earning", "EARNING"],
 	[&"hiding", &"hiding", "HIDING"],
+	[&"moving", &"speeds", "MOVING"],
 ]
 
 ## Whole numbers (read with i()): marked W in ROWS.
@@ -101,18 +103,30 @@ const ROWS: Array = [
 	# The Orderly (the Clinic).
 	[&"orderly.speed", &"orderly", "HUNT SPEED", "how fast it comes while nobody holds it", "m/s", 3.8, 2.4, 4.8, 0.05, &"now", &"LS1", F],
 	[&"orderly.dark_speed", &"orderly", "SPEED IN THE BLACKOUT", "the same, while the lights are out before the car", "m/s", 3.8, 2.4, 4.8, 0.05, &"now", &"LS1", F],
-	# The Temp (the Annex). When Lonely (T19c) is built its chase speed takes over temp.speed.
-	[&"temp.speed", &"temp", "HUNT SPEED", "how fast it comes while nobody holds it", "m/s", 3.8, 2.4, 4.8, 0.05, &"now", &"LS1", F],
-	[&"temp.dark_speed", &"temp", "SPEED IN THE BLACKOUT", "the same, while the lights are out before the car", "m/s", 3.8, 2.4, 4.8, 0.05, &"now", &"LS1", F],
+	# The Temp (the Annex). Lonely (T19c, sim/lonely.gd) is on in the game's rooms: its chase speed is temp.speed
+	# (temp.dark_speed in the blackout, temp.alone_speed with a crew of one), today's its CHASE_SPEED and
+	# SOLO_CHASE_SPEED. Without Lonely (tests only) the Temp's Stillness hunt reads the same two ids.
+	[&"temp.speed", &"temp", "HUNT SPEED", "how fast it chases a player who is alone", "m/s", 3.9, 2.4, 4.8, 0.05, &"now", &"LS1", F],
+	[&"temp.dark_speed", &"temp", "SPEED IN THE BLACKOUT", "the same, while the lights are out before the car", "m/s", 3.9, 2.4, 4.8, 0.05, &"now", &"LS1", F],
+	[&"temp.alone_speed", &"temp", "HUNT SPEED, PLAYING ALONE", "its chase in a run of one player (slower than a walk)", "m/s", 2.6, 1.5, 4.5, 0.1, &"now", &"LS1", F],
 	# The Minder (the Playroom).
 	[&"minder.stroll", &"minder", "STROLL SPEED", "tidying, outside a count", "m/s", 1.2, 0.6, 2.0, 0.1, &"now", &"LS4", F],
 	[&"minder.search_speed", &"minder", "SEARCH SPEED", "going from hide to hide in a count", "m/s", 3.0, 1.5, 4.5, 0.1, &"now", &"LS1", F],
 	[&"minder.run_speed", &"minder", "RUN SPEED", "running down someone it has found", "m/s", 7.0, 4.0, 9.0, 0.25, &"now", &"LS1", F],
-	[&"minder.hide_time", &"minder", "TIME TO HIDE", "the free seconds at the start of a count", "s", 6.0, 3.0, 60.0, 1.0, &"next", &"LS4", F],
+	# The tuned Playroom (T15m, sim/seek.gd) is on in the game's rooms: the first count gives 30 s to hide, each
+	# later one 5 s more (to the fourth), the last count 30; every search lasts 30 s; the anger bar fills in 2 s
+	# of sprinting or 3 noises and cools from full in 50 s. Without it (tests only) a count's hide is HIDE_TIME.
+	[&"minder.hide_time", &"minder", "TIME TO HIDE", "the free seconds at the start of the first count", "s", 30.0, 3.0, 60.0, 1.0, &"next", &"LS4", F],
+	[&"minder.hide_more", &"minder", "EACH COUNT HIDES LONGER BY", "seconds more to hide at each later count, to the fourth", "s", 5.0, 0.0, 15.0, 1.0, &"next", &"LS4", F],
+	[&"minder.last_hide", &"minder", "TIME TO HIDE, THE LAST COUNT", "the free seconds at the start of the count the lift call starts", "s", 30.0, 3.0, 60.0, 1.0, &"next", &"LS4", F],
+	[&"minder.search", &"minder", "IT SEARCHES FOR", "how long a count's search lasts after the time to hide", "s", 30.0, 10.0, 90.0, 5.0, &"next", &"LS4", F],
 	[&"minder.last_count", &"minder", "THE LAST COUNT LASTS", "the count the lift call starts", "s", 40.0, 20.0, 90.0, 5.0, &"next", &"LS4", F],
 	[&"minder.calm", &"minder", "CALM AFTER A COUNT", "nothing can start a new count for this long", "s", 15.0, 5.0, 60.0, 5.0, &"next", &"LS4", F],
 	[&"minder.sight", &"minder", "SEES AS FAR AS", "its sight in a count", "m", 12.0, 6.0, 20.0, 1.0, &"now", &"LS4", F],
 	[&"minder.found_after", &"minder", "FOUND AFTER", "how long in its sight before you are found", "s", 1.0, 0.3, 3.0, 0.1, &"now", &"LS4", F],
+	[&"minder.anger_sprint", &"minder", "SPRINTING FILLS ITS ANGER IN", "seconds of sprinting that fill an empty anger bar", "s", 2.0, 0.5, 10.0, 0.5, &"now", &"LS4", F],
+	[&"minder.anger_noise", &"minder", "ONE NOISE ADDS TO ITS ANGER", "a ball pit, a flap, a dropped tape or an emote", "in 100", 34.0, 5.0, 100.0, 1.0, &"now", &"LS4", W],
+	[&"minder.anger_cool", &"minder", "ITS ANGER COOLS FROM FULL IN", "seconds of quiet that empty a full anger bar", "s", 50.0, 10.0, 300.0, 5.0, &"now", &"LS4", F],
 	# The Groundskeeper (the Arboretum; sim/hearing.gd, sim/noise.gd, sim/run.gd KEEPER_HEALS). AR1 wires its
 	# speeds, its reach, the lean and the heals; the rest (piece AR) are listed for the panel and read by nothing yet.
 	[&"groundskeeper.speed", &"groundskeeper", "COMING SPEED", "how fast it comes to a noise", "m/s", 6.0, 4.2, 9.0, 0.1, &"now", &"AR1", F],
@@ -149,11 +163,6 @@ const ROWS: Array = [
 	[&"dark.first_min", &"lift", "FIRST FLOOR'S BLACKOUT, SHORTEST", "the same on the first floor of a day", "s", 14.0, 5.0, 40.0, 1.0, &"next", &"LS4", F],
 	[&"dark.first_max", &"lift", "FIRST FLOOR'S BLACKOUT, LONGEST", "the same on the first floor of a day", "s", 16.0, 5.0, 40.0, 1.0, &"next", &"LS4", F],
 	[&"dark.warning", &"lift", "BLACKOUT WARNING", "the long flicker before it", "s", 3.0, 1.0, 6.0, 0.5, &"next", &"LS4", F],
-	# Players: moving.
-	[&"player.walk", &"moving", "WALK", "a player's walking speed", "m/s", 3.0, 2.0, 4.0, 0.1, &"floor", &"LS6", F],
-	[&"player.sprint", &"moving", "SPRINT", "a player's sprinting speed", "m/s", 5.0, 3.5, 7.0, 0.1, &"floor", &"LS6", F],
-	[&"player.creep", &"moving", "CREEP", "a player's creeping speed", "m/s", 1.2, 0.6, 2.0, 0.1, &"floor", &"LS6", F],
-	[&"player.raised", &"moving", "WALK WITH THE INSTRUMENT UP", "the cap while recording", "m/s", 2.2, 1.0, 4.0, 0.1, &"floor", &"LS6", F],
 	# Players: stamina.
 	[&"stamina.tank", &"stamina", "A FULL TANK SPRINTS FOR", "seconds of sprinting in a full tank", "s", 7.0, 3.0, 15.0, 0.5, &"now", &"LS5", F],
 	[&"stamina.refill_walk", &"stamina", "REFILL, WALKING", "empty to full", "s", 8.0, 3.0, 20.0, 0.5, &"now", &"LS5", F],
@@ -183,10 +192,29 @@ const ROWS: Array = [
 	[&"hide.in_slow", &"hiding", "GETTING IN, QUIETLY", "seconds to get into a hide quietly", "s", 1.5, 0.5, 4.0, 0.1, &"next", &"LS6", F],
 	[&"hide.in_fast", &"hiding", "GETTING IN, FAST AND LOUD", "seconds to get into a hide fast", "s", 0.5, 0.2, 2.0, 0.1, &"next", &"LS6", F],
 	[&"hide.reach", &"hiding", "HIDE FROM WITHIN", "how near a hide F works", "m", 1.2, 0.8, 2.5, 0.1, &"floor", &"LS6", F],
+	# Player speeds, last (the owner: "player speeds come last").
+	[&"player.walk", &"moving", "WALK", "a player's walking speed", "m/s", 3.0, 2.0, 4.0, 0.1, &"floor", &"LS6", F],
+	[&"player.sprint", &"moving", "SPRINT", "a player's sprinting speed", "m/s", 5.0, 3.5, 7.0, 0.1, &"floor", &"LS6", F],
+	[&"player.creep", &"moving", "CREEP", "a player's creeping speed", "m/s", 1.2, 0.6, 2.0, 0.1, &"floor", &"LS6", F],
+	[&"player.raised", &"moving", "WALK WITH THE INSTRUMENT UP", "the cap while recording", "m/s", 2.2, 1.0, 4.0, 0.1, &"floor", &"LS6", F],
 ]
 
 ## The pieces whose rows the rules read today (`wired`). LS4, LS5 and LS6 add theirs as they wire them.
-const WIRED_PIECES: Array[StringName] = [&"LS1", &"AR1"]
+const WIRED_PIECES: Array[StringName] = [&"LS1"]
+## Rows of later pieces the rules already read (wired one group at a time, each with its proof).
+const WIRED_IDS: Array[StringName] = [
+	# LS4: the lift and the dark.
+	&"lift.false_stop", &"lift.board", &"lift.hold", &"lift.ride",
+	&"dark.min", &"dark.max", &"dark.first_min", &"dark.first_max", &"dark.warning",
+	# LS4: the Minder (the tuned Playroom).
+	&"minder.stroll", &"minder.hide_time", &"minder.hide_more", &"minder.last_hide", &"minder.search",
+	&"minder.anger_sprint", &"minder.anger_noise", &"minder.anger_cool",
+	# LS5: the tank, and the heal.
+	&"stamina.tank", &"heal.time", &"heal.quiet", &"heal.health",
+	# AR1: the Groundskeeper (the Arboretum).
+	&"groundskeeper.speed", &"groundskeeper.dark_speed", &"groundskeeper.reach", &"groundskeeper.lean_range",
+	&"groundskeeper.lean", &"groundskeeper.heals",
+]
 
 ## The least wait of a call is its start delay plus the floors: sim/run.gd CALL_START_DELAY_MIN (this file
 ## does not load run.gd, which loads it; tests/prop_settings.gd checks they are equal).
@@ -259,7 +287,7 @@ static func _load() -> void:
 		s.holds = r[9]
 		s.piece = r[10]
 		s.whole = r[11]
-		s.wired = WIRED_PIECES.has(s.piece)
+		s.wired = WIRED_PIECES.has(s.piece) or WIRED_IDS.has(s.id)
 		_rows.append(s)
 		_by_id[s.id] = s
 

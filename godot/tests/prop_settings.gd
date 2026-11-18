@@ -43,6 +43,8 @@ const HostRules = preload("res://net/host_rules.gd")
 const Snap = preload("res://tests/snap.gd")
 const CountRun = preload("res://tests/prop_count_run.gd")
 const PropSeek = preload("res://tests/prop_seek.gd")
+const PropLonely = preload("res://tests/prop_lonely.gd")
+const Lonely = preload("res://sim/lonely.gd")
 const Hearing = preload("res://sim/hearing.gd")
 const Noises = preload("res://sim/noise.gd")
 const PropHearing = preload("res://tests/prop_hearing.gd")
@@ -50,8 +52,9 @@ const PropHearing = preload("res://tests/prop_hearing.gd")
 const DT := 0.05
 const EPS := 1e-9
 
-## The ten LS1 wires, in the registry's order.
-const TEN: Array[StringName] = [&"orderly.speed", &"orderly.dark_speed", &"temp.speed", &"temp.dark_speed",
+## The LS1 wires, in the registry's order: the first ten, and the Lonely Temp's chase alone (temp.alone_speed),
+## added with the Lonely fix.
+const TEN: Array[StringName] = [&"orderly.speed", &"orderly.dark_speed", &"temp.speed", &"temp.dark_speed", &"temp.alone_speed",
 	&"minder.search_speed", &"minder.run_speed", &"lift.floors_min", &"lift.floors_max", &"lift.floor_time", &"down.time"]
 
 ## The Groundskeeper's six AR1 wires, in the registry's order.
@@ -68,15 +71,44 @@ const PROOFS := {
 	&"groundskeeper.heals": "test_groundskeeper_six",
 	&"orderly.speed": "test_orderly_and_temp_speeds_lit",
 	&"orderly.dark_speed": "test_orderly_and_temp_speeds_in_the_blackout",
-	&"temp.speed": "test_orderly_and_temp_speeds_lit",
-	&"temp.dark_speed": "test_orderly_and_temp_speeds_in_the_blackout",
+	&"temp.speed": "test_temp_chase_speeds_under_lonely",
+	&"temp.dark_speed": "test_temp_chase_speeds_under_lonely",
+	&"temp.alone_speed": "test_temp_chase_speeds_under_lonely",
 	&"minder.search_speed": "test_minder_search_and_run_pace",
 	&"minder.run_speed": "test_minder_search_and_run_pace",
 	&"lift.floors_min": "test_lift_wait_over_500_plans_and_in_a_run",
 	&"lift.floors_max": "test_lift_wait_over_500_plans_and_in_a_run",
 	&"lift.floor_time": "test_lift_wait_over_500_plans_and_in_a_run",
 	&"down.time": "test_down_time",
+	# LS4 and LS5, wired a group at a time.
+	&"lift.false_stop": "test_false_stop_chance",
+	&"lift.board": "test_boarding_hold_and_ride",
+	&"lift.hold": "test_boarding_hold_and_ride",
+	&"lift.ride": "test_boarding_hold_and_ride",
+	&"dark.min": "test_blackout_lengths_and_warning",
+	&"dark.max": "test_blackout_lengths_and_warning",
+	&"dark.first_min": "test_blackout_lengths_and_warning",
+	&"dark.first_max": "test_blackout_lengths_and_warning",
+	&"dark.warning": "test_blackout_lengths_and_warning",
+	&"minder.stroll": "test_minder_stroll",
+	&"minder.hide_time": "test_minder_anger_and_count_lengths",
+	&"minder.hide_more": "test_minder_anger_and_count_lengths",
+	&"minder.last_hide": "test_minder_anger_and_count_lengths",
+	&"minder.search": "test_minder_anger_and_count_lengths",
+	&"minder.anger_sprint": "test_minder_anger_and_count_lengths",
+	&"minder.anger_noise": "test_minder_anger_and_count_lengths",
+	&"minder.anger_cool": "test_minder_anger_and_count_lengths",
+	&"stamina.tank": "test_stamina_tank",
+	&"heal.time": "test_heal_time_and_quiet",
+	&"heal.quiet": "test_heal_time_and_quiet",
+	&"heal.health": "test_heal_health",
 }
+
+## The rows of later pieces wired so far (sim/settings.gd WIRED_IDS), in the registry's order.
+const MORE: Array[StringName] = [&"minder.stroll", &"minder.hide_time", &"minder.hide_more", &"minder.last_hide", &"minder.search",
+	&"minder.anger_sprint", &"minder.anger_noise", &"minder.anger_cool",
+	&"lift.false_stop", &"lift.board", &"lift.hold", &"lift.ride", &"dark.min", &"dark.max", &"dark.first_min", &"dark.first_max", &"dark.warning",
+	&"stamina.tank", &"heal.time", &"heal.quiet", &"heal.health"]
 
 ## The game's value of every setting: the constant the game uses, with the rooms' switches on (paced, the long
 ## dark, the car waits: net/host_rules.gd). This table, not the registry, is the test's oracle.
@@ -91,13 +123,21 @@ static func game_values() -> Dictionary:
 		&"reloc.near_max": Relocate.NEAR_MAX,
 		&"orderly.speed": Run.PACED_HUNT_SPEED,
 		&"orderly.dark_speed": Run.PACED_BLACKOUT_HUNT_SPEED,
-		# The Temp is stepped by the same call as the Orderly (sim/run.gd), at the same paced speeds.
-		&"temp.speed": Run.PACED_HUNT_SPEED,
-		&"temp.dark_speed": Run.PACED_BLACKOUT_HUNT_SPEED,
+		# The Temp is Lonely in the game's rooms (sim/lonely.gd): its chase, lit and in the blackout, and alone.
+		&"temp.speed": Lonely.CHASE_SPEED,
+		&"temp.dark_speed": Lonely.CHASE_SPEED,
+		&"temp.alone_speed": Lonely.SOLO_CHASE_SPEED,
 		&"minder.stroll": Seek.WANDER_SPEED,
 		&"minder.search_speed": Seek.SEARCH_SPEED,
 		&"minder.run_speed": Seek.RUN_SPEED,
-		&"minder.hide_time": Seek.HIDE_TIME,
+		# The tuned Playroom (T15m) is on in the game's rooms.
+		&"minder.hide_time": Seek.TUNED_HIDE_LENGTHS[0],
+		&"minder.hide_more": Seek.TUNED_HIDE_LENGTHS[1] - Seek.TUNED_HIDE_LENGTHS[0],
+		&"minder.last_hide": Seek.TUNED_LAST_HIDE,
+		&"minder.search": Seek.TUNED_SEARCH,
+		&"minder.anger_sprint": 1.0 / float(Seek.ANGER_RATES[&"sprint"]),
+		&"minder.anger_noise": 100.0 * float(Seek.ANGER_LUMPS[&"emote"]),
+		&"minder.anger_cool": 1.0 / Seek.ANGER_COOL,
 		&"minder.last_count": Seek.LAST_LENGTH,
 		&"minder.calm": Seek.CALM_TIME,
 		&"minder.sight": Seek.SIGHT_RANGE,
@@ -165,10 +205,10 @@ static func game_values() -> Dictionary:
 		&"hide.reach": Seek.HIDE_REACH,
 	}
 
-## All ten LS1 settings at today's value (the "all at today's" tuning).
+## Every wired setting at today's value (the "all at today's" tuning).
 static func ten_at_today() -> Dictionary:
 	var out := {}
-	for id in TEN:
+	for id in TEN + MORE:
 		out[id] = Settings.today(id)
 	return out
 
@@ -178,7 +218,7 @@ static func ten_at_today() -> Dictionary:
 func test_registry_rows(t: T) -> void:
 	var game := game_values()
 	var rows := Settings.list()
-	t.eq(rows.size(), 80, "rows in the registry")
+	t.eq(rows.size(), 87, "rows in the registry")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -221,18 +261,18 @@ func test_registry_rows(t: T) -> void:
 	var wired: Array[StringName] = []
 	for s in Settings.list(true):
 		wired.append(s.id)
-	# The ten of LS1, with the Groundskeeper's six (AR1) where the registry lists them: after the Minder's.
-	var want_wired: Array[StringName] = []
-	for n in TEN.size():
-		if n == 6:
-			want_wired.append_array(KEEPER_SIX)
-		want_wired.append(TEN[n])
-	t.check(wired == want_wired, "the wired rows are exactly the ten of LS1 and the Groundskeeper's six, in order: %s" % str(wired))
-	t.eq(by_group.get(&"residents", 0), 40, "residents")
+	var want: Array[StringName] = []
+	for s in rows:
+		if TEN.has(s.id) or MORE.has(s.id) or KEEPER_SIX.has(s.id):
+			want.append(s.id)
+	t.check(wired == want and want.size() == TEN.size() + MORE.size() + KEEPER_SIX.size(), "the wired rows are exactly those of LS1 and the groups wired since, in order: %s" % str(wired))
+	t.eq(by_group.get(&"residents", 0), 47, "residents")
 	t.eq(by_group.get(&"lift", 0), 12, "the lift and the dark")
-	t.eq(by_group.get(&"players", 0), 17, "players")
+	t.eq(by_group.get(&"players", 0), 13, "players")
 	t.eq(by_group.get(&"earning", 0), 8, "earning")
 	t.eq(by_group.get(&"hiding", 0), 3, "hiding")
+	t.eq(by_group.get(&"speeds", 0), 4, "player speeds, the last group")
+	t.eq(group_order[group_order.size() - 1], &"speeds", "player speeds come last")
 	t.eq(Settings.LIFT_DELAY_MIN, Run.CALL_START_DELAY_MIN, "the pair rule's start delay is the run's")
 	t.check(Settings.pair_broken({}).is_empty(), "today's values keep every pair rule: %s" % Settings.pair_broken({}))
 	t.eq(Settings.text(&"orderly.speed", 3.6), "3.60 M/S", "the panel's words")
@@ -294,7 +334,7 @@ static func game_floor(seed: String, depth: int, n: int) -> Run.RunState:
 	var ids: Array[String] = []
 	for k in n:
 		ids.append("p%d" % k)
-	var rules := HostRules.new(true, depth, Places.FULL, false, false, true, true, true, true, true, true)
+	var rules := HostRules.new(true, depth, Places.FULL, false, false, true, true, true, true, true, true, true, true)
 	var st := rules.prepare(Run.create_run(seed, ids, Places.FULL))
 	var plan := st.plan
 	var dist := Floor.distances_from(plan, plan.landing)
@@ -399,7 +439,7 @@ func test_untuned_empty_and_all_at_today_match_tick_for_tick(t: T) -> void:
 		places[base.plan.place] = int(places.get(base.plan.place, 0)) + 1
 		var style: StringName = &"stay" if i % 2 == 0 else &"flee"
 		var lanes: Array[Lane] = [Lane.new(base, style), Lane.new(Run.with_tuning(base, {}), style), Lane.new(Run.with_tuning(base, ten_at_today()), style)]
-		t.check(lanes[0].st.tuning == null and lanes[1].st.tuning != null and lanes[1].st.tuning.size() == 0 and lanes[2].st.tuning.size() == 10, "%s: the three tunings" % seed)
+		t.check(lanes[0].st.tuning == null and lanes[1].st.tuning != null and lanes[1].st.tuning.size() == 0 and lanes[2].st.tuning.size() == TEN.size() + MORE.size(), "%s: the three tunings" % seed)
 		for k in roundi(secs / DT):
 			var prints: Array = []
 			var evs0: Array[Dictionary] = []
@@ -506,7 +546,8 @@ static func pace(seed: String, depth: int, given: Dictionary, dark: bool) -> Pac
 func _speed_proof(t: T, dark: bool) -> void:
 	var seeds := 1 if t.quick else 3
 	var lines: Array[String] = []
-	for who: Array in [[&"orderly", 1], [&"temp", 3]]:
+	# The Orderly only: the Temp is Lonely in the game (test_temp_chase_speeds_under_lonely).
+	for who: Array in [[&"orderly", 1]]:
 		var id := StringName("%s.%s" % [who[0], "dark_speed" if dark else "speed"])
 		# The other resident's id at the other end of its range: a read of the wrong id shows.
 		var other := StringName("%s.%s" % ["temp" if who[0] == &"orderly" else "orderly", "dark_speed" if dark else "speed"])
@@ -760,6 +801,485 @@ func test_down_time(t: T) -> void:
 		t.check(got[0] >= 0.0 and absf(got[1] - got[0] - Run.DOWN_TIME) < 1e-6 and got[2] >= got[1] - 1e-6 and got[2] < got[1] + DT + 1e-6,
 			"changed to %.0f s while down: downed %.3f, until %.3f, out %.3f" % [retune, got[0], got[1], got[2]])
 	t.note("out came down.time after downed at %s; already down keeps its time" % ", ".join(lines))
+
+## The Lonely Temp's chase (sim/lonely.gd, on in the game's rooms) over the first second after it starts: a setup of
+## tests/prop_lonely.gd (the Temp 8 to 15 m from b0 with a clear line, facing them), b0 standing; with a crew (b1
+## 40 m off, so b0 is lonely) unless `solo`, lit unless `dark` (the blackout on: Run.blacked_out). Returns
+## [metres, top speed, chase ticks, dark ticks].
+static func lonely_chase(row: Array, given: Dictionary, solo: bool, dark: bool) -> PackedFloat64Array:
+	var ids: Array[String] = ["b0"]
+	if not solo:
+		ids.append("b1")
+	var s := PropLonely.floor_run(str(row[0]), ids, false, false)
+	var plan := s.plan
+	if dark:
+		# The crew calls the car from the landing and waits there until the blackout is on (the Temp parked).
+		s.orderly = HostRules.parked_orderly(s)
+		var at_car := {}
+		for id in ids:
+			at_car[id] = Run.car_body(s.car, -1.0, 0.0 if id == "b0" else 0.5)
+		s = PropLonely.stand(s, at_car)
+		var first := true
+		for _k in roundi(90.0 / DT):
+			if Run.blacked_out(s):
+				break
+			var ins := PropLonely.inputs(s, at_car, false)
+			ins[0].call = first
+			first = false
+			s = Run.step_run(s, ins, DT).state
+	var tb := PropLonely.cell_body(plan, row[1])
+	var pb := PropLonely.cell_body(plan, row[2])
+	var bodies := {"b0": pb}
+	if not solo:
+		bodies["b1"] = PropLonely.cell_body(plan, row[3])
+	s = PropLonely.temp_at(PropLonely.stand(s, bodies), tb, Entity.yaw_toward(pb.x - tb.x, pb.z - tb.z))
+	s = Run.with_tuning(s, given) if not given.is_empty() else s
+	var out := PackedFloat64Array([0.0, 0.0, 0.0, 0.0])
+	for _k in roundi(1.0 / DT):
+		var before := s.orderly.body
+		var r := Run.step_run(s, PropLonely.inputs(s, bodies, false), DT)
+		s = r.state
+		if s.orderly.lonely_phase != &"chase" or s.orderly.mode != &"hunting":
+			break
+		out[0] += M.hypot2(s.orderly.body.x - before.x, s.orderly.body.z - before.z)
+		out[1] = maxf(out[1], s.orderly.speed)
+		out[2] += 1.0
+		if Run.blacked_out(s):
+			out[3] += 1.0
+	return out
+
+func test_temp_chase_speeds_under_lonely(t: T) -> void:
+	var n := 3 if t.quick else 8
+	var setups: Array = PropLonely.new()._line_setups(n, 9.0, 15.0)
+	t.check(setups.size() >= 2, "setups found: %d" % setups.size())
+	var lines: Array[String] = []
+	# [id, solo, dark]
+	for c: Array in [[&"temp.speed", false, false], [&"temp.dark_speed", false, true], [&"temp.alone_speed", true, false]]:
+		var id: StringName = c[0]
+		var row := Settings.row(id)
+		# The other two at the far end of their ranges: a read of the wrong id shows.
+		var others: Array[StringName] = []
+		for o: StringName in [&"temp.speed", &"temp.dark_speed", &"temp.alone_speed"]:
+			if o != id:
+				others.append(o)
+		for setup: Array in setups:
+			var untuned := lonely_chase(setup, {}, c[1], c[2])
+			var tag0 := "%s %s" % [setup[0], id]
+			t.check(untuned[2] == roundi(1.0 / DT) and (not c[2] or untuned[3] == untuned[2]), "%s: untuned, chased for the whole second (%d ticks, %d dark)" % [tag0, untuned[2], untuned[3]])
+			var want_today := Lonely.SOLO_CHASE_SPEED if c[1] else Lonely.CHASE_SPEED
+			t.check(absf(untuned[1] - want_today) < 1e-6, "%s: untuned chase %.4f m/s, Lonely's own %.2f" % [tag0, untuned[1], want_today])
+			var last := -1.0
+			for v: float in [row.lo, row.today, row.hi]:
+				var given := {id: v}
+				for o in others:
+					var orow := Settings.row(o)
+					given[o] = orow.hi if v < row.hi else orow.lo
+				var got := lonely_chase(setup, given, c[1], c[2])
+				var tag := "%s = %.2f" % [tag0, v]
+				t.check(got[2] == roundi(1.0 / DT), "%s: chased for the whole second (%d ticks)" % [tag, got[2]])
+				t.check(absf(got[1] - v) < 0.02, "%s: top speed %.3f m/s" % [tag, got[1]])
+				t.check(got[0] <= v * 1.0 + 0.05 and got[0] >= v * 0.85, "%s: %.2f m in 1 s" % [tag, got[0]])
+				t.check(got[0] > last, "%s: %.2f m is not more than at the slower speed (%.2f m)" % [tag, got[0], last])
+				last = got[0]
+				if v == row.today:
+					t.check(got[0] == untuned[0] and got[1] == untuned[1], "%s: today's value is the untuned run (%.4f m against %.4f m)" % [tag, got[0], untuned[0]])
+				if setup == setups[0]:
+					lines.append("%s %.2f: %.2f m" % [id, v, got[0]])
+	t.note("the Lonely Temp's first second of a chase (%d setups): %s" % [setups.size(), ", ".join(lines)])
+
+# ---------------------------------------------------------------------------------------------
+# 4b. LS4: the lift and the dark.
+
+## The blackout bounds of the proof: [dark.min, dark.max, dark.first_min, dark.first_max, dark.warning], each pair-safe.
+const DARK_SETS: Array = [[20.0, 24.0, 14.0, 16.0, 3.0], [5.0, 5.0, 5.0, 5.0, 1.0], [40.0, 40.0, 40.0, 40.0, 6.0], [8.0, 30.0, 10.0, 12.0, 2.0]]
+
+func test_blackout_lengths_and_warning(t: T) -> void:
+	var n := 60 if t.quick else 200
+	var lines: Array[String] = []
+	for d: Array in DARK_SETS:
+		for lift: Array in LIFT_SETS:
+			var given := {&"dark.min": d[0], &"dark.max": d[1], &"dark.first_min": d[2], &"dark.first_max": d[3], &"dark.warning": d[4],
+				&"lift.floors_min": lift[0], &"lift.floors_max": lift[1], &"lift.floor_time": lift[2]}
+			var tag := "dark %s, lift %s" % [str(d), str(lift)]
+			t.check(Settings.pair_broken(given).is_empty(), "%s: keeps the pair rules" % tag)
+			var tuning := Settings.make(given)
+			var bad := 0
+			var at_bound := 0
+			var capped := 0
+			for i in n:
+				var depth := 1 + i % 3
+				var p := Run.call_plan("ls4-dark-%d" % i, i % 3, -1, depth, true, tuning)
+				var b: Run.DarkStretch = p.darks[p.darks.size() - 1]
+				var lo: float = d[2] if depth <= 1 else d[0]
+				var hi: float = d[3] if depth <= 1 else d[1]
+				var ok := b.blackout and absf(b.warn - float(d[4])) < 1e-9 and absf(b.at + b.len - p.wait) < 1e-6 and b.len <= hi + 1e-9 \
+					and b.at - b.warn >= -1e-9 and p.darks.size() >= 2
+				# The first blink and its warning fit before the blackout's warning (prop_blackout's rule).
+				if p.darks.size() >= 2:
+					var first: Run.DarkStretch = p.darks[0]
+					ok = ok and first.at - first.warn >= -1e-9 and p.darks[p.darks.size() - 2].at + p.darks[p.darks.size() - 2].len <= b.at - b.warn + 1e-9
+				if b.len >= lo - 1e-9:
+					at_bound += 1
+				else:
+					capped += 1
+				if not ok:
+					bad += 1
+					if bad <= 3:
+						t.check(false, "%s %d (depth %d): wait %.2f, blackout at %.2f for %.2f (warn %.2f), %d darks" % [tag, i, depth, p.wait, b.at, b.len, b.warn, p.darks.size()])
+			t.eq(bad, 0, "%s: plans breaking the blackout's rules" % tag)
+			t.check(at_bound > 0 or float(d[0]) >= 30.0, "%s: some blackout within its bounds (%d, %d capped by a short wait)" % [tag, at_bound, capped])
+			if lift == LIFT_SETS[0]:
+				lines.append("%s: %d in bounds, %d capped" % [str(d), at_bound, capped])
+	# All at today's is the untuned plan, every dark stretch exactly.
+	var today := Settings.make({&"dark.min": 20.0, &"dark.max": 24.0, &"dark.first_min": 14.0, &"dark.first_max": 16.0, &"dark.warning": 3.0, &"lift.false_stop": 25.0})
+	var same := 0
+	for i in n:
+		var u := Run.call_plan("ls4-same-%d" % i, i % 3, -1, 1 + i % 3, true)
+		var v := Run.call_plan("ls4-same-%d" % i, i % 3, -1, 1 + i % 3, true, today)
+		var eq := u.wait == v.wait and u.false_stop == v.false_stop and u.darks.size() == v.darks.size()
+		for k in mini(u.darks.size(), v.darks.size()):
+			eq = eq and u.darks[k].at == v.darks[k].at and u.darks[k].len == v.darks[k].len and u.darks[k].warn == v.darks[k].warn
+		if eq:
+			same += 1
+	t.eq(same, n, "plans at today's values equal the untuned ones")
+	# The blackout follows its bounds: min = max = v gives v exactly when the wait has room.
+	for v: float in [5.0, 14.0, 22.0]:
+		var exact := 0
+		for i in n:
+			var p := Run.call_plan("ls4-exact-%d" % i, 0, -1, 2, true, Settings.make({&"dark.min": v, &"dark.max": v, &"lift.floor_time": 8.0}))
+			if absf(p.darks[p.darks.size() - 1].len - v) < 1e-9:
+				exact += 1
+		t.eq(exact, n, "dark.min = dark.max = %.0f: every blackout %.0f s long (waits of 49 s and more)" % [v, v])
+	t.note("blackout corners over %d plans each: %s" % [n, "; ".join(lines)])
+
+func test_false_stop_chance(t: T) -> void:
+	var n := 200 if t.quick else 1000
+	var counts := {}
+	for v: float in [0.0, 25.0, 100.0]:
+		var stops := 0
+		var same := 0
+		for i in n:
+			var p := Run.call_plan("ls4-stop-%d" % i, i % 3, -1, 1, true, Settings.make({&"lift.false_stop": v}))
+			var u := Run.call_plan("ls4-stop-%d" % i, i % 3, -1, 1, true)
+			if p.false_stop:
+				stops += 1
+			if p.delay == u.delay and p.floors == u.floors:
+				same += 1
+		counts[v] = stops
+		t.eq(same, n, "false_stop %.0f: the other draws are the untuned plan's" % v)
+	t.eq(counts[0.0], 0, "chance 0: never")
+	t.eq(counts[100.0], n, "chance 100: always")
+	var untuned := 0
+	for i in n:
+		if Run.call_plan("ls4-stop-%d" % i, i % 3, -1, 1, true).false_stop:
+			untuned += 1
+	t.eq(counts[25.0], untuned, "chance 25: the untuned plans' false stops exactly")
+	t.note("false stops in %d plans: 0 -> %d, 25 -> %d, 100 -> %d" % [n, counts[0.0], counts[25.0], counts[100.0]])
+
+## p0 on the landing calls the car (2 or 3 floors at 7 s), steps in when it is there, and rides down: the bell,
+## the hold and the ride as the run counts them. Returns [bell_left at the doors opening, hold_left then, seconds
+## from the doors opening to the bell, the ride's timer on its first tick, seconds riding]. `retune`: a tuning
+## put in force the tick after the doors open.
+static func board_and_ride(seed: String, given: Dictionary, retune: Variant = null) -> PackedFloat64Array:
+	var g := given.duplicate()
+	g.merge({&"lift.floors_min": 2, &"lift.floors_max": 3, &"lift.floor_time": 7.0})
+	var s := chase_floor(seed, 1, g)
+	var out := PackedFloat64Array([-1.0, -1.0, -1.0, -1.0, -1.0])
+	var opened := -1.0
+	var riding := -1.0
+	var first := true
+	var inside := Run.car_body(s.car, 1.0, 0.0)
+	for _k in roundi(200.0 / DT):
+		var inp := landing_input(s, first)
+		first = false
+		if opened >= 0.0:
+			inp = Run.PlayerInput.make("p0", inside, 1.65, 0.0, 0.0, 90.0, 70.0)
+		var r := Run.step_run(s, [inp] as Array[Run.PlayerInput], DT)
+		s = r.state
+		for e in r.events:
+			if e["type"] == "carArrived" and opened < 0.0:
+				opened = s.t
+				out[0] = s.bell_left
+				out[1] = s.hold_left
+				if retune != null:
+					s = Run.with_tuning(s, retune)
+			if e["type"] == "bell" and out[2] < 0.0:
+				out[2] = s.t - opened
+		if s.phase == &"riding" and riding < 0.0:
+			riding = s.t
+			out[3] = s.timer
+		elif riding >= 0.0 and s.phase != &"riding":
+			out[4] = s.t - riding
+			return out
+	return out
+
+func test_boarding_hold_and_ride(t: T) -> void:
+	var lines: Array[String] = []
+	for c: Array in [[&"lift.board", 0], [&"lift.hold", 1], [&"lift.ride", 3]]:
+		var id: StringName = c[0]
+		var row := Settings.row(id)
+		var untuned := board_and_ride("ls4-board-0", {})
+		for v: float in [row.lo, row.today, row.hi]:
+			var got := board_and_ride("ls4-board-0", {id: v})
+			var k: int = c[1]
+			var tag := "%s = %.0f" % [id, v]
+			match k:
+				0:
+					t.check(absf(got[0] - v) <= DT + 1e-6, "%s: the bell is %.2f s off when the doors open" % [tag, got[0]])
+					t.check(absf(got[2] - v) <= DT + 1e-6, "%s: the bell rang %.2f s after the doors opened" % [tag, got[2]])
+				1:
+					t.check(absf(got[1] - v) <= DT + 1e-6, "%s: the doors can be held %.2f s" % [tag, got[1]])
+				3:
+					t.check(absf(got[3] - v) <= DT + 1e-6 and absf(got[4] - v) <= 2.0 * DT + 1e-6, "%s: the ride's timer %.2f, it rode %.2f s" % [tag, got[3], got[4]])
+			if v == row.today:
+				t.check(got == untuned, "%s: today's value is the untuned run: %s / %s" % [tag, str(got), str(untuned)])
+			lines.append("%s: %s" % [tag, str(got[k] if k != 3 else got[4])])
+	# A boarding already open rings its bell when it would have, whatever is changed.
+	var before := board_and_ride("ls4-board-0", {&"lift.board": 30.0})
+	var changed := board_and_ride("ls4-board-0", {&"lift.board": 30.0}, {&"lift.board": 10.0, &"lift.hold": 0.0, &"lift.floors_min": 2, &"lift.floors_max": 3, &"lift.floor_time": 7.0})
+	t.check(before[2] > 0.0 and changed[2] == before[2], "changed while the doors are open: the bell at %.2f s, as before (%.2f)" % [changed[2], before[2]])
+	t.note(", ".join(lines))
+
+# ---------------------------------------------------------------------------------------------
+# 4c. LS4: the Playroom (the Minder's stroll; with the tuned Playroom, T15m, on as in the game: the time to hide,
+# the search, the anger bar).
+
+## A Playroom rig (tests/prop_count_run.gd) with the tuned Playroom on as the game's rooms have it, the tuning
+## `given`, out on the floor, everyone creeping.
+static func tuned_rig(seed: String, given: Dictionary, t: T) -> CountRun.Rig:
+	var r := CountRun.Rig.new(seed)
+	# The game's Playroom: the tuned one (net/host_rules.gd playroom_tuned).
+	var rules := HostRules.new(true, 4, Places.FULL, false, false, false, false, false, false, false, false, false, true)
+	r.st = rules.prepare(Run.create_run(seed, CountRun.IDS, Places.FULL))
+	for p in r.st.players:
+		r.bodies[p.id] = p.body
+	r.st = Run.with_tuning(r.st, given) if not given.is_empty() else r.st
+	CountRun.to_away(t, r)
+	return r
+
+func test_minder_stroll(t: T) -> void:
+	var row := Settings.row(&"minder.stroll")
+	var lines: Array[String] = []
+	var last := -1.0
+	for v: float in [row.lo, row.today, row.hi]:
+		var r := CountRun.Rig.new("ls4-stroll-0")
+		r.st = Run.with_tuning(r.st, {&"minder.stroll": v})
+		CountRun.to_away(t, r)
+		var top := 0.0
+		var metres := 0.0
+		for _k in roundi(12.0 / DT):
+			var before := (r.st.seek as Seek.SeekState).minder.body
+			r.step()
+			var ss: Seek.SeekState = r.st.seek
+			if ss.counting:
+				break
+			top = maxf(top, ss.minder.speed)
+			metres += M.hypot2(ss.minder.body.x - before.x, ss.minder.body.z - before.z)
+		t.check(absf(top - v) < 0.02, "minder.stroll = %.1f: it strolled at %.3f m/s" % [v, top])
+		t.check(metres > last, "minder.stroll = %.1f: %.2f m in 12 s, not more than at the slower (%.2f)" % [v, metres, last])
+		last = metres
+		lines.append("%.1f: %.2f m" % [v, metres])
+	t.note("the Minder's stroll, 12 s outside a count: %s" % ", ".join(lines))
+
+## Seconds of sprinting from an empty bar to the count (p0 sprints on the spot... across the floor), and the
+## count's own hide and search seconds.
+static func sprint_to_count(seed: String, given: Dictionary, t: T) -> PackedFloat64Array:
+	var r := tuned_rig(seed, given, t)
+	r.gait["p0"] = &"sprint"
+	var out := PackedFloat64Array([-1.0, -1.0, -1.0])
+	var from := r.st.t
+	var cells := CountRun.safe_cells(r.plan(), 0.0, seed + ":run")
+	var b0: Move.Body = Move.body_at_cell(r.plan(), cells[0])
+	var k := 0
+	for _i in roundi(30.0 / DT):
+		# Keep p0 moving at a sprint's pace, to and fro on one safe cell (a sprint that goes nowhere is no noise).
+		k += 1
+		r.bodies["p0"] = Move.Body.make(b0.x + (0.25 if k % 2 == 1 else 0.0), b0.z, b0.level, b0.y)
+		r.step()
+		var ss: Seek.SeekState = r.st.seek
+		if ss.counting:
+			out[0] = r.st.t - from
+			out[1] = ss.hide_len
+			out[2] = ss.len
+			return out
+	return out
+
+func test_minder_anger_and_count_lengths(t: T) -> void:
+	var lines: Array[String] = []
+	# The first count: its time to hide and its search, from a sprint (as the game's).
+	var untuned := sprint_to_count("ls4-count-0", {}, t)
+	t.check(untuned[1] == Seek.TUNED_HIDE_LENGTHS[0] and untuned[2] == Seek.TUNED_SEARCH, "untuned: hide %.0f, search %.0f" % [untuned[1], untuned[2]])
+	for c: Array in [[&"minder.hide_time", 1], [&"minder.search", 2]]:
+		var row := Settings.row(c[0])
+		for v: float in [row.lo, row.today, row.hi]:
+			var got := sprint_to_count("ls4-count-0", {c[0]: v}, t)
+			t.check(got[c[1]] == v, "%s = %.0f: the count has %.0f" % [c[0], v, got[c[1]]])
+			if v == row.today:
+				t.check(got == untuned, "%s at today's: the untuned count (%s / %s)" % [c[0], str(got), str(untuned)])
+			lines.append("%s %.0f -> %.0f" % [c[0], v, got[c[1]]])
+	# The anger bar: seconds of sprinting to a full bar follow minder.anger_sprint.
+	var srow := Settings.row(&"minder.anger_sprint")
+	var last := -1.0
+	for v: float in [srow.lo, srow.today, srow.hi]:
+		var got := sprint_to_count("ls4-count-0", {&"minder.anger_sprint": v}, t)
+		t.check(got[0] > last and absf(got[0] - v) <= 2.0 * DT + 1e-6, "minder.anger_sprint = %.1f: a sprint started the count after %.2f s" % [v, got[0]])
+		last = got[0]
+		if v == srow.today:
+			t.check(got == untuned, "minder.anger_sprint at today's: the untuned count")
+		lines.append("anger %.1f s -> %.2f s" % [v, got[0]])
+	# The rest of the counts, the noise's lump and the cooling: the rules' own numbers, as the step reads them.
+	for counts: int in [1, 2, 3, 4, 6]:
+		for given: Dictionary in [{}, {&"minder.hide_time": 10.0, &"minder.hide_more": 0.0}, {&"minder.hide_time": 60.0, &"minder.hide_more": 15.0}, {&"minder.hide_time": 30.0, &"minder.hide_more": 5.0}]:
+			var want: float = Seek.TUNED_HIDE_LENGTHS[mini(counts - 1, 3)] if given.is_empty() else float(given[&"minder.hide_time"]) + float(given[&"minder.hide_more"]) * mini(counts - 1, 3)
+			t.eq(Seek.tuned_hide(Settings.make(given) if not given.is_empty() else null, counts, false), want, "count %d %s: time to hide" % [counts, str(given)])
+	for v: float in [3.0, 30.0, 60.0]:
+		t.eq(Seek.tuned_hide(Settings.make({&"minder.last_hide": v}), 2, true), v, "the last count's time to hide at %.0f" % v)
+	t.eq(Seek.tuned_hide(null, 2, true), Seek.TUNED_LAST_HIDE, "the last count's, untuned")
+	for v: float in [5.0, 34.0, 100.0]:
+		t.eq(Seek.anger_gain(&"emote", DT, Settings.make({&"minder.anger_noise": v})), v / 100.0, "minder.anger_noise = %.0f: one noise adds %.2f" % [v, v / 100.0])
+	t.eq(Seek.anger_gain(&"emote", DT, Settings.make({&"minder.anger_noise": 34.0})), Seek.anger_gain(&"emote", DT, null), "a noise at today's: the untuned lump")
+	for v: float in [10.0, 50.0, 300.0]:
+		t.eq(Seek.anger_cool(Settings.make({&"minder.anger_cool": v})), 1.0 / v, "minder.anger_cool = %.0f: it cools %.4f a second" % [v, 1.0 / v])
+	t.eq(Seek.anger_cool(Settings.make({&"minder.anger_cool": 50.0})), Seek.anger_cool(null), "cooling at today's: the untuned rate")
+	t.note("; ".join(lines))
+
+# ---------------------------------------------------------------------------------------------
+# 4d. LS5: the tank and the heal.
+
+func test_stamina_tank(t: T) -> void:
+	var row := Settings.row(&"stamina.tank")
+	var base := Run.with_paced(Run.create_run("ls5-tank", ["p0"] as Array[String]))
+	t.eq(Run.sprint_seconds(base), Stamina.PACED_SPRINT_SECONDS, "untuned: the paced tank")
+	var lines: Array[String] = []
+	for v: float in [row.lo, row.today, row.hi]:
+		var s := Run.with_tuning(base, {&"stamina.tank": v})
+		t.eq(Run.sprint_seconds(s), v, "stamina.tank = %.1f: the run's tank" % v)
+		# A full tank sprints for v seconds (sim/stamina.gd, as the host and the game step it).
+		var st := Stamina.fresh_stamina(Run.sprint_seconds(s))
+		var secs := 0.0
+		while st.level > 0.0 and secs < 60.0:
+			st = Stamina.step_stamina(st, &"sprint", Stamina.SPRINT_SPEED, DT)
+			secs += DT
+		t.check(absf(secs - v) <= DT + 1e-6, "stamina.tank = %.1f: a full tank sprinted %.2f s" % [v, secs])
+		lines.append("%.1f s" % secs)
+	# The host resizes a tank mid-run keeping how full it is, so the bar never jumps (net/host.gd _step_gait).
+	var half := Stamina.Stamina.make(0.5, false, 7.0)
+	var resized := Stamina.Stamina.make(half.level, half.winded, 12.0)
+	t.check(resized.level == 0.5 and resized.tank == 12.0, "a resized tank keeps its level")
+	t.note("a full tank sprinted %s" % ", ".join(lines))
+
+## p0 is caught (as down_and_out) and p1, stood beside them from the tick they go down, holds F: [the healStart's
+## from and done, the tick of healed, the resident's quiet after it]. `retune`: put in force 0.5 s into the hold.
+static func heal_run(seed: String, given: Dictionary, retune: Variant = null) -> PackedFloat64Array:
+	var rng := Rng.make_rng(seed)
+	var s := Run.with_paced(Run.create_run(seed, ["p0", "p1"] as Array[String], [], false, false, true))
+	s = Run.with_tuning(s, given) if not given.is_empty() else s
+	var plan := s.plan
+	var dist := Floor.distances_from(plan, plan.landing)
+	var cells: Array[Floor.Pos] = []
+	for i in dist.size():
+		var p := Floor.pos_from_index(plan, i)
+		if dist[i] >= 3 and p.level == plan.landing.level:
+			cells.append(p)
+	var vb := Move.body_at_cell(plan, cells[rng.int_in(0, cells.size() - 1)])
+	var ob := Move.body_at_cell(plan, plan.landing)
+	var hb := vb
+	for j in 8:
+		var a := (rng.int_in(0, 7) + j) * PI / 4.0
+		var b := Move.move_with_collision(plan, vb, cos(a) * 1.2, sin(a) * 1.2, Entity.ORDERLY_RADIUS)
+		if M.hypot2(b.x - vb.x, b.z - vb.z) >= 1.15:
+			ob = b
+			hb = Move.move_with_collision(plan, vb, -cos(a) * 0.8, -sin(a) * 0.8, 0.3)
+			break
+	s = s.copy()
+	s.phase = &"away"
+	s.call = null
+	s.blink = null
+	s.lure = false
+	var o := s.orderly.copy()
+	o.body = ob
+	o.yaw = Entity.yaw_toward(vb.x - ob.x, vb.z - ob.z)
+	o.mode = &"hunting"
+	o.replan_in = 0.0
+	o.ever_seen = true
+	s.orderly = o
+	var away := Run.car_body(s.car, 1.0, 0.0)
+	var players: Array[Run.RunPlayer] = []
+	for q in s.players:
+		var np := q.copy()
+		np.body = vb if q.id == "p0" else away
+		np.aboard = q.id != "p0"
+		players.append(np)
+	s.players = players
+	var yaw := Entity.yaw_toward(vb.x - ob.x, vb.z - ob.z)
+	var out := PackedFloat64Array([-1.0, -1.0, -1.0, -1.0])
+	var downed := false
+	for _k in roundi(40.0 / DT):
+		var p1 := Run.PlayerInput.make("p1", hb if downed else away, 1.65, yaw + PI, 0.0, 90.0, 70.0)
+		p1.use = downed
+		var ins: Array[Run.PlayerInput] = [Run.PlayerInput.make("p0", vb, 1.65, yaw, 0.0, 90.0, 70.0), p1]
+		var r := Run.step_run(s, ins, DT)
+		s = r.state
+		for e in r.events:
+			if e["type"] == "downed" and e["playerId"] == "p0":
+				downed = true
+			if e["type"] == "healStart" and out[0] < 0.0:
+				out[0] = float(e["from"])
+				out[1] = float(e["done"])
+			if e["type"] == "healed":
+				out[2] = s.t
+				out[3] = s.orderly.dormant_left if s.orderly.mode == &"dormant" else -1.0
+				return out
+		if retune != null and out[0] >= 0.0 and s.t >= out[0] + 0.5:
+			s = Run.with_tuning(s, retune)
+			retune = null
+	return out
+
+func test_heal_time_and_quiet(t: T) -> void:
+	var lines: Array[String] = []
+	var untuned := heal_run("ls5-heal-0", {})
+	t.check(untuned[2] > 0.0, "untuned: p1 healed p0 (%s)" % str(untuned))
+	t.check(absf(untuned[1] - untuned[0] - Run.HEAL_TIME) < 1e-9, "untuned: the hold is Run.HEAL_TIME")
+	for c: Array in [[&"heal.time", 0], [&"heal.quiet", 1]]:
+		var row := Settings.row(c[0])
+		for v: float in [row.lo, row.today, row.hi]:
+			var got := heal_run("ls5-heal-0", {c[0]: v})
+			var tag := "%s = %.1f" % [c[0], v]
+			t.check(got[2] > 0.0, "%s: healed (%s)" % [tag, str(got)])
+			if c[1] == 0:
+				t.check(absf(got[1] - got[0] - v) < 1e-9 and got[2] >= got[1] - 1e-6 and got[2] < got[1] + DT + 1e-6, "%s: the hold from %.2f, done %.2f, healed %.2f" % [tag, got[0], got[1], got[2]])
+				lines.append("%s: healed %.2f s into the hold" % [tag, got[2] - got[0]])
+			else:
+				t.check(absf(got[3] - v) <= DT + 1e-6, "%s: the resident stood off %.2f s" % [tag, got[3]])
+				lines.append("%s: quiet %.2f" % [tag, got[3]])
+			if v == row.today:
+				t.check(got == untuned, "%s: today's value is the untuned run (%s / %s)" % [tag, str(got), str(untuned)])
+	# A hold already begun ends when its healStart said, whatever is changed.
+	var stamped := heal_run("ls5-heal-0", {&"heal.time": 6.0}, {&"heal.time": 1.0})
+	t.check(absf(stamped[1] - stamped[0] - 6.0) < 1e-9 and stamped[2] >= stamped[1] - 1e-6, "changed to 1 s mid-hold: healed at %.2f, its healStart said %.2f" % [stamped[2], stamped[1]])
+	t.note("; ".join(lines))
+
+func test_heal_health(t: T) -> void:
+	var row := Settings.row(&"heal.health")
+	for v: float in [row.lo, row.today, row.hi]:
+		var r := CountRun.Rig.new("ls5-health-0")
+		CountRun.to_away(t, r)
+		var s := Run.with_tuning(r.st, {&"heal.health": v})
+		var ss: Seek.SeekState = s.seek
+		var ns := ss.copy()
+		var list: Array[Seek.SeekPlayer] = []
+		for q in ss.players:
+			var nq := q.copy()
+			if q.id == "p0":
+				nq.status = &"down"
+				nq.health = 0.0
+			list.append(nq)
+		ns.players = list
+		s.seek = ns
+		Run._seek_heal(s, s.players[0])
+		t.eq(Seek.player_of(s.seek, "p0").health, v, "heal.health = %.0f: the healed player's health" % v)
+	var r0 := CountRun.Rig.new("ls5-health-0")
+	t.eq(Settings.f(r0.st.tuning, &"heal.health", Run.HEAL_HEALTH), Run.HEAL_HEALTH, "untuned: Run.HEAL_HEALTH")
 
 # ---------------------------------------------------------------------------------------------
 # 6. The Groundskeeper's six (AR1).
