@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 86,
-  "now": "T20g",
-  "nowText": "A builder is making the rules for searching drawers, gurneys and cabinets: credits, poem notes and juice cartons; the on-screen part follows",
+  "iteration": 87,
+  "now": "T26",
+  "nowText": "A Fable builder is making the Arboretum: the noise rules and the Groundskeeper, the forest layout, then the dark place on screen with a stand-in figure",
   "ci": {
     "status": "passed",
-    "commit": "27c8c04",
-    "at": "2026-11-18T05:05:16.732Z"
+    "commit": "7790209",
+    "at": "2026-11-18T06:29:18.019Z"
   },
   "answersAppliedTo": "2026-11-17T21:11:49.720Z",
   "tasks": [
@@ -2504,7 +2504,7 @@
       "id": "T20d",
       "title": "Furniture you bump into",
       "why": "Beds, chairs, cabinets and desks block you, which hiding needs",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [],
       "nsWhy": "new from the owner's play of 17 Nov; no North Star mechanic covers furniture collision",
@@ -2523,7 +2523,11 @@
           "at": "2026-11-18T03:40:50.762Z"
         }
       ],
-      "waiting": "Checked (284 tests, both breaks caught, playthroughs 42/42 and 46/46 with solid furniture); merging into main; it goes into the next build"
+      "waiting": "Checked (284 tests, both breaks caught, playthroughs 42/42 and 46/46 with solid furniture); merging into main; it goes into the next build",
+      "nsCheck": "New from the owner's play of 17 Nov; fairness kept: the monsters move exactly as before (they pass through furniture until T20k).",
+      "finishedAt": "2026-11-18T06:47:35.614Z",
+      "summary": "Chairs, beds, desks and cabinets on the Clinic and the Annex are solid for players, from one list in the rules; every hide is still reachable and nobody gets stuck. In the promoted build of 18 Nov 00:37 (commit 7790209); promote check passed everything incl. the furniture walk and getting in and out of a bed and a cabinet; lab-box server updated and the remote test passed.",
+      "todo": []
     },
     {
       "id": "T20j",
@@ -2613,12 +2617,15 @@
       "id": "T26",
       "title": "The Arboretum: a dark forest floor and the Groundskeeper",
       "why": "A new place: no corridors, you steer by landmarks and sound, and a blind monster comes to noise. You asked for the scariest one yet, and dark",
-      "status": "todo",
+      "status": "doing",
       "gates": [],
       "ns": [
         "A2",
         "B1"
-      ]
+      ],
+      "startedAt": "2026-11-18T06:21:01.721Z",
+      "doingText": "A Fable builder is making the Arboretum: the noise rules and the Groundskeeper, the forest layout, then the dark place on screen with a stand-in figure",
+      "doingAt": "2026-11-18T06:21:01.721Z"
     },
     {
       "id": "T27",
@@ -3240,6 +3247,26 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-18T06:47:35.936Z",
+      "text": "NEW BUILD in play/ (18 Nov 00:37): solid furniture, plus everything in the 22:25 build. The lab-box server matches it and the remote test passed. Zip for friends: play/GoingDown-2026-11-18-0037.zip",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T06:47:35.615Z",
+      "text": "Finished T20d: Furniture you bump into.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T06:21:01.721Z",
+      "text": "Started T26: The Arboretum: a dark forest floor and the Groundskeeper. A Fable builder is making the Arboretum: the noise rules and the Groundskeeper, the forest layout, then the dark place on screen with a stand-in figure",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T06:13:12.253Z",
+      "text": "Promote check with furniture passed everything: 297 tests, web 42/42, desktop 46/46, sound, down-and-heal 24/24, the day check 16/16, the Playroom check 12/12, network 17/17, mix 45/45, the furniture walk. The build is being made and promoted now",
+      "kind": "note"
+    },
     {
       "at": "2026-11-18T05:58:51.577Z",
       "text": "The Arboretum is designed (a dark forest, ground that is loud or quiet underfoot, and the Groundskeeper: blind, comes to noise, leans to your face if you stand still). Building starts when a builder frees up; the brightness setting is its own small task",
@@ -4218,26 +4245,6 @@
     {
       "at": "2026-11-17T15:10:52.334Z",
       "text": "Found: the lift pushes you out after 12 seconds (will change to wait); furniture exists only on your screen, so the rules can't make it block you (needs the furniture list in the rules, next to hiding places); the day quota line is written but never shown; and you already can't leave the prison without sleeping.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:10:51.993Z",
-      "text": "Paused T20a: waiting for Cause found: the Orderly is hidden on purpose whenever the lights are out, and has no glow. Fix (a faint moving silhouette in the dark) waits for a free builder",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:08:32.564Z",
-      "text": "Started T20a: The Orderly stays visible in the dark. A Sonnet agent is finding why the Orderly disappears in the dark, why furniture doesn't block you, and why the lift pushes players out",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T15:08:32.348Z",
-      "text": "Started T20e: The day quota you can see, and no going home short. Fable is designing the visible day quota, refusing BANK until it is met, and the prison as shop-then-sleep",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T15:08:32.144Z",
-      "text": "Your notes from playing are in: the Orderly vanishing in the dark, no trolley, longer blackouts, the day quota and the prison, a ready-up screen, findables, furniture collision. Seven tasks added (T20a-g); a designer is writing up the day quota, ready-up and findables, and a code lookup is finding the causes of the bugs.",
       "kind": "note"
     }
   ]

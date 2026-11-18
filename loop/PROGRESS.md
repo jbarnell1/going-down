@@ -4,10 +4,10 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 76 of 114.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 86.
-- **Now:** T20g Things to find: drawers, gurneys, credits, poem notes. A builder is making the rules for searching drawers, gurneys and cabinets: credits, poem notes and juice cartons; the on-screen part follows
-- **Last CI result seen:** passed on 27c8c04
+- **Gates passed:** 7 of 14. **Tasks done:** 77 of 114.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 87.
+- **Now:** T26 The Arboretum: a dark forest floor and the Groundskeeper. A Fable builder is making the Arboretum: the noise rules and the Groundskeeper, the forest layout, then the dark place on screen with a stand-in figure
+- **Last CI result seen:** passed on 7790209
 - **Answers applied up to:** 2026-11-17T21:11:49.720Z
 
 ## Tasks
@@ -263,8 +263,9 @@
 - [x] **T15m** `done` Playroom tuning from your play
   - Why: A warning line on arrival to sneak, more time to hide, the ball pit lowers your view so you can watch it search, an anger bar, and a reminder to get your instrument out
   - Evidence: Playroom tuned: 30-45 seconds to hide, a view out of the ball pit, the anger bar, the Minder grabs within 1 m and drags you to the party table. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
-- [ ] **T20d** `todo` Furniture you bump into
+- [x] **T20d** `done` Furniture you bump into
   - Why: Beds, chairs, cabinets and desks block you, which hiding needs
+  - Evidence: Chairs, beds, desks and cabinets on the Clinic and the Annex are solid for players, from one list in the rules; every hide is still reachable and nobody gets stuck. In the promoted build of 18 Nov 00:37 (commit 7790209); promote check passed everything incl. the furniture walk and getting in and out of a bed and a cabinet; lab-box server updated and the remote test passed.
 - [ ] **T20j** `todo` Furniture back in the lobby, atrium and break room
   - Why: You asked for some of the dropped pieces back: benches, planters and waiting chairs along the walls, and the break-room table
 - [ ] **T20k** `todo` Monsters walk around furniture
@@ -278,7 +279,7 @@
   - To do: Your rule: holding the car open all game must never count. The only way off a floor is quota met, car gone, call, car comes back. Check it and test it
 - [ ] **T20g** `doing` Things to find: drawers, gurneys, credits, poem notes
   - Why: Searching furniture (F TO OPEN DRAWER) turns up credits, obscure poems about the monster's rule, and something to restore you
-- [ ] **T26** `todo` The Arboretum: a dark forest floor and the Groundskeeper
+- [ ] **T26** `doing` The Arboretum: a dark forest floor and the Groundskeeper
   - Why: A new place: no corridors, you steer by landmarks and sound, and a blind monster comes to noise. You asked for the scariest one yet, and dark
 - [ ] **T27** `todo` A brightness setting with a calibration screen
   - Why: The Arboretum is very dark; each player sets brightness on their own screen at the start or in settings so dark is dark but not blind
@@ -387,6 +388,10 @@
 
 ## Activity (newest first)
 
+- 2026-11-18 06:47Z NEW BUILD in play/ (18 Nov 00:37): solid furniture, plus everything in the 22:25 build. The lab-box server matches it and the remote test passed. Zip for friends: play/GoingDown-2026-11-18-0037.zip
+- 2026-11-18 06:47Z Finished T20d: Furniture you bump into.
+- 2026-11-18 06:21Z Started T26: The Arboretum: a dark forest floor and the Groundskeeper. A Fable builder is making the Arboretum: the noise rules and the Groundskeeper, the forest layout, then the dark place on screen with a stand-in figure
+- 2026-11-18 06:13Z Promote check with furniture passed everything: 297 tests, web 42/42, desktop 46/46, sound, down-and-heal 24/24, the day check 16/16, the Playroom check 12/12, network 17/17, mix 45/45, the furniture walk. The build is being made and promoted now
 - 2026-11-18 05:58Z The Arboretum is designed (a dark forest, ground that is loud or quiet underfoot, and the Groundskeeper: blind, comes to noise, leans to your face if you stand still). Building starts when a builder frees up; the brightness setting is its own small task
 - 2026-11-18 05:56Z Added task T27: A brightness setting with a calibration screen.
 - 2026-11-18 05:56Z Added task T26: The Arboretum: a dark forest floor and the Groundskeeper.
@@ -423,7 +428,3 @@
 - 2026-11-18 04:23Z Paused T20d: waiting for Built; the web and desktop playthroughs pass with solid furniture (42/42 and 46/46); a checker is going over the branch before it merges
 - 2026-11-18 04:12Z The day quota is on main (291 tests). The build is being made now: tests, export, web playthrough, down-and-heal, network check, then promote to play/ and the zip
 - 2026-11-18 03:58Z Promote check on main passed everything: 278 tests, web playthrough 42/42, desktop 46/46, sound passes (and fails muted), down-and-heal 24/24, network 17/17, mix 45/45. The day quota is merging in; then the build is made and promoted
-- 2026-11-18 03:46Z Paused T20e: waiting for Both test gaps fixed by its builder (40 bot days pass at full size in 73 s; a new test covers both earned paths); a checker is confirming, then it merges
-- 2026-11-18 03:40Z Started T20d: Furniture you bump into. Furniture is built and solid for players; its builder is now running the scripted playthroughs with it on top of today's main
-- 2026-11-18 03:40Z New pictures for T20d: Furniture you bump into.
-- 2026-11-18 03:40Z New pictures for T20d: Furniture you bump into.
