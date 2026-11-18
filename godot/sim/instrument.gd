@@ -79,7 +79,7 @@ const INSTRUMENT_HEIGHT := 1.2
 const ENTITY_CHEST := 1.7
 ## What the slip says, per trait. Printed the first time a trait is recorded in a run.
 const SLIP_TEXT := {&"stillness": "recorded while: subject moving", &"hearing": "recorded while: subject searching",
-	&"lonely": "recorded while: subject pursuing. operator alone."}
+	&"lonely": "recorded while: subject pursuing. operator alone.", &"listening": "recorded while: subject coming to a sound."}
 
 const EPS := 1e-9
 
@@ -159,6 +159,10 @@ class EntityTick:
 	## gates Hearing per player (docs/floors/playarea.md section 11) and Lonely to the chased player
 	## (sim/lonely.gd). Stillness leaves it null.
 	var holders: Variant = null
+	## The Arboretum's Groundskeeper (sim/hearing.gd): each holder's pay multiplier this tick ({player id:
+	## number}; a holder it does not name is paid as usual), or null for none: the lean pays by closeness to
+	## its reach. Every other resident leaves it null, and the rate is then computed exactly as before.
+	var pay: Variant = null
 
 	static func make(id_: String, trait_: StringName, prev_: Entity.OrderlyState, next_: Entity.OrderlyState, events_: Array[Dictionary]) -> EntityTick:
 		var e := EntityTick.new()
@@ -290,7 +294,7 @@ static func trait_acting(e: EntityTick) -> bool:
 	match e.trait_name:
 		&"stillness":
 			return stillness_acting(e.prev, e.next)
-		&"hearing", &"lonely":
+		&"hearing", &"lonely", &"listening":
 			return e.acting
 	return false
 
@@ -358,6 +362,8 @@ static func step_instrument(plan: Floor.FloorPlan, prev: Instrument, holder_body
 			cur = null
 		var factor: float = factor_for.call(best.id, best.trait_name)
 		var rate := rate_at(best_d) * factor
+		if best.pay != null:
+			rate *= float((best.pay as Dictionary).get(holder_id, 1.0))
 		var add := rate * dt
 		if cur != null:
 			var n := cur.copy()

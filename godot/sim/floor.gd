@@ -128,6 +128,9 @@ class FloorPlan:
 	var entity_start: Pos  # TypeScript: entityStart
 	## Long straight runs of corridor, so threats can be seen from far away.
 	var sightlines: Array[Sightline] = []
+	## The Arboretum only (sim/noise.gd, sim/arboretum.gd): the floor's ground (a Noises.Ground, or the
+	## generator's Garden, which is one): a surface per cell. Null on every other place.
+	var ground: RefCounted = null
 
 	# Caches (TypeScript keeps these in WeakMaps keyed by the plan object).
 	var _index: PlanIndex = null
@@ -154,6 +157,7 @@ class FloorPlan:
 		p.landing = landing
 		p.entity_start = entity_start
 		p.sightlines = sightlines.duplicate()
+		p.ground = ground
 		return p
 
 class PlanIndex:

@@ -258,6 +258,26 @@
 # (call_plan, stamped in the plan at the call); the down timer (stamped in Downed.until); the Minder's search
 # and run speeds (sim/seek.gd).
 #
+# The Arboretum (North Star A2 and B1; sim/noise.gd, sim/hearing.gd; AR1). On a floor whose place is the
+# Arboretum, with its resident on (seek_off false), the run holds `garden` (a GardenFloor: the Groundskeeper and
+# this floor's heal counts), made when the crew reaches the floor and dropped on the next; on any other floor it
+# is null and nothing below happens, so every stored result is as recorded (no deck but the game's has the place).
+#  - Every tick except while riding, sim/hiding.gd first (the floor's hides, sim/hides.gd), then sim/hearing.gd
+#    with every player on the floor: on their feet out of the car (their gait, a sound emote, the hide they got
+#    into or out of this tick, sitting in a hide), or down (their crawl). Players in the car, caught or out are
+#    not given: they make no noise and are never taken. A tape that hit the floor and a player healed back up on
+#    the tick before are heard this tick.
+#  - `orderly` carries its pose, mode and speed, so the network and the views are unchanged (as for the Minder).
+#  - A snatch is "caught" (the resident's own event) and then the down rule's down ("downed", by "catch", with
+#    `more`: the heals this player still has here after this one) while the player has been healed fewer than
+#    KEEPER_HEALS times on this floor (the setting groundskeeper.heals); after that it is "out" at once (`by`
+#    "keeper"), until the car next moves. Without the down rule a snatch is "caught", as any catch.
+#  - The instrument: trait "listening", recording only while it comes or leans (EntityTick.acting), for every
+#    holder in range; in the lean each holder's pay is multiplied by their closeness to its reach (EntityTick.pay,
+#    Hearing.lean_pay).
+#  - Its events are run events at host time: "keeperTilt", "keeperComing", "keeperArrived", "keeperLean",
+#    "keeperLeanEnd", "keeperSweep", "keeperSnatch", "twigCrack" (sim/hearing.gd).
+#
 # Events are Dictionaries with the TypeScript shapes (see RunEvent in run.ts), carrying Move.Body,
 # TapeLib.Reading and RunSummary objects where TypeScript carries those objects.
 extends RefCounted
@@ -284,6 +304,8 @@ const Stamina = preload("res://sim/stamina.gd")
 const Lonely = preload("res://sim/lonely.gd")
 const Settings = preload("res://sim/settings.gd")
 const Furniture = preload("res://sim/furniture.gd")
+const Noises = preload("res://sim/noise.gd")
+const Hearing = preload("res://sim/hearing.gd")
 
 # ---------------------------------------------------------------------------------------------
 # Tuning.
@@ -412,6 +434,8 @@ const CRAWL_SPEED := 0.6
 const HEAL_QUIET := 5.0
 const HEAL_HEALTH := 50.0
 const CRAWL_RADIUS := 0.3
+## The Arboretum (see the header): how many times a player can be healed back up on one Arboretum floor.
+const KEEPER_HEALS := 2
 
 const EPS := 1e-9
 ## How far onto the landing side of the wall line the doorway channel reaches, beyond a body's radius.
@@ -792,6 +816,28 @@ class AnnexFloor:
 		a.chase_noted = chase_noted.duplicate()
 		return a
 
+## The Arboretum floor the crew is on (see the header). Replaced, never edited, once in a RunState (copy() first).
+class GardenFloor:
+	## The plan it belongs to (a new plan is a new floor).
+	var plan: Floor.FloorPlan
+	## The Groundskeeper (sim/hearing.gd).
+	var keeper: Hearing.Keeper
+	## Times each player has been healed back up on this floor, {id: int}.
+	var heals: Dictionary = {}
+	## Who was healed back up on the tick before (their getting up is heard this tick), and the tapes that hit
+	## the floor then.
+	var healed: Array[String] = []
+	var drops: Array[Noises.Sound] = []
+
+	func copy() -> GardenFloor:
+		var g := GardenFloor.new()
+		g.plan = plan
+		g.keeper = keeper
+		g.heals = heals.duplicate()
+		g.healed = healed.duplicate()
+		g.drops = drops.duplicate()
+		return g
+
 ## A downed player (see the header). Replaced, never edited, once in a RunState.
 class Downed:
 	var id: String
@@ -938,10 +984,13 @@ class RunState:
 	## and stored result). The rules read it with Settings.f, falling back to today's constant. Replaced,
 	## never edited (with_tuning).
 	var tuning: Settings.Values = null
+	## The Arboretum (see the header): this floor's Groundskeeper and heal counts (a GardenFloor), else null.
+	var garden: GardenFloor = null
 
 	func copy() -> RunState:
 		var s := RunState.new()
 		s.tuning = tuning
+		s.garden = garden
 		s.lonely = lonely
 		s.day_lock = day_lock
 		s.day_earned = day_earned
@@ -1759,10 +1808,170 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 	return et
 
 # ---------------------------------------------------------------------------------------------
+# The Arboretum (see the header): the Groundskeeper, who hears.
+
+## Whether this floor's resident is the Groundskeeper stepped by sim/hearing.gd.
+static func listens(s: RunState) -> bool:
+	return not s.seek_off and not at_home(s) and s.plan != null and s.plan.place == Places.ARBORETUM
+
+## Keeps `garden` the state of this floor: made when the crew reaches an Arboretum (the Groundskeeper where the
+## floor's resident starts, listening), dropped on any other floor.
+static func _sync_garden(s: RunState) -> void:
+	if not listens(s):
+		if s.garden != null:
+			s.garden = null
+		return
+	if s.garden != null and s.garden.plan == s.plan:
+		return
+	var g := GardenFloor.new()
+	g.plan = s.plan
+	g.keeper = Hearing.create(s.orderly.body, s.orderly.yaw)
+	g.keeper.t = s.t
+	s.garden = g
+
+## The heals a player still has on this Arboretum floor (0 off one).
+static func keeper_heals_left(s: RunState, id: String) -> int:
+	if s.garden == null:
+		return 0
+	return maxi(0, Settings.i(s.tuning, &"groundskeeper.heals", KEEPER_HEALS) - int(s.garden.heals.get(id, 0)))
+
+## One tick of the Arboretum's rules (see the header). Updates `s` (garden, orderly, hiding) and `players`
+## (statuses and bodies), appends the events, and returns the Groundskeeper's tick for the instruments.
+## `ev_from`: where this tick's hiding events start in `events`.
+static func _step_garden(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t_prev: float, t: float, dt: float, events: Array[Dictionary], ev_from: int) -> Instr.EntityTick:
+	var g := s.garden.copy()
+	# Nothing sees on this floor: hiding's "seen" reasons are not the Groundskeeper's (it reads none of them).
+	var hide_noise := {}
+	var i := ev_from
+	while i < events.size():
+		var ty: String = events[i]["type"]
+		if ty == "reason":
+			events.remove_at(i)
+			continue
+		if ty == "hideStart" or ty == "hideLeave":
+			hide_noise[str(events[i]["playerId"])] = int(events[i]["hide"])
+		i += 1
+	var people: Array[Hearing.Person] = []
+	for p in players:
+		var down := p.status == &"down" and s.down.has(p.id)
+		if in_car(s.car, p.body) or not (down or _is_active(p, input_of)):
+			continue
+		var inp := _inp(p, input_of)
+		var hp := Hearing.Person.make(p.id, p.body, inp.gait)
+		hp.up = not down
+		hp.down = down
+		hp.emote = inp.emote_sound and not down
+		hp.healed = g.healed.has(p.id)
+		hp.hide_noise = int(hide_noise.get(p.id, -1))
+		if s.hiding != null and not down:
+			var h := Hiding.player_of(s.hiding, p.id)
+			if h != null and h.phase == &"inside":
+				hp.hide = h.hide
+		people.append(hp)
+	var heard_things := g.drops
+	g.healed = []
+	g.drops = []
+	var base := g.keeper.copy()
+	base.t = t_prev
+	var r := Hearing.step(s.plan, s.plan.ground as Noises.Ground, base, people, heard_things, blacked_out(s), dt, s.tuning)
+	var k := r.state
+	g.keeper = k
+	events.append_array(r.events)
+
+	# The Groundskeeper as the network and the views carry a resident: its pose, mode and speed.
+	var before := s.orderly
+	var o := before.copy()
+	o.t = before.t + dt
+	o.body = k.body
+	o.yaw = k.yaw
+	o.mode = k.mode
+	o.anim = k.anim
+	o.anim_time = k.anim_time
+	o.speed = k.speed
+	o.moving = k.moving
+	o.seen = false
+	o.held = false
+	o.frozen = false
+	o.wind_up_left = 0.0
+	o.wind_up_target = null
+	o.target_id = null
+	s.orderly = o
+	s.lure = false
+
+	# A snatch: down while the player still has a heal here, else out at once (see the header).
+	var dropped: Array[Dictionary] = []
+	var limit := Settings.i(s.tuning, &"groundskeeper.heals", KEEPER_HEALS)
+	for id in r.taken:
+		for n in players.size():
+			if players[n].id != id or players[n].status != &"ok":
+				continue
+			if s.hiding != null:
+				# Taken out of a hide: pulled out onto its front spot first.
+				var rel := Hiding.release(s.hiding, id)
+				s.hiding = rel[0]
+				if rel[1] != null:
+					var moved := players[n].copy()
+					moved.body = rel[1]
+					players[n] = moved
+			events.append({"type": "caught", "t": t, "playerId": id})
+			var had := int(g.heals.get(id, 0))
+			if s.downs and had < limit:
+				_go_down(s, players, n, t, &"catch", events)
+				events[events.size() - 1]["more"] = limit - had - 1
+				continue
+			var np := players[n].copy()
+			np.side = null
+			if s.downs:
+				np.status = &"out"
+				var b := np.body
+				var spot := {"playerId": id, "x": _cm(b.x), "z": _cm(b.z), "level": b.level, "y": _cm(b.y), "t": _mrad(t)}
+				var spots: Array[Dictionary] = s.spots.duplicate()
+				spots.append(spot)
+				s.spots = spots
+				events.append({"type": "out", "t": t, "playerId": id, "at": b, "spot": spot, "by": "keeper"})
+			else:
+				np.status = &"caught"
+			players[n] = np
+			dropped.append({"type": "caught", "t": t, "playerId": id})
+	s.garden = g
+
+	var et := Instr.EntityTick.make(s.entity_id, resident_of(s).trait_name, before, o, dropped)
+	et.acting = Hearing.acting(k)
+	if k.mode == &"lean":
+		# The lean's pay, by each holder's closeness to its reach.
+		var pay := {}
+		for p in players:
+			if p.status == &"ok" and p.body.level == k.body.level:
+				pay[p.id] = Hearing.lean_pay(k, M.hypot2(p.body.x - k.body.x, p.body.z - k.body.z), s.tuning)
+		et.pay = pay
+	return et
+
+## After the tick's heals and the crew's tick: who got back up and which tapes hit the floor, for the
+## Groundskeeper to hear on the next tick; and the heal counts.
+static func _garden_after(s: RunState, events: Array[Dictionary]) -> void:
+	var g: GardenFloor = null
+	for e in events:
+		var ty: String = e["type"]
+		if ty != "healed" and ty != "tapeDropped":
+			continue
+		if g == null:
+			g = s.garden.copy()
+		var id := str(e["playerId"])
+		if ty == "healed":
+			g.heals[id] = int(g.heals.get(id, 0)) + 1
+			g.healed.append(id)
+		elif e.get("at") is Move.Body:
+			g.drops.append(Noises.drop(id, e["at"]))
+	if g != null:
+		s.garden = g
+
+# ---------------------------------------------------------------------------------------------
 # Hiding off the Playroom (see the header).
 
 ## Whether this floor has hides the run steps with sim/hiding.gd: a Clinic or an Annex with its resident.
 static func hides_here(s: RunState) -> bool:
+	if s.plan != null and s.plan.place == Places.ARBORETUM:
+		return listens(s)
 	return not at_home(s) and s.plan != null and (s.plan.place == Places.CLINIC or s.plan.place == Places.ANNEX) \
 		and Places.resident(s.plan.place).stillness
 
@@ -2334,6 +2543,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	_sync_seek(s)
 	_sync_hiding(s)
 	_sync_annex(s)
+	_sync_garden(s)
 	# Who called the car on the Playroom this tick (it starts the last count).
 	var seek_call_by := ""
 	# The floor quota for the crew as it is: set while the car arrives (so a player admitted at the stop
@@ -2639,6 +2849,11 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	elif s.phase != &"riding" and s.seek != null:
 		# The Playroom: the count, the search, hiding, health (sim/seek.gd; see the header).
 		entity_ticks = [_step_seek(s, players, input_of, seek_call_by, prev.t, t, dt, events)]
+	elif s.phase != &"riding" and s.garden != null:
+		# The Arboretum's Groundskeeper (sim/hearing.gd; see the header), after the floor's hides.
+		var ev_from := events.size()
+		_step_hiding(s, players, input_of, prev.t, dt, events)
+		entity_ticks = [_step_garden(s, players, input_of, prev.t, t, dt, events, ev_from)]
 	elif s.phase != &"riding" and who.trait_name == &"lonely":
 		# The Temp's own mechanic (sim/lonely.gd; see the header).
 		entity_ticks = [_step_lonely(s, players, input_of, t, dt, events)]
@@ -2814,6 +3029,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 
 	# ---- The Annex: the crew's marks and the Temp's notes (see the header).
 	_step_annex(s, players, input_of, t, dt, events)
+	# ---- The Arboretum: what the Groundskeeper will hear next tick (a heal, a dropped tape).
+	if s.garden != null:
+		_garden_after(s, events)
 
 	# ---- Arriving home (the day loop).
 	if s.phase == &"riding" and s.timer <= EPS and s.going_up:
@@ -2879,6 +3097,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	_sync_seek(s)
 	_sync_hiding(s)
 	_sync_annex(s)
+	_sync_garden(s)
 
 	# ---- A wipe: nobody left who can call or board.
 	var everyone_out := true

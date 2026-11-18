@@ -30,6 +30,8 @@ const PRISON := &"prison"
 const CLINIC := &"clinic"
 const ANNEX := &"annex"
 const PLAYROOM := &"playroom"
+## The Arboretum (North Star A2): a forest indoors; its Groundskeeper hears (sim/hearing.gd).
+const ARBORETUM := &"arboretum"
 
 ## Every floor a Clinic: the default of a run, so the stored goldens stay as recorded.
 const CLINIC_ONLY: Array[StringName] = [&"clinic"]
@@ -73,6 +75,9 @@ static func resident(place: StringName) -> Resident:
 			return Resident.make("Temp", true, &"stillness", Entity.temp_body())
 		PLAYROOM:
 			return Resident.make("Minder", false, &"hearing")
+		ARBORETUM:
+			# Its instrument trait is "listening": it records only while it comes to a noise or leans.
+			return Resident.make("Groundskeeper", false, &"listening")
 	return Resident.make("", false, &"")
 
 ## The resident of a place in a run with Lonely on or off (sim/run.gd resident_of; T19c): with it on the Temp

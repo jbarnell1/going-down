@@ -70,6 +70,7 @@ const SECTIONS: Array = [
 	[&"orderly", &"residents", "THE ORDERLY (THE CLINIC)"],
 	[&"temp", &"residents", "THE TEMP (THE ANNEX)"],
 	[&"minder", &"residents", "THE MINDER (THE PLAYROOM)"],
+	[&"groundskeeper", &"residents", "THE GROUNDSKEEPER (THE ARBORETUM)"],
 	[&"lift", &"lift", "THE LIFT AND THE DARK"],
 	[&"moving", &"players", "MOVING"],
 	[&"stamina", &"players", "STAMINA"],
@@ -112,6 +113,29 @@ const ROWS: Array = [
 	[&"minder.calm", &"minder", "CALM AFTER A COUNT", "nothing can start a new count for this long", "s", 15.0, 5.0, 60.0, 5.0, &"next", &"LS4", F],
 	[&"minder.sight", &"minder", "SEES AS FAR AS", "its sight in a count", "m", 12.0, 6.0, 20.0, 1.0, &"now", &"LS4", F],
 	[&"minder.found_after", &"minder", "FOUND AFTER", "how long in its sight before you are found", "s", 1.0, 0.3, 3.0, 0.1, &"now", &"LS4", F],
+	# The Groundskeeper (the Arboretum; sim/hearing.gd, sim/noise.gd, sim/run.gd KEEPER_HEALS). AR1 wires its
+	# speeds, its reach, the lean and the heals; the rest (piece AR) are listed for the panel and read by nothing yet.
+	[&"groundskeeper.speed", &"groundskeeper", "COMING SPEED", "how fast it comes to a noise", "m/s", 6.0, 4.2, 9.0, 0.1, &"now", &"AR1", F],
+	[&"groundskeeper.dark_speed", &"groundskeeper", "SPEED IN THE BLACKOUT", "the same, while the lights are out before the car", "m/s", 6.5, 4.2, 9.0, 0.1, &"now", &"AR1", F],
+	[&"groundskeeper.reach", &"groundskeeper", "REACH", "it takes whoever is this near when a lean ends or a noise is made", "m", 2.0, 1.0, 3.0, 0.1, &"now", &"AR1", F],
+	[&"groundskeeper.lean_range", &"groundskeeper", "LEANS TO ANYONE WITHIN", "of the place the noise was, when it gets there", "m", 4.0, 2.5, 8.0, 0.5, &"now", &"AR1", F],
+	[&"groundskeeper.lean", &"groundskeeper", "THE LEAN LASTS", "how long it leans to a face before it takes them or not", "s", 2.5, 1.0, 6.0, 0.5, &"next", &"AR1", F],
+	[&"groundskeeper.heals", &"groundskeeper", "HEALS A PLAYER, A FLOOR", "times one player can be healed back up on its floor", "heals", 2.0, 0.0, 5.0, 1.0, &"now", &"AR1", W],
+	[&"groundskeeper.tilt", &"groundskeeper", "HEAD TILT", "from hearing a noise to setting off", "s", 0.8, 0.3, 2.0, 0.1, &"next", &"AR", F],
+	[&"groundskeeper.beat", &"groundskeeper", "THE BEAT AFTER A LEAN", "it holds the pose this long when it takes nobody", "s", 0.5, 0.0, 2.0, 0.1, &"next", &"AR", F],
+	[&"groundskeeper.sweep", &"groundskeeper", "THE SWEEP LASTS", "the shears through an empty place", "s", 2.0, 0.5, 5.0, 0.5, &"next", &"AR", F],
+	[&"groundskeeper.turn", &"groundskeeper", "LISTENING TURN", "how fast its head turns while it listens", "deg/s", 30.0, 10.0, 90.0, 5.0, &"now", &"AR", F],
+	[&"noise.creep_loud", &"groundskeeper", "HEARS A CREEP ON LITTER WITHIN", "a creep on litter or gravel (on moss it is silent)", "m", 2.5, 1.0, 5.0, 0.5, &"now", &"AR", F],
+	[&"noise.walk_moss", &"groundskeeper", "HEARS A WALK ON MOSS WITHIN", "a walk on moss or worn path", "m", 3.0, 1.0, 6.0, 0.5, &"now", &"AR", F],
+	[&"noise.walk_litter", &"groundskeeper", "HEARS A WALK ON LITTER WITHIN", "a walk on leaf litter", "m", 8.0, 4.0, 14.0, 0.5, &"now", &"AR", F],
+	[&"noise.walk_gravel", &"groundskeeper", "HEARS A WALK ON GRAVEL WITHIN", "a walk on gravel", "m", 10.0, 4.0, 16.0, 0.5, &"now", &"AR", F],
+	[&"noise.twig", &"groundskeeper", "HEARS A TWIG CRACK WITHIN", "walking or sprinting onto a twig fall, once a crossing", "m", 12.0, 6.0, 20.0, 1.0, &"now", &"AR", F],
+	[&"noise.sprint", &"groundskeeper", "HEARS A SPRINT WITHIN", "a sprint, on anything", "m", 14.0, 8.0, 24.0, 1.0, &"now", &"AR", F],
+	[&"noise.crawl", &"groundskeeper", "HEARS A CRAWL WITHIN", "a downed player crawling", "m", 2.0, 0.0, 5.0, 0.5, &"now", &"AR", F],
+	[&"noise.hide", &"groundskeeper", "HEARS A HIDE WITHIN", "getting into or out of a hide, opening something", "m", 4.0, 2.0, 8.0, 0.5, &"now", &"AR", F],
+	[&"noise.drop", &"groundskeeper", "HEARS A DROP OR A HEAL WITHIN", "a tape hitting the floor, a player getting back up", "m", 6.0, 3.0, 12.0, 0.5, &"now", &"AR", F],
+	[&"noise.cone", &"groundskeeper", "HEARS A PINECONE WITHIN", "where a thrown cone lands", "m", 12.0, 6.0, 20.0, 1.0, &"now", &"AR", F],
+	[&"noise.emote", &"groundskeeper", "HEARS A WHISTLE WITHIN", "a sound emote: a whistle, a clap, a shout", "m", 18.0, 10.0, 30.0, 1.0, &"now", &"AR", F],
 	# The lift and the dark. "Time for the elevator to return" is the first three rows.
 	[&"lift.floors_min", &"lift", "CAR STARTS, FEWEST FLOORS AWAY", "the shortest the indicator can start from", "floors", 6.0, 2.0, 19.0, 1.0, &"next", &"LS1", W],
 	[&"lift.floors_max", &"lift", "CAR STARTS, MOST FLOORS AWAY", "the longest", "floors", 12.0, 3.0, 20.0, 1.0, &"next", &"LS1", W],
@@ -162,7 +186,7 @@ const ROWS: Array = [
 ]
 
 ## The pieces whose rows the rules read today (`wired`). LS4, LS5 and LS6 add theirs as they wire them.
-const WIRED_PIECES: Array[StringName] = [&"LS1"]
+const WIRED_PIECES: Array[StringName] = [&"LS1", &"AR1"]
 
 ## The least wait of a call is its start delay plus the floors: sim/run.gd CALL_START_DELAY_MIN (this file
 ## does not load run.gd, which loads it; tests/prop_settings.gd checks they are equal).
@@ -171,6 +195,10 @@ const LIFT_DELAY_MIN := 1.0
 const LIFT_SHORTEST_WAIT := 15.0
 ## ARRIVES NO NEARER stays at least this far under ARRIVES NO FURTHER (metres).
 const RELOC_GAP := 2.0
+## The Groundskeeper always comes at least this many times a sprint ("sprinting away never works"), and leans
+## to at least this far beyond its reach (metres).
+const KEEPER_OVER_SPRINT := 1.2
+const KEEPER_LEAN_GAP := 0.5
 
 const EPS := 1e-9
 
@@ -387,4 +415,10 @@ static func pair_broken(given: Dictionary) -> String:
 	var sprint: float = at.call(&"player.sprint")
 	if not (creep < raised - EPS and raised <= walk + EPS and walk < sprint - EPS):
 		return "CREEP UNDER INSTRUMENT UP, AT OR UNDER WALK, UNDER SPRINT"
+	# The Groundskeeper (AR1): sprinting away never works, and the lean reaches beyond the reach.
+	for id: StringName in [&"groundskeeper.speed", &"groundskeeper.dark_speed"]:
+		if float(at.call(id)) < KEEPER_OVER_SPRINT * sprint - 1e-6:
+			return "THE GROUNDSKEEPER MUST COME A FIFTH FASTER THAN A SPRINT"
+	if float(at.call(&"groundskeeper.lean_range")) < float(at.call(&"groundskeeper.reach")) + KEEPER_LEAN_GAP - EPS:
+		return "IT MUST LEAN FURTHER THAN IT REACHES"
 	return ""

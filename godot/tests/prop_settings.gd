@@ -16,6 +16,11 @@
 #      "out" comes down.time after "downed" at 5, 10 and 60 s, and a player already down when it changes goes
 #      out at the time their "downed" event gave.
 #   5. Every wired id has a proof here (PROOFS): a slider can never be wired to nothing.
+#   6. The Groundskeeper's six (piece AR1; sim/hearing.gd, tests/prop_hearing.gd): its metres in a second of coming
+#      follow its speed, lit and in the blackout (each only its own); a player standing just inside the reach is
+#      taken and one just outside is not, at three reaches; the lean goes to a player just inside the lean range
+#      and the sweep to one just outside; the lean lasts the lean time; and a player is out at the snatch after
+#      `heals` heals. The other Groundskeeper and noise rows are listed and read by nothing yet.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -38,6 +43,9 @@ const HostRules = preload("res://net/host_rules.gd")
 const Snap = preload("res://tests/snap.gd")
 const CountRun = preload("res://tests/prop_count_run.gd")
 const PropSeek = preload("res://tests/prop_seek.gd")
+const Hearing = preload("res://sim/hearing.gd")
+const Noises = preload("res://sim/noise.gd")
+const PropHearing = preload("res://tests/prop_hearing.gd")
 
 const DT := 0.05
 const EPS := 1e-9
@@ -46,8 +54,18 @@ const EPS := 1e-9
 const TEN: Array[StringName] = [&"orderly.speed", &"orderly.dark_speed", &"temp.speed", &"temp.dark_speed",
 	&"minder.search_speed", &"minder.run_speed", &"lift.floors_min", &"lift.floors_max", &"lift.floor_time", &"down.time"]
 
+## The Groundskeeper's six AR1 wires, in the registry's order.
+const KEEPER_SIX: Array[StringName] = [&"groundskeeper.speed", &"groundskeeper.dark_speed", &"groundskeeper.reach",
+	&"groundskeeper.lean_range", &"groundskeeper.lean", &"groundskeeper.heals"]
+
 ## Every wired id's proof: the test in this file that measures the thing it changes.
 const PROOFS := {
+	&"groundskeeper.speed": "test_groundskeeper_six",
+	&"groundskeeper.dark_speed": "test_groundskeeper_six",
+	&"groundskeeper.reach": "test_groundskeeper_six",
+	&"groundskeeper.lean_range": "test_groundskeeper_six",
+	&"groundskeeper.lean": "test_groundskeeper_six",
+	&"groundskeeper.heals": "test_groundskeeper_six",
 	&"orderly.speed": "test_orderly_and_temp_speeds_lit",
 	&"orderly.dark_speed": "test_orderly_and_temp_speeds_in_the_blackout",
 	&"temp.speed": "test_orderly_and_temp_speeds_lit",
@@ -84,6 +102,27 @@ static func game_values() -> Dictionary:
 		&"minder.calm": Seek.CALM_TIME,
 		&"minder.sight": Seek.SIGHT_RANGE,
 		&"minder.found_after": Seek.FOUND_TIME,
+		&"groundskeeper.speed": Hearing.SPEED,
+		&"groundskeeper.dark_speed": Hearing.DARK_SPEED,
+		&"groundskeeper.reach": Hearing.REACH,
+		&"groundskeeper.lean_range": Hearing.LEAN_RANGE,
+		&"groundskeeper.lean": Hearing.LEAN,
+		&"groundskeeper.heals": float(Run.KEEPER_HEALS),
+		&"groundskeeper.tilt": Hearing.TILT,
+		&"groundskeeper.beat": Hearing.BEAT,
+		&"groundskeeper.sweep": Hearing.SWEEP,
+		&"groundskeeper.turn": Hearing.TURN,
+		&"noise.creep_loud": Noises.CREEP_LOUD,
+		&"noise.walk_moss": Noises.WALK_MOSS,
+		&"noise.walk_litter": Noises.WALK_LITTER,
+		&"noise.walk_gravel": Noises.WALK_GRAVEL,
+		&"noise.twig": Noises.TWIG_CRACK,
+		&"noise.sprint": Noises.SPRINT,
+		&"noise.crawl": Noises.CRAWL,
+		&"noise.hide": Noises.HIDE,
+		&"noise.drop": Noises.DROP,
+		&"noise.cone": Noises.CONE,
+		&"noise.emote": Noises.EMOTE,
 		&"lift.floors_min": float(Run.CALL_FLOORS_MIN),
 		&"lift.floors_max": float(Run.CALL_FLOORS_MAX),
 		&"lift.floor_time": Run.FLOOR_TIME,
@@ -139,7 +178,7 @@ static func ten_at_today() -> Dictionary:
 func test_registry_rows(t: T) -> void:
 	var game := game_values()
 	var rows := Settings.list()
-	t.eq(rows.size(), 59, "rows in the registry")
+	t.eq(rows.size(), 80, "rows in the registry")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -182,8 +221,14 @@ func test_registry_rows(t: T) -> void:
 	var wired: Array[StringName] = []
 	for s in Settings.list(true):
 		wired.append(s.id)
-	t.check(wired == TEN, "the wired rows are exactly the ten of LS1, in order: %s" % str(wired))
-	t.eq(by_group.get(&"residents", 0), 19, "residents")
+	# The ten of LS1, with the Groundskeeper's six (AR1) where the registry lists them: after the Minder's.
+	var want_wired: Array[StringName] = []
+	for n in TEN.size():
+		if n == 6:
+			want_wired.append_array(KEEPER_SIX)
+		want_wired.append(TEN[n])
+	t.check(wired == want_wired, "the wired rows are exactly the ten of LS1 and the Groundskeeper's six, in order: %s" % str(wired))
+	t.eq(by_group.get(&"residents", 0), 40, "residents")
 	t.eq(by_group.get(&"lift", 0), 12, "the lift and the dark")
 	t.eq(by_group.get(&"players", 0), 17, "players")
 	t.eq(by_group.get(&"earning", 0), 8, "earning")
@@ -715,6 +760,122 @@ func test_down_time(t: T) -> void:
 		t.check(got[0] >= 0.0 and absf(got[1] - got[0] - Run.DOWN_TIME) < 1e-6 and got[2] >= got[1] - 1e-6 and got[2] < got[1] + DT + 1e-6,
 			"changed to %.0f s while down: downed %.3f, until %.3f, out %.3f" % [retune, got[0], got[1], got[2]])
 	t.note("out came down.time after downed at %s; already down keeps its time" % ", ".join(lines))
+
+# ---------------------------------------------------------------------------------------------
+# 6. The Groundskeeper's six (AR1).
+
+## A whistle `d` metres west of it on the test garden's moss, the whistler standing: [metres it covered in the
+## first second of coming, taken, the first of lean/sweep it did, seconds the lean lasted].
+static func keeper_case(given: Dictionary, d: float, dark: bool) -> Array:
+	var plan := PropHearing.striped()
+	var sim := PropHearing.Sim.make(plan, PropHearing.at(24.0, 40.0))
+	sim.tuning = Settings.make(given) if not given.is_empty() else null
+	sim.dark = dark
+	var b := sim.bot("a", PropHearing.at(24.0 - d, 40.0))
+	b.emote = true
+	sim.tick()
+	var from: Move.Body = null
+	var metres := -1.0
+	var came := 0
+	var what := ""
+	var lean_ticks := 0
+	for _n in int(20.0 / DT):
+		var before := sim.k
+		sim.tick()
+		if before.mode == &"coming":
+			if from == null:
+				from = before.body
+			came += 1
+			if came == int(1.0 / DT):
+				metres = M.hypot2(sim.k.body.x - from.x, sim.k.body.z - from.z)
+		if what == "" and (sim.k.mode == &"lean" or sim.k.mode == &"sweep"):
+			what = String(sim.k.mode)
+		if before.mode == &"lean":
+			lean_ticks += 1
+		if sim.k.mode == &"listening":
+			break
+	return [metres, sim.taken.has("a"), what, lean_ticks * DT]
+
+func test_groundskeeper_six(t: T) -> void:
+	var lines: PackedStringArray = []
+	# Speeds: a second of coming covers the speed, lit and dark, each following only its own setting.
+	for dark: bool in [false, true]:
+		var id: StringName = &"groundskeeper.dark_speed" if dark else &"groundskeeper.speed"
+		var other: StringName = &"groundskeeper.speed" if dark else &"groundskeeper.dark_speed"
+		var row := Settings.row(id)
+		# (The least needs a slower sprint to be allowed; the rules read the speed alone.)
+		for v: float in [row.lo, row.today, row.hi]:
+			var got: Array = keeper_case({id: v}, 17.5, dark)
+			t.check(absf(float(got[0]) - v) < 0.02, "%s %.1f: %.2f m in a second of coming" % [id, v, got[0]])
+			var cross: Array = keeper_case({other: row.hi}, 17.5, dark)
+			t.check(absf(float(cross[0]) - row.today) < 0.02, "%s moved the %s speed: %.2f m in a second" % [other, "dark" if dark else "lit", cross[0]])
+			lines.append("%s %.1f: %.2f m in a second" % [id, v, got[0]])
+	# Reach: standing just inside it at the lean's end is taken, just outside is not.
+	var reach := Settings.row(&"groundskeeper.reach")
+	for v: float in [reach.lo, reach.today, reach.hi]:
+		var given := {&"groundskeeper.reach": v, &"groundskeeper.lean_range": 6.0}
+		var sim := PropHearing.Sim.make(PropHearing.striped(), PropHearing.at(24.0, 40.0))
+		sim.tuning = Settings.make(given)
+		var whistler := sim.bot("w", PropHearing.at(12.0, 40.0))
+		var inside := sim.bot("in", PropHearing.at(12.0, 40.0 + v - 0.05))
+		var outside := sim.bot("out", PropHearing.at(12.0, 40.0 - v - 0.05))
+		whistler.emote = true
+		sim.tick()
+		whistler.go(&"creep", -1.0, 0.0)
+		for _n in int(12.0 / DT):
+			sim.tick()
+		t.check(sim.taken.has("in") and not sim.taken.has("out"), "reach %.1f: just inside taken %s, just outside taken %s" % [v, sim.taken.has("in"), sim.taken.has("out")])
+	# Lean range: a player just inside it is leaned to; just outside, the sweep.
+	var lr := Settings.row(&"groundskeeper.lean_range")
+	for v: float in [lr.lo, lr.today, lr.hi]:
+		for inside: bool in [true, false]:
+			var sim := PropHearing.Sim.make(PropHearing.striped(), PropHearing.at(24.0, 40.0))
+			sim.tuning = Settings.make({&"groundskeeper.lean_range": v})
+			var whistler := sim.bot("w", PropHearing.at(12.0, 40.0))
+			whistler.emote = true
+			sim.tick()
+			# The whistler steps to its mark at once (a test's move, not a walk: nothing is heard).
+			whistler.body = PropHearing.at(12.0, 40.0 + v + (-0.05 if inside else 0.05))
+			var what := ""
+			for _n in int(8.0 / DT):
+				sim.tick()
+				if what == "" and (sim.k.mode == &"lean" or sim.k.mode == &"sweep"):
+					what = String(sim.k.mode)
+			t.check(what == ("lean" if inside else "sweep"), "lean range %.1f: a player just %s it gets the %s" % [v, "inside" if inside else "outside", what])
+	# The lean's length, and the heals.
+	var lean := Settings.row(&"groundskeeper.lean")
+	for v: float in [lean.lo, lean.today, lean.hi]:
+		var got: Array = keeper_case({&"groundskeeper.lean": v}, 10.0, false)
+		t.check(got[1] and absf(float(got[3]) - v) <= DT + 1e-6, "lean %.1f s: it lasted %.2f s (taken %s)" % [v, got[3], got[1]])
+		lines.append("lean %.1f: %.2f s" % [v, got[3]])
+	var heals := Settings.row(&"groundskeeper.heals")
+	for v: float in [heals.lo, heals.today, heals.hi]:
+		var ids: Array[String] = ["a"]
+		var s := PropHearing.garden_run(ids, {"a": PropHearing.at(12.0, 40.0)}, PropHearing.at(15.0, 40.0))
+		s = Run.with_tuning(s, {&"groundskeeper.heals": v})
+		t.eq(Run.KEEPER_HEALS, 2, "the game's heals")
+		# With `had` heals already had on the floor, the next snatch is down while had < v, else out.
+		for had: int in [0, int(v) - 1, int(v)]:
+			if had < 0:
+				continue
+			var st := s
+			var out_now := false
+			var down_now := false
+			for step in int(8.0 / DT):
+				var ia := PropHearing.input("a", PropHearing.at(12.0, 40.0))
+				ia.emote_sound = step == 2
+				if step == 1:
+					var g := st.garden.copy()
+					g.heals = {"a": had}
+					st = st.copy()
+					st.garden = g
+				var r := Run.step_run(st, PropHearing.one(ia), DT)
+				st = r.state
+				for e in r.events:
+					out_now = out_now or (e["type"] == "out" and e.get("by") == "keeper")
+					down_now = down_now or e["type"] == "downed"
+			t.check(down_now == (had < int(v)) and out_now == (had >= int(v)), "heals %d, had %d: down %s, out at once %s" % [int(v), had, down_now, out_now])
+	t.note("; ".join(lines))
 
 # ---------------------------------------------------------------------------------------------
 # 5. Every wired id has a proof.

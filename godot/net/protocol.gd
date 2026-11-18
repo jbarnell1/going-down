@@ -40,11 +40,13 @@ const PHASES: Array[String] = ["arriving", "unloading", "away", "coming", "board
 ## Then the bend over a downed player (sim/entity.gd "bending" / "bend").
 const ANIMS: Array[String] = ["idle", "walk", "duck", "reach",
 	"stand", "straighten", "cover", "prowl", "sweep", "look", "slump", "run", "catch",
-	"bend"]
+	"bend",
+	"tilt", "lean"]
 const MODES: Array[String] = ["waiting", "hunting", "windUp", "dormant",
 	"wander", "cover", "search", "sweep", "look", "slump", "run", "catch",
 	"bending",
-	"grab", "drag"]
+	"grab", "drag",
+	"listening", "tilt", "coming", "lean", "beat", "strike"]
 ## The Playroom's per-player states (sim/seek.gd SeekPlayer), for the seek block.
 const SEEK_STATUSES: Array[String] = ["ok", "found", "taken", "down"]
 const SEEK_PHASES: Array[String] = ["out", "entering", "inside", "leaving"]
