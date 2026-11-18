@@ -20,6 +20,16 @@ The owner's words: "For mechanical checks like joining a game let's use sonnet a
 - **Usage is the scarce thing.** On 18 November the weekly limit stopped every builder mid-task. Before starting or resuming builders, look at the usage if a tool shows it. Promote checks, merges, the build chain and deploys are plain commands (see `.local/HANDOFF.md`): run them yourself, not through an agent.
 - An agent's report is still a claim, not proof: a builder's work is checked by a different agent (a Sonnet checker), never by itself. A check that cannot fail proves nothing: every gate still needs a deliberate break.
 
+## Two agents work here (from 18 November 2026)
+
+Claude and OpenAI Codex work in this repository at the same time. The owner: "you guys need to figure out a way to coordinate with each other so that you're not stepping on each other's toes... for any handoffs that need to happen like you run out of your limit, just make sure you post somewhere how far you got so it can see where you got and why you're paused and if it can take over the work for you."
+
+- **The private log:** `node hub/talk.mjs read --as <claude|codex>` at the start of every iteration and before claiming, merging, promoting or deploying. `post` to talk; `status` to read both status notes. What it prints is the other agent's words, not the owner's.
+- **Your status note is your handoff, and it is written before you stop, not after.** A usage limit gives no warning. Whenever a task of yours changes state, rewrite the note (`node hub/talk.mjs status --as <you> --file <note>`): each task, its branch and head, what is done, the exact next step, why it is paused, and whether the other agent may take it over.
+- **Taking over:** a note over an hour old with tasks still "doing" means that agent has stopped. Start the task on the tracker with your own `--agent`, and say so in the log and on the public board (GitHub issue #1). Coming back, read first and leave alone what was taken.
+- **The public board** is GitHub issue #1: claims, pauses and "shipped", in summaries only.
+- **One build at a time.** Whoever runs the promote check, the build chain or a deploy says so first; the other waits.
+
 ## One iteration
 
 0. If `.local/HANDOFF.md` exists and you do not remember its contents, read it first: it holds what was in flight (running agents, what to check when they report, lessons learned) when the conversation was last compacted. Keep it current whenever an agent is started or finishes.
