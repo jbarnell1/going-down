@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 87,
+  "iteration": 89,
   "now": "T26",
   "nowText": "A Fable builder is making the Arboretum: the noise rules and the Groundskeeper, the forest layout, then the dark place on screen with a stand-in figure",
   "ci": {
-    "status": "passed",
-    "commit": "7790209",
-    "at": "2026-11-18T06:29:18.019Z"
+    "status": "failed",
+    "commit": "6f0708c",
+    "at": "2026-11-18T07:22:32.093Z"
   },
   "answersAppliedTo": "2026-11-17T21:11:49.720Z",
   "tasks": [
@@ -3248,6 +3248,16 @@
   ],
   "feed": [
     {
+      "at": "2026-11-18T07:22:32.094Z",
+      "text": "CI failed on 6f0708c.",
+      "kind": "ci"
+    },
+    {
+      "at": "2026-11-18T06:56:47.382Z",
+      "text": "The skill tree is designed: four branches (Lamp, Ear, Hands, Nerve), twenty upgrades that each add something to do, ten of them for Friday; it waits for your look before anyone builds it",
+      "kind": "note"
+    },
+    {
       "at": "2026-11-18T06:47:35.936Z",
       "text": "NEW BUILD in play/ (18 Nov 00:37): solid furniture, plus everything in the 22:25 build. The lab-box server matches it and the remote test passed. Zip for friends: play/GoingDown-2026-11-18-0037.zip",
       "kind": "note"
@@ -4235,16 +4245,6 @@
     {
       "at": "2026-11-17T15:19:09.663Z",
       "text": "Added task T20h: A bit more stamina, monsters paced to match.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:15:23.470Z",
-      "text": "Your sound note went to the sound builder: shrieks, roars and wails will carry across the floor so you hear them from the lift, and the raspy breathing starts much further out, well before a catch.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:10:52.334Z",
-      "text": "Found: the lift pushes you out after 12 seconds (will change to wait); furniture exists only on your screen, so the rules can't make it block you (needs the furniture list in the rules, next to hiding places); the day quota line is written but never shown; and you already can't leave the prison without sleeping.",
       "kind": "note"
     }
   ]

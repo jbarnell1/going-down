@@ -5,9 +5,9 @@
 ## Status
 
 - **Gates passed:** 7 of 14. **Tasks done:** 77 of 114.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 87.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 89.
 - **Now:** T26 The Arboretum: a dark forest floor and the Groundskeeper. A Fable builder is making the Arboretum: the noise rules and the Groundskeeper, the forest layout, then the dark place on screen with a stand-in figure
-- **Last CI result seen:** passed on 7790209
+- **Last CI result seen:** failed on 6f0708c
 - **Answers applied up to:** 2026-11-17T21:11:49.720Z
 
 ## Tasks
@@ -388,6 +388,8 @@
 
 ## Activity (newest first)
 
+- 2026-11-18 07:22Z CI failed on 6f0708c.
+- 2026-11-18 06:56Z The skill tree is designed: four branches (Lamp, Ear, Hands, Nerve), twenty upgrades that each add something to do, ten of them for Friday; it waits for your look before anyone builds it
 - 2026-11-18 06:47Z NEW BUILD in play/ (18 Nov 00:37): solid furniture, plus everything in the 22:25 build. The lab-box server matches it and the remote test passed. Zip for friends: play/GoingDown-2026-11-18-0037.zip
 - 2026-11-18 06:47Z Finished T20d: Furniture you bump into.
 - 2026-11-18 06:21Z Started T26: The Arboretum: a dark forest floor and the Groundskeeper. A Fable builder is making the Arboretum: the noise rules and the Groundskeeper, the forest layout, then the dark place on screen with a stand-in figure
@@ -426,5 +428,3 @@
 - 2026-11-18 04:36Z Finished T8c: Down and healed on screen.
 - 2026-11-18 04:36Z Finished T8a: Down first, then out.
 - 2026-11-18 04:23Z Paused T20d: waiting for Built; the web and desktop playthroughs pass with solid furniture (42/42 and 46/46); a checker is going over the branch before it merges
-- 2026-11-18 04:12Z The day quota is on main (291 tests). The build is being made now: tests, export, web playthrough, down-and-heal, network check, then promote to play/ and the zip
-- 2026-11-18 03:58Z Promote check on main passed everything: 278 tests, web playthrough 42/42, desktop 46/46, sound passes (and fails muted), down-and-heal 24/24, network 17/17, mix 45/45. The day quota is merging in; then the build is made and promoted
