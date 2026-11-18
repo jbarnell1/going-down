@@ -28,10 +28,10 @@
       "OR WHERE A FRIEND NOT FAR AWAY",
       "COULD SEE YOU IF THEY TURNED,",
       "AND YOUR NAME COMES OFF THE LIST."]},
-    {"id": "lonely-2", "trait": "lonely", "pins": {"chase_speed": 3.9}, "lines": [
+    {"id": "lonely-2", "trait": "lonely", "pins": {}, "lines": [
       "STARE IF YOU LIKE. IT COMES THE SAME.",
       "RUN IF YOU LIKE.",
-      "IT RUNS A LITTLE BETTER.",
+      "IT DOES NOT TIRE.",
       "DO NOT RUN AWAY.",
       "RUN TO."]},
     {"id": "lonely-3", "trait": "lonely", "pins": {"company_near": 8}, "lines": [

@@ -5,7 +5,7 @@
 #      its room, never a hide, never within 1.2 m of the front spot of a hide in its room, never in the lobby, never within 3
 #      steps of the landing; sim/furniture.gd's list carries the same flags;
 #   2. inside: exactly 3 notes (one in the nearest third by walking), 3 cartons (10 steps or more from the
-#      landing), credits in three of every ten pieces (rounded), one lore page (10 steps or more, of the floor's
+#      landing), credits in the place's share of the pieces (Findables.CREDIT_SHARE, rounded), one lore page (10 steps or more, of the floor's
 #      place and the day's tier, no repeat while another is unused), the rest nothing; credits are the piece's
 #      units of 1% of the floor's quota; the sheet's numbers are the fill's;
 #   3. the same for everyone: generated twice alike, and every floor's hash as stored in
@@ -208,7 +208,7 @@ func test_what_is_inside(t: T) -> void:
 				if what == "note":
 					poems[str(c["note"])] = true
 					near_note = near_note or int(third[id]) == 0
-			var want_credits := roundi(n * 3 / 10.0)
+			var want_credits := roundi(n * float(Findables.CREDIT_SHARE[place]))
 			var ok: bool = count["note"] == 3 and count["juice"] == 3 and count["credits"] == want_credits and count["page"] == 1 and poems.size() == 3 and near_note \
 				and sum == fill.credits and count["credits"] == fill.credit_pieces
 			if not ok:

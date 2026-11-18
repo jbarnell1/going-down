@@ -23,7 +23,7 @@
 #
 # WHAT IS INSIDE (fill_for). One fill per floor (Rng "find:<seed>:<depth>", fork "fill"): NOTES poem notes
 # (one among the third of the pieces nearest the lift by walking, two anywhere), CARTONS cartons of juice (at
-# least FAR_STEPS from the landing), credits in CREDITS_IN_TEN of every ten pieces (rounded), one lore page
+# least FAR_STEPS from the landing), credits in the place's CREDIT_SHARE of the pieces (rounded), one lore page
 # in place of an empty piece at least FAR_STEPS from the landing (story.md 4a: by place and the day's tier,
 # never by trait; a piece of the page's own kind when one is free; none repeated in a night while another
 # of that place and tier is unused: `lore_used`), and nothing in the rest.
@@ -79,8 +79,10 @@ const CLINIC_MAX := 30
 ## A floor's notes and cartons, the pieces with credits (in every ten, rounded), the side-branch bonus (units).
 const NOTES := 3
 const CARTONS := 3
-const CREDITS_IN_TEN := 3
 const SIDE_BONUS := 2
+## The share of a floor's pieces holding credits, by place, rounded (the design's three in ten, cut on 18 Nov so a
+## search mostly finds nothing: about 18% of the floor quota hidden on a Clinic, 35% on an Annex).
+const CREDIT_SHARE := {&"clinic": 0.22, &"annex": 0.16, &"playroom": 0.2}
 ## Cartons and the lore page lie at least this many steps from the landing.
 const FAR_STEPS := 10
 ## The careful search and the rushed one (seconds); a careful search stops if its searcher moves this far (m).
@@ -333,8 +335,8 @@ static func fill_for(plan: Floor.FloorPlan, floor_seed: String, depth: int, base
 		free.erase(id)
 		f.contents[id]["what"] = "juice"
 		f.cartons += 1
-	# Credits: three in every ten pieces, rounded.
-	var want := mini(roundi(n * CREDITS_IN_TEN / 10.0), free.size())
+	# Credits: the place's share of the pieces, rounded.
+	var want := mini(credit_pieces(plan.place, n), free.size())
 	for k in want:
 		var id: int = free[rng.int_in(0, free.size() - 1)]
 		free.erase(id)
@@ -363,6 +365,10 @@ static func fill_for(plan: Floor.FloorPlan, floor_seed: String, depth: int, base
 		f.pages = 1
 		f.page = pg[0]
 	return f
+
+## How many of a floor's `n` searchable pieces hold credits (CREDIT_SHARE, rounded).
+static func credit_pieces(place: StringName, n: int) -> int:
+	return roundi(n * float(CREDIT_SHARE.get(place, 0.2)))
 
 ## The laminated sheet by the lobby doors (and the monitor's fourth row on the ride down): the fill's numbers.
 static func sheet_text(f: Fill) -> String:
