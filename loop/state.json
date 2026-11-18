@@ -3,9 +3,9 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 92,
+  "iteration": 93,
   "now": "T25b",
-  "nowText": "The builder is back on the server's start-up self-check and the exported-build check",
+  "nowText": "Server self-check, exported-build check and play_net for the day lock: builder resumed",
   "ci": {
     "status": "passed",
     "commit": "6b17496",
@@ -2270,8 +2270,8 @@
       "ns": [],
       "nsWhy": "tooling and a server start-up guard",
       "startedAt": "2026-11-18T08:06:49.845Z",
-      "doingText": "The builder is back on the server's start-up self-check and the exported-build check",
-      "doingAt": "2026-11-18T12:48:50.762Z"
+      "doingText": "Server self-check, exported-build check and play_net for the day lock: builder resumed",
+      "doingAt": "2026-11-18T14:14:18.961Z"
     },
     {
       "id": "T23",
@@ -2297,8 +2297,8 @@
       "ns": [],
       "nsWhy": "voice lines from the owner's answers of 18 Nov",
       "startedAt": "2026-11-18T07:51:18.144Z",
-      "doingText": "With the brightness builder: the grab line, the reworded hint, the long hint's check",
-      "doingAt": "2026-11-18T12:48:50.655Z"
+      "doingText": "Voice touch-ups: builder resumed; the Minder's grab line and the reworded hint are committed on its branch",
+      "doingAt": "2026-11-18T14:14:18.852Z"
     },
     {
       "id": "T24",
@@ -2642,8 +2642,8 @@
         "A7"
       ],
       "startedAt": "2026-11-18T05:44:41.664Z",
-      "doingText": "The builder is back on searching: trimming the loot, then the on-screen prompt, bar and note reader",
-      "doingAt": "2026-11-18T12:48:50.436Z"
+      "doingText": "Searching: builder resumed; rules, balance trim and on-screen parts are committed on its branch, finishing checks and merging main",
+      "doingAt": "2026-11-18T14:14:18.637Z"
     },
     {
       "id": "T26",
@@ -2656,8 +2656,20 @@
         "B1"
       ],
       "startedAt": "2026-11-18T06:21:01.721Z",
-      "doingText": "The Fable builder is back on the Arboretum (rules, then layout, then the dark place on screen)",
-      "doingAt": "2026-11-18T12:48:50.248Z"
+      "doingText": "Arboretum: the Fable builder is back on it after the usage reset (rules and generator done; finishing the place on screen with a stand-in figure and the near light)",
+      "doingAt": "2026-11-18T14:14:18.446Z"
+    },
+    {
+      "id": "T26b",
+      "title": "The Groundskeeper: Blender figure, voice, pinecones, a full playthrough",
+      "why": "The Arboretum's resident is a stand-in until it has its own body and voice",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "B11",
+        "B8",
+        "A2"
+      ]
     },
     {
       "id": "T27",
@@ -2668,8 +2680,8 @@
       "ns": [],
       "nsWhy": "new from the owner on 18 Nov; a per-player display setting",
       "startedAt": "2026-11-18T07:51:17.985Z",
-      "doingText": "The builder is back on the brightness card and the voice touch-ups",
-      "doingAt": "2026-11-18T12:48:50.546Z"
+      "doingText": "Brightness card: builder resumed; committed on its branch, finishing checks",
+      "doingAt": "2026-11-18T14:14:18.750Z"
     },
     {
       "id": "T21a",
@@ -2679,6 +2691,52 @@
       "gates": [],
       "ns": [],
       "nsWhy": "new from the owner on 17 Nov (Questions page); amendment recorded"
+    },
+    {
+      "id": "T28",
+      "title": "The shop: six things to buy",
+      "why": "Credits finally buy something you can carry down: markers, a flashbulb, a glow stick, a wind-up toy, speed juice, smelling salts",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "F1",
+        "G1"
+      ]
+    },
+    {
+      "id": "T29",
+      "title": "A cabinet in your cell",
+      "why": "Only what you put in your cabinet before bed is kept; everything else is cleared overnight",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "G1",
+        "C6"
+      ]
+    },
+    {
+      "id": "T30",
+      "title": "The skill tree window and trades",
+      "why": "Everyone can take the first layer of all four branches, then each player goes deeper in one trade",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "F1",
+        "G1"
+      ],
+      "todo": [
+        "Waiting on the owner: what trade nodes cost (old crew badges is a proposal) and whether layer 1 costs credits"
+      ]
+    },
+    {
+      "id": "T31",
+      "title": "The first eight skills working in play",
+      "why": "Deep Pockets, Second Wind, Soft Shoes, Long Burn, Quick Fingers, Field Dressing, Steady Gaze, Throwing Arm",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "F1"
+      ]
     },
     {
       "id": "T21b",
@@ -3282,6 +3340,76 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-18T14:48:42.206Z",
+      "text": "All notes brought up to date for a change of agent: AGENTS.md written, the North Star folded to Draft 6, the handoff notes rewritten, the README and loop notes corrected.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:48:41.985Z",
+      "text": "Added task T26b: The Groundskeeper: Blender figure, voice, pinecones, a full playthrough.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:48:41.824Z",
+      "text": "Added task T31: The first eight skills working in play.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:48:41.627Z",
+      "text": "Added task T30: The skill tree window and trades.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:48:41.366Z",
+      "text": "Added task T29: A cabinet in your cell.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:48:41.111Z",
+      "text": "Added task T28: The shop: six things to buy.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:39:58.499Z",
+      "text": "Owner approved the skill tree's shape; a cabinet in each cell keeps items overnight; trade nodes will cost something found while exploring (proposal: old crew badges, waiting for a yes).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:30:24.665Z",
+      "text": "Skill tree and shop redesigned for the owner (skills are training, assets are shop items; one trade per player past the first layer). Waiting for their go-ahead before anything is built.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:14:19.043Z",
+      "text": "09:15 owner reset the Fable limit: weekly all-models 67%, Fable 4%, 5-hour 10%. All four builders resumed.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:14:18.962Z",
+      "text": "Started T25b: The exported server proves itself. Server self-check, exported-build check and play_net for the day lock: builder resumed",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T14:14:18.853Z",
+      "text": "Started T23b: Voice touch-ups: a grab line, a reworded hint. Voice touch-ups: builder resumed; the Minder's grab line and the reworded hint are committed on its branch",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T14:14:18.750Z",
+      "text": "Started T27: A brightness setting with a calibration screen. Brightness card: builder resumed; committed on its branch, finishing checks",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T14:14:18.638Z",
+      "text": "Started T20g: Things to find: drawers, gurneys, credits, poem notes. Searching: builder resumed; rules, balance trim and on-screen parts are committed on its branch, finishing checks and merging main",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T14:14:18.447Z",
+      "text": "Started T26: The Arboretum: a dark forest floor and the Groundskeeper. Arboretum: the Fable builder is back on it after the usage reset (rules and generator done; finishing the place on screen with a stand-in figure and the near light)",
+      "kind": "start"
+    },
     {
       "at": "2026-11-18T12:59:01.934Z",
       "text": "Paused T22: waiting for In the 06:48 build: the F8 panel, the saved file and 32 settings. Still to wire: the rest of the list. For the server to keep settings across restarts the owner makes one folder on the lab box",
@@ -4210,76 +4338,6 @@
     {
       "at": "2026-11-17T17:01:03.149Z",
       "text": "Started T16k: The Temp as a proper Blender figure. Judging round 1: Fable done; Opus judges now",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T17:01:02.994Z",
-      "text": "Started T19e: Monsters slip away and reappear out of view. Built: when nobody has seen the Orderly for a while, it slips away out of everyone's sight and reappears 12-20 m from a player, with a sound first. A Sonnet agent is re-running its checks",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T17:00:40.601Z",
-      "text": "Down and heal is merged into the main code and pushed. The three-player network check now allows the one move you decided watchers see (the Orderly bent over a downed player, working in place) and still goes red if it walks while watched (checked with a deliberate break).",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T16:58:33.917Z",
-      "text": "The Temp's first judge (shown only pictures): the face sheet over a real head and the tilted head work; in the dark it scores 6.5/10. Weak: the sheet looks like a flat board, thin tube arms with mitten hands, trousers too short. Two more judges, then the fixes.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T16:57:55.939Z",
-      "text": "Started TB: Your second batch of sounds in the game. Back with its builder: make the breathing grow louder as it nears every time, and the beds' hum dip reliably under the voice",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T16:57:55.679Z",
-      "text": "Started T16k: The Temp as a proper Blender figure. Built in Blender (3,812 triangles, T-pose with spread fingers, stapler and notes separate). Judging round 1: Fable now, two Opus judges when builder slots free",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T16:57:55.465Z",
-      "text": "New pictures for T16k: The Temp as a proper Blender figure.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T16:57:55.338Z",
-      "text": "New pictures for T16k: The Temp as a proper Blender figure.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T16:56:24.157Z",
-      "text": "Paused TB: waiting for Checked: tests, export and the browser sound check all pass, and the far-carry breaks go red. But the mix check is unstable: the beds' duck under the voice misses by about 1 dB in 2 of 3 runs, and the 'breathing grows as it nears' check failed 2 of 3 (at 5 m it was sometimes quieter than at 20 m). Goes back to its builder when a builder slot frees",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T16:22:27.336Z",
-      "text": "Paused T8a: waiting for Merged into main with its screen (T8c); goes into your next build",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T16:22:27.223Z",
-      "text": "Paused T8c: waiting for Checked: 209 quick tests, the two-player down check 24/24, a deliberate break (no HOLD F TO HELP) turned it red. Merged into main; re-running the three-player network test on main before your next build",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T16:12:27.656Z",
-      "text": "Sound batch 2 built: a roar 55 m away is now heard (it was silent), and the breathing starts at about 26 m instead of 9 m.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T16:12:27.526Z",
-      "text": "Started T20f: Controls card and a ready-up screen. Part of the same Opus job: the car waits while anyone is aboard; a returning car waits 30 s; anyone left out wakes in the prison without their credits (the ready-up screen comes later)",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T16:12:27.415Z",
-      "text": "Started T20h: A bit more stamina, monsters paced to match. Part of the same Opus job: more stamina, monster speeds retuned so catches stay as likely",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T16:12:27.190Z",
-      "text": "Started T20c: Longer blackouts before the car comes. Part of the same Opus job: blackouts last longer before the car comes",
       "kind": "start"
     }
   ]

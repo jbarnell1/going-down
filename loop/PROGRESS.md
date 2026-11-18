@@ -4,9 +4,9 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 78 of 115.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 92.
-- **Now:** T25b The exported server proves itself. The builder is back on the server's start-up self-check and the exported-build check
+- **Gates passed:** 7 of 14. **Tasks done:** 78 of 120.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 93.
+- **Now:** T25b The exported server proves itself. Server self-check, exported-build check and play_net for the day lock: builder resumed
 - **Last CI result seen:** passed on 6b17496
 - **Answers applied up to:** 2026-11-17T21:11:49.720Z
 
@@ -283,10 +283,21 @@
   - Why: Searching furniture (F TO OPEN DRAWER) turns up credits, obscure poems about the monster's rule, and something to restore you
 - [ ] **T26** `doing` The Arboretum: a dark forest floor and the Groundskeeper
   - Why: A new place: no corridors, you steer by landmarks and sound, and a blind monster comes to noise. You asked for the scariest one yet, and dark
+- [ ] **T26b** `todo` The Groundskeeper: Blender figure, voice, pinecones, a full playthrough
+  - Why: The Arboretum's resident is a stand-in until it has its own body and voice
 - [ ] **T27** `doing` A brightness setting with a calibration screen
   - Why: The Arboretum is very dark; each player sets brightness on their own screen at the start or in settings so dark is dark but not blind
 - [ ] **T21a** `todo` A four-slot inventory
   - Why: Four squares at the bottom of the screen, scroll or 1-4 to pick what is in your hand; the instrument is always in the other hand; store items take a slot
+- [ ] **T28** `todo` The shop: six things to buy
+  - Why: Credits finally buy something you can carry down: markers, a flashbulb, a glow stick, a wind-up toy, speed juice, smelling salts
+- [ ] **T29** `todo` A cabinet in your cell
+  - Why: Only what you put in your cabinet before bed is kept; everything else is cleared overnight
+- [ ] **T30** `todo` The skill tree window and trades
+  - Why: Everyone can take the first layer of all four branches, then each player goes deeper in one trade
+  - To do: Waiting on the owner: what trade nodes cost (old crew badges is a proposal) and whether layer 1 costs credits
+- [ ] **T31** `todo` The first eight skills working in play
+  - Why: Deep Pockets, Second Wind, Soft Shoes, Long Burn, Quick Fingers, Field Dressing, Steady Gaze, Throwing Arm
 - [ ] **T21b** `todo` The nerve bar
   - Why: Your nerve drops near monsters and in the dark, and a juice carton steadies you
 - [x] **TB** `done` Your second batch of sounds in the game
@@ -390,6 +401,20 @@
 
 ## Activity (newest first)
 
+- 2026-11-18 14:48Z All notes brought up to date for a change of agent: AGENTS.md written, the North Star folded to Draft 6, the handoff notes rewritten, the README and loop notes corrected.
+- 2026-11-18 14:48Z Added task T26b: The Groundskeeper: Blender figure, voice, pinecones, a full playthrough.
+- 2026-11-18 14:48Z Added task T31: The first eight skills working in play.
+- 2026-11-18 14:48Z Added task T30: The skill tree window and trades.
+- 2026-11-18 14:48Z Added task T29: A cabinet in your cell.
+- 2026-11-18 14:48Z Added task T28: The shop: six things to buy.
+- 2026-11-18 14:39Z Owner approved the skill tree's shape; a cabinet in each cell keeps items overnight; trade nodes will cost something found while exploring (proposal: old crew badges, waiting for a yes).
+- 2026-11-18 14:30Z Skill tree and shop redesigned for the owner (skills are training, assets are shop items; one trade per player past the first layer). Waiting for their go-ahead before anything is built.
+- 2026-11-18 14:14Z 09:15 owner reset the Fable limit: weekly all-models 67%, Fable 4%, 5-hour 10%. All four builders resumed.
+- 2026-11-18 14:14Z Started T25b: The exported server proves itself. Server self-check, exported-build check and play_net for the day lock: builder resumed
+- 2026-11-18 14:14Z Started T23b: Voice touch-ups: a grab line, a reworded hint. Voice touch-ups: builder resumed; the Minder's grab line and the reworded hint are committed on its branch
+- 2026-11-18 14:14Z Started T27: A brightness setting with a calibration screen. Brightness card: builder resumed; committed on its branch, finishing checks
+- 2026-11-18 14:14Z Started T20g: Things to find: drawers, gurneys, credits, poem notes. Searching: builder resumed; rules, balance trim and on-screen parts are committed on its branch, finishing checks and merging main
+- 2026-11-18 14:14Z Started T26: The Arboretum: a dark forest floor and the Groundskeeper. Arboretum: the Fable builder is back on it after the usage reset (rules and generator done; finishing the place on screen with a stand-in figure and the near light)
 - 2026-11-18 12:59Z Paused T22: waiting for In the 06:48 build: the F8 panel, the saved file and 32 settings. Still to wire: the rest of the list. For the server to keep settings across restarts the owner makes one folder on the lab box
 - 2026-11-18 12:59Z NEW BUILD in play/ (18 Nov 06:48): the Ready-up screen with the controls card, the orientation tape on a first join, and the host's F8 settings panel with 32 working settings. Server updated to match; remote test passed. Zip: play/GoingDown-2026-11-18-0648.zip
 - 2026-11-18 12:59Z Finished T20f: Controls card and a ready-up screen.
@@ -416,17 +441,3 @@
 - 2026-11-18 08:02Z Searching rules are built (drawers, gurneys, lockers, filing drawers, boxes, copiers; credits, 9 poems, 14 story pages, juice cartons). Its builder also spotted a real bug: the server build left the game's data files out, so on the real server the Annex's notes, the awards and the upgrade list could not load. Fixed with a test; the server is being rebuilt and redeployed
 - 2026-11-18 07:51Z Started T23b: Voice touch-ups: a grab line, a reworded hint. Queued behind the brightness card with the same builder: a grab line for the Minder, a reworded hint, and the long hint's check
 - 2026-11-18 07:51Z Started T27: A brightness setting with a calibration screen. A builder is making the brightness card (set once per PC, changeable from the Esc menu), then the voice touch-ups
-- 2026-11-18 07:51Z Paused T22: waiting for The panel, the saved file and 32 working settings are built; a checker is going over the branch before it merges
-- 2026-11-18 07:51Z New pictures for T22: Live settings for the host.
-- 2026-11-18 07:23Z CI stopped itself again: the test step had its own 15-minute stop inside the job. Raised it; not a test failure
-- 2026-11-18 07:22Z CI failed on 6f0708c.
-- 2026-11-18 06:56Z The skill tree is designed: four branches (Lamp, Ear, Hands, Nerve), twenty upgrades that each add something to do, ten of them for Friday; it waits for your look before anyone builds it
-- 2026-11-18 06:47Z NEW BUILD in play/ (18 Nov 00:37): solid furniture, plus everything in the 22:25 build. The lab-box server matches it and the remote test passed. Zip for friends: play/GoingDown-2026-11-18-0037.zip
-- 2026-11-18 06:47Z Finished T20d: Furniture you bump into.
-- 2026-11-18 06:21Z Started T26: The Arboretum: a dark forest floor and the Groundskeeper. A Fable builder is making the Arboretum: the noise rules and the Groundskeeper, the forest layout, then the dark place on screen with a stand-in figure
-- 2026-11-18 06:13Z Promote check with furniture passed everything: 297 tests, web 42/42, desktop 46/46, sound, down-and-heal 24/24, the day check 16/16, the Playroom check 12/12, network 17/17, mix 45/45, the furniture walk. The build is being made and promoted now
-- 2026-11-18 05:58Z The Arboretum is designed (a dark forest, ground that is loud or quiet underfoot, and the Groundskeeper: blind, comes to noise, leans to your face if you stand still). Building starts when a builder frees up; the brightness setting is its own small task
-- 2026-11-18 05:56Z Added task T27: A brightness setting with a calibration screen.
-- 2026-11-18 05:56Z Added task T26: The Arboretum: a dark forest floor and the Groundskeeper.
-- 2026-11-18 05:47Z Owner on the orientation tape: 'The VHS is amazing.' It stays as built; the nightly tapes will follow the same look and voice
-- 2026-11-18 05:47Z Owner: Temp gets ink tears; Mixamo for the Temp and Orderly tomorrow morning; skill tree: the five listed upgrades plus more of my choosing; passphrase steps wanted in the morning
