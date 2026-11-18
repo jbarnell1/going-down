@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 67,
-  "now": "T24",
-  "nowText": "A builder is making the VCR orientation tape now: blue and yellow, narrated, with a video you can watch here when it is done",
+  "iteration": 76,
+  "now": "T20d",
+  "nowText": "A builder is making chairs, cabinets, desks and hospital beds solid for players, with every hide still reachable",
   "ci": {
-    "status": "passed",
-    "commit": "cb7c7a0",
-    "at": "2026-11-17T16:04:16.993Z"
+    "status": "failed",
+    "commit": "63c8689",
+    "at": "2026-11-18T01:45:18.474Z"
   },
   "answersAppliedTo": "2026-11-17T21:11:49.720Z",
   "tasks": [
@@ -2219,13 +2219,12 @@
       "id": "T22",
       "title": "Live settings for the host",
       "why": "On game night the host can slow a monster that's too fast, lengthen the lift's return or the time you have down, and much more, from an in-game panel, while everyone plays",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [],
       "nsWhy": "new from the owner on 17 Nov; a testing and hosting tool, amendment recorded",
       "startedAt": "2026-11-17T20:23:31.311Z",
-      "doingText": "Designed (59 settings in six groups, F8 opens the host panel). An Opus builder is making the settings list and wiring the first ten: each monster's speed, the lift's return, the down timer",
-      "doingAt": "2026-11-17T20:34:56.073Z"
+      "waiting": "Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update"
     },
     {
       "id": "T25",
@@ -2235,25 +2234,25 @@
       "gates": [],
       "ns": [],
       "nsWhy": "new from the owner on 17 Nov: tooling for game night, amendment recorded",
-      "waiting": "Planned; starts with the next free builder (high priority for Friday)"
+      "startedAt": "2026-11-17T22:07:38.694Z",
+      "waiting": "Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update"
     },
     {
       "id": "T23",
       "title": "The announcer's hints",
       "why": "The lift's announcer teaches the game with snide, creepy hints: board on time or lose your pay, the quota, sneaking in the Playroom, instruments out",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [],
       "nsWhy": "new from the owner on 17 Nov; announcer lines (H5 voice), amendment recorded",
       "startedAt": "2026-11-17T20:34:56.176Z",
-      "doingText": "An Opus builder is recording the 38 hints in both voices and wiring the ones whose moments exist in the game today",
-      "doingAt": "2026-11-17T20:49:16.164Z"
+      "waiting": "Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update"
     },
     {
       "id": "T24",
       "title": "The story: the tape, the nightly tapes and the clues",
       "why": "A blue-and-yellow VCR orientation tape on joining, a new tape each night in the prison, and clues on every floor that the monsters were once crews like yours",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "H1",
@@ -2263,10 +2262,24 @@
       "startedAt": "2026-11-17T20:47:49.167Z",
       "todo": [
         "Your answers: better names (Fable proposing); left out = keep your bed, draw a new face, get a new number, and the next monster wears your old face; bedtime tape on the lift monitor during the ride up, the car waits for it unless over half skip; tape shot 16: the diamond body for two frames, then one more two-frame flicker",
-        "Names chosen: Lidgate, the Soke, Continuance, 'Leave it with us.', Lidgate Reception Centre, Day Release, Crew 41 (script updated)"
+        "Names chosen: Lidgate, the Soke, Continuance, 'Leave it with us.', Lidgate Reception Centre, Day Release, Crew 41 (script updated)",
+        "After the merge reaches main: copy the tape's five takes into assets_src/voice/takes and rewrite the audition page there (generate.mjs --page), so the tape's narration can be auditioned beside the hints"
       ],
-      "doingText": "A builder is making the VCR orientation tape now: blue and yellow, narrated, with a video you can watch here when it is done",
-      "doingAt": "2026-11-17T21:34:10.080Z"
+      "media": [
+        {
+          "src": "T24/20261117T222124-orientation.mp4",
+          "caption": "First cut of the orientation tape (the builder is still finishing its tests)",
+          "kind": "file",
+          "at": "2026-11-17T22:21:24.487Z"
+        },
+        {
+          "src": "T24/20261117T222124-shot_16.png",
+          "caption": "The 'don't stay late' shot",
+          "kind": "image",
+          "at": "2026-11-17T22:21:24.702Z"
+        }
+      ],
+      "waiting": "Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update"
     },
     {
       "id": "T19d",
@@ -2422,7 +2435,7 @@
       "id": "T15m",
       "title": "Playroom tuning from your play",
       "why": "A warning line on arrival to sneak, more time to hide, the ball pit lowers your view so you can watch it search, an anger bar, and a reminder to get your instrument out",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "A11"
@@ -2432,31 +2445,47 @@
         "Your Minder answer: it just wanders; within 1 m it grabs you and drags you to the party table; once angered it hunts actively, and the intercom says not to run while it hunts; relocation is on for it"
       ],
       "startedAt": "2026-11-17T20:34:56.369Z",
-      "doingText": "An Opus builder is giving you 30-45 s to hide, a ball pit you can see out of, an anger bar, and a Minder that wanders and only grabs you within a metre until it's angry",
-      "doingAt": "2026-11-17T20:34:56.370Z"
+      "waiting": "Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update",
+      "media": [
+        {
+          "src": "T15m/20261117T223226-02-sat-back-in-the-ball-pit.png",
+          "caption": "Sat back in the ball pit during the count: you see the room, balls only along the bottom, 22 seconds left to hide",
+          "kind": "image",
+          "at": "2026-11-17T22:32:26.707Z"
+        },
+        {
+          "src": "T15m/20261117T223226-01-the-anger-bar-part-full.png",
+          "caption": "The anger bar, top left, half full after a second of sprinting",
+          "kind": "image",
+          "at": "2026-11-17T22:32:26.807Z"
+        }
+      ]
     },
     {
       "id": "T20d",
       "title": "Furniture you bump into",
       "why": "Beds, chairs, cabinets and desks block you, which hiding needs",
-      "status": "todo",
+      "status": "doing",
       "gates": [],
-      "ns": [
-        "B1"
-      ]
+      "ns": [],
+      "nsWhy": "new from the owner's play of 17 Nov; no North Star mechanic covers furniture collision",
+      "startedAt": "2026-11-17T23:15:36.487Z",
+      "doingText": "A builder is making chairs, cabinets, desks and hospital beds solid for players, with every hide still reachable",
+      "doingAt": "2026-11-17T23:38:45.238Z"
     },
     {
       "id": "T20e",
       "title": "The day quota you can see, and no going home short",
       "why": "You know how close you are to the day's target; BANK is refused until it is met, with a snide line from the announcer; in the prison you can only shop and sleep",
-      "status": "todo",
+      "status": "doing",
       "gates": [],
       "ns": [
         "C6",
         "C9"
       ],
       "startedAt": "2026-11-17T15:08:32.346Z",
-      "waiting": "Designed: BANK locked until the day quota is met, the quota shown always, a wipe is now the missed day. Six questions on your Questions page. Waits for a free builder"
+      "doingText": "A builder is making the day quota screens: the lift monitor rows, BANK LOCKED paint, the corner line and the snide refusal lines",
+      "doingAt": "2026-11-17T23:27:37.515Z"
     },
     {
       "id": "T20f",
@@ -2900,15 +2929,19 @@
       "id": "TP",
       "title": "Bring the build checks up to the new rules",
       "why": "The build that carries your 0833 fixes can't reach play/ until the scripted playthroughs agree with the new rules (the Orderly drawn in the dark, downs, the longer blackout)",
-      "status": "todo",
+      "status": "doing",
       "gates": [],
       "ns": [],
       "nsWhy": "tooling: the playthrough scripts that gate a promote",
       "todo": [
         "playthrough.mjs: the blackout and dark checks still expect the Orderly hidden; owner said draw it (T20a)",
         "playthrough.mjs: alone, being caught in the longer, faster blackout now means down, out and the wipe; the run then rides away and every later check fails",
-        "sound_web.mjs: blackout never seen, so the hum-silent and emergency-drone checks fail; same cause"
-      ]
+        "sound_web.mjs: blackout never seen, so the hum-silent and emergency-drone checks fail; same cause",
+        "Add a quick test that loads every script in godot/ (client too): a duplicate constant from the Lonely + sounds merge broke sfx.gd on main and 241 quick tests passed anyway"
+      ],
+      "startedAt": "2026-11-17T22:06:48.105Z",
+      "doingText": "A builder is finishing the build-check update from the kept partial work",
+      "doingAt": "2026-11-17T23:38:45.098Z"
     }
   ],
   "gates": [
@@ -3091,6 +3124,196 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-18T01:45:18.475Z",
+      "text": "CI failed on 63c8689.",
+      "kind": "ci"
+    },
+    {
+      "at": "2026-11-18T01:21:07.159Z",
+      "text": "Hints scripted check after the fix: 8 of 10, as its builder reported. The two failures are the lone player being caught while waiting for the car (out, then the wipe), the same thing the build-check update is working on",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T01:19:11.416Z",
+      "text": "Main now holds the Playroom changes, live settings, the announcer hints, the orientation tape and crash reports with the hotfix pipeline (pushed). play/ is still build 0833 until the scripted playthroughs pass. The audition page lists the tape's narration beside the hints",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T01:19:11.251Z",
+      "text": "Paused T25: waiting for Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T01:19:11.106Z",
+      "text": "Paused T24: waiting for Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T01:19:10.972Z",
+      "text": "Paused T23: waiting for Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T01:19:10.842Z",
+      "text": "Paused T22: waiting for Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T01:19:10.722Z",
+      "text": "Paused T15m: waiting for Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T01:03:31.913Z",
+      "text": "Combined-branch check: 277 quick tests, each piece's own tests, the voice check, the hotfix dry run and five deliberate breaks all as expected. It also caught a real bug: with crash reports in, the test servers dropped every player (code 4005). Fixed in the room; down-and-heal is 24/24 and the Playroom check 12/12 again",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T00:52:14.603Z",
+      "text": "The usage limit paused all four agents for a few minutes around 18:45; it has reset and all four are running again from where they stopped",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T23:43:38.270Z",
+      "text": "The combined branch (Lonely, Playroom tuning, live settings, hints, the tape, crash reports) passed 277 quick tests; a checker is now running the scripted checks and five deliberate breaks on it before it goes to main",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T23:40:26.356Z",
+      "text": "Owner: difficulty progression (stronger bosses and/or inherited curses) is tomorrow's decision; skill trees to be thought about too. Nothing is briefed until they decide",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T23:38:45.239Z",
+      "text": "Started T20d: Furniture you bump into. A builder is making chairs, cabinets, desks and hospital beds solid for players, with every hide still reachable",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T23:38:45.099Z",
+      "text": "Started TP: Bring the build checks up to the new rules. A builder is finishing the build-check update from the kept partial work",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T23:27:37.515Z",
+      "text": "Started T20e: The day quota you can see, and no going home short. A builder is making the day quota screens: the lift monitor rows, BANK LOCKED paint, the corner line and the snide refusal lines",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T23:27:37.324Z",
+      "text": "Paused T20d: waiting for Stopped when you sent a message mid-run; waiting for your go-ahead to restart",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T23:27:37.218Z",
+      "text": "Paused TP: waiting for Stopped when you sent a message mid-run; its partial work is kept; waiting for your go-ahead to restart",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T23:21:37.225Z",
+      "text": "Paused T25: waiting for Built; waiting to be merged and checked with the other finished pieces",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T23:21:37.102Z",
+      "text": "Crash reports and the hotfix pipeline are built: every client error and a heartbeat go to the server's log, F9 sends a report, the server refuses an out-of-date game with a clear message, one command fetches and summarises the night's logs, and one command runs tests, build, promote and package and prints the deploy steps; 249 quick tests pass, eight deliberate breaks caught",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T23:15:36.488Z",
+      "text": "Started T20d: Furniture you bump into. A builder is making chairs, cabinets, desks and hospital beds solid for players, with every hide still reachable",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T23:15:36.355Z",
+      "text": "Linked T20d to the North Star: nothing in it (new from the owner's play of 17 Nov; no North Star mechanic covers furniture collision).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T23:14:50.931Z",
+      "text": "Paused T20e: waiting for Rules built; the screens start once the combined branch (Playroom, settings, hints, tape) is committed",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T23:14:50.807Z",
+      "text": "Day quota lock built (rules and network): BANK is locked until the day's quota is earned, a refused vote rides down with the same tapes, and holding the car open never counts as an ending; 247 quick tests pass, four deliberate breaks caught. The screens and voice lines are next",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T22:32:26.807Z",
+      "text": "New pictures for T15m: Playroom tuning from your play.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T22:32:26.707Z",
+      "text": "New pictures for T15m: Playroom tuning from your play.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T22:23:12.325Z",
+      "text": "The orientation tape is built: 21 shots in 65 s, five narration beats in Bella (958 characters), hold Space to skip; watch the video under the story task",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T22:23:12.157Z",
+      "text": "Paused T24: waiting for The tape is built (65 s, narrated, video posted); waiting for its merge and check",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T22:23:11.971Z",
+      "text": "Started T20e: The day quota you can see, and no going home short. A builder is making the day quota lock: BANK stays locked until the day's quota is earned, a refused vote rides down with a snide line; the screens come next",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T22:21:24.849Z",
+      "text": "Live settings (first piece) reported: 59 settings in the list, 10 already change the game (Orderly/Temp/Minder speeds, lift floors and seconds a floor, the down timer); 239 tests pass at full size with stored results unchanged",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T22:21:24.702Z",
+      "text": "New pictures for T24: The story: the tape, the nightly tapes and the clues.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T22:21:24.487Z",
+      "text": "New pictures for T24: The story: the tape, the nightly tapes and the clues.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-17T22:07:38.695Z",
+      "text": "Started T25: Crash reports, metrics and a same-night hotfix. A builder is making crash reports, logs on the server, an F9 report key, a version check on joining, and a one-command hotfix pipeline for Friday night",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T22:06:48.959Z",
+      "text": "Paused T15m: waiting for Built; re-testing on top of the Lonely rule, then its check",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T22:06:48.785Z",
+      "text": "Paused T22: waiting for Built and committed (59 host settings, the first ten read by the rules); waiting for its check and merge",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T22:06:48.609Z",
+      "text": "Paused T23: waiting for Its check and merge, after the Playroom tuning and live settings",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T22:06:48.414Z",
+      "text": "Announcer hints built: 76 lines recorded in both voices (12,088 characters), 26 wired in, 12 waiting on features not built yet (day quota, findables, the shop). HINTS on/off is on H. Listen first: hint_board_1, hint_play_no_run_1, and both takes of hint_hide_2 on the audition page",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-17T22:06:48.106Z",
+      "text": "Started TP: Bring the build checks up to the new rules. A builder is updating the build checks to the new rules (Orderly drawn in the dark, downs, longer blackout) and adding a test that loads every script",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-17T22:02:44.293Z",
+      "text": "Caught a merge break on main (two branches each added PHONE_DB to the sound script, so the game could not load its sounds); fixed and committing. Every game script parses again.",
+      "kind": "note"
+    },
     {
       "at": "2026-11-17T21:47:20.997Z",
       "text": "Finished T19c: The Temp's own mechanic.",
@@ -3900,196 +4123,6 @@
       "at": "2026-11-17T12:06:23.463Z",
       "text": "Finished T18j: The day in the run: bank, ride up, sleep, day 2.",
       "kind": "done"
-    },
-    {
-      "at": "2026-11-17T12:01:44.757Z",
-      "text": "New pictures for T15e: The count on screen.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T12:01:44.666Z",
-      "text": "New pictures for T15e: The count on screen.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T12:01:44.532Z",
-      "text": "New pictures for T15e: The count on screen.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T12:01:44.431Z",
-      "text": "Started T15e: The count on screen. A Sonnet agent is checking the count on screen: two players' screens must agree on the dark, the bell and who was found",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T12:01:23.149Z",
-      "text": "Started T5q: A quota before the lift can be called. Back with its builder: a solo player sometimes can't meet floor 1's quota, a no-grow test is missing, and the test playthroughs need updating",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T11:39:22.854Z",
-      "text": "Started T16h: Crew marks and the Temp's sticky notes in the run. An Opus builder is putting the Annex's crew marks and the Temp's sticky notes into the run, the same for every player",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T11:39:19.005Z",
-      "text": "Added task T16h: Crew marks and the Temp's sticky notes in the run.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T11:39:18.819Z",
-      "text": "Added task T5r: The quota on screen.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T11:39:18.622Z",
-      "text": "Started T5q: A quota before the lift can be called. A Sonnet agent is checking the floor quota: every client sees the same refusals, dropped tapes still count",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T11:01:27.515Z",
-      "text": "Finished T15i: The count's voice lines.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T11:01:27.304Z",
-      "text": "Paused T15d: waiting for checked (all three clients agreed on every count over a link that lost 2,550 messages; walking never starts a count); goes into your build with its screens (T15e)",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T10:50:26.414Z",
-      "text": "The count's announcer lines are recorded in both voices (2,148 characters; the voice budget is at 22,560 of 50,000): 'Hide.', forty, thirty, twenty, then ten to one, 'Coming, ready or not!', 'Found you!', 'All done!', and 'Your car is on its way! One more round before we go!'. Takes are on the audition page for you to pick.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T10:50:26.325Z",
-      "text": "Started T15i: The count's voice lines. A Sonnet agent is checking the count's voice lines: budget, loudness, no key anywhere",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T10:47:00.530Z",
-      "text": "Started T5q: A quota before the lift can be called. An Opus builder is adding the floor quota: the call button is dead until the crew has recorded enough",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T10:47:00.356Z",
-      "text": "Linked T5q to the North Star: C9.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T10:46:54.119Z",
-      "text": "Started T15e: The count on screen. An Opus builder is putting the count on screen: HIDE, the dark, climbing into hiding places, peeking, the health bar, being found",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T10:46:25.117Z",
-      "text": "Paused T15k: waiting for checked and merged (7dc9958); marked done once it's in the build you play, with the day screens",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T10:46:25.026Z",
-      "text": "Started T15k: The Blender Minder in the game. reopened",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T10:46:20.733Z",
-      "text": "Finished T15k: The Blender Minder in the game.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T10:46:20.631Z",
-      "text": "Started T15d: The count in the run and over the network. A Sonnet agent is checking the count in the run: three clients on lossy links must agree on every count",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T10:46:20.493Z",
-      "text": "Started T18k: Bed and the day board on screen. A Sonnet agent is running the combined check of the day screens with everything else (floors, sounds, crewmates, the Blender Minder)",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T10:15:13.393Z",
-      "text": "New build in play/ (GoingDown-2026-11-17-0344.zip): ride down to the Annex with the Temp on floor 3 and the Playroom on floor 4; your recorded sounds; the bigger lift. The lab-box server is updated, and a two-player game over the public address passed.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T10:14:51.569Z",
-      "text": "Started T15i: The count's voice lines. An Opus builder is recording the count's announcer lines (Hide, the countdown, Coming ready or not, All done) within the voice budget",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T10:14:51.362Z",
-      "text": "Added task T15i: The count's voice lines.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T10:10:44.223Z",
-      "text": "Finished T16e: The place deck: the third floor down is the Annex.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T10:10:38.824Z",
-      "text": "Finished T15c: The Playroom's look and a stand-in Minder.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T10:10:38.707Z",
-      "text": "Finished T15a: The Playroom floor generator.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T10:10:38.601Z",
-      "text": "Finished T16f: The Temp's body in the rules.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T10:10:38.493Z",
-      "text": "Finished T16g: The Temp's figure and its stapler.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T10:10:38.394Z",
-      "text": "Finished TA: Real sounds, and comedy sounds.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T10:10:38.300Z",
-      "text": "Finished T6f: A bigger elevator.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T10:06:46.093Z",
-      "text": "The online check failed on tonight's merges: tests registered tonight need Godot's class list, which a fresh checkout only has after an import. CI now imports first (a45ffce); its next run shows whether that fixed it.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T10:06:12.616Z",
-      "text": "CI failed on 1a817de.",
-      "kind": "ci"
-    },
-    {
-      "at": "2026-11-17T09:59:56.987Z",
-      "text": "Paused T7g: waiting for checked (foot slip 0.8-4.3% headless, 5.7-11.8% live, tags only within 2 m, faces on the masks; breaks red); merged after the combined check that is running on the main copy finishes",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T09:45:38.654Z",
-      "text": "The day rules passed their separate check: bank, ride up, bed, lights out and day 2, the same for every player; the bedtime count really cannot be stopped; no tape banked twice or from the floor.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T09:45:38.499Z",
-      "text": "Paused T18j: waiting for checked (every player agreed with the host at every stop over a link that lost 1,960 messages; four deliberate breaks red); it goes into the build together with its screens (T18k), because the old screens stop at BANK",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T09:44:50.098Z",
-      "text": "Started T15d: The count in the run and over the network. An Opus builder is wiring the hide-and-seek count into the run and the network (built on the day rules)",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T09:44:49.933Z",
-      "text": "Started T7g: Crewmates in motion: no foot sliding, name tags readable at 8 m, drawn faces on the mask screens. A Sonnet agent is checking crewmate motion (foot slip 0.8-4.3% headless, under 15% live) and the close-only name tags",
-      "kind": "start"
     }
   ]
 }

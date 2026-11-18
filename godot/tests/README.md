@@ -23,6 +23,11 @@ on lossy links) keeps no counts either; run it alone with `npm run godot:test --
 the help prompt and its bar, the out screen) against the test's own reading of B6; the same on screen,
 with two real game windows over the network, is `node godot/tools/play_down.mjs`.
 
+`test_scripts_load` (first in every run, the quick set included) loads every `.gd` script under `client/`,
+`face/`, `net/`, `server/`, `sim/`, `tools/` and `tests/`: a script that does not parse or compile fails it
+(on 17 Nov a duplicate constant in `client/sfx.gd` stopped the game loading its sounds while every other
+test passed, because none of them loads the client's scripts).
+
 The scenario inputs that are data rather than code (the bridge's requests, the network scripts, the
 maths samples, the literal table) are in `tests/inputs/` and never change when goldens are recorded.
 

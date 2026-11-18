@@ -1,8 +1,9 @@
 // First copied from the client trial on 16 Nov 2026; this file is now edited here (see godot/README.md).
 // The scripted playthrough, the same for the browser build (tools/play_web.mjs) and the Windows
 // build (tools/play_desktop.mjs): step out, the clean side, the corrupted side, the Orderly's corridor,
-// watch it (it does not move), turn away (it moves), take a reading, call the lift, flee at the blackout
-// warning, come back when the lights return, board on BANK, bank and ride UP to the prison; read the
+// watch it (it does not move), turn away (it moves), take a reading, call the lift, back off in the blinks,
+// get into a hide at the blackout warning (tools/careful.mjs: alone a catch is the wipe since the owner's
+// 17 Nov changes), come back when the lights return, board on BANK, bank and ride UP to the prison; read the
 // report board, the closed teller windows, hold F at your bunk, the bed count, lights out, wake on day 2
 // at depth 1; that day rides DOWN, and on floor 2 the camera drops for creeping and for being down (with
 // the eye sent checked every frame).
@@ -11,6 +12,7 @@
 // opts: { shots (folder), only, report (file name), firstFrameMs, busPeaks (desktop: assert sound by bus) }
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { chooseHide, getIn, getOut, hideForTheWait, hidesOf, safeHide } from './careful.mjs';
 
 export async function playthrough(driver, opts) {
 const shots = opts.shots;
@@ -181,6 +183,8 @@ await cmd(`face ${ePos.x} ${ePos.z} ${es.level * 3.2 + 1.4}`);
 s = await until((s) => s.orderly.seeing === true, 4000, 50);
 const o0 = { x: s.orderly.x, z: s.orderly.z };
 check('the Orderly is in view and seen', s.orderly.seeing === true && s.orderly.drawn === true, `mode ${s.orderly.mode}, ${s.orderly.distance.toFixed(1)} m`);
+// How it is drawn in the light (client/orderly_view.gd look): the blackout's frames are held to it (step 7).
+const litLook = s.orderly.look ?? {};
 await shot('orderly-watched');
 // Keep watching for 2.5 s: it may wake (seen for a second), but it must not move.
 let moved = 0;
@@ -231,12 +235,32 @@ s = await until((s) => s.me.canCall === true, 3000);
 check('at the lift, the call button is in reach', s.me.canCall === true, `phase ${s.phase}, prompt "${s.client.prompt}", at (${s.me.cell.x},${s.me.cell.y})`);
 await cmd('call');
 s = await until((s) => s.phase === 'coming', 3000, 50);
+const calledAt = s.t;
 check('the call: the car is coming, the indicator shows where it starts', s.phase === 'coming' && s.call && s.call.floorsAway > 0, `floors away ${s.call?.floorsAway}, eta ${s.call?.eta?.toFixed(1)} s, indicator ${s.client.indicator}`);
-await wait(500);
-await soundCheck('the announcer answers the call', 'Voice', 4000);
+console.log(`  at the call the Orderly is ${s.orderly.distance.toFixed(1)} m away (L${s.orderly.level}, ${s.orderly.mode})`);
+// The picture at once, then on with the wait while the announcer is listened for (desktop: 4 s of bus peaks,
+// sampled alongside; the test channel answers in order). Standing at the lift for those 4 s is how the
+// final desktop runs before this change were caught, before they reached a hide: with the owner's 17 Nov
+// rules nobody stands still in the open after calling.
 await shot('called-indicator');
+s = await state();
+if (s.orderly.level === s.me.level && s.orderly.distance < 30) await cmd(`face ${s.orderly.x} ${s.orderly.z} ${(s.orderly.pose?.y ?? 0) + 1.6}`);
+const announcer = soundCheck('the announcer answers the call', 'Voice', 4000);
 // ---- 7. The wait, played the way a person would: watch the Orderly when it is in view (it freezes),
-// back off down the clean corridor while a blink is warned or on, and at the blackout warning, flee.
+// back off down the clean corridor while a blink is warned or on, and get into a hide for the blackout.
+// Since the owner's 17 Nov changes the blackout is longer (T20c) and the Orderly hunts faster (T20h), and
+// alone a catch is down, out and the wipe (T8a/T8c): running down the corridor no longer outlasts it, as
+// this script used to (17 Nov, the rules alone with the game's flags, 10 seeds each on a Clinic and an Annex:
+// standing at the lift through the wait, watching the Orderly or not, 18 of 20 caught; in a hide entered
+// unseen, 0 of 20). A careful player gets into a hide it cannot see them get into (T19b; found only
+// if it saw you get in), the quiet way, and stays in until the lights come back with the car: in a lit
+// stretch, with the Orderly watched (frozen) and well away from the hide (tools/careful.mjs), as soon as
+// there is one: standing in the open through the blinks is how this script was caught (a blink is 1 to 6 s
+// and the paced Orderly hunts at 3.8 m/s). If no such moment comes before the blackout warning, the best hide left
+// at the warning.
+const ctx = { cmd, state, wait, until };
+const hidesHere = await hidesOf(ctx);
+let waitHide = null;
 const far = (() => {
   // The walkable level-0 cell at about 18 cells' walk from the lift, farthest from the Orderly's start.
   let best = null;
@@ -255,45 +279,92 @@ const watchOrderly = async (s) => {
   if (s.orderly.level === s.me.level && s.orderly.distance < 30) await cmd(`face ${s.orderly.x} ${s.orderly.z} ${(s.orderly.pose?.y ?? 0) + 1.6}`);
 };
 s = await state();
+let hideNote = '';
+let noneNote = false;
 while (s.phase === 'coming' && !(s.warn && s.blink?.blackout)) {
   if (s.dark && !s.blackout) sawBlink = true;
-  if ((s.warn || s.dark) && !fleeing) {
-    await cmd(`walkto 0 ${far.x} ${far.y} 5`);
-    fleeing = true;
-  } else if (!s.warn && !s.dark && fleeing) {
-    await cmd('stopwalk');
-    fleeing = false;
+  if (s.mySeek?.phase !== 'inside') {
+    if ((s.warn || s.dark) && !fleeing) {
+      await cmd(`walkto 0 ${far.x} ${far.y} 5`);
+      fleeing = true;
+    } else if (!s.warn && !s.dark && fleeing) {
+      await cmd('stopwalk');
+      fleeing = false;
+    }
+    if (!fleeing && !s.client.noise) {
+      await watchOrderly(s);
+      // Within 30 m (as tools/careful.mjs hideForTheWait): on some floors no hide nearer the lift is clear of it.
+      // With none clear that near, one up to 60 m out (still away from it: safeHide wants its front further
+      // from the Orderly than we are): standing at the lift through the blinks is how this script was caught
+      // on 17 Nov when the Orderly came down by the one near hide (desktop, final run before this change).
+      const h = waitHide ? null : safeHide(hidesHere, s, 30) ?? safeHide(hidesHere, s, 60);
+      if (!h && !waitHide && !noneNote) {
+        noneNote = true;
+        console.log(`  no hide clear of the Orderly within 60 m yet: it is at L${s.orderly.level} (${s.orderly.x.toFixed(1)}, ${s.orderly.z.toFixed(1)}), ${s.orderly.distance.toFixed(1)} m away; we are at (${s.me.x.toFixed(1)}, ${s.me.z.toFixed(1)})`);
+      }
+      if (h) {
+        waitHide = h;
+        hideNote = `lit, ${(s.t - calledAt).toFixed(1)} s after the call, the Orderly ${s.orderly.distance.toFixed(1)} m away (${s.orderly.seeing ? 'watched' : 'not in view'})`;
+        s = await getIn(ctx, h);
+        continue;
+      }
+    }
   }
-  if (!fleeing && !s.client.noise) await watchOrderly(s);
   await wait(60);
   s = await state();
 }
+await announcer;
 check('blinks before the blackout (it moves in them, frozen again when the lights return)', sawBlink && (s.events.blinkStart ?? 0) > 0, `blink starts ${s.events.blinkStart ?? 0}, caught ${s.events.caught ?? 0} times`);
 check('the blackout warning', s.warn === true && s.blink?.blackout === true, `phase ${s.phase}`);
 await shot('blackout-warning');
-await cmd(`walkto 0 ${far.x} ${far.y} 5`);
+if (s.mySeek?.phase !== 'inside') {
+  waitHide = chooseHide(hidesHere, s);
+  hideNote = `at the blackout warning, the Orderly ${s.orderly.distance.toFixed(1)} m away`;
+  if (waitHide) s = await getIn(ctx, waitHide);
+}
+console.log(`  hid in ${JSON.stringify(waitHide)}: ${hideNote}`);
+check('in a hide for the blackout, unseen getting in (no reason to look in)', s.mySeek?.phase === 'inside' && s.me.status === 'ok' && (s.events.reason ?? 0) === 0,
+  `hide ${waitHide?.id} (${waitHide?.kind}), got in ${hideNote}; phase ${s.mySeek?.phase}, status ${s.me.status}, reasons ${s.events.reason ?? 0}`);
 s = await until((s) => s.blackout === true && s.client.emergency >= 1, 8000, 50);
-check('the blackout: dark, emergency lighting on, the Orderly never drawn', s.blackout && s.client.emergency >= 1 && s.orderly.drawn === false, `emergency ${s.client.emergency}, drawn ${s.orderly.drawn}`);
+check('the blackout: dark, emergency lighting on', s.blackout && s.client.emergency >= 1, `emergency ${s.client.emergency}`);
 await wait(200);
 await shot('blackout-emergency-strips');
-let drawnInDark = false;
-s = await until((s) => {
-  if (s.dark && s.orderly.drawn) drawnInDark = true;
-  return s.phase !== 'coming';
-}, 40000, 50);
-await cmd('stopwalk');
+// In the dark the Orderly is drawn as it is (owner, 17 Nov: "If the lights are off, don't make a
+// silhouette, just don't hide it"; net/client.gd draw_in_dark, T20a). This replaces the old rule (never
+// drawn while dark): on every dark frame it is not hidden (unless it has us: taken, or the catch's noise),
+// and it is never drawn brighter or outlined: the same look as in the light (client/orderly_view.gd look),
+// with no glow, outline pass, overlay or light added.
+const dark = { frames: 0, drawn: 0, hidden: 0, changed: 0, last: null };
+const lookOf = (l) => `sig ${l?.sig}, glow ${l?.glow}, unshaded ${l?.unshaded}, passes ${l?.passes}, overlays ${l?.overlays}, lights ${l?.lights}`;
+const darkFrame = (s) => {
+  if (!s.dark) return;
+  dark.frames++;
+  if (s.orderly.drawn) {
+    dark.drawn++;
+    const l = s.orderly.look ?? {};
+    if (l.sig !== litLook.sig || l.glow !== litLook.glow || l.unshaded !== litLook.unshaded || l.passes !== litLook.passes || l.overlays !== litLook.overlays || l.lights !== litLook.lights) {
+      dark.changed++;
+      dark.last = l;
+    }
+  } else if (s.orderly.pose && !s.orderly.taken && !s.client.noise) dark.hidden++;
+};
+s = await until((s) => { darkFrame(s); return s.phase !== 'coming'; }, 60000, 50);
 // The screen is drawn a little behind the host (interpolation) and the client keeps a blink dark one
 // tick past its end (net/client.gd _is_dark), so the lights come back a moment after the phase turns:
 // within 0.3 s of host time.
 {
-  const lit = s.dark ? await until((s) => { if (s.dark && s.orderly.drawn) drawnInDark = true; return !s.dark; }, 3000, 20) : s;
+  const lit = s.dark ? await until((s) => { darkFrame(s); return !s.dark; }, 3000, 20) : s;
   const late = lit.t - s.t;
-  check('never drawn while dark (heard, not seen)', drawnInDark === false);
+  check('in the dark the Orderly is drawn as it is: never hidden, never brighter or outlined',
+    dark.drawn >= 10 && dark.hidden === 0 && dark.changed === 0 && litLook.passes === 0 && litLook.overlays === 0 && litLook.lights === 0,
+    `drawn on ${dark.drawn} of ${dark.frames} dark frames, hidden on ${dark.hidden}, look changed on ${dark.changed}; lit: ${lookOf(litLook)}${dark.last ? `; dark: ${lookOf(dark.last)}` : ''}`);
   check('the lights come back as the car arrives', s.phase === 'boarding' && !lit.dark && late <= 0.3, `phase ${s.phase}, lit ${late.toFixed(2)} s of host time after it turned, caught ${s.events.caught ?? 0} times so far`);
 }
 
-// ---- 8. The dash back. If it took us at some point, our tape is on the floor where it happened: get it.
+// ---- 8. The dash back: out of the hide (the slow way), the Orderly watched when it is in view. If it took
+// us at some point, our tape is on the floor where it happened: get it.
 if (s.client.noise) s = await until((s) => !s.client.noise, 4000);
+if (s.mySeek?.phase === 'inside') s = await getOut(ctx);
 await watchOrderly(s);
 await wait(300);
 
@@ -424,9 +495,18 @@ s = await until((s) => s.phase === 'away', 15000, 100);
 await walk(p2.landing.level, p2.landing.x, p2.landing.y, 9);
 await cmd('call');
 s = await until((s) => s.phase === 'coming', 3000, 50);
+// The wait, sped up: nobody watches the Orderly at six times the speed, and alone a catch is the wipe (see
+// step 7), so a careful player waits it out in a hide it did not see them get into, and comes out when
+// the car is here.
+{
+  const r = await hideForTheWait(ctx);
+  s = r.s;
+  console.log(`  day 2: waiting in hide ${r.hide?.id} (${r.hide?.kind}), got in with ${r.note}: ${s.mySeek?.phase}, status ${s.me.status}, reasons ${s.events.reason ?? 0}`);
+}
 await cmd('timescale 6');
 s = await until((s) => s.phase !== 'coming', 120000, 100);
 await cmd('timescale 1');
+if (s.mySeek?.phase === 'inside') s = await getOut(ctx);
 await walk(p2.landing.level, p2.landing.x, p2.landing.y, 9);
 await cmd(`face ${p2.car.doorX + p2.car.inX * 2} ${p2.car.doorZ + p2.car.inZ * 2}`);
 await cmd('move 1 0 0 0');
