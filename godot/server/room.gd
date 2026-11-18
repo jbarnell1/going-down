@@ -46,6 +46,8 @@
 #
 # The run has Lonely (`lonely`, on unless a test turns it off: sim/run.gd, sim/lonely.gd; T19c): the Annex's
 # Temp goes only for a player who is alone, and breaks off the moment they are not.
+# The run has the tuned Playroom (`playroom_tuned`, on unless a test turns it off: sim/run.gd, sim/seek.gd T15m):
+# 30-45 s to hide, the anger bar, and the Minder grabs anyone within 1 m outside a count.
 extends RefCounted
 
 const Run = preload("res://sim/run.gd")
@@ -118,6 +120,9 @@ var paced := true
 var car_waits := true
 ## Lonely in the next run (the game's; tests may turn it off: sim/run.gd lonely, sim/lonely.gd).
 var lonely := true
+## The Playroom tuned from the owner's first play in the next run (the game's; tests may turn it off: sim/run.gd
+## playroom_tuned, sim/seek.gd T15m).
+var playroom_tuned := true
 ## Tick cost, for the log: total and worst microseconds, and ticks.
 var tick_us := 0
 var tick_max_us := 0
@@ -208,7 +213,7 @@ func _start(now: float) -> void:
 	for id: String in people:
 		roster.append(id)
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
-	rules = HostRules.new(true, 1, Places.FULL, days, quota and not HostRules.quota_off_by_arg(false), downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely)
+	rules = HostRules.new(true, 1, Places.FULL, days, quota and not HostRules.quota_off_by_arg(false), downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned)
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))

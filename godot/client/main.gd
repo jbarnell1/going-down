@@ -46,6 +46,10 @@ const Day = preload("res://sim/day.gd")
 const HideView = preload("res://client/hide_view.gd")
 const QuotaView = preload("res://client/quota_view.gd")
 const DownView = preload("res://client/down_view.gd")
+const HintCues = preload("res://client/hint_cues.gd")
+## Logs, crash and F9 reports for game night (client/telemetry.gd): read-only on this node.
+const Telemetry = preload("res://client/telemetry.gd")
+const BuildInfo = preload("res://net/build_info.gd")
 
 const VFOV := 70.0
 const SENS := 0.0022
@@ -101,6 +105,8 @@ var hide_view: HideView
 var quota_view := QuotaView.new()
 ## Down first, then out on screen: your timer, the help prompt, the out screen, the red spots (client/down_view.gd).
 var down_view := DownView.new()
+## The hints this screen triggers itself (client/hint_cues.gd; the gate is client/hints.gd, AH1).
+var hint_cues := HintCues.new()
 ## The floor's red spots are drawn under this (rebuilt with each floor).
 var spots_root: Node3D = null
 ## Caught and down: until when (msec) the camera turns to the resident bent over you (B6: "turns you
@@ -228,6 +234,10 @@ func _ready() -> void:
 		process_mode = Node.PROCESS_MODE_DISABLED
 		get_tree().change_scene_to_file.call_deferred("res://client/prison_demo.tscn")
 		return
+	if OS.get_cmdline_user_args().has("scene=tape"):  # the orientation tape on its own (client/tape_demo.gd)
+		process_mode = Node.PROCESS_MODE_DISABLED
+		get_tree().change_scene_to_file.call_deferred("res://client/tape_demo.tscn")
+		return
 	var t0 := Time.get_ticks_msec()
 	_t0_us = Time.get_ticks_usec()
 	# Where the client makes its plans: every floor from the game's deck (the third floor down is the
@@ -247,8 +257,12 @@ func _ready() -> void:
 		_test_server = TCPServer.new()
 		var err := _test_server.listen(_test_port, "127.0.0.1")
 		print("test channel on 127.0.0.1:%d %s" % [_test_port, "ready" if err == OK else "FAILED %d" % err])
+	add_child(Telemetry.new(self))
 	start.remember = not automated
 	if automated:
+		# A test starts with no hint record and never writes the player's (user://hints.cfg).
+		announcer.persist = false
+		announcer.hints.from_save({})
 		# A test draws its own faces and must never change the player's saved one.
 		FaceCodec.save_path = "user://face/test_last_face.txt"
 	if not join_arg.is_empty():
@@ -543,6 +557,7 @@ func _leave_room() -> void:
 	_back_to_title()
 
 func _enter_game() -> void:
+	# HOOK (story.md ST1, for FD6's controls card): play client/orientation_tape.gd (start(), await finished) before the card, once per player (save tape_seen).
 	mode = "game"
 	start.show_screen("")
 	hud.osd_on = true
@@ -558,6 +573,8 @@ func _close_words(code: int) -> String:
 			return "THE ROOM IS FULL: 8 PLAYERS ARE IN."
 		4003, 4004, 4005, 4006:
 			return "THE SERVER DROPPED THIS GAME: CODE %d." % code
+		4007:
+			return BuildInfo.OUT_OF_DATE.to_upper()
 	if not _ever_connected:
 		return "CANNOT REACH THE SERVER. CHECK THE ADDRESS. AFTER WRONG PASSPHRASES IT REFUSES THIS PC FOR UP TO A MINUTE."
 	if code == 1001:
@@ -586,6 +603,7 @@ func _clear_world() -> void:
 
 ## A run has begun on this screen (alone or with friends): the presentation starts fresh.
 func _on_new_run() -> void:
+	hint_cues.reset()
 	pitch = 0.0
 	raise_latch = false
 	ending = {}
@@ -682,6 +700,8 @@ func _input(event: InputEvent) -> void:
 			var k0 := event as InputEventKey
 			if k0.pressed and not k0.echo and k0.physical_keycode == KEY_ESCAPE and start.screen != "face":
 				menu_overlay = not menu_overlay
+			elif menu_overlay and k0.pressed and not k0.echo and k0.physical_keycode == KEY_H:
+				_set_hints(not announcer.hints.enabled)
 			elif not menu_overlay:
 				start.key(k0)
 			get_viewport().set_input_as_handled()
@@ -732,9 +752,18 @@ func _input(event: InputEvent) -> void:
 			pending_pick = true
 			pending_hide = true
 			pending_hide_fast = Input.is_action_pressed("sprint")
+		elif k.physical_keycode == KEY_H:
+			_set_hints(not announcer.hints.enabled)
 		elif k.physical_keycode == KEY_T:
 			var st: float = tape_mat.get_shader_parameter("strength")
 			tape_mat.set_shader_parameter("strength", 0.0 if st > 0.5 else 1.0)
+
+## HINTS: ON / OFF (the Esc menu's H): the announcer's hints, kept for this player in user://hints.cfg.
+func _set_hints(on: bool) -> void:
+	announcer.set_hints_on(on)
+	hud.hints_on = on
+	hud.note = "HINTS ON" if on else "HINTS OFF"
+	_note_until = Time.get_ticks_msec() + 1500
 
 func _wheel_open() -> void:
 	if mode != "game" or snap.is_empty() or snap.has("waiting"):
@@ -832,6 +861,7 @@ func _process(delta: float) -> void:
 	if OS.has_feature("web") and frames == 3:
 		JavaScriptBridge.eval("window.gdReady = true; window.gdFirstFrameMs = performance.now();", true)
 	hud.menu_foot = "CLICK TO PLAY" if mode == "game" else "ESC TO GO BACK"
+	hud.hints_on = announcer.hints.enabled
 	if Time.get_ticks_msec() > _note_until:
 		hud.note = ""
 	if link == null:
@@ -954,6 +984,9 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		_build_floor(s["plan"])
 	if level == null:
 		return
+	announcer.place = str(link.plan_dict.get("place", ""))
+	announcer.days_on = s.get("day") != null
+	announcer.my_id = link.my_id()
 	_present(s.get("events", []), now)
 	for em: Dictionary in s.get("emotes", []):
 		others.play_emote(str(em["player"]), str(em["emote"]))
@@ -1123,13 +1156,16 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		hud.quota_line = ""
 	_show_day(s, now)
 	_show_count(s, dt)
+	var lc := link.client()
+	hint_cues.update(announcer, s, lc.latest if lc != null else null, lc.quota() if lc != null else null, car_waiting, now)
 	_show_down(s, now, dt, noise)
 	var sk: Variant = s.get("seek")
 	if sk is Dictionary and (_seek_hist.is_empty() or _seek_hist[-1][0] != s["t"]):
 		var hs := {}
 		for sp: Dictionary in (sk as Dictionary)["players"]:
 			hs[str(sp["id"])] = sp["health"]
-		_seek_hist.append([s["t"], hs])
+		# The tuned Playroom (T15m): the host's anger in that snapshot too, or null.
+		_seek_hist.append([s["t"], hs, (sk as Dictionary).get("anger")])
 		if _seek_hist.size() > 80:
 			_seek_hist.pop_front()
 	_show_end(now)
@@ -1207,6 +1243,10 @@ func _show_count(s: Dictionary, dt: float) -> void:
 	hud.seek_note = ""
 	hud.health = -1.0
 	var r := hide_view.update(s, dt, _now(), link.names(), link.my_id(), sfx, announcer, hud, level, s.get("others", []))
+	# The count as this screen has it, for the hints' gate (client/hints.gd number_in).
+	var cev: Dictionary = s.get("countEvent", {})
+	announcer.count_ctx = {} if cev.is_empty() else {"phase": hide_view.count_phase, "left": hide_view.count_left,
+		"len": int(roundf(float(cev.get("len", 0.0)))), "last": bool(cev.get("last", false))}
 	if not bool(r.get("on", false)):
 		return
 	var dk := float(r["dark"])
@@ -1402,7 +1442,7 @@ func _present(events: Array, now: int) -> void:
 				pitch = 0.0
 				raise_latch = false
 				_day_note_until = now + 4000
-				announcer.start_run()
+				announcer.start_run(false)
 			"banked":
 				var summary: Dictionary = e["summary"]
 				var shares: Dictionary = summary["shares"]
@@ -1825,6 +1865,14 @@ func _command(c: String) -> String:
 					sfx.play(p[1])
 		"say":
 			announcer.request(p[1], 9000)
+		"clock":
+			# The engine's ms, the clock the announcer's history and hint log are stamped with.
+			return JSON.stringify({"ms": Time.get_ticks_msec()})
+		"hints":
+			# hints on | off: the Esc menu's H.
+			if p.size() >= 2:
+				_set_hints(p[1] == "on")
+			return JSON.stringify({"on": announcer.hints.enabled})
 		"props":
 			return JSON.stringify(level.prop_spots if level != null else [])
 		"down":
@@ -1931,7 +1979,8 @@ func _test_state() -> Dictionary:
 		"client": {"yaw": yaw, "pitch": pitch, "emergency": emergency, "light": light, "doors": lift.doors if lift else 0.0,
 			"indicator": lift.indicator_text if lift else "", "slip": inst_view.slip_text, "slipShown": inst_view.slip_shown(),
 			"raise": inst_view.raise, "needle": inst_view.needle, "needleAngle": inst_view.angle, "subtitle": announcer.subtitle,
-			"spoken": announcer.history.map(func(h: Dictionary) -> String: return str(h["id"])), "caught": caught_at >= 0, "noise": _noise_on(),
+			"spoken": announcer.history.map(func(h: Dictionary) -> String: return str(h["id"])), "history": announcer.history, "hintsOn": announcer.hints.enabled,
+			"hintLog": announcer.hint_log.slice(maxi(0, announcer.hint_log.size() - 60)), "caught": caught_at >= 0, "noise": _noise_on(),
 			"wentDown": hud.went_down, "end": hud.end_lines.map(func(l: Dictionary) -> String: return str(l["text"])), "tapeText": hud.tape_text,
 			"prompt": hud.prompt, "menu": hud.menu_on, "built": built_depth, "hudSize": [hud.size.x, hud.size.y], "lift": _lift_drawn(),
 			"wheel": wheel_open, "wheelSel": hud.wheel_sel, "note": hud.note, "tags": hud.tags.map(func(t: Dictionary) -> String: return str(t["text"])), "tagRange": TAG_RANGE,
@@ -1942,7 +1991,8 @@ func _test_state() -> Dictionary:
 		"seek": s.get("seek"), "mySeek": s.get("mySeek"), "countEvent": s.get("countEvent"), "nearHide": s.get("nearHide"), "hideCam": s.get("hideCam"),
 		"place": link.plan_dict.get("place", ""),
 		"hide": hide_view.describe(), "hud": {"health": hud.health, "rates": hud.health_rates, "countText": hud.count_text, "countBy": hud.count_by,
-			"seekNote": hud.seek_note, "subtitle": hud.subtitle, "bigNote": hud.big_note, "centerNote": hud.center_note},
+			"seekNote": hud.seek_note, "subtitle": hud.subtitle, "bigNote": hud.big_note, "centerNote": hud.center_note,
+			"anger": hud.anger, "angerRates": hud.anger_rates},
 		"quota": {"host": link.client().quota() if link.client() != null else null, "panel": lift.quota_text, "tone": lift.quota_tone,
 			"hud": hud.quota_line, "carWaiting": car_waiting, "view": quota_view.describe(), "at": [lift.quota_point().x, lift.quota_point().y, lift.quota_point().z]},
 		"downs": {"host": s.get("downs"), "view": down_view.describe(), "hud": {"head": hud.down_head, "left": hud.down_left, "line": hud.down_line,

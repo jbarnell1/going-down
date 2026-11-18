@@ -6,3 +6,6 @@ tools/node_modules/
 !/tools/
 # Builds (npm run godot:export) and the playthroughs' pictures: rebuildable, never committed.
 export/
+# The build id npm run godot:export writes (net/build_info.gd), and the uid Godot gives it.
+/build_id.gd
+/build_id.gd.uid

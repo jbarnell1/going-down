@@ -10,20 +10,25 @@
 #   1. TCP accepted: refused at once (closed, nothing read) if its address is serving a back-off after
 #      failed passphrases, or if MAX_PENDING connections are already waiting to prove theirs.
 #   2. WebSocket handshake, then the first message must be the hello:
-#        ["hello", 1, "<passphrase>", "<name>"]
+#        ["hello", 1, "<passphrase>", "<name>", "<build id>"]
 #      The passphrase is compared in constant time (SHA-256 of both, every byte compared). A wrong or
 #      missing one, a first message of any other shape, or no hello within AUTH_TIMEOUT closes the
 #      connection (close code 4001) before any game message is read, and counts a failure against the
 #      address: from the third failure on, that address is refused for 2^(failures - 2) seconds (at
 #      most BACKOFF_MAX), whatever it sends. A bare TCP connection that never finishes the WebSocket
 #      handshake (a health check) is dropped after AUTH_TIMEOUT without counting as a failure.
+#      Then the build (net/build_info.gd): a client whose build id is not this server's (or that sent
+#      none) is closed with 4007 and BuildInfo.OUT_OF_DATE, unless this server's own id is DEV.
 #   3. Accepted: given an id ("c1", "c2", ...) unless MAX_PLAYERS are already in (4002, full).
 #      From then on every message must be text, at most MAX_MESSAGE bytes (4003), at most MAX_RATE
 #      per second over a one-second window (4004), and something must arrive at least every
 #      IDLE_TIMEOUT seconds (4006). What a message may say is the room's business (server/room.gd),
 #      which closes the connection (4005) for anything outside the protocol.
-# The passphrase is never stored beyond its hash, never logged, never sent anywhere.
+# The passphrase is never stored beyond its hash, never logged, never sent anywhere. Addresses are
+# logged only as a short salted hash (addr_tag): enough to tell connections apart within one night.
 extends RefCounted
+
+const BuildInfo = preload("res://net/build_info.gd")
 
 const MAX_PLAYERS := 8
 const MAX_PENDING := 4
@@ -44,6 +49,7 @@ const CLOSE_TOO_BIG := 4003
 const CLOSE_FLOOD := 4004
 const CLOSE_PROTOCOL := 4005
 const CLOSE_IDLE := 4006
+const CLOSE_VERSION := 4007
 
 class Conn:
 	var ws: WebSocketPeer
@@ -58,7 +64,11 @@ class Conn:
 ## Events since the last poll: {kind: "joined", id, name} | {kind: "message", id, data} | {kind: "left", id}.
 var events: Array[Dictionary] = []
 ## Counters for the log.
-var refused := {"backoff": 0, "pending": 0, "auth": 0, "full": 0, "too_big": 0, "flood": 0, "idle": 0, "protocol": 0}
+var refused := {"backoff": 0, "pending": 0, "auth": 0, "full": 0, "too_big": 0, "flood": 0, "idle": 0, "protocol": 0, "version": 0}
+## This server's build (BuildInfo.id(); tests and the server's `build=` argument may set it).
+var build := BuildInfo.id()
+## Why each accepted connection closed, for the night's log: id -> [code, reason]. Its reader erases them.
+var closed := {}
 var _tcp := TCPServer.new()
 var _secret_hash: PackedByteArray
 var _insecure: bool
@@ -67,6 +77,7 @@ var _by_id := {}
 var _fails := {}  # address -> [failures, refused until]
 var _next_id := 1
 var _log: Callable
+var _salt := Crypto.new().generate_random_bytes(16)
 
 ## `secret`: the passphrase (only its hash is kept); `insecure`: accept any (local tests only).
 ## `log`: Callable(String) for one-line notes (never given the passphrase).
@@ -121,7 +132,15 @@ func _close(c: Conn, code: int, reason: String) -> void:
 		c.closing_since = Time.get_ticks_msec() / 1000.0
 	if not c.id.is_empty() and _by_id.has(c.id):
 		_by_id.erase(c.id)
+		closed[c.id] = [code, reason]
 		events.append({"kind": "left", "id": c.id})
+
+## An address as the log may show it: 8 hex digits of a salted SHA-256 (the salt is new every start), so
+## the same address reads the same all night and no address is ever written down.
+func addr_tag(addr: String) -> String:
+	var b := _salt.duplicate()
+	b.append_array(addr.to_utf8_buffer())
+	return _sha256(b).hex_encode().left(8)
 
 func _fail(addr: String, now: float) -> void:
 	var f: Array = _fails.get(addr, [0, 0.0])
@@ -167,6 +186,7 @@ func poll(now: float) -> void:
 		if st == WebSocketPeer.STATE_CLOSED:
 			if not c.id.is_empty() and _by_id.has(c.id):
 				_by_id.erase(c.id)
+				closed[c.id] = [c.ws.get_close_code(), c.ws.get_close_reason()]
 				events.append({"kind": "left", "id": c.id})
 			continue
 		if c.closing_since >= 0.0:
@@ -229,25 +249,31 @@ func _read(c: Conn, now: float) -> void:
 
 func _hello(c: Conn, text: String, now: float) -> void:
 	var p: Variant = JSON.parse_string(text) if text.length() <= 512 else null
-	var ok: bool = p is Array and (p as Array).size() == 4 and p[0] is String and p[0] == "hello" and (p[1] is float or p[1] is int) \
+	var ok: bool = p is Array and ((p as Array).size() == 4 or (p as Array).size() == 5) and p[0] is String and p[0] == "hello" and (p[1] is float or p[1] is int) \
 		and float(p[1]) == 1.0 and p[2] is String and p[3] is String
 	if not ok or not _secret_ok(p[2]):
 		refused["auth"] += 1
 		_fail(c.addr, now)
 		_close(c, CLOSE_AUTH, "wrong passphrase")
-		_log.call("refused a connection from %s: no valid passphrase" % c.addr)
+		_log.call("refused a connection from address %s: no valid passphrase" % addr_tag(c.addr))
+		return
+	var their_build: String = p[4] if (p as Array).size() == 5 and BuildInfo.valid(p[4]) else ""
+	if not BuildInfo.accepts(build, their_build):
+		refused["version"] += 1
+		_close(c, CLOSE_VERSION, BuildInfo.OUT_OF_DATE)
+		_log.call("refused a connection from address %s: build %s, this server is %s" % [addr_tag(c.addr), their_build if their_build != "" else "(none)", build])
 		return
 	if _by_id.size() >= MAX_PLAYERS:
 		refused["full"] += 1
 		_close(c, CLOSE_FULL, "the room is full")
-		_log.call("refused a connection from %s: the room is full" % c.addr)
+		_log.call("refused a connection from address %s: the room is full" % addr_tag(c.addr))
 		return
 	_fails.erase(c.addr)
 	c.id = "c%d" % _next_id
 	_next_id += 1
 	_by_id[c.id] = c
-	events.append({"kind": "joined", "id": c.id, "name": _clean_name(p[3])})
-	_log.call("%s joined from %s" % [c.id, c.addr])
+	events.append({"kind": "joined", "id": c.id, "name": _clean_name(p[3]), "build": their_build, "addr": addr_tag(c.addr)})
+	_log.call("%s joined from address %s" % [c.id, addr_tag(c.addr)])
 
 ## A name for the lobby: printable ASCII only, at most 16 characters.
 static func _clean_name(s: String) -> String:
