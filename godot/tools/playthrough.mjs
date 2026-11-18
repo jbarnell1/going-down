@@ -237,9 +237,15 @@ await cmd('call');
 s = await until((s) => s.phase === 'coming', 3000, 50);
 const calledAt = s.t;
 check('the call: the car is coming, the indicator shows where it starts', s.phase === 'coming' && s.call && s.call.floorsAway > 0, `floors away ${s.call?.floorsAway}, eta ${s.call?.eta?.toFixed(1)} s, indicator ${s.client.indicator}`);
-await wait(500);
-await soundCheck('the announcer answers the call', 'Voice', 4000);
+console.log(`  at the call the Orderly is ${s.orderly.distance.toFixed(1)} m away (L${s.orderly.level}, ${s.orderly.mode})`);
+// The picture at once, then on with the wait while the announcer is listened for (desktop: 4 s of bus peaks,
+// sampled alongside; the test channel answers in order). Standing at the lift for those 4 s is how the
+// final desktop runs before this change were caught, before they reached a hide: with the owner's 17 Nov
+// rules nobody stands still in the open after calling.
 await shot('called-indicator');
+s = await state();
+if (s.orderly.level === s.me.level && s.orderly.distance < 30) await cmd(`face ${s.orderly.x} ${s.orderly.z} ${(s.orderly.pose?.y ?? 0) + 1.6}`);
+const announcer = soundCheck('the announcer answers the call', 'Voice', 4000);
 // ---- 7. The wait, played the way a person would: watch the Orderly when it is in view (it freezes),
 // back off down the clean corridor while a blink is warned or on, and get into a hide for the blackout.
 // Since the owner's 17 Nov changes the blackout is longer (T20c) and the Orderly hunts faster (T20h), and
@@ -274,6 +280,7 @@ const watchOrderly = async (s) => {
 };
 s = await state();
 let hideNote = '';
+let noneNote = false;
 while (s.phase === 'coming' && !(s.warn && s.blink?.blackout)) {
   if (s.dark && !s.blackout) sawBlink = true;
   if (s.mySeek?.phase !== 'inside') {
@@ -287,7 +294,14 @@ while (s.phase === 'coming' && !(s.warn && s.blink?.blackout)) {
     if (!fleeing && !s.client.noise) {
       await watchOrderly(s);
       // Within 30 m (as tools/careful.mjs hideForTheWait): on some floors no hide nearer the lift is clear of it.
-      const h = waitHide ? null : safeHide(hidesHere, s, 30);
+      // With none clear that near, one up to 60 m out (still away from it: safeHide wants its front further
+      // from the Orderly than we are): standing at the lift through the blinks is how this script was caught
+      // on 17 Nov when the Orderly came down by the one near hide (desktop, final run before this change).
+      const h = waitHide ? null : safeHide(hidesHere, s, 30) ?? safeHide(hidesHere, s, 60);
+      if (!h && !waitHide && !noneNote) {
+        noneNote = true;
+        console.log(`  no hide clear of the Orderly within 60 m yet: it is at L${s.orderly.level} (${s.orderly.x.toFixed(1)}, ${s.orderly.z.toFixed(1)}), ${s.orderly.distance.toFixed(1)} m away; we are at (${s.me.x.toFixed(1)}, ${s.me.z.toFixed(1)})`);
+      }
       if (h) {
         waitHide = h;
         hideNote = `lit, ${(s.t - calledAt).toFixed(1)} s after the call, the Orderly ${s.orderly.distance.toFixed(1)} m away (${s.orderly.seeing ? 'watched' : 'not in view'})`;
@@ -299,6 +313,7 @@ while (s.phase === 'coming' && !(s.warn && s.blink?.blackout)) {
   await wait(60);
   s = await state();
 }
+await announcer;
 check('blinks before the blackout (it moves in them, frozen again when the lights return)', sawBlink && (s.events.blinkStart ?? 0) > 0, `blink starts ${s.events.blinkStart ?? 0}, caught ${s.events.caught ?? 0} times`);
 check('the blackout warning', s.warn === true && s.blink?.blackout === true, `phase ${s.phase}`);
 await shot('blackout-warning');
