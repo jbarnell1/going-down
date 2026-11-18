@@ -5,10 +5,11 @@
 //   node hub/track.mjs iteration
 //   node hub/track.mjs start T2a "what is happening, in plain words" [--agent claude|openai]
 //   node hub/track.mjs assign T2a --agent claude       label an already active task without restarting it
+//   node hub/track.mjs reserve T2a --for openai|claude|free     change who may pick up unfinished work
 //   node hub/track.mjs done T2a --summary "what is now true and how it was checked" --media shot.png:"caption" --media map.txt
 //   node hub/track.mjs media T3 render.png:"second pass, front view"      attach pictures to a task at any time
 //   node hub/track.mjs gate G2 passed "evidence" [--media ...]           passed | unverified | open
-//   node hub/track.mjs add T1b "Title" --why "why a player cares" [--after T1] [--ns H1,B6 | --ns none --ns-why "..."]
+//   node hub/track.mjs add T1b "Title" --why "why a player cares" [--after T1] [--for openai|claude|free] [--ns H1,B6 | --ns none --ns-why "..."]
 //   node hub/track.mjs link T8 B6,F3            tie a task to North Star mechanics (see hub/ns.mjs); or: link T2w none --why "tooling"
 //        start refuses a task with no link and prints the linked mechanics; done prints them again and
 //        needs --ns "<how the result matches them, or where it differs on purpose and who decided>"
@@ -78,15 +79,36 @@ for (let i = 0; i < argv.length; i++) {
 }
 const flag = (k) => flags[k]?.[0];
 
+const agentLabels = new Map([['openai', 'OpenAI Codex'], ['claude', 'Claude']]);
+
 function taskAgent() {
-  if (flags.agent) {
-    const labels = new Map([['openai', 'OpenAI Codex'], ['claude', 'Claude']]);
-    return labels.get(flag('agent')) ?? die('--agent must be openai or claude');
-  }
+  if (flags.agent) return agentLabels.get(flag('agent')) ?? die('--agent must be openai or claude');
   const codex = Boolean(process.env.CODEX_THREAD_ID);
   const claude = Boolean(process.env.CLAUDECODE || process.env.CLAUDE_CODE_ENTRYPOINT);
   if (codex === claude) return undefined;
   return codex ? 'OpenAI Codex' : 'Claude';
+}
+
+function reservation() {
+  const owner = flag('for');
+  if (owner === 'free') return undefined;
+  if (!agentLabels.has(owner)) die('--for must be openai, claude or free');
+  return owner;
+}
+
+function checkReservation(t, agent) {
+  const owner = agentLabels.get(t.reservedFor);
+  if (owner && agent !== owner) die(`${t.id} is reserved for ${owner}. Ask them to take it or release the reservation first.`);
+}
+
+function ownership(t) {
+  const owner = agentLabels.get(t.reservedFor);
+  const labels = [];
+  if (t.status === 'doing') labels.push(t.agent ? `In progress with ${t.agent}` : 'In progress with agent unreported');
+  if (t.status === 'done' && t.agent) labels.push(`Completed by ${t.agent}`);
+  if (t.status !== 'done' && owner) labels.push(`Reserved for ${owner}`);
+  if (t.status !== 'doing' && t.status !== 'done' && !owner) labels.push('Free for either agent');
+  return labels.length ? ' · ' + labels.join(' · ') : '';
 }
 
 const kindOf = (file) => ({ '.png': 'image', '.jpg': 'image', '.jpeg': 'image', '.webp': 'image', '.txt': 'text', '.glb': 'model', '.mp3': 'audio', '.wav': 'audio' }[path.extname(file).toLowerCase()] ?? 'file');
@@ -120,6 +142,13 @@ function nsIds(spec, why) {
 const gateOf = (s, id) => s.gates.find((g) => g.id === id) ?? die(`no gate ${id}`);
 const feed = (s, text, kind = 'note') => { s.feed.unshift({ at: now(), text, kind }); s.feed = s.feed.slice(0, 200); };
 
+function clearActivity(s, t) {
+  delete t.agent;
+  delete t.doingAt;
+  delete t.doingText;
+  if (s.now === t.id) { s.now = null; s.nowText = ''; }
+}
+
 function render(s) {
   const done = s.tasks.filter((t) => t.status === 'done').length;
   const passed = s.gates.filter((g) => g.status === 'passed').length;
@@ -134,10 +163,11 @@ function render(s) {
   L.push(`- **Answers applied up to:** ${s.answersAppliedTo ?? 'none yet'}`, '');
   L.push('## Tasks', '');
   for (const t of s.tasks) {
-    L.push(`- [${t.status === 'done' ? 'x' : ' '}] **${t.id}** \`${t.status}\` ${t.title}${t.agent ? ' · ' + t.agent : ''}${t.gates?.length ? ` (${t.gates.join(', ')})` : ''}`);
+    L.push(`- [${t.status === 'done' ? 'x' : ' '}] **${t.id}** \`${t.status}\` ${t.title}${ownership(t)}${t.gates?.length ? ` (${t.gates.join(', ')})` : ''}`);
     if (t.why) L.push(`  - Why: ${t.why}`);
     if (t.summary) L.push(`  - Evidence: ${t.summary}`);
     if (t.blocked) L.push(`  - BLOCKED: ${t.blocked}`);
+    if (t.waiting) L.push(`  - Waiting for ${t.waiting}`);
     for (const d of t.todo ?? []) L.push(`  - To do: ${d}`);
   }
   L.push('', '## Gates', '');
@@ -157,7 +187,7 @@ switch (cmd) {
     const t = s.tasks.find((x) => x.id === s.now);
     console.log(`iteration ${s.iteration} | gates ${s.gates.filter((g) => g.status === 'passed').length}/${s.gates.length} | started ${s.startedAt} | limit ${s.deadlineAt}`);
     console.log(`now: ${t ? `${t.id} ${t.title} [${t.status}]` : 'nothing'} | ci: ${s.ci ? `${s.ci.status} ${s.ci.commit}` : 'none'} | answers applied to: ${s.answersAppliedTo ?? 'none'}`);
-    for (const x of s.tasks) console.log(`  ${x.status.padEnd(7)} ${x.id.padEnd(5)} ${x.title}${x.agent ? ' · ' + x.agent : ''}${x.blocked ? '  BLOCKED' : ''}`);
+    for (const x of s.tasks) console.log(`  ${x.status.padEnd(7)} ${x.id.padEnd(5)} ${x.title}${ownership(x)}${x.blocked ? '  BLOCKED' : ''}`);
     process.exit(0);
   }
   case 'render': break;
@@ -173,9 +203,11 @@ switch (cmd) {
   case 'start': {
     const t = task(s, pos[0]);
     if (t.status === 'done' && !flags.reopen) die(`${t.id} is done; pass --reopen to start it again`);
+    const agent = taskAgent();
+    checkReservation(t, agent);
     if (!t.ns) die(`${t.id} has no North Star link. Look first:  node hub/ns.mjs find <words>   then:  node hub/track.mjs link ${t.id} <ids>   (or: link ${t.id} none --why "...")`);
     if (t.ns.length) spawnSync(process.execPath, [path.join(ROOT, 'hub', 'ns.mjs'), 'show', ...t.ns], { stdio: 'inherit' });
-    t.agent = taskAgent();
+    t.agent = agent;
     t.status = 'doing'; t.startedAt ??= now(); delete t.blocked; delete t.waiting;
     // Several steps can be in progress at once (parallel agents): each keeps its own line.
     if (pos[1]) { t.doingText = pos[1]; t.doingAt = now(); }
@@ -186,7 +218,22 @@ switch (cmd) {
   case 'assign': {
     const t = task(s, pos[0]);
     if (t.status !== 'doing' || !flags.agent) die('assign needs an active task and --agent claude or openai');
-    t.agent = taskAgent();
+    const agent = taskAgent();
+    checkReservation(t, agent);
+    t.agent = agent;
+    break;
+  }
+  case 'reserve': {
+    const t = task(s, pos[0]);
+    const owner = reservation();
+    if (t.status === 'done') die(`${t.id} is done; reservations apply to unfinished work`);
+    const label = agentLabels.get(owner);
+    if (owner && t.status === 'doing' && t.agent !== label) {
+      die(`${t.id} is active with ${t.agent ?? 'an unreported agent'}. Resolve the active assignment before reserving it for ${label}.`);
+    }
+    if (owner) t.reservedFor = owner;
+    else delete t.reservedFor;
+    feed(s, owner ? `Reserved ${t.id} for ${label}.` : `Released the reservation for ${t.id}.`);
     break;
   }
   case 'done': {
@@ -199,6 +246,7 @@ switch (cmd) {
     }
     if (flag('ns')) t.nsCheck = flag('ns');
     t.status = 'done'; t.finishedAt = now(); t.summary = flag('summary'); t.todo = [];
+    delete t.reservedFor;
     for (const m of flags.media ?? []) (t.media ??= []).push(keep(m, t.id));
     if (s.now === t.id) { s.now = null; s.nowText = ''; }
     feed(s, `Finished ${t.id}: ${t.title}.`, 'done');
@@ -222,6 +270,7 @@ switch (cmd) {
   case 'add': {
     if (s.tasks.some((t) => t.id === pos[0])) die(`task ${pos[0]} already exists`);
     const t = { id: pos[0], title: pos[1] ?? die('add needs a title'), why: flag('why') ?? '', status: 'todo', gates: (flag('gates') ?? '').split(',').filter(Boolean) };
+    if (flags.for) t.reservedFor = reservation();
     if (flag('ns')) { t.ns = nsIds(flag('ns'), flag('ns-why')); if (flag('ns-why')) t.nsWhy = flag('ns-why'); }
     const after = flag('after') ? s.tasks.findIndex((x) => x.id === flag('after')) : -1;
     if (after === -1) s.tasks.push(t); else s.tasks.splice(after + 1, 0, t);
@@ -238,11 +287,11 @@ switch (cmd) {
   }
   case 'todo': (task(s, pos[0]).todo ??= []).push(pos[1] ?? die('todo needs text')); break;
   case 'todo-clear': task(s, pos[0]).todo = []; break;
-  case 'blocked': { const t = task(s, pos[0]); t.status = 'blocked'; t.blocked = pos[1] ?? die('say why'); feed(s, `Blocked on ${t.id}: ${t.blocked}`, 'blocked'); break; }
+  case 'blocked': { const t = task(s, pos[0]); t.status = 'blocked'; t.blocked = pos[1] ?? die('say why'); clearActivity(s, t); feed(s, `Blocked on ${t.id}: ${t.blocked}`, 'blocked'); break; }
   case 'unblock': { const t = task(s, pos[0]); t.status = 'todo'; delete t.blocked; break; }
   // Nobody is working on it this minute: back to the queue, with what it waits for. Only steps an agent
   // is actually running stay "doing", so the Progress page's "Right now" list is true.
-  case 'wait': { const t = task(s, pos[0]); if (t.status === 'done') die(`${t.id} is done; wait is only for unfinished steps`); t.status = 'todo'; t.waiting = pos[1] ?? die('say what it waits for'); delete t.doingText; delete t.doingAt; if (s.now === t.id) { s.now = null; s.nowText = ''; } feed(s, `Paused ${t.id}: waiting for ${t.waiting}`); break; }
+  case 'wait': { const t = task(s, pos[0]); if (t.status === 'done') die(`${t.id} is done; wait is only for unfinished steps`); t.status = 'todo'; t.waiting = pos[1] ?? die('say what it waits for'); clearActivity(s, t); feed(s, `Paused ${t.id}: waiting for ${t.waiting}`); break; }
   case 'decision': s.decisions.push({ at: now(), text: pos[0] ?? die('decision needs text') }); feed(s, `Took a default: ${pos[0]}`, 'decision'); break;
   case 'ci': s.ci = { status: pos[0], commit: pos[1] ?? '', at: now() }; if (pos[0] !== 'passed') feed(s, `CI ${pos[0]} on ${pos[1] ?? ''}.`, 'ci'); break;
   case 'deadline': {

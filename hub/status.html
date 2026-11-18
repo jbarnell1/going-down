@@ -19,6 +19,8 @@
   .nowlist strong { font-weight: 600; }
   .nowwhen { opacity: .7; white-space: nowrap; }
   .agent { font-size: .85em; color: var(--acc); font-weight: 600; }
+  .task-owners { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; font-size: 14px; }
+  .reservation { color: var(--dim); }
   .now h2 { margin: 0 0 4px; font-size: 18px; display: flex; gap: 10px; align-items: center; }
   .now p { margin: 4px 0 0; color: var(--dim); }
   .spin { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--acc); border-radius: 50%; animation: sp 1s linear infinite; flex: none; }
@@ -199,13 +201,20 @@ function render(d) {
   const active = s.tasks.filter((t) => t.status === 'doing' || t.status === 'blocked');
   const finished = s.tasks.filter((t) => t.status === 'done').sort((a, b) => fin(b) - fin(a));
   const coming = s.tasks.filter((t) => t.status !== 'doing' && t.status !== 'blocked' && t.status !== 'done');
+  const agentLabels = new Map([['openai', 'OpenAI Codex'], ['claude', 'Claude']]);
   const step = (list) => (t, i) => {
     const mark = { done: '✓', doing: '', blocked: '!', todo: String(i + 1) }[t.status] ?? '';
     const dot = el('div', { class: 'dot' }, t.status === 'doing' ? el('span', { class: 'spin' }) : document.createTextNode(mark));
     const card = el('div', { class: 'scard' });
     const h = el('h3', {}, el('span', { text: t.title }), el('span', { class: 'id', text: t.id + (t.gates && t.gates.length ? ' · ' + t.gates.join(', ') : '') }));
     card.append(h);
-    if (t.agent || t.status === 'doing') card.append(el('span', { class: 'agent', text: t.agent || 'Agent unreported' }));
+    const owners = [];
+    const reserved = agentLabels.get(t.reservedFor);
+    if (t.status === 'doing') owners.push(el('span', { class: 'agent', text: t.agent ? `In progress with ${t.agent}` : 'In progress, agent unreported' }));
+    if (t.status === 'done' && t.agent) owners.push(el('span', { class: 'agent', text: `Completed by ${t.agent}` }));
+    if (t.status !== 'done' && reserved) owners.push(el('span', { class: 'reservation', text: `Reserved for ${reserved}` }));
+    if (t.status !== 'doing' && t.status !== 'done' && !reserved) owners.push(el('span', { class: 'reservation', text: 'Free for either agent' }));
+    if (owners.length) card.append(el('div', { class: 'task-owners' }, ...owners));
     if (t.status === 'done' && t.summary) card.append(el('p', { class: 'sum', text: t.summary }));
     else {
       if (t.status === 'doing' && t.doingText) card.append(el('p', { class: 'sum', text: 'Now: ' + t.doingText }));

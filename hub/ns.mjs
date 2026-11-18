@@ -3,7 +3,7 @@
 // prints only what is asked for. Nothing here publishes the document.
 //
 //   node hub/ns.mjs index                 write .local/north-star-index.md: one line per mechanic,
-//                                         with the tracker tasks linked to it (read this, not the HTML)
+//                                         with the linked tracker tasks and their current ownership
 //   node hub/ns.mjs find <ids or words>   print the full text of the mechanics that match
 //                                         (ids like H1 B6, or words: all must appear); falls back to
 //                                         matching lines anywhere in the document
@@ -23,6 +23,7 @@ const INDEX = path.join(ROOT, '.local', 'north-star-index.md');
 const ENT = { '&rsquo;': "'", '&lsquo;': "'", '&ldquo;': '"', '&rdquo;': '"', '&amp;': '&', '&nbsp;': ' ', '&mdash;': ', ', '&ndash;': '-', '&hellip;': '...', '&lt;': '<', '&gt;': '>', '&times;': 'x', '&rarr;': '->' };
 const plain = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/g, (e) => ENT[e] ?? ' ').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/\s+/g, ' ').trim();
 const slug = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24);
+const agentLabels = new Map([['openai', 'OpenAI Codex'], ['claude', 'Claude']]);
 
 export function mechanics() {
   if (!existsSync(DOC)) return null;
@@ -53,13 +54,22 @@ const tasksByNs = () => {
   const map = new Map();
   if (!existsSync(STATE)) return { map, tasks: [] };
   const s = JSON.parse(readFileSync(STATE, 'utf8'));
-  for (const t of s.tasks) for (const id of t.ns ?? []) (map.get(id) ?? map.set(id, []).get(id)).push(`${t.id}${t.status === 'done' ? ' done' : t.status === 'doing' ? ' doing' : ''}`);
+  for (const t of s.tasks) for (const id of t.ns ?? []) (map.get(id) ?? map.set(id, []).get(id)).push(t);
   return { map, tasks: s.tasks };
 };
 
-const print = (m) => {
+const taskLine = (task) => {
+  const owner = agentLabels.get(task.reservedFor);
+  if (task.status === 'done') return `${task.id} (done${task.agent ? ` by ${task.agent}` : ''})`;
+  const plan = owner ? `reserved for ${owner}` : 'free for either agent';
+  if (task.status === 'doing') return `${task.id} (in progress with ${task.agent ?? 'agent unreported'}${owner ? `, ${plan}` : ''})`;
+  return `${task.id} (${plan}${task.status === 'blocked' ? ', blocked' : task.waiting ? ', waiting' : ''})`;
+};
+
+const print = (m, tasks = []) => {
   console.log(`\n${m.id}. ${m.title}  [${m.tier}${m.chips.length ? ': ' + m.chips.join(' | ') : ''}]  (${m.section})`);
   for (const p of m.text) console.log('  ' + p);
+  if (tasks.length) console.log('  Tasks: ' + tasks.map(taskLine).join(' · '));
 };
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
@@ -71,7 +81,12 @@ if (isMain) {
   switch (cmd) {
     case 'ids': console.log(all.map((m) => m.id).join(' ')); break;
     case 'show': {
-      for (const a of args.flatMap((x) => x.split(','))) { const m = byId.get(a.toLowerCase()); if (m) print(m); else console.log(`\n(no mechanic ${a})`); }
+      const { map } = tasksByNs();
+      for (const a of args.flatMap((x) => x.split(','))) {
+        const m = byId.get(a.toLowerCase());
+        if (m) print(m, map.get(m.id));
+        else console.log(`\n(no mechanic ${a})`);
+      }
       break;
     }
     case 'find': {
@@ -107,7 +122,7 @@ if (isMain) {
       for (const m of all) {
         if (m.section !== sec) { sec = m.section; L.push('', `## ${sec}`, ''); }
         const first = (m.text[0] ?? '').split(/(?<=[.!?])\s/)[0].slice(0, 170);
-        L.push(`- **${m.id}** ${m.title} _(${m.tier}${m.chips[0] ? ': ' + m.chips[0] : ''})_: ${first}${map.has(m.id) ? `  **Tasks:** ${map.get(m.id).join(', ')}` : ''}`);
+        L.push(`- **${m.id}** ${m.title} _(${m.tier}${m.chips[0] ? ': ' + m.chips[0] : ''})_: ${first}${map.has(m.id) ? `  **Tasks:** ${map.get(m.id).map(taskLine).join(' · ')}` : ''}`);
       }
       mkdirSync(path.dirname(INDEX), { recursive: true });
       writeFileSync(INDEX, L.join('\n') + '\n');
