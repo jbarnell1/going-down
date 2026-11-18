@@ -242,7 +242,16 @@ static func _other_instance(marker: String) -> bool:
 	if OS.has_feature("web"):
 		return false
 	var pid := FileAccess.get_file_as_string(marker).strip_edges()
-	return pid.is_valid_int() and int(pid) != OS.get_process_id() and OS.is_process_running(int(pid))
+	if not pid.is_valid_int() or int(pid) == OS.get_process_id():
+		return false
+	# OS.is_process_running only answers for any process on Windows; elsewhere it knows its own children only
+	# and reports an engine error for anything else. Linux lists every process under /proc; on other systems a
+	# marker left behind counts as a crash.
+	if OS.get_name() == "Windows":
+		return OS.is_process_running(int(pid))
+	if OS.get_name() == "Linux":
+		return DirAccess.dir_exists_absolute("/proc/%d" % int(pid))
+	return false
 
 ## Moves session.log (and .1) to `to`.log (and .1), replacing what was there.
 func _keep_previous(to: String) -> void:
