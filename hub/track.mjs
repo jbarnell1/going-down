@@ -20,8 +20,11 @@
 //   node hub/track.mjs deadline <iso time> "who decided and why"           move the loop's time limit (the owner's call only)
 //   node hub/track.mjs note "one line for the activity feed"
 //   node hub/track.mjs show                                                print the short status the loop reads
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { once } from 'node:events';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -42,21 +45,25 @@ const die = (m) => { console.error(m); process.exit(1); };
 
 // Two chats can update different tasks at once. Hold the lock across load, edit and save.
 async function lockState() {
-  const local = path.join(ROOT, '.local');
-  mkdirSync(local, { recursive: true });
-  const lock = path.join(local, 'tracker-write.lock');
+  const checkout = createHash('sha256').update(realpathSync.native(path.dirname(STATE))).digest('hex');
+  const name = `going-down-tracker-${checkout}`;
+  // Each address is local, and the kernel releases it even if the writer is killed.
+  let address = { host: '127.0.0.1', port: 16_384 + (Number.parseInt(checkout.slice(0, 4), 16) % 32_768) };
+  if (process.platform === 'win32') address = { path: `\\\\.\\pipe\\${name}` };
+  if (process.platform === 'linux') address = { path: `\0${name}` };
   const deadline = Date.now() + 10000;
   for (;;) {
-    try { mkdirSync(lock); break; }
-    catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-      if (Date.now() >= deadline) die('Tracker is busy. If a writer crashed, verify it stopped before removing .local/tracker-write.lock.');
+    try {
+      const holder = createServer((socket) => socket.destroy()).listen({ ...address, exclusive: true });
+      await once(holder, 'listening');
+      holder.unref();
+      return;
+    } catch (error) {
+      if (error.code !== 'EADDRINUSE') throw error;
+      if (Date.now() >= deadline) die('Tracker is busy. Try again when the other writer finishes.');
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
   }
-  process.on('exit', () => rmdirSync(lock));
-  process.once('SIGINT', () => process.exit(130));
-  process.once('SIGTERM', () => process.exit(143));
 }
 
 // --- arguments: positionals, plus repeatable --flag value ---

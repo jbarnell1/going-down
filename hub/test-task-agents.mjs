@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 
 // Exercise the real CLI in an isolated copy. Nothing here updates the live tracker.
@@ -37,7 +39,37 @@ try {
   assert.equal((await tasks())[0].agent, undefined);
   await run(['done', 'B', '--summary', 'Checked']);
   assert.equal((await tasks())[1].agent, 'Claude');
-  console.log('Tracker agent checks passed, including concurrent starts and handoff.');
+
+  // A linked start calls the North Star helper while it holds the write lock.
+  // Keep the helper blocked on stdin so we can kill the holder before any save.
+  await writeFile(path.join(root, 'hub', 'ns.mjs'), `
+    if (process.argv[2] === 'ids') {
+      console.log('H1');
+    } else {
+      process.stdin.resume();
+      console.log('holding tracker lock');
+    }
+  `);
+  await run(['link', 'C', 'H1']);
+  const holder = spawn(process.execPath, [tracker, 'start', 'C', 'Interrupted'], {
+    env, stdio: ['pipe', 'pipe', 'inherit'],
+  });
+  const exited = once(holder, 'exit');
+  const closed = once(holder, 'close');
+  const output = createInterface({ input: holder.stdout });
+  try {
+    assert.deepEqual(await once(output, 'line', { signal: AbortSignal.timeout(5000) }), ['holding tracker lock']);
+    assert.ok(holder.kill('SIGKILL'));
+    assert.deepEqual(await exited, [null, 'SIGKILL']);
+    assert.equal((await tasks())[2].doingText, 'Reviewing');
+    await run(['assign', 'C', '--agent', 'openai']);
+    assert.equal((await tasks())[2].agent, 'OpenAI Codex');
+  } finally {
+    holder.stdin.end();
+    if (!holder.killed) holder.kill('SIGKILL');
+    await closed;
+  }
+  console.log('Tracker agent checks passed, including concurrent starts, handoff, and recovery after a writer is killed.');
 } finally {
   await rm(root, { recursive: true, force: true });
 }

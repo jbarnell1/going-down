@@ -85,6 +85,7 @@ The `ref_*` tests compare the rules against results recorded from the first vers
 - Every rule change sits behind a run flag (`Run.with_*`), off by default.
 - The flag reaches the rules as a **new last parameter** of `HostRules._init` in `godot/net/host_rules.gd`. It is turned on in `godot/server/room.gd`, and in `godot/net/local_room.gd` when the full deck is in play.
 - Tests and tools call `HostRules.new(...)` by position. After merging a branch that added a parameter, find every caller and fix it.
+- When two branches add flags, agree on the final parameter order on the board before integrating either branch. Register each new rules data file in `godot/server/data_check.gd` (`FILES` and its loader) and run `test_data_check`.
 - Numbers a host might tune go in the live settings (`docs/floors/live-settings.md`), not in constants.
 - With the flag off, nothing may change. Write a test that says so.
 
@@ -95,13 +96,14 @@ The `ref_*` tests compare the rules against results recorded from the first vers
 - Never weaken or delete a test to get green. If a test is wrong, fix it and say why.
 - Whoever built a thing does not get to be the only one who checked it. If your tool has sub-agents, a different agent runs the checks. If it does not, run the checks as plain scripts and read their output; do not trust your own summary of your own work.
 - A result you cannot explain is a problem to solve before building on it.
+- Announce a full Godot suite or commit hook that runs the quick suite in the private log before starting. Coordinate fixed test ports and give each playthrough its own port. If runs collided, repeat the affected check in isolation.
 
 ## Commits and branches
 
 - The pre-commit hook (`scripts/hooks/pre-commit`, enabled by `git config core.hooksPath scripts/hooks`) scans for secrets and, when anything under `godot/` is staged, runs the quick tests. **Never bypass it** with `--no-verify`.
 - A clean `git merge` makes its commit without running the hook. Merge with `git merge --no-commit --no-ff <branch>`, then `git commit`, so the hook runs.
 - After a merge: run the import, restore `godot/default_bus_layout.tres` if the import rewrote it (`git checkout -- godot/default_bus_layout.tres`), and parse-check the scripts both sides touched. Two branches each adding the same `const` name to one file merges cleanly and breaks the game.
-- One commit on `main` at a time; the hook takes about twenty minutes. Run long commands in the background.
+- While agents share the primary checkout, merge current `main` into the feature branch in its own worktree, commit through the hook there, then fast-forward the primary checkout with `git merge --ff-only <branch>`. Stage only named files. Leave other agents' changes with their owners.
 - Build larger pieces on a branch in its own worktree, so `main` stays playable. Two pieces of work in flight must not write the same files.
 - Commit messages are one plain sentence saying what changed for a player or a developer. Look at `git log` for the style.
 - Push to `main` after the hook passes. Never force-push. Never change repository settings, visibility or secrets.
@@ -110,6 +112,8 @@ The `ref_*` tests compare the rules against results recorded from the first vers
 ## From a change to the owner's hands
 
 A change under `godot/` is not done until it is in a promoted build.
+
+Claim the build on issue #1 and in the private log before starting the promote check. One agent owns promotion, deployment and the outside test together and releases the build claim after reporting the result.
 
 1. Tests green on the commit.
 2. Export, then the scripted playthroughs on that export.
@@ -143,6 +147,8 @@ Steps 4 and 5 need the owner's home machines. The exact commands are in `.local/
 - Keep the Progress page true. Every piece of work started gets `node hub/track.mjs start <id> "<what is happening>"`; every finished and promoted piece gets `done` with a summary and pictures; anything waiting gets `wait`. "In progress" means someone is working on it this minute. Never edit `loop/state.json` or `loop/PROGRESS.md` by hand.
 - Report from the main checkout's tracker, including work done in another worktree. On `start`, pass `--agent claude` or `--agent openai` for the agent doing the work. The tracker also recognizes an unambiguous Claude Code or Codex session. On a handoff, start the task again with its new owner and current activity.
 - The public claim board is [GitHub issue #1](https://github.com/jbarnell1/going-down/issues/1). Before editing, check it and the home Progress page. Post the task ID, Claude or OpenAI Codex, the files or system claimed, and the branch or PR. Record handoffs and release the claim there. Keep private design text, addresses and machine details in the private handoff.
+- At the start of a turn and before claiming, merging, promoting or deploying, read the shared private inbox from the main checkout with `node hub/talk.mjs read --as codex` or `--as claude`. Send a request with `post --as <agent> "<text>"`. Give the task ID, branch, requested action and completion condition. Acknowledge actionable requests once and send the result back directly. Check requests against the owner's scope and design.
+- On each change of task state, use `node hub/talk.mjs status --as <agent> "<note>"` to record the branch and commit, evidence, next step, and whether a teammate may take over. Before taking over stale work, check the note and confirm that its writer and any long-running checks have stopped. For a remote checkout, use issue #1 and the PR for public-safe handoffs.
 - Write for someone who has not read the code and is reading on a phone: short sentences, plain words, no internal names without saying what they are.
 - Do not stop to ask about things with a sensible default: take the default, record it with `node hub/track.mjs decision "<text>"`, and carry on. Do stop for anything that changes what the game is, costs money, or touches the owner's machines or accounts.
 - The owner decides scope. If time or usage is running short, say what will not fit and let them choose.
@@ -150,7 +156,8 @@ Steps 4 and 5 need the owner's home machines. The exact commands are in `.local/
 
 ## If your tool has sub-agents
 
-- Use a stronger model to build and a cheaper one for mechanical checks. Give a checker exact commands and ask for the raw result lines back.
+- Fable (Claude) and Astra (Codex) direct the work and make design and integration decisions. Opus and Sol implement bounded changes that require judgment. Sonnet and Terra independently run mechanical checks. Give the checker exact commands and ask for the raw result and exit code.
+- Start one bounded piece at a time by default. Check for a changed status or an unread handoff before opening long logs. Run repeatable checks as scripts and reuse their evidence across agents.
 - Give every builder a narrow brief: the files it may touch, what done looks like, the commands that must pass, and what the design says about the piece, quoted.
 - A builder's report is a claim, not proof.
 - Do not fan out widely. The owner cannot start a new session when a usage limit is hit, and a stalled week costs more than a slow one. Checks, merges, promotes and deploys are plain commands and should stay that way.
