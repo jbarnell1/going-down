@@ -2118,6 +2118,12 @@ func _command(c: String) -> String:
 		"luma":
 			# The mean of the window as drawn: the gamma-encoded luma (Rec. 709 weights) and the linear luminance.
 			return JSON.stringify(_window_luma())
+		"overlays":
+			# overlays 0 | 1: tests only: hide the crisp layers over the picture (the display, a hide's dark
+			# inside) so a picture can be measured as the tape draws it.
+			var on := p.size() < 2 or p[1] != "0"
+			hud.visible = on
+			hide_view.overlay.visible = on
 		"props":
 			return JSON.stringify(level.prop_spots if level != null else [])
 		"down":

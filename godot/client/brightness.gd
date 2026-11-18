@@ -21,11 +21,13 @@ extends RefCounted
 const SAVE_PATH := "user://settings.cfg"
 const STEPS := 20
 const DEFAULT := 10
-## At the top of the range: black lifted by this much, and the gamma 1 / GAMMA_SPAN. At the bottom: black
-## pressed down by LIFT_LOW, the gamma GAMMA_SPAN.
-const LIFT_HIGH := 0.03
-const LIFT_LOW := 0.02
-const GAMMA_SPAN := 1.3
+## At the top of the range: black lifted by LIFT_HIGH, the gamma 1 / GAMMA_HIGH. At the bottom: black pressed
+## down by LIFT_LOW, the gamma GAMMA_LOW. Measured on a Clinic blackout frame (tools/playthrough.mjs, the
+## picture without the display): the top about 2.2 times the default's mean, the bottom about 0.6 times.
+const LIFT_HIGH := 0.028
+const GAMMA_HIGH := 1.3
+const LIFT_LOW := 0.005
+const GAMMA_LOW := 1.15
 
 ## The game's black on screen: the tape's lifted black in the dark at the picture's centre (tape.gdshader:
 ## 0.04 + 0.025 in the dark, a little more in green and blue).
@@ -54,8 +56,9 @@ static func t_of(lv: int) -> float:
 ## The shader's two numbers for a level: {"lift": black level change, "gamma": the power}.
 static func params(lv: int) -> Dictionary:
 	var t := t_of(lv)
-	var lift := (LIFT_HIGH * t) if t >= 0.0 else (LIFT_LOW * t)
-	return {"lift": lift, "gamma": pow(GAMMA_SPAN, -t)}
+	if t >= 0.0:
+		return {"lift": LIFT_HIGH * t, "gamma": pow(GAMMA_HIGH, -t)}
+	return {"lift": LIFT_LOW * t, "gamma": pow(GAMMA_LOW, -t)}
 
 ## One grey (0..1) through the change at a level: the same sum as tape.gdshader's last step.
 static func apply(x: float, lv: int) -> float:

@@ -331,14 +331,18 @@ await wait(200);
 await shot('blackout-emergency-strips');
 // The player's brightness (client/brightness.gd, the tape's last step) is clamped so that at its top the
 // blackout is still dark: the mean of this blackout frame at the lowest, the default and the highest setting.
+// Measured on the picture as the tape draws it: the crisp layers over it (the display, the hide's dark
+// inside, which the setting does not change) are hidden for these three frames.
 {
   const luma = {};
+  await cmd('overlays 0');
   for (const [name, level] of [['min', 0], ['max', 20], ['default', 10]]) {
     await cmd(`brightness ${level}`);
     await wait(150);
     luma[name] = JSON.parse(await cmd('luma'));
     await shot(`blackout-brightness-${name}`);
   }
+  await cmd('overlays 1');
   const f = (k) => `${luma[k].mean.toFixed(4)} (linear ${luma[k].linear.toFixed(4)})`;
   const up = luma.max.mean / luma.default.mean;
   const down = luma.min.mean / luma.default.mean;
