@@ -12,6 +12,9 @@ const T = preload("res://tests/t.gd")
 const DIRS: Array[String] = ["client", "face", "net", "server", "sim", "tools", "tests"]
 ## Folders never searched: the engine's import cache and the exported builds.
 const SKIP: Array[String] = [".godot", "export", "addons"]
+## Scripts at res:// itself that belong there: build_id.gd, written by `npm run godot:export` (tools/godot.mjs,
+## not in git; net/build_info.gd reads it). Present only after an export; loaded like the rest when it is.
+const ROOT_FILES: Array[String] = ["build_id.gd"]
 
 func test_every_script_loads(t: T) -> void:
 	var files: Array[String] = []
@@ -19,7 +22,7 @@ func test_every_script_loads(t: T) -> void:
 	var n := 0
 	for path in files:
 		var top := path.trim_prefix("res://").get_slice("/", 0)
-		if not DIRS.has(top):
+		if not DIRS.has(top) and not ROOT_FILES.has(top):
 			t.check(false, "%s is a script outside the folders this test knows (%s): add its folder to DIRS" % [path, ", ".join(DIRS)])
 			continue
 		var s: Variant = load(path)

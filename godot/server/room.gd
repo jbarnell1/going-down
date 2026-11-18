@@ -221,6 +221,11 @@ func _start(now: float) -> void:
 	_log.call("run %d started with %d players" % [epoch, roster.size()])
 
 func _on_message(id: String, data: String, now: float) -> void:
+	# A client's log line ("t|", net/room_client.gd send_telemetry). The home server's night log takes these
+	# out before the room sees them (server/night_log.gd pump); a server without one (the test servers in
+	# tools/) just lets them go by. It is never a reason to drop a player.
+	if data.begins_with("t|"):
+		return
 	if data.begins_with("m|"):
 		var p: Variant = JSON.parse_string(data.substr(2))
 		if not p is Dictionary or not (p as Dictionary).get("t") is String:
