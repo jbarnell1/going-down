@@ -32,6 +32,32 @@ net/ws_server.gd    the door: WebSocket connections, the passphrase hello, every
 - **Behind Tailscale Funnel** every friend arrives from the same address (the proxy), so the
   per-address back-off acts for the whole room; that is why it stops at 60 s.
 
+- **Build.** The hello may carry a fifth element, the game's build id (`net/build_info.gd`: the short
+  commit, written by `npm run godot:export`). A server whose own id is not `dev` refuses any other id,
+  and a hello without one, with code 4007 and "Your game is out of date. Ask the host for the new
+  GoingDown.zip.", which the join screen shows. A server run from source before any export is `dev`
+  and takes everyone. `build=ID` (an argument) sets the server's id for tests.
+
+## The night's log
+
+Beside its plain lines the server prints the night's log, one JSON object per line
+(`server/night_log.gd` lists every event): joins and leaves (names, builds, close codes; addresses only
+as a salted 8-digit hash), the runs and what happened in them (floors, catches, downs, wipes, banks), the
+tick cost each stats period, refused connections, server errors (a Logger sees every engine and script
+error), and what the games send on their own `t|` frame (`client/telemetry.gd`): a heartbeat every 30 s
+(build, OS, GPU, frame times, ping, floor, phase), every error line, F9 reports and crash tails. The
+server only logs those: at most 20 lines, 4 heartbeats and 16 report parts a minute per player, the
+rest counted; one that does not decode is dropped, never a kick. The passphrase is never in it.
+
+The container can write nowhere but a 1 MB `/tmp`, so standard output is the store: Docker keeps it
+until the container is removed, and `run-on-host.sh` removes it. Fetch the logs before a redeploy:
+
+```sh
+node godot/tools/night_logs.mjs --ssh USER@HOST         # saves godot/export/night-logs/night-<time>.log, prints the summary
+node godot/tools/night_logs.mjs godot/export/night-logs/*.log --errors-only
+node godot/tools/hotfix.mjs "what the fix is"            # tests, export, playthroughs, promote, package, server; prints the deploy commands
+```
+
 ## Running it
 
 Locally (Windows, for tests):

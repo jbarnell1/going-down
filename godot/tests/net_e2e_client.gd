@@ -1,7 +1,10 @@
 # A headless GDScript player (or a hostile probe) for the local end-to-end check (tools/net_local.mjs).
 #   godot --headless --path godot --script res://tests/net_e2e_client.gd -- url=ws://127.0.0.1:4451 secret=test-passphrase
 #       role=player name=A delay=0.05 behave=watch|away|door expect=3 [starts=1]
-#   ... role=probe kind=wrongpass|oversize|flood|ninth
+#   ... role=probe kind=wrongpass|oversize|flood|ninth|garbage|oldbuild
+#   build=ID: the build id this client says in its hello (net/build_info.gd; the server is given the same).
+# A player also sends the server one heartbeat, one error line and one F9 report (client/telemetry.gd's
+# message shapes), for the night's log (server/night_log.gd; tools/net_local.mjs checks it).
 # A player plays a scripted session through net/room_client.gd at 60 frames a second: out of the
 # car, watch the Orderly (or keep it behind you, or watch the door), call the lift, board on the bank
 # half, bank. It checks its own screen as it goes and prints one line `RESULT {json}`:
@@ -19,6 +22,8 @@ const Pose = preload("res://net/pose.gd")
 const Move = preload("res://sim/move.gd")
 const Run = preload("res://sim/run.gd")
 const Entity = preload("res://sim/entity.gd")
+const BuildInfo = preload("res://net/build_info.gd")
+const Telemetry = preload("res://client/telemetry.gd")
 
 var args := {}
 var rc: RoomClient
@@ -45,6 +50,8 @@ func _init() -> void:
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
 	Engine.max_fps = 60
 	t0 = Time.get_ticks_usec()
+	if args.has("build"):
+		BuildInfo._id = args["build"]
 	if args.get("role") == "probe":
 		return
 	rc = RoomClient.new()
@@ -78,6 +85,9 @@ func _player(t: float) -> void:
 		res["closed"] = rc.close_code
 		finish(res, 1)
 		return
+	if rc.status == "lobby" and not _told:
+		_told = true
+		_tell()
 	if rc.status == "lobby" and not rc.run_on:
 		if args.get("starts") == "1" and not started and rc.people.size() >= int(args.get("expect", "1")):
 			started = true
@@ -162,6 +172,17 @@ func _player(t: float) -> void:
 		_report(c)
 
 var _call_next := false
+var _told := false
+
+## What a game sends for the night's log: a heartbeat, an error line, an F9 report (two lines).
+func _tell() -> void:
+	var who: String = args.get("name", "player")
+	var delay := float(args.get("delay", "0"))
+	rc.send_telemetry({"type": "telemetry", "kind": "hb", "body": JSON.stringify({"build": BuildInfo.id(), "os": OS.get_name(), "mode": "lobby",
+		"fps": 60, "avg_ms": 16.7, "worst_ms": 20.0 + delay * 200.0, "ping_ms": delay * 2000.0, "errors": 1})})
+	rc.send_telemetry({"type": "telemetry", "kind": "log", "body": "err net_local test error from every player (res://tests/net_e2e_client.gd:1 _tell)"})
+	for m in Telemetry.report_parts("rep", 1, PackedStringArray(["player pressed F9 at %s, lobby (net_local test)" % who, "a line before it"])):
+		rc.send_telemetry(m)
 
 ## The one movement a watched Orderly makes (B6, the owner's call: "Anyone looking sees it bend down
 ## too"): bent over a downed player, it works at them where it stands. Only the bend's own clock may
@@ -247,7 +268,7 @@ func _pump() -> void:
 		if ws.get_ready_state() == WebSocketPeer.STATE_OPEN and not ws.get_meta("hello"):
 			ws.set_meta("hello", true)
 			if ws.get_meta("secret") != null:
-				ws.send_text(JSON.stringify(["hello", 1, ws.get_meta("secret"), "probe"]))
+				ws.send_text(JSON.stringify(["hello", 1, ws.get_meta("secret"), "probe", ws.get_meta("build") if ws.has_meta("build") else BuildInfo.id()]))
 		while ws.get_available_packet_count() > 0:
 			var txt := ws.get_packet().get_string_from_utf8()
 			if txt.begins_with("m|{\"id\""):
@@ -298,6 +319,12 @@ func _probe(t: float) -> void:
 				for i in 8:
 					probes[i].close()
 				finish(r)
+		"oldbuild":
+			# The right passphrase from another build: closed (4007) with the out-of-date reason.
+			if probes.is_empty():
+				_open(args["secret"]).set_meta("build", "an-old-build")
+			if probes[0].get_ready_state() == WebSocketPeer.STATE_CLOSED:
+				finish({"kind": kind, "code": probes[0].get_close_code(), "reason": probes[0].get_close_reason()})
 		"garbage":
 			# A run message that is not the protocol: closed (4005).
 			if probes.is_empty():
