@@ -73,8 +73,8 @@ them (tests use it to show the checks can fail). `tests/prop_face_net.gd` (run a
 
 The game is joined: `client/play_link.gd` is the only client script that talks to the room, alone
 (`LocalRoom`) or with friends (`RoomClient`); `client/main.gd` draws its snapshot and
-`client/start_screen.gd` is the join form and the lobby (`rc.people`, `rc.start_run()`, `rc.leave()`,
-`rc.status`, `rc.close_code`). What it does each frame is the pattern below.
+`client/start_screen.gd` is the join form and Ready-up (`rc.people`, `rc.set_ready()`, `rc.host_id`,
+`rc.start_at`, `rc.start_run()` for the host's START WITHOUT, `rc.leave()`, `rc.status`, `rc.close_code`). What it does each frame is the pattern below.
 
 The game talks to one object, `RoomClient`. Call `poll(now)` every frame (local seconds, any
 monotonic clock), then, while `client` is not null, `frame(now, local)` once per rendered frame with
@@ -93,8 +93,8 @@ func _ready() -> void:
 func _process(_dt: float) -> void:
 	var now := (Time.get_ticks_usec() - t0) / 1e6
 	rc.poll(now)                                   # status: connecting, lobby, running, closed
-	if rc.status == "lobby" and start_pressed:
-		rc.start_run()                             # rc.people: [[id, name], ...]
+	if rc.status == "lobby" and ready_pressed:
+		rc.set_ready(true)                         # rc.people: [[id, name, ready, tape, inRun, face], ...]
 	if rc.client == null:
 		return
 	var lf := Client.LocalFrame.new()              # the player's own body, moved locally (instant)

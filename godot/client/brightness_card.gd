@@ -137,8 +137,8 @@ func _draw() -> void:
 	PixelFont.draw(self, "<", Vector2(_track.position.x - 12 * px, ty - 3 * px), px, amber)
 	PixelFont.draw(self, ">", Vector2(_track.end.x + 8 * px, ty - 3 * px), px, amber)
 	_centred(str(lv), ty + 12 * px, px * 2.0, amber)
-	_centred(DONE, ty + 34 * px, px, amber)
-	_centred(LATER, size.y - 16 * px, px, Color(0.62, 0.62, 0.58))
+	_centred(DONE, ty + 30 * px, px, amber)
+	_centred(LATER, size.y - 12 * px, px, Color(0.62, 0.62, 0.58))
 
 ## One old crew badge: a card with a clip slot, a photo of a head and shoulders and two lines of type, all
 ## cut out of the one grey (so the badge is a single grey on black).

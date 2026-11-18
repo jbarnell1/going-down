@@ -6,7 +6,12 @@
 #   -> events (doors, chimes, the announcer, the slip, being taken, the end) -> the picture, the
 #   other players, their emotes and footsteps.
 # Before the game: the start screen (start_screen.gd): Play alone, Join friends, draw your face, the
-# lobby. The face drawn goes in the join (net/protocol.gd); every crewmate wears the face their player
+# orientation tape (the first time on this PC), Ready-up (the controls card and the crew; findables-and-day.md
+# section 2, FD6). Nobody is in the car until their own READY is pressed and the room has put them in the run
+# (run_view_on): with friends the run starts for everyone at once; alone READY starts it at once. On entering,
+# the desktop captures the mouse (so the Esc menu does not show; in the browser one line, CLICK TO LOOK), and
+# the announcer's welcome is held WELCOME_HOLD seconds, so the car and the crew come first, then the voice.
+# The face drawn goes in the join (net/protocol.gd); every crewmate wears the face their player
 # drew on their mask (others_view.gd), and the lift's monitor shows the whole crew's (lift.gd). In the
 # prison, F at the face kiosk (client/face_kiosk.gd) opens the same editor on your face; Done sends the
 # new face to everyone in the run (net/room_client.gd set_face).
@@ -19,6 +24,8 @@
 # URL parameters (browser) / user args after `--` (desktop):
 #   seed=<text> (default alpha; playing alone)  quality=light|full (browser default light, desktop full)
 #   auto=1 (never capture the mouse; also when navigator.webdriver or testport=)  props=0  entity=0
+#     Under automation the orientation tape never plays unless tape=1; playing alone READY is pressed at once
+#     (ready=0: wait on the card for `ui ready`); with friends a test presses READY with the `ready` command.
 #   join=<address> name=<text>: open the join form filled in (quick joining)
 #   delay=<seconds>: FOR LOCAL TESTS ONLY. Every message to and from the server waits this long (a slow
 #     link; play_hide runs one client at 0.3). hidebreak=arrival: play_hide's deliberate break (the count
@@ -41,6 +48,8 @@ const Move = preload("res://sim/move.gd")
 const Prison = preload("res://sim/prison.gd")
 const PrisonView = preload("res://client/prison_view.gd")
 const FaceKiosk = preload("res://client/face_kiosk.gd")
+## Live settings (LS3): the host's panel and the notice line, F8.
+const SettingsPanel = preload("res://client/settings_panel.gd")
 const Run = preload("res://sim/run.gd")
 const Day = preload("res://sim/day.gd")
 const HideView = preload("res://client/hide_view.gd")
@@ -83,6 +92,8 @@ const WHEEL_DEAD := 40.0
 const TAG_RANGE := 2.0
 ## Giving up on a connection that never opens (seconds).
 const CONNECT_TIMEOUT := 10.0
+## The announcer's welcome waits this long after the run appears on screen (findables-and-day.md section 2).
+const WELCOME_HOLD := 2.0
 
 var link: PlayLink = null
 var sub: SubViewport
@@ -102,6 +113,7 @@ var start: StartScreen
 ## The face kiosk's editor over the game (client/face_kiosk.gd): opened by F at the prison's kiosk, or
 ## by the test hook. Done changes the face for everyone in the run.
 var kiosk: FaceKiosk
+var settings_panel: SettingsPanel
 var inst_view: InstrumentView
 ## The Playroom's count and hiding on screen (client/hide_view.gd).
 var hide_view: HideView
@@ -143,6 +155,19 @@ var mode := "title"
 var join_arg := ""
 var name_arg := ""
 var pass_arg := ""
+## Tests: tape=1 plays the orientation tape under automation; ready=0 keeps an automated lone player on the card.
+var tape_arg := false
+var ready_arg := true
+## Ready-up: whether the tape has been decided for this room (once per join); the welcome waiting for its
+## hold (armed at a new run), and when (seconds, _now) it is due: WELCOME_HOLD after the first frame of the car.
+var _tape_decided := false
+var _welcome_armed := false
+var _welcome_due := -1.0
+## Esc pressed in the game: the controls menu shows until the mouse is captured again.
+var _esc_menu := false
+## Tests (FD6): when this screen entered the run (unix ms), first drew the car, and the welcome started; whether
+## the controls menu or a voice line showed in the first WELCOME_HOLD seconds.
+var _entry := {}
 var _t0_us := 0
 var _connect_at := 0.0
 var _ever_connected := false
@@ -270,7 +295,10 @@ func _ready() -> void:
 		print("test channel on 127.0.0.1:%d %s" % [_test_port, "ready" if err == OK else "FAILED %d" % err])
 	add_child(Telemetry.new(self))
 	start.remember = not automated
+	# A test never reads or writes the player's tape record (user://tape.cfg), like the hints' record.
+	start.persist_tape = not automated
 	if automated:
+		start.tape_seen = false
 		# A test starts with no hint record and never writes the player's (user://hints.cfg).
 		announcer.persist = false
 		announcer.hints.from_save({})
@@ -293,7 +321,8 @@ func _ready() -> void:
 		start.open_face("join_submit" if filled else "join")
 	else:
 		_show_start("title")
-	# THE BRIGHTNESS HOOK: the card once on a PC's first launch, over the title, before any game is joined.
+	# THE BRIGHTNESS HOOK: the card once on a PC's first launch, over the title, before any game is joined and
+	# so before the orientation tape (_pre_run also holds the tape while the card is open). Never under auto=1.
 	if not automated and not brightness.saved: bright_card.start()
 	load_ms = Time.get_ticks_msec() - t0
 	print("client ready in %d ms; quality %s" % [load_ms, quality])
@@ -378,6 +407,8 @@ func _read_options() -> void:
 			"pass": pass_arg = val
 			"delay": delay_arg = clampf(float(val), 0.0, 2.0)
 			"hidebreak": HideView.test_break = val
+			"tape": tape_arg = val != "0"
+			"ready": ready_arg = val != "0"
 	if OS.has_feature("web"):
 		seed = _url("seed", seed)
 		quality = _url("quality", quality)
@@ -386,6 +417,8 @@ func _read_options() -> void:
 		join_arg = _url("join", "")
 		name_arg = _url("name", "")
 		pass_arg = _url("pass", "")
+		tape_arg = _url("tape", "0") == "1"
+		ready_arg = _url("ready", "1") != "0"
 		automated = str(JavaScriptBridge.eval("(navigator.webdriver || /[?&]auto=1/.test(location.search)) ? 'y' : 'n'", true)) == "y"
 
 func _add_actions() -> void:
@@ -472,6 +505,9 @@ func _build_view() -> void:
 	start.start_pressed.connect(_lobby_start)
 	start.leave_pressed.connect(_leave_room)
 	start.screen_shown.connect(_on_screen_shown)
+	start.ready_pressed.connect(_on_ready_pressed)
+	start.watch_tape_pressed.connect(_watch_tape)
+	start.tape_finished.connect(_on_tape_finished)
 	kiosk = FaceKiosk.new()
 	kiosk.name = "FaceKiosk"
 	kiosk.remember = true
@@ -482,6 +518,13 @@ func _build_view() -> void:
 	bright_card.setting = brightness
 	add_child(bright_card)
 	bright_card.changed.connect(_apply_brightness)
+	# Live settings (LS3): over everything, the game going on underneath.
+	var panel_layer := CanvasLayer.new()
+	panel_layer.layer = 50
+	add_child(panel_layer)
+	settings_panel = SettingsPanel.new()
+	settings_panel.name = "SettingsPanel"
+	panel_layer.add_child(settings_panel)
 	sfx = Sfx.new()
 	add_child(sfx)
 	var audio3d := Node3D.new()
@@ -506,6 +549,7 @@ func _show_start(which: String) -> void:
 	hud.subtitle = ""
 	hud.osd_on = false
 	hud.wheel_on = false
+	hud.click_to_look = false
 	wheel_open = false
 	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -522,10 +566,15 @@ func _play_alone() -> void:
 	lr.open_local(seed, nm, entity_on, start.face_code)
 	# The game's run is a run of days: BANK rides up to the prison, bed starts the next day.
 	lr.days = true
-	lr.start_run()
+	# Live settings: alone, the player's own changes are kept in user://settings.json (none under automation).
+	lr.open_settings("" if automated else LocalRoom.SETTINGS_FILE)
 	link = PlayLink.new(lr, true)
 	start.error = ""
-	_enter_game()
+	_tape_decided = false
+	if automated and ready_arg and not tape_arg:
+		# Under automation READY is pressed at once (the scripted playthroughs start in the car as before).
+		lr.set_ready(true)
+		_enter_game()
 
 ## "Join friends": the form's Join.
 func _join(address: String, player_name: String, passphrase: String) -> void:
@@ -539,6 +588,7 @@ func _join(address: String, player_name: String, passphrase: String) -> void:
 	print("joining %s as %s" % [url, player_name])
 	rc.delay = delay_arg
 	link = PlayLink.new(rc, false)
+	_tape_decided = false
 	_connect_at = _now()
 	_ever_connected = false
 	_leaving = false
@@ -571,20 +621,82 @@ func _back_to_title() -> void:
 	start.error = ""   # the error belonged to the join form the player just left
 	_show_start("title")
 
+## The host's START WITHOUT (the room ignores it from anyone else, or before 30 s).
 func _lobby_start() -> void:
 	if link != null:
 		link.rc.start_run()
+
+## I'M READY (or undone) on the card.
+func _on_ready_pressed(on: bool) -> void:
+	if link != null:
+		link.rc.set_ready(on)
+
+## WATCH THE TAPE on Ready-up: not ready while it plays (the others see WATCHING THE TAPE).
+func _watch_tape() -> void:
+	if link == null:
+		return
+	start.my_ready = false
+	link.rc.set_ready(false, true)
+	mode = "tape"
+	start.play_tape()
+
+func _on_tape_finished(_skipped: bool) -> void:
+	if link != null:
+		link.rc.set_ready(false)
+		start.my_ready = false
+		_show_start("lobby")
+
+## FD6: whether this screen shows the run: only after this player's own READY, and once the room has put
+## them in it (a late joiner waits on Ready-up for the next stop). Never on the room's running flag alone.
+static func run_view_on(my_ready: bool, _run_on: bool, playing: bool) -> bool:
+	return my_ready and playing
+
+## Before the run: the tape the first time, then Ready-up, kept in step with the room.
+func _pre_run(rc: RoomClient, now: float) -> void:
+	if not _tape_decided:
+		# The brightness card first (a first launch), then the tape: it waits until the card is done.
+		if bright_card.is_open():
+			return
+		_tape_decided = true
+		if StartScreen.wants_tape(start.tape_seen, automated, tape_arg):
+			rc.set_ready(false, true)
+			_clear_world()
+			menu_overlay = false
+			mode = "tape"
+			start.play_tape()
+			return
+	if mode == "tape":
+		return
+	if mode != "lobby":
+		_clear_world()
+		menu_overlay = false
+		_show_start("lobby")
+	start.people = rc.people
+	start.my_id = rc.my_id
+	start.run_on = rc.run_on
+	start.host_id = rc.host_id
+	start.my_ready = rc.my_ready
+	start.count_left = rc.start_at - now if rc.start_at >= 0.0 and not rc.run_on else -1.0
+	start.without_ok = rc.host_id == rc.my_id and rc.without_at >= 0.0 and now >= rc.without_at and not rc.run_on
+	start.run_depth = rc.run_depth if rc.run_on else -1
 
 func _leave_room() -> void:
 	_back_to_title()
 
 func _enter_game() -> void:
-	# HOOK (story.md ST1, for FD6's controls card): play client/orientation_tape.gd (start(), await finished) before the card, once per player (save tape_seen).
+	# The tape and the controls card came before this (_pre_run, start_screen.gd); the run is on for this player.
 	mode = "game"
 	start.show_screen("")
+	menu_overlay = false
 	hud.osd_on = true
 	snap = {}
 	_client_seen = null
+	_esc_menu = false
+	_entry = {"enteredUnix": Time.get_unix_time_from_system() * 1000.0, "enteredAt": _now(), "menuEarly": false, "voiceEarly": false}
+	# The desktop takes the mouse on entering, so the controls menu does not cover the car (it stays on Esc).
+	# The browser needs a click for that: CLICK TO LOOK shows instead. Never under automation.
+	if not automated and not OS.has_feature("web"):
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 ## Plain words for why the connection closed.
 func _close_words(code: int) -> String:
@@ -642,12 +754,11 @@ func _on_new_run() -> void:
 	quota_view.reset()
 	down_view.reset()
 	_turn_until = -1
-	# In a browser nothing is heard before the first click or key (autoplay rules): the welcome
-	# waits for it rather than being spoken to a muted page.
-	if _gesture or not OS.has_feature("web"):
-		announcer.start_run()
-	else:
-		_welcome_pending = true
+	# The welcome is held WELCOME_HOLD seconds (the car and the crew first, then the voice). In a browser
+	# nothing is heard before the first click or key (autoplay rules): it also waits for one.
+	_welcome_armed = true
+	_welcome_due = -1.0
+	_welcome_pending = not _gesture and OS.has_feature("web")
 
 ## Alone: a new run (the end screen's key, the test hook).
 func _new_run() -> void:
@@ -713,20 +824,21 @@ func _use_resident(plan: Dictionary) -> void:
 func _input(event: InputEvent) -> void:
 	if (event is InputEventMouseButton or event is InputEventKey) and event.is_pressed() and not _gesture:
 		_gesture = true
-		if _welcome_pending:
-			_welcome_pending = false
-			announcer.start_run()
+		_welcome_pending = false
 	if bright_card.is_open():
 		# The brightness card has the keys (its slider, Enter done) and its own mouse.
 		if event is InputEventKey:
 			bright_card.key(event as InputEventKey)
 			get_viewport().set_input_as_handled()
 		return
+	if _settings_input(event):
+		return
 	if mode != "game":
-		# The start screen: Esc shows the controls; everything else is the screen's.
+		# The start screen: Esc shows the controls (not on the face step, the tape or Ready-up, whose card is
+		# the controls); everything else is the screen's.
 		if event is InputEventKey:
 			var k0 := event as InputEventKey
-			if k0.pressed and not k0.echo and k0.physical_keycode == KEY_ESCAPE and start.screen != "face":
+			if k0.pressed and not k0.echo and k0.physical_keycode == KEY_ESCAPE and not start.screen in ["face", "tape", "lobby"]:
 				menu_overlay = not menu_overlay
 			elif menu_overlay and k0.pressed and not k0.echo and k0.physical_keycode == KEY_H:
 				_set_hints(not announcer.hints.enabled)
@@ -747,6 +859,7 @@ func _input(event: InputEvent) -> void:
 		# The mouse is captured only after a real click, never under automation.
 		if mb.pressed and not automated and mb.button_index == MOUSE_BUTTON_LEFT and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not wheel_open:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			_esc_menu = false
 	elif event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
 		if wheel_open:
@@ -771,6 +884,7 @@ func _input(event: InputEvent) -> void:
 		if k.physical_keycode == KEY_ESCAPE:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 			wheel_open = false
+			_esc_menu = true
 		elif not hud.end_lines.is_empty() and Time.get_ticks_msec() - end_shown_at > 1200:
 			_new_run()
 		elif k.physical_keycode == KEY_E:
@@ -925,6 +1039,8 @@ func _process(delta: float) -> void:
 	hud.hints_on = announcer.hints.enabled
 	if Time.get_ticks_msec() > _note_until:
 		hud.note = ""
+	settings_panel.rc = link.rc if link != null else null
+	hide_view.tuning = link.client().tuning if link != null and link.client() != null else null
 	if link == null:
 		hud.menu_on = menu_overlay
 		return
@@ -957,15 +1073,16 @@ func _process(delta: float) -> void:
 				_show_start("join")
 			return
 		_ever_connected = true
-		if mode != "lobby":
-			_clear_world()
-			_show_start("lobby")
-		start.people = rc.people
-		start.my_id = rc.my_id
-		start.run_on = rc.run_on
+		_pre_run(rc, now)
 		hud.menu_on = menu_overlay
 		return
 	_ever_connected = true
+	if mode != "game" and not run_view_on(rc.my_ready, rc.run_on, not s.has("waiting") and bool(s.get("playing", false))):
+		# A run is on that this player is not in yet (still reading, watching the tape, or ready and waiting
+		# for the next stop): Ready-up stays, with the late joiner's line.
+		_pre_run(rc, now)
+		hud.menu_on = menu_overlay
+		return
 	if mode != "game":
 		_enter_game()
 	if link.client() != _client_seen:
@@ -993,7 +1110,7 @@ func _game_input(dt: float) -> Dictionary:
 		r = t_move[1]
 		sprint = t_move[2]
 		creep = t_move[3]
-	elif mode == "game" and not kiosk.is_open() and not bright_card.is_open():
+	elif mode == "game" and not kiosk.is_open() and not settings_panel.is_open() and not bright_card.is_open():
 		f = Input.get_action_strength("forward") - Input.get_action_strength("back")
 		r = Input.get_action_strength("right") - Input.get_action_strength("left")
 		sprint = Input.is_action_pressed("sprint")
@@ -1001,7 +1118,7 @@ func _game_input(dt: float) -> Dictionary:
 	var raised: bool = t_raise if t_raise != null else (raise_latch or (mode == "game" and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)))
 	var me: Dictionary = snap.get("me", {})
 	var hold: bool = t_hold if t_hold != null else (mode == "game" and Input.is_action_pressed("use") and bool(me.get("nearHold", false)))
-	var use: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and Input.is_action_pressed("use"))
+	var use: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and not settings_panel.is_open() and Input.is_action_pressed("use"))
 	var call: bool = pending_call and bool(me.get("canCall", false))
 	# The Playroom: F at a hide's front, or in a hide, is for the hide (the call wins at the lift).
 	var my_seek: Variant = snap.get("mySeek")
@@ -1162,7 +1279,21 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	var car: Dictionary = link.plan_dict["car"]
 	sfx.update(dt, o["squeak"] if _resident_kind == "orderly" and not _no_resident else {}, o.get("pose"), tick_hz, loud, float(me["exertion"]) if not still else 0.0, bool(me["winded"]), machine,
 		Vector3(float(car["doorX"]), float(car["floorY"]) + 1.5, float(car["doorZ"])), float(o.get("speed", 0.0)))
-	announcer.update()
+	if not _entry.has("carUnix"):
+		_entry["carUnix"] = Time.get_unix_time_from_system() * 1000.0
+	# The welcome's hold runs from the first frame of the car on this screen.
+	if _welcome_armed and _welcome_due < 0.0:
+		_welcome_due = _now() + WELCOME_HOLD
+	if _welcome_armed and _now() >= _welcome_due and not _welcome_pending:
+		_welcome_armed = false
+		_welcome_due = -1.0
+		_entry["welcomeUnix"] = Time.get_unix_time_from_system() * 1000.0
+		announcer.start_run()
+	# Nothing is said before the welcome (findables-and-day.md section 2: the car and the crew come first).
+	if not _welcome_armed:
+		announcer.update()
+	if _now() - float(_entry.get("enteredAt", -INF)) < WELCOME_HOLD and announcer.speaking():
+		_entry["voiceEarly"] = true
 	sfx.duck(announcer.speaking(), dt)
 
 	# The picture and the display.
@@ -1182,15 +1313,20 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	hud.wheel_on = wheel_open
 	hud.wheel_labels = EMOTE_LABELS
 	hud.wheel_sel = _wheel_sel() if wheel_open else -1
-	# The menu (the controls) shows whenever the mouse is free: after Esc, and before the first click.
-	hud.menu_on = t_menu or (error_text == "" and not automated and not wheel_open and not kiosk.is_open() and not bright_card.is_open() and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and hud.end_lines.is_empty())
+	# The menu (the controls) shows after Esc, while the mouse is free. Free without Esc (the browser on
+	# entering, or the window lost the mouse): one line, CLICK TO LOOK, instead (findables-and-day.md section 2).
+	var free := error_text == "" and not automated and not wheel_open and not kiosk.is_open() and not settings_panel.is_open() and not bright_card.is_open() and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and hud.end_lines.is_empty()
+	hud.menu_on = t_menu or (free and _esc_menu)
+	hud.click_to_look = free and not _esc_menu and not t_menu
+	if _now() - float(_entry.get("enteredAt", -INF)) < WELCOME_HOLD and hud.menu_on:
+		_entry["menuEarly"] = true
 	var prompt := ""
 	var station := _station()
 	var bed: Variant = s.get("bed")
 	var home := s.get("day") != null and int(s["depth"]) == 0 and bed is Dictionary
 	hud.prompt_fill = -1.0
 	# Down first, then out (client/down_view.gd): your own timer or the out screen, or a crewmate to help.
-	var holding: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and Input.is_action_pressed("use"))
+	var holding: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and not settings_panel.is_open() and Input.is_action_pressed("use"))
 	down_view.update(s, link.my_id(), link.names(), holding)
 	var me_down := str(me["status"]) == "down" or str(me["status"]) == "out" or _left_out(s)
 	if not ended and not noise and not kiosk.is_open() and not _lights_out and not me_down:
@@ -1783,6 +1919,8 @@ func _command(c: String) -> String:
 					return "unknown draw command"
 		"faces":
 			return JSON.stringify(_faces_state())
+		"panel":
+			return _panel_command(p, c)
 		"kiosk":
 			# The face kiosk's editor during a run, as F at the prison's kiosk opens it.
 			if p.size() < 2:
@@ -1823,6 +1961,18 @@ func _command(c: String) -> String:
 				return "only address or name"
 		"start":
 			_lobby_start()
+		"ready":
+			# Ready-up: press I'M READY (ready 0: undo it). Alone, READY starts the run.
+			if start.screen != "lobby":
+				return "not on Ready-up (%s)" % start.screen
+			var want := p.size() < 2 or p[1] != "0"
+			if start.my_ready != want:
+				start.press("ready")
+		"tapeskip":
+			# The orientation tape: skip it (as a held Space would).
+			if start.tape == null or not start.tape.playing:
+				return "no tape playing"
+			start.tape.skip()
 		"leave":
 			_back_to_title()
 		"emote":
@@ -1924,9 +2074,7 @@ func _command(c: String) -> String:
 		"click":
 			# A stand-in for the first real click or key (the browser's audio and the welcome wait for one).
 			_gesture = true
-			if _welcome_pending:
-				_welcome_pending = false
-				announcer.start_run()
+			_welcome_pending = false
 		"quit":
 			get_tree().quit(0)
 		"sfx":
@@ -2047,7 +2195,10 @@ func _lift_drawn() -> Dictionary:
 func _screen_state() -> Dictionary:
 	return {"screen": mode, "error": start.error, "address": start.address, "name": start.player_name, "passTyped": not start.passphrase.is_empty(),
 		"people": start.people, "me": start.my_id, "runOn": start.run_on, "focus": start.focused_id(), "menu": menu_overlay,
-		"status": link.rc.status if link != null else "none", "closeCode": link.rc.close_code if link != null else 0}
+		"status": link.rc.status if link != null else "none", "closeCode": link.rc.close_code if link != null else 0,
+		"ready": start.my_ready, "host": start.host_id, "line": start.status_line() if mode == "lobby" else "", "countLeft": start.count_left,
+		"withoutOk": start.without_ok, "tapePlaying": start.tape != null and start.tape.playing, "tapeSeen": start.tape_seen,
+		"card": StartScreen.card_lines(), "entry": _entry}
 
 func _test_state() -> Dictionary:
 	var s := snap
@@ -2103,3 +2254,78 @@ func _test_state() -> Dictionary:
 		"bells": sfx.bells.duplicate(), "seekHist": _seek_hist.duplicate(), "camPos": [cam.position.x, cam.position.y, cam.position.z],
 		"events": event_counts,
 	}
+
+# --- live settings (LS3) ------------------------------------------------------------------------
+
+## F8 opens and closes the settings panel (in a run and on the start screens); while it is open it has the keys
+## and the mouse. True when the event was the panel's.
+func _settings_input(event: InputEvent) -> bool:
+	if event is InputEventKey:
+		var k := event as InputEventKey
+		if k.pressed and not k.echo and k.physical_keycode == KEY_F8 and not kiosk.is_open():
+			settings_panel.toggle()
+			if settings_panel.is_open() and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+				Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+			get_viewport().set_input_as_handled()
+			return true
+		if settings_panel.is_open():
+			settings_panel.key(k)
+			get_viewport().set_input_as_handled()
+			return true
+	elif settings_panel.is_open() and (event is InputEventMouseButton or event is InputEventMouseMotion):
+		settings_panel.mouse(event)
+		get_viewport().set_input_as_handled()
+		return true
+	return false
+
+## Tests: the panel. panel open | close | state | key NAME [shift] | set ID VALUE | reset ID | resetall | select SECTION | click X Y
+func _panel_command(p: PackedStringArray, _c: String) -> String:
+	if p.size() < 2:
+		return "panel what"
+	match p[1]:
+		"open":
+			settings_panel.open()
+		"close":
+			settings_panel.close()
+		"state":
+			return JSON.stringify(settings_panel.describe())
+		"key":
+			if p.size() < 3:
+				return "key what"
+			var ev := InputEventKey.new()
+			ev.physical_keycode = OS.find_keycode_from_string(p[2])
+			ev.shift_pressed = p.size() > 3 and p[3] == "shift"
+			ev.pressed = true
+			_settings_input(ev)
+			var up := ev.duplicate() as InputEventKey
+			up.pressed = false
+			if ev.physical_keycode != KEY_F8:
+				_settings_input(up)
+		"set":
+			if p.size() < 4:
+				return "set id value"
+			return "sent" if settings_panel.set_value(StringName(p[2]), float(p[3])) else "not the host"
+		"reset":
+			if p.size() < 3:
+				return "reset id"
+			return "sent" if settings_panel.reset_row(StringName(p[2])) else "not the host"
+		"resetall":
+			return "sent" if settings_panel.reset_all() else "not the host"
+		"forceset":
+			# A change sent to the room whoever this player is (the server's host check, from a real client).
+			if p.size() < 4 or link == null or link.local:
+				return "forceset id value (with friends)"
+			link.rc.call("_queue", "m|" + JSON.stringify({"t": "tune", "id": p[2], "v": float(p[3])}))
+			link.rc.call("_flush", INF)
+			return "sent"
+		"select":
+			if p.size() < 3:
+				return "select section"
+			return "ok" if settings_panel.select(StringName(p[2])) else "no such section"
+		"click":
+			if p.size() < 4:
+				return "click x y"
+			return "hit" if settings_panel.click(Vector2(float(p[2]), float(p[3]))) else "missed"
+		_:
+			return "unknown panel command"
+	return "ok"
