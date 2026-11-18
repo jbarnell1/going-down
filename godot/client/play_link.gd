@@ -265,6 +265,11 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 			speed = sp
 	if before != null and body != null and dt > 0.0:
 		tank = Stamina.step_stamina(tank, gait, M.hypot2(body.x - before.x, body.z - before.z) / dt, dt)
+	# The shop's speed juice (S2): the host holds this player's tank full while it lasts; so does this screen.
+	if latest.get("shop") is Dictionary:
+		for jr: Dictionary in (latest["shop"] as Dictionary)["timers"]:
+			if str(jr["playerId"]) == str(c.id) and float(jr["juice"]) > c.clock.host_time(rc._now):
+				tank = Stamina.Stamina.make(1.0, false, tank.tank)
 	# The eyes: standing, creeping or down (a spectator stands), eased; this frame's camera height.
 	var want_eye := EyeHeight.target(status, String(gait)) if body != null else EyeHeight.STAND
 	# The Playroom: found players stand rooted; at the party table they sit; in a hide the hide decides.
@@ -400,6 +405,8 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	snap["find"] = latest.get("find")
 	# The inventory (S1, null in a run without it): the host's inv block (client.gd inventory()).
 	snap["inv"] = latest.get("inv")
+	# The shop and the cabinet (S2, null in a run without them): the host's shop block (client.gd shop()).
+	snap["shop"] = latest.get("shop")
 	if plan_dict.has("_new"):
 		plan_dict.erase("_new")
 		snap["plan"] = plan_dict

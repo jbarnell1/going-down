@@ -37,6 +37,8 @@
 #    follow the game's deck.
 #  - The four-slot inventory (sim/run.gd inventory, sim/inventory.gd, S1) is the same again: `inventory` true, false,
 #    or null to follow the game's deck.
+#  - The shop and the cabinet (sim/run.gd shop, sim/shop.gd, S2) are the same again: `shop` true, false, or null to
+#    follow the game's deck.
 #  - Live settings (docs/floors/live-settings.md LS3): the room owns a desk exactly as the server's room does
 #    (net/tuning_desk.gd), and the player is the host. The game gives it the file user://settings.json
 #    (open_settings); under automation (auto=1) it has none, so no scripted playthrough reads a saved change.
@@ -87,6 +89,8 @@ var furniture_layout: Variant = null
 var findables: Variant = null
 ## The four-slot inventory (sim/run.gd inventory, S1): true, false, or null to follow the game's deck.
 var inventory: Variant = null
+## The shop and the cabinet (sim/run.gd shop, S2): true, false, or null to follow the game's deck.
+var shop: Variant = null
 ## Cost of the host's ticks on this machine (microseconds, summed), for the stats hook.
 var host_us := 0
 ## Live settings: this room's desk (no file until open_settings gives it one).
@@ -186,6 +190,12 @@ func findables_on() -> bool:
 		return bool(findables)
 	return Session.deck == Places.FULL
 
+## Whether the next run has the shop and the cabinet (sim/run.gd shop, S2).
+func shop_on() -> bool:
+	if shop != null:
+		return bool(shop)
+	return Session.deck == Places.FULL
+
 ## Whether the next run has the four-slot inventory (sim/run.gd inventory, S1).
 func inventory_on() -> bool:
 	if inventory != null:
@@ -238,7 +248,7 @@ func start_run() -> void:
 	var q := quota_on()
 	var depth := HostRules.start_depth_by_arg() if _playtest_depth < 0 else maxi(1, _playtest_depth)
 	var deck := Places.deck_for_start_depth(depth) if Session.deck == Places.FULL else Session.deck
-	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL)
+	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL, shop_on())
 	# Method callables hold no reference to this object, so the pipes do not keep it alive.
 	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
 	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))

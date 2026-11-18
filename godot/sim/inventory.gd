@@ -34,7 +34,8 @@ const PICKUP_REACH := 1.3
 const HAND_REACH := 1.5
 ## The item ids the rules know, in wire order (net/protocol.gd sends the index). data/items.json names them and
 ## says which can be used; tests/prop_inventory.gd checks the two agree.
-const ITEMS: Array[String] = ["juice", "badge"]
+## The shop's six (sim/shop.gd ITEMS, S2) follow the two found ones.
+const ITEMS: Array[String] = ["juice", "badge", "marker", "glow", "flash", "speed", "toy", "salts"]
 const DATA_PATH := "res://data/items.json"
 const EPS := 1e-9
 

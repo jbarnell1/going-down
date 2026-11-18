@@ -276,6 +276,9 @@ class Run:
 		var maybe := {}
 		if i.dropped_tape:
 			sure[&"tape"] = true
+		# The shop's wind-up toy (S2): its owner's noise as it starts to rattle, whatever they are doing.
+		if i.toy:
+			sure[&"toy"] = true
 		if pp == null or pp.status != &"ok":
 			return [sure, sure.merged(maybe)]
 		var moved: bool = last_body.has(i.id) and (last_body[i.id].level != i.body.level or Me.horiz(last_body[i.id], i.body) > 1e-6)

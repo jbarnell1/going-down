@@ -128,6 +128,8 @@ const Seek = preload("res://sim/seek.gd")
 const Hiding = preload("res://sim/hiding.gd")
 const Findables = preload("res://sim/findables.gd")
 const Inventory = preload("res://sim/inventory.gd")
+const Shop = preload("res://sim/shop.gd")
+const Upgrades = preload("res://sim/upgrades.gd")
 
 const EPS := 1e-9
 const TICK := Session.TICK
@@ -676,6 +678,9 @@ func _step_gait(p: HostPlayer, m: Dictionary) -> void:
 	var gait := String(Stamina.gait_for(p.stamina, want == "sprint", want == "creep", ground > 0.0, cap))
 	p.allowance += (Session.MAX_PLAYER_SPEED if gait == "sprint" else Stamina.WALK_SPEED) * dt
 	p.stamina = Stamina.step_stamina(p.stamina, StringName(gait), ground, dt)
+	# The shop's speed juice (S2, sim/run.gd): while it lasts sprinting costs nothing; "juiceOut" leaves them winded.
+	if state.shop and Shop.juiced(state.shop_state, p.id, state.t):
+		p.stamina = Stamina.Stamina.make(1.0, false, tank)
 	p.gait = gait
 	p.last_ct = ct
 	p.claim = mb
@@ -823,7 +828,7 @@ func _step(now: float) -> void:
 			var pushed: Dictionary = e["pushedOut"]
 			for id: String in pushed:
 				_place(id, pushed[id], st.depth, st)
-		elif ty == "rodeDown" or ty == "rodeUp" or ty == "newDay":
+		elif ty == "rodeDown" or ty == "rodeUp" or ty == "newDay" or ty == "wokeUp":
 			var bodies: Dictionary = e["bodies"]
 			for id: String in bodies:
 				_place(id, bodies[id], st.depth, st)
@@ -833,6 +838,11 @@ func _step(now: float) -> void:
 			var hp := _find_run_player(st, str(e["playerId"]))
 			if hp != null:
 				_place(hp.id, hp.body, st.depth, st)
+		elif ty == "juiceOut":
+			# The shop's speed juice ran out (S2): winded, as a tank run dry is.
+			var jp: HostPlayer = _players.get(str(e["playerId"]))
+			if jp != null and jp.stamina != null:
+				jp.stamina = Stamina.Stamina.make(0.0, true, jp.stamina.tank)
 		elif ty == "caught":
 			_last_catch_tick = tick + 1
 			if _pending_catch != null and _pending_catch["victim"] == e["playerId"]:
@@ -1214,7 +1224,33 @@ func world(full: bool = false) -> Dictionary:
 	# The inventory (S1): every player's slots and what lies on the floor (Protocol "inv").
 	if s.inventory:
 		out["inv"] = inv_block(s)
+	# The shop and the cabinet (S2): wallets, cabinets, what is lit, the timers (Protocol "shop").
+	if s.shop and s.shop_state != null:
+		out["shop"] = shop_block(s)
 	return out
+
+## The shop and the cabinet (S2; Protocol.enc_shop): every player's credits and cabinet in the run's order, the glow
+## sticks and toys on this floor, the juice and flash timers (host times, -1 for none), the morning's wake (or -1).
+static func shop_block(s: Run.RunState) -> Dictionary:
+	var sh: Shop.ShopState = s.shop_state
+	var credits: Array = []
+	var cabs: Array = []
+	var timers: Array = []
+	for rp in s.players:
+		var w: Variant = s.wallets.get(rp.id)
+		credits.append({"playerId": rp.id, "credits": (w as Upgrades.UpgradeState).credits if w != null else 0})
+		cabs.append({"playerId": rp.id, "slots": Shop.cabinet_of(sh.cabinets, rp.id).duplicate(true)})
+		var ju := float(sh.juiced.get(rp.id, -1.0))
+		var fl := float(sh.flashes.get(rp.id, -1.0))
+		if ju >= 0.0 or fl >= 0.0:
+			timers.append({"playerId": rp.id, "juice": ju, "flash": fl})
+	var glows: Array = []
+	for g: Dictionary in sh.glows:
+		glows.append({"id": g["id"], "at": g["at"], "until": g["until"]})
+	var toys: Array = []
+	for g: Dictionary in sh.toys:
+		toys.append({"id": g["id"], "at": g["at"], "start": g["start"], "end": g["end"]})
+	return {"credits": credits, "cabinets": cabs, "glows": glows, "toys": toys, "timers": timers, "wake": sh.wake_until}
 
 ## The inventory (S1; Protocol.enc_inv): {bags: [{playerId, sel, slots}], pickups: [{id, item, count, at}]}, every
 ## player in the run's order (an empty bag for one who has never held anything).

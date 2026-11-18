@@ -64,6 +64,9 @@
 #  - The four-slot inventory (sim/run.gd inventory, sim/inventory.gd, S1): off unless asked (`inventory`, the last
 #    parameter); the game's rooms ask for it. prepare() turns it on before the first tick. The soft catch keeps the
 #    bags and the pickups of the real tick (what the caught player carried fell where they were caught).
+#  - The shop and the cabinet (sim/run.gd shop, sim/shop.gd, S2): off unless asked (`shop`, the last parameter); the
+#    game's rooms ask for it, and it needs the inventory. prepare() turns it on before the first tick. The soft catch
+#    keeps the cabinets, the lit things and the wallets of the real tick.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -118,11 +121,15 @@ var inventory: bool
 var furniture_layout: bool
 ## Residents route around the floor's shared solid footprints (off unless asked).
 var resident_navigation: bool
+## The shop and the cabinet (off unless asked; sim/run.gd shop, S2).
+var shop: bool
 
 func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false,
 		watchers_: bool = false, relocation_: bool = false, long_dark_: bool = false, paced_: bool = false, car_waits_: bool = false,
 		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false, furniture_: bool = false, findables_: bool = false,
-		inventory_: bool = false, furniture_layout_: bool = false, resident_navigation_: bool = false) -> void:
+		inventory_: bool = false, furniture_layout_: bool = false, resident_navigation_: bool = false,
+		shop_: bool = false) -> void:
+	shop = shop_
 	inventory = inventory_
 	findables = findables_
 	furniture_layout = furniture_layout_
@@ -241,6 +248,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_inventory(s)
 	if resident_navigation and not s.resident_navigation:
 		s = Run.with_resident_navigation(s)
+	if shop and s.inventory and not s.shop:
+		s = Run.with_shop(s)
 	return _capped(s)
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web
@@ -392,6 +401,10 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 		st.pickups = r.state.pickups
 		st.pickups_plan = r.state.pickups_plan
 		st.pickup_seq = r.state.pickup_seq
+		# The shop (S2): the cabinets, what was lit, and what was bought, of the real tick.
+		if st.shop:
+			st.shop_state = r.state.shop_state
+			st.wallets = r.state.wallets
 		st.players = players
 		st.summary = null
 		var kept_events: Array[Dictionary] = []

@@ -25,6 +25,14 @@ const REFUSED := {
 	"empty": "NOTHING IN YOUR HAND.",
 	"gone": "IT IS NOT THERE ANY MORE.",
 	"busy": "NOT NOW.",
+	# The shop and the cabinet (S2, sim/run.gd _step_shop).
+	"cabFull": "THE CABINET IS FULL.",
+	"poor": "NOT ENOUGH CREDITS.",
+	"window": "BUY AT SHOP WINDOW 1 OR 2.",
+	"closed": "THE SHOP IS SHUT TILL TONIGHT.",
+	"nobody": "NOBODY DOWN IN REACH. FACE THEM.",
+	"annexOnly": "MARKS ONLY STICK IN THE ANNEX.",
+	"unusable": "THAT IS NOT SOMETHING YOU USE.",
 }
 
 ## The host's block this frame (null: the run has no inventory, nothing is drawn).

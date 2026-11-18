@@ -78,6 +78,7 @@ const SECTIONS: Array = [
 	[&"down", &"players", "DOWN AND HEALING"],
 	[&"health", &"players", "HEALTH (THE PLAYROOM)"],
 	[&"carry", &"players", "CARRYING"],
+	[&"shop", &"players", "THE SHOP AND THE CABINET"],
 	[&"earning", &"earning", "EARNING"],
 	[&"hiding", &"hiding", "HIDING"],
 	[&"moving", &"speeds", "MOVING"],
@@ -185,6 +186,16 @@ const ROWS: Array = [
 	# at lights out, when every bag is empty, so a slot never holds more than the number in force.
 	[&"inv.stack", &"carry", "ONE SLOT HOLDS", "how many of the same item stack in one slot", "items", 1.0, 1.0, 5.0, 1.0, &"day", &"S1", W],
 	[&"inv.hand_reach", &"carry", "HAND OVER WITHIN", "giver's feet to the crewmate's", "m", 1.5, 0.5, 3.0, 0.1, &"floor", &"S1", F],
+	# Players: the shop and the cabinet (S2, T28 and T29; sim/shop.gd). Prices are credits from the buyer's own share; the
+	# game's are the design's shares of a made day's pay (Shop.SHARE). The cabinet's size goes into force at lights out.
+	[&"cabinet.slots", &"shop", "CABINET HOLDS", "slots in each cell's cabinet", "slots", 6.0, 4.0, 8.0, 1.0, &"day", &"S2", W],
+	[&"shop.price.marker", &"shop", "A MARKER COSTS", "credits at the shop window", "credits", 60.0, 0.0, 600.0, 5.0, &"now", &"S2", W],
+	[&"shop.price.glow", &"shop", "A GLOW STICK COSTS", "credits at the shop window", "credits", 90.0, 0.0, 600.0, 5.0, &"now", &"S2", W],
+	[&"shop.price.flash", &"shop", "A FLASHBULB COSTS", "credits at the shop window", "credits", 120.0, 0.0, 600.0, 5.0, &"now", &"S2", W],
+	[&"shop.price.speed", &"shop", "SPEED JUICE COSTS", "credits at the shop window", "credits", 150.0, 0.0, 600.0, 5.0, &"now", &"S2", W],
+	[&"shop.price.toy", &"shop", "A WIND-UP TOY COSTS", "credits at the shop window", "credits", 150.0, 0.0, 600.0, 5.0, &"now", &"S2", W],
+	[&"shop.price.salts", &"shop", "SMELLING SALTS COST", "credits at the shop window", "credits", 180.0, 0.0, 600.0, 5.0, &"now", &"S2", W],
+	[&"shop.glow", &"shop", "A GLOW STICK LASTS", "seconds a dropped glow stick stays lit", "s", 180.0, 30.0, 600.0, 10.0, &"next", &"S2", F],
 	# Earning.
 	[&"quota.each", &"earning", "FLOOR QUOTA, EACH PLAYER", "floor 1's quota for one player", "credits", 400.0, 100.0, 1000.0, 25.0, &"floor", &"LS5", W],
 	[&"quota.step", &"earning", "QUOTA GROWS, A FLOOR", "times this for every floor deeper", "times", 1.45, 1.0, 2.0, 0.05, &"floor", &"LS5", F],
@@ -223,6 +234,9 @@ const WIRED_IDS: Array[StringName] = [
 	&"groundskeeper.lean", &"groundskeeper.heals",
 	# S1: carrying.
 	&"inv.stack", &"inv.hand_reach",
+	# S2: the shop and the cabinet.
+	&"cabinet.slots", &"shop.price.marker", &"shop.price.glow", &"shop.price.flash", &"shop.price.speed", &"shop.price.toy",
+	&"shop.price.salts", &"shop.glow",
 ]
 
 ## The least wait of a call is its start delay plus the floors: sim/run.gd CALL_START_DELAY_MIN (this file

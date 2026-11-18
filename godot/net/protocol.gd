@@ -32,6 +32,7 @@ const Face = preload("res://face/face_codec.gd")
 const Findables = preload("res://sim/findables.gd")
 const Settings = preload("res://sim/settings.gd")
 const Inventory = preload("res://sim/inventory.gd")
+const Shop = preload("res://sim/shop.gd")
 
 const PROTOCOL_VERSION := 1
 const SOLID_BASELINE := 1
@@ -224,7 +225,17 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##  - events "itemDropped" {playerId, pickup, item, count, at, why: drop, down}, "itemTaken" {playerId, pickup,
 ##    item, count, left}, "itemGiven" {playerId, to, item, count}, "invRefused" {playerId, op, why: full,
 ##    theirFull, reach, empty, gone, busy} and "searchFull" {playerId, piece} (a carton found with no room).
-const INV_OPS: Array[String] = ["", "drop", "take", "give"]
+## The shop and the cabinet (sim/run.gd shop, sim/shop.gd; S2). New in the Godot game, and only ever sent in a run with
+## it, so a run without it sends exactly what it did before:
+##  - the inventory's requests gain "stash" (arg your slot, 0 to 3), "fetch" (arg the cabinet's slot), "buy" (arg the
+##    item's index in Shop.ITEMS) and "use" (arg 0), sent and counted as the others;
+##  - the world gains a 28th element, the shop block ("shop" decoded), with the 16th to 27th null when absent:
+##    [[[player id, credits], ...], [[player id, [slot x Shop.CAB_MAX]], ...], [[glow id, body, until], ...],
+##    [[toy id, body, start, end], ...], [[player id, juice until, flash until], ...], wake until (-1 for none)],
+##    a slot as in the inv block;
+##  - events "stashed" / "fetched" {playerId, item, count, slot}, "wokeUp" {bodies, leaveAt}, and the refusals as
+##    "invRefused" {why: cabFull, poor, window, closed, nobody, annexOnly, unusable} besides the inventory's.
+const INV_OPS: Array[String] = ["", "drop", "take", "give", "stash", "fetch", "buy", "use"]
 
 ## Telemetry (client/telemetry.gd -> server/night_log.gd). New in the Godot game: [1, "T", kind, body] for kind
 ## "hb" (a heartbeat: body is a small JSON object as text) or "log" (one error or warning line), and
@@ -421,6 +432,10 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < 26:
 			out.append(null)
 		out.append(enc_inv(w["inv"]))
+	if w.get("shop") != null:
+		while out.size() < 27:
+			out.append(null)
+		out.append(enc_shop(w["shop"]))
 	return out
 
 ## The inv block (see the header) from its readable form {bags: [{playerId, sel, slots: [[item, count] x4]}],
@@ -463,6 +478,75 @@ static func dec_inv(c: _V, w: Variant) -> Dictionary:
 			return {}
 		pickups.append({"id": _i(c, p[0], 0, MAX_COUNT), "item": _code(c, Inventory.ITEMS, p[1]), "count": _i(c, p[2], 1, MAX_COUNT), "at": _dec_body(c, p[3])})
 	return {"bags": bags, "pickups": pickups}
+
+## The shop block (see the header) from its readable form {credits: [{playerId, credits}], cabinets: [{playerId,
+## slots: [[item, count] x Shop.CAB_MAX]}], glows: [{id, at, until}], toys: [{id, at, start, end}], timers:
+## [{playerId, juice, flash}], wake}.
+static func enc_shop(k: Dictionary) -> Array:
+	var credits: Array = []
+	for r: Dictionary in k["credits"]:
+		credits.append([r["playerId"], r["credits"]])
+	var cabs: Array = []
+	for r: Dictionary in k["cabinets"]:
+		var slots: Array = []
+		for s: Array in r["slots"]:
+			slots.append([Inventory.ITEMS.find(String(s[0])), s[1]] if int(s[1]) > 0 else 0)
+		cabs.append([r["playerId"], slots])
+	var glows: Array = []
+	for g: Dictionary in k["glows"]:
+		glows.append([g["id"], _enc_body(g["at"]), floor3(g["until"])])
+	var toys: Array = []
+	for g: Dictionary in k["toys"]:
+		toys.append([g["id"], _enc_body(g["at"]), floor3(g["start"]), floor3(g["end"])])
+	var timers: Array = []
+	for r: Dictionary in k["timers"]:
+		timers.append([r["playerId"], floor3(r["juice"]), floor3(r["flash"])])
+	return [credits, cabs, glows, toys, timers, floor3(k["wake"])]
+
+static func dec_shop(c: _V, w: Variant) -> Dictionary:
+	var a := _a(c, w, 6, 6)
+	if c.bad:
+		return {}
+	var credits: Array = []
+	for rw: Variant in _a(c, a[0], 0, 64):
+		var r := _a(c, rw, 2, 2)
+		if c.bad:
+			return {}
+		credits.append({"playerId": _s(c, r[0]), "credits": _i(c, r[1], 0, MAX_COUNT)})
+	var cabs: Array = []
+	for rw: Variant in _a(c, a[1], 0, 64):
+		var r := _a(c, rw, 2, 2)
+		if c.bad:
+			return {}
+		var slots: Array = []
+		for sw: Variant in _a(c, r[1], Shop.CAB_MAX, Shop.CAB_MAX):
+			if _is_num(sw) and float(sw) == 0.0:
+				slots.append(["", 0])
+				continue
+			var s := _a(c, sw, 2, 2)
+			if c.bad:
+				return {}
+			slots.append([_code(c, Inventory.ITEMS, s[0]), _i(c, s[1], 1, MAX_COUNT)])
+		cabs.append({"playerId": _s(c, r[0]), "slots": slots})
+	var glows: Array = []
+	for gw: Variant in _a(c, a[2], 0, 256):
+		var g := _a(c, gw, 3, 3)
+		if c.bad:
+			return {}
+		glows.append({"id": _i(c, g[0], 0, MAX_COUNT), "at": _dec_body(c, g[1]), "until": _f(c, g[2])})
+	var toys: Array = []
+	for gw: Variant in _a(c, a[3], 0, 256):
+		var g := _a(c, gw, 4, 4)
+		if c.bad:
+			return {}
+		toys.append({"id": _i(c, g[0], 0, MAX_COUNT), "at": _dec_body(c, g[1]), "start": _f(c, g[2]), "end": _f(c, g[3])})
+	var timers: Array = []
+	for rw: Variant in _a(c, a[4], 0, 64):
+		var r := _a(c, rw, 3, 3)
+		if c.bad:
+			return {}
+		timers.append({"playerId": _s(c, r[0]), "juice": _f(c, r[1]), "flash": _f(c, r[2])})
+	return {"credits": credits, "cabinets": cabs, "glows": glows, "toys": toys, "timers": timers, "wake": _f(c, a[5])}
 
 ## The find block (see the header) from its readable form {opened: [{piece, by, what, credits, note, fast, t}],
 ## searching: [{playerId, piece, fast, from, done}], items: [{playerId, juice}], base}.
@@ -776,7 +860,7 @@ static func encode(m: Dictionary) -> String:
 				inp.append(int(m.get("invSel", -1)))
 				inp.append(int(m.get("invs", 0)))
 				inp.append(INV_OPS.find(op))
-				inp.append(str(m["invArg"]) if op == "give" else (int(m["invArg"]) if op == "take" else 0))
+				inp.append(str(m["invArg"]) if op == "give" else (int(m["invArg"]) if op in ["take", "stash", "fetch", "buy"] else 0))
 			return JsJson.stringify(inp)
 		"join":
 			var j: Array = [PROTOCOL_VERSION, "J", m["name"], m["ct"]]
@@ -879,7 +963,7 @@ static func _opt_num(c: _V, v: Variant) -> Variant:
 	return null if v == null else _f(c, v)
 
 static func dec_world(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 15, 27)
+	var a := _a(c, w, 15, 28)
 	if c.bad:
 		return {}
 	var blink: Variant = null
@@ -959,8 +1043,10 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 		out["tune"] = dec_tune(c, a[24])
 	if a.size() > 25 and (a[25] != null or a.size() == 26):
 		out["find"] = dec_find(c, a[25])
-	if a.size() > 26:
+	if a.size() > 26 and (a[26] != null or a.size() == 27):
 		out["inv"] = dec_inv(c, a[26])
+	if a.size() > 27:
+		out["shop"] = dec_shop(c, a[27])
 	return out
 
 static func _dec_report(c: _V, w: Variant) -> Dictionary:
@@ -1067,6 +1153,12 @@ static func decode(text: String) -> Variant:
 					out["invArg"] = _s(c, a[26])
 				elif op == "take":
 					out["invArg"] = _i(c, a[26], 0, MAX_COUNT)
+				elif op == "stash":
+					out["invArg"] = _i(c, a[26], 0, Inventory.SLOTS - 1)
+				elif op == "fetch":
+					out["invArg"] = _i(c, a[26], 0, Shop.CAB_MAX - 1)
+				elif op == "buy":
+					out["invArg"] = _i(c, a[26], 0, Shop.ITEMS.size() - 1)
 				else:
 					out["invArg"] = _i(c, a[26], 0, 0)
 		"J":

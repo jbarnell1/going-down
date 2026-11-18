@@ -133,6 +133,8 @@ const WHY_BUMP := &"bump"
 const WHY_LIGHT := &"light"
 const WHY_VOICE := &"voice"
 const WHY_CALL := &"call"
+## A wind-up toy starting to rattle (the shop, S2: sim/shop.gd), its owner's noise, once, as a dropped tape is.
+const WHY_TOY := &"toy"
 
 static var SIGHT_COS := 0.0
 static var GAP_COS := 0.0
@@ -187,6 +189,8 @@ class SeekInput:
 	var dropped_tape: bool = false
 	## The party horn was blown. Harmless: never a provocation (owner).
 	var horn: bool = false
+	## The shop (S2): this player's wind-up toy starts rattling this tick (a provocation, as a noise is).
+	var toy: bool = false
 	## Their instrument ticked this tick.
 	var ticking: bool = false
 	## Their voice was heard (the hook for when the microphone is built).
@@ -701,6 +705,8 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 		moved_of[p.id] = moved
 		if inp.dropped_tape:
 			_note(noisy, p.id, WHY_TAPE)
+		if inp.toy:
+			_note(noisy, p.id, WHY_TOY)
 		if p.status != &"ok":
 			continue
 		var flap := false
@@ -1342,7 +1348,7 @@ const TUNED_SEARCH := 30.0
 ## its lump (three of them fill it). Nobody provoking, it cools by ANGER_COOL a second (full to empty in
 ## 50 s). The bar is full through a count and drains to empty over the CALM_TIME after it.
 const ANGER_RATES := {&"sprint": 0.5, &"squeaker": 0.5, &"bump": 1.0, &"light": 0.5, &"voice": 0.5}
-const ANGER_LUMPS := {&"ballpit": 0.34, &"flap": 0.34, &"tape": 0.34, &"emote": 0.34}
+const ANGER_LUMPS := {&"ballpit": 0.34, &"flap": 0.34, &"tape": 0.34, &"emote": 0.34, &"toy": 0.34}
 const ANGER_COOL := 0.02
 ## Outside a count: within this of it (out of a hide, same level) it grabs you; holds you this long
 ## (its mask in your face), then drags you to the party table at DRAG_SPEED, DRAG_BEHIND behind it. A drag

@@ -1,7 +1,13 @@
 {
-  "about": "The items a slot can hold (sim/inventory.gd ITEMS lists the same ids in the same order). id: the rules' id; short: what the square prints; name: the item in a sentence; usable: whether it can be used from the hand (nothing is used yet: the nerve bar and the shop come later).",
+  "about": "The items a slot can hold (sim/inventory.gd ITEMS lists the same ids in the same order). id: the rules' id; short: what the square prints; name: the item in a sentence; usable: whether it can be used from the hand (the shop's six, sim/shop.gd ITEMS: the left mouse button uses the one in your hand; the carton waits for the nerve bar).",
   "items": [
-    {"id": "juice", "short": "JUICE", "name": "A CARTON OF JUICE", "usable": true},
-    {"id": "badge", "short": "BADGE", "name": "AN OLD CREW BADGE", "usable": false}
+    {"id": "juice", "short": "JUICE", "name": "A CARTON OF JUICE", "usable": false},
+    {"id": "badge", "short": "BADGE", "name": "AN OLD CREW BADGE", "usable": false},
+    {"id": "marker", "short": "MARK", "name": "A MARKER", "usable": true, "shop": "ONE MARK IN YOUR COLOUR. THE ANNEX ONLY"},
+    {"id": "glow", "short": "GLOW", "name": "A GLOW STICK", "usable": true, "shop": "DROP IT: LIGHT FOR EVERYONE, 3 MINUTES"},
+    {"id": "flash", "short": "FLASH", "name": "A FLASHBULB", "usable": true, "shop": "ONE SECOND OF LIGHT THAT COUNTS AS LOOKING"},
+    {"id": "speed", "short": "SPEED", "name": "SPEED JUICE", "usable": true, "shop": "8 SECONDS OF FREE SPRINT, THEN WINDED"},
+    {"id": "toy", "short": "TOY", "name": "A WIND-UP TOY", "usable": true, "shop": "SET IT DOWN: IT RATTLES IN 3 SECONDS, FOR 6"},
+    {"id": "salts", "short": "SALTS", "name": "SMELLING SALTS", "usable": true, "shop": "A DOWNED CREWMATE UP AT ONCE"}
   ]
 }

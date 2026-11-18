@@ -66,6 +66,8 @@ var bank_strip: MeshInstance3D
 var night_lights: Array[OmniLight3D] = []
 ## One per cell, in bunk order 1..8: the middle of the mattress, in the cell Prison.bunk_positions() names.
 var bunk_centres: Array[Vector3] = []
+## One per cell, in bunk order 1..8: the middle of the cabinet's door (S2; sim/shop.gd cabinet_cell is its stand cell).
+var cabinet_centres: Array[Vector3] = []
 ## The four teller window panes' middles, in the plan's window order (Prison.WINDOWS: window 1 first,
 ## left to right for a player facing the counter).
 var window_centres: Array[Vector3] = []
@@ -137,6 +139,7 @@ func dress(level: Level) -> void:
 	var bunks := Prison.bunk_positions()
 	for i in bunks.size():
 		bunk_centres.append(Vector3.ZERO)
+		cabinet_centres.append(Vector3.ZERO)
 		night_lights.append(null)
 	for r: Dictionary in lv.plan.rooms:
 		match str(r.kind):
@@ -506,6 +509,13 @@ func _kiosk() -> void:
 	set_kiosk_face("")
 	_plate("KioskSign", "YOUR FACE", wall + out * 0.012 + Vector3(0, 2.12, 0), out, 0.16, Color(0.86, 0.84, 0.74), Color(0.08, 0.08, 0.08), 0.15)
 
+## The shop (S2): with it on, windows 1 and 2 (Prison.SHOP_WINDOWS) lose their CLOSED TONIGHT cards; 3 and 4 keep theirs.
+func set_shop_open(on: bool) -> void:
+	for n in Prison.SHOP_WINDOWS:
+		var card := lv.get_node_or_null("WindowClosed_%d" % n) as Node3D
+		if card != null and card.visible == on:
+			card.visible = not on
+
 ## Shows `code` (FaceCodec text) on the kiosk's screen; "" or a face that does not decode shows the
 ## default face.
 func set_kiosk_face(code: String) -> void:
@@ -599,6 +609,16 @@ func _cell(r: Dictionary, number: int, bunk: Vector2i) -> void:
 	_box(_steel, _w(mid, side, fwd, ts, back - 0.3, 0.21), _sz(side, fwd, 0.42, 0.55, 0.42))
 	_box(_steel, _w(mid, side, fwd, ts, back - 0.17, 0.86), _sz(side, fwd, 0.4, 0.3, 0.12))
 	_box(_steel_dark, _w(mid, side, fwd, ts, back - 0.04, 0.6), _sz(side, fwd, 0.36, 0.06, 0.6))
+	# The cabinet (S2, T29; sim/shop.gd cabinet_cell): a steel locker against the back wall beside the bunk's foot, in
+	# the cell's other column, where its player stands to open it. The plate says whose cell it is.
+	var cs := s_lo + bl + 0.5
+	var cd := 0.45
+	_box(_steel, _w(mid, side, fwd, cs, back - cd * 0.5, 0.9), _sz(side, fwd, 0.62, cd, 1.8))
+	_box(_steel_dark, _w(mid, side, fwd, cs, back - cd - 0.006, 0.95), _sz(side, fwd, 0.54, 0.012, 1.6))
+	for k: float in [1.55, 1.62, 1.69]:
+		_box(_steel, _w(mid, side, fwd, cs, back - cd - 0.014, k), _sz(side, fwd, 0.36, 0.008, 0.02))
+	_box(_brass, _w(mid, side, fwd, cs + 0.2, back - cd - 0.02, 1.0), _sz(side, fwd, 0.03, 0.02, 0.14))
+	cabinet_centres[number - 1] = _w(mid, side, fwd, cs, back - cd, 1.0)
 
 # --- the bank room ----------------------------------------------------------------------------
 

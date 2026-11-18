@@ -50,6 +50,10 @@ const Noises = preload("res://sim/noise.gd")
 const PropHearing = preload("res://tests/prop_hearing.gd")
 const Inventory = preload("res://sim/inventory.gd")
 const PropInventory = preload("res://tests/prop_inventory.gd")
+const Shop = preload("res://sim/shop.gd")
+const PropCabinet = preload("res://tests/prop_cabinet.gd")
+const Upgrades = preload("res://sim/upgrades.gd")
+const Prison = preload("res://sim/prison.gd")
 
 const DT := 0.05
 const EPS := 1e-9
@@ -108,13 +112,23 @@ const PROOFS := {
 	# S1: carrying (the four-slot inventory).
 	&"inv.stack": "test_inventory_stack_and_hand_reach",
 	&"inv.hand_reach": "test_inventory_stack_and_hand_reach",
+	# S2: the shop and the cabinet.
+	&"cabinet.slots": "test_cabinet_slots",
+	&"shop.price.marker": "test_shop_prices",
+	&"shop.price.glow": "test_shop_prices",
+	&"shop.price.flash": "test_shop_prices",
+	&"shop.price.speed": "test_shop_prices",
+	&"shop.price.toy": "test_shop_prices",
+	&"shop.price.salts": "test_shop_prices",
+	&"shop.glow": "test_glow_seconds",
 }
 
 ## The rows of later pieces wired so far (sim/settings.gd WIRED_IDS), in the registry's order.
 const MORE: Array[StringName] = [&"orderly.catch_dance", &"minder.stroll", &"minder.hide_time", &"minder.hide_more", &"minder.last_hide", &"minder.search",
 	&"minder.anger_sprint", &"minder.anger_noise", &"minder.anger_cool",
 	&"lift.false_stop", &"lift.board", &"lift.hold", &"lift.ride", &"dark.min", &"dark.max", &"dark.first_min", &"dark.first_max", &"dark.warning",
-	&"stamina.tank", &"heal.time", &"heal.quiet", &"heal.health", &"inv.stack", &"inv.hand_reach"]
+	&"stamina.tank", &"heal.time", &"heal.quiet", &"heal.health", &"inv.stack", &"inv.hand_reach", &"cabinet.slots",
+	&"shop.price.marker", &"shop.price.glow", &"shop.price.flash", &"shop.price.speed", &"shop.price.toy", &"shop.price.salts", &"shop.glow"]
 
 ## The game's value of every setting: the constant the game uses, with the rooms' switches on (paced, the long
 ## dark, the car waits: net/host_rules.gd). This table, not the registry, is the test's oracle.
@@ -201,6 +215,14 @@ static func game_values() -> Dictionary:
 		&"heal.health": Run.HEAL_HEALTH,
 		&"inv.stack": float(Inventory.STACK),
 		&"inv.hand_reach": Inventory.HAND_REACH,
+		&"cabinet.slots": float(Shop.CAB_SLOTS),
+		&"shop.price.marker": float(Shop.base_price("marker")),
+		&"shop.price.glow": float(Shop.base_price("glow")),
+		&"shop.price.flash": float(Shop.base_price("flash")),
+		&"shop.price.speed": float(Shop.base_price("speed")),
+		&"shop.price.toy": float(Shop.base_price("toy")),
+		&"shop.price.salts": float(Shop.base_price("salts")),
+		&"shop.glow": Shop.GLOW_SECONDS,
 		&"quota.each": float(Run.QUOTA_PER_PLAYER),
 		&"quota.step": Run.QUOTA_DEPTH_STEP,
 		&"pay.step": Run.DEPTH_PAY_STEP,
@@ -233,7 +255,7 @@ func test_catch_dance_setting(t: T) -> void:
 func test_registry_rows(t: T) -> void:
 	var game := game_values()
 	var rows := Settings.list()
-	t.eq(rows.size(), 90, "rows in the registry")
+	t.eq(rows.size(), 98, "rows in the registry")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -283,7 +305,7 @@ func test_registry_rows(t: T) -> void:
 	t.check(wired == want and want.size() == TEN.size() + MORE.size() + KEEPER_SIX.size(), "the wired rows are exactly those of LS1 and the groups wired since, in order: %s" % str(wired))
 	t.eq(by_group.get(&"residents", 0), 48, "residents")
 	t.eq(by_group.get(&"lift", 0), 12, "the lift and the dark")
-	t.eq(by_group.get(&"players", 0), 15, "players")
+	t.eq(by_group.get(&"players", 0), 23, "players")
 	t.eq(by_group.get(&"earning", 0), 8, "earning")
 	t.eq(by_group.get(&"hiding", 0), 3, "hiding")
 	t.eq(by_group.get(&"speeds", 0), 4, "player speeds, the last group")
@@ -1326,6 +1348,80 @@ func test_inventory_stack_and_hand_reach(t: T) -> void:
 			t.eq(Inventory.bag_of(r.state.bags, "p1").totals().size(), 1 if d < v else 0, "inv.hand_reach = %.1f: a hand-over at %.2f m" % [v, d])
 	t.eq(Inventory.stack_limit(null, "p0"), Inventory.STACK, "untuned: Inventory.STACK")
 	t.eq(Inventory.hand_reach(null), Inventory.HAND_REACH, "untuned: Inventory.HAND_REACH")
+
+## S2, the cabinet: CABINET HOLDS, at least, today's and most: at home, at your own cabinet, with every open slot
+## full but one, a stash goes into the last open slot; with all of them full the next is refused (cabFull).
+func test_cabinet_slots(t: T) -> void:
+	var ids: Array[String] = ["p0"]
+	var s0 := PropCabinet.home_run("ls-cab", ids)
+	if not t.check(Run.at_home(s0) and s0.shop, "home with the shop"):
+		return
+	var at := PropCabinet.cab_body(s0, ids, "p0")
+	var row := Settings.row(&"cabinet.slots")
+	for v: float in [row.lo, row.today, row.hi]:
+		var n := roundi(v)
+		var cab := Shop.empty_cabinet()
+		for k in n - 1:
+			cab[k] = ["toy", 1]
+		var s := Run.with_tuning(PropCabinet.with_bags(Run.with_cabinet(s0, "p0", cab), {"p0": [["glow", 1], ["salts", 1]]}), {&"cabinet.slots": v})
+		var r := PropCabinet.tick(s, {"p0": at}, {"p0": ["stash", 0]})
+		t.eq(Shop.cabinet_of((r.state.shop_state as Shop.ShopState).cabinets, "p0")[n - 1], ["glow", 1], "cabinet.slots = %d: the last open slot takes it" % n)
+		var r2 := PropCabinet.tick(r.state, {"p0": at}, {"p0": ["stash", 1]})
+		var w := PropCabinet.of_type(r2.events, "invRefused")
+		t.check(w.size() == 1 and str(w[0]["why"]) == "cabFull", "cabinet.slots = %d: then it is full (%s)" % [n, str(w)])
+	t.eq(Shop.cab_slots(null), Shop.CAB_SLOTS, "untuned: Shop.CAB_SLOTS")
+
+## S2, the prices: each item's price at least, today's and most, bought at window 1 with exactly that many credits
+## (bought, nothing left) and with one fewer (refused, poor).
+func test_shop_prices(t: T) -> void:
+	var ids: Array[String] = ["p0"]
+	var s0 := PropCabinet.home_run("ls-price", ids)
+	if not t.check(Run.at_home(s0) and s0.shop, "home with the shop"):
+		return
+	var at := PropCabinet.at_cell(s0, Prison.WINDOWS[0])
+	for k in Shop.ITEMS.size():
+		var item: String = Shop.ITEMS[k]
+		var row := Settings.row(Shop.price_id(item))
+		for v: float in [row.lo, row.today, row.hi]:
+			var n := roundi(v)
+			for have: int in [n, n - 1]:
+				if have < 0:
+					continue
+				var s := PropCabinet.with_bags(s0, {"p0": []})
+				var w := s.wallets.duplicate()
+				w["p0"] = Upgrades.UpgradeState.make(have)
+				s.wallets = w
+				s = Run.with_tuning(s, {Shop.price_id(item): v})
+				var r := PropCabinet.tick(s, {"p0": at}, {"p0": ["buy", k]})
+				var ok := not PropCabinet.of_type(r.events, "bought").is_empty()
+				t.check(ok == (have >= n), "%s at %d with %d credits: %s" % [item, n, have, "bought" if ok else "refused"])
+				if ok:
+					t.eq((r.state.wallets["p0"] as Upgrades.UpgradeState).credits, have - n, "%s at %d: exactly the price is taken" % [item, n])
+		t.eq(Shop.price(null, item), Shop.base_price(item), "untuned %s: the design's price" % item)
+
+## S2, A GLOW STICK LASTS: at least, today's and most, a glow stick dropped now is lit exactly that long (the host's
+## shop block's until), and goes out once.
+func test_glow_seconds(t: T) -> void:
+	var ids: Array[String] = ["p0"]
+	var rules := HostRules.new(false, 1, Places.FULL, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, true)
+	var s0 := PropInventory.open_doors(rules.prepare(Run.create_run("ls-glow", ids)))
+	var row := Settings.row(&"shop.glow")
+	for v: float in [row.lo, row.today, row.hi]:
+		var s := Run.with_tuning(PropCabinet.with_bags(s0, {"p0": [["glow", 1]]}), {&"shop.glow": v})
+		var r := PropCabinet.tick(s, {}, {"p0": ["use", 0]})
+		var g: Array = (r.state.shop_state as Shop.ShopState).glows
+		t.check(g.size() == 1 and absf(float(g[0]["until"]) - r.state.t - v) < 1e-6, "shop.glow = %.0f: lit until %.0f s from now" % [v, v])
+		var st := r.state
+		var outs := 0
+		var out_t := -1.0
+		for _k in roundi((v + 0.3) / DT):
+			var rr := PropCabinet.tick(st, {})
+			st = rr.state
+			for e: Dictionary in PropCabinet.of_type(rr.events, "glowOut"):
+				outs += 1
+				out_t = float(e["t"])
+		t.check(outs == 1 and absf(out_t - r.state.t - v) <= DT + 1e-6, "shop.glow = %.0f: out once, on time" % v)
+	t.eq(Shop.glow_seconds(null), Shop.GLOW_SECONDS, "untuned: Shop.GLOW_SECONDS")
 
 # ---------------------------------------------------------------------------------------------
 # 6. The Groundskeeper's six (AR1).

@@ -15,10 +15,14 @@
 #   "days"     int     days served, 0..MAX_INT
 #   "records"  Dictionary  String key ([a-z0-9_], 1..24 characters) -> int 0..MAX_INT, at most
 #                      MAX_RECORDS entries (award counts, bests: whatever the report keeps)
+#   "cabinet"  String  OPTIONAL (the shop and the cabinet, S2, T29): the player's cabinet as sim/shop.gd cabinet_text writes it,
+#                      Shop.CAB_MAX slots, each "item:count" or "0". A save without it is read as before; a save with
+#                      it adds one more part before the stamp ("What is in your cabinet when the game is shut is kept").
 # Integers only: a float anywhere is refused, so the text never depends on float formatting.
 #
 # The canonical text (one line, ASCII only, safe inside JSON and a URL without escaping):
 #   GDS1|<player>|<name as hex>|<credits>|<nodes, sorted, comma-separated>|<days>|<records, sorted by key, key:value comma-separated>
+#   then, only when the fields have a cabinet: |<cabinet>
 # The sealed line is the text, "|", then the stamp: 64 lowercase hex characters of
 # HMAC-SHA256(key, text). Same fields, same key: always the same line.
 #
@@ -30,7 +34,7 @@
 #   open(sealed, key) -> Dictionary         {"ok": bool, "reason": String, "fields": Dictionary}
 #       Refusal reasons: "key", "too_big", "chars", "shape", "version", "stamp", then (only for a
 #       correctly stamped line) "player", "name", "credits", "nodes", "days", "records",
-#       "not_canonical". On a refusal "fields" is {}; the caller starts the player fresh.
+#       "cabinet", "not_canonical". On a refusal "fields" is {}; the caller starts the player fresh.
 #   fresh(player_number) -> Dictionary      a new player's fields (no credits, no nodes)
 #   new_player_number() -> String           16 random hex characters (the engine's secure random)
 #   key_from_hex(text) -> Dictionary        {"ok", "reason", "key": PackedByteArray}
@@ -39,6 +43,7 @@
 extends RefCounted
 
 const Upgrades = preload("res://sim/upgrades.gd")
+const Shop = preload("res://sim/shop.gd")
 
 const VERSION := "GDS1"
 ## The environment variable the server reads the key from: hex, at least MIN_KEY_BYTES bytes
@@ -63,8 +68,11 @@ const FIELDS: Array[String] = ["player", "name", "credits", "nodes", "days", "re
 # ---------------------------------------------------------------- making
 
 static func check(fields: Dictionary) -> String:
-	if fields.size() != FIELDS.size():
+	var with_cab := fields.has("cabinet")
+	if fields.size() != FIELDS.size() + (1 if with_cab else 0):
 		return "fields"
+	if with_cab and (not (fields["cabinet"] is String) or Shop.cabinet_from_text(String(fields["cabinet"])).is_empty()):
+		return "cabinet"
 	for k in FIELDS:
 		if not fields.has(k):
 			return "fields"
@@ -120,6 +128,8 @@ static func make(fields: Dictionary) -> String:
 	var name: String = fields["name"]
 	var text := "%s|%s|%s|%d|%s|%d|%s" % [VERSION, String(fields["player"]), name.to_ascii_buffer().hex_encode(),
 		int(fields["credits"]), ",".join(nodes), int(fields["days"]), ",".join(pairs)]
+	if fields.has("cabinet"):
+		text += "|" + String(fields["cabinet"])
 	if text.length() + 1 + STAMP_HEX > MAX_SEALED:
 		return ""
 	return text
@@ -154,7 +164,7 @@ static func open(sealed: String, key: PackedByteArray) -> Dictionary:
 		if not _allowed(sealed.unicode_at(i)):
 			return _no("chars")
 	var parts := sealed.split("|", true)
-	if parts.size() != FIELDS.size() + 2:
+	if parts.size() != FIELDS.size() + 2 and parts.size() != FIELDS.size() + 3:
 		return _no("shape")
 	if parts[0] != VERSION:
 		return _no("version")
@@ -197,6 +207,10 @@ static func open(sealed: String, key: PackedByteArray) -> Dictionary:
 				return _no("records")
 			records[kv[0]] = v
 	var fields := {"player": parts[1], "name": name, "credits": credits, "nodes": nodes, "days": days, "records": records}
+	if parts.size() == FIELDS.size() + 3:
+		if Shop.cabinet_from_text(parts[7]).is_empty():
+			return _no("cabinet")
+		fields["cabinet"] = parts[7]
 	var why := check(fields)
 	if why != "":
 		return _no(why)

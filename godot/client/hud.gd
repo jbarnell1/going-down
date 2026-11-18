@@ -43,6 +43,8 @@ const MENU_ROWS: Array[Array] = [
 	# The four-slot inventory (S1, client/inventory_view.gd).
 	["1 2 3 4 / WHEEL", "PICK WHAT YOU HOLD"],
 	["G", "DROP WHAT YOU HOLD"],
+	# The shop's items (S2, client/shop_view.gd): the left mouse button uses the one in your hand.
+	["LEFT MOUSE", "USE WHAT YOU HOLD"],
 	["F FACING A FRIEND", "GIVE THEM WHAT YOU HOLD"],
 	["W IN A HIDE", "LEAN TO THE GAP"],
 	["T", "TAPE LOOK ON / OFF"],

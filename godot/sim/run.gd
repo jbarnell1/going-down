@@ -283,6 +283,27 @@
 #  - With findables, a carton found goes into the finder's bag instead of `items`. No room: the piece is not
 #    opened, the carton stays in the furniture, and "searchFull" {playerId, piece} says so (searchDone is not sent).
 #  - The morning clears every bag and every pickup.
+# The shop and the cabinet (S2, T28 and T29, `shop`, with_shop: docs/floors/skill-tree.md sections 1, 2b and 5; sim/shop.gd;
+# net/host_rules.gd turns it on for the game's rooms; it needs the inventory; tests and every stored result leave it off,
+# and then nothing below happens). `shop_state` (Shop.ShopState) holds every cabinet and what the items left lit.
+#  - The requests come as the inventory's (PlayerInput.inv_op, after its busy check): "stash" (inv_arg: your slot) puts
+#    that slot into your own cabinet, "fetch" (inv_arg: the cabinet's slot) takes it out, both standing at your
+#    cabinet (beside your bunk, Shop.cabinet_cell) in the prison, as much as fits ("stashed", "fetched"). Refused
+#    ("invRefused" {why: reach, empty, cabFull, full}) changes nothing.
+#  - "buy" (inv_arg: the item's index in Shop.ITEMS) at shop window 1 or 2, before bed: the price (Shop.price, the host's
+#    shop.price.<item>) leaves the buyer's own wallet and the item goes into their hands ("bought" {item, price,
+#    credits}). Refused (window, closed, busy, full, poor) it changes nothing.
+#  - "use" (inv_arg 0): the item in the hand, if it is one of the shop's (_use_item); used, it leaves the hand ("itemUsed"
+#    {item, ...}). Speed juice: Shop.JUICE_SECONDS of sprint that costs no stamina (net/host.gd holds the tank full),
+#    then "juiceOut" (winded). Glow stick: lit where it was dropped for shop.glow seconds ("glowOut"); nothing reads
+#    its light. Wind-up toy: set at the feet, TOY_WAIT later it rattles for TOY_RATTLE: the host event "noise" {x, z,
+#    level, radius, by} once as it starts (nothing listens yet), and on the Playroom a provocation of its owner's
+#    (Seek WHY_TOY). Flashbulb: for FLASH_SECONDS the Stillness step counts the player as looking even in a blackout,
+#    one watcher. Smelling salts: a downed crewmate faced within HEAL_REACH is up at once ("healed" {salts: true}),
+#    refused "nobody". Marker: the Annex only ("annexOnly"): one mark in the player's colour at once (a "markPlaced"
+#    {own: true}) that never comes from the crew's pad, and peeled never goes onto it.#  - The night: at lights out + Day.LIGHTS_OUT_SECONDS every bag and pickup is cleared, the cabinets are kept, and the
+#    crew wakes on their bunks, lights on ("wokeUp" {bodies, leaveAt}), for Shop.WAKE_SECONDS; then the morning
+#    (the car on floor 1, as before) with what each player then carries.
 # Live settings (docs/floors/live-settings.md, sim/settings.gd): `tuning` is null unless the host's desk put one
 # there (with_tuning). The rules read the host's numbers through Settings.f with today's constant as the
 # fallback, so a run without one computes exactly as before. Read so far (LS1): the Stillness residents' hunt
@@ -340,6 +361,7 @@ const Noises = preload("res://sim/noise.gd")
 const Hearing = preload("res://sim/hearing.gd")
 const Findables = preload("res://sim/findables.gd")
 const Inventory = preload("res://sim/inventory.gd")
+const Shop = preload("res://sim/shop.gd")
 
 # ---------------------------------------------------------------------------------------------
 # Tuning.
@@ -1042,6 +1064,10 @@ class RunState:
 	var pickups: Array = []
 	var pickups_plan: Variant = null
 	var pickup_seq: int = 0
+	## The shop and the cabinet (S2, with_shop; sim/shop.gd). Off: nothing below is ever made or read.
+	var shop: bool = false
+	## Every cabinet and what the items left lit (Shop.ShopState). Replaced, never edited.
+	var shop_state: Variant = null
 
 	## Live settings (sim/settings.gd): the host's numbers in force in this run, or null for none (every test
 	## and stored result). The rules read it with Settings.f, falling back to today's constant. Replaced,
@@ -1071,6 +1097,8 @@ class RunState:
 		s.pickups = pickups
 		s.pickups_plan = pickups_plan
 		s.pickup_seq = pickup_seq
+		s.shop = shop
+		s.shop_state = shop_state
 		s.two_watchers = two_watchers
 		s.relocation = relocation
 		s.seed = seed
@@ -1416,6 +1444,13 @@ static func with_findables(s0: RunState) -> RunState:
 	s.find = null
 	s.lore_used = []
 	s.items = {}
+	return s
+
+## Turns the shop and the cabinet on (S2, see the header): empty cabinets, nothing lit.
+static func with_shop(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.shop = true
+	s.shop_state = Shop.ShopState.new()
 	return s
 
 ## Turns the four-slot inventory on (S1, see the header): empty hands, nothing on the floor.
@@ -1851,6 +1886,8 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 		si.voice = i.voice
 		si.horn = i.horn
 		si.light = i.light
+		# The shop (S2): a wind-up toy of theirs starting to rattle is their noise.
+		si.toy = s.shop and Shop.rattles_from(s.shop_state, t_prev, t).has(p.id)
 		var mem := Instr.member(s.crew, p.id)
 		si.ticking = mem != null and mem.instrument.ticks > 0
 		inputs.append(si)
@@ -2446,7 +2483,16 @@ static func _step_annex(s: RunState, players: Array[RunPlayer], input_of: Dictio
 		if not _is_active(p, input_of):
 			continue
 		var inp: PlayerInput = input_of[p.id]
-		if inp.peel >= 0:
+		if inp.peel >= 0 and s.shop and (s.shop_state as Shop.ShopState).own_marks.has(inp.peel) and _mark_by_id(ms, inp.peel) != null:
+			# A bought marker's mark (S2): peeled, it goes; it never goes onto the crew's pad.
+			var om := _mark_by_id(ms, inp.peel)
+			if om.level == p.body.level and M.hypot2(om.x - p.body.x, om.z - p.body.z) <= MARK_PEEL_REACH + EPS and p.status == &"ok":
+				ms = ms.copy()
+				ms.marks.erase(om)
+				events.append({"type": "markPeeled", "t": t, "playerId": p.id, "id": om.id, "owner": om.player, "pad": ms.pad, "own": true})
+			else:
+				events.append({"type": "markRefused", "t": t, "playerId": p.id, "reason": "far", "peel": inp.peel})
+		elif inp.peel >= 0:
 			var m := _mark_by_id(ms, inp.peel)
 			var why := ""
 			if m == null:
@@ -3035,7 +3081,12 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			else:
 				var hv := _hidden_view(s, i, blind or i.blind)
 				# A searcher's eyes are in the drawer (findables): huntable, never a watcher.
-				views.append(hv if hv != null else _view_of(i, true, blind or i.blind or searching(s, p.id)))
+				# The shop's flashbulb (S2): for its second the player looks from where they stand, even in the dark, as one
+				# watcher (the deliberate break counts it twice).
+				var flash := s.shop and Shop.flashing(s.shop_state, p.id, t)
+				views.append(hv if hv != null else _view_of(i, true, (blind and not flash) or i.blind or searching(s, p.id)))
+				if flash and hv == null and Shop.flash_watchers() > 1:
+					views.append(_view_of(i, true, false))
 		# The call pulls it toward the landing, until it gets there.
 		var s2 := float(s.plan.cell_size)
 		var lx := (s.plan.landing.x + 0.5) * s2
@@ -3177,6 +3228,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	# ---- The four-slot inventory (S1, see the header).
 	if s.inventory:
 		_step_inventory(s, players, input_of, t, events)
+	# ---- The shop and the cabinet (S2, see the header): after the inventory, whose requests they share.
+	if s.shop and s.inventory:
+		_step_shop(s, players, input_of, t, dt, events)
 
 	# ---- The floor quota met: said once per floor, while the crew is still on it.
 	if s.quota and not s.quota_met and not at_home(s) and s.phase != &"riding" and s.floor_needed > 0 and quota_reached(s):
@@ -3199,8 +3253,18 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	# ---- Bed and the morning (the day loop).
 	elif home:
 		_step_bed(s, players, input_of, t, dt, events)
-		if s.lights_out_t >= 0.0 and t >= s.lights_out_t + Day.LIGHTS_OUT_SECONDS - EPS:
+		var waking := s.shop and (s.shop_state as Shop.ShopState).wake_until >= 0.0
+		if waking and t >= (s.shop_state as Shop.ShopState).wake_until - EPS:
+			# The shop (S2): the morning in the cells is over; the car takes the crew down.
+			var sh := (s.shop_state as Shop.ShopState).copy()
+			sh.wake_until = -1.0
+			s.shop_state = sh
 			_morning(s, players, t, events)
+		elif not waking and s.lights_out_t >= 0.0 and t >= s.lights_out_t + Day.LIGHTS_OUT_SECONDS - EPS:
+			if s.shop:
+				_wake_in_cells(s, players, t, events)
+			else:
+				_morning(s, players, t, events)
 	# ---- Arriving on the next floor.
 	elif s.phase == &"riding" and s.timer <= EPS:
 		var depth := s.depth + 1
@@ -3512,8 +3576,9 @@ static func _morning(s: RunState, players: Array[RunPlayer], t: float, events: A
 	if s.findables:
 		# Cartons do not go home (findables, see the header).
 		s.items = {}
-	if s.inventory and Inventory.test_break != "no_clear":
-		# Everything carried or left lying is cleared overnight (the inventory, see the header).
+	if s.inventory and not s.shop and Inventory.test_break != "no_clear":
+		# Everything carried or left lying is cleared overnight (the inventory, see the header). With the shop that was
+		# done as the crew woke in the cells (_wake_in_cells): what they took out of their cabinets goes down with them.
 		s.bags = {}
 		s.pickups = []
 		s.pickups_plan = null
@@ -3926,8 +3991,351 @@ static func _step_inventory(s: RunState, players: Array[RunPlayer], input_of: Di
 				bags[p.id] = nb
 				events.append({"type": "itemGiven", "t": t, "playerId": p.id, "to": q.id, "item": b.item(k), "count": r.added})
 			_:
-				refuse.call("op")
+				# The shop's requests (S2) are the shop's step's, after this one.
+				if not (s.shop and Shop.OPS.has(String(i.inv_op))):
+					refuse.call("op")
 	if touched:
 		s.bags = bags
 		s.pickups = pickups
 		s.pickup_seq = seq
+
+# ---------------------------------------------------------------------------------------------
+# The shop and the cabinet (S2; see the header).
+
+## The ids of the run's players, in its order (Day.bunk_of sorts them: every bunk and cabinet is the same for all).
+static func _ids_of(players: Array[RunPlayer]) -> Array[String]:
+	var ids: Array[String] = []
+	for p in players:
+		ids.append(p.id)
+	return ids
+
+## The night in the cells (the shop on; see the header): everything carried or left lying is cleared, the cabinets
+## are kept, and the crew wakes on their bunks, lights on, until the car takes them down.
+static func _wake_in_cells(s: RunState, players: Array[RunPlayer], t: float, events: Array[Dictionary]) -> void:
+	if s.inventory and Shop.test_break != "keep" and Inventory.test_break != "no_clear":
+		s.bags = {}
+		s.pickups = []
+		s.pickups_plan = null
+	var sh := (s.shop_state as Shop.ShopState).copy()
+	sh.glows = []
+	sh.toys = []
+	sh.juiced = {}
+	sh.flashes = {}
+	sh.wake_until = t + Shop.WAKE_SECONDS
+	s.shop_state = sh
+	var ids := _ids_of(players)
+	var bodies := {}
+	for i in players.size():
+		var np := players[i].copy()
+		np.body = bunk_body(s.plan, ids, np.id)
+		np.status = &"ok"
+		np.aboard = false
+		np.side = null
+		players[i] = np
+		bodies[np.id] = np.body
+	var nc := s.crew.copy()
+	var members: Array[Instr.CrewMember] = []
+	for m in nc.members:
+		var nm := m.copy()
+		nm.body = bodies.get(m.id, m.body)
+		members.append(nm)
+	nc.members = members
+	s.crew = nc
+	s.bed = null
+	s.bed_hold = {}
+	s.use_prev = {}
+	s.lights_out_t = -1.0
+	events.append({"type": "wokeUp", "t": t, "bodies": bodies, "leaveAt": sh.wake_until})
+
+## One tick of the shop (see the header): the floor's lit things go with it, and the requests in the run's player
+## order. Updates `s` (shop_state, bags) and appends the events.
+static func _step_shop(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, _dt: float, events: Array[Dictionary]) -> void:
+	var sh0: Shop.ShopState = s.shop_state
+	var sh := sh0
+	if sh.plan != s.plan:
+		# A new floor (or home): what was lit or set on the last one is gone with it.
+		sh = sh.copy()
+		sh.plan = s.plan
+		sh.glows = []
+		sh.toys = []
+	# What the items left (S2): glow sticks going out, toys rattling (the host event "noise": nothing listens to it on
+	# main yet; the Playroom hears it through the seek step) and going quiet, the juice and the flash running out.
+	var t0 := t - _dt
+	var live_g: Array = []
+	for g: Dictionary in sh.glows:
+		if float(g["until"]) <= t + EPS:
+			events.append({"type": "glowOut", "t": t, "id": g["id"]})
+		else:
+			live_g.append(g)
+	var live_t: Array = []
+	for g: Dictionary in sh.toys:
+		var st := float(g["start"])
+		if st > t0 + EPS and st <= t + EPS:
+			var b0: Move.Body = g["at"]
+			events.append({"type": "noise", "t": t, "source": "toy", "id": g["id"], "by": g["by"], "x": b0.x, "z": b0.z, "y": b0.y, "level": b0.level, "radius": Shop.TOY_RADIUS})
+		if float(g["end"]) <= t + EPS:
+			events.append({"type": "toyDone", "t": t, "id": g["id"]})
+		else:
+			live_t.append(g)
+	var ju := {}
+	for id: String in sh.juiced:
+		if float(sh.juiced[id]) <= t + EPS:
+			events.append({"type": "juiceOut", "t": t, "playerId": id})
+		else:
+			ju[id] = sh.juiced[id]
+	var fl := {}
+	for id: String in sh.flashes:
+		if float(sh.flashes[id]) > t + EPS:
+			fl[id] = sh.flashes[id]
+	if live_g.size() != sh.glows.size() or live_t.size() != sh.toys.size() or ju.size() != sh.juiced.size() or fl.size() != sh.flashes.size():
+		sh = sh.copy() if sh == sh0 else sh
+		sh.glows = live_g
+		sh.toys = live_t
+		sh.juiced = ju
+		sh.flashes = fl
+	var ids := _ids_of(players)
+	for p in players:
+		var i: PlayerInput = input_of.get(p.id)
+		if i == null or p.status != &"ok" or not _is_active(p, input_of) or not Shop.OPS.has(String(i.inv_op)):
+			continue
+		# The inventory's step said "busy" to these already.
+		if s.phase == &"riding" or _in_hide(s, p.id) or searching(s, p.id):
+			continue
+		var refuse := func(why: String) -> void:
+			events.append({"type": "invRefused", "t": t, "playerId": p.id, "op": String(i.inv_op), "why": why})
+		var b := Inventory.bag_of(s.bags, p.id)
+		var limit := Inventory.stack_limit(s.tuning, p.id)
+		match String(i.inv_op):
+			"stash", "fetch":
+				if not Shop.at_cabinet(s.plan, ids, p.id, p.body):
+					refuse.call("reach")
+					continue
+				var cab := Shop.cabinet_of(sh.cabinets, p.id)
+				var k := int(i.inv_arg) if i.inv_arg != null else -1
+				if i.inv_op == &"stash":
+					if k < 0 or k >= Inventory.SLOTS or b.count(k) <= 0:
+						refuse.call("empty")
+						continue
+					var put := Shop.cab_put(cab, Shop.cab_slots(s.tuning), b.item(k), b.count(k), limit)
+					if int(put[1]) <= 0:
+						refuse.call("cabFull")
+						continue
+					var nb := b.copy()
+					var left := b.count(k) - int(put[1])
+					nb.slots[k] = [b.item(k) if left > 0 else "", left]
+					_set_bag(s, p.id, nb)
+					sh = _with_cabinet(sh, sh0, p.id, put[0])
+					events.append({"type": "stashed", "t": t, "playerId": p.id, "item": b.item(k), "count": int(put[1]), "slot": k})
+				else:
+					if k < 0 or k >= Shop.CAB_MAX or int(cab[k][1]) <= 0:
+						refuse.call("empty")
+						continue
+					var item := str(cab[k][0])
+					var r := Inventory.add(b, item, int(cab[k][1]), limit)
+					if r.added <= 0:
+						refuse.call("full")
+						continue
+					var nc := cab.duplicate(true)
+					var left := int(cab[k][1]) - r.added
+					nc[k] = [item if left > 0 else "", left]
+					_set_bag(s, p.id, r.bag)
+					sh = _with_cabinet(sh, sh0, p.id, nc)
+					events.append({"type": "fetched", "t": t, "playerId": p.id, "item": item, "count": r.added, "slot": k})
+			"buy":
+				var n := int(i.inv_arg) if i.inv_arg != null else -1
+				if n < 0 or n >= Shop.ITEMS.size():
+					refuse.call("op")
+					continue
+				if not Shop.at_shop(s.plan, p.body):
+					refuse.call("window")
+					continue
+				# In the prison you can only buy and then sleep (C6): not in bed, not after lights out, not in the morning.
+				if sh.wake_until >= 0.0 or s.lights_out_t >= 0.0 or (s.bed != null and Day.is_lights_out(s.bed, t)):
+					refuse.call("closed")
+					continue
+				if s.bed != null and s.bed.in_bed.has(p.id):
+					refuse.call("busy")
+					continue
+				var item: String = Shop.ITEMS[n]
+				var price := Shop.price(s.tuning, item)
+				if not Inventory.has_room(b, item, limit):
+					refuse.call("full")
+					continue
+				var w: Upgrades.UpgradeState = s.wallets.get(p.id)
+				if w == null:
+					w = Upgrades.UpgradeState.make(0)
+				if w.credits < price:
+					refuse.call("poor")
+					continue
+				var nw := w.copy()
+				if Shop.test_break != "free":
+					nw.credits -= price
+				var wallets := s.wallets.duplicate()
+				wallets[p.id] = nw
+				s.wallets = wallets
+				_set_bag(s, p.id, Inventory.add(b, item, 1, limit).bag)
+				events.append({"type": "bought", "t": t, "playerId": p.id, "item": item, "price": price, "credits": nw.credits})
+			"use":
+				var k := b.sel
+				if b.count(k) <= 0:
+					refuse.call("empty")
+					continue
+				var item := b.item(k)
+				if not Shop.usable(item):
+					refuse.call("unusable")
+					continue
+				var used: Array = _use_item(s, sh, sh0, players, p, i, item, t, events)
+				if str(used[0]) != "":
+					refuse.call(str(used[0]))
+					continue
+				sh = used[1]
+				_set_bag(s, p.id, Inventory.remove_one(Inventory.bag_of(s.bags, p.id), k))
+			_:
+				refuse.call("op")
+	if sh != sh0:
+		s.shop_state = sh
+
+## Uses `item` from player `p`'s hand (the shop's items; see the header). Returns ["" and the shop state after] when it
+## worked (the caller takes the item from the hand), or [why, the shop state unchanged] when it cannot be used here.
+static func _use_item(s: RunState, sh: Shop.ShopState, sh0: Shop.ShopState, players: Array[RunPlayer], p: RunPlayer, i: PlayerInput, item: String, t: float, events: Array[Dictionary]) -> Array:
+	var at := Move.Body.make(_cm(p.body.x), _cm(p.body.z), p.body.level, p.body.y)
+	var used := {"type": "itemUsed", "t": t, "playerId": p.id, "item": item}
+	var n := sh.copy() if sh == sh0 else sh
+	match item:
+		"speed":
+			# Eight seconds of sprint that costs no stamina (the host holds the tank full), then winded ("juiceOut").
+			var ju := n.juiced.duplicate()
+			ju[p.id] = t + Shop.JUICE_SECONDS
+			n.juiced = ju
+			used["until"] = ju[p.id]
+		"glow":
+			# Dropped at the feet, lit on every screen until shop.glow runs out. No rule reads its light.
+			n.seq += 1
+			var g := n.glows.duplicate()
+			g.append({"id": n.seq, "at": at, "until": t + Shop.glow_seconds(s.tuning), "by": p.id})
+			n.glows = g
+			used["id"] = n.seq
+			used["at"] = at
+		"toy":
+			# Set at the feet: TOY_WAIT later it rattles for TOY_RATTLE.
+			n.seq += 1
+			var g := n.toys.duplicate()
+			g.append({"id": n.seq, "at": at, "start": t + Shop.TOY_WAIT, "end": t + Shop.TOY_WAIT + Shop.TOY_RATTLE, "by": p.id})
+			n.toys = g
+			used["id"] = n.seq
+			used["at"] = at
+		"flash":
+			# One second of looking from where they stand, even in the dark (the Stillness step reads it).
+			var fl := n.flashes.duplicate()
+			fl[p.id] = t + Shop.FLASH_SECONDS
+			n.flashes = fl
+			used["until"] = fl[p.id]
+		"salts":
+			# A downed crewmate, faced, within the heal reach: up at once, counted as a heal.
+			var k := _salts_target(s, players, p, i)
+			if k < 0:
+				return ["nobody", sh]
+			used["target"] = players[k].id
+			events.append(used)
+			_salts_heal(s, players, k, p.id, t, events)
+			return ["", n]
+		"marker":
+			# The Annex's marks (sim/marks.gd): one in your colour, on top of the crew's pad, which it never touches.
+			if s.annex == null or (s.annex as AnnexFloor).plan != s.plan:
+				return ["annexOnly", sh]
+			if p.aboard or i.gait == &"sprint":
+				return ["busy", sh]
+			var a := (s.annex as AnnexFloor).copy()
+			var ms := a.marks.copy()
+			var m := Marks.Mark.make(ms.next_id, at.x, at.z, at.level, Marks.snap_dir(i.yaw), p.id, t)
+			ms.next_id += 1
+			ms.marks.append(m)
+			a.marks = ms
+			s.annex = a
+			var om := n.own_marks.duplicate()
+			om[m.id] = true
+			n.own_marks = om
+			used["mark"] = m.id
+			events.append(used)
+			events.append({"type": "markPlaced", "t": t, "playerId": p.id, "mark": mark_plain(m), "pad": ms.pad, "radius": Marks.NOISE_RADIUS, "own": true})
+			return ["", n]
+		_:
+			return ["unusable", sh]
+	events.append(used)
+	return ["", n]
+
+## The downed crewmate player `p` faces within the salts' reach (feet, same level, within Shop.SALTS_FACE_DEG of where
+## they look): the nearest, or -1.
+static func _salts_target(s: RunState, players: Array[RunPlayer], p: RunPlayer, i: PlayerInput) -> int:
+	if not s.downs:
+		return -1
+	var reach := Shop.salts_reach(HEAL_REACH)
+	var fx := -sin(i.yaw)
+	var fz := -cos(i.yaw)
+	var cos_max := cos(deg_to_rad(Shop.SALTS_FACE_DEG))
+	var best := -1
+	var best_d := INF
+	for k in players.size():
+		var q := players[k]
+		if q.id == p.id or q.status != &"down" or q.body == null or q.body.level != p.body.level or not s.down.has(q.id):
+			continue
+		var dx := q.body.x - p.body.x
+		var dz := q.body.z - p.body.z
+		var d := M.hypot2(dx, dz)
+		if d > reach + EPS or (d > 0.05 and (dx * fx + dz * fz) / d < cos_max):
+			continue
+		if d < best_d:
+			best_d = d
+			best = k
+	return best
+
+## Smelling salts: player `k` is up at once where they lie, as a finished heal is ("healed", by the user).
+static func _salts_heal(s: RunState, players: Array[RunPlayer], k: int, by: String, t: float, events: Array[Dictionary]) -> void:
+	var p := players[k]
+	var down := s.down.duplicate()
+	var d: Downed = down.get(p.id)
+	if d != null and d.healer != "":
+		events.append({"type": "healStop", "t": t, "playerId": d.healer, "target": p.id})
+	down.erase(p.id)
+	s.down = down
+	var np := p.copy()
+	np.status = &"ok"
+	np.side = null
+	players[k] = np
+	events.append({"type": "healed", "t": t, "playerId": p.id, "by": by, "at": np.body, "salts": true})
+	if s.orderly.mode == &"bending" and str(s.orderly.bend_target) == p.id:
+		s.orderly = Entity.stand_off(s.orderly, Settings.f(s.tuning, &"heal.quiet", HEAL_QUIET))
+	_seek_heal(s, np)
+
+## The bags with player `id`'s replaced.
+static func _set_bag(s: RunState, id: String, b: Inventory.Bag) -> void:
+	var bags := s.bags.duplicate()
+	bags[id] = b
+	s.bags = bags
+
+## The shop state with player `id`'s cabinet replaced (copied first if it is still the tick's first).
+static func _with_cabinet(sh: Shop.ShopState, sh0: Shop.ShopState, id: String, cab: Array) -> Shop.ShopState:
+	var n := sh.copy() if sh == sh0 else sh
+	var cabs := n.cabinets.duplicate()
+	cabs[id] = cab
+	n.cabinets = cabs
+	return n
+
+## Every item in the world with the shop on: every bag, every pickup and every cabinet ({item: count}).
+static func items_with_cabinets(s: RunState) -> Dictionary:
+	var out := items_in_world(s)
+	if s.shop_state != null:
+		var c: Dictionary = Shop.cabinet_totals((s.shop_state as Shop.ShopState).cabinets)
+		for item: String in c:
+			out[item] = int(out.get(item, 0)) + int(c[item])
+	return out
+
+## Tests and the stamped save: the run with player `id`'s cabinet as given (Shop.cabinet_from_text of a save).
+static func with_cabinet(s0: RunState, id: String, cab: Array) -> RunState:
+	var s := s0.copy()
+	var sh := (s.shop_state as Shop.ShopState).copy()
+	var cabs := sh.cabinets.duplicate()
+	cabs[id] = cab.duplicate(true)
+	sh.cabinets = cabs
+	s.shop_state = sh
+	return s

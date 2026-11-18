@@ -435,6 +435,13 @@ func inventory() -> Variant:
 		return null
 	return latest.get("inv")
 
+## The shop and the cabinet (S2) as the newest snapshot has them (Protocol "shop": credits, cabinets, glows, toys,
+## timers, wake), or null in a run without them.
+func shop() -> Variant:
+	if latest == null:
+		return null
+	return latest.get("shop")
+
 ## Down first, then out: who is down as the newest snapshot has it, [{id, at, until, by, healer, healFrom}]
 ## (host times: out at `until` unless healed; a heal is done at healFrom + Run.HEAL_TIME). Empty when nobody
 ## is down or the run has no down rule.

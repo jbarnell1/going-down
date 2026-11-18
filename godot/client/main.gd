@@ -76,6 +76,10 @@ const NoteReaderScript = preload("res://client/note_reader.gd")
 const FindablesRules = preload("res://sim/findables.gd")
 # The four-slot inventory on screen (S1): client/inventory_view.gd.
 const InventoryViewScript = preload("res://client/inventory_view.gd")
+# The shop and the cabinet on screen (S2): client/cabinet_view.gd.
+const CabinetViewScript = preload("res://client/cabinet_view.gd")
+const ShopViewScript = preload("res://client/shop_view.gd")
+const Shop = preload("res://sim/shop.gd")
 ## Logs, crash and F9 reports for game night (client/telemetry.gd): read-only on this node.
 const Telemetry = preload("res://client/telemetry.gd")
 const BuildInfo = preload("res://net/build_info.gd")
@@ -163,6 +167,10 @@ var _finds_seen := false
 ## keys asked for since the last frame (a slot 0 to 3 or -1, a wheel step, a request and its argument); the slot
 ## last asked for and when (so a quick scroll counts from it, not from a snapshot that has not caught up).
 var inv_view: InventoryViewScript
+## The cabinet in your cell (S2b, client/cabinet_view.gd): F at it opens the card.
+var cab_view: CabinetViewScript
+## The shop's card at windows 1 and 2, and what bought items do on screen (S2, client/shop_view.gd).
+var shop_view: ShopViewScript
 var pending_inv_sel := -1
 var pending_inv_step := 0
 var pending_inv_op := ""
@@ -604,6 +612,13 @@ func _build_view() -> void:
 	inv_view = InventoryViewScript.new()
 	inv_view.name = "InventoryView"
 	hud.add_child(inv_view)
+	# The cabinet's card (S2b), over the squares.
+	cab_view = CabinetViewScript.new()
+	cab_view.name = "CabinetView"
+	hud.add_child(cab_view)
+	shop_view = ShopViewScript.new()
+	shop_view.name = "ShopView"
+	hud.add_child(shop_view)
 	start = StartScreen.new()
 	start.name = "StartScreen"
 	add_child(start)
@@ -1087,12 +1102,17 @@ func _input(event: InputEvent) -> void:
 			kiosk.key(event as InputEventKey)
 			get_viewport().set_input_as_handled()
 		return
+	if _card_input(event):
+		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		# The mouse is captured only after a real click, never under automation.
 		if mb.pressed and not automated and mb.button_index == MOUSE_BUTTON_LEFT and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not wheel_open:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			_esc_menu = false
+		elif mb.pressed and not wheel_open and mb.button_index == MOUSE_BUTTON_LEFT and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+			# The shop's items (S2): the left mouse button uses the one in your hand (it does nothing else in play).
+			inv_key("use")
 		elif mb.pressed and not wheel_open and (mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN):
 			# The four-slot inventory (S1): the wheel steps through the squares.
 			inv_key("down" if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN else "up")
@@ -1134,6 +1154,10 @@ func _input(event: InputEvent) -> void:
 			raise_latch = not raise_latch
 		elif k.physical_keycode == KEY_F and _station() == "kiosk":
 			_open_kiosk()
+		elif k.physical_keycode == KEY_F and _station() == "shop" and snap.get("shop") != null:
+			_open_card("shop")
+		elif k.physical_keycode == KEY_F and _at_my_cabinet():
+			_open_card("cabinet")
 		elif k.physical_keycode >= KEY_1 and k.physical_keycode <= KEY_4:
 			inv_key(str(k.physical_keycode - KEY_1 + 1))
 		elif k.physical_keycode == KEY_G:
@@ -1169,6 +1193,12 @@ func inv_key(key: String) -> bool:
 			pending_inv_step += 1
 		"g":
 			pending_inv_op = "drop"
+			pending_inv_arg = 0
+		"use":
+			# The shop's items (S2): use the one in your hand. The host decides whether it can be used here.
+			if snap.get("shop") == null:
+				return false
+			pending_inv_op = "use"
 			pending_inv_arg = 0
 		"f":
 			if inv_view.prompt == "" or hud.prompt != inv_view.prompt:
@@ -1247,6 +1277,75 @@ func _send_emote(which: String) -> void:
 	link.client().emote(which)
 	hud.note = "> " + EMOTE_LABELS[Protocol.EMOTES.find(which)]
 	_note_until = Time.get_ticks_msec() + 1500
+
+## The shop's and the cabinet's cards (S2): keys and clicks while one is open. True when the event was the card's.
+## The card closes with F or Esc; the host decides every move (sent as the inventory's requests).
+func _card_input(event: InputEvent) -> bool:
+	if not cab_view.is_open() and not shop_view.is_open():
+		return false
+	var card: Object = shop_view if shop_view.is_open() else cab_view
+	if event is InputEventKey:
+		var k := event as InputEventKey
+		if not k.pressed or k.echo:
+			return false
+		var r: Array = card.call("key", k)
+		if r.is_empty():
+			return false
+		if r[0] == "close":
+			card.call("close")
+		elif r[0] != "pick":
+			pending_inv_op = r[0]
+			pending_inv_arg = r[1]
+		get_viewport().set_input_as_handled()
+		return true
+	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+		var r: Array = card.call("click", (event as InputEventMouseButton).position)
+		if not r.is_empty() and r[0] != "pick":
+			pending_inv_op = r[0]
+			pending_inv_arg = r[1]
+		get_viewport().set_input_as_handled()
+		return true
+	return false
+
+## Opens a card (S2): "cabinet". The mouse is let go so the card's squares can be clicked.
+func _open_card(which: String) -> bool:
+	if mode != "game" or snap.get("shop") == null:
+		return false
+	if which == "cabinet":
+		cab_view.show_card()
+	elif which == "shop":
+		shop_view.show_card()
+		sfx.play("teller_window")
+	wheel_open = false
+	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_esc_menu = false
+	return true
+
+## The ids of the run's players in its order (the shop block lists every one), for the bunks and the cabinets.
+func _run_ids() -> Array[String]:
+	var ids: Array[String] = []
+	var sb: Variant = snap.get("shop")
+	if sb is Dictionary:
+		for r: Dictionary in (sb as Dictionary)["credits"]:
+			ids.append(str(r["playerId"]))
+	return ids
+
+## Whether this player stands at their own cabinet in the prison (sim/shop.gd cabinet_cell), with the shop on.
+func _at_my_cabinet() -> bool:
+	if link == null or snap.get("shop") == null or str(link.plan_dict.get("place", "")) != String(Prison.PLACE) or not snap.has("me"):
+		return false
+	var me: Dictionary = snap["me"]
+	if int(me["level"]) != 0:
+		return false
+	return Vector2i(floori(float(me["x"]) / Prison.CELL_SIZE), floori(float(me["z"]) / Prison.CELL_SIZE)) == Shop.cabinet_cell(_run_ids(), link.my_id())
+
+## The morning in the cells (S2): seconds until the car takes the crew down, or -1.
+func _wake_left(s: Dictionary) -> float:
+	var sb: Variant = s.get("shop")
+	if not sb is Dictionary or float((sb as Dictionary)["wake"]) < 0.0:
+		return -1.0
+	return maxf(0.0, float((sb as Dictionary)["wake"]) - float(s.get("hostNow", 0.0)))
 
 ## What the player stands at in the prison (Prison.station_at: "shop", "skills", "kiosk"), "" elsewhere
 ## or on any other floor.
@@ -1640,18 +1739,43 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	inv_view.update(s.get("inv"), link.my_id(), me if not (me_down or ended or noise or _lights_out) else {}, s.get("others", []), yaw, lc0.tuning if lc0 != null else null)
 	inv_view.hidden_now = hud.black or not hud.end_lines.is_empty() or hud.menu_on or hud.out_on
 	inv_view.show_pickups(spots_root)
+	# The shop and the cabinet (S2): the card shows the host's blocks, and closes when you walk away or cannot use it.
+	var at_cab := _at_my_cabinet()
+	cab_view.update(s.get("shop"), s.get("inv"), link.my_id(), lc0.tuning if lc0 != null else null)
+	if cab_view.is_open() and (not at_cab or me_down or ended or _lights_out):
+		cab_view.close()
+	shop_view.update(s.get("shop"), link.my_id(), lc0.tuning if lc0 != null else null, float(s.get("hostNow", 0.0)))
+	shop_view.on_events(s.get("events", []), link.my_id(), now)
+	shop_view.show_world(spots_root, cam, s.get("shop"), float(s.get("hostNow", 0.0)), now)
+	if shop_view.is_open() and (station != "shop" or me_down or ended or _lights_out):
+		shop_view.close()
+	for e: Dictionary in s.get("events", []):
+		if str(e.get("type", "")) == "bought" and str(e.get("playerId", "")) == link.my_id():
+			sfx.play("teller_ding")
+	if level.has_meta(&"prison"):
+		level.get_meta(&"prison").call("set_shop_open", s.get("shop") != null)
+	var wake_left := _wake_left(s)
 	_update_search(s, me, home, station, me_down or ended or noise or kiosk.is_open() or _lights_out)
 	if not ended and not noise and not kiosk.is_open() and not _lights_out and not me_down:
 		if down_view.prompt != "":
 			prompt = down_view.prompt
 			hud.prompt_fill = down_view.fill
-		elif home and bool((bed as Dictionary)["inBed"]):
+		elif cab_view.is_open() or shop_view.is_open():
+			prompt = ""
+		elif at_cab:
+			prompt = "F  OPEN YOUR CABINET"
+		elif home and wake_left < 0.0 and bool((bed as Dictionary)["inBed"]):
 			prompt = "F TO GET UP"
-		elif home and bool((bed as Dictionary)["atBunk"]):
+		elif home and wake_left < 0.0 and bool((bed as Dictionary)["atBunk"]):
 			prompt = "HOLD F TO SLEEP"
 			hud.prompt_fill = float((bed as Dictionary)["hold"])
 		elif station != "":
-			prompt = PrisonView.tonight_prompt_for(Vector2i(floori(float(me["x"]) / Prison.CELL_SIZE), floori(float(me["z"]) / Prison.CELL_SIZE)))
+			var here := Vector2i(floori(float(me["x"]) / Prison.CELL_SIZE), floori(float(me["z"]) / Prison.CELL_SIZE))
+			# The shop (S2): windows 1 and 2 are open with the shop on, shut in the morning; the skill tree stays shut.
+			prompt = PrisonView.prompt_for(here) if station == "shop" and s.get("shop") != null and wake_left < 0.0 else PrisonView.tonight_prompt_for(here)
+		elif wake_left >= 0.0:
+			# The morning in the cells (S2): what is in your cabinet goes down with you only if you take it out.
+			prompt = "THE LIFT LEAVES IN %d. TAKE WHAT YOU NEED FROM YOUR CABINET" % ceili(wake_left)
 		elif phase == "night":
 			pass   # home for the night: the car cannot be called
 		elif bool(me.get("canCall", false)):
@@ -2426,7 +2550,7 @@ func _command(c: String) -> String:
 			# Findables (FD10): F held for a search: careful | fast (with sprint) | off | - (the keyboard's).
 			t_search = null if p[1] == "-" else p[1]
 		"inv":
-			# The four-slot inventory (S1): inv key 1|2|3|4|up|down|g|f (as the key or the wheel is pressed) |
+			# The four-slot inventory (S1): inv key 1|2|3|4|up|down|g|f|use (as the key, the wheel or the left button is pressed) |
 			# inv demo off | inv demo <sel> <item:count,item:count,...> (draws a row nothing in the game can fill yet;
 			# the screenshot of a full row) | inv (what the squares show).
 			if p.size() >= 3 and p[1] == "key":
@@ -2442,6 +2566,30 @@ func _command(c: String) -> String:
 					while inv_view.demo_slots.size() < 4:
 						inv_view.demo_slots.append(["", 0])
 			return JSON.stringify(inv_view.describe())
+		"cab":
+			# The cabinet (S2b): cab open | close | put <your slot 1-4> | take <cabinet slot 1-8> | cab (what the card shows).
+			if p.size() >= 2 and p[1] == "open":
+				return JSON.stringify({"ok": _at_my_cabinet() and _open_card("cabinet"), "view": cab_view.describe()})
+			if p.size() >= 2 and p[1] == "close":
+				cab_view.close()
+			elif p.size() >= 3 and (p[1] == "put" or p[1] == "take") and cab_view.is_open():
+				pending_inv_op = "stash" if p[1] == "put" else "fetch"
+				pending_inv_arg = int(p[2]) - 1
+			return JSON.stringify(cab_view.describe())
+		"shop":
+			# The shop (S2): shop open | close | pick <1-6> | buy [<1-6>] | shop (what the card shows).
+			if p.size() >= 2 and p[1] == "open":
+				return JSON.stringify({"ok": _station() == "shop" and _open_card("shop"), "view": shop_view.describe()})
+			if p.size() >= 2 and p[1] == "close":
+				shop_view.close()
+			elif p.size() >= 3 and p[1] == "pick":
+				shop_view.sel = clampi(int(p[2]) - 1, 0, Shop.ITEMS.size() - 1)
+			elif p.size() >= 2 and p[1] == "buy" and shop_view.is_open():
+				if p.size() >= 3:
+					shop_view.sel = clampi(int(p[2]) - 1, 0, Shop.ITEMS.size() - 1)
+				pending_inv_op = "buy"
+				pending_inv_arg = shop_view.sel
+			return JSON.stringify(shop_view.describe())
 		"pieces":
 			# The floor's searchable pieces, where to stand at each and its prompt.
 			return JSON.stringify(search_view.pieces_plain())
@@ -2657,6 +2805,21 @@ static func _inv_plain(block: Variant) -> Variant:
 		pk.append({"id": p["id"], "item": p["item"], "count": p["count"], "at": {"x": at.x, "y": at.y, "z": at.z, "level": at.level} if at is Object else at})
 	return {"bags": (block as Dictionary)["bags"], "pickups": pk}
 
+## The shop block with its bodies as plain {x, y, z, level} (for the test channel's JSON).
+static func _shop_plain(block: Variant) -> Variant:
+	if not block is Dictionary:
+		return null
+	var out := (block as Dictionary).duplicate()
+	for key: String in ["glows", "toys"]:
+		var list: Array = []
+		for g: Dictionary in (block as Dictionary)[key]:
+			var e := g.duplicate()
+			var at: Variant = g["at"]
+			e["at"] = {"x": at.x, "y": at.y, "z": at.z, "level": at.level} if at is Object else at
+			list.append(e)
+		out[key] = list
+	return out
+
 func _test_state() -> Dictionary:
 	var s := snap
 	if mode != "game" or s.is_empty() or s.has("waiting") or level == null:
@@ -2700,6 +2863,8 @@ func _test_state() -> Dictionary:
 			"fill": hud.prompt_fill, "monitor": lift.day_rows if lift != null else []},
 		# The four-slot inventory (S1): the host's block, what the squares show, the prompt on screen.
 		"inv": {"host": _inv_plain(s.get("inv")), "view": inv_view.describe(), "hudPrompt": hud.prompt},
+		# The shop and the cabinet (S2): the host's block, the cards.
+		"shop": {"host": _shop_plain(s.get("shop")), "cab": cab_view.describe(), "atCabinet": _at_my_cabinet(), "card": shop_view.describe()},
 		"day": s.get("day"), "hostNow": s.get("hostNow"), "bed": s.get("bed"), "seed": s.get("seed"),
 		"seek": s.get("seek"), "mySeek": s.get("mySeek"), "countEvent": s.get("countEvent"), "nearHide": s.get("nearHide"), "hideCam": s.get("hideCam"),
 		"place": link.plan_dict.get("place", ""),
