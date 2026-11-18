@@ -121,6 +121,7 @@ const Transport = preload("res://net/transport.gd")
 const Day = preload("res://sim/day.gd")
 const Seek = preload("res://sim/seek.gd")
 const Hiding = preload("res://sim/hiding.gd")
+const Findables = preload("res://sim/findables.gd")
 
 const EPS := 1e-9
 const TICK := Session.TICK
@@ -731,6 +732,9 @@ func _step(now: float) -> void:
 		# The Annex (sim/run.gd): Q pressed, a peel asked for.
 		inp.mark = p.mark_pending
 		inp.peel = p.peel_pending
+		# Findables (sim/run.gd): F held to search, sprint held with it.
+		inp.search = m.get("search", false) == true
+		inp.search_fast = m.get("searchFast", false) == true
 		inputs.append(inp)
 		p.call_pending = false
 		p.pick_pending = false
@@ -1060,7 +1064,12 @@ static func _close_pose(a: Dictionary, b: Dictionary) -> bool:
 # Sending.
 
 static func _tape(t: TapeLib.Tape) -> Dictionary:
-	return {"id": t.id, "owner": t.owner_id, "readings": t.readings.size(), "total": t.total}
+	var d := {"id": t.id, "owner": t.owner_id, "readings": t.readings.size(), "total": t.total}
+	# Findables (FD9): the credits found on it, only when there are any (Protocol "found").
+	var found := Run.found_on(t)
+	if found > 0.0:
+		d["found"] = found
+	return d
 
 ## The shared part of a snapshot (also the welcome's state). `full`: the welcome's, with every note of
 ## an Annex floor (a snapshot carries only how many there are).
@@ -1124,7 +1133,31 @@ func world(full: bool = false) -> Dictionary:
 	# Solid furniture (FD7): the clients move their own bodies round it (Protocol "solid").
 	if s.furniture:
 		out["solid"] = 1
+	# Findables (FD9): what is open, who is searching, who carries what (Protocol "find").
+	var fb: Variant = find_block(s)
+	if fb != null:
+		out["find"] = fb
 	return out
+
+## Findables (FD9; Protocol.enc_find): {opened, searching, items, base} as the host has it this tick, or null when
+## the run has none, or there is nothing to say (off a Clinic or an Annex, with nobody carrying anything).
+static func find_block(s: Run.RunState) -> Variant:
+	if not s.findables or (s.find == null and s.items.is_empty()):
+		return null
+	var ff: Findables.FindFloor = s.find
+	var opened: Array = []
+	for row: Dictionary in Findables.opened_rows(ff):
+		opened.append({"piece": row["piece"], "by": row["by"], "what": row["what"], "credits": row["credits"], "note": row["note"], "fast": row["fast"], "t": row["t"]})
+	var searching: Array = []
+	var items: Array = []
+	for rp in s.players:
+		if ff != null and ff.searches.has(rp.id):
+			var sr: Findables.Search = ff.searches[rp.id]
+			searching.append({"playerId": rp.id, "piece": sr.piece, "fast": sr.fast, "from": sr.from, "done": sr.done})
+		var mine: Dictionary = s.items.get(rp.id, {})
+		if int(mine.get(String(Findables.JUICE), 0)) > 0:
+			items.append({"playerId": rp.id, "juice": int(mine[String(Findables.JUICE)])})
+	return {"opened": opened, "searching": searching, "items": items, "base": ff.fill.base if ff != null else 0}
 
 ## Two-watcher Stillness (T19a; Protocol.enc_watch): the count as the host has it this tick, {need,
 ## watchers (ids, with grace)}. Only in a run with two-watcher Stillness on and Entity.WATCH_CREW or more

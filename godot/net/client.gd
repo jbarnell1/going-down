@@ -150,6 +150,10 @@ class LocalFrame:
 	## mark to peel (F held on it for Marks.PEEL_SECONDS ended this frame) or -1.
 	var mark := false
 	var peel := -1
+	## Findables (FD9): F held to search the piece in reach (Findables.piece_in_reach), and sprint held with it
+	## (the rushed search). Sent while held; the host decides when a search starts, stops and ends.
+	var search := false
+	var search_fast := false
 
 ## One rendered frame: what to draw.
 class Frame:
@@ -394,6 +398,15 @@ func day_lock() -> Variant:
 		return null
 	return {"day": d["day"], "earned": d["earned"], "quota": d["quota"], "locked": d["locked"], "aboard": d["aboard"],
 		"each": d["each"], "stakes": d["stakes"]}
+
+## Findables (FD9) as the newest snapshot has them: {opened: [{piece, by, what, credits, note, fast, t}] (by piece
+## id: draw these open; a note or page id reads with Findables.note_lines), searching: [{playerId, piece, fast,
+## from, done}] (host times: a bar fills over (now - from) / (done - from)), items: [{playerId, juice}], base (the
+## floor's quota as set on arrival: Findables.fill_for's base, for the sheet)}, or null when there is nothing.
+func findables() -> Variant:
+	if latest == null:
+		return null
+	return latest.get("find")
 
 ## Down first, then out: who is down as the newest snapshot has it, [{id, at, until, by, healer, healFrom}]
 ## (host times: out at `until` unless healed; a heal is done at healFrom + Run.HEAL_TIME). Empty when nobody
@@ -1054,6 +1067,10 @@ func _send(now: float, cam: Pose.Camera, local: LocalFrame, rt: float) -> void:
 		m["use"] = true
 	if local.peek:
 		m["peek"] = true
+	if local.search:
+		m["search"] = true
+		if local.search_fast:
+			m["searchFast"] = true
 	if _hides > 0:
 		m["hides"] = _hides
 		m["fastHides"] = _fast_hides
