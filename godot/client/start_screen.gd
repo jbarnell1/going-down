@@ -25,6 +25,10 @@
 class_name StartScreen
 extends Control
 
+signal playtest_pressed
+signal playtest_selected(id: String)
+var playtest_available := false
+var playtest_choices: Array[Dictionary] = []
 signal alone_pressed
 signal join_pressed(address: String, player_name: String, passphrase: String)
 signal back_pressed
@@ -250,7 +254,15 @@ func _process(delta: float) -> void:
 func _order() -> Array[String]:
 	match screen:
 		"title":
-			return ["alone", "join"]
+			var title_items: Array[String] = ["alone", "join"]
+			if playtest_available:
+				title_items.append("playtest")
+			return title_items
+		"playtest":
+			var ids: Array[String] = []
+			for choice in playtest_choices:
+				ids.append(str(choice["id"]))
+			return ids
 		"face":
 			return []
 		"join":
@@ -271,7 +283,14 @@ func focused_id() -> String:
 
 ## Presses an item by id (the mouse, Enter, and the test hook all come here).
 func press(id: String) -> void:
+	if screen == "playtest":
+		if _order().has(id):
+			playtest_selected.emit(id)
+		return
 	match id:
+		"playtest":
+			if screen == "title" and playtest_available:
+				playtest_pressed.emit()
 		"alone":
 			open_face("alone")
 		"join":
@@ -459,7 +478,7 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.35))
 	var big := px * 2.0
 	var top := size.y * 0.14
-	if screen != "lobby":   # Ready-up lays out its own, smaller title (_draw_ready)
+	if screen != "lobby" and screen != "playtest":   # Ready-up lays out its own, smaller title (_draw_ready)
 		_centred("GOING DOWN", top, big * (1.5 if screen == "title" else 1.0), AMBER)
 	var cy := size.y * 0.5
 	match screen:
@@ -467,9 +486,23 @@ func _draw() -> void:
 			_centred("A CO-OP HORROR ON TAPE", top + 18 * big + 4 * px, px, DIM)
 			_button("alone", "PLAY ALONE", Vector2(size.x * 0.5, cy), px, 110)
 			_button("join", "JOIN FRIENDS", Vector2(size.x * 0.5, cy + 22 * px), px, 110)
+			if playtest_available:
+				_button("playtest", "HOST PLAYTEST", Vector2(size.x * 0.5, cy + 44 * px), px, 110)
 			if error != "":
-				_wrapped(error, cy + 38 * px, px, WARN)
+				_wrapped(error, cy + (59 if playtest_available else 38) * px, px, WARN)
 			_centred("ESC  CONTROLS", size.y - 16 * px, px, DIM)
+		"playtest":
+			draw_rect(Rect2(Vector2.ZERO, size), Color(0.018, 0.015, 0.02, 0.97))
+			px = maxf(1.0, minf(px, size.y / (playtest_choices.size() * 19.0 + 64.0)))
+			var spacing := 19.0 * px
+			var y := (size.y - playtest_choices.size() * spacing) * 0.5 + 10 * px
+			_centred("HOST PLAYTEST", y - 30 * px, px * 1.5, AMBER)
+			_centred("SOLO SANDBOX   /   F6 IN GAME TO JUMP OR RESTART", y - 15 * px, px, DIM)
+			for choice in playtest_choices:
+				_button(str(choice["id"]), str(choice["label"]), Vector2(size.x * 0.5, y), px, 142)
+				y += spacing
+			if error != "":
+				_wrapped(error, y, px, WARN)
 		"join":
 			var w := 150.0
 			var y0 := top + 14 * big

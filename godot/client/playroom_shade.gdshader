@@ -63,7 +63,7 @@ void fragment() {
 		c = mix(c, c * palette(k), t.a);
 	} else {
 		corr = COLOR.r;
-		vec2 q = floor(wpos.xz + 0.013);
+		vec2 q = floor(wpos.xz);
 		c *= palette(q.x + 2.0 * q.y + floor(q.y * 0.5));
 	}
 	float b = smoothstep(0.25, 1.0, corr) * bleach;

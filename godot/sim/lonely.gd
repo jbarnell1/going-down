@@ -185,7 +185,7 @@ static func _view(p: Person) -> Entity.PlayerView:
 ## seen: firstSeen and waking); `solo`: a crew of one; `relocating`: the run relocates it (a break-off then
 ## waits for that). `chase`: the chase speed the host set (live settings, sim/run.gd _tuned_chase), or -1 for
 ## CHASE_SPEED (SOLO_CHASE_SPEED solo). Never mutates `prev`.
-static func step(plan: Floor.FloorPlan, prev: Entity.OrderlyState, people: Array[Person], views: Array[Entity.PlayerView], dt: float, solo: bool, relocating: bool, chase: float = -1.0) -> Entity.StepResult:
+static func step(plan: Floor.FloorPlan, prev: Entity.OrderlyState, people: Array[Person], views: Array[Entity.PlayerView], dt: float, solo: bool, relocating: bool, chase: float = -1.0, solids: Move.Solids = null) -> Entity.StepResult:
 	var k := Entity.kind_of(prev)
 	var t := prev.t + dt
 	var s := prev.copy()
@@ -253,7 +253,7 @@ static func step(plan: Floor.FloorPlan, prev: Entity.OrderlyState, people: Array
 	if s.lonely_phase == &"":
 		s.lonely_phase = &"lurk"
 	if s.lonely_phase == &"breakoff":
-		_step_break_off(plan, s, people, dt, k, relocating)
+		_step_break_off(plan, s, people, dt, k, relocating, solids)
 		_finish(prev, res, dt, k)
 		return res
 	if s.lonely_phase == &"chase":
@@ -264,7 +264,7 @@ static func step(plan: Floor.FloorPlan, prev: Entity.OrderlyState, people: Array
 		elif not lonely.has(target.id):
 			_end_chase(s, events, "company")
 			_break_off(plan, s, people, target.id, k)
-			_step_break_off(plan, s, people, dt, k, relocating)
+			_step_break_off(plan, s, people, dt, k, relocating, solids)
 			_finish(prev, res, dt, k)
 			return res
 		else:
@@ -295,7 +295,7 @@ static func step(plan: Floor.FloorPlan, prev: Entity.OrderlyState, people: Array
 			_start_wind_up(s, target, events)
 		else:
 			var one: Array[Entity.PlayerView] = [_view(target)]
-			Entity._hunt(plan, s, one, dt, (SOLO_CHASE_SPEED if solo else CHASE_SPEED) if chase < 0.0 else chase, false, k)
+			Entity._hunt(plan, s, one, dt, (SOLO_CHASE_SPEED if solo else CHASE_SPEED) if chase < 0.0 else chase, false, k, solids)
 		_finish(prev, res, dt, k)
 		return res
 
@@ -315,7 +315,7 @@ static func step(plan: Floor.FloorPlan, prev: Entity.OrderlyState, people: Array
 		s.replan_in = 0.0
 		s.path = []
 	var view: Array[Entity.PlayerView] = [_view(goal)]
-	Entity._hunt(plan, s, view, dt, APPROACH_SPEED, false, k)
+	Entity._hunt(plan, s, view, dt, APPROACH_SPEED, false, k, solids)
 	_finish(prev, res, dt, k)
 	return res
 
@@ -475,13 +475,16 @@ static func _break_off(plan: Floor.FloorPlan, s: Entity.OrderlyState, people: Ar
 		s.path_next = 1 if s.path.size() > 1 else 0
 
 ## One tick of a break-off: walking off along its route at BREAK_OFF_SPEED, then standing.
-static func _step_break_off(plan: Floor.FloorPlan, s: Entity.OrderlyState, people: Array[Person], dt: float, k: Entity.BodySettings, relocating: bool) -> void:
+static func _step_break_off(plan: Floor.FloorPlan, s: Entity.OrderlyState, people: Array[Person], dt: float, k: Entity.BodySettings, relocating: bool, solids: Move.Solids) -> void:
 	s.lonely_lost += dt
 	var before := s.body
 	if not s.path.is_empty() and s.path_next < s.path.size():
-		var walk := Follow.PathWalk.make(s.path, s.path_next)
-		s.body = Follow.step_path_walk(plan, walk, before, BREAK_OFF_SPEED * dt, k.radius)
-		s.path_next = walk.next
+		if solids != null:
+			Entity._resident_walk(plan, s, Move.body_at_cell(plan, s.path.back()), BREAK_OFF_SPEED * dt, k.radius, solids)
+		else:
+			var walk := Follow.PathWalk.make(s.path, s.path_next)
+			s.body = Follow.step_path_walk(plan, walk, before, BREAK_OFF_SPEED * dt, k.radius)
+			s.path_next = walk.next
 	var mx := s.body.x - before.x
 	var mz := s.body.z - before.z
 	var moved := M.hypot2(mx, mz)

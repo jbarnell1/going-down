@@ -209,7 +209,7 @@ func add_glow(m: ShaderMaterial, lit_col: Color, dark_col: Color, lit_e: float, 
 	_glows.append({"mat": m, "light": false, "lit_col": lit_col, "dark_col": dark_col, "lit_e": lit_e, "dark_e": dark_e})
 	_last_k = -1.0
 
-# --- textures (made here, no files) --------------------------------------------------------------
+# --- textures --------------------------------------------------------------
 
 static func _finish(img: Image) -> Texture2D:
 	img.generate_mipmaps()
@@ -218,56 +218,11 @@ static func _finish(img: Image) -> Texture2D:
 ## Walls: 2 m across, the storey high. The lower 1.1 m is padded vinyl (alpha 1: the shader tints it
 ## a palette colour), with a seam every metre and soft pillowing; above it, white paint.
 static func wall_tex() -> Texture2D:
-	if _tex.has("wall"):
-		return _tex["wall"]
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 4101
-	var img := Image.create(64, 128, false, Image.FORMAT_RGBA8)
-	var band := 128 - int(1.1 / LH * 128.0)
-	for y in 128:
-		for x in 64:
-			var c := Color(0.88, 0.87, 0.82) * (1.0 + rng.randf_range(-0.012, 0.012))
-			var a := 0.0
-			if y >= band - 5 and y < band - 1:
-				# A coloured trim along the top of the padding.
-				c = Color(0.72, 0.72, 0.72)
-				a = 1.0
-			elif y >= band and y < 124:
-				var u := float(x % 32) / 31.0
-				var v := float(y - band) / float(124 - band)
-				var pillow := 1.0 - 0.16 * (pow(absf(u - 0.5) * 2.0, 4.0) + pow(absf(v - 0.5) * 2.0, 4.0))
-				c = Color(0.95, 0.95, 0.95) * pillow
-				if x % 32 == 0:
-					c = c * 0.72
-				a = 1.0
-			elif y == band - 1:
-				c = Color(0.7, 0.7, 0.7)
-			elif y >= 124:
-				c = Color(0.3, 0.3, 0.32)
-			c.a = a
-			img.set_pixel(x, y, c)
-	_tex["wall"] = _finish(img)
-	return _tex["wall"]
+	return preload("res://assets/textures/playroom_padding.png")
 
-## Floor mats: one 2 m cell, four 1 m squares with dark seams and pillowed edges (the shader colours
-## each square).
+## Floor mats: four vinyl pads to a cell, with rounded corners and a welded edge.
 static func mat_tex() -> Texture2D:
-	if _tex.has("mat"):
-		return _tex["mat"]
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 4102
-	var img := Image.create(64, 64, false, Image.FORMAT_RGB8)
-	for y in 64:
-		for x in 64:
-			var u := float(x % 32) / 31.0
-			var v := float(y % 32) / 31.0
-			var edge := pow(absf(u - 0.5) * 2.0, 6.0) + pow(absf(v - 0.5) * 2.0, 6.0)
-			var c := Color(0.97, 0.97, 0.97) * (1.0 - 0.12 * edge + rng.randf_range(-0.015, 0.015))
-			if x % 32 == 0 or y % 32 == 0:
-				c = Color(0.5, 0.5, 0.52)
-			img.set_pixel(x, y, c)
-	_tex["mat"] = _finish(img)
-	return _tex["mat"]
+	return preload("res://assets/textures/playroom_mats.png")
 
 ## The walkways: pale laminate planks.
 static func laminate_tex() -> Texture2D:
@@ -1014,12 +969,11 @@ func _table(h: Playroom.Hide, xf: Transform3D, seat_list: Array[Playroom.Seat]) 
 	var wid := 1.1
 	var ht := 0.56
 	var body: Array = [_b(len, 0.05, wid, 0, ht - 0.05, 0, WHITE)]
-	var cloth: Array = [
-		_b(len + 0.06, ht - 0.02, 0.02, 0, 0.03, -wid * 0.5 - 0.02, CLOTH), _b(len + 0.06, ht - 0.1, 0.02, 0, 0.1, wid * 0.5 + 0.02, CLOTH),
-		_b(0.02, ht - 0.02, wid + 0.04, -len * 0.5 - 0.02, 0.03, 0, CLOTH), _b(0.02, ht - 0.02, wid + 0.04, len * 0.5 + 0.02, 0.03, 0, CLOTH),
-		_b(len + 0.08, 0.02, wid + 0.08, 0, ht - 0.01, 0, CLOTH),
-	]
-	_boxes(h.level, xf, body + cloth)
+	_boxes(h.level, xf, body + [_b(len + 0.08, 0.02, wid + 0.08, 0, ht - 0.01, 0, CLOTH)])
+	for side: float in [-1.0, 1.0]:
+		var hem := 0.1 if side > 0.0 else 0.03
+		_tablecloth_edge(h.level, xf, Vector3.BACK * side, len * 0.5, wid * 0.5, ht, hem)
+		_tablecloth_edge(h.level, xf, Vector3.RIGHT * side, wid * 0.5, len * 0.5, ht, 0.03)
 	for i in 8:
 		var along := -1.0 + (i % 4) * 0.66
 		var across := -0.32 if i < 4 else 0.32
@@ -1041,6 +995,32 @@ func _table(h: Playroom.Hide, xf: Transform3D, seat_list: Array[Playroom.Seat]) 
 		_boxes(h.level, c_xf, [_b(0.36, 0.05, 0.34, 0, 0.3, 0, PAL[int(absf(sp[0].x * 7.0)) % 4]), _b(0.36, 0.34, 0.04, 0, 0.35, -0.17, WHITE),
 			_b(0.04, 0.3, 0.04, -0.15, 0, -0.14, GREY), _b(0.04, 0.3, 0.04, 0.15, 0, -0.14, GREY), _b(0.04, 0.3, 0.04, -0.15, 0, 0.14, GREY), _b(0.04, 0.3, 0.04, 0.15, 0, 0.14, GREY)])
 	return body
+
+## A folded drop below the tabletop. The existing opening on the hide side stays clear.
+func _tablecloth_edge(level: int, xf: Transform3D, out: Vector3, across: float, depth: float, top: float, hem: float) -> void:
+	var st := lv._st(level, xf.origin.x, xf.origin.z, "pprops")
+	var along := Vector3.UP.cross(out)
+	var segments := roundi(across * 24.0)
+	var folds := roundi(across * 5.0)
+	var prev_top := Vector3.ZERO
+	var prev_hem := Vector3.ZERO
+	for i in range(segments + 1):
+		var t := float(i) / segments
+		var x := lerpf(-across - 0.02, across + 0.02, t)
+		var fold := sin(TAU * folds * t)
+		var lower := hem + absf(fold) * 0.035
+		var a := xf * (along * x + out * (depth + 0.02) + Vector3.UP * (top - 0.01))
+		var b := xf * (along * x + out * (depth + 0.02 + fold * 0.017) + Vector3.UP * lower)
+		if i > 0:
+			var n := (prev_hem - b).cross(a - b).normalized()
+			if n.dot(xf.basis * out) < 0.0:
+				n = -n
+			var light := 0.90 + 0.10 * n.dot(xf.basis * along)
+			var c := _tone(Color(CLOTH.r * light, CLOTH.g * light, CLOTH.b * light), a)
+			AnnexView.quad(st, prev_top, a, b, prev_hem, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, n, c)
+			AnnexView.quad(st, prev_top, a, b, prev_hem, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, -n, c)
+		prev_top = a
+		prev_hem = b
 
 ## A toy chest: a painted box, its lid open a crack on the gap side, TOYS on the front.
 func _chest(h: Playroom.Hide, xf: Transform3D, col: Color, col2: Color) -> Array:

@@ -43,3 +43,30 @@ figure on a throwaway rig with automatic weights (never exported) and writes the
   rigid the same way): the bottom of the sheet is tucked under the jaw, and neck weights would bend it.
 - Parent `temp_stapler.glb` to the right hand and `temp_notes.glb` to the left; the hands are open in
   the T-pose, so the grip comes from the animation (or a fixed finger curl).
+
+## Bake the game model
+
+Use the original download names below. Each FBX has the Temp's 65-bone Mixamo skeleton
+and the same 2,398-vertex round-trip mesh. The bake checks the rig and transfers weights to
+the original meshes, which carry the hand-painted clothes and their UVs. The paper stays rigid
+on the head. The stapler and notes follow the right and left hands.
+
+From the repository root, pass the folder containing the six FBXs. The script writes
+`godot/assets/entities/temp.glb`.
+
+```powershell
+blender --background --disable-autoexec --python-exit-code 1 --python assets_src/blender/temp/bake_temp.py -- <clips-folder>
+```
+
+| Game clip | Original FBX | How the view samples it |
+| --- | --- | --- |
+| `walk` | `Walking.fbx` | Slow gait, distance-driven. Horizontal travel is baked out. |
+| `chase` | `Walking (1).fbx` | Fast gait, distance-driven. Horizontal travel is baked out. |
+| `idle` | `Standing W_Briefcase Idle.fbx` | Sway on the resident's idle clock. |
+| `look` | `Look Around.fbx` | Occasional glance during a longer idle. |
+| `reach` | `Button Pushing.fbx` | Frames 17–38 bring the stapler up through the existing catch wind-up. |
+| `bend` | `Zombie Attack.fbx` | Frames 31–42 give the downward strike. The view folds the torso further and retains the small head motion while bent. |
+
+The watched walk uses the same gait with a head turn and a raised stapler. Holding the last
+visible pose freezes the sampled bones and both attachments together. There are no separate
+turn and writing clips in this batch.

@@ -46,12 +46,14 @@ var demo_sel := -1
 var hidden_now := false
 
 var _meshes := {}
+var _last_spill := {}
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
 func reset() -> void:
+	_last_spill.clear()
 	block = null
 	slots = []
 	sel = 0
@@ -128,16 +130,32 @@ func update(inv: Variant, my_id: String, me: Dictionary, others: Array, yaw: flo
 				f_arg = str(o["id"])
 				prompt = "F  GIVE %s TO %s" % [Inventory.short_name(str(slots[sel][0])), str(o.get("name", o["id"])).to_upper()]
 
-## The host's answers this frame: a refusal of mine, something handed to me, a carton left in its drawer.
-func on_events(events: Array, my_id: String, names: Dictionary, now: int) -> void:
+## The host's answers this frame, each delivered once by PlayLink. A single fall can empty several slots.
+func on_events(events: Array, my_id: String, names: Dictionary, now: int, sfx: Object) -> void:
 	for e: Dictionary in events:
 		var ty := str(e.get("type", ""))
-		if ty == "invRefused" and str(e.get("playerId", "")) == my_id:
+		var who := str(e.get("playerId", ""))
+		if ty == "invRefused" and who == my_id:
 			say(str(REFUSED.get(str(e.get("why", "")), "NOT NOW.")), now)
-		elif ty == "searchFull" and str(e.get("playerId", "")) == my_id:
+		elif ty == "searchFull" and who == my_id:
 			say("YOUR HANDS ARE FULL. IT IS STILL IN THERE.", now)
-		elif ty == "itemGiven" and str(e.get("to", "")) == my_id:
-			say("%s GAVE YOU %s" % [str(names.get(str(e["playerId"]), "SOMEONE")).to_upper(), Inventory.long_name(str(e["item"]))], now)
+		elif ty == "itemGiven":
+			var recipient := str(e.get("to", ""))
+			if recipient == my_id:
+				say("%s GAVE YOU %s" % [str(names.get(who, "SOMEONE")).to_upper(), Inventory.long_name(str(e["item"]))], now)
+			if sfx != null and (who == my_id or recipient == my_id):
+				sfx.call("play", "item_handoff")
+		elif ty == "itemTaken" and who == my_id and sfx != null:
+			sfx.call("play", "item_pickup")
+		elif ty == "itemDropped" and sfx != null:
+			if e.get("why") == "down":
+				# The host's event budget can split a spill across snapshots.
+				var spill_time: float = float(e["t"])
+				if _last_spill.get(who) == spill_time:
+					continue
+				_last_spill[who] = spill_time
+			var at: Dictionary = e["at"]
+			sfx.call("play_at", "item_drop", Vector3(float(at["x"]), float(at["y"]) + 0.1, float(at["z"])))
 
 func say(text: String, now: int) -> void:
 	message = text

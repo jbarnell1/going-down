@@ -1,8 +1,7 @@
 # Walking a find_path route with real collision: aim at the centre of the next cell, move, repeat.
 # Used by bots and entities. Port of src/sim/follow.ts.
 #
-# With solid furniture (`solids`, sim/move.gd Solids: players only, i.e. the bots and the client's test walks;
-# the residents never pass any), the walk first plans a route round the boxes through the path's cells
+# With solid furniture (`solids`, sim/move.gd Solids), the walk first plans a route round the boxes through the path's cells
 # (Move.fine_path) and follows that instead of the cell centres; `next` still moves along the path's cells as
 # they are entered, and the walk is done at the end of that route.
 extends RefCounted
@@ -36,6 +35,85 @@ class PathWalk:
 
 ## How close to a waypoint's centre counts as reached. Small, so corners are turned square.
 const REACHED := 0.08
+## Long routes are solved a few cells at a time. The floor graph gives the long-distance route;
+## only the current leg needs the finer geometry of every chair and cabinet.
+const RESIDENT_LEG_CELLS := 4
+
+## The precise route a resident is following. A route is replaced when its destination moves far
+## enough to need it, including an empty route to an unreachable point. This keeps chase ticks from
+## running a search every frame against a goal behind a cabinet or near a wall.
+class ResidentWalk:
+	var goal: Move.Body = null
+	var points: Array[Vector3] = []
+	var next := 0
+	var more := false
+
+	func copy() -> ResidentWalk:
+		var w := ResidentWalk.new()
+		w.goal = goal
+		w.points = points
+		w.next = next
+		w.more = more
+		return w
+
+static func step_resident_walk(plan: Floor.FloorPlan, walk: ResidentWalk, body: Move.Body, goal: Move.Body, max_dist: float, radius: float, solids: Move.Solids, stop: float = 0.0) -> Move.Body:
+	var here := Move.cell_of(plan, body)
+	var there := Move.cell_of(plan, goal)
+	var dx := goal.x - body.x
+	var dz := goal.z - body.z
+	var gap := M.hypot2(dx, dz)
+	# Finish directly when there is a clear approach to the point. Some legal player or hide positions
+	# have too little clearance for the resident to stand on them. The route below approaches those.
+	if here.equals(there) and (walk.next >= walk.points.size() or walk.goal == null):
+		if gap <= stop + 1e-6:
+			return body
+		var leg := (gap - stop) / gap
+		var end := Move.Body.make(body.x + dx * leg, body.z + dz * leg, goal.level, 0.0)
+		if Move.straight_to(plan, solids, body, end, radius):
+			var step := minf(max_dist, gap - stop) / gap
+			return Move.move_with_collision(plan, body, dx * step, dz * step, radius, solids)
+	var new_goal := walk.goal == null or not there.equals(Move.cell_of(plan, walk.goal)) \
+			or (not walk.more and M.hypot2(goal.x - walk.goal.x, goal.z - walk.goal.z) >= Move.FINE_STEP * 2.0)
+	var next_leg := walk.more and not walk.points.is_empty() and walk.next >= walk.points.size()
+	if new_goal or next_leg:
+		walk.goal = goal
+		walk.next = 0
+		var cells := Floor.find_path(plan, here, there)
+		walk.more = cells.size() > RESIDENT_LEG_CELLS
+		var end := goal
+		if walk.more:
+			cells.resize(RESIDENT_LEG_CELLS)
+			end = Move.body_at_cell(plan, cells.back())
+		walk.points = _resident_leg(plan, solids, body, cells, end, radius, walk.more)
+	while walk.next < walk.points.size():
+		var w := walk.points[walk.next]
+		var d := M.hypot2(w.x - body.x, w.y - body.z)
+		if d <= 1e-6 and body.level == int(w.z):
+			walk.next += 1
+			continue
+		if d <= 1e-6:
+			break
+		var step := minf(max_dist, d) / d
+		# Keep a turn at a waypoint on its own tick so the client does not interpolate across the corner.
+		var moved := Move.move_with_collision(plan, body, (w.x - body.x) * step, (w.y - body.z) * step, radius, solids)
+		if step == 1.0 and int(w.z) == moved.level and M.hypot2(w.x - moved.x, w.y - moved.z) <= 1e-6:
+			walk.next += 1
+		return moved
+	return body
+
+static func _resident_leg(plan: Floor.FloorPlan, solids: Move.Solids, body: Move.Body, cells: Array[Floor.Pos], end: Move.Body, radius: float, partial: bool) -> Array[Vector3]:
+	while not cells.is_empty():
+		if Move.straight_to(plan, solids, body, end, radius):
+			return [Vector3(end.x, end.z, end.level)]
+		var points := Move.fine_path(plan, solids, body, cells, radius, end)
+		if not points.is_empty() or not partial or cells.size() <= 2 \
+				or Move.clear_at(plan, solids, end.level, end.x, end.z, radius):
+			return points
+		# Furniture may occupy a whole intermediate coarse cell. Try the preceding cell, where we
+		# can choose the next leg from an actual standing spot beside the furniture.
+		cells.pop_back()
+		end = Move.body_at_cell(plan, cells.back())
+	return []
 
 static func start_path_walk(path: Array[Floor.Pos]) -> PathWalk:
 	return PathWalk.make(path, 1 if path.size() > 1 else 0)

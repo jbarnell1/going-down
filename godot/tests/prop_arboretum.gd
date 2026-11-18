@@ -755,6 +755,9 @@ func test_the_groundskeeper_starts_far(t: T) -> void:
 # 9. The deck.
 
 func test_the_deck(t: T) -> void:
+	for depth: int in [1, 2, 3, 4]:
+		t.eq(Places.deck_for_start_depth(depth), Places.BEFORE_ARBORETUM, "ordinary starts keep the previous deck")
+	t.eq(Places.deck_for_start_depth(5), Places.FULL, "an explicit floor-five start includes the garden")
 	t.check(Places.FULL == ([&"clinic", &"annex", &"playroom", &"arboretum"] as Array[StringName]), "the game's deck: %s" % str(Places.FULL))
 	t.check(Places.BEFORE_ARBORETUM == ([&"clinic", &"annex", &"playroom"] as Array[StringName]), "the deck before it: %s" % str(Places.BEFORE_ARBORETUM))
 	var n := 30 if t.quick else 300
@@ -878,6 +881,107 @@ func test_the_view_draws_the_hosts_garden(t: T) -> void:
 		t.check(int(drawn.get("trunk", 0)) == trunks and int(drawn.get("thicket", 0)) >= thicket and int(drawn.get("dead_tree", 0)) == g.dead.size(),
 			"%s: drawn %s, the floor has %d trunks, %d thicket cells, %d dead trees" % [key_of(i * 3), str(drawn), trunks, thicket, g.dead.size()])
 		t.check(float(level.get_meta(&"near_light", 0.0)) > 0.5, "%s: the floor does not ask for the near light" % key_of(i * 3))
-		t.check((chk["sounds"] as Array).size() >= 20, "the stand-in sounds are listed")
+		t.check((chk["sounds"] as Array).size() >= 20, "the recorded takes are listed")
+		_check_garden_meshes(t, g, view as Node3D, key_of(i * 3))
 		level.free()
 	_cache = {}
+
+func test_photographic_maps_are_small_and_bound_to_the_floor(t: T) -> void:
+	var plan := Arboretum.generate_arboretum("garden-1", 5)
+	var level := LevelScript.new()
+	level.build(PlanDump.dump(plan, Run.car_geometry(plan)), plan.seed)
+	var view := level.get_meta(&"arboretum") as Node3D
+	var maps := {
+		"bark": ["willow_bark.png", 256],
+		"litter": ["leaf_litter.png", 512],
+		"iron": ["painted_iron.webp", 256],
+		"glass": ["glass_grime.png", 256],
+	}
+	var materials := {}
+	for child: Node in view.get_children():
+		if child is MeshInstance3D:
+			var kind := String(child.name).get_slice("_", 0)
+			if maps.has(kind):
+				var material := (child as MeshInstance3D).material_override
+				if materials.has(kind):
+					t.check(materials[kind] == material, "%s chunks share a material" % kind)
+				else:
+					materials[kind] = material
+	for kind: String in maps:
+		if not t.check(materials.has(kind), "%s is drawn in garden-1" % kind):
+			continue
+		var material: Material = materials[kind]
+		var texture: Texture2D
+		if kind == "glass":
+			texture = (material as ShaderMaterial).get_shader_parameter(&"grime_mask")
+		else:
+			var surface := material as StandardMaterial3D
+			t.check(surface.vertex_color_use_as_albedo and not surface.emission_enabled,
+				"%s keeps its tint and reacts to the floor lighting" % kind)
+			texture = surface.albedo_texture
+		if not t.check(texture != null, "%s samples a photo map" % kind):
+			continue
+		var spec: Array = maps[kind]
+		t.eq(texture.resource_path.get_file(), spec[0], "%s uses its supplied map" % kind)
+		t.eq(texture.get_size(), Vector2(spec[1], spec[1]), "%s map dimensions" % kind)
+		var image := texture.get_image()
+		t.check(image.has_mipmaps(), "%s map has mipmaps" % kind)
+		if kind == "glass":
+			t.check(image.get_format() in [Image.FORMAT_R8, Image.FORMAT_L8], "glass grime uses one channel")
+	level.free()
+
+func _check_garden_meshes(t: T, g: Arboretum.Garden, view: Node3D, tag: String) -> void:
+	var batched := 0
+	var triangles := 0
+	var gravel_chunks := 0
+	var lit_gravel := 0
+	var misplaced_gravel := 0
+	var gravel_edges := 0
+	var floor_off_plane := 0
+	var shadow_casters := 0
+	var lantern: ShaderMaterial = null
+	for child: Node in view.get_children():
+		var instance := child as MeshInstance3D
+		if instance == null or not instance.mesh is ArrayMesh:
+			continue
+		batched += 1
+		triangles += instance.mesh.surface_get_array_len(0) / 3
+		var kind := String(instance.name).get_slice("_", 0)
+		if kind == "gravel":
+			gravel_chunks += 1
+			var mat := instance.material_override as StandardMaterial3D
+			if mat.emission_enabled:
+				lit_gravel += 1
+			var arrays := instance.mesh.surface_get_arrays(0)
+			var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+			for i in range(0, vertices.size(), 3):
+				var mid := (vertices[i] + vertices[i + 1] + vertices[i + 2]) / 3.0
+				var x := floori(mid.x / 2.0)
+				var z := floori(mid.z / 2.0)
+				var within := true
+				for k in range(i, i + 3):
+					var v := vertices[k]
+					within = within and v.x >= x * 2 and v.x <= x * 2 + 2 and v.z >= z * 2 and v.z <= z * 2 + 2
+				if not within or g.surface(x, z) != Noises.GRAVEL:
+					misplaced_gravel += 1
+				if colors[i] != colors[i + 1] or colors[i] != colors[i + 2]:
+					gravel_edges += 1
+		if kind in ["moss", "litter", "gravel", "brick"] and not is_zero_approx(instance.mesh.get_aabb().size.y):
+			floor_off_plane += 1
+		if kind == "lantern":
+			lantern = instance.material_override as ShaderMaterial
+		if instance.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+			shadow_casters += 1
+	t.check(gravel_chunks > 0, "%s: gravel is drawn in batches" % tag)
+	t.eq(lit_gravel, 0, "%s: gravel must need the near light during a blackout" % tag)
+	t.eq(misplaced_gravel, 0, "%s: every drawn gravel triangle stays in a gravel cell" % tag)
+	t.check(gravel_edges > 0, "%s: gravel thins at exposed edges" % tag)
+	t.eq(floor_off_plane, 0, "%s: dressed ground stays on the movement plane" % tag)
+	t.eq(shadow_casters, 0, "%s: garden art batches add no shadow pass" % tag)
+	t.check(batched < 650 and triangles < 100000, "%s: %d mesh batches and %d triangles" % [tag, batched, triangles])
+	if t.check(lantern != null, "%s: the park lanterns are drawn" % tag):
+		t.check(float(lantern.get_shader_parameter(&"energy")) > 0.0, "%s: park lanterns glow when lit" % tag)
+		view.call(&"_apply", 0.0)
+		t.eq(float(lantern.get_shader_parameter(&"energy")), 0.0, "%s: park lanterns go dark in blackout" % tag)
+	t.note("%s: %d batched meshes, %d triangles" % [tag, batched, triangles])

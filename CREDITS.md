@@ -25,6 +25,14 @@ each prop came from.
   - `wheelchair_01` (used only as a size and proportion reference; the game's wheelchair was built
     from simple shapes by the script)
 
+## Indoor surfaces (`godot/assets/textures/`)
+
+- **ambientCG**, CC0 1.0. Carpet 001 adds grain to the Annex's mustard carpet. Leather 010 adds
+  grain to the Playroom's wall padding and welded mats. [Carpet 001](https://ambientcg.com/view?id=Carpet001) · [Leather 010](https://ambientcg.com/view?id=Leather010)
+- **Poly Haven**, CC0 1.0. Old Linoleum Flooring 01 adds wear to the Clinic's tiled floor.
+  Concrete Floor supplies grain for the painted Prison floor. Metal Plate textures the lift
+  doorway sill. [Old Linoleum Flooring 01](https://polyhaven.com/a/old_linoleum_flooring_01) · [Concrete Floor](https://polyhaven.com/a/concrete_floor) · [Metal Plate](https://polyhaven.com/a/metal_plate)
+
 ## Crewmate movement (`godot/assets/entities/crewmate.glb`)
 
 - **Adobe Mixamo**, motion capture and auto-rigging. https://www.mixamo.com. The crewmate figure

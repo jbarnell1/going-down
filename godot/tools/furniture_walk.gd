@@ -6,13 +6,15 @@
 # On the Clinic it then gets into a bed and a cabinet with the furniture solid, as a player does: from the
 # hide's front cell it walks to the front spot, presses F (the client's "hide"), waits until the host has it
 # inside, presses F again and waits until it is out.
-# Exit code 0 when both walks and both hides pass.
+# Repeat with the restored wall furniture, walking up to an added piece through the same client and host.
+# Exit code 0 when both arrangements pass on both floors.
 #   "$GODOT" --headless --path godot --script res://tools/furniture_walk.gd
 extends SceneTree
 
 const LocalRoom = preload("res://net/local_room.gd")
 const PlayLink = preload("res://client/play_link.gd")
 const Session = preload("res://net/session.gd")
+const Protocol = preload("res://net/protocol.gd")
 const Furniture = preload("res://sim/furniture.gd")
 const Floor = preload("res://sim/floor.gd")
 const Move = preload("res://sim/move.gd")
@@ -29,9 +31,10 @@ func _init() -> void:
 ## The pipes deliver on the main loop, so every step waits a frame.
 func _main() -> void:
 	var failed := 0
-	for place: StringName in [&"clinic", &"annex"]:
-		if not await _walk(place):
-			failed += 1
+	for restored: bool in [false, true]:
+		for place: StringName in [&"clinic", &"annex"]:
+			if not await _walk(place, restored):
+				failed += 1
 	Session.deck = Places_clinic()
 	print("furniture walk: %s" % ("PASS" if failed == 0 else "FAIL (%d)" % failed))
 	quit(0 if failed == 0 else 1)
@@ -40,12 +43,13 @@ static func Places_clinic() -> Array[StringName]:
 	var d: Array[StringName] = [&"clinic"]
 	return d
 
-func _walk(place: StringName) -> bool:
+func _walk(place: StringName, restored: bool) -> bool:
 	var deck: Array[StringName] = [place]
 	Session.deck = deck
 	var lr := LocalRoom.new()
 	lr.open_local("furniture-walk", "WALKER", false)
 	lr.furniture = true
+	lr.furniture_layout = restored
 	lr.start_run()
 	var link := PlayLink.new(lr, true)
 	_now = 0.0
@@ -60,11 +64,17 @@ func _walk(place: StringName) -> bool:
 		return false
 	var plan := link.plan
 	var latest: Dictionary = link.client().latest
-	if latest.get("solid") == null:
-		print("%s: the host does not say the furniture is solid" % place)
+	var expected := Protocol.SOLID_RESTORED if restored else Protocol.SOLID_BASELINE
+	if latest.get("solid") != expected:
+		print("%s: expected furniture code %d, received %s" % [place, expected, latest.get("solid")])
 		return false
-	var pieces := Furniture.pieces_for(plan)
-	var solids := Furniture.solids_of(plan)
+	var pieces := Furniture.pieces_for(plan, plan.seed, plan.depth, restored)
+	if restored:
+		pieces = pieces.slice(Furniture.pieces_for(plan).size())
+	if pieces.is_empty():
+		print("%s: no pieces to walk to (restored=%s)" % [place, restored])
+		return false
+	var solids := Furniture.solids_of(plan, restored)
 	# The room with the most plain pieces.
 	var counts := {}
 	for pc in pieces:

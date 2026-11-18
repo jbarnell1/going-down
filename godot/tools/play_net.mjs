@@ -347,10 +347,9 @@ try {
   check('a tap of R closes the wheel and sends nothing', tap.sent === '', `sent "${tap.sent}"`);
   // A dance, from B this time, seen by A.
   await sleep(500);
-  // The wheel's sectors go clockwise from the top, 60 degrees each: WAVE up, LOOK BEHIND up-right, PRAY
-  // down-right, DANCE SPIN straight down, DANCE SNAKE down-left, BUTTON up-left (main.gd EMOTE_LABELS).
+  // Nine 40-degree sectors clockwise from WAVE. DANCE SPIN is 30 degrees below right.
   await B.cmd('wheel open');
-  await B.cmd('wheel aim 0 150');
+  await B.cmd('wheel aim 130 75');
   await sleep(100);
   const bAim = (await B.state()).client.wheelSel;
   const dance = JSON.parse(await B.cmd('wheel release'));
@@ -359,6 +358,14 @@ try {
   check('B dances (DANCE SPIN), A sees it', bAim === 3 && dance.sent === 'dance_spin' && seenDance?.clip === 'dance_spin' && a.emotesSeen.some((e) => e.player === b.me.id && e.emote === 'dance_spin'), `aimed at ${bAim}, sent ${dance.sent}; on A's screen B's figure plays "${seenDance?.clip}"`);
   await sleep(700);
   await A.shot('09-ann-sees-bob-dance.png');
+
+  // POINT is the seventh sector, 30 degrees below left.
+  await A.cmd('wheel open');
+  await A.cmd('wheel aim -130 75');
+  const point = JSON.parse(await A.cmd('wheel release'));
+  b = await until(B.state, (s) => (s.others ?? []).some((x) => x.id === a.me.id && x.clip === 'point'), 3000, 50);
+  const seenPoint = (b.others ?? []).find((x) => x.id === a.me.id);
+  check('A points (POINT), B sees it', point.sent === 'point' && seenPoint?.clip === 'point' && b.emotesSeen.some((e) => e.player === a.me.id && e.emote === 'point'), `sent ${point.sent}; on B's screen A's figure plays "${seenPoint?.clip}"`);
 
   // ---- 7. A calls the lift; then the wait: A watches the Orderly whenever it is in view, B looks at the doors.
   a = await A.state();

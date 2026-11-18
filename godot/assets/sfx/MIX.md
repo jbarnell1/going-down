@@ -206,6 +206,19 @@ Headless, no walls, V = -18.0 LUFS on both (the Voice bus over four lines). Shor
 
 Breaks that turn it red: the office tone 12 dB up (`--break=office`: Ambience -1.7 LU under the voice, the "at least 8 LU under" check fails); the found-you sting 8 dB up (`--break=sting`: the Scare bus +10.5 LU over the voice, and Master's true peak -0.3 dBTP).
 
+## The Arboretum (18 Nov)
+
+The floor uses recorded Oggs from the owner's ElevenLabs batch. The wind, crickets and the quiet air inside
+the ring measure 14.2, 16.3 and 20.0 LU below file reference V, with LRA 0.6, 0.6 and 0.7 LU, respectively.
+The ring begins at 10 m and the wind and insects are gone by 5 m. The existing Ambience and Effects duck still
+applies. Footstep takes sit 6.1 to 6.3 LU under V on gravel, 8.1 to 8.3 on leaves, 12.0 to 12.3 on moss and
+15.1 to 15.2 for a careful step in leaves, by momentary max. A creep on moss stays silent.
+
+The Groundskeeper's breathing, badges and sniff use Entity. The catch uses the snatch on Scare within 4 m and
+the shears on Entity at greater distances. The impacts in the decoded takes are 85 ms after the start for the
+snatches and 149 ms after the start for the shears. Playback uses those offsets to meet the animation's blade
+contact at 200 ms. The takes are short and use a momentary target, preserving the attack under the peak ceiling.
+
 ## The voice files
 
 | File | I | Smax | LRA | TP |
@@ -264,6 +277,37 @@ Breaks that turn it red: the office tone 12 dB up (`--break=office`: Ambience -1
 | wipe_1.mp3 | -16.1 | -16.4 | 1.3 | -1.8 |
 | wipe_2.mp3 | -16.1 | -15.2 | 1.7 | -1.8 |
 | wipe_3.mp3 | -16.1 | -15.7 | 2.0 | -1.6 |
+
+## Search, inventory, shop and Annex recordings (18 Nov)
+
+The 25 masters are 44.1 kHz mono Vorbis. One-shots were trimmed with attack and tail room, and loops use equal-power joins. Loudness was measured again after encoding, with every decoded true peak at or below -1.5 dBTP. The targets below use the -16.1 LUFS voice files as the reference. M is maximum momentary loudness and I is integrated loudness. The final masters are within 0.7 LU of their targets.
+
+| File | Meter | Target LUFS | Master LUFS | True peak dBTP |
+|---|---|---:|---:|---:|
+| search/drawer_1, drawer_2 | M | -24.1 | -24.2, -24.1 | -11.6, -9.9 |
+| search/locker | M | -24.1 | -24.3 | -8.0 |
+| search/rifle_1 | M | -22.1 | -22.2 | -3.0 |
+| search/carton | M | -24.1 | -24.3 | -7.4 |
+| search/paper | M | -26.1 | -26.4 | -2.8 |
+| search/drop_1, drop_2 | M | -22.1 | -22.0, -22.4 | -2.5, -1.9 |
+| search/pickup | M | -26.1 | -26.2 | -12.8 |
+| search/handoff | M | -26.1 | -25.9 | -2.5 |
+| search/drink | I | -24.1 | -24.3 | -5.8 |
+| shop/cabinet | M | -24.1 | -24.2 | -5.0 |
+| shop/bought | M | -24.1 | -24.2 | -10.4 |
+| shop/stamp_1, stamp_2 | M | -24.1 | -24.4, -24.4 | -1.7, -2.1 |
+| shop/badge_trade | M | -24.1 | -24.2 | -4.9 |
+| shop/flashbulb | M | -20.1 | -20.3 | -2.9 |
+| shop/glow_stick | M | -24.1 | -24.4 | -3.3 |
+| shop/toy_wind | M | -24.1 | -24.8 | -1.9 |
+| shop/toy_run | I | -22.1 | -22.3 | -3.3 |
+| shop/speed_juice | M | -24.1 | -24.4 | -2.0 |
+| shop/smelling_salts | M | -22.1 | -22.3 | -8.3 |
+| shop/low_nerve | I | -26.1 | -26.1 | -4.1 |
+| annex/temp_walk | M | -24.1 | -24.2 | -2.8 |
+| annex/temp_chase | M | -22.1 | -22.3 | -6.3 |
+
+Careful openings play 10 dB below the usual Effects gain, for the searcher alone. The rushed cue plays at the furniture and a dropped item uses an 8 m range.
 
 ## Method
 

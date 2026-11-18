@@ -44,6 +44,7 @@ extends "res://net/room_client.gd"
 
 const Host = preload("res://net/host.gd")
 const HostRules = preload("res://net/host_rules.gd")
+const Run = preload("res://sim/run.gd")
 const Move = preload("res://sim/move.gd")
 const Places = preload("res://sim/places.gd")
 const TuningDesk = preload("res://net/tuning_desk.gd")
@@ -60,6 +61,7 @@ var host: Host = null
 var rules: HostRules = null
 var seed := "alpha"
 var run_seed := ""
+var _playtest_depth := -1
 var runs := 0
 var entity_on := true
 var time_scale := 1.0
@@ -79,6 +81,8 @@ var lonely: Variant = null
 var playroom_tuned: Variant = null
 ## Solid furniture (sim/run.gd furniture, FD7): true, false, or null to follow the game's deck.
 var furniture: Variant = null
+## Restored wall furniture (T20j): true, false, or null to follow the game's deck.
+var furniture_layout: Variant = null
 ## Findables (sim/run.gd findables, FD9): true, false, or null to follow the game's deck.
 var findables: Variant = null
 ## The four-slot inventory (sim/run.gd inventory, S1): true, false, or null to follow the game's deck.
@@ -171,6 +175,11 @@ func furniture_on() -> bool:
 		return bool(furniture)
 	return Session.deck == Places.FULL
 
+func furniture_layout_on() -> bool:
+	if furniture_layout != null:
+		return bool(furniture_layout)
+	return Session.deck == Places.FULL
+
 ## Whether the next run has findables (sim/run.gd findables, FD9).
 func findables_on() -> bool:
 	if findables != null:
@@ -187,27 +196,62 @@ func inventory_on() -> bool:
 func room_time() -> float:
 	return _vt
 
+## The fixed floors and any additional places available in the seeded deck.
+static func playtest_destinations(seed_: String, deck: Array[StringName]) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var seen: Array[StringName] = []
+	for depth in range(Places.FIXED.size() + 128):
+		var place := Places.place_at(seed_, depth, deck)
+		if depth < Places.FIXED.size() or not seen.has(place):
+			out.append({"depth": depth, "place": place})
+			seen.append(place)
+		if depth >= Places.FIXED.size() - 1 and deck.all(func(p: StringName) -> bool: return seen.has(p)):
+			break
+	return out
+
+## Start a fresh sandbox run at a destination on this machine. Reopening the same floor uses the same seed.
+func start_playtest(depth: int) -> bool:
+	for destination in playtest_destinations(seed, Session.deck):
+		if depth == int(destination["depth"]):
+			_playtest_depth = depth
+			days = true
+			open_settings("")
+			my_ready = true
+			start_run()
+			return true
+	return false
+
+func _prepare_playtest_prison(initial: Run.RunState) -> Run.RunState:
+	var s := rules.prepare(initial)
+	var events: Array[Dictionary] = []
+	Run._arrive_home(s, s.players, s.t, events)
+	return s
+
 ## A new run (the previous one, if any, is closed).
 func start_run() -> void:
 	_close_run()
-	run_seed = seed if runs == 0 else "%s-%d" % [seed, runs]
+	run_seed = seed if runs == 0 or _playtest_depth >= 0 else "%s-%d" % [seed, runs]
 	runs += 1
 	epoch += 1
 	var o := owner_0833_on()
 	# The day quota's lock goes with the floor quota (net/host_rules.gd turns it on only with days too).
 	var q := quota_on()
-	rules = HostRules.new(entity_on, HostRules.start_depth_by_arg(), Session.deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on())
+	var depth := HostRules.start_depth_by_arg() if _playtest_depth < 0 else maxi(1, _playtest_depth)
+	var deck := Places.deck_for_start_depth(depth) if Session.deck == Places.FULL else Session.deck
+	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL)
 	# Method callables hold no reference to this object, so the pipes do not keep it alive.
 	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
 	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))
 	var roster: Array[String] = [ME]
-	host = Host.new(_host_pipe, run_seed, roster, _vt, Callable(rules, "prepare"), Callable(rules, "step"), roster)
+	var prepare := Callable(self, "_prepare_playtest_prison") if _playtest_depth == 0 else Callable(rules, "prepare")
+	host = Host.new(_host_pipe, run_seed, roster, _vt, prepare, Callable(rules, "step"), roster)
 	# A trusted player gets no placement from the host at the start; send the start spot as one, as the
 	# server's room does for its players, so the game takes its body from the same place either way.
 	for p in host.state.players:
 		if p.id == ME:
 			host.place_player(ME, p.body)
 	client = Client.new(_client_pipe, "host", _name, _vt, Session.INTERP_DELAY, Session.INPUT_INTERVAL, _face)
+	client.floor_deck = deck
 	client.draw_in_dark = o
 	# Live settings: everything asked for is in force from the first tick.
 	desk.run_started()

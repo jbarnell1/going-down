@@ -6,7 +6,7 @@ public/assets/textures (made by assets_src/textures/generate.mjs), and the grin 
 The material is alpha-tested (glTF MASK) and double-sided so the torn cloth can be cut by texture.
 
 Usage (headless):
-  blender.exe --background --factory-startup --python build_orderly.py -- [--out PATH] [--blend PATH]
+  blender.exe --background --factory-startup --python build_orderly.py -- [--out PATH] [--blend PATH] [--mixamo-dir PATH]
 
 How to change it:
   * proportions: HEIGHTS / SPINE / TORSO tables and the ARM / LEG / HAND dicts
@@ -1978,6 +1978,7 @@ def main():
     ap.add_argument("--out", default=os.path.join(ROOT, "public", "assets", "entities", "orderly.glb"))
     ap.add_argument("--blend", default="")
     ap.add_argument("--atlas", default="", help="also save the atlas PNG here, for review")
+    ap.add_argument("--mixamo-dir", help="bake the Orderly Mixamo downloads onto the original rig")
     args = ap.parse_args(argv)
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -2004,6 +2005,10 @@ def main():
     make_action(arm, "reach", reach_keys(), "CONSTANT")
     make_action(arm, "duck", duck_keys(), "CONSTANT")
     make_action(arm, "still", still_keys(), "CONSTANT")
+    if args.mixamo_dir:
+        sys.path.insert(0, HERE)
+        from retarget_mixamo import bake
+        bake(arm, args.mixamo_dir)
     set_pose(arm, {})
     scn.frame_start, scn.frame_end = 1, 97
 

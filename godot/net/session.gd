@@ -59,11 +59,12 @@ static var deck: Array[StringName] = Places.CLINIC_ONLY
 
 ## The floor plan of a depth (every machine builds the same one from the seed and the deck, through
 ## Places.generate, as the host's run does). Keeps the last 16.
-static func plan_for(seed: String, depth: int) -> Floor.FloorPlan:
-	var key := "%s/%d/%s" % [seed, depth, ",".join(PackedStringArray(deck))]
+static func plan_for(seed: String, depth: int, run_deck: Array[StringName] = []) -> Floor.FloorPlan:
+	var floor_deck := deck if run_deck.is_empty() else run_deck
+	var key := "%s/%d/%s" % [seed, depth, ",".join(PackedStringArray(floor_deck))]
 	if _plans.has(key):
 		return _plans[key]
-	var p := Places.generate(seed, depth, deck)
+	var p := Places.generate(seed, depth, floor_deck)
 	_plans[key] = p
 	_plan_order.append(key)
 	if _plan_order.size() > 16:
@@ -85,13 +86,14 @@ static func doors_open_in(phase: Variant) -> bool:
 
 ## Moves the local player the way the run does (move_in_run: walls, stairs, the car's doorway while
 ## the doors are open). move_in_run takes a whole RunState but reads only the plan, the car, the phase and
-## whether the run's furniture is solid (`solid`: the world's "solid", Protocol; sim/run.gd furniture).
-static func move_local(plan: Floor.FloorPlan, phase: Variant, body: Move.Body, dx: float, dz: float, radius: float = PLAYER_RADIUS, solid: bool = false) -> Move.Body:
+## which furniture layout the host selected (the world's "solid" code, Protocol).
+static func move_local(plan: Floor.FloorPlan, phase: Variant, body: Move.Body, dx: float, dz: float, radius: float = PLAYER_RADIUS, solid: bool = false, furniture_layout: bool = false) -> Move.Body:
 	var view := Run.RunState.new()
 	view.plan = plan
 	view.car = car_for(plan)
 	view.phase = StringName(phase)
 	view.furniture = solid
+	view.furniture_layout = furniture_layout
 	return Run.move_in_run(view, body, dx, dz, radius)
 
 ## Whether a camera could be showing the Orderly drawn at `pose` (Pose.camera_sees with the plan's car).

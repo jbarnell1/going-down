@@ -73,9 +73,10 @@ async function game(label, testport, args, pos) {
   const g = launch([...(headless ? ['--headless'] : []), '--path', project, '--resolution', '960x540', '--position', pos, '--', 'auto=1', `testport=${testport}`, ...args]);
   const { sock, cmd } = await line(testport, label, () => !g.exited).catch((e) => { throw new Error(`${e.message} (${g.lines.slice(-5).join(' | ')})`); });
   const state = async () => JSON.parse(await cmd('state'));
+  const heard = async (name) => JSON.parse(await cmd('sfx state')).played.filter((cue) => cue.name === name).length;
   const shot = async (name) => { if (headless) return; const r = await cmd(`shot ${join(shots, name)}`); console.log(`  shot ${join(shots, name)} (${label}) ${r}`); };
   const close = async () => { try { sock.write('quit\n'); } catch { /* closed */ } await sleep(600); if (!g.exited) g.p.kill(); sock.destroy(); };
-  return { label, g, cmd, state, shot, close };
+  return { label, g, cmd, state, heard, shot, close };
 }
 
 const results = [];
@@ -166,6 +167,7 @@ try {
     `host ${slotsOf(a, idA)}, sel ${bag(a, idA)?.sel}, hand "${a.inv.view.inHand}"`);
   b = await until(B.state, (s) => slotsOf(s, idA) === ONE, 3000);
   check('Bob\'s screen has the same: Ann carries the carton', slotsOf(b, idA) === ONE, slotsOf(b, idA));
+  check('the carton sound plays once on Ann’s screen', await A.heard('search_carton') === 1 && await B.heard('search_carton') === 0);
   await sleep(300);
   await A.shot('2-one-item.png');
 
@@ -197,6 +199,8 @@ try {
   await A.cmd('inv key g');
   a = await until(A.state, (s) => s.inv.view.message !== '', 3000, 30);
   check('G with nothing in hand: the host refuses, her screen says so', a.inv.view.message === 'NOTHING IN YOUR HAND.' && slotsOf(a, idA) === ONE, `message "${a.inv.view.message}"`);
+  check('the accepted drop has one world cue on both clients and the refusal adds none', await A.heard('item_drop') === 1 && await B.heard('item_drop') === 1);
+  check('the pickup sound plays once for the taker', await A.heard('item_pickup') === 1 && await B.heard('item_pickup') === 0);
   await A.cmd('inv key 1');
   await until(A.state, (s) => bag(s, idA)?.sel === 0, 3000);
 
@@ -214,6 +218,7 @@ try {
   a = await until(A.state, (s) => slotsOf(s, idA) === EMPTY, 3000);
   check('F hands it over: Bob holds it, Ann does not', f2.ok && slotsOf(b, idB) === ONE && slotsOf(a, idA) === EMPTY, `Bob ${slotsOf(b, idB)}, Ann ${slotsOf(a, idA)}`);
   check('Bob is told who gave it', b.inv.view.message === 'ANN GAVE YOU A CARTON OF JUICE', `"${b.inv.view.message}"`);
+  check('the hand-over sound plays once for each participant', await A.heard('item_handoff') === 1 && await B.heard('item_handoff') === 1);
   await B.shot('6-bob-holds-it.png');
 
   // A full row, drawn (nothing in the game can fill four slots yet).

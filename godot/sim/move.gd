@@ -193,8 +193,7 @@ static func _try_step(plan: Floor.FloorPlan, cur: Body, sx: float, sz: float, r:
 ## Moves a body by (dx, dz) metres, sliding along walls, climbing stairs and changing level at the
 ## top. Never ends inside a wall or outside walkable space: a step that would is dropped, then
 ## retried along each axis alone, so a walker pressed into a corner still slides where it can.
-## `solids` (players only: solid furniture, see Solids below) are boxes it slides along the same way;
-## null, as for every resident and every run without furniture, reads none.
+## `solids` are the furniture boxes it slides along the same way. Null reads none.
 static func move_with_collision(plan: Floor.FloorPlan, body: Body, dx: float, dz: float, radius: float, solids: Solids = null) -> Body:
 	var dist := M.hypot2(dx, dz)
 	if dist == 0.0:
@@ -216,10 +215,25 @@ static func move_with_collision(plan: Floor.FloorPlan, body: Body, dx: float, dz
 		cur = next
 	return cur
 
+## Tests a straight leg with the same steps as collision movement. Sliding onto a waypoint does not
+## establish that the straight leg is clear, which matters when joining a planned route mid-cell.
+static func straight_to(plan: Floor.FloorPlan, solids: Solids, from: Body, to: Body, radius: float) -> bool:
+	var dx := to.x - from.x
+	var dz := to.z - from.z
+	var n := maxi(1, int(ceil(M.hypot2(dx, dz) / minf(0.1, radius * 0.5))))
+	if dx == 0.0 and dz == 0.0:
+		return from.level == to.level
+	var cur := from
+	for i in range(1, n + 1):
+		cur = _try_step(plan, cur, dx / n, dz / n, radius, solids)
+		if cur == null or absf(cur.x - (from.x + dx * i / n)) > CLEARANCE_SLACK \
+				or absf(cur.z - (from.z + dz * i / n)) > CLEARANCE_SLACK:
+			return false
+	return cur.level == to.level
+
 # ---------------------------------------------------------------------------------------------
-# Solid furniture (docs/floors/findables-and-day.md section 4, FD7): boxes players slide along like walls.
-# sim/furniture.gd builds them from the floor's one list (Furniture.solids_of); only players move with them
-# (Run.move_in_run on a run with `furniture`, the bots and the client's walks): the residents never do.
+# Solid furniture (docs/floors/findables-and-day.md section 4, FD7): boxes bodies slide along like walls.
+# sim/furniture.gd builds them from the floor's shared list.
 
 ## A floor's solid footprints, metres: axis-aligned boxes per level, each listed in the cells it is within
 ## one cell of, so a body (radius under a cell) only meets the boxes listed in its own cell.
@@ -227,8 +241,11 @@ class Solids:
 	var cell_size := 2.0
 	var boxes: Array = [PackedFloat64Array(), PackedFloat64Array()]
 	var near: Array = [{}, {}]
+	var _fine_plan: Floor.FloorPlan = null
+	var _fine_clearance: Dictionary = {}
 
 	func add(level: int, x0: float, z0: float, x1: float, z1: float) -> void:
+		_fine_clearance.clear()
 		var b: PackedFloat64Array = boxes[level]
 		var i := b.size() / 4
 		b.append_array([x0, z0, x1, z1])
@@ -251,6 +268,15 @@ class Solids:
 
 	func count() -> int:
 		return (boxes[0] as PackedFloat64Array).size() / 4 + (boxes[1] as PackedFloat64Array).size() / 4
+
+	## Reuse the radius clearance checks when residents replan against the same floor.
+	func fine_clearance(plan: Floor.FloorPlan, rr: float) -> Dictionary:
+		if _fine_plan != plan:
+			_fine_plan = plan
+			_fine_clearance.clear()
+		if not _fine_clearance.has(rr):
+			_fine_clearance[rr] = {}
+		return _fine_clearance[rr]
 
 ## Distance from a point to the nearest solid box on a level (0 inside one; INF if none is near).
 static func box_clearance(solids: Solids, level: int, x: float, z: float) -> float:
@@ -384,10 +410,12 @@ static func _settle_at(plan: Floor.FloorPlan, solids: Solids, body: Body, r: flo
 ## Vector3(x, z, level). Empty when no such walk exists. For the bots and the client's test walks (sim/follow.gd).
 const FINE_STEP := 0.25
 const FINE_SPARE := 0.03
+## Bound work on an unreachable precise goal. The legacy bot and test routes keep their original search.
+const FINE_SEARCH_BUDGET := 1536
 const _FINE_DIRS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
 	Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]
 
-static func fine_path(plan: Floor.FloorPlan, solids: Solids, from: Body, cells: Array[Floor.Pos], r: float) -> Array[Vector3]:
+static func fine_path(plan: Floor.FloorPlan, solids: Solids, from: Body, cells: Array[Floor.Pos], r: float, point: Body = null) -> Array[Vector3]:
 	var out: Array[Vector3] = []
 	if cells.is_empty():
 		return out
@@ -397,17 +425,20 @@ static func fine_path(plan: Floor.FloorPlan, solids: Solids, from: Body, cells: 
 	var gh := plan.height * sub
 	var per := gw * gh
 	var allowed := {}
-	for c in cells:
-		allowed[Floor.pos_index(plan, c)] = true
-		for st in Floor.STEPS:
-			var nx := c.x + st.x
-			var ny := c.y + st.y
-			if Floor.is_walkable(plan, c.level, nx, ny):
-				allowed[Floor.pos_index(plan, Floor.Pos.make(c.level, nx, ny))] = true
-	var valid := {}
+	if point == null:
+		for c in cells:
+			allowed[Floor.pos_index(plan, c)] = true
+			for st in Floor.STEPS:
+				var nx := c.x + st.x
+				var ny := c.y + st.y
+				if Floor.is_walkable(plan, c.level, nx, ny):
+					allowed[Floor.pos_index(plan, Floor.Pos.make(c.level, nx, ny))] = true
 	var rr := r + FINE_SPARE
-	# The goal: the clear point nearest the last cell's centre.
+	var valid := solids.fine_clearance(plan, rr) if point != null else {}
+	# The goal: a clear point near the destination, or the last cell's centre for legacy callers.
 	var last := cells[cells.size() - 1]
+	var tx := point.x if point != null else (last.x + 0.5) * s
+	var tz := point.z if point != null else (last.y + 0.5) * s
 	var goal := -1
 	var goal_d := INF
 	for j in sub:
@@ -418,13 +449,14 @@ static func fine_path(plan: Floor.FloorPlan, solids: Solids, from: Body, cells: 
 			var z := gz * FINE_STEP
 			if not clear_at(plan, solids, last.level, x, z, rr):
 				continue
-			var d := M.hypot2(x - (last.x + 0.5) * s, z - (last.y + 0.5) * s)
+			var d := M.hypot2(x - tx, z - tz)
 			if d < goal_d:
 				goal_d = d
 				goal = last.level * per + gz * gw + gx
 	if goal < 0:
 		return out
-	# Dijkstra from the clear points within half a metre of the body (costs in centimetres).
+	# Search from clear points within half a metre of the body (costs in centimetres).
+	# Precise goals use A*, which may leave the original corridor to take a route around the boxes.
 	var cost := {}
 	var prev := {}
 	var heap := PackedInt64Array()
@@ -452,23 +484,39 @@ static func fine_path(plan: Floor.FloorPlan, solids: Solids, from: Body, cells: 
 			var n := lv * per + gz * gw + gx
 			if not _fine_ok(plan, solids, allowed, valid, n, per, gw, sub, rr):
 				continue
+			if point != null and not straight_to(plan, solids, from, Body.make(x, z, lv, 0.0), r):
+				continue
 			var cc := int(round(d * 100.0))
 			if not cost.has(n) or cost[n] > cc:
 				cost[n] = cc
-				_heap_push(heap, cc, n)
+				_heap_push(heap, cc + _fine_estimate(n, goal, per, gw, point != null), n)
+	var budget := FINE_SEARCH_BUDGET
+	var reached_goal := false
+	var alternate := -1
+	var alternate_d := INF
 	while not heap.is_empty():
 		var top := _heap_pop(heap)
 		var cn := int(top & 0xffffffff)
-		var cc := int(top >> 32)
-		if cc > int(cost[cn]):
+		var cc := int(cost[cn])
+		if int(top >> 32) != cc + _fine_estimate(cn, goal, per, gw, point != null):
 			continue
 		if cn == goal:
+			reached_goal = true
 			break
+		if point != null:
+			budget -= 1
+			if budget <= 0:
+				break
 		var lv := cn / per
 		var rest := cn - lv * per
 		var gx := rest % gw
 		var gz := rest / gw
 		var here := Floor.Pos.make(lv, gx / sub, gz / sub)
+		if point != null and here.equals(last):
+			var d := M.hypot2(gx * FINE_STEP - tx, gz * FINE_STEP - tz)
+			if d < alternate_d:
+				alternate = cn
+				alternate_d = d
 		for k in 8:
 			var dv := _FINE_DIRS[k]
 			var nx := gx + dv.x
@@ -496,8 +544,10 @@ static func fine_path(plan: Floor.FloorPlan, solids: Solids, from: Body, cells: 
 			if not cost.has(nn) or int(cost[nn]) > nc:
 				cost[nn] = nc
 				prev[nn] = cn
-				_heap_push(heap, nc, nn)
-	if not cost.has(goal):
+				_heap_push(heap, nc + _fine_estimate(nn, goal, per, gw, point != null), nn)
+	if not reached_goal:
+		goal = alternate
+	if goal < 0:
 		return out
 	var chain: Array[int] = []
 	var at := goal
@@ -507,6 +557,18 @@ static func fine_path(plan: Floor.FloorPlan, solids: Solids, from: Body, cells: 
 			break
 		at = int(prev[at])
 	chain.reverse()
+	if point != null:
+		# Retain the actual corner on the route. Replacing it with a later point on the new leg
+		# would cut that corner, even when every sampled point on both legs clears the furniture.
+		for i in chain.size():
+			var p := _fine_point(chain[i], per, gw)
+			if i > 0 and i < chain.size() - 1:
+				var before := _fine_point(chain[i - 1], per, gw)
+				var after := _fine_point(chain[i + 1], per, gw)
+				if p.z == before.z and p.z == after.z and p - before == after - p:
+					continue
+			out.append(p)
+		return out
 	var last_dir := Vector3.INF
 	for i in chain.size():
 		var n := chain[i]
@@ -525,15 +587,29 @@ static func fine_path(plan: Floor.FloorPlan, solids: Solids, from: Body, cells: 
 		out.append(p)
 	return out
 
+static func _fine_point(n: int, per: int, gw: int) -> Vector3:
+	var rest := n % per
+	return Vector3((rest % gw) * FINE_STEP, (rest / gw) * FINE_STEP, n / per)
+
+static func _fine_estimate(n: int, goal: int, per: int, gw: int, precise: bool) -> int:
+	if not precise:
+		return 0
+	var a := n % per
+	var b := goal % per
+	var dx := absi(a % gw - b % gw)
+	var dz := absi(a / gw - b / gw)
+	return 25 * maxi(dx, dz) + 10 * mini(dx, dz)
+
 static func _fine_ok(plan: Floor.FloorPlan, solids: Solids, allowed: Dictionary, valid: Dictionary, n: int, per: int, gw: int, sub: int, rr: float) -> bool:
-	if valid.has(n):
-		return valid[n]
 	var lv := n / per
 	var rest := n - lv * per
 	var gx := rest % gw
 	var gz := rest / gw
-	var ok := allowed.has(lv * plan.width * plan.height + (gz / sub) * plan.width + gx / sub) \
-		and clear_at(plan, solids, lv, gx * FINE_STEP, gz * FINE_STEP, rr)
+	if not allowed.is_empty() and not allowed.has(lv * plan.width * plan.height + (gz / sub) * plan.width + gx / sub):
+		return false
+	if valid.has(n):
+		return valid[n]
+	var ok := clear_at(plan, solids, lv, gx * FINE_STEP, gz * FINE_STEP, rr)
 	valid[n] = ok
 	return ok
 

@@ -384,6 +384,12 @@ func test_two_clients_over_the_network(t: T) -> void:
 			"%s: the tuned event once, with the old and the new value: %s" % [rc.my_id, str(tuned)])
 	t.check(b.tune_lines.size() == 2 and b.tune_lines[1] == "ANN PUT ORDERLY HUNT SPEED BACK TO 3.80 M/S", "the reset's notice: %s" % str(b.tune_lines))
 	# Set again, for the restart.
+	# The host can switch the catch gag for the whole crew while both views are live.
+	t.check(not a.client.catch_dance_enabled() and not b.client.catch_dance_enabled(), "both screens start with the dance off")
+	t.check(not b.tune_set(&"orderly.catch_dance", 1) and a.tune_set(&"orderly.catch_dance", 1), "only the host can enable the gag")
+	t.check(net.run(2.0, func() -> bool: return a.client.catch_dance_enabled() and b.client.catch_dance_enabled()), "the host and delayed guest both enable the dance")
+	a.tune_reset(&"orderly.catch_dance")
+	t.check(net.run(2.0, func() -> bool: return not a.client.catch_dance_enabled() and not b.client.catch_dance_enabled()), "reset turns it off on both screens")
 	a.tune_set(&"down.time", 14.0)
 	net.run(1.0)
 	# The host leaves: the key passes in arrival order.

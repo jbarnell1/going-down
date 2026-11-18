@@ -64,6 +64,7 @@ const CATS := {
 	"scare": ["Scare", 6.0, 45.0],
 	"room": ["Ambience", 3.0, 28.0],
 	"effect": ["Effects", 3.0, 30.0],
+	"item": ["Effects", 1.5, 8.0],
 	"steps": ["Effects", 3.0, 30.0],
 	"ui": ["UI", 3.0, 30.0],
 }
@@ -99,6 +100,15 @@ const RECORDED := {
 	"cell_door": ["effect", "prison/cell_door"],
 	"teller_window": ["effect", "prison/teller_window"],
 	"teller_ding": ["ui", "prison/teller_ding"],
+	# Searching and the inventory.
+	"search_drawer": ["effect", "search/drawer_1", "search/drawer_2"],
+	"search_locker": ["effect", "search/locker"],
+	"search_rifle": ["effect", "search/rifle_1"],
+	"search_carton": ["effect", "search/carton"],
+	"search_paper": ["effect", "search/paper"],
+	"item_drop": ["item", "search/drop_1", "search/drop_2"],
+	"item_pickup": ["item", "search/pickup"],
+	"item_handoff": ["item", "search/handoff"],
 	# The Annex.
 	"buzz": ["effect", "annex/buzz"],
 	"phone": ["room", "annex/phone"],
@@ -453,7 +463,7 @@ static func _group_of(name: String, cat: String) -> String:
 			return "orderly"
 		"room":
 			return "room"
-	return "fx" if cat == "effect" or cat == "" else cat
+	return "fx" if cat == "effect" or cat == "item" or cat == "" else cat
 
 func _note(name: String) -> void:
 	_last[name] = Time.get_ticks_msec()

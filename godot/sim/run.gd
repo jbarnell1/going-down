@@ -248,9 +248,7 @@
 # Players' bodies (move_in_run: the local player, the bots, a crawl) slide along every solid piece of the
 # floor's one list (sim/furniture.gd, Furniture.solids_of) as along walls, and a body found standing inside one
 # (dragged, grabbed, relocated, or there when the flag turned on) is first pushed out to the nearest clear spot
-# (Move.settle). The residents never read the list: they walk exactly as before, through any piece their path
-# crosses (the list keeps pieces against walls and off every cell's middle, so that is rare: the meeting table
-# and the beds' last few centimetres).
+# (Move.settle). With `resident_navigation` (T20k), the residents route around the same solid footprints.
 # Findables (FD9, `findables`, with_findables: docs/floors/findables-and-day.md section 3; sim/findables.gd;
 # net/host_rules.gd turns it on for the game's rooms; tests and every stored result leave it off, and then nothing
 # below happens). On a Clinic or an Annex the run holds `find` (a Findables.FindFloor: the fill, what has been
@@ -1026,6 +1024,9 @@ class RunState:
 	## Solid furniture (FD7, with_furniture; sim/furniture.gd): players slide along the floor's pieces. Off:
 	## nothing blocks but walls, as every stored result has it.
 	var furniture: bool = false
+	## Restored waiting chairs, atrium seating and break-room tables (T20j).
+	var furniture_layout: bool = false
+	var resident_navigation: bool = false
 	## Findables (FD9, with_findables; sim/findables.gd). Off: nothing below is ever made or read.
 	var findables: bool = false
 	## This floor's findables (a Findables.FindFloor), or null; the lore pages dealt tonight; each player's
@@ -1059,6 +1060,8 @@ class RunState:
 		s.day_met = day_met
 		s.playroom_tuned = playroom_tuned
 		s.furniture = furniture
+		s.furniture_layout = furniture_layout
+		s.resident_navigation = resident_navigation
 		s.findables = findables
 		s.find = find
 		s.lore_used = lore_used
@@ -1400,6 +1403,12 @@ static func with_furniture(s0: RunState) -> RunState:
 	s.furniture = true
 	return s
 
+## Enables the restored layout on top of solid furniture.
+static func with_furniture_layout(s0: RunState) -> RunState:
+	var s := with_furniture(s0)
+	s.furniture_layout = true
+	return s
+
 ## Turns findables on (FD9, see the header): nothing opened, no pages dealt, nothing carried.
 static func with_findables(s0: RunState) -> RunState:
 	var s := s0.copy()
@@ -1423,7 +1432,30 @@ static func with_inventory(s0: RunState) -> RunState:
 static func solids_in(state: RunState) -> Move.Solids:
 	if state == null or not state.furniture or state.plan == null:
 		return null
-	return Furniture.solids_of(state.plan)
+	return Furniture.solids_of(state.plan, state.furniture_layout)
+
+## Enables furniture routing for residents. The host applies this after enabling solid furniture.
+static func with_resident_navigation(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.resident_navigation = true
+	s.orderly = _settled_resident(s, s.orderly)
+	return s
+
+static func _resident_solids(s: RunState) -> Move.Solids:
+	var solids := solids_in(s) if s.resident_navigation else null
+	return solids if solids != null and solids.count() > 0 else null
+
+static func _settled_resident(s: RunState, o: Entity.OrderlyState) -> Entity.OrderlyState:
+	var solids := _resident_solids(s)
+	if solids == null:
+		return o
+	var body := Move.settle(s.plan, solids, o.body, Entity.kind_of(o).radius)
+	if body == o.body:
+		return o
+	var next := o.copy()
+	next.body = body
+	next.resident_walk = null
+	return next
 
 ## The run with this tuning in force (live settings, sim/settings.gd): `given` is {id: number}, checked by
 ## the caller with Settings.check. An empty set reads exactly like none.
@@ -3017,14 +3049,15 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		# and nobody can see to time a turn in the dark), at BLACKOUT_HUNT_SPEED.
 		var er: Entity.StepResult
 		var need := Entity.watch_need(stillness_up_count(players, input_of)) if s.two_watchers else 1
+		var resident_solids := _resident_solids(s)
 		# Paced (see the header): both Stillness residents hunt at HUNT_SPEED, so both at the paced speeds.
 		# Live settings: the host's speeds for this body (_tuned_hunt), else these.
 		if blacked_out(s):
-			er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, true, PACED_BLACKOUT_HUNT_SPEED if s.paced else BLACKOUT_HUNT_SPEED), false, need)
+			er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, true, PACED_BLACKOUT_HUNT_SPEED if s.paced else BLACKOUT_HUNT_SPEED), false, need, resident_solids)
 		elif s.paced:
-			er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, false, PACED_HUNT_SPEED), true, need)
+			er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, false, PACED_HUNT_SPEED), true, need, resident_solids)
 		else:
-			er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, false, -1.0), true, need)
+			er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, false, -1.0), true, need, resident_solids)
 		var next := er.state
 		# Belt and braces: it can never end a tick in (or overlapping) the car.
 		if rect_distance(car.rect, next.body.x, next.body.z) < Entity.ORDERLY_RADIUS - 1e-3 and next.body.level == car.level:
@@ -3204,7 +3237,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		s.depth = depth
 		s.plan = f.plan
 		s.car = f.car
-		s.orderly = f.orderly
+		s.orderly = _settled_resident(s, f.orderly)
 		s.entity_id = f.entity_id
 		var nc := s.crew.copy()
 		nc.members = []
@@ -3498,7 +3531,7 @@ static func _morning(s: RunState, players: Array[RunPlayer], t: float, events: A
 	s.depth = 1
 	s.plan = f.plan
 	s.car = f.car
-	s.orderly = f.orderly
+	s.orderly = _settled_resident(s, f.orderly)
 	s.entity_id = f.entity_id
 	var nc := _fresh_crew(s.crew)
 	for m in nc.members:
@@ -3568,7 +3601,7 @@ static func relocation_free(s: RunState) -> bool:
 static func _relocate(s: RunState, o: Entity.OrderlyState, trait_name: StringName, players: Array[RunPlayer], input_of: Dictionary, t: float, dt: float, events: Array[Dictionary]) -> Entity.OrderlyState:
 	var r := s.car.rect
 	var bars := Relocate.barred(s.plan, s.plan.seed, PackedFloat64Array([r.x0, r.z0, r.x1, r.z1]), s.car.level)
-	var st := Relocate.step(s.plan, s.seed, s.depth, trait_name, o, relocation_eyes(s, players, input_of), bars, relocation_free(s), t, dt)
+	var st := Relocate.step(s.plan, s.seed, s.depth, trait_name, o, relocation_eyes(s, players, input_of), bars, relocation_free(s), t, dt, _resident_solids(s))
 	if st.event != null:
 		events.append(st.event)
 	return st.state
@@ -3596,7 +3629,7 @@ static func _step_lonely(s: RunState, players: Array[RunPlayer], input_of: Dicti
 		var i := _inp(p, input_of)
 		views.append(_view_of(i, _is_active(p, input_of) and not p.aboard, blind or i.blind))
 	var before := s.orderly
-	var er := Lonely.step(s.plan, before, lonely_people(s, players, input_of), views, dt, players.size() <= 1, s.relocation, _tuned_chase(s, players.size() <= 1))
+	var er := Lonely.step(s.plan, before, lonely_people(s, players, input_of), views, dt, players.size() <= 1, s.relocation, _tuned_chase(s, players.size() <= 1), _resident_solids(s))
 	var next := er.state
 	# Belt and braces: it can never end a tick in (or overlapping) the car.
 	if rect_distance(car.rect, next.body.x, next.body.z) < Entity.ORDERLY_RADIUS - 1e-3 and next.body.level == car.level:

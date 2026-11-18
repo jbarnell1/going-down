@@ -233,12 +233,13 @@ try {
   const { t: b1, seenDown } = await bobGoes;
   b = b1;
   const figA = other(b, idA);
-  check('Bob\'s screen: Ann\'s figure lies on the floor (downed, lying or crawling, not standing)', figA?.downed === true && ['taken', 'crawl'].includes(figA.clip) && figA.drawn === true,
+  check('Bob\'s screen: Ann\'s figure lies on the floor (downed, lying or crawling, not standing)', figA?.downed === true && ['taken', 'crawl', 'down_idle'].includes(figA.clip) && figA.drawn === true,
     `downed ${figA?.downed}, clip ${figA?.clip}, drawn ${figA?.drawn}, mask at ${r2(figA?.maskY)} m`);
   check('Bob\'s screen: the resident is bent over her (the host\'s mode, drawn in the bend)', b.orderly.mode === 'bending' && b.orderly.pose?.anim === 'bend' && (b.downs.bend ?? 0) > 0.5 && b.client.residentDrawn,
     `mode ${b.orderly.mode}, pose ${b.orderly.pose?.anim}, drawn ${b.client.residentDrawn}, bend ${r2(b.downs.bend)}`);
   check('Bob beside her: HOLD F TO HELP with an empty bar', b.client.prompt === 'HOLD F TO HELP' && b.downs.hud.fill === 0 && b.downs.view.target === idA,
     `prompt "${b.client.prompt}", bar ${b.downs.hud.fill}, ${r2(dist(b, seenDown.x, seenDown.z))} m from her`);
+  check('the first catch uses the default bend on the other screen', b.orderly.clip === 'mixamo_reach', b.orderly.clip);
   await B.cmd(`face ${seenDown.x} ${seenDown.z} 0.2`);
   await B.cmd('use 1');
   b = await until(B.state, (s) => (s.downs?.hud?.fill ?? 0) >= 0.3, 4000, 30);
@@ -265,6 +266,7 @@ try {
   check('play goes on: Ann walks', a.me.status === 'ok' && a.me.speed > 1.0 || dist(a, pa.x, pa.z) > 0.3, `${r2(dist(a, pa.x, pa.z))} m from where she lay`);
 
   // ---- 2. Out: nobody finishes the hold.
+  check('the host enables the optional catch dance from the panel', await A.cmd('panel set orderly.catch_dance 1') === 'sent');
   a = await approach(A, pa.x, pa.z, 0.2);
   b = await approach(B, pb.x, pb.z, 0.2);
   await sleep(500);
@@ -280,6 +282,10 @@ try {
     await B.cmd('use 1');
     t = await until(B.state, (s) => (s.downs?.hud?.fill ?? 0) >= 0.25, 3000, 30);
     const f1 = t.downs.hud.fill;
+    // A witness can see the dance while attempting a rescue. Keep holding until the full bend has played.
+    t = await until(B.state, (s) => s.orderly.clip === 'bellydance', 1400, 40);
+    check('Bob sees the host-enabled belly dance while Ann is down', t.orderly.clip === 'bellydance' && t.me.status === 'ok' && other(t, idA)?.status === 'down',
+      `clip ${t.orderly.clip}, pose ${t.orderly.pose?.anim}, catch ${t.orderly.pose?.catch_active}`);
     await B.cmd('use 0');
     await sleep(350);
     t = await B.state();

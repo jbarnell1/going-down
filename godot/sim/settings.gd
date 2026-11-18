@@ -104,6 +104,7 @@ const ROWS: Array = [
 	# The Orderly (the Clinic).
 	[&"orderly.speed", &"orderly", "HUNT SPEED", "how fast it comes while nobody holds it", "m/s", 3.8, 2.4, 4.8, 0.05, &"now", &"LS1", F],
 	[&"orderly.dark_speed", &"orderly", "SPEED IN THE BLACKOUT", "the same, while the lights are out before the car", "m/s", 3.8, 2.4, 4.8, 0.05, &"now", &"LS1", F],
+	[&"orderly.catch_dance", &"orderly", "BELLY DANCE AFTER A CATCH", "dance after bending over a downed crewmate", "on/off", 0.0, 0.0, 1.0, 1.0, &"now", &"T20i", W],
 	# The Temp (the Annex). Lonely (T19c, sim/lonely.gd) is on in the game's rooms: its chase speed is temp.speed
 	# (temp.dark_speed in the blackout, temp.alone_speed with a crew of one), today's its CHASE_SPEED and
 	# SOLO_CHASE_SPEED. Without Lonely (tests only) the Temp's Stillness hunt reads the same two ids.
@@ -136,7 +137,7 @@ const ROWS: Array = [
 	[&"groundskeeper.lean_range", &"groundskeeper", "LEANS TO ANYONE WITHIN", "of the place the noise was, when it gets there", "m", 4.0, 2.5, 8.0, 0.5, &"now", &"AR1", F],
 	[&"groundskeeper.lean", &"groundskeeper", "THE LEAN LASTS", "how long it leans to a face before it takes them or not", "s", 2.5, 1.0, 6.0, 0.5, &"next", &"AR1", F],
 	[&"groundskeeper.heals", &"groundskeeper", "HEALS A PLAYER, A FLOOR", "times one player can be healed back up on its floor", "heals", 2.0, 0.0, 5.0, 1.0, &"now", &"AR1", W],
-	[&"groundskeeper.tilt", &"groundskeeper", "HEAD TILT", "from hearing a noise to setting off", "s", 0.8, 0.3, 2.0, 0.1, &"next", &"AR", F],
+	[&"groundskeeper.tilt", &"groundskeeper", "HEARING REACTION", "from hearing a noise to setting off", "s", 0.8, 0.3, 2.0, 0.1, &"next", &"AR", F],
 	[&"groundskeeper.beat", &"groundskeeper", "THE BEAT AFTER A LEAN", "it holds the pose this long when it takes nobody", "s", 0.5, 0.0, 2.0, 0.1, &"next", &"AR", F],
 	[&"groundskeeper.sweep", &"groundskeeper", "THE SWEEP LASTS", "the shears through an empty place", "s", 2.0, 0.5, 5.0, 0.5, &"next", &"AR", F],
 	[&"groundskeeper.turn", &"groundskeeper", "LISTENING TURN", "how fast its head turns while it listens", "deg/s", 30.0, 10.0, 90.0, 5.0, &"now", &"AR", F],
@@ -208,6 +209,7 @@ const ROWS: Array = [
 const WIRED_PIECES: Array[StringName] = [&"LS1"]
 ## Rows of later pieces the rules already read (wired one group at a time, each with its proof).
 const WIRED_IDS: Array[StringName] = [
+	&"orderly.catch_dance",
 	# LS4: the lift and the dark.
 	&"lift.false_stop", &"lift.board", &"lift.hold", &"lift.ride",
 	&"dark.min", &"dark.max", &"dark.first_min", &"dark.first_max", &"dark.warning",
@@ -399,6 +401,8 @@ static func differs(id: StringName, value: float) -> bool:
 ## The value as the panel and the notice print it: "3.60 M/S", "6 FLOORS", "25 IN 100".
 static func text(id: StringName, value: float) -> String:
 	var s := row(id)
+	if s != null and s.unit == "on/off":
+		return "OFF" if value == 0.0 else "ON"
 	var d := decimals(id)
 	var num := ("%." + str(d) + "f") % value
 	return num if s == null or s.unit.is_empty() else "%s %s" % [num, s.unit.to_upper()]

@@ -258,7 +258,7 @@ func _on_text(text: String, now: float) -> void:
 					# Back on the Ready-up screen: the server has forgotten everyone's ready.
 					my_ready = false
 				if run_on and epoch > _epoch_joined:
-					_join_run(epoch, now)
+					_join_run(epoch, now, p.get("garden"))
 				elif not run_on and client != null:
 					client = null
 					_pipe = null
@@ -269,7 +269,7 @@ func _on_text(text: String, now: float) -> void:
 		if bar > 1 and int(text.substr(1, bar - 1)) == _epoch_joined:
 			_pipe.push("host", text.substr(bar + 1))
 
-func _join_run(e: int, now: float) -> void:
+func _join_run(e: int, now: float, garden: Variant) -> void:
 	_epoch_joined = e
 	# Weak, so the pipe's callables do not keep this object alive.
 	var me: WeakRef = weakref(self)
@@ -279,6 +279,9 @@ func _join_run(e: int, now: float) -> void:
 			rc.call("_queue", "n%d|%s" % [e, data])
 	_pipe = Transport.Pipe.new(my_id, func(_to: String, data: String) -> void: out.call(data), out)
 	client = Client.new(_pipe, "host", _name, now, Session.INTERP_DELAY, Session.INPUT_INTERVAL, _face)
+	if garden is bool:
+		const Places = preload("res://sim/places.gd")
+		client.floor_deck = Places.FULL if garden else Places.BEFORE_ARBORETUM
 	# The game (client/main.gd sets the full deck) draws a Stillness resident in the dark too (T20a).
 	client.draw_in_dark = Session.deck == preload("res://sim/places.gd").FULL
 	status = "running"

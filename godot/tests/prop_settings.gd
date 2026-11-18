@@ -71,6 +71,7 @@ const PROOFS := {
 	&"groundskeeper.lean_range": "test_groundskeeper_six",
 	&"groundskeeper.lean": "test_groundskeeper_six",
 	&"groundskeeper.heals": "test_groundskeeper_six",
+	&"orderly.catch_dance": "test_catch_dance_setting",
 	&"orderly.speed": "test_orderly_and_temp_speeds_lit",
 	&"orderly.dark_speed": "test_orderly_and_temp_speeds_in_the_blackout",
 	&"temp.speed": "test_temp_chase_speeds_under_lonely",
@@ -110,7 +111,7 @@ const PROOFS := {
 }
 
 ## The rows of later pieces wired so far (sim/settings.gd WIRED_IDS), in the registry's order.
-const MORE: Array[StringName] = [&"minder.stroll", &"minder.hide_time", &"minder.hide_more", &"minder.last_hide", &"minder.search",
+const MORE: Array[StringName] = [&"orderly.catch_dance", &"minder.stroll", &"minder.hide_time", &"minder.hide_more", &"minder.last_hide", &"minder.search",
 	&"minder.anger_sprint", &"minder.anger_noise", &"minder.anger_cool",
 	&"lift.false_stop", &"lift.board", &"lift.hold", &"lift.ride", &"dark.min", &"dark.max", &"dark.first_min", &"dark.first_max", &"dark.warning",
 	&"stamina.tank", &"heal.time", &"heal.quiet", &"heal.health", &"inv.stack", &"inv.hand_reach"]
@@ -127,6 +128,7 @@ static func game_values() -> Dictionary:
 		&"reloc.near_min": Relocate.NEAR_MIN,
 		&"reloc.near_max": Relocate.NEAR_MAX,
 		&"orderly.speed": Run.PACED_HUNT_SPEED,
+		&"orderly.catch_dance": 0.0,
 		&"orderly.dark_speed": Run.PACED_BLACKOUT_HUNT_SPEED,
 		# The Temp is Lonely in the game's rooms (sim/lonely.gd): its chase, lit and in the blackout, and alone.
 		&"temp.speed": Lonely.CHASE_SPEED,
@@ -222,10 +224,16 @@ static func ten_at_today() -> Dictionary:
 # ---------------------------------------------------------------------------------------------
 # 1. The registry.
 
+func test_catch_dance_setting(t: T) -> void:
+	var row := Settings.row(&"orderly.catch_dance")
+	t.check(row != null and row.wired and row.section == &"orderly", "the host can find the dance under the Orderly")
+	t.eq(Settings.text(&"orderly.catch_dance", Settings.today(&"orderly.catch_dance")), "OFF", "fresh rooms show OFF")
+	t.eq(Settings.text(&"orderly.catch_dance", 1), "ON", "the enabled setting reads ON")
+
 func test_registry_rows(t: T) -> void:
 	var game := game_values()
 	var rows := Settings.list()
-	t.eq(rows.size(), 89, "rows in the registry")
+	t.eq(rows.size(), 90, "rows in the registry")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -273,7 +281,7 @@ func test_registry_rows(t: T) -> void:
 		if TEN.has(s.id) or MORE.has(s.id) or KEEPER_SIX.has(s.id):
 			want.append(s.id)
 	t.check(wired == want and want.size() == TEN.size() + MORE.size() + KEEPER_SIX.size(), "the wired rows are exactly those of LS1 and the groups wired since, in order: %s" % str(wired))
-	t.eq(by_group.get(&"residents", 0), 47, "residents")
+	t.eq(by_group.get(&"residents", 0), 48, "residents")
 	t.eq(by_group.get(&"lift", 0), 12, "the lift and the dark")
 	t.eq(by_group.get(&"players", 0), 15, "players")
 	t.eq(by_group.get(&"earning", 0), 8, "earning")

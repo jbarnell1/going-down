@@ -168,6 +168,7 @@ class Frame:
 	## Where the Orderly is on this screen's timeline (a pose Dictionary, the same one for as long as it
 	## is held), or null.
 	var orderly: Variant = null
+	var catch_active := false
 	## Whether to draw it. Never on a dark frame: in the dark it is heard (its sound still comes from
 	## `orderly`), not seen.
 	var visible := false
@@ -239,6 +240,8 @@ var input_sizes: Array[int] = []
 var host_stamina: Stamina.Stamina = null
 ## Draw the resident on a dark frame too (see the header). Off unless the game turns it on.
 var draw_in_dark := false
+## The room supplies the deck for this run. Direct rules tests use the session default.
+var floor_deck: Array[StringName] = []
 ## Live settings (docs/floors/live-settings.md LS2): the revision the host has in force (0: never tuned), and its
 ## list ({id: number}) as a tuning for this client's own predicted numbers (Settings.f; null for none). The
 ## snapshots carry the revision always and the list now and then (Protocol "tune"): a lost one heals within a second.
@@ -811,6 +814,7 @@ func frame(now: float, local: LocalFrame) -> Frame:
 	var seeing_now := false
 	var report: Variant = null
 	var orderly: Variant = null
+	var catch_active := false
 	if not show.is_empty() and int(show[0]["depth"]) == local_depth and _day_of(show[0]) == day_index and int(show[0]["tick"]) > _orderly_from:
 		var a: Dictionary = show[0]
 		var b: Dictionary = show[1]
@@ -824,7 +828,7 @@ func frame(now: float, local: LocalFrame) -> Frame:
 			_pin = null
 		var pinned := _pin != null
 		var cand: Dictionary = _pin["pose"] if pinned else (Pose.quant_pose(b["orderly"]) if _moved_on(a, b) else Pose.lerp_pose(a["orderly"], b["orderly"], alpha))
-		var plan := Session.plan_for(seed, a_depth)
+		var plan := Session.plan_for(seed, a_depth, floor_deck)
 		var open := Session.doors_open_in(a["phase"]) or Session.doors_open_in(b["phase"]) or (latest != null and Session.doors_open_in(latest["phase"]))
 		var same := _drawn != null and _drawn_depth == a_depth
 		if not _still(plan.place, a, b):
@@ -872,6 +876,8 @@ func frame(now: float, local: LocalFrame) -> Frame:
 				_drawn = cand
 		_drawn_depth = a_depth
 		orderly = _drawn
+		# A watched bend can stay pinned after the victim is up.
+		catch_active = orderly != null and orderly["anim"] == "bend" and not pinned and not _frozen and _bending(a, b)
 		if _still(plan.place, a, b):
 			_set_eyes(eyes, seeing_now, not pinned and not _bending(a, b))
 	else:
@@ -921,6 +927,7 @@ func frame(now: float, local: LocalFrame) -> Frame:
 	var f := Frame.new()
 	f.dark = blind
 	f.orderly = shown
+	f.catch_active = shown != null and catch_active
 	# Dark: drawn only with draw_in_dark (never while taken: `shown` is null then), and never seen.
 	f.visible = shown != null and (not blind or (draw_in_dark and not taken))
 	f.held = _frozen
@@ -1052,6 +1059,9 @@ func _update_latch(show: Array, rt: float) -> bool:
 	_latched_end = end
 	stats.latches += 1
 	return true
+
+func catch_dance_enabled() -> bool:
+	return Settings.i(tuning, &"orderly.catch_dance", 0) == 1
 
 ## Forgets the Orderly as drawn (and any pose held because it was in view): the next frame draws it
 ## from the snapshots. For a test hook's teleport, which is not a move the rule has to hide.

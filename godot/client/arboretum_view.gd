@@ -1,23 +1,19 @@
 # The Arboretum as drawn (North Star A2: "A forest indoors, under a painted sky"; piece AR3). Dresses a Level
 # whose plan is an Arboretum (Level.build hands over here): the ground by surface, thicket, trunks under a dark
 # canopy, the landmarks each with its old park lamp, the brick lift pavilion, the painted sky with its panel
-# seams, and the dark. Everything is made here from simple meshes and textures drawn in code (no files).
+# seams, and the dark. Simple batched meshes use procedural and reduced photographic textures.
 #
 # The dark. The owner, 18 Nov: "the whole level should be pretty darn dark." The sky gives a deep blue dusk and
 # almost no light; under the canopy it is close to black. The only real light is a lamp at each landmark (a
-# pool about 6 m across) and the pavilion's. In the dark only the gravel shows (it keeps a faint pale glow of
-# its own, as wet stone does under a night sky), so the walk is a pale line and a crew that learned where the
-# moss ran can still find it. In the blackout the lamps and the sky go out; the gravel's glow and the fireflies
-# by the fountain and the greenhouse stay. The near light (client/main.gd) is the player's own.
+# pool about 6 m across) and the pavilion's. In the blackout the lamps and the sky go out. The near light
+# (client/main.gd) is the player's own, and picks out the gravel underfoot. Fireflies stay around the water.
 #
 # Ground has a voice: moss is dark green and smooth, litter brown and mottled, gravel pale, a twig fall litter
 # with pale sticks on it under its dead tree. surface_at() says what is under a point, from the same garden
 # the host made (sim/arboretum.gd from the plan's seed and depth), and the footsteps are played from it.
 #
-# Sound, all stand-ins (client/garden_sound.gd lists them for the owner's recordings): wind, crickets and a
-# sprinkler; footsteps by surface for this player and the others; a twig's crack. The ring of silence: within
-# 10 m of the Groundskeeper the wind, the crickets and the sprinkler fall away (gone by 5 m), so the garden
-# goes quiet round a player before they hear its badges.
+# Recorded wind, crickets, footsteps for each surface, and the host's twig crack. Within 10 m of the
+# Groundskeeper the garden fades to a faint air bed, with the insects gone by 5 m.
 # Nothing here is a rule: no collision, no noise (sim/noise.gd is the host's), no timing.
 extends Node3D
 
@@ -27,6 +23,12 @@ const Floor = preload("res://sim/floor.gd")
 const Furniture = preload("res://sim/furniture.gd")
 const Hides = preload("res://sim/hides.gd")
 const GardenSound = preload("res://client/garden_sound.gd")
+const Ferns = preload("res://client/arboretum_ferns.gd")
+const BARK_MAP = preload("res://assets/arboretum/willow_bark.png")
+const LITTER_MAP = preload("res://assets/arboretum/leaf_litter.png")
+const IRON_MAP = preload("res://assets/arboretum/painted_iron.webp")
+const GLASS_GRIME = preload("res://assets/arboretum/glass_grime.png")
+const GLASS_SHADER = preload("res://client/shaders/arboretum_glass.gdshader")
 
 const S := 2.0
 const SKY_H := 12.0
@@ -50,12 +52,12 @@ const HUSH_NEAR := 5.0
 ## Metres to a footstep by gait, and the gait a speed means (m/s).
 const STRIDE := {"creep": 0.55, "walk": 0.8, "sprint": 1.15}
 
-const C_MOSS := Color(0.16, 0.34, 0.11)
-const C_LITTER := Color(0.36, 0.24, 0.13)
-const C_GRAVEL := Color(0.8, 0.78, 0.72)
+const C_MOSS := Color(0.27, 0.33, 0.13)
+const C_LITTER := Color(0.54, 0.28, 0.13)
+const C_GRAVEL := Color(0.74, 0.70, 0.63)
 const C_BRICK := Color(0.5, 0.27, 0.2)
-const C_THICKET := Color(0.1, 0.19, 0.1)
-const C_BARK := Color(0.3, 0.23, 0.17)
+const C_THICKET := Color(0.18, 0.22, 0.10)
+const C_BARK := Color(0.46, 0.30, 0.16)
 const C_DEAD := Color(0.62, 0.6, 0.55)
 const C_STICK := Color(0.72, 0.68, 0.58)
 const C_IRON := Color(0.1, 0.12, 0.11)
@@ -78,8 +80,8 @@ var _moths: Array = []    # [node, centre, radius, phase, speed]
 var _flies: Array = []    # [node, centre, phase]
 var _t := 0.0
 var _rng := RandomNumberGenerator.new()
-var _amb: Array[AudioStreamPlayer] = []
-var _amb_db: Array[float] = []
+var _garden_audio := GardenSound.new()
+var _amb: Dictionary = {}
 var _steps: Array[AudioStreamPlayer3D] = []
 var _step_next := 0
 var _own: AudioStreamPlayer
@@ -114,6 +116,7 @@ func _dress(level: Level) -> void:
 	_ground()
 	_thicket_and_walls()
 	_pieces()
+	drawn["fern"] = Ferns.dress(self, fp, g)
 	_landmarks()
 	_pavilion()
 	_sky()
@@ -178,6 +181,60 @@ static func _noise_tex(key: String, base: float, spread: float, grain: int, seed
 	_tex[key] = tex
 	return tex
 
+## Small grains and gravel facets sit on one world-aligned tile per surface.
+static func _soil_tex(key: String) -> Texture2D:
+	if _tex.has(key):
+		return _tex[key]
+	var n := 96
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(key)
+	var img := Image.create(n, n, false, Image.FORMAT_L8)
+	var moss := key == "moss"
+	for y in n:
+		for x in n:
+			var shade := (0.55 if moss else 0.52) + 0.12 * rng.randf()
+			img.set_pixel(x, y, Color(shade, shade, shade))
+	for k in 400:
+		var center := Vector2(rng.randi_range(0, n - 1), rng.randi_range(0, n - 1))
+		var span := rng.randf_range(1.7, 3.3)
+		var half_width := span * rng.randf_range(0.62, 0.95)
+		var angle := rng.randf() * TAU
+		var tone := rng.randf_range(0.49, 0.84 if moss else 0.94)
+		for dy in range(-ceili(span), ceili(span) + 1):
+			for dx in range(-ceili(span), ceili(span) + 1):
+				var p := Vector2(dx, dy).rotated(angle)
+				var edge := absf(p.x) / span + absf(p.y) / half_width * (0.68 if moss else 0.82)
+				if edge <= 1.0:
+					var shade := tone * (0.78 if edge > 0.74 and p.y > 0 else 1.0)
+					img.set_pixel(posmod(int(center.x) + dx, n), posmod(int(center.y) + dy, n), Color(shade, shade, shade))
+	img.generate_mipmaps()
+	var tex := ImageTexture.create_from_image(img)
+	_tex[key] = tex
+	return tex
+
+static func _brick_tex() -> Texture2D:
+	if _tex.has("pavilion"):
+		return _tex["pavilion"]
+	var n := 96
+	var img := Image.create(n, n, false, Image.FORMAT_RGB8)
+	for y in n:
+		var row := y / 48
+		for x in n:
+			var u := (x + row * 24) % n
+			var mx := u % 48
+			var my := y % 48
+			var wear := _hash01(x / 3, y / 4, 36)
+			var col := Color(0.48, 0.29, 0.22) * (0.75 + 0.28 * wear + 0.23 * _hash01(u / 48, row, 37))
+			if mx < 2 or my < 4:
+				col = Color(0.28, 0.25, 0.20) * (0.80 + 0.28 * wear)
+			elif mx == 3 or my == 5:
+				col *= 1.12
+			img.set_pixel(x, y, col)
+	img.generate_mipmaps()
+	var tex := ImageTexture.create_from_image(img)
+	_tex["pavilion"] = tex
+	return tex
+
 ## A leaf card: blotches of leaf with gaps (alpha), for the canopy.
 static func _leaf_tex() -> Texture2D:
 	if _tex.has("leaf"):
@@ -187,14 +244,20 @@ static func _leaf_tex() -> Texture2D:
 	var n := 64
 	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
-	for k in 46:
-		var c := Vector2(rng.randf_range(6, n - 6), rng.randf_range(6, n - 6))
-		var r := rng.randf_range(4.0, 10.0)
-		var shade := rng.randf_range(0.55, 1.0)
+	for k in 62:
+		var c := Vector2(rng.randf_range(4, n - 4), rng.randf_range(4, n - 4))
+		var r := rng.randf_range(3.0, 10.0)
+		var a := rng.randf() * TAU
+		var shade := rng.randf_range(0.51, 1.0)
+		if ((c - Vector2(32, 32)) / Vector2(30, 23)).length_squared() > 1.0:
+			continue
 		for y in range(maxi(0, int(c.y - r)), mini(n, int(c.y + r) + 1)):
 			for x in range(maxi(0, int(c.x - r)), mini(n, int(c.x + r) + 1)):
-				if Vector2(x, y).distance_to(c) <= r and c.distance_to(Vector2(n / 2.0, n / 2.0)) < n * 0.47:
-					img.set_pixel(x, y, Color(shade, shade, shade, 1.0))
+				var p := (Vector2(x, y) - c).rotated(a) / r
+				if absf(p.x) + absf(p.y) * 1.6 < 1.0:
+					var v := shade if p.y < 0.0 else shade * 0.81
+					img.set_pixel(x, y, Color(v, v, v, 1.0))
+	img.generate_mipmaps()
 	var tex := ImageTexture.create_from_image(img)
 	_tex["leaf"] = tex
 	return tex
@@ -246,6 +309,11 @@ func _lit(key: String, tex: Texture2D = null, uv := 1.0, rough := 1.0, emit := C
 	_mats[key] = m
 	return m
 
+func _photo(key: String, tex: Texture2D, roughness: float) -> StandardMaterial3D:
+	var material := _lit(key, tex, 1.0, roughness)
+	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	return material
+
 func _tool(mat: String, at: Vector3) -> SurfaceTool:
 	var key := [mat, int(floor(at.x / (S * CHUNK))), int(floor(at.z / (S * CHUNK)))]
 	if not _tools.has(key):
@@ -254,11 +322,22 @@ func _tool(mat: String, at: Vector3) -> SurfaceTool:
 		_tools[key] = st
 	return _tools[key]
 
-func _quad(mat: String, a: Vector3, b: Vector3, c: Vector3, d: Vector3, n: Vector3, col: Color, uvs := 1.0) -> void:
+func _quad(mat: String, a: Vector3, b: Vector3, c: Vector3, d: Vector3, n: Vector3, col: Color,
+		uv_span := Vector2.ONE, uv_origin := Vector2.ZERO) -> void:
 	var st := _tool(mat, (a + c) * 0.5)
 	var pts := [a, b, c, a, c, d]
-	var uv := [Vector2(0, 0), Vector2(uvs, 0), Vector2(uvs, uvs), Vector2(0, 0), Vector2(uvs, uvs), Vector2(0, uvs)]
+	var uv := [Vector2.ZERO, Vector2(uv_span.x, 0), uv_span, Vector2.ZERO, uv_span, Vector2(0, uv_span.y)]
 	for i in 6:
+		st.set_normal(n)
+		st.set_color(col)
+		st.set_uv(uv_origin + uv[i])
+		st.add_vertex(pts[i])
+
+func _triangle(mat: String, a: Vector3, b: Vector3, c: Vector3, n: Vector3, col: Color) -> void:
+	var st := _tool(mat, (a + b + c) / 3.0)
+	var pts := [a, b, c]
+	var uv := [Vector2.ZERO, Vector2.RIGHT, Vector2.DOWN]
+	for i in 3:
 		st.set_normal(n)
 		st.set_color(col)
 		st.set_uv(uv[i])
@@ -281,12 +360,57 @@ func _box(mat: String, size: Vector3, c: Vector3, col: Color, on_floor := true, 
 		var o := n * h
 		var du := u * h
 		var dv := v * h
-		_quad(mat, mid + basis * (o - du - dv), mid + basis * (o + du - dv), mid + basis * (o + du + dv), mid + basis * (o - du + dv), basis * n, col)
+		var uv := Vector2(du.length() * 2.0 / 0.54, dv.length() * 2.0 / 0.17) if mat == "pavilion" else Vector2.ONE
+		var offset := Vector2.ZERO
+		if mat == "iron" or mat == "glass":
+			# Keep scratches proportional along long rails and vary which patch each pane samples.
+			var repeat_per_m := 1.45 if mat == "iron" else 0.48
+			uv = Vector2(du.length(), dv.length()) * 2.0 * repeat_per_m
+			offset = Vector2(c.x - c.z, c.y + c.z + c.x) * repeat_per_m
+		_quad(mat, mid + basis * (o + du - dv), mid + basis * (o - du - dv),
+			mid + basis * (o - du + dv), mid + basis * (o + du + dv), basis * n, col, uv, offset)
+
+## Faceted wood and iron share the same tapered profile. The rings stay perpendicular to the
+## supplied axis, so at standing height the leaning trunks still fit their solid footprint.
+func _taper(mat: String, points: PackedVector3Array, radii: PackedFloat32Array, axis: Vector3,
+		yaw: float, col: Color, sides: int = 5, cap_top := false) -> void:
+	var ref := Vector3.FORWARD if absf(axis.dot(Vector3.UP)) > 0.98 else Vector3.UP
+	var u := ref.cross(axis).normalized()
+	var v := u.cross(axis).normalized()
+	var spokes := PackedVector3Array()
+	for i in sides:
+		var a := yaw + TAU * i / sides
+		spokes.append(u * cos(a) + v * sin(a))
+	var tex_v := 0.0
+	for r in points.size() - 1:
+		var len := points[r].distance_to(points[r + 1]) * (0.55 if mat == "bark" else 1.0)
+		for i in sides:
+			var j := (i + 1) % sides
+			var a := points[r] + spokes[i] * radii[r]
+			var b := points[r] + spokes[j] * radii[r]
+			var c := points[r + 1] + spokes[j] * radii[r + 1]
+			var d := points[r + 1] + spokes[i] * radii[r + 1]
+			var n := (d - a).cross(b - a).normalized()
+			_quad(mat, a, b, c, d, n, col, Vector2(1.0 / sides, len), Vector2(float(i) / sides, tex_v))
+		tex_v += len
+	if cap_top:
+		for i in sides:
+			_triangle(mat, points[-1], points[-1] + spokes[i] * radii[-1],
+				points[-1] + spokes[(i + 1) % sides] * radii[-1], axis, col)
+
+func _limb(from: Vector3, to: Vector3, radius: float, col: Color) -> void:
+	_taper("bark", PackedVector3Array([from, to]), PackedFloat32Array([radius, 0.008]),
+		(to - from).normalized(), 0.0, col, 4)
+
+func _leaf_card(at: Vector3, along: Vector3, across: Vector3, col: Color) -> void:
+	var n := across.cross(along).normalized()
+	_quad("leaf", at - across - along, at + across - along, at + across + along, at - across + along, n, col)
 
 func _commit() -> void:
 	for key: Array in _tools:
 		var st: SurfaceTool = _tools[key]
 		var mi := MeshInstance3D.new()
+		mi.name = "%s_%d_%d" % key
 		mi.mesh = st.commit()
 		mi.material_override = _mats[key[0]]
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -306,10 +430,9 @@ static func _hash01(a: int, b: int, c: int = 0) -> float:
 # --- the ground --------------------------------------------------------------------------------------
 
 func _ground() -> void:
-	_lit("moss", _noise_tex("moss", 0.82, 0.3, 8, 11), 1.0, 0.85)
-	_lit("litter", _noise_tex("litter", 0.7, 0.9, 2, 12), 2.0)
-	# Gravel keeps a faint pale light of its own: the one thing that shows in the dark.
-	_lit("gravel", _noise_tex("gravel", 0.8, 0.5, 1, 13), 3.0, 1.0, Color(0.12, 0.125, 0.14))
+	_lit("moss", _soil_tex("moss"), 1.0, 0.85)
+	_photo("litter", LITTER_MAP, 1.0)
+	_lit("gravel", _soil_tex("gravel"))
 	_lit("brick", _noise_tex("brick", 0.8, 0.35, 4, 14), 2.0, 1.0, Color(0.012, 0.008, 0.006))
 	_lit("stick", null, 1.0, 0.9)
 	var W := Arboretum.W
@@ -330,11 +453,16 @@ func _ground() -> void:
 			elif s == Noises.GRAVEL:
 				mat = "gravel"
 				col = C_GRAVEL
-			col = col * (0.86 + 0.28 * _hash01(x, y, 3))
+			# Let the hue carry the surface cue. A single stretch of gravel reads as a trail.
+			col *= 0.94 + 0.12 * _hash01(x, y, 3)
 			col.a = 1.0
 			var x0 := x * S
 			var z0 := y * S
-			_quad(mat, Vector3(x0, 0, z0), Vector3(x0 + S, 0, z0), Vector3(x0 + S, 0, z0 + S), Vector3(x0, 0, z0 + S), Vector3.UP, col)
+			if mat == "gravel":
+				_gravel_tile(x, y, col)
+			else:
+				_quad(mat, Vector3(x0, 0, z0), Vector3(x0 + S, 0, z0), Vector3(x0 + S, 0, z0 + S), Vector3(x0, 0, z0 + S),
+					Vector3.UP, col, Vector2.ONE * S * 0.85, Vector2(x0, z0) * 0.85)
 			drawn[Noises.SURFACE_NAMES[s]] = int(drawn.get(Noises.SURFACE_NAMES[s], 0)) + 1
 			if s == Noises.TWIG:
 				# Pale sticks on the litter.
@@ -342,10 +470,55 @@ func _ground() -> void:
 					var p := Vector3(x0 + S * _hash01(x, y, 10 + k), 0.012, z0 + S * _hash01(x, y, 30 + k))
 					_box("stick", Vector3(0.28 + 0.4 * _hash01(x, y, 50 + k), 0.022, 0.03), p, C_STICK * (0.75 + 0.25 * _hash01(x, y, 70 + k)), true, TAU * _hash01(x, y, 90 + k))
 
+## Gravel thins over the last few centimetres of an exposed edge. Its colour, texture and all
+## geometry stay in the host's gravel cell, so the surface where a foot lands still reads honestly.
+func _gravel_tile(x: int, z: int, col: Color) -> void:
+	var open_w := g.surface(x - 1, z) != Noises.GRAVEL
+	var open_e := g.surface(x + 1, z) != Noises.GRAVEL
+	var open_n := g.surface(x, z - 1) != Noises.GRAVEL
+	var open_s := g.surface(x, z + 1) != Noises.GRAVEL
+	var exposed := [open_n, open_e, open_s, open_w]
+	var at := Vector3(x * S, 0, z * S)
+	var st := _tool("gravel", at + Vector3(1, 0, 1) * S * 0.5)
+	var corners := [Vector2(0, 0), Vector2(0.5, 0), Vector2(1, 0), Vector2(1, 0.5),
+		Vector2(1, 1), Vector2(0.5, 1), Vector2(0, 1), Vector2(0, 0.5)]
+	var edge := PackedVector3Array()
+	var inside := PackedVector3Array()
+	var tones := PackedColorArray()
+	for i in corners.size():
+		var p: Vector2 = corners[i]
+		var w := 0.07 + _hash01(x, z, 100 + i) * 0.09
+		var dx := w if p.x == 0.0 and open_w else (-w if p.x == 1.0 and open_e else 0.0)
+		var dz := w if p.y == 0.0 and open_n else (-w if p.y == 1.0 and open_s else 0.0)
+		edge.append(at + Vector3(p.x, 0, p.y) * S)
+		inside.append(edge[i] + Vector3(dx, 0, dz))
+		tones.append(col * (0.40 + 0.20 * _hash01(x, z, 110 + i)) if dx != 0.0 or dz != 0.0 else col)
+	var center := at + Vector3(1, 0, 1) * S * 0.5
+	for i in edge.size():
+		var j := (i + 1) % edge.size()
+		_gravel_vertex(st, center, col)
+		_gravel_vertex(st, inside[i], col)
+		_gravel_vertex(st, inside[j], col)
+		if not exposed[i / 2]:
+			continue
+		_gravel_vertex(st, edge[i], tones[i])
+		_gravel_vertex(st, inside[j], col)
+		_gravel_vertex(st, inside[i], col)
+		_gravel_vertex(st, edge[i], tones[i])
+		_gravel_vertex(st, edge[j], tones[j])
+		_gravel_vertex(st, inside[j], col)
+
+static func _gravel_vertex(st: SurfaceTool, at: Vector3, tone: Color) -> void:
+	st.set_normal(Vector3.UP)
+	st.set_color(tone)
+	st.set_uv(Vector2(at.x, at.z) * 1.4)
+	st.add_vertex(at)
+
 # --- thicket, and the hall's wall behind its hedge -----------------------------------------------------
 
 func _thicket_and_walls() -> void:
-	_lit("thicket", _noise_tex("thicket", 0.7, 0.9, 2, 21), 2.0)
+	_lit("thicket", _soil_tex("litter"), 1.0)
+	_lit("leaf", _leaf_tex(), 1.0, 1.0, Color.BLACK, true, true)
 	var W := Arboretum.W
 	var H := Arboretum.H
 	for y in H:
@@ -359,25 +532,47 @@ func _thicket_and_walls() -> void:
 				continue
 			if not ((inside and g.thicket[y * W + x] == 1) or hedge):
 				continue
-			var cx := (x + 0.5) * S
-			var cz := (y + 0.5) * S
-			var top := 2.5 + 1.1 * _hash01(x, y, 1)
-			var col := C_THICKET * (0.7 + 0.6 * _hash01(x, y, 2))
-			col.a = 1.0
-			_box("thicket", Vector3(S, top, S), Vector3(cx, 0, cz), col)
-			# Lumps and sprays breaking the top and the faces: a mass, not a wall.
-			for k in 4:
-				var off := Vector3((_hash01(x, y, 20 + k) - 0.5) * 1.5, 0, (_hash01(x, y, 30 + k) - 0.5) * 1.5)
-				var sz := Vector3(0.7 + 0.6 * _hash01(x, y, 40 + k), 0.5 + 0.9 * _hash01(x, y, 50 + k), 0.7 + 0.6 * _hash01(x, y, 60 + k))
-				_box("thicket", sz, Vector3(cx, top - 0.2, cz) + off, col * 1.25, true, TAU * _hash01(x, y, 70 + k))
+			_bramble(x, y)
 			drawn["thicket"] = int(drawn.get("thicket", 0)) + 1
+
+## The hedge stays solid along the cell edge underfoot. The waist and crown pull in irregularly.
+func _bramble(x: int, y: int) -> void:
+	var center := Vector3((x + 0.5) * S, 0, (y + 0.5) * S)
+	var offsets := [Vector2(-1, -1), Vector2(0, -1), Vector2(1, -1), Vector2(1, 0),
+		Vector2(1, 1), Vector2(0, 1), Vector2(-1, 1), Vector2(-1, 0)]
+	var top := 2.35 + 0.85 * _hash01(x, y, 1)
+	var col := C_THICKET * (0.78 + 0.45 * _hash01(x, y, 2))
+	var bottom := PackedVector3Array()
+	var waist := PackedVector3Array()
+	var crown := PackedVector3Array()
+	for i in offsets.size():
+		var edge := Vector3(offsets[i].x, 0, offsets[i].y) * S * 0.5
+		bottom.append(center + edge)
+		var waist_scale := 0.86 + 0.14 * _hash01(x, y, 20 + i)
+		waist.append(center + edge * waist_scale + Vector3.UP * (1.2 + 0.36 * _hash01(x, y, 30 + i)))
+		var crown_scale := 0.43 + 0.39 * _hash01(x, y, 40 + i)
+		crown.append(center + edge * crown_scale + Vector3.UP * (top + 0.42 * _hash01(x, y, 50 + i)))
+	for i in offsets.size():
+		var j := (i + 1) % offsets.size()
+		var tint := col * (0.85 + 0.34 * _hash01(x, y, 60 + i))
+		var lower := (waist[i] - bottom[i]).cross(bottom[j] - bottom[i]).normalized()
+		var upper := (crown[i] - waist[i]).cross(waist[j] - waist[i]).normalized()
+		_quad("thicket", bottom[i], bottom[j], waist[j], waist[i], lower, tint * 0.75)
+		_quad("thicket", waist[i], waist[j], crown[j], crown[i], upper, tint)
+		_triangle("thicket", center + Vector3.UP * (top + 0.35), crown[i], crown[j], Vector3.UP, tint)
+	# Two ragged sprays catch the edge of the near light and break the cap's silhouette.
+	for i: int in [1, 5]:
+		var a := TAU * _hash01(x, y, 80 + i)
+		var side := Vector3(cos(a), 0.08, sin(a))
+		var up := Vector3(-sin(a) * 0.22, 0.55, cos(a) * 0.22)
+		var at := waist[i].lerp(crown[i], 0.57)
+		_leaf_card(at, up, side * 0.52, col * 1.1)
 
 # --- what stands on the ground: trunks, dead trees, lamp posts, the small landmarks' pieces, the hides -----
 
 func _pieces() -> void:
-	_lit("bark", _noise_tex("bark", 0.75, 0.5, 2, 31), 1.0)
-	_lit("leaf", _leaf_tex(), 1.0, 1.0, Color.BLACK, true, true)
-	_lit("iron", null, 1.0, 0.6)
+	_photo("bark", BARK_MAP, 1.0)
+	_photo("iron", IRON_MAP, 0.72).albedo_color = Color(1.35, 1.35, 1.35)
 	_lit("wood", _noise_tex("wood", 0.8, 0.4, 4, 32), 1.0)
 	_lit("stone", _noise_tex("stone", 0.8, 0.4, 2, 33), 1.0)
 	for p in Furniture.pieces_for(fp):
@@ -385,26 +580,10 @@ func _pieces() -> void:
 		var r := _hash01(p.x, p.y, 5)
 		match p.kind:
 			&"trunk":
-				var tall := 6.5 + 3.0 * r
-				var thick := 0.2 + 0.1 * _hash01(p.x, p.y, 6)
-				var col := C_BARK * (0.7 + 0.6 * r)
-				col.a = 1.0
-				_box("bark", Vector3(thick, tall, thick), at, col, true, TAU * r)
-				# The canopy: dark cards of leaf above eye level, and a higher one.
-				var lc := Color(0.07, 0.13, 0.07) * (0.6 + 0.8 * _hash01(p.x, p.y, 7))
-				lc.a = 1.0
-				for k in 2:
-					var hy := 3.6 + 1.6 * _hash01(p.x, p.y, 8 + k) + k * 1.4
-					var half := 1.5 + 0.9 * _hash01(p.x, p.y, 10 + k)
-					var c := at + Vector3((_hash01(p.x, p.y, 12 + k) - 0.5) * 0.8, hy, (_hash01(p.x, p.y, 14 + k) - 0.5) * 0.8)
-					_quad("leaf", c + Vector3(-half, 0, -half), c + Vector3(half, 0, -half), c + Vector3(half, 0.3 * (r - 0.5), half), c + Vector3(-half, 0.25, half), Vector3.DOWN, lc)
+				_tree(at, p.x, p.y, r, false)
 				drawn["trunk"] = int(drawn.get("trunk", 0)) + 1
 			&"dead_tree":
-				# Bare and pale, taller than its neighbours, a few broken limbs.
-				_box("bark", Vector3(0.42, 8.5, 0.42), at, C_DEAD, true, 0.4)
-				for k in 4:
-					var hy := 3.0 + 1.3 * k
-					_box("bark", Vector3(1.6 + 0.5 * _hash01(p.x, p.y, 20 + k), 0.12, 0.12), at + Vector3(0, hy, 0), C_DEAD * 0.9, false, TAU * _hash01(p.x, p.y, 30 + k), Vector3(0, 0, 0.5))
+				_tree(at, p.x, p.y, r, true)
 				drawn["dead_tree"] = int(drawn.get("dead_tree", 0)) + 1
 			&"lamp":
 				_lamp(at, true)
@@ -420,11 +599,7 @@ func _pieces() -> void:
 				_box("stone", Vector3(1.05, 0.3, 0.34), at + Vector3(0.12, 0.12, 0.06), C_STONE, true, 0.25, Vector3(0, 0, 0.12))
 				_box("stone", Vector3(0.24, 0.24, 0.24), at + Vector3(0.52, 0.02, -0.2), C_STONE * 1.1, true, 0.7)
 			&"arch":
-				for sx: float in [-0.5, 0.5]:
-					_box("iron", Vector3(0.09, 2.2, 0.09), at + Vector3(sx, 0, 0), C_IRON * 1.6)
-				_box("iron", Vector3(1.1, 0.08, 0.3), at + Vector3(0, 2.2, 0), C_IRON * 1.6)
-				for k in 7:
-					_box("thicket", Vector3(0.16, 0.22, 0.34), at + Vector3(-0.5 + k * 0.165, 2.1 + 0.22 * sin(k * 0.52), 0), Color(0.05, 0.03, 0.03), true, r + k)
+				_rose_arch(at, r)
 			&"sundial":
 				_box("stone", Vector3(0.36, 0.95, 0.36), at, C_STONE)
 				_box("stone", Vector3(0.74, 0.07, 0.74), at + Vector3(0, 0.95, 0), C_STONE * 1.1)
@@ -454,23 +629,80 @@ func _pieces() -> void:
 					_box("bark", Vector3(1.6, 0.11, 0.22), at + Vector3(0, 0.27, 0) + b * Vector3(0, sin(a) * 0.22, cos(a) * 0.2), C_BARK * 1.5, false, yaw, Vector3(a, 0, 0))
 				_box("bark", Vector3(1.5, 0.3, 0.3), at + Vector3(0, 0.12, 0), Color(0.012, 0.01, 0.008), true, yaw)
 
+func _tree(at: Vector3, x: int, z: int, r: float, dead: bool) -> void:
+	var a := TAU * r
+	var along := Vector3(cos(a), 0, sin(a))
+	var tall := (7.6 + 1.5 * r) if dead else (5.5 + 3.5 * r)
+	var shoulder := at + Vector3.UP * 2.14
+	var fork := shoulder.lerp(at + Vector3.UP * tall, 0.36) + along * (0.13 + 0.26 * r)
+	var tip := at + Vector3.UP * tall + along * (0.3 + 0.55 * r)
+	var col := (C_DEAD if dead else C_BARK) * (0.79 + 0.40 * r)
+	var root := 0.24 if dead else 0.15
+	var waist := root * (0.70 + 0.16 * _hash01(x, z, 6))
+	_taper("bark", PackedVector3Array([at, at + Vector3.UP * 0.32, shoulder, fork, tip]),
+		PackedFloat32Array([root, waist, waist, waist * 0.72, 0.012]), Vector3.UP, a, col, 5)
+	for k in (3 if dead else 2):
+		var angle := a + (2.1 * k if dead else 2.6 * k) + 0.8
+		var spread := Vector3(cos(angle), 0, sin(angle))
+		var join := shoulder.lerp(fork, 0.08 + k * (0.40 if dead else 0.64))
+		var end := join + spread * (0.9 + 0.8 * _hash01(x, z, 8 + k)) + Vector3.UP * (0.55 + 0.8 * _hash01(x, z, 10 + k))
+		_limb(join, end, waist * 0.65, col * 0.90)
+		if dead:
+			var bend := join.lerp(end, 0.71)
+			_limb(bend, bend + (spread + Vector3.UP * 1.9) * 0.35, 0.032, col)
+		else:
+			var across := Vector3(-spread.z, 0.30, spread.x)
+			var lc := Color(0.095, 0.15, 0.07) * (0.82 + 0.45 * _hash01(x, z, 7))
+			_leaf_card(end + Vector3.UP * 0.13, spread * 1.08 + Vector3.UP * (0.45 - 0.63 * r), across * 0.66, lc)
+	if not dead:
+		_leaf_card(fork.lerp(tip, 0.45), along * 1.52 + Vector3.UP * 0.24,
+			Vector3(-along.z, -0.30, along.x) * 1.13, Color(0.075, 0.12, 0.068))
+
+func _rose_arch(at: Vector3, r: float) -> void:
+	var iron := Color(0.22, 0.24, 0.19)
+	for z: float in [-0.14, 0.14]:
+		for x: float in [-0.51, 0.51]:
+			_box("iron", Vector3(0.045, 1.94, 0.045), at + Vector3(x, 0, z), iron)
+		for k in 8:
+			var a := PI * k / 8.0
+			var b := PI * (k + 1) / 8.0
+			var start := at + Vector3(cos(a) * 0.51, 1.94 + sin(a) * 0.51, z)
+			var end := at + Vector3(cos(b) * 0.51, 1.94 + sin(b) * 0.51, z)
+			_taper("iron", PackedVector3Array([start, end]), PackedFloat32Array([0.027, 0.027]),
+				(end - start).normalized(), 0.0, iron, 4)
+	for k in 5:
+		var a := 0.24 + k * 0.53
+		var at_leaf := at + Vector3(cos(a) * 0.52, 1.94 + sin(a) * 0.54, 0.0)
+		_leaf_card(at_leaf, Vector3(0.08, 0.20, 0.07), Vector3(0.12, 0.02, 0.14), Color(0.125, 0.165, 0.088))
+		if k % 2 == 0:
+			_box("thicket", Vector3(0.09, 0.08, 0.12), at_leaf + Vector3(0.017, 0.08, -0.04),
+				Color(0.30, 0.095, 0.095), false, r + k)
+
 static func _facing(f: StringName) -> Vector3:
 	return Vector3(float(Floor.dir_dx(f)), 0, float(Floor.dir_dy(f)))
 
 ## An old park lamp: a post with a lantern (or, on the pavilion, the lantern on its wall), its warm pool, moths.
 func _lamp(at: Vector3, post: bool) -> void:
 	var head := at + Vector3(0, 2.75 if post else 2.45, 0)
+	var frame := Color(0.15, 0.19, 0.16)
 	if post:
-		_box("iron", Vector3(0.09, 2.7, 0.09), at, C_IRON * 1.5)
-		_box("iron", Vector3(0.2, 0.12, 0.2), at, C_IRON * 1.5)
-		_box("iron", Vector3(0.34, 0.05, 0.34), head + Vector3(0, 0.16, 0), C_IRON * 1.5, false)
-	var lantern := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = Vector3(0.2, 0.26, 0.2)
-	lantern.mesh = bm
-	lantern.position = head
-	lantern.material_override = _glow(LAMP, 2.4, 0.0)
-	add_child(lantern)
+		_taper("iron", PackedVector3Array([at, at + Vector3.UP * 0.12, at + Vector3.UP * 0.31, head]),
+			PackedFloat32Array([0.10, 0.10, 0.05, 0.035]), Vector3.UP, 0.0, frame, 6)
+	var base := head + Vector3.DOWN * 0.14
+	var rim := head + Vector3.UP * 0.14
+	if not _mats.has("lantern"):
+		_mats["lantern"] = _glow(Color(1.0, 0.66, 0.29), 1.38, 0.0)
+	_taper("lantern", PackedVector3Array([base, rim]), PackedFloat32Array([0.081, 0.129]),
+		Vector3.UP, 0.0, Color.WHITE, 6)
+	_taper("iron", PackedVector3Array([rim, rim + Vector3.UP * 0.03, rim + Vector3.UP * 0.14]),
+		PackedFloat32Array([0.184, 0.184, 0.018]), Vector3.UP, 0.0, frame * 1.2, 6, true)
+	for k in 6:
+		var a := TAU * k / 6.0
+		var side := Vector3(cos(a), 0, sin(a))
+		var low := base + side * 0.084
+		var high := rim + side * 0.132
+		_taper("iron", PackedVector3Array([low, high]), PackedFloat32Array([0.014, 0.014]),
+			(high - low).normalized(), 0.0, frame, 4)
 	var o := OmniLight3D.new()
 	o.position = head + Vector3(0, -0.1, 0)
 	o.light_color = LAMP
@@ -507,7 +739,10 @@ func _fireflies(at: Vector3) -> void:
 # --- the big landmarks' buildings ---------------------------------------------------------------------
 
 func _landmarks() -> void:
-	_lit("glass", null, 1.0, 0.1, Color(0.01, 0.014, 0.012), true, true)
+	var glass := ShaderMaterial.new()
+	glass.shader = GLASS_SHADER
+	glass.set_shader_parameter(&"grime_mask", GLASS_GRIME)
+	_mats["glass"] = glass
 	var W := Arboretum.W
 	for l in g.landmarks:
 		drawn["landmark"] = int(drawn.get("landmark", 0)) + 1
@@ -516,15 +751,7 @@ func _landmarks() -> void:
 		var at := Vector3((l.building % W + 0.5) * S, 0, (l.building / W + 0.5) * S)
 		match l.kind:
 			&"greenhouse":
-				_box("stone", Vector3(S, 0.5, S), at, C_BRICK)
-				for k in 4:
-					var a := k * PI * 0.5
-					_box("glass", Vector3(S - 0.1, 1.7, 0.03), at + Vector3(sin(a), 0, cos(a)) * 0.97 + Vector3(0, 0.5, 0), C_GLASS, true, a)
-					_box("iron", Vector3(0.06, 2.2, 0.06), at + Vector3(sin(a + 0.785), 0, cos(a + 0.785)) * 1.38, Color(0.5, 0.52, 0.48))
-				for sx: float in [-1.0, 1.0]:
-					_box("glass", Vector3(1.12, 0.03, S), at + Vector3(sx * 0.5, 2.5, 0), C_GLASS, false, 0, Vector3(0, 0, sx * 0.5))
-				_box("iron", Vector3(0.06, 0.06, S), at + Vector3(0, 2.76, 0), Color(0.5, 0.52, 0.48), false)
-				_fireflies(at + Vector3(0, 1.0, 0))
+				_greenhouse(at)
 			&"bandstand":
 				_box("wood", Vector3(S, 0.55, S), at, C_WOOD * 0.8)
 				for k in 4:
@@ -551,29 +778,64 @@ func _landmarks() -> void:
 					_box("wood", Vector3(1.25, 0.08, 2.3), at + Vector3(sx * 0.52, 2.72, 0), Color(0.1, 0.1, 0.11), false, 0, Vector3(0, 0, sx * 0.55))
 				_box("wood", Vector3(0.6, 0.7, 0.04), at + Vector3(0.3, 1.1, 1.0), Color(0.01, 0.012, 0.016))
 
+func _greenhouse(at: Vector3) -> void:
+	var frame := Color(0.37, 0.43, 0.37)
+	_box("stone", Vector3(S, 0.46, S), at, C_BRICK)
+	for k in 4:
+		var a := k * PI * 0.5
+		var out := Vector3(sin(a), 0, cos(a))
+		var cross := Vector3(cos(a), 0, -sin(a))
+		var wall := at + out * 0.963
+		for x: float in [-0.96, -0.33, 0.33]:
+			_box("iron", Vector3(0.055, 1.82, 0.05), wall + Vector3.UP * 0.46 + cross * x, frame, true, a)
+		for y: float in [0.47, 1.34, 2.20]:
+			_box("iron", Vector3(1.97, 0.048, 0.052), wall + Vector3.UP * y, frame, false, a)
+		for i in 3:
+			var x := float(i - 1) * 0.64
+			# Two missing upper panes give the glasshouse an irregular profile when its lamp picks it out.
+			var h := 0.88 if (i + k) % 4 == 1 else 1.72
+			var tint := C_GLASS * (0.78 + 0.22 * _hash01(i, k, 17))
+			tint.a = C_GLASS.a
+			_box("glass", Vector3(0.61, h, 0.018), wall + Vector3.UP * 0.48 + cross * x, tint, true, a)
+	for sx: float in [-1.0, 1.0]:
+		var tilt := Vector3(0, 0, -sx * 0.57)
+		var roof := at + Vector3(sx * 0.51, 2.53, 0)
+		_box("glass", Vector3(1.19, 0.02, S), roof, C_GLASS, false, 0, tilt)
+		for z: float in [-0.97, 0.0, 0.97]:
+			_box("iron", Vector3(1.20, 0.054, 0.055), roof + Vector3(0, 0, z), frame, false, 0, tilt)
+	_box("iron", Vector3(0.065, 0.065, S), at + Vector3(0, 2.86, 0), frame, false)
+	_fireflies(at + Vector3.UP)
+
 # --- the lift pavilion ----------------------------------------------------------------------------------
 
 func _pavilion() -> void:
+	_lit("pavilion", _brick_tex())
 	var lx := fp.landing.x
 	var x0 := (lx - 1) * S
 	var x1 := (lx + 2) * S
 	var z0 := Arboretum.Y0 * S
 	var z1 := (Arboretum.Y0 + 2) * S
 	var t := 0.16
-	var col := C_BRICK
+	var col := Color(0.87, 0.80, 0.75)
 	# The back wall, with the lift's doorway in it; the two sides; the front, with the one doorway.
 	var half := lv.lift_half
 	var mid := (lx + 0.5) * S
-	_box("stone", Vector3(mid - half - x0, WALL_H, t), Vector3((x0 + mid - half) * 0.5, 0, z0), col)
-	_box("stone", Vector3(x1 - mid - half, WALL_H, t), Vector3((x1 + mid + half) * 0.5, 0, z0), col)
-	_box("stone", Vector3(half * 2.0, WALL_H - Level.LIFT_H, t), Vector3(mid, Level.LIFT_H, z0), col)
-	_box("stone", Vector3(t, WALL_H, z1 - z0), Vector3(x0, 0, (z0 + z1) * 0.5), col)
-	_box("stone", Vector3(t, WALL_H, z1 - z0), Vector3(x1, 0, (z0 + z1) * 0.5), col)
-	_box("stone", Vector3(mid - DOOR_W * 0.5 - x0, WALL_H, t), Vector3((x0 + mid - DOOR_W * 0.5) * 0.5, 0, z1), col)
-	_box("stone", Vector3(x1 - mid - DOOR_W * 0.5, WALL_H, t), Vector3((x1 + mid + DOOR_W * 0.5) * 0.5, 0, z1), col)
-	_box("stone", Vector3(DOOR_W, WALL_H - DOOR_H, t), Vector3(mid, DOOR_H, z1), col)
-	# A flat roof with a lip, and the lantern over the door.
-	_box("stone", Vector3(x1 - x0 + 0.5, 0.18, z1 - z0 + 0.5), Vector3((x0 + x1) * 0.5, WALL_H, (z0 + z1) * 0.5), col * 0.6)
+	_box("pavilion", Vector3(mid - half - x0, WALL_H, t), Vector3((x0 + mid - half) * 0.5, 0, z0), col)
+	_box("pavilion", Vector3(x1 - mid - half, WALL_H, t), Vector3((x1 + mid + half) * 0.5, 0, z0), col)
+	_box("pavilion", Vector3(half * 2.0, WALL_H - Level.LIFT_H, t), Vector3(mid, Level.LIFT_H, z0), col)
+	_box("pavilion", Vector3(t, WALL_H, z1 - z0), Vector3(x0, 0, (z0 + z1) * 0.5), col)
+	_box("pavilion", Vector3(t, WALL_H, z1 - z0), Vector3(x1, 0, (z0 + z1) * 0.5), col)
+	_box("pavilion", Vector3(mid - DOOR_W * 0.5 - x0, WALL_H, t), Vector3((x0 + mid - DOOR_W * 0.5) * 0.5, 0, z1), col)
+	_box("pavilion", Vector3(x1 - mid - DOOR_W * 0.5, WALL_H, t), Vector3((x1 + mid + DOOR_W * 0.5) * 0.5, 0, z1), col)
+	_box("pavilion", Vector3(DOOR_W, WALL_H - DOOR_H, t), Vector3(mid, DOOR_H, z1), col)
+	# Cast-stone door lining sits on the two jambs, clear of the modeled doorway.
+	var trim := Color(0.40, 0.36, 0.29)
+	for side: float in [-1.0, 1.0]:
+		_box("stone", Vector3(0.12, DOOR_H, 0.11), Vector3(mid + side * (DOOR_W * 0.5 + 0.06), 0, z1 + t * 0.5), trim)
+	_box("stone", Vector3(DOOR_W + 0.24, 0.12, 0.12), Vector3(mid, DOOR_H, z1 + t * 0.5), trim)
+	var roof := Vector3(mid, WALL_H, (z0 + z1) * 0.5)
+	_box("stone", Vector3(x1 - x0 + 0.25, 0.12, z1 - z0 + 0.25), roof, trim)
+	_box("stone", Vector3(x1 - x0 + 0.50, 0.16, z1 - z0 + 0.50), roof + Vector3.UP * 0.12, trim * 0.72)
 	var lamp := g.landmarks[0].lamp
 	_lamp(Vector3(lamp.x / 100.0, 0, lamp.y / 100.0 + 0.2), false)
 	# A weak bulb inside, so the crew steps out of light into the garden.
@@ -653,50 +915,62 @@ func _apply(light: float) -> void:
 # --- sound -----------------------------------------------------------------------------------------------
 
 func _sounds() -> void:
-	for spec: Array in [["wind", -15.0], ["crickets", -20.0], ["sprinkler", -27.0]]:
+	for cue: String in GardenSound.BED_CUES:
+		var recording := _garden_audio.next(cue)
+		if recording == null:
+			continue
 		var p := AudioStreamPlayer.new()
 		p.bus = &"Ambience"
-		p.stream = GardenSound.stream(spec[0])
-		p.volume_db = spec[1]
+		p.stream = recording
+		p.volume_db = -80.0
 		add_child(p)
-		_amb.append(p)
-		_amb_db.append(spec[1])
+		_amb[cue] = p
 	for k in 6:
 		var sp := AudioStreamPlayer3D.new()
 		sp.bus = &"Effects"
 		sp.unit_size = 4.0
 		sp.max_distance = 30.0
+		sp.max_db = 0.0
 		add_child(sp)
 		_steps.append(sp)
 	_own = AudioStreamPlayer.new()
 	_own.bus = &"Effects"
 	add_child(_own)
 
-static func _step_name(surface: String, k: int) -> String:
-	var kind := "gravel" if (surface == "gravel" or surface == "none") else ("moss" if surface == "moss" else "leaves")
-	return "step_%s_%d" % [kind, 1 + k % 4]
+func _step_take(surface: String, creeping: bool) -> AudioStreamOggVorbis:
+	if surface == "moss":
+		return null if creeping else _garden_audio.next("step_moss")
+	if surface == "gravel" or surface == "none":
+		return _garden_audio.next("step_gravel")
+	if creeping:
+		var quiet_step := _garden_audio.next("step_creep")
+		if quiet_step != null:
+			return quiet_step
+	return _garden_audio.next("step_leaves")
 
 ## One footstep of another player at `pos` (client/sfx.gd hands them over on this floor). True: played here.
 func step_at(pos: Vector3, gain_db: float) -> bool:
 	var surface := surface_at(pos.x, pos.z)
-	if surface == "moss" and gain_db < -3.0:
-		return true   # a creep on moss is silent
+	var recording := _step_take(surface, gain_db < float(OthersView.STEP_DB["walk"]))
+	if recording == null:
+		return true
 	var sp := _steps[_step_next]
 	_step_next = (_step_next + 1) % _steps.size()
-	sp.stream = GardenSound.stream(_step_name(surface, _rng.randi()))
-	sp.volume_db = -6.0 + gain_db + (-8.0 if surface == "moss" else 0.0)
-	sp.pitch_scale = 0.92 + _rng.randf() * 0.16
+	sp.stream = recording
+	sp.volume_db = Sfx.BASE_DB + gain_db
 	sp.global_position = pos
 	sp.play()
 	return true
 
 ## A twig cracked at (x, z) (the host's "twigCrack" event): everyone hears it.
 func crack(x: float, z: float) -> void:
+	var recording := _garden_audio.next("twig")
+	if recording == null:
+		return
 	var sp := _steps[_step_next]
 	_step_next = (_step_next + 1) % _steps.size()
-	sp.stream = GardenSound.stream("twig_%d" % _rng.randi_range(1, 3))
-	sp.volume_db = 4.0
-	sp.pitch_scale = 0.95 + _rng.randf() * 0.1
+	sp.stream = recording
+	sp.volume_db = Sfx.BASE_DB + 3.0
 	sp.global_position = Vector3(x, 0.1, z)
 	sp.play()
 
@@ -715,10 +989,11 @@ func _listen(delta: float) -> void:
 			if _walked >= float(STRIDE[gait]):
 				_walked = 0.0
 				var surface := surface_at(p.x, p.z)
-				if not (surface == "moss" and gait == "creep"):
-					_own.stream = GardenSound.stream(_step_name(surface, _rng.randi()))
-					_own.volume_db = (-13.0 if gait == "creep" else (-5.0 if gait == "walk" else -1.0)) + (-9.0 if surface == "moss" else 0.0)
-					_own.pitch_scale = 0.92 + _rng.randf() * 0.16
+				var recording := _step_take(surface, gait == "creep")
+				if recording != null:
+					_own.stream = recording
+					var creep_trim := -3.0 if recording.resource_path.get_file().begins_with("step_creep_") else -8.0
+					_own.volume_db = Sfx.BASE_DB + (creep_trim if gait == "creep" else (0.0 if gait == "walk" else 4.0))
 					_own.play()
 		elif speed <= 0.4:
 			_walked = minf(_walked, 0.3)
@@ -728,7 +1003,10 @@ func _listen(delta: float) -> void:
 	if keeper != null and is_instance_valid(keeper) and keeper.visible:
 		want = smoothstep(HUSH_NEAR, HUSH_FAR, Vector2(p.x - keeper.global_position.x, p.z - keeper.global_position.z).length())
 	_hush = move_toward(_hush, want, delta * 0.9)
-	for i in _amb.size():
-		if not _amb[i].playing:
-			_amb[i].play()
-		_amb[i].volume_db = _amb_db[i] + linear_to_db(maxf(_hush, 0.0005))
+	for cue: String in _amb:
+		var bed: AudioStreamPlayer = _amb[cue]
+		var share := 1.0 - _hush if cue == "quiet" else _hush
+		var trim := -3.0 if cue == "crickets" or cue == "sprinkler" else 0.0
+		bed.volume_db = Sfx.BASE_DB + trim + linear_to_db(maxf(share, 0.0001))
+		if not bed.playing:
+			bed.play()

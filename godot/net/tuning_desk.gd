@@ -239,6 +239,9 @@ static func label(id: StringName) -> String:
 
 ## A value without its unit ("3.80").
 static func bare(id: StringName, value: float) -> String:
+	var row := Settings.row(id)
+	if row != null and row.unit == "on/off":
+		return Settings.text(id, value)
 	return ("%." + str(Settings.decimals(id)) + "f") % value
 
 ## The one line every screen shows for a note.

@@ -31,6 +31,7 @@ const RoomClient = preload("res://net/room_client.gd")
 const LocalRoom = preload("res://net/local_room.gd")
 const Client = preload("res://net/client.gd")
 const Session = preload("res://net/session.gd")
+const Protocol = preload("res://net/protocol.gd")
 const Pose = preload("res://net/pose.gd")
 const PlanDump = preload("res://client/plan_dump.gd")
 const Run = preload("res://sim/run.gd")
@@ -65,6 +66,8 @@ const WATCH_U := Run.CAR_DEPTH / 2.0
 const SAT_DROP := 0.12
 const SAT_BACK := 0.3
 const SEAT_EYE := 0.95
+## Mask height in the sitting clip before lowering the model onto the child-size chair.
+const CREW_SEAT_MASK := 1.15
 ## Seen from outside, a player in a hide is drawn crouched with the mask at the hide's eye, sunk to it
 ## (CREW_CROUCH_MASK: the crouched figure's mask, EyeHeight.CREEP); in the ball pit a little higher, so
 ## the head shows between the balls. Several in one hide sit SLOT_GAP apart.
@@ -179,10 +182,12 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 		last_ms = (Time.get_ticks_usec() - t0) / 1000.0
 		return {"waiting": true}
 	var latest: Dictionary = c.latest
-	_use_floor(str(c.seed), c.local_depth)
 	var phase := str(latest["phase"])
 	# Solid furniture (FD7): the host says so in every world ("solid"); the body slides along the pieces.
-	var solid: bool = latest.get("solid") != null
+	var furniture_code: Variant = latest.get("solid")
+	var solid: bool = furniture_code != null
+	var furniture_layout: bool = furniture_code == Protocol.SOLID_RESTORED
+	_use_floor(str(c.seed), c.local_depth, furniture_layout, c.floor_deck)
 	var me_row: Variant = _row(latest, str(c.id))
 	var status := str(me_row["status"]) if me_row != null else "ok"
 	var dt := clampf(float(inp.get("dt", 0.0)), 0.0, 0.1)
@@ -227,7 +232,7 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 			auto_status = "done"
 		else:
 			# With solid furniture the walk plans its way round the pieces (sim/follow.gd).
-			body = Follow.step_path_walk(plan, _auto, b0, _auto_pace * dt, PLAYER_RADIUS, Furniture.solids_of(plan) if solid else null)
+			body = Follow.step_path_walk(plan, _auto, b0, _auto_pace * dt, PLAYER_RADIUS, Furniture.solids_of(plan, furniture_layout) if solid else null)
 			var mx := body.x - b0.x
 			var mz := body.z - b0.z
 			if M.hypot2(mx, mz) > 1e-4:
@@ -256,7 +261,7 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 				sp = CRAWL_PACE
 			var sn := M.sin_js(in_yaw)
 			var cs := M.cos_js(in_yaw)
-			body = Session.move_local(plan, phase, body, (-sn * nf + cs * nr) * sp * dt, (-cs * nf - sn * nr) * sp * dt, PLAYER_RADIUS, solid)
+			body = Session.move_local(plan, phase, body, (-sn * nf + cs * nr) * sp * dt, (-cs * nf - sn * nr) * sp * dt, PLAYER_RADIUS, solid, furniture_layout)
 			speed = sp
 	if before != null and body != null and dt > 0.0:
 		tank = Stamina.step_stamina(tank, gait, M.hypot2(body.x - before.x, body.z - before.z) / dt, dt)
@@ -336,7 +341,7 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 		body = f.placed
 		placed = _body_plain(body)
 		var moved_on := c.local_depth != depth_before or c.day_index != day_before
-		_use_floor(str(c.seed), c.local_depth)
+		_use_floor(str(c.seed), c.local_depth, c.latest.get("solid") == Protocol.SOLID_RESTORED, c.floor_deck)
 		if _face_on_place or (moved_on and Run.in_car(car, body)):
 			# A new floor, a new day or home: in the car, face out of its doors.
 			_face_on_place = false
@@ -427,14 +432,14 @@ func _new_run(c: Client) -> void:
 	_hide_wait_phase = ""
 	_auto_gait = &"walk"
 
-func _use_floor(seed: String, depth: int) -> void:
-	var p := Session.plan_for(seed, depth)
-	if p == plan and depth == plan_depth:
+func _use_floor(seed: String, depth: int, furniture_layout: bool, floor_deck: Array[StringName]) -> void:
+	var p := Session.plan_for(seed, depth, floor_deck)
+	if p == plan and depth == plan_depth and plan_dict.get("furnitureLayout", false) == furniture_layout:
 		return
 	plan = p
 	car = Session.car_for(p)
 	plan_depth = depth
-	plan_dict = PlanDump.dump(p, car)
+	plan_dict = PlanDump.dump(p, car, furniture_layout)
 	plan_dict["_new"] = true
 	_orderly_tpl = Entity.create_orderly(p)
 	hides = []
@@ -523,6 +528,9 @@ func _snapshot(c: Client, f: Client.Frame, latest: Dictionary, me_row: Variant, 
 	# The Orderly: exactly the frame's pose (held while seen), never drawn on a dark frame.
 	var lo: Dictionary = latest["orderly"]
 	var pose: Variant = f.orderly
+	if pose != null and f.catch_active:
+		pose = pose.duplicate()
+		pose["catch_active"] = true
 	var moving := float(lo["speed"]) > 0.0
 	var squeak := {"gain": 0.0, "muffled": false}
 	var ox := float(lo["x"])
@@ -662,6 +670,12 @@ func _others(f: Client.Frame, latest: Dictionary) -> Array:
 	var raised := {}
 	for m: Dictionary in latest["crew"]:
 		raised[m["id"]] = m["raised"]
+	var helping := {}
+	var downs: Variant = latest.get("downs")
+	if downs != null:
+		for down: Dictionary in downs["down"]:
+			if str(down["healer"]) != "" and down["healFrom"] != null:
+				helping[down["healer"]] = down["id"]
 	var nm := names()
 	var faces: Dictionary = rc.client.faces if rc.client != null else {}
 	var out: Array = []
@@ -672,6 +686,9 @@ func _others(f: Client.Frame, latest: Dictionary) -> Array:
 			"yaw": p["yaw"], "pitch": p["pitch"], "gait": p["gait"], "status": p["status"], "active": p["active"],
 			"raised": bool(raised.get(id, false)), "face": str(faces.get(id, ""))}
 		_seek_figure(o, latest)
+		if helping.has(id) and str(o["status"]) == "ok" and not o.has("crewPose"):
+			o["crewPose"] = "help"
+			o["helpTarget"] = helping[id]
 		out.append(o)
 	return out
 
@@ -698,7 +715,8 @@ func _seek_figure(o: Dictionary, latest: Dictionary) -> void:
 		if si >= 0 and si < seats.size():
 			var sf := seats[si].facing
 			o["yaw"] = Seek.yaw_toward(float(Floor.dir_dx(sf)), float(Floor.dir_dy(sf)))
-			o["y"] = float(o["y"]) - (CREW_CROUCH_MASK - SEAT_EYE)
+			o["crewPose"] = "sit"
+			o["y"] = float(o["y"]) + SEAT_EYE - CREW_SEAT_MASK
 	elif st == "ok" and ph == "inside" and int(row["hide"]) >= 0 and int(row["hide"]) < hides.size():
 		var h := hides[int(row["hide"])]
 		var off := slot_offset(h, latest, str(o["id"]))
@@ -706,8 +724,11 @@ func _seek_figure(o: Dictionary, latest: Dictionary) -> void:
 		o["z"] = float(o["z"]) + off.y
 		o["gait"] = "creep"
 		o["yaw"] = gap_yaw(h)
-		var mask := PIT_HEAD if h.kind == &"pit" else h.eye / 100.0
-		o["y"] = float(o["y"]) + mask - CREW_CROUCH_MASK
+		if h.kind == &"bed":
+			o["crewPose"] = "prone"
+		else:
+			var mask := PIT_HEAD if h.kind == &"pit" else h.eye / 100.0
+			o["y"] = float(o["y"]) + mask - CREW_CROUCH_MASK
 	elif st == "ok" and ph != "out":
 		o["gait"] = "creep"
 
@@ -860,7 +881,8 @@ func nudge(dx: float, dz: float) -> Dictionary:
 		return {"ok": false}
 	if not local and M.hypot2(dx, dz) > 0.7:
 		return {"ok": false, "error": "too far for the server"}
-	body = Session.move_local(plan, rc.client.latest["phase"], body, dx, dz, PLAYER_RADIUS, (rc.client.latest as Dictionary).get("solid") != null)
+	var furniture_code: Variant = (rc.client.latest as Dictionary).get("solid")
+	body = Session.move_local(plan, rc.client.latest["phase"], body, dx, dz, PLAYER_RADIUS, furniture_code != null, furniture_code == Protocol.SOLID_RESTORED)
 	return {"ok": true, "body": _body_plain(body)}
 
 ## Walks along the rules' own path to a cell. With friends no faster than walking (the server checks),

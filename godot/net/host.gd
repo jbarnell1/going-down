@@ -1202,7 +1202,7 @@ func world(full: bool = false) -> Dictionary:
 		out["lonely"] = str(o.lonely_target) if o.lonely_phase == &"chase" and o.lonely_target != null else ""
 	# Solid furniture (FD7): the clients move their own bodies round it (Protocol "solid").
 	if s.furniture:
-		out["solid"] = 1
+		out["solid"] = Protocol.SOLID_RESTORED if s.furniture_layout else Protocol.SOLID_BASELINE
 	# Live settings (LS2): the revision in force, with the whole list in the welcome, for a second after a change
 	# and once a second after that (Protocol "tune"). Absent while never tuned.
 	if tune_rev > 0:

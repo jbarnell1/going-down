@@ -149,6 +149,7 @@ func build(car: Dictionary, left_wall := false) -> void:
 	_down_mat = Level.prop_material(Color.WHITE, _paint("DOWN", Color("#b8231c"), Color("#f6efe6"), true))
 	_bank_floor = _floor_half(-1.0, _bank_mat)
 	_floor_half(1.0, _down_mat)
+	_add_sill()
 	# The car's light.
 	_lamp_panel = Level.glow_material(Color(0.9, 0.95, 1.0), 1.0)
 	_box(Vector3(0, CAR_H - 0.01, -depth * 0.5), Vector3(1.4, 0.02, 1.4), _lamp_panel)
@@ -273,6 +274,26 @@ func _box(pos: Vector3, size: Vector3, mat: Material, parent: Node3D = null) -> 
 	mi.position = pos
 	(parent if parent else self).add_child(mi)
 	return mi
+
+# Worn checker plate across the doorway. A visual cap over the floor, outside both vote panels.
+func _add_sill() -> void:
+	var plate := PlaneMesh.new()
+	plate.size = Vector2(door_half * 2.0, LAND + FRONT)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = preload("res://assets/textures/metal_plate_sill_diff.webp")
+	mat.normal_enabled = true
+	mat.normal_texture = preload("res://assets/textures/metal_plate_sill_nor_gl.webp")
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	mat.metallic = 0.28
+	mat.roughness = 0.64
+	var sill := MeshInstance3D.new()
+	sill.name = "MetalSill"
+	sill.mesh = plate
+	sill.material_override = mat
+	sill.position = Vector3(0.0, 0.009, (LAND - FRONT) * 0.5)
+	sill.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(sill)
+
 
 ## One painted half of the car's floor: `side` -1 is BANK (left walking in), 1 is DOWN.
 func _floor_half(side: float, mat: ShaderMaterial) -> MeshInstance3D:

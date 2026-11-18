@@ -12,7 +12,7 @@
 # The six states (Keeper.mode), the same on every screen:
 #   listening  it stands, its head slowly turning (TURN degrees a second). It hears every noise made inside
 #              that noise's radius of where it stands (sim/noise.gd: straight distance, nothing muffles it).
-#   tilt       on hearing one it stops and tilts its head toward the place for TILT seconds: the wind-up, and
+#   tilt       on hearing one it stops and grabs its head for TILT seconds: the wind-up, and
 #              the last moment to go silent somewhere else. The tilt starts on the tick of the noise.
 #   coming     it walks to where the noise was: straight there where the ground is open, round the thicket
 #              where it is not, at its coming speed (faster in the blackout). Its own steps clink.
@@ -73,7 +73,7 @@ const M = preload("res://sim/jsmath.gd")
 ## Coming speed, lit and in the blackout (m/s): "scary quick", a fifth faster than a sprint at the least.
 const SPEED := 6.0
 const DARK_SPEED := 6.5
-## The head tilt (seconds).
+## The hearing reaction (seconds).
 const TILT := 0.8
 ## Its reach (metres, from where it stands).
 const REACH := 2.0

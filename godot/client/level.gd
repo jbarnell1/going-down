@@ -26,6 +26,15 @@ const SIGN_GAP := 0.06
 const SIGN_H := 0.16
 const STRIP_COLOR := Color(1.0, 0.36, 0.05)
 const SIGN_COLOR := Color(0.95, 0.08, 0.03)
+## The molded bumper sits over the painted Clinic stripe. Each point is height and relief.
+const BUMPER_PROFILE: Array[Vector2] = [
+	Vector2(1.105, 0.001), Vector2(1.125, 0.024), Vector2(1.155, 0.039),
+	Vector2(1.245, 0.039), Vector2(1.275, 0.024), Vector2(1.295, 0.001),
+]
+const BUMPER_COLOURS: Array[Color] = [
+	Color(0.23, 0.35, 0.33), Color(0.28, 0.43, 0.40), Color(0.34, 0.50, 0.46),
+	Color(0.39, 0.55, 0.50), Color(0.43, 0.57, 0.53),
+]
 ## How many lights nearest the camera cast shadows at the "full" quality level.
 const SHADOW_LIGHTS := 4
 const PRISON_VIEW := preload("res://client/prison_view.gd")
@@ -215,9 +224,10 @@ func _make_materials() -> void:
 	mat_wall.set_shader_parameter("stain_amount", 1.0)
 	mat_floor = ShaderMaterial.new()
 	mat_floor.shader = sh
-	mat_floor.set_shader_parameter("albedo_tex", _tex("floor_tile"))
+	mat_floor.set_shader_parameter("albedo_tex", _tex("clinic_linoleum"))
 	mat_floor.set_shader_parameter("stain_tex", _tex("decal_rust_stain"))
 	mat_floor.set_shader_parameter("stain_amount", 0.6)
+	mat_floor.set_shader_parameter("tile_wear", 1.0)
 	mat_ceiling = ShaderMaterial.new()
 	mat_ceiling.shader = sh
 	mat_ceiling.set_shader_parameter("albedo_tex", _tex("ceiling_tile"))
@@ -323,6 +333,7 @@ func _wall_edge(level: int, x0: float, z0: float, x1: float, z1: float, cellA: V
 	var showA := kind(level, cellA.x, cellA.y) != "void" or level == 0
 	var showB := kind(level, cellB.x, cellB.y) != "void" or level == 0
 	var capcell := cellA if showA else cellB
+	var clinic_wall: bool = plan.get("place", "clinic") == "clinic"
 	for part: Array in parts:
 		var f: float = part[0]
 		var t: float = part[1]
@@ -348,6 +359,43 @@ func _wall_edge(level: int, x0: float, z0: float, x1: float, z1: float, cellA: V
 				var cell: Vector2i = side[0]
 				if _strip_area(level, cell.x, cell.y):
 					_glow_piece(level, a, b, side[1], STRIP_Y0, STRIP_Y1, STRIP_COLOR)
+				if clinic_wall and walkable(level, cell.x, cell.y):
+					var dirt := smoothstep(0.22, 0.95, corruption(level, cell.x, cell.y))
+					_clinic_bumper(level, a, b, side[1], f > 0.001 or ext0, t < S - 0.001 or ext1, dirt)
+
+## A wipe-clean bed bumper on a solid wall part. Its profile returns to the wall at a doorway or
+## a corner. At a straight cell boundary the profiles join without an end.
+func _clinic_bumper(level: int, a: Vector3, b: Vector3, n: Vector3, cap_a: bool, cap_b: bool, dirt: float) -> void:
+	var along := (b - a).normalized()
+	var turn := minf(0.056, a.distance_to(b) * 0.35)
+	var face := n * (WALL_T * 0.5) + Vector3.UP * (level * LH)
+	var centers: Array[Vector3] = [a + face]
+	var relief: Array[float] = [0.0 if cap_a else 1.0]
+	if cap_a:
+		centers.push_back(a + face + along * turn * 0.35)
+		centers.push_back(a + face + along * turn)
+		relief.append_array([0.68, 1.0])
+	if cap_b:
+		centers.push_back(b + face - along * turn)
+		centers.push_back(b + face - along * turn * 0.35)
+		relief.append_array([1.0, 0.68])
+	centers.push_back(b + face)
+	relief.push_back(0.0 if cap_b else 1.0)
+	var mid := (a + b) * 0.5
+	var st := _st(level, mid.x, mid.z, "bumper")
+	for i in range(1, centers.size()):
+		for j in range(1, BUMPER_PROFILE.size()):
+			var low := BUMPER_PROFILE[j - 1]
+			var high := BUMPER_PROFILE[j]
+			var u := centers[i - 1] + Vector3.UP * low.x + n * lerpf(0.001, low.y, relief[i - 1])
+			var v := centers[i] + Vector3.UP * low.x + n * lerpf(0.001, low.y, relief[i])
+			var w := centers[i] + Vector3.UP * high.x + n * lerpf(0.001, high.y, relief[i])
+			var x := centers[i - 1] + Vector3.UP * high.x + n * lerpf(0.001, high.y, relief[i - 1])
+			var normal := (v - u).cross(x - u).normalized()
+			if normal.dot(n) < 0.0:
+				normal = -normal
+			var color := BUMPER_COLOURS[j - 1].lerp(Color(0.23, 0.25, 0.17), dirt * 0.72)
+			ANNEX_VIEW.quad(st, u, v, w, x, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, normal, color)
 
 # The horizontal face of a wall slab at height y (the underside of a lintel, the top of a rail).
 func _flat_face(level: int, a: Vector3, b: Vector3, n: Vector3, h: float, y: float, up: Vector3, cell: Vector2i, what: String) -> void:
@@ -500,6 +548,9 @@ func _commit_chunks() -> void:
 			"ceiling": mi.material_override = mat_ceiling
 			"rail": mi.material_override = mat_rail
 			"hidef": mi.material_override = mat_hide
+			"bumper":
+				mi.material_override = mat_hide
+				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			"glow":
 				mi.material_override = mat_glow
 				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -751,7 +802,7 @@ func _build_furniture() -> void:
 		push_error("level: the Clinic plan for %s/%d does not match the one being drawn" % [plan.seed, plan.depth])
 		return
 	hides = Hides.hides_for(fp, str(plan.seed))
-	pieces = Furniture.pieces_for(fp, str(plan.seed), int(plan.depth))
+	pieces = Furniture.pieces_for(fp, str(plan.seed), int(plan.depth), bool(plan.get("furnitureLayout", false)))
 	for pc: Furniture.Piece in pieces:
 		if pc.hide >= 0:
 			var h: PlayroomLib.Hide = hides[pc.hide]
@@ -759,14 +810,21 @@ func _build_furniture() -> void:
 			furniture_drawn.append({"piece": pc.id, "kind": String(pc.kind), "rect": ANNEX_VIEW.boxes_rect(ANNEX_VIEW.hide_xf(h), ANNEX_VIEW.hide_boxes(h.kind, true))})
 			continue
 		var f := Vector2(FloorLib.dir_dx(pc.facing), FloorLib.dir_dy(pc.facing))
-		# The glb's front faces +z: turn it to the piece's facing.
-		var n := _make_prop(String(pc.kind), atan2(f.x, f.y), 0.0)
-		var box := _prop_box(n)
 		var cx := pc.x / 100.0
 		var cz := pc.y / 100.0
-		n.position = Vector3(cx - (box.position.x + box.size.x * 0.5), pc.level * LH - box.position.y, cz - (box.position.z + box.size.z * 0.5))
-		add_child(n)
-		var foot := Rect2(n.position.x + box.position.x, n.position.z + box.position.z, box.size.x, box.size.z)
+		var foot: Rect2
+		if pc.kind == &"bench" or pc.kind == &"planter":
+			var boxes: Array = ANNEX_VIEW.catalogue()[ANNEX_VIEW.catalogue_name(pc.kind)]["boxes"]
+			var xf := Transform3D(Basis(Vector3.UP, atan2(-f.x, -f.y)), Vector3(cx, pc.level * LH, cz))
+			ANNEX_VIEW.draw_hide_into_boxes(self, pc.level, xf, boxes, "hidef")
+			foot = ANNEX_VIEW.boxes_rect(xf, boxes)
+		else:
+			# The glb's front faces +z: turn it to the piece's facing.
+			var n := _make_prop(String(pc.kind), atan2(f.x, f.y), 0.0)
+			var box := _prop_box(n)
+			n.position = Vector3(cx - (box.position.x + box.size.x * 0.5), pc.level * LH - box.position.y, cz - (box.position.z + box.size.z * 0.5))
+			add_child(n)
+			foot = Rect2(n.position.x + box.position.x, n.position.z + box.position.z, box.size.x, box.size.z)
 		furniture_drawn.append({"piece": pc.id, "kind": String(pc.kind), "rect": foot})
 		# The cell it stands in against its wall, and that wall's side (the scripted playthroughs look at a prop
 		# from inside its room and from beyond that wall: the `props` test command).

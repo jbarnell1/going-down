@@ -127,30 +127,15 @@ static func dress(level: Level) -> RefCounted:
 	v._commit()
 	return v
 
-# --- textures (made here, no files) ----------------------------------------------------------------
+# --- textures ----------------------------------------------------------------
 
 static func _finish(img: Image) -> Texture2D:
 	img.generate_mipmaps()
 	return ImageTexture.create_from_image(img)
 
+## The same mustard loop pile in every room, with the nap running along the same axis.
 static func carpet_tex() -> Texture2D:
-	if _tex.has("carpet"):
-		return _tex["carpet"]
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 3101
-	var img := Image.create(64, 64, false, Image.FORMAT_RGB8)
-	var base := Color(0.64, 0.48, 0.14)
-	for y in 64:
-		for x in 64:
-			var v := rng.randf_range(-0.045, 0.045)
-			if (x + y * 2) % 4 == 0:
-				v -= 0.025
-			var c := Color(base.r + v, base.g + v * 0.85, base.b + v * 0.4)
-			if rng.randf() < 0.03:
-				c = base * 0.78
-			img.set_pixel(x, y, c)
-	_tex["carpet"] = _finish(img)
-	return _tex["carpet"]
+	return preload("res://assets/textures/annex_carpet.png")
 
 ## Wallpaper: 2 m across, the whole storey high (Level's wall UVs), skirting at the bottom.
 static func wall_tex() -> Texture2D:
@@ -889,6 +874,11 @@ static func catalogue() -> Dictionary:
 	small.append_array(_turned(_chair(), 0.0, Vector3(0, 0, 0.72)))
 	small.append_array(_turned(_chair(), -PI * 0.5, Vector3(-0.72, 0, 0)))
 	c["table_small"] = {"hw": 0.97, "zb": 0.97, "zf": -0.97, "tall": false, "boxes": small}
+	# The wall table is shallow. Its chairs are separate pieces with their own footprints.
+	c["break_table"] = {"boxes": [
+		_b(1.2, 0.04, 0.56, 0, 0.7, 0, LAMINATE), _b(0.06, 0.7, 0.06, -0.45, 0, 0.13, METAL_DARK),
+		_b(0.06, 0.7, 0.06, 0.45, 0, 0.13, METAL_DARK), _b(0.06, 0.7, 0.06, -0.45, 0, -0.18, METAL_DARK),
+		_b(0.06, 0.7, 0.06, 0.45, 0, -0.18, METAL_DARK)]}
 	c["fridge"] = {"hw": 0.36, "zb": 0.34, "zf": -0.37, "tall": true, "boxes": [
 		_b(0.7, 1.75, 0.68, 0, 0, 0, WHITE), _b(0.704, 0.015, 0.684, 0, 1.15, 0, GREY_MID),
 		_b(0.03, 0.3, 0.03, 0.28, 1.25, -0.355, GREY_DARK)]}
@@ -919,6 +909,11 @@ static func catalogue() -> Dictionary:
 	c["planter"] = {"hw": 0.5, "zb": 0.5, "zf": -0.5, "tall": false, "boxes": [
 		_b(1.0, 0.5, 1.0, 0, 0, 0, Color(0.6, 0.58, 0.52)), _b(0.9, 0.02, 0.9, 0, 0.5, 0, Color(0.3, 0.24, 0.18)),
 		_b(0.8, 0.5, 0.8, 0, 0.5, 0, LEAF), _b(0.6, 0.5, 0.6, 0.05, 0.95, -0.05, LEAF2), _b(0.36, 0.4, 0.36, -0.05, 1.4, 0.05, LEAF)]}
+	var trough: Array = []
+	var flat := Vector3(1.0, 1.0, 0.56)
+	for box: Array in c["planter"]["boxes"]:
+		trough.append([box[0] * flat, box[1] * flat, box[2]])
+	c["wall_planter"] = {"boxes": trough}
 	c["bench"] = {"hw": 0.9, "zb": 0.25, "zf": -0.25, "tall": false, "boxes": [
 		_b(1.8, 0.08, 0.5, 0, 0.4, 0, WOOD), _b(0.08, 0.4, 0.44, -0.8, 0, 0, METAL_DARK), _b(0.08, 0.4, 0.44, 0.8, 0, 0, METAL_DARK)]}
 	_catalogue_cache = c
@@ -1145,7 +1140,7 @@ static func _outward(l: Layout, m: Vector2) -> Vector2:
 func _furniture() -> void:
 	var cat := catalogue()
 	var fp := AnnexPlan.generate_annex(str(lv.plan.seed), int(lv.plan.depth))
-	var list := Furniture.pieces_for(fp, str(lv.plan.seed), int(lv.plan.depth))
+	var list := Furniture.pieces_for(fp, str(lv.plan.seed), int(lv.plan.depth), bool(lv.plan.get("furnitureLayout", false)))
 	lv.pieces = list
 	for pc: Furniture.Piece in list:
 		var xf: Transform3D
@@ -1186,7 +1181,12 @@ func _furniture() -> void:
 
 ## The catalogue's name for a piece's kind.
 static func catalogue_name(kind: StringName) -> String:
-	return "cabinet" if kind == &"filing" else String(kind)
+	match kind:
+		&"filing":
+			return "cabinet"
+		&"planter":
+			return "wall_planter"
+	return String(kind)
 
 ## The pictures, laid out by each room's shape, off the walls behind its tall pieces.
 func _pictures() -> void:

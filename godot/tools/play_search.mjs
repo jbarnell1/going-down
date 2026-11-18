@@ -72,9 +72,10 @@ async function game(label, testport, args, pos) {
   const g = launch([...(headless ? ['--headless'] : []), '--path', project, '--resolution', '640x360', '--position', pos, '--', 'auto=1', `testport=${testport}`, ...args]);
   const { sock, cmd } = await line(testport, label, () => !g.exited).catch((e) => { throw new Error(`${e.message} (${g.lines.slice(-5).join(' | ')})`); });
   const state = async () => JSON.parse(await cmd('state'));
+  const heard = async (name) => JSON.parse(await cmd('sfx state')).played.filter((cue) => cue.name === name).length;
   const shot = async (name) => { if (headless) return; const r = await cmd(`shot ${join(shots, name)}`); console.log(`  shot ${join(shots, name)} (${label}) ${r}`); };
   const close = async () => { try { sock.write('quit\n'); } catch { /* closed */ } await sleep(600); if (!g.exited) g.p.kill(); sock.destroy(); };
-  return { label, g, cmd, state, shot, close };
+  return { label, g, cmd, state, heard, shot, close };
 }
 
 const results = [];
@@ -179,6 +180,8 @@ try {
     check(`${tag}: the piece's prompt and the rushed search's line`, s.find.view.piece === p.id && s.find.hudPrompt === p.prompt && s.find.reader.prompt2 === RUSH,
       `piece ${s.find.view.piece} (want ${p.id}), prompt "${s.find.hudPrompt}", second "${s.find.reader.prompt2}"`);
     if (tag === 'poem') await A.shot('1-prompt.png');
+    const opening = {drawers_low: 'search_drawer', side_table: 'search_locker'}[p.kind];
+    const before = opening ? await A.heard(opening) : 0;
     await A.cmd(`search ${fast ? 'fast' : 'careful'}`);
     s = await until(A.state, (x) => x.find.view.mine === p.id && x.find.fill > 0.3, 3000, 30);
     const row = (s.find.host.searching ?? []).find((r) => r.playerId === idA);
@@ -188,6 +191,9 @@ try {
     if (tag === 'poem') await A.shot('2-bar.png');
     s = await until(A.state, (x) => x.find.view.lastDone?.piece === p.id, 6000, 30);
     await A.cmd('search off');
+    if (opening && !fast) {
+      check(`${tag}: the careful opening plays once for Ann`, await A.heard(opening) === before + 1 && await B.heard(opening) === 0);
+    }
     return s;
   }
 
@@ -196,6 +202,7 @@ try {
   const pn = fin.contents[String(poem.id)].note;
   check('poem: the result is the host\'s and the poem opens in the reader', a.find.view.lastDone?.note === pn && a.find.reader.open === pn && a.find.reader.lines.length >= 4,
     `done ${JSON.stringify(a.find.view.lastDone)}, reader ${a.find.reader.open}: ${JSON.stringify(a.find.reader.lines)}`);
+  check('the paper unfolds once for Ann', await A.heard('search_paper') === 1 && await B.heard('search_paper') === 0);
   await sleep(200);
   await A.shot('4-poem-open.png');
   const poemLines = a.find.reader.lines;
@@ -227,6 +234,7 @@ try {
   b = await until(B.state, (s) => JSON.stringify(s.find.view.open) === JSON.stringify(hostOpen), 3000);
   check('both screens draw the same three pieces open, as the host has them', hostOpen.length === 3 && JSON.stringify(a.find.view.open) === JSON.stringify(hostOpen)
     && JSON.stringify(b.find.view.open) === JSON.stringify(hostOpen), `host ${JSON.stringify(hostOpen)}, Ann ${JSON.stringify(a.find.view.open)}, Bob ${JSON.stringify(b.find.view.open)}`);
+  check('the rushed search plays one world cue on each client', await A.heard('search_rifle') === 1 && await B.heard('search_rifle') === 1);
   // Bob reads the same note where it was found.
   b = await goTo(B, poem);
   check('Bob at the opened piece: F  READ NOTE, the same note', b.find.hudPrompt === 'F  READ NOTE' && b.find.view.read === pn, `prompt "${b.find.hudPrompt}", read "${b.find.view.read}"`);

@@ -9,7 +9,7 @@ const Floor = preload("res://sim/floor.gd")
 const Landing = preload("res://sim/landing.gd")
 const Walls = preload("res://sim/walls.gd")
 
-static func dump(p: Floor.FloorPlan, car: Run.CarGeometry) -> Dictionary:
+static func dump(p: Floor.FloorPlan, car: Run.CarGeometry, furniture_layout: bool = false) -> Dictionary:
 	var w := p.width
 	var h := p.height
 	var edges: Array = []
@@ -33,6 +33,8 @@ static func dump(p: Floor.FloorPlan, car: Run.CarGeometry) -> Dictionary:
 	out["landingFacing"] = String(Landing.landing_facing(p))
 	out["car"] = car_plain(car)
 	out["liftDist"] = lift_dist
+	if furniture_layout:
+		out["furnitureLayout"] = true
 	return out
 
 static func rect_plain(r: Run.Rect) -> Dictionary:

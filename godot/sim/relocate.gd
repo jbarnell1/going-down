@@ -274,7 +274,7 @@ static func may_leave(o: Entity.OrderlyState, t: float) -> bool:
 		and t - o.arrived_at >= REST - EPS and t >= o.retry_at - EPS
 
 ## The cell it arrives on going to `to` (an eye's id), or null if none passes. `k`: relocations so far.
-static func arrival(plan: Floor.FloorPlan, seed: String, depth: int, k: int, to: String, eyes: Array[Eye], bars: Dictionary, kind: Entity.BodySettings) -> Floor.Pos:
+static func arrival(plan: Floor.FloorPlan, seed: String, depth: int, k: int, to: String, eyes: Array[Eye], bars: Dictionary, kind: Entity.BodySettings, solids: Move.Solids = null) -> Floor.Pos:
 	var target := _eye(eyes, to)
 	if target == null or target.walk == null:
 		return null
@@ -306,13 +306,16 @@ static func arrival(plan: Floor.FloorPlan, seed: String, depth: int, k: int, to:
 		cands[j] = cands[n]
 		cands[n] = c
 		var p := Floor.pos_from_index(plan, c)
-		if out_of_view(plan, eyes, Move.body_at_cell(plan, p), kind):
+		var body := Move.body_at_cell(plan, p)
+		if solids != null and not Move.clear_at(plan, solids, body.level, body.x, body.z, kind.radius):
+			continue
+		if out_of_view(plan, eyes, body, kind):
 			return p
 	return null
 
 ## One tick of relocation for the resident `o`, already stepped this tick (host time `t`). `free`: the run
 ## allows it this tick (see the header); `bars`: barred(). Never mutates `o`.
-static func step(plan: Floor.FloorPlan, seed: String, depth: int, trait_name: StringName, o: Entity.OrderlyState, eyes: Array[Eye], bars: Dictionary, free: bool, t: float, dt: float) -> Step:
+static func step(plan: Floor.FloorPlan, seed: String, depth: int, trait_name: StringName, o: Entity.OrderlyState, eyes: Array[Eye], bars: Dictionary, free: bool, t: float, dt: float, solids: Move.Solids = null) -> Step:
 	var out := Step.new()
 	out.state = o
 	var why: StringName = wants_to_leave(trait_name, plan, o, eyes) if free and may_leave(o, t) else &""
@@ -328,7 +331,7 @@ static func step(plan: Floor.FloorPlan, seed: String, depth: int, trait_name: St
 	if s.hidden_for < OUT_OF_VIEW_TIME - EPS:
 		return out
 	var to := goes_to(trait_name, plan, o, eyes)
-	var cell: Floor.Pos = arrival(plan, seed, depth, o.relocations, to, eyes, bars, k) if to != "" else null
+	var cell: Floor.Pos = arrival(plan, seed, depth, o.relocations, to, eyes, bars, k, solids) if to != "" else null
 	if cell == null:
 		s.retry_at = t + RETRY
 		s.hidden_for = 0.0

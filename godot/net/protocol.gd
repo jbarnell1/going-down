@@ -34,6 +34,8 @@ const Settings = preload("res://sim/settings.gd")
 const Inventory = preload("res://sim/inventory.gd")
 
 const PROTOCOL_VERSION := 1
+const SOLID_BASELINE := 1
+const SOLID_RESTORED := 2
 
 ## "night" (the day loop: in the prison once the car's doors have closed) is last, so the codes of the
 ## others are as they were.
@@ -65,7 +67,7 @@ const GAITS: Array[String] = ["walk", "creep", "sprint"]
 ## The emote wheel's emotes (client/crew_view.gd plays them). Not in protocol.ts: the emote messages
 ## ("E" client -> host, "M" host -> the other clients) are new in the Godot game. They change nothing
 ## in the other messages, and a session that never emotes sends exactly what it did before.
-const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dance_snake", "button"]
+const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dance_snake", "button", "point", "cheer", "scared"]
 ## Drawn faces (face/README.md, North Star H1 and V7). Also new in the Godot game, and also optional:
 ##  - the join may carry the player's face as a fifth element, [1, "J", name, ct, face]. A join of four
 ##    elements is still a join; a fifth that is not a valid face (FaceCodec.check, at most
@@ -186,8 +188,8 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##  - the events "chaseStarted" {playerId, at (a body), yaw} and "chaseEnded" {playerId, why}.
 ## Solid furniture (sim/run.gd furniture, sim/furniture.gd; FD7). New in the Godot game, and only ever sent in a run
 ## with it, so a run without it sends exactly what it did before:
-##  - the world gains a 24th element, 1 ("solid" decoded: 1), with the 16th to 23rd null when absent: each client
-##    then moves its own body round the floor's solid pieces (net/session.gd move_local).
+##  - the world gains a 24th element, 1 for the baseline or 2 for the restored wall furniture (T20j), decoded
+##    as "solid". The client draws that layout and moves its body round it (net/session.gd move_local).
 ## Findables (sim/run.gd findables, sim/findables.gd; FD9). New in the Godot game, and only ever sent in a run with
 ## them, so a run without them sends exactly what it did before:
 ##  - the input's flags gain bit 128, "search" (F held to search the piece in reach), and bit 256, "searchFast"
@@ -406,7 +408,7 @@ static func enc_world(w: Dictionary) -> Array:
 	if w.get("solid") != null:
 		while out.size() < 23:
 			out.append(null)
-		out.append(1)
+		out.append(w["solid"])
 	if w.get("tune") != null:
 		while out.size() < 24:
 			out.append(null)
@@ -952,7 +954,7 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 	if a.size() > 22 and (a[22] != null or a.size() == 23):
 		out["lonely"] = _s(c, a[22], MAX_NAME * 2)
 	if a.size() > 23 and (a[23] != null or a.size() == 24):
-		out["solid"] = _i(c, a[23], 1, 1)
+		out["solid"] = _i(c, a[23], SOLID_BASELINE, SOLID_RESTORED)
 	if a.size() > 24 and (a[24] != null or a.size() == 25):
 		out["tune"] = dec_tune(c, a[24])
 	if a.size() > 25 and (a[25] != null or a.size() == 26):

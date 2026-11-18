@@ -11,8 +11,9 @@
 #
 #   set_body(position, yaw)      feet position, where the player looks (the camera's yaw convention)
 #   set_gait(gait, speed)        &"still" | &"walk" | &"sprint" | &"creep", ground speed in m/s
-#   play_emote(name)             &"wave" | &"look_behind" | &"button" | &"pray" | &"dance_spin" | &"dance_snake"
-#   set_downed(on)               taken (falls), then crawl; set_gait's speed drives the crawl
+#   play_emote(name)             a gesture from EMOTES
+#   set_downed(on, recover)      fall, then hurt on the floor or crawl; recover plays a rise
+#   set_stance(name)             forced help, prone, or sit pose while the host state lasts
 #   set_raised(on)               the right arm holds the instrument up (over idle, walk, run and the
 #                                upright one-shots; not over the sneak, crouch, crawl, pray or dances)
 #   set_face(texture)            the player's drawing on the mask screen; null = a plain default face
@@ -56,8 +57,8 @@ const REVERSE_OFF := deg_to_rad(80.0)
 static var test_break := ""
 static var _strides := {}       # clip -> m/s at 1x with its SWING (measured once per process)
 const GAIT_CLIP := {&"still": "idle", &"walk": "walk", &"sprint": "run", &"creep": "sneak"}
-const LOOPING: Array[String] = ["idle", "walk", "run", "sneak", "crouch_idle", "crawl", "dance_spin", "dance_snake"]
-const EMOTES: Array[StringName] = [&"wave", &"look_behind", &"button", &"pray", &"dance_spin", &"dance_snake"]
+const LOOPING: Array[String] = ["idle", "walk", "run", "sneak", "crouch_idle", "crawl", "dance_spin", "dance_snake", "down_idle", "help", "prone", "sit"]
+const EMOTES: Array[StringName] = [&"wave", &"look_behind", &"button", &"pray", &"dance_spin", &"dance_snake", &"point", &"cheer", &"scared"]
 const FADE := 0.25              # cross-fade between clips, seconds
 const FADE_DOWN := 0.6          # from the fall into the crawl (it rolls the body over)
 const MOVING := 0.15            # below this ground speed a gait counts as standing still
@@ -78,6 +79,8 @@ var gait: StringName = &"still"
 var speed := 0.0
 var emote: StringName = &""
 var downed := false
+var stance := ""
+var _getting_up := false
 var raised := false
 var clip := ""                  # the clip playing now
 var _clip_t := 0.0              # seconds since it started
@@ -199,21 +202,31 @@ func set_gait(g: StringName, ground_speed: float) -> void:
 		emote = &""   # moving off cancels an emote
 
 func play_emote(which: StringName) -> void:
-	if downed or not which in EMOTES or not ap.has_animation(which):
+	if downed or _getting_up or stance != "" or not which in EMOTES or not ap.has_animation(which):
 		return
 	emote = which
 	_play(String(which), FADE)
 	ap.seek(0.0, true)
 
-func set_downed(on: bool) -> void:
+func set_downed(on: bool, recover: bool = false) -> void:
 	if on == downed:
 		return
 	downed = on
 	emote = &""
 	_down_t = 0.0
+	_getting_up = not on and recover
 	if on:
 		_play("taken", FADE)
 		ap.seek(0.0, true)
+	elif _getting_up:
+		_play("get_up", FADE)
+		ap.seek(0.0, true)
+
+func set_stance(which: String) -> void:
+	if which != "" and stance != which:
+		emote = &""
+		_getting_up = false
+	stance = which
 
 func set_raised(on: bool) -> void:
 	raised = on
@@ -302,9 +315,19 @@ func _process(delta: float) -> void:
 		if _down_t < fall - 0.1:
 			want = "taken"
 		else:
-			want = "crawl"
+			want = "crawl" if speed >= MOVING else "down_idle"
 			fade = FADE_DOWN
-			rate = speed / STRIDE["crawl"] if speed >= MOVING else 0.0
+			if want == "crawl":
+				rate = speed / STRIDE["crawl"]
+	elif stance != "":
+		want = stance
+	elif _getting_up:
+		var elapsed := ap.current_animation_position
+		if elapsed < ap.get_animation("get_up").length - FADE and (speed < MOVING or elapsed < 0.75):
+			want = "get_up"
+			rate = 1.5
+		else:
+			_getting_up = false
 	elif emote != &"":
 		want = String(emote)
 		var dur := ap.get_animation(want).length
@@ -336,7 +359,7 @@ func _process(delta: float) -> void:
 		stepping = true
 	if want != clip:
 		_play(want, fade)
-	_steer(delta, stepping, not downed and emote == &"")
+	_steer(delta, stepping, not downed and stance == "" and not _getting_up and emote == &"")
 	ap.speed_scale = -rate if reverse else rate
 	ap.advance(delta)
 	_apply_stride(delta)

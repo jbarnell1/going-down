@@ -1,5 +1,5 @@
 """Build the animated crewmate (godot/assets/entities/crewmate.glb) from nothing: the Convict mesh as
-build_convict.py makes it, skinned to the skeleton Mixamo rigged it with, carrying 13 named clips
+build_convict.py makes it, skinned to the skeleton Mixamo rigged it with, carrying 21 named clips
 baked from the Mixamo downloads, with the two headwear pieces parented to the Head bone.
 
 Usage, from the repository root (paths are relative to it):
@@ -9,9 +9,10 @@ Usage, from the repository root (paths are relative to it):
 Inputs (none of them leave this machine; assets_src/inbox/ is ignored by git):
   assets_src/inbox/mixamo/*.fbx          the Mixamo clips (all 13 were downloaded With Skin; the
                                          skeleton and weights are taken from the first that has a mesh)
+  assets_src/inbox/mixamo/crew-2026-11-17/*.fbx   eight additional clips, named by SOURCES.txt
   assets_src/blender/convict/convict_tpose.glb, headwear_knit.glb, headwear_hair.glb, convict_skin_*.png
 Outputs:
-  godot/assets/entities/crewmate.glb     one skinned mesh (2,216 triangles), 34 deform bones, 13 clips,
+  godot/assets/entities/crewmate.glb     one skinned mesh (2,216 triangles), 34 deform bones, 21 clips,
                                          headwear_knit / headwear_hair parented to the Head bone
   godot/assets/entities/crewmate_skin_1..4.png   the four skin textures (the view swaps them)
 
@@ -62,6 +63,14 @@ CLIPS = [
     ("dance_spin", "Northern Soul Spin Combo", "loop"),
     ("dance_snake", "Snake Hip Hop Dance", "loop"),
     ("wave", "Waving", "once"),
+    ("down_idle", "crew-2026-11-17/crew_down_idle", "loop"),
+    ("get_up", "crew-2026-11-17/crew_get_up", "in_place"),
+    ("help", "crew-2026-11-17/crew_help", "loop"),
+    ("prone", "crew-2026-11-17/crew_prone", "loop"),
+    ("sit", "crew-2026-11-17/crew_sit", "loop"),
+    ("point", "crew-2026-11-17/crew_point", "once"),
+    ("cheer", "crew-2026-11-17/crew_cheer", "once"),
+    ("scared", "crew-2026-11-17/crew_scared", "in_place"),
 ]
 MATS = ("convict_suit", "convict_skin", "number_patch", "face_screen")
 HEAD_JOINT = Vector((0, 0.005, 1.548))   # build_convict.py JOINTS["head"]: the headwear origin
@@ -282,6 +291,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(ENT, "crewmate.glb"))
     ap.add_argument("--fps", type=int, default=FPS, help="sample rate of the exported clips")
+    ap.add_argument("--mixamo", default=MIXAMO, help="directory containing the original and new Mixamo downloads")
     args = ap.parse_args(argv)
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -290,7 +300,7 @@ def main():
     scn.render.fps_base = 1.0
 
     # ---- 1. the skeleton and Mixamo's weights from the first clip that carries the mesh
-    files = {src: os.path.join(MIXAMO, src + ".fbx") for _, src, _ in CLIPS}
+    files = {src: os.path.join(args.mixamo, src + ".fbx") for _, src, _ in CLIPS}
     for p in files.values():
         if not os.path.exists(p):
             raise SystemExit("missing " + os.path.relpath(p, ROOT))
@@ -488,6 +498,10 @@ def main():
         for d in clip.values():
             d["q"] = continuous(d["q"])
         notes = []
+        if game == "scared":
+            # Terrified is 20s long; keep the first recoil and hand back to locomotion.
+            F = min(F, 3 * FPS + 1)
+            clip = take(clip, slice(0, F))
         speed = None
         loops = kind in ("loop", "move")
         # trim to a clean cycle
@@ -529,6 +543,9 @@ def main():
             s = np.linspace(0, 1, F)[:, None]
             drift = hw[-1] - hw[0]
             hw[:, :2] -= s * drift[None, :2]
+        if kind == "in_place":
+            s = np.linspace(0, 1, F)[:, None]
+            hw[:, :2] -= s * (hw[-1] - hw[0])[:2]
         if kind == "fall":
             z = hw[:, 2]
             a = int(np.argmax(z < z[0] - 0.12))
@@ -549,9 +566,20 @@ def main():
         hw = rig.hips_world(clip)
         if kind in ("move",):
             c = hw[:, :2].mean(0)
+        elif game in ("down_idle", "prone", "sit", "help"):
+            # Floor and seat poses are placed by the hips, not their outstretched boots.
+            c = hw[0, :2].copy()
+        elif game == "get_up":
+            c = smp[-1, 1:3]
         else:
             c = smp[0, 1:3]
         hw[:, :2] -= c[None, :]
+        if game == "down_idle":
+            # Tonic Seizure is already horizontal at export, but floats above the floor.
+            # Lower the entire take together, then use the normal per-frame floor clearance.
+            base = float(np.median(smp[:, 0]))
+            hw[:, 2] -= base
+            smp[:, 0] -= base
         lift = smooth_max(np.maximum(0.0, -smp[:, 0] - FLOOR_TOL), loops)
         if lift.max() > 0:
             notes.append(f"lifted up to {lift.max() * 100:.1f} cm where the mesh went under the floor")

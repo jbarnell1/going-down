@@ -8,6 +8,7 @@ render_mode diffuse_lambert, specular_schlick_ggx;
 
 // 0 wall, 1 floor, 2 ceiling.
 uniform float part = 0.0;
+uniform sampler2D concrete_tex : filter_linear_mipmap, repeat_enable;
 uniform vec4 low_paint : source_color = vec4(0.33, 0.42, 0.37, 1.0);
 uniform vec4 high_paint : source_color = vec4(0.83, 0.79, 0.64, 1.0);
 uniform vec4 floor_paint : source_color = vec4(0.32, 0.33, 0.31, 1.0);
@@ -57,17 +58,20 @@ void fragment() {
 	} else if (part < 1.5) {
 		c = floor_paint.rgb;
 		// Worn patches where the paint has gone thin.
-		c *= 0.9 + 0.2 * vnoise(wpos.xz * 0.7);
+		c *= 0.93 + 0.14 * vnoise(wpos.xz * 0.7);
+		float grain = texture(concrete_tex, wpos.xz * 0.5).r;
+		c *= 1.0 + 1.25 * (grain - 0.5);
 		rough = 0.5;
 		spec = 0.45;
-		gp = wpos.xz;
 	} else {
 		c = ceiling_paint.rgb;
 		gp = wpos.xz;
 	}
-	// Grain in coarse pixels (about 6 cm), and slow blotches.
-	float g = hash(floor(gp * 16.0)) * 0.5 + vnoise(gp * 1.3) * 0.5;
-	c *= 0.93 + 0.13 * g;
+	// Painted walls and ceiling retain their coarse grain and slow blotches.
+	if (part < 0.5 || part >= 1.5) {
+		float g = hash(floor(gp * 16.0)) * 0.5 + vnoise(gp * 1.3) * 0.5;
+		c *= 0.93 + 0.13 * g;
+	}
 	ALBEDO = c;
 	ROUGHNESS = rough;
 	SPECULAR = spec;

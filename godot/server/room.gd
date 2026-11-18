@@ -171,6 +171,8 @@ var lonely := true
 var playroom_tuned := true
 ## Solid furniture in the next run (the game's; tests may turn it off: sim/run.gd furniture, FD7).
 var furniture := true
+## Restored wall furniture in the next run (T20j).
+var furniture_layout := true
 ## Findables in the next run (the game's; tests may turn it off: sim/run.gd findables, sim/findables.gd, FD9).
 var findables := true
 ## The four-slot inventory in the next run (the game's; tests may turn it off: sim/run.gd inventory, S1).
@@ -216,7 +218,8 @@ func _lobby_text(now: float) -> String:
 	if host_id != "" and ready.has(host_id) and host == null:
 		without = float(ready[host_id]) + WITHOUT_AFTER
 	return "m|" + JSON.stringify({"t": "lobby", "epoch": epoch, "running": running(), "people": list, "host": host_id,
-		"startAt": start_at, "withoutAt": without, "now": now, "depth": host.state.depth if host != null else -1})
+		"startAt": start_at, "withoutAt": without, "now": now, "depth": host.state.depth if host != null else -1,
+		"garden": host != null and host.state.deck.has(Places.ARBORETUM)})
 
 ## The players a run starting now takes: the ready ones, in arrival order.
 func _start_roster() -> Array[String]:
@@ -349,7 +352,7 @@ func _start(now: float) -> void:
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
 	var q := quota and not HostRules.quota_off_by_arg(false)
 	# The day quota's lock goes with the floor quota (net/host_rules.gd): quota=0 turns both off.
-	rules = HostRules.new(true, first_depth, Places.FULL, days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory)
+	rules = HostRules.new(true, first_depth, Places.deck_for_start_depth(first_depth), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true)
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))

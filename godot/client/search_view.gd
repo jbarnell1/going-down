@@ -190,14 +190,14 @@ func update(s: Dictionary, my: String, yaw: float, f_held: bool, sprint: bool, m
 		read_id = str(opened[pr.id]["note"])
 		prompt = Findables.READ_PROMPT
 
-## This frame's events: this player's result line and note, the noise of anyone's rushed search. Returns the note
-## or page id to open in the reader, or "".
+## Host events arrive once via PlayLink. Careful searches are only heard by the searcher. A rushed search's
+## separate noise event is audible at the piece. Returns the note or page id to open in the reader, or "".
 func on_events(events: Array, my: String, sfx: Object, now: int) -> String:
 	var open := ""
 	for e: Dictionary in events:
 		var ty := str(e.get("type", ""))
-		if ty == "searchNoise" and sfx != null:
-			sfx.call("play_at", "slam", piece_point(int(e["piece"])), -6.0)
+		if ty == "searchNoise" and sfx != null and _ff != null and _ff.by_id.has(int(e["piece"])):
+			sfx.call("play_at", "search_rifle", piece_point(int(e["piece"])))
 		elif ty == "searchDone" and str(e.get("playerId", "")) == my:
 			var what := str(e["what"])
 			result = Findables.result_line(what, int(e["credits"]))
@@ -208,13 +208,17 @@ func on_events(events: Array, my: String, sfx: Object, now: int) -> String:
 			if sfx != null:
 				match what:
 					"juice":
-						sfx.call("play", "pop")
+						sfx.call("play", "search_carton")
 					"note", "page":
-						sfx.call("play", "note_peel")
+						sfx.call("play", "search_paper")
 					"credits":
 						sfx.call("play", "teller_ding")
 		elif ty == "searchStart" and str(e.get("playerId", "")) == my and sfx != null and not bool(e.get("fast", false)):
-			sfx.call("play", "teller_window", -10.0)
+			match str(e["kind"]):
+				"drawers_low":
+					sfx.call("play", "search_drawer", -10.0)
+				"side_table", "filing":
+					sfx.call("play", "search_locker", -10.0)
 	return open
 
 ## The result line now ("" once its 2 s are up).
@@ -230,9 +234,7 @@ func piece_point(id: int) -> Vector3:
 
 ## Where to stand to search a piece (tests and scripted runs): 45 cm in front of its side facing into the room.
 static func stand_point(p: Furniture.Piece) -> Vector2:
-	var inward := -Furniture.dir_vec(p.wall) if p.wall != &"" else Furniture.dir_vec(p.facing)
-	var ext := p.foot.size.x / 2 if inward.x != 0 else p.foot.size.y / 2
-	var at := p.foot.position + p.foot.size / 2 + inward * (ext + 45)
+	var at := Furniture.search_stand_cm(p)
 	return Vector2(at.x / 100.0, at.y / 100.0)
 
 ## The floor's searchable pieces for a scripted run: [{id, kind, x, z, level, stand: [x, z], cell: [level, x, y]}].

@@ -24,6 +24,9 @@ var figures := {}
 ## Per frame. `others` from play_link.gd; `cam` the camera's position.
 func update(dt: float, others: Array, cam: Vector3) -> void:
 	var seen := {}
+	var positions := {}
+	for o: Dictionary in others:
+		positions[str(o["id"])] = Vector2(float(o["x"]), float(o["z"]))
 	for o: Dictionary in others:
 		var id := str(o["id"])
 		seen[id] = true
@@ -32,7 +35,7 @@ func update(dt: float, others: Array, cam: Vector3) -> void:
 			var v := CrewView.new()
 			v.name = "Crew_%s" % id
 			add_child(v)
-			fig = {"view": v, "index": -1, "last": Vector3.INF, "speed": 0.0, "steps": 0.0, "face": ""}
+			fig = {"view": v, "index": -1, "last": Vector3.INF, "speed": 0.0, "steps": 0.0, "face": "", "status": ""}
 			figures[id] = fig
 		var view: CrewView = fig["view"]
 		var index := int(o["index"])
@@ -58,17 +61,25 @@ func update(dt: float, others: Array, cam: Vector3) -> void:
 		fig["last"] = pos
 		fig["speed"] = sp
 		var gait := str(o["gait"])
-		view.set_body(pos, float(o["yaw"]))
+		var stance := str(o.get("crewPose", ""))
+		var yaw := float(o["yaw"])
+		var target: Vector2 = positions.get(str(o.get("helpTarget", "")), Vector2(pos.x, pos.z))
+		var towards := target - Vector2(pos.x, pos.z)
+		if towards.length_squared() > 0.0001:
+			yaw = atan2(-towards.x, -towards.y)
+		view.set_body(pos, yaw)
 		view.set_gait(GAITS.get(gait, &"walk"), sp)
 		view.set_raised(bool(o["raised"]))
 		# Down (or caught, without the down rule): lying where they fell, crawling as they crawl. Out: gone;
 		# a red spot is left where they lay (client/down_view.gd). Left behind (gone, or left out by the car for the
 		# day: sim/run.gd car_waits): not drawn.
 		var st := str(o["status"])
-		view.set_downed(st == "caught" or st == "down")
+		view.set_downed(st == "caught" or st == "down", str(fig["status"]) == "down" and st == "ok" and stance == "")
+		fig["status"] = st
+		view.set_stance(stance)
 		view.visible = st != "out" and st != "leftBehind" and (Vector2(pos.x - cam.x, pos.z - cam.z).length() > NEAR_CAMERA or absf(pos.y - cam.y) > 2.5)
 		# Footsteps, from where they are.
-		if sp > CrewView.MOVING and str(o["status"]) == "ok" and sfx != null:
+		if sp > CrewView.MOVING and st == "ok" and stance == "" and sfx != null:
 			var steps := float(fig["steps"]) + sp * dt / float(STEP_LEN.get(gait, 0.75))
 			if steps >= 1.0:
 				steps -= floorf(steps)

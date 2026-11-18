@@ -44,6 +44,18 @@ const GroundskeeperView = preload("res://client/groundskeeper_view.gd")
 const EyeHeight = preload("res://client/eye_height.gd")
 const RoomClient = preload("res://net/room_client.gd")
 const LocalRoom = preload("res://net/local_room.gd")
+const PLAYTEST_REVIEWS := {
+	"ward": {
+		"pack": "WardReview.pck", "scene": "res://ward_review.tscn",
+		"label": "HANGING WARD (PROTOTYPE)", "title": "Going Down - Hanging Ward Prototype",
+		"size": Vector2i(1040, 720),
+	},
+	"crew23": {
+		"pack": "Crew23Review.pck", "scene": "res://review.tscn",
+		"label": "RECOVERED TAPE (PROTOTYPE)", "title": "Going Down - Recovered Tape Prototype",
+		"size": Vector2i(1120, 700),
+	},
+}
 const Protocol = preload("res://net/protocol.gd")
 const Move = preload("res://sim/move.gd")
 const Prison = preload("res://sim/prison.gd")
@@ -91,7 +103,7 @@ const CAR_WAIT_SHOW_MS := 4000
 ## The car waits (FD4): the dark screen of a player the car left out for the day.
 const LEFT_OUT_LINES: Array = ["LEFT BEHIND", "", "YOU WAKE IN THE PRISON", "NO PAY TODAY"]
 ## The emote wheel, clockwise from the top (Protocol.EMOTES order).
-const EMOTE_LABELS: Array[String] = ["WAVE", "LOOK BEHIND", "PRAY", "DANCE SPIN", "DANCE SNAKE", "BUTTON"]
+const EMOTE_LABELS: Array[String] = ["WAVE", "LOOK BEHIND", "PRAY", "DANCE SPIN", "DANCE SNAKE", "BUTTON", "POINT", "CHEER", "SCARED"]
 ## The wheel's dead zone (window pixels of mouse travel): letting go inside it cancels.
 const WHEEL_DEAD := 40.0
 ## Name tags show only this close (m, body to body; 0 = never). Not knowing who is who further off is
@@ -124,6 +136,12 @@ var sfx: Sfx
 var announcer: Announcer
 var hud: Hud
 var start: StartScreen
+var _playtest_active := false
+var _playtest_selection := -1
+var _playtest_face := ""
+var _playtest_hints: Dictionary = {}
+var _playtest_hint_persist := true
+var _playtest_review_pid := -1
 ## The face kiosk's editor over the game (client/face_kiosk.gd): opened by F at the prison's kiosk, or
 ## by the test hook. Done changes the face for everyone in the run.
 var kiosk: FaceKiosk
@@ -283,7 +301,48 @@ var _day_note_until := -1
 var _board: Array[String] = []
 var _lights_out := false
 
+## A Windows review child mounts only the fixed sibling pack and skips all game setup and networking.
+func _owner_review_requested() -> bool:
+	if not OS.has_feature("windows") or OS.has_feature("editor"):
+		return false
+	var args := OS.get_cmdline_user_args()
+	if args.has("server"):
+		return false
+	for id: String in PLAYTEST_REVIEWS:
+		if args.has("owner_review=" + id):
+			process_mode = Node.PROCESS_MODE_DISABLED
+			_start_owner_review.call_deferred(id)
+			return true
+	return false
+
+func _review_pack_path(review: Dictionary) -> String:
+	return OS.get_executable_path().get_base_dir().path_join(str(review["pack"]))
+
+func _start_owner_review(id: String) -> void:
+	var review: Dictionary = PLAYTEST_REVIEWS[id]
+	if not ProjectSettings.load_resource_pack(_review_pack_path(review), false):
+		printerr("Could not load owner review pack: ", id)
+		get_tree().quit(1)
+		return
+	var window := get_window()
+	var view_size: Vector2i = review["size"]
+	window.title = str(review["title"])
+	window.content_scale_size = view_size
+	window.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	window.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP
+	if DisplayServer.get_name() != "headless":
+		window.size = view_size
+	var scene := str(review["scene"])
+	var result := get_tree().change_scene_to_file(scene)
+	if result != OK:
+		printerr("Could not open owner review scene: ", id, " (", result, ")")
+		get_tree().quit(1)
+		return
+	print("Owner review opened: ", id, " (", scene, ")")
+
 func _ready() -> void:
+	if _owner_review_requested():
+		return
 	if OS.get_cmdline_user_args().has("scene=annex_demo"):
 		process_mode = Node.PROCESS_MODE_DISABLED
 		get_tree().change_scene_to_file.call_deferred("res://client/annex_demo.tscn")
@@ -549,6 +608,9 @@ func _build_view() -> void:
 	start.name = "StartScreen"
 	add_child(start)
 	start.alone_pressed.connect(_play_alone)
+	start.playtest_available = OS.has_feature("windows")
+	start.playtest_pressed.connect(_open_playtest)
+	start.playtest_selected.connect(_select_playtest)
 	start.join_pressed.connect(_join)
 	start.back_pressed.connect(_back_to_title)
 	start.start_pressed.connect(_lobby_start)
@@ -608,6 +670,87 @@ func _on_screen_shown(which: String) -> void:
 	if which != "" and mode != "game":
 		mode = which
 
+func _open_playtest() -> void:
+	if not start.playtest_available or (mode != "title" and not _playtest_active):
+		return
+	start.playtest_choices.clear()
+	if _playtest_active:
+		start.playtest_choices.append({"id": "resume", "label": "RESUME"})
+		start.playtest_choices.append({"id": "restart", "label": "RESTART SELECTED AREA"})
+	for destination in LocalRoom.playtest_destinations(seed, Session.deck):
+		var depth := int(destination["depth"])
+		var area := str(destination["place"]).replace("_", " ").to_upper()
+		var label := area if depth == 0 else "FLOOR %d - %s" % [depth, area]
+		start.playtest_choices.append({"id": str(depth), "label": label})
+	if not OS.has_feature("editor"):
+		for id: String in PLAYTEST_REVIEWS:
+			var review: Dictionary = PLAYTEST_REVIEWS[id]
+			if FileAccess.file_exists(_review_pack_path(review)):
+				start.playtest_choices.append({"id": id, "label": review["label"]})
+	var exit_label := "END SANDBOX" if _playtest_active else "BACK TO TITLE"
+	start.playtest_choices.append({"id": "title", "label": exit_label})
+	menu_overlay = false
+	hud.menu_on = false
+	start.error = ""
+	start.show_screen("playtest")
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+func _resume_playtest() -> void:
+	start.show_screen("")
+	_esc_menu = false
+	if not automated:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+func _select_playtest(id: String) -> void:
+	if start.screen != "playtest":
+		return
+	match id:
+		"title":
+			_back_to_title()
+			return
+		"resume":
+			_resume_playtest()
+			return
+	if PLAYTEST_REVIEWS.has(id) and not OS.has_feature("editor"):
+		if _playtest_review_pid > 0 and OS.is_process_running(_playtest_review_pid):
+			start.error = "CLOSE THE OPEN PROTOTYPE FIRST"
+			return
+		var exe := OS.get_executable_path()
+		var review: Dictionary = PLAYTEST_REVIEWS[id]
+		start.error = ""
+		if FileAccess.file_exists(_review_pack_path(review)):
+			_playtest_review_pid = OS.create_process(exe, PackedStringArray(["--", "owner_review=" + id]))
+		else:
+			_playtest_review_pid = -1
+		if _playtest_review_pid < 0:
+			start.error = "COULD NOT OPEN PROTOTYPE"
+		return
+	if not id.is_valid_int() and id != "restart":
+		return
+	var depth := _playtest_selection if id == "restart" else int(id)
+	var lr := LocalRoom.new()
+	var face := start.face_code
+	var player_name := start.player_name if not start.player_name.is_empty() else "YOU"
+	lr.open_local(seed, player_name, entity_on, face)
+	if not lr.start_playtest(depth):
+		start.error = "THAT FLOOR IS UNAVAILABLE"
+		return
+	if not _playtest_active:
+		_playtest_face = face
+		_playtest_hints = announcer.hints.to_save().duplicate(true)
+		_playtest_hint_persist = announcer.persist
+		announcer.persist = false
+		kiosk.remember = false
+	if link != null:
+		link.rc.leave()
+	_clear_world()
+	_playtest_active = true
+	_playtest_selection = depth
+	link = PlayLink.new(lr, true)
+	_enter_game()
+	hud.note = "F6  HOST PLAYTEST"
+	_note_until = Time.get_ticks_msec() + 4000
+
 ## "Play alone": a room on this machine, a run at once.
 func _play_alone() -> void:
 	var lr := LocalRoom.new()
@@ -662,6 +805,13 @@ static func ws_url(address: String) -> String:
 	return ("ws://" if home else "wss://") + a
 
 func _back_to_title() -> void:
+	if _playtest_active:
+		_playtest_active = false
+		_playtest_selection = -1
+		start.face_code = _playtest_face
+		kiosk.remember = true
+		announcer.hints.from_save(_playtest_hints)
+		announcer.persist = _playtest_hint_persist
 	if link != null:
 		_leaving = true
 		link.rc.leave()
@@ -896,8 +1046,26 @@ func _input(event: InputEvent) -> void:
 			bright_card.key(event as InputEventKey)
 			get_viewport().set_input_as_handled()
 		return
+	if start.screen == "playtest":
+		if event is InputEventKey:
+			var key := event as InputEventKey
+			if key.pressed and not key.echo and (key.physical_keycode == KEY_ESCAPE or key.physical_keycode == KEY_F6):
+				if _playtest_active:
+					_resume_playtest()
+				else:
+					_back_to_title()
+			else:
+				start.key(key)
+			get_viewport().set_input_as_handled()
+		return
 	if _settings_input(event):
 		return
+	if _playtest_active and event is InputEventKey:
+		var key := event as InputEventKey
+		if key.pressed and not key.echo and key.physical_keycode == KEY_F6:
+			_open_playtest()
+			get_viewport().set_input_as_handled()
+			return
 	if mode != "game":
 		# The start screen: Esc shows the controls (not on the face step, the tape or Ready-up, whose card is
 		# the controls); everything else is the screen's.
@@ -954,6 +1122,7 @@ func _input(event: InputEvent) -> void:
 			return
 		if k.physical_keycode == KEY_F and search_view.read_id != "":
 			note_reader.open(search_view.read_id)
+			sfx.play("search_paper")
 			return
 		if k.physical_keycode == KEY_ESCAPE:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -1134,6 +1303,8 @@ func _poll_test() -> void:
 
 func _process(delta: float) -> void:
 	_poll_test()
+	if start.screen == "playtest":
+		return
 	frames += 1
 	if frames > 5:
 		_ft_sum += delta
@@ -1294,7 +1465,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	announcer.my_id = link.my_id()
 	_present(s.get("events", []), now)
 	_show_finds_events(s, now)
-	inv_view.on_events(s.get("events", []), link.my_id(), link.names(), now)
+	inv_view.on_events(s.get("events", []), link.my_id(), link.names(), now, sfx)
 	for em: Dictionary in s.get("emotes", []):
 		others.play_emote(str(em["player"]), str(em["emote"]))
 		emotes_seen.append({"player": em["player"], "emote": em["emote"]})
@@ -1324,6 +1495,9 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	# count (solo, the rules bridge) has one mark, lit while it is seen.
 	if orderly.has_method(&"set_watched"):
 		orderly.call(&"set_watched", o.get("watchedAt"))
+	if orderly is OrderlyView:
+		var room_client := link.client()
+		(orderly as OrderlyView).bellydance_on_catch = room_client != null and room_client.catch_dance_enabled()
 	orderly.call(&"show_pose", o.get("pose"), bool(o.get("visible", false)) and not _noise_on() and not _no_resident)
 	var seen := bool(o.get("seeing", false)) and _resident_kind != "minder"
 	hud.eyes = o.get("eyes", {"on": seen, "need": 1, "lit": 1, "all": true}) if not _noise_on() and not _no_resident else {}
@@ -1481,7 +1655,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		elif phase == "night":
 			pass   # home for the night: the car cannot be called
 		elif bool(me.get("canCall", false)):
-			prompt = "F  ▼ CALL"
+			prompt = "F  â–¼ CALL"
 		elif bool(me.get("nearHold", false)):
 			prompt = "F  <|> HOLD"
 		elif _tape_in_reach(me):
@@ -1522,7 +1696,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 ## under the prompt while the call button is in reach or a refused press flashes.
 func _show_quota(now: int) -> void:
 	var c := link.client()
-	hud.quota_line = quota_view.update(c.quota() if c != null else null, lift, hud.prompt == "F  ▼ CALL", now)
+	hud.quota_line = quota_view.update(c.quota() if c != null else null, lift, hud.prompt == "F  â–¼ CALL", now)
 	hud.quota_tone = quota_view.tone
 	# The car waits (FD4): standing open on arrival for whoever is still aboard, the panel says who.
 	car_waiting = car_waiting_text(c.latest if c != null else null, link.names(), now)
@@ -1577,7 +1751,6 @@ func _left_out(s: Dictionary) -> bool:
 ## The search's words this frame: whether F means a search (no other prompt or hide has it), the reader closed
 ## by moving.
 func _update_search(s: Dictionary, me: Dictionary, home: bool, station: String, off: bool) -> void:
-	search_view.use_plan(link.plan)
 	var moving := false
 	if not t_move.is_empty():
 		moving = absf(float(t_move[0])) > SearchView.MOVE_LETS_GO or absf(float(t_move[1])) > SearchView.MOVE_LETS_GO
@@ -1596,6 +1769,7 @@ func _update_search(s: Dictionary, me: Dictionary, home: bool, station: String, 
 
 ## This frame's search events: your result line and note (into the reader), the noise of a rushed search.
 func _show_finds_events(s: Dictionary, now: int) -> void:
+	search_view.use_plan(link.plan)
 	var nid := search_view.on_events(s.get("events", []), link.my_id(), sfx, now)
 	if nid != "":
 		note_reader.open(nid)
@@ -1622,7 +1796,7 @@ func _ride_rows(s: Dictionary, rows: PackedStringArray) -> PackedStringArray:
 	if c == null or c.seed == null or not c.latest is Dictionary:
 		return rows
 	var next := int(s["depth"]) + 1
-	var plan := Session.plan_for(str(c.seed), next)
+	var plan := Session.plan_for(str(c.seed), next, c.floor_deck)
 	if not FindablesRules.place_on(plan.place):
 		return rows
 	var crew := 0
@@ -2502,6 +2676,7 @@ func _test_state() -> Dictionary:
 		"orderly": {"mode": o["mode"], "held": o["held"], "seeing": o["seeing"], "visible": o["visible"],
 			"moving": o["moving"], "frozen": o["frozen"], "distance": o["distance"], "x": o["x"], "z": o["z"],
 			"level": o["level"], "drawn": orderly.visible, "pose": o.get("pose"), "squeak": o["squeak"], "taken": o["taken"],
+			"clip": str((orderly as OrderlyView).ap.assigned_animation) if orderly is OrderlyView and (orderly as OrderlyView).ap != null else "",
 			"look": orderly.call(&"look") if orderly.has_method(&"look") else {}},
 		"others": oth,
 		"nearLight": {"energy": near_light.light_energy, "on": near_light.visible, "reach": near_light.omni_range},

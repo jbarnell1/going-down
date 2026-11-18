@@ -257,6 +257,7 @@ class OrderlyState:
 	## The route; empty means none (TypeScript: null). Never written to once made.
 	var path: Array[Floor.Pos] = []
 	var path_next: int = 0
+	var resident_walk: Follow.ResidentWalk = null
 	var replan_in: float = 0.0
 	var wind_up_left: float = 0.0
 	var wind_up_target: Variant = null  # String or null
@@ -361,6 +362,7 @@ class OrderlyState:
 		s.prey_id = prey_id
 		s.path = path
 		s.path_next = path_next
+		s.resident_walk = resident_walk
 		s.replan_in = replan_in
 		s.wind_up_left = wind_up_left
 		s.wind_up_target = wind_up_target
@@ -519,9 +521,9 @@ static func seen_by(plan: Floor.FloorPlan, body: Move.Body, players: Array[Playe
 ## Advances the resident by dt seconds. Never mutates `prev`. (TypeScript HuntOptions: speed, creep.)
 ## `hunt_speed` below 0 means its body's own. `need`: watchers needed to hold it this tick (watch_need of
 ## the up players; 1, the default, is the rule every stored result was made with).
-static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float = -1.0, creep: bool = true, need: int = 1) -> StepResult:
+static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float = -1.0, creep: bool = true, need: int = 1, solids: Move.Solids = null) -> StepResult:
 	var k := kind_of(prev)
-	var res := _step_rules(plan, prev, players, dt, k.hunt_speed if hunt_speed < 0.0 else hunt_speed, creep, k, need)
+	var res := _step_rules(plan, prev, players, dt, k.hunt_speed if hunt_speed < 0.0 else hunt_speed, creep, k, need, solids)
 	if k.clicks():
 		_stapler(prev, res, dt, k)
 	return res
@@ -546,7 +548,7 @@ static func _stapler(prev: OrderlyState, res: StepResult, dt: float, k: BodySett
 			s.clicks += 1
 			res.events.append({"type": "click", "t": s.t, "why": "wait"})
 
-static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool, k: BodySettings, need: int = 1) -> StepResult:
+static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool, k: BodySettings, need: int, solids: Move.Solids) -> StepResult:
 	var t := prev.t + dt
 	var s := prev.copy()
 	s.t = t
@@ -634,7 +636,7 @@ static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 
 	# Hidden players: going to look into a hide, or standing where it lost someone (see below).
 	if s.mode == &"look" or s.mode == &"search":
-		_step_hidden(plan, s, players, dt, hunt_speed, k, events)
+		_step_hidden(plan, s, players, dt, hunt_speed, k, events, solids)
 		return res
 
 	if s.mode == &"windUp":
@@ -682,19 +684,19 @@ static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 		return res
 
 	if _turn_to_hides(plan, s, players, events):
-		_step_hidden(plan, s, players, dt, hunt_speed, k, events)
+		_step_hidden(plan, s, players, dt, hunt_speed, k, events, solids)
 		return res
-	_hunt(plan, s, players, dt, hunt_speed, creep, k)
+	_hunt(plan, s, players, dt, hunt_speed, creep, k, solids)
 	return res
 
 ## One tick of walking toward the nearest player. Mutates the (already copied) state.
-static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool, k: BodySettings) -> void:
+static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool, k: BodySettings, solids: Move.Solids = null) -> void:
 	s.replan_in -= dt
-	if s.replan_in <= EPS or s.path.is_empty():
+	if s.replan_in <= EPS or (solids == null and s.path.is_empty()):
 		s.replan_in = REPLAN_INTERVAL
 		var near := _nearest_by_walk(plan, s.body, players)
 		s.target_id = near.player.id if near != null else null
-		if near != null:
+		if near != null and solids == null:
 			s.path = Floor.find_path(plan, Move.cell_of(plan, s.body), Move.cell_of(plan, near.player.body))
 		else:
 			s.path = []
@@ -704,9 +706,12 @@ static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerV
 		if s.target_id != null and p.id == s.target_id and p.active and not p.hidden:
 			target = p
 			break
-	if target == null or s.path.is_empty():
+	if target == null or (solids == null and s.path.is_empty()):
 		s.anim = &"idle"
 		s.path = []
+		s.resident_walk = null
+		if solids != null:
+			s.replan_in = 0.0
 		return
 
 	var before := s.body
@@ -726,7 +731,9 @@ static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerV
 	var pace := k.creep_speed if creeping else hunt_speed
 
 	var here := Move.cell_of(plan, before)
-	if _same_cell(here, Move.cell_of(plan, target.body)):
+	if solids != null:
+		_resident_walk(plan, s, target.body, pace * dt, k.radius, solids, APPROACH_STOP)
+	elif _same_cell(here, Move.cell_of(plan, target.body)):
 		var dx := target.body.x - before.x
 		var dz := target.body.z - before.z
 		var d := M.hypot2(dx, dz)
@@ -744,7 +751,7 @@ static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerV
 	var mz := s.body.z - before.z
 	var moved := M.hypot2(mx, mz)
 	s.moving = moved > 1e-9
-	if moved < 1e-4:
+	if moved < 1e-4 and solids == null:
 		s.replan_in = 0.0  # blocked or arrived: think again next tick
 
 	var tx := target.body.x - s.body.x
@@ -893,6 +900,7 @@ static func arrive(o: OrderlyState, body: Move.Body, yaw: float, t: float, targe
 	s.target_id = target
 	s.path = []
 	s.path_next = 0
+	s.resident_walk = null
 	s.replan_in = 0.0
 	s.wind_up_target = null
 	s.wind_up_left = 0.0
@@ -1009,7 +1017,7 @@ static func _end_hidden(s: OrderlyState) -> bool:
 	return false
 
 ## One tick of "look" or "search", free to act. Mutates the (already copied) state.
-static func _step_hidden(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, k: BodySettings, events: Array[Dictionary]) -> void:
+static func _step_hidden(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, k: BodySettings, events: Array[Dictionary], solids: Move.Solids) -> void:
 	# Someone it can hunt within reach: reached for as always.
 	var victim: PlayerView = null
 	var victim_dist := INF
@@ -1046,7 +1054,7 @@ static func _step_hidden(plan: Floor.FloorPlan, s: OrderlyState, players: Array[
 			s.anim = &"idle"
 			return
 		if M.hypot2(front.x - s.body.x, front.z - s.body.z) > LOOK_REACH or front.level != s.body.level:
-			_walk_to(plan, s, front, hunt_speed, dt, k)
+			_walk_to(plan, s, front, hunt_speed, dt, k, solids)
 			return
 		if at != null:
 			s.yaw = _turn_toward(s.yaw, yaw_toward(at.x - s.body.x, at.z - s.body.z), TURN_RATE * dt)
@@ -1069,7 +1077,7 @@ static func _step_hidden(plan: Floor.FloorPlan, s: OrderlyState, players: Array[
 		return
 	var spot := s.search_spot
 	if s.search_left >= STAND_TIME - EPS and (M.hypot2(spot.x - s.body.x, spot.z - s.body.z) > SEARCH_ARRIVE or spot.level != s.body.level):
-		if _walk_to(plan, s, spot, hunt_speed, dt, k):
+		if _walk_to(plan, s, spot, hunt_speed, dt, k, solids):
 			return
 	# There (or as near as it can get): it stands.
 	s.anim = &"idle"
@@ -1080,16 +1088,18 @@ static func _step_hidden(plan: Floor.FloorPlan, s: OrderlyState, players: Array[
 
 ## Walks toward a point at `speed` along the floor's paths (straight within its cell). Returns whether it
 ## moved. Mutates the (already copied) state.
-static func _walk_to(plan: Floor.FloorPlan, s: OrderlyState, goal: Move.Body, speed: float, dt: float, k: BodySettings) -> bool:
+static func _walk_to(plan: Floor.FloorPlan, s: OrderlyState, goal: Move.Body, speed: float, dt: float, k: BodySettings, solids: Move.Solids = null) -> bool:
 	var before := s.body
 	var here := Move.cell_of(plan, before)
 	var there := Move.cell_of(plan, goal)
 	s.replan_in -= dt
-	if s.replan_in <= EPS or s.path.is_empty():
+	if solids == null and (s.replan_in <= EPS or s.path.is_empty()):
 		s.replan_in = REPLAN_INTERVAL
 		s.path = Floor.find_path(plan, here, there)
 		s.path_next = 1 if s.path.size() > 1 else 0
-	if _same_cell(here, there):
+	if solids != null:
+		_resident_walk(plan, s, goal, speed * dt, k.radius, solids)
+	elif _same_cell(here, there):
 		var dx := goal.x - before.x
 		var dz := goal.z - before.z
 		var d := M.hypot2(dx, dz)
@@ -1113,6 +1123,11 @@ static func _walk_to(plan: Floor.FloorPlan, s: OrderlyState, goal: Move.Body, sp
 	else:
 		s.anim = &"idle"
 	return moved >= 1e-4
+
+## The follow cursor belongs to this tick's copy; previous states retain their routes for reconciliation.
+static func _resident_walk(plan: Floor.FloorPlan, s: OrderlyState, goal: Move.Body, max_dist: float, radius: float, solids: Move.Solids, stop: float = 0.0) -> void:
+	s.resident_walk = s.resident_walk.copy() if s.resident_walk != null else Follow.ResidentWalk.new()
+	s.body = Follow.step_resident_walk(plan, s.resident_walk, s.body, goal, max_dist, radius, solids, stop)
 
 # ---------------------------------------------------------------------------------------------
 # Sound.

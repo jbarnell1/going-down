@@ -20,10 +20,12 @@
 # (client/level.gd, client/annex_view.gd); posters, clocks, things on desks and ceiling lights stay its own.
 #
 # Residents keep walking by the plan alone (they never read this list), so plain pieces stand against walls
-# (their back INSET from the wall line), never on a door cell, never in the lobby or within LANDING_STEPS of
-# the landing, and never over the middle of a cell. So nobody is sealed in: two pieces in a room that do not
-# share a wall line stand at least CLEAR apart (a player's body and 10 cm to spare), neighbours along one wall
-# at least SPARE apart, and nothing stands within FRONT_SPARE of a body on a hide's front spot.
+# (their back INSET from the wall line), never on a door cell or over the middle of a cell. T20j restores
+# waiting chairs to the lobby side walls away from the landing, benches and planters to atriums, and a
+# break-room table with two chairs to a free wall. Other furniture stays beyond LANDING_STEPS. Two pieces
+# in a room that do not share a wall line stand at least CLEAR apart (a player's body and 10 cm to spare),
+# neighbours along one wall at least SPARE apart, and nothing stands within FRONT_SPARE of a body on a
+# hide's front spot.
 #
 # The Clinic's plain pieces are dealt by the seed (Rng "furniture:clinic:<seed>:<depth>", one fork per room,
 # on its wall slots as the client dealt its props); the Annex's by room shape alone, with no seed: every room
@@ -42,6 +44,7 @@ const Move = preload("res://sim/move.gd")
 const Playroom = preload("res://sim/playroom.gd")
 const Hides = preload("res://sim/hides.gd")
 const Arboretum = preload("res://sim/arboretum.gd")
+const Landing = preload("res://sim/landing.gd")
 
 const CM := 200
 ## A player's body radius, cm (net/session.gd PLAYER_RADIUS).
@@ -58,7 +61,9 @@ const FRONT_SPARE := 10
 const HIDE_SPARE := 2
 ## No piece on a cell this many steps or fewer from the landing.
 const LANDING_STEPS := 3
-## Rooms that never hold a piece.
+## Lobby chairs are flank pieces only, at least two cells from the landing.
+const LOBBY_LANDING_STEPS := 2
+## Rooms that hold no furniture in the baseline layout.
 const NO_PIECES: Array[StringName] = [&"lobby"]
 ## The Clinic's plain pieces' slide along their wall, cm either way.
 const SLIDE := 40
@@ -100,9 +105,11 @@ const KINDS := {
 	&"arch": [120, 40, true],
 	&"sundial": [80, 80, false],
 	&"shed": [90, 60, true],
-	&"bench": [180, 60, false],
+	&"bench": [180, 50, false],
 	&"under": [120, 50, false],
 	&"log": [160, 50, false],
+	&"break_table": [120, 56, false],
+	&"planter": [100, 56, false],
 }
 const TURNED: Array[StringName] = [&"wheelchair", &"gurney"]
 ## The Annex meeting room's table (client/annex_view.gd draws it): 4.4 by 1.3 m.
@@ -165,7 +172,7 @@ class Piece:
 
 ## Every floor-standing piece on the floor, in id order: the hides first (in hide id order, each followed by
 ## its chairs), then the plain pieces room by room. `floor_seed` "" means plan.seed; `depth` -1 means plan.depth.
-static func pieces_for(plan: Floor.FloorPlan, floor_seed: String = "", depth: int = -1) -> Array[Piece]:
+static func pieces_for(plan: Floor.FloorPlan, floor_seed: String = "", depth: int = -1, furniture_layout: bool = false) -> Array[Piece]:
 	var sd := floor_seed if floor_seed != "" else plan.seed
 	var dp := depth if depth >= 0 else plan.depth
 	var c := _ctx(plan)
@@ -189,6 +196,9 @@ static func pieces_for(plan: Floor.FloorPlan, floor_seed: String = "", depth: in
 	if _findables == null:
 		_findables = load("res://sim/findables.gd")
 	_findables.mark_searchable(plan, c.out, sd, dp, c.hides)
+	# Append after marking searches so every existing piece keeps its id, position and contents.
+	if furniture_layout:
+		_restore_wall_furniture(c)
 	return c.out
 
 static var _findables: GDScript = null
@@ -235,7 +245,7 @@ static func _piece(c: Ctx, kind: StringName, room: int, level: int, x: int, y: i
 	p.facing = facing
 	var spec: Array = KINDS[kind]
 	p.w = spec[0]
-	p.d = spec[1]
+	p.d = 60 if kind == &"bench" and c.plan.place == &"arboretum" else spec[1]
 	p.tall = spec[2]
 	p.solid = not (test_break == "chairs_soft" and CHAIRS.has(kind))
 	p.foot = foot_of(x, y, facing, p.w, p.d)
@@ -332,7 +342,7 @@ static func _wall_piece(c: Ctx, kind: StringName, room: Floor.Room, x: int, y: i
 	return p
 
 ## Whether a cell may be under a piece of `room`.
-static func _cell_ok(c: Ctx, room_id: int, level: int, x: int, y: int) -> bool:
+static func _cell_ok(c: Ctx, room_id: int, level: int, x: int, y: int, lobby: bool) -> bool:
 	var plan := c.plan
 	if x < 0 or y < 0 or x >= plan.width or y >= plan.height:
 		return false
@@ -345,6 +355,8 @@ static func _cell_ok(c: Ctx, room_id: int, level: int, x: int, y: int) -> bool:
 	if c.doors.has(i):
 		return false
 	var d := c.landing_dist[i]
+	if lobby:
+		return d >= LOBBY_LANDING_STEPS
 	return d < 0 or d > LANDING_STEPS
 
 ## Distance squared between two rectangles (0 when they touch or overlap).
@@ -357,10 +369,10 @@ static func overlaps(a: Rect2i, b: Rect2i) -> bool:
 	return a.position.x < b.end.x and b.position.x < a.end.x and a.position.y < b.end.y and b.position.y < a.end.y
 
 ## Whether a piece may stand where it is (the rules in the header).
-static func _fits(c: Ctx, p: Piece) -> bool:
+static func _fits(c: Ctx, p: Piece, restored: bool = false) -> bool:
 	var plan := c.plan
 	var room: Floor.Room = c.rooms.get(p.room)
-	if room == null or NO_PIECES.has(room.kind):
+	if room == null or (NO_PIECES.has(room.kind) and not restored):
 		return false
 	var f := p.foot
 	var inner := Rect2i(room.x * CM + INSET, room.y * CM + INSET, room.w * CM - 2 * INSET, room.h * CM - 2 * INSET)
@@ -369,15 +381,22 @@ static func _fits(c: Ctx, p: Piece) -> bool:
 	# Every cell under it, and never over a cell's middle.
 	for cy in range(f.position.y / CM, (f.end.y - 1) / CM + 1):
 		for cx in range(f.position.x / CM, (f.end.x - 1) / CM + 1):
-			if not _cell_ok(c, room.id, p.level, cx, cy):
+			if not _cell_ok(c, room.id, p.level, cx, cy, room.kind == &"lobby"):
 				return false
 			var mx := cx * CM + CM / 2
 			var my := cy * CM + CM / 2
 			if p.block.position.x < mx and mx < p.block.end.x and p.block.position.y < my and my < p.block.end.y:
 				return false
+			if restored and gap2(Rect2i(mx, my, 0, 0), p.block) < PLAYER_R * PLAYER_R:
+				return false
 	for q: Piece in c.by_room.get(p.room, []):
 		if q.level != p.level:
 			continue
+		if restored and q.searchable:
+			var at := search_stand_cm(q)
+			var reach := PLAYER_R + FRONT_SPARE
+			if gap2(Rect2i(at, Vector2i.ZERO), f) < reach * reach:
+				return false
 		if p.group >= 0 and (q.id == p.group or q.group == p.group):
 			# A chair at its own desk or table (or beside another of its chairs): only never inside it.
 			if overlaps(q.foot, f):
@@ -395,6 +414,12 @@ static func _fits(c: Ctx, p: Piece) -> bool:
 		if gap2(Rect2i(h.front.x, h.front.y, 0, 0), f) < reach * reach:
 			return false
 	return true
+
+## The standard approach to search a piece: 45 cm in front of its side facing into the room.
+static func search_stand_cm(p: Piece) -> Vector2i:
+	var inward := -dir_vec(p.wall) if p.wall != &"" else dir_vec(p.facing)
+	var ext := p.foot.size.x / 2 if inward.x != 0 else p.foot.size.y / 2
+	return p.foot.position + p.foot.size / 2 + inward * (ext + 45)
 
 # ---------------------------------------------------------------------------------------------
 # The Clinic: by room kind, dealt by the seed.
@@ -441,17 +466,20 @@ static func _wall_solid(plan: Floor.FloorPlan, level: int, s: Vector3i) -> bool:
 # ---------------------------------------------------------------------------------------------
 # The Annex: by shape, in each room's canonical frame.
 
+static func _canonical_wall_slots(plan: Floor.FloorPlan, room: Floor.Room) -> Array[Vector3i]:
+	var sh := Hides.shape_of(plan, room)
+	var slots: Array[Vector3i] = []
+	for cs: Array in Hides._canon_slots(sh):
+		var a := Hides._slot_abs(room, sh, cs[0], cs[1])
+		if _wall_solid(plan, room.level, a):
+			slots.append(a)
+	return slots
+
 static func _annex(c: Ctx) -> void:
-	var plan := c.plan
-	for room in plan.rooms:
+	for room in c.plan.rooms:
 		if NO_PIECES.has(room.kind) or not ANNEX_PROPS.has(room.kind):
 			continue
-		var sh := Hides.shape_of(plan, room)
-		var slots: Array = []
-		for cs: Array in Hides._canon_slots(sh):
-			var a := Hides._slot_abs(room, sh, cs[0], cs[1])
-			if _wall_solid(plan, room.level, a):
-				slots.append(a)
+		var slots := _canonical_wall_slots(c.plan, room)
 		for kind: StringName in ANNEX_PROPS[room.kind]:
 			for s: Vector3i in slots:
 				var p := _wall_piece(c, kind, room, s.x, s.y, s.z, 0)
@@ -460,20 +488,85 @@ static func _annex(c: Ctx) -> void:
 					break
 
 # ---------------------------------------------------------------------------------------------
+# Restored wall furniture (T20j).
+
+static func _restore_wall_furniture(c: Ctx) -> void:
+	for room in c.plan.rooms:
+		match room.kind:
+			&"lobby":
+				_restore_lobby(c, room)
+			&"atrium":
+				var slots := _canonical_wall_slots(c.plan, room)
+				for kind: StringName in [&"bench", &"planter", &"bench", &"planter"]:
+					for s in slots:
+						var p := _wall_piece(c, kind, room, s.x, s.y, s.z, 0)
+						if _fits(c, p, true):
+							_commit(c, p)
+							break
+			&"break":
+				_restore_break_table(c, room)
+
+static func _restore_lobby(c: Ctx, room: Floor.Room) -> void:
+	var side := dir_vec(Landing.elevator_wall(c.plan))
+	var kind := &"chair_row" if c.plan.place == &"annex" else &"chair_waiting"
+	var used := {}
+	for s in _canonical_wall_slots(c.plan, room):
+		var wall := Playroom.DIRS[s.z]
+		var normal := dir_vec(wall)
+		if used.has(wall) or normal.x * side.x + normal.y * side.y != 0:
+			continue
+		var p := _wall_piece(c, kind, room, s.x, s.y, s.z, 0)
+		if _fits(c, p, true):
+			_commit(c, p)
+			used[wall] = true
+
+## The chairs sit beside the table and face it. They keep the same shallow wall strip clear of the centre.
+## Only place the set when the table and both chairs fit.
+static func _restore_break_table(c: Ctx, room: Floor.Room) -> void:
+	var chair_width: int = KINDS[&"chair"][0]
+	for s in _canonical_wall_slots(c.plan, room):
+		var table := _wall_piece(c, &"break_table", room, s.x, s.y, s.z, 0)
+		if not _fits(c, table, true):
+			continue
+		var wall := dir_vec(table.wall)
+		var across := Vector2i(-wall.y, wall.x)
+		var chairs: Array[Piece] = []
+		for sign_: int in [-1, 1]:
+			var at := Vector2i(table.x, table.y) + across * sign_ * (table.w / 2 + chair_width / 2 + SPARE)
+			var toward := -across * sign_
+			var chair := _piece(c, &"chair", room.id, room.level, at.x, at.y, Floor.dir_from_vec(toward.x, toward.y))
+			chair.wall = table.wall
+			chair.wall_at = table.wall_at
+			chair.group = c.out.size()
+			if not _fits(c, chair, true):
+				break
+			chairs.append(chair)
+		if chairs.size() == 2:
+			_commit(c, table)
+			for chair in chairs:
+				_commit(c, chair)
+			return
+
+# ---------------------------------------------------------------------------------------------
 # Collision: the solid pieces as boxes for players (sim/move.gd Solids), cached per plan.
 
 static var _solids := {}
+static var _restored_solids := {}
 static var _solid_order: Array = []
 
-## The floor's solid pieces as Move.Solids (metres), from pieces_for(plan). Keeps the last 16 plans.
-static func solids_of(plan: Floor.FloorPlan) -> Move.Solids:
-	if _solids.has(plan):
-		return _solids[plan]
-	var s := solids_from(plan, pieces_for(plan))
-	_solids[plan] = s
-	_solid_order.append(plan)
-	if _solid_order.size() > 16:
-		_solids.erase(_solid_order.pop_front())
+## The layout's solid pieces as Move.Solids (metres), from pieces_for. Keeps the last 16 plans.
+static func solids_of(plan: Floor.FloorPlan, furniture_layout: bool = false) -> Move.Solids:
+	var cache := _restored_solids if furniture_layout else _solids
+	if cache.has(plan):
+		return cache[plan]
+	var s := solids_from(plan, pieces_for(plan, "", -1, furniture_layout))
+	if not _solid_order.has(plan):
+		_solid_order.append(plan)
+		if _solid_order.size() > 16:
+			var first: Floor.FloorPlan = _solid_order.pop_front()
+			_solids.erase(first)
+			_restored_solids.erase(first)
+	cache[plan] = s
 	return s
 
 static func solids_from(plan: Floor.FloorPlan, list: Array[Piece]) -> Move.Solids:

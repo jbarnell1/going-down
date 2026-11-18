@@ -182,6 +182,8 @@ func _surface(part: float) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = load("res://client/prison_surface.gdshader")
 	m.set_shader_parameter("part", part)
+	if part == 1.0:
+		m.set_shader_parameter("concrete_tex", preload("res://assets/textures/prison_concrete.png"))
 	m.set_shader_parameter("low_paint", LOW_PAINT)
 	m.set_shader_parameter("high_paint", HIGH_PAINT)
 	m.set_shader_parameter("dado", 1.3)

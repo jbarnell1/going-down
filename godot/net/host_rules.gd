@@ -114,13 +114,19 @@ var furniture: bool
 var findables: bool
 ## The four-slot inventory (off unless asked; sim/run.gd inventory, S1).
 var inventory: bool
+## Restored wall furniture (T20j), with solid furniture.
+var furniture_layout: bool
+## Residents route around the floor's shared solid footprints (off unless asked).
+var resident_navigation: bool
 
 func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false,
 		watchers_: bool = false, relocation_: bool = false, long_dark_: bool = false, paced_: bool = false, car_waits_: bool = false,
 		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false, furniture_: bool = false, findables_: bool = false,
-		inventory_: bool = false) -> void:
+		inventory_: bool = false, furniture_layout_: bool = false, resident_navigation_: bool = false) -> void:
 	inventory = inventory_
 	findables = findables_
+	furniture_layout = furniture_layout_
+	resident_navigation = resident_navigation_
 	playroom_tuned = playroom_tuned_
 	furniture = furniture_
 	relocation = relocation_
@@ -227,10 +233,14 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_day_lock(s)
 	if furniture and not s.furniture:
 		s = Run.with_furniture(s)
+	if furniture_layout and s.furniture and not s.furniture_layout:
+		s = Run.with_furniture_layout(s)
 	if findables and not s.findables:
 		s = Run.with_findables(s)
 	if inventory and not s.inventory:
 		s = Run.with_inventory(s)
+	if resident_navigation and not s.resident_navigation:
+		s = Run.with_resident_navigation(s)
 	return _capped(s)
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web

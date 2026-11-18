@@ -2,6 +2,8 @@
 
 One list of everything the game is waiting on from outside: Mixamo animation clips and ElevenLabs sound effects. Written 18 November 2026. Tick things off here as they arrive.
 
+**Sound delivery, 18 November.** Received 69 WAVs, including the search, inventory, shop and cabinet sets and two office shuffle recordings. The Arboretum batch includes three moss footsteps and one sniff. The sprinkler (A4) is still outstanding. A single take can be used where the table originally requested more. Keep those delivered files for the mix.
+
 **Where to put files:** leave everything in your Downloads folder with the names given here, then tell either agent "the files are in Downloads". Only your new files are copied; nothing else there is touched.
 
 **Order that helps most:** section 1 (the Temp in Mixamo), then the starred sounds in section 4 (the Arboretum), then the rest as you have time. Nothing here blocks Friday: every item has a stand-in today.
@@ -124,8 +126,22 @@ Paste each prompt as it is. "Loop" means ask for a loop (or make sure it starts 
 
 ---
 
-## Not needed from you
+## Optional environment art for the floor review
+
+Save the unopened downloads in Downloads. **Fern 02, Forest Leaves 04 and Carpet 001** are the first three for comparison. Choose a 2K ZIP for each material and the glTF model with 2K textures for the fern. Keep the foliage alpha and the OpenGL normal and roughness maps. Poly Haven and ambientCG publish these assets under CC0.
+
+| Place | Download | Intended use |
+|---|---|---|
+| Arboretum | [Fern 02](https://polyhaven.com/a/fern_02), [Forest Leaves 04](https://polyhaven.com/a/forest_leaves_04), [Bark Willow 02](https://polyhaven.com/a/bark_willow_02) | Frond silhouettes, copper-colored paths and ridges on the trunks. |
+| Greenhouse | [Green Metal Rust](https://polyhaven.com/a/green_metal_rust), [Surface Imperfections 001](https://ambientcg.com/view?id=SurfaceImperfections001) | Worn frame edges and patches of grime visible in reflected light on the panes. |
+| Annex | [Carpet 001](https://ambientcg.com/view?id=Carpet001) | Give the mustard carpet a visible weave. |
+| Clinic | [Old Linoleum Flooring 01](https://polyhaven.com/a/old_linoleum_flooring_01) | Catch overhead light on the corridor floor and retain the clean-to-dirty gradient. |
+| Playroom | [Leather 010](https://ambientcg.com/view?id=Leather010) | Sample the fine grain for colored upholstery on the padded walls. |
+| Prison hub | [Concrete Floor](https://polyhaven.com/a/concrete_floor) | Give the concrete wear at foot level around doorways and bunks. |
+| Lift | [Metal Plate](https://polyhaven.com/a/metal_plate) | Give the threshold a worn tread while keeping the floor markings legible. |
+
+## Handled in the project
 
 - The announcer's lines: made here on your ElevenLabs account, inside the character cap.
-- Textures and drawn signs: made here.
+- Signs and gameplay markings are drawn in the project.
 - Figures: built in Blender here. A better sculpted body for a resident from an image-to-3D service is optional; the note for that is `assets_src/inbox/README.md`.
