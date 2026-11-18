@@ -5,9 +5,9 @@
 ## Status
 
 - **Gates passed:** 7 of 14. **Tasks done:** 77 of 114.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 89.
-- **Now:** T26 The Arboretum: a dark forest floor and the Groundskeeper. A Fable builder is making the Arboretum: the noise rules and the Groundskeeper, the forest layout, then the dark place on screen with a stand-in figure
-- **Last CI result seen:** failed on 6f0708c
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 90.
+- **Now:** T23b Voice touch-ups: a grab line, a reworded hint. Queued behind the brightness card with the same builder: a grab line for the Minder, a reworded hint, and the long hint's check
+- **Last CI result seen:** passed on 2a5d5dd
 - **Answers applied up to:** 2026-11-17T21:11:49.720Z
 
 ## Tasks
@@ -223,7 +223,7 @@
 - [x] **T19c** `done` The Temp's own mechanic
   - Why: No two monsters share a rule: the Temp needs its own way to hunt and to be recorded
   - Evidence: Merged as e54eed3. Checker: quick 230/230, the Lonely/Temp/notes/relocate tests 25/25, ref_* 18/18 with 0 values differing, net_local 10/10, play_down 24/24; two deliberate breaks (company never seen; every holder may record) each turned two tests red. Merged with the 0833 fixes by hand (Lonely is the last rules switch); 241/241 on the merge commit.
-- [ ] **T22** `doing` Live settings for the host
+- [ ] **T22** `todo` Live settings for the host
   - Why: On game night the host can slow a monster that's too fast, lengthen the lift's return or the time you have down, and much more, from an in-game panel, while everyone plays
 - [x] **T25** `done` Crash reports, metrics and a same-night hotfix
   - Why: If something breaks on game night we see exactly what happened on whose PC, fix it, and send everyone a new build within minutes
@@ -231,7 +231,7 @@
 - [x] **T23** `done` The announcer's hints
   - Why: The lift's announcer teaches the game with snide, creepy hints: board on time or lose your pay, the quota, sneaking in the Playroom, instruments out
   - Evidence: The announcer's hints: 76 lines in both voices, 30 wired in, HINTS on H. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
-- [ ] **T23b** `todo` Voice touch-ups: a grab line, a reworded hint
+- [ ] **T23b** `doing` Voice touch-ups: a grab line, a reworded hint
   - Why: The Minder's grab gets its own line; 'You are not alone on this floor now' is reworded so it does not give away the Temp's rule
 - [ ] **T24** `todo` The story: the tape, the nightly tapes and the clues
   - Why: A blue-and-yellow VCR orientation tape on joining, a new tape each night in the prison, and clues on every floor that the monsters were once crews like yours
@@ -281,7 +281,7 @@
   - Why: Searching furniture (F TO OPEN DRAWER) turns up credits, obscure poems about the monster's rule, and something to restore you
 - [ ] **T26** `doing` The Arboretum: a dark forest floor and the Groundskeeper
   - Why: A new place: no corridors, you steer by landmarks and sound, and a blind monster comes to noise. You asked for the scariest one yet, and dark
-- [ ] **T27** `todo` A brightness setting with a calibration screen
+- [ ] **T27** `doing` A brightness setting with a calibration screen
   - Why: The Arboretum is very dark; each player sets brightness on their own screen at the start or in settings so dark is dark but not blind
 - [ ] **T21a** `todo` A four-slot inventory
   - Why: Four squares at the bottom of the screen, scroll or 1-4 to pick what is in your hand; the instrument is always in the other hand; store items take a slot
@@ -388,6 +388,11 @@
 
 ## Activity (newest first)
 
+- 2026-11-18 07:51Z Started T23b: Voice touch-ups: a grab line, a reworded hint. Queued behind the brightness card with the same builder: a grab line for the Minder, a reworded hint, and the long hint's check
+- 2026-11-18 07:51Z Started T27: A brightness setting with a calibration screen. A builder is making the brightness card (set once per PC, changeable from the Esc menu), then the voice touch-ups
+- 2026-11-18 07:51Z Paused T22: waiting for The panel, the saved file and 32 working settings are built; a checker is going over the branch before it merges
+- 2026-11-18 07:51Z New pictures for T22: Live settings for the host.
+- 2026-11-18 07:23Z CI stopped itself again: the test step had its own 15-minute stop inside the job. Raised it; not a test failure
 - 2026-11-18 07:22Z CI failed on 6f0708c.
 - 2026-11-18 06:56Z The skill tree is designed: four branches (Lamp, Ear, Hands, Nerve), twenty upgrades that each add something to do, ten of them for Friday; it waits for your look before anyone builds it
 - 2026-11-18 06:47Z NEW BUILD in play/ (18 Nov 00:37): solid furniture, plus everything in the 22:25 build. The lab-box server matches it and the remote test passed. Zip for friends: play/GoingDown-2026-11-18-0037.zip
@@ -423,8 +428,3 @@
 - 2026-11-18 04:36Z Finished T20h: A bit more stamina, monsters paced to match.
 - 2026-11-18 04:36Z Finished T20a: The Orderly stays visible in the dark.
 - 2026-11-18 04:36Z Finished T19e: Monsters slip away and reappear out of view.
-- 2026-11-18 04:36Z Finished T19b: Hiding places on every floor.
-- 2026-11-18 04:36Z Finished T19a: Freeze takes two watchers.
-- 2026-11-18 04:36Z Finished T8c: Down and healed on screen.
-- 2026-11-18 04:36Z Finished T8a: Down first, then out.
-- 2026-11-18 04:23Z Paused T20d: waiting for Built; the web and desktop playthroughs pass with solid furniture (42/42 and 46/46); a checker is going over the branch before it merges

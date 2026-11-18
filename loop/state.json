@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 89,
-  "now": "T26",
-  "nowText": "A Fable builder is making the Arboretum: the noise rules and the Groundskeeper, the forest layout, then the dark place on screen with a stand-in figure",
+  "iteration": 90,
+  "now": "T23b",
+  "nowText": "Queued behind the brightness card with the same builder: a grab line for the Minder, a reworded hint, and the long hint's check",
   "ci": {
-    "status": "failed",
-    "commit": "6f0708c",
-    "at": "2026-11-18T07:22:32.093Z"
+    "status": "passed",
+    "commit": "2a5d5dd",
+    "at": "2026-11-18T07:51:17.506Z"
   },
   "answersAppliedTo": "2026-11-17T21:11:49.720Z",
   "tasks": [
@@ -2228,13 +2228,20 @@
       "id": "T22",
       "title": "Live settings for the host",
       "why": "On game night the host can slow a monster that's too fast, lengthen the lift's return or the time you have down, and much more, from an in-game panel, while everyone plays",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [],
       "nsWhy": "new from the owner on 17 Nov; a testing and hosting tool, amendment recorded",
       "startedAt": "2026-11-17T20:23:31.311Z",
-      "doingText": "A builder is making the host's F8 settings panel, the saved settings file, and wiring more settings (each monster's speeds, lift return, down and heal times, blackout length)",
-      "doingAt": "2026-11-18T05:44:41.187Z"
+      "media": [
+        {
+          "src": "T22/20261118T075117-1-host-panel.png",
+          "caption": "The host's settings panel (F8): pick a monster, move its speed, everyone sees the change announced",
+          "kind": "image",
+          "at": "2026-11-18T07:51:17.635Z"
+        }
+      ],
+      "waiting": "The panel, the saved file and 32 working settings are built; a checker is going over the branch before it merges"
     },
     {
       "id": "T25",
@@ -2270,10 +2277,13 @@
       "id": "T23b",
       "title": "Voice touch-ups: a grab line, a reworded hint",
       "why": "The Minder's grab gets its own line; 'You are not alone on this floor now' is reworded so it does not give away the Temp's rule",
-      "status": "todo",
+      "status": "doing",
       "gates": [],
       "ns": [],
-      "nsWhy": "voice lines from the owner's answers of 18 Nov"
+      "nsWhy": "voice lines from the owner's answers of 18 Nov",
+      "startedAt": "2026-11-18T07:51:18.144Z",
+      "doingText": "Queued behind the brightness card with the same builder: a grab line for the Minder, a reworded hint, and the long hint's check",
+      "doingAt": "2026-11-18T07:51:18.145Z"
     },
     {
       "id": "T24",
@@ -2631,10 +2641,13 @@
       "id": "T27",
       "title": "A brightness setting with a calibration screen",
       "why": "The Arboretum is very dark; each player sets brightness on their own screen at the start or in settings so dark is dark but not blind",
-      "status": "todo",
+      "status": "doing",
       "gates": [],
       "ns": [],
-      "nsWhy": "new from the owner on 18 Nov; a per-player display setting"
+      "nsWhy": "new from the owner on 18 Nov; a per-player display setting",
+      "startedAt": "2026-11-18T07:51:17.985Z",
+      "doingText": "A builder is making the brightness card (set once per PC, changeable from the Esc menu), then the voice touch-ups",
+      "doingAt": "2026-11-18T07:51:17.986Z"
     },
     {
       "id": "T21a",
@@ -3247,6 +3260,31 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-18T07:51:18.145Z",
+      "text": "Started T23b: Voice touch-ups: a grab line, a reworded hint. Queued behind the brightness card with the same builder: a grab line for the Minder, a reworded hint, and the long hint's check",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T07:51:17.986Z",
+      "text": "Started T27: A brightness setting with a calibration screen. A builder is making the brightness card (set once per PC, changeable from the Esc menu), then the voice touch-ups",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T07:51:17.786Z",
+      "text": "Paused T22: waiting for The panel, the saved file and 32 working settings are built; a checker is going over the branch before it merges",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T07:51:17.635Z",
+      "text": "New pictures for T22: Live settings for the host.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-18T07:23:30.332Z",
+      "text": "CI stopped itself again: the test step had its own 15-minute stop inside the job. Raised it; not a test failure",
+      "kind": "note"
+    },
     {
       "at": "2026-11-18T07:22:32.094Z",
       "text": "CI failed on 6f0708c.",
@@ -4220,31 +4258,6 @@
     {
       "at": "2026-11-17T15:19:53.059Z",
       "text": "Paused T20g: waiting for Designed: hold F to search drawers, gurneys and lockers for credits, poem notes and juice cartons. Waits for furniture in the rules (T20d) and a free builder",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:19:52.814Z",
-      "text": "Paused T20f: waiting for Designed: a controls card and ready-up screen, everyone drops in together, the car waits. Waits for a free builder",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:19:52.583Z",
-      "text": "Paused T20e: waiting for Designed: BANK locked until the day quota is met, the quota shown always, a wipe is now the missed day. Six questions on your Questions page. Waits for a free builder",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:19:52.356Z",
-      "text": "Took a default: Day quota, ready-up and findables designed (docs/floors/findables-and-day.md). Six questions on the Questions page; building on the recommended defaults until you answer.",
-      "kind": "decision"
-    },
-    {
-      "at": "2026-11-17T15:19:10.382Z",
-      "text": "Paused T20a: waiting for Your call: don't hide it in the dark and add no glow; just draw it as normal. Waits for a free builder",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:19:09.663Z",
-      "text": "Added task T20h: A bit more stamina, monsters paced to match.",
       "kind": "note"
     }
   ]
