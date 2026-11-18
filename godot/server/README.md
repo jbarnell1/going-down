@@ -1,6 +1,7 @@
 # The Going Down server
 
-One room, run by the home server: a lobby until a player presses start, then the run (the
+One room, run by the home server: a lobby (Ready-up) until everyone in it is ready and a 5 s count has run,
+or the host (the first in the room, `room.host_id`) starts without the stragglers 30 s after readying; then the run (the
 authoritative host of `net/host.gd`, stepping the rules through `net/host_rules.gd` exactly as the
 game does), then back to the lobby ten seconds after a bank or a wipe. It draws nothing, opens no
 file for writing, starts no process and makes no outgoing connection.
@@ -25,7 +26,7 @@ net/ws_server.gd    the door: WebSocket connections, the passphrase hello, every
   refused for 2, 4, 8 ... s (at most 60 s) before any handshake; messages at most 4096 bytes (4003);
   at most 120 messages a second per connection (4004); 20 s of silence closes a connection (4006;
   clients ping every 2 s in the lobby and send 20 inputs a second in a run). Every message must be
-  text and fit the protocol exactly: the room's own (`m|{"t":"start"|"name"|"ping"}`) or a run
+  text and fit the protocol exactly: the room's own (`m|{"t":"ready"|"face"|"start"|"name"|"ping"}`; see the header of `server/room.gd`) or a run
   message that `net/protocol.gd` decodes with every field in range and every number finite;
   anything else closes the connection (4005). A client's run messages are handed to the host as
   coming from its own connection id, so it can only ever send its own inputs.

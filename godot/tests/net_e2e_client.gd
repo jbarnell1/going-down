@@ -1,7 +1,9 @@
 # A headless GDScript player (or a hostile probe) for the local end-to-end check (tools/net_local.mjs).
 #   godot --headless --path godot --script res://tests/net_e2e_client.gd -- url=ws://127.0.0.1:4451 secret=test-passphrase
 #       role=player name=A delay=0.05 behave=watch|away|door expect=3 [starts=1]
-#   ... role=probe kind=wrongpass|oversize|flood|ninth|garbage|oldbuild
+#   ... role=probe kind=wrongpass|oversize|flood|ninth|garbage|oldbuild|startwithout
+# Ready-up (server/room.gd): every player sends ready once the room has `expect` people; the starter also
+# sends START at once, which must not start the run early (START WITHOUT is the host's, after 30 s).
 #   build=ID: the build id this client says in its hello (net/build_info.gd; the server is given the same).
 # A player also sends the server one heartbeat, one error line and one F9 report (client/telemetry.gd's
 # message shapes), for the night's log (server/night_log.gd; tools/net_local.mjs checks it).
@@ -89,10 +91,18 @@ func _player(t: float) -> void:
 		_told = true
 		_tell()
 	if rc.status == "lobby" and not rc.run_on:
-		if args.get("starts") == "1" and not started and rc.people.size() >= int(args.get("expect", "1")):
+		# Ready-up (server/room.gd): every player readies once the room is full; the run starts after the
+		# count. The starter also sends START at once: START WITHOUT is the host's alone and only 30 s
+		# after readying, so it must not start the run early (res "countWait": ready to the run, seconds).
+		if not started and rc.people.size() >= int(args.get("expect", "1")):
 			started = true
-			rc.start_run()
+			res["readyAt"] = t
+			rc.set_ready(true)
+			if args.get("starts") == "1":
+				rc.start_run()
 		return
+	if started and not res.has("countWait"):
+		res["countWait"] = t - float(res["readyAt"])
 	var c := rc.client
 	if c == null or c.seed == null:
 		rc.frame(t, _local())
@@ -275,6 +285,11 @@ func _pump() -> void:
 				pass
 			if txt.contains("\"t\":\"you\""):
 				ws.set_meta("you", true)
+				var y: Variant = JSON.parse_string(txt.substr(2))
+				if y is Dictionary:
+					ws.set_meta("id", str((y as Dictionary).get("id", "")))
+			if txt.begins_with("m|") and txt.contains("\"t\":\"lobby\""):
+				ws.set_meta("lobby", JSON.parse_string(txt.substr(2)))
 
 func _probe(t: float) -> void:
 	var kind: String = args.get("kind")
@@ -319,6 +334,61 @@ func _probe(t: float) -> void:
 				for i in 8:
 					probes[i].close()
 				finish(r)
+		"startwithout":
+			# START WITHOUT over real sockets (server/room.gd ready-up): H arrives first (the host), R second.
+			# H readies, R does not. R's START, and H's before 30 s, start nothing; H's at 31 s starts the run
+			# with H alone, and R (still reading) is not in it.
+			if probes.is_empty():
+				_open(args["secret"])
+			if probes.size() == 1 and probes[0].has_meta("you"):
+				_open(args["secret"])
+			if probes.size() < 2 or not probes[1].has_meta("you"):
+				return
+			var h := probes[0]
+			var r := probes[1]
+			var lob: Variant = h.get_meta("lobby") if h.has_meta("lobby") else null
+			var running: bool = lob is Dictionary and bool((lob as Dictionary).get("running", false))
+			# Something at least every IDLE_TIMEOUT (net/ws_server.gd) from both, through the 31 s wait.
+			if t - float(res.get("pingAt", 0.0)) > 5.0:
+				res["pingAt"] = t
+				h.send_text("m|{\"t\":\"ping\"}")
+				r.send_text("m|{\"t\":\"ping\"}")
+			match probe_stage:
+				0:
+					probe_stage = 1
+					probe_at = t
+					h.send_text("m|{\"t\":\"ready\",\"on\":true}")
+					r.send_text("m|{\"t\":\"start\"}")
+					res["notHostStarted"] = false
+				1:
+					if running:
+						res["notHostStarted"] = true
+					if t - probe_at > 2.0:
+						probe_stage = 2
+						h.send_text("m|{\"t\":\"start\"}")
+				2:
+					if running:
+						res["earlyStarted"] = true
+					if t - probe_at > 31.0:
+						probe_stage = 3
+						res["earlyStarted"] = res.get("earlyStarted", false)
+						h.send_text("m|{\"t\":\"start\"}")
+				3:
+					if running:
+						var host := str((lob as Dictionary).get("host", ""))
+						var host_in := false
+						var reader_in := false
+						for row: Array in (lob as Dictionary)["people"]:
+							var inr: bool = row.size() >= 5 and bool(row[4])
+							if str(row[0]) == host:
+								host_in = inr
+							else:
+								reader_in = reader_in or inr
+						var out := {"kind": kind, "notHostStarted": res["notHostStarted"], "earlyStarted": res["earlyStarted"], "started": true,
+							"after": t - probe_at, "hostInRun": host_in, "readerInRun": reader_in, "hostIsFirst": host == str(h.get_meta("id", ""))}
+						h.close()
+						r.close()
+						finish(out)
 		"oldbuild":
 			# The right passphrase from another build: closed (4007) with the out-of-date reason.
 			if probes.is_empty():

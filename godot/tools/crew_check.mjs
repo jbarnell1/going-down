@@ -105,7 +105,10 @@ try {
   const drew = (await drawFace(A, [])) && (await drawFace(B, ['press starter:frown', 'press colour:3', 'press brush:1', 'line 22 14 22 21', 'press colour:4', 'line 6 5 13 7']));
   check('both join and Bob draws a face', drew);
   await until(A.state, (s) => scr(s).screen === 'lobby' && (scr(s).people ?? []).length >= 2, 20000);
-  await A.cmd('start');
+  // Ready-up (server/room.gd, FD5/FD6): both press READY on the controls card; the run starts for both
+  // after the 5 s count.
+  await A.cmd('ready');
+  await B.cmd('ready');
   let a = await until(A.state, (s) => s.phase !== undefined, 20000);
   let b = await until(B.state, (s) => s.phase !== undefined, 20000);
   await A.cmd('click');
