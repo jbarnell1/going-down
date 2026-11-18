@@ -44,6 +44,7 @@ extends Node
 
 const Client = preload("res://net/client.gd")
 const Seek = preload("res://sim/seek.gd")
+const Settings = preload("res://sim/settings.gd")
 const Floor = preload("res://sim/floor.gd")
 const Playroom = preload("res://sim/playroom.gd")
 
@@ -76,6 +77,17 @@ const KIND_NAMES := {"pit": "BALL PIT", "slide": "TUBE SLIDE", "den": "CRAWL DEN
 const HEALTH_RATES := "WALK -3/S  SPRINT -8/S  STILL OR CREEP +1/S"
 ## T15m: what fills the anger bar (sim/seek.gd ANGER_RATES and ANGER_LUMPS), printed under it.
 const ANGER_RATES := "SPRINT 2 S OR 3 NOISES FILL IT"
+## Live settings: the run's tuning as this client has it (the game sets it every frame; null for none), so the
+## printed rates follow the host's minder.anger_sprint and minder.anger_noise.
+var tuning: Settings.Values = null
+
+## The anger bar's printed rates: ANGER_RATES, or the same words with the host's numbers.
+static func anger_rates_text(t: Settings.Values) -> String:
+	if t == null or not (t.has(&"minder.anger_sprint") or t.has(&"minder.anger_noise")):
+		return ANGER_RATES
+	var secs := Settings.f(t, &"minder.anger_sprint", 1.0 / float(Seek.ANGER_RATES[&"sprint"]))
+	var noises := ceili(100.0 / Settings.f(t, &"minder.anger_noise", 100.0 * float(Seek.ANGER_LUMPS[&"emote"])) - 1e-9)
+	return "SPRINT %s S OR %d NOISE%s FILL IT" % [("%.1f" % secs).trim_suffix(".0"), noises, "" if noises == 1 else "S"]
 
 static var test_break := ""
 
@@ -375,7 +387,7 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 	hud.count_by = started_by if count_phase == "hide" else ""
 	# T15m: the anger bar, the host's own number (the snapshot's seek block), the same on every screen.
 	hud.anger = clampf(float(seek["anger"]), 0.0, 1.0) if seek.has("anger") else -1.0
-	hud.anger_rates = ANGER_RATES if seek.has("anger") else ""
+	hud.anger_rates = anger_rates_text(tuning) if seek.has("anger") else ""
 	# --- this player.
 	var look: Variant = null
 	var note := ""

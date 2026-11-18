@@ -102,6 +102,11 @@
 # no seen report or "I can see it" is applied to it: looking does nothing. The catch still waits for its
 # victim's screen (_confirm_catch), which the Lonely step honours. Every snapshot on its floor carries who it
 # chases (Protocol "lonely"), which also tells each client not to hold the figure.
+#
+# Live settings (docs/floors/live-settings.md LS2; set_tuning): the room's desk decides what is in force and hands it
+# over between ticks; the host puts it on the state (RunState.tuning, read by the rules), announces a change with the
+# next tick's "tuned" event, and adds the tune block to the snapshots once the revision is above 0. A run nobody
+# tunes sends exactly what it did before.
 extends RefCounted
 
 const Run = preload("res://sim/run.gd")
@@ -276,6 +281,17 @@ var _last_catch_tick := -1
 var _next_id := 1
 var _step_fn: Callable
 var _trusted := {}
+## Live settings (docs/floors/live-settings.md LS2; set_tuning): the revision in force (0: never tuned, and the
+## snapshot is what it always was), the list in force, the notices waiting for the next tick, and when the
+## snapshot next carries the whole list. on_tick: called with every tick's run events after the tick (the room's
+## desk lets waiting values in on "carLeft" and "lightsOut", and may call set_tuning then: between two ticks).
+var tune_rev := 0
+var on_tick: Callable
+var _tune_list: Array = []
+var _tune_events: Array[Dictionary] = []
+var _tune_full_until := -INF
+var _tune_last_full := -INF
+var _tune_list_due := false
 
 ## `roster`: players in the run from the first tick (their peer ids). `now`: host clock at the start
 ## (tick k is due at now + k * TICK). `prepare` (RunState -> RunState) adjusts the run before the first
@@ -420,6 +436,29 @@ func place_player(id: String, body: Move.Body) -> void:
 	state.players = players
 
 ## Ends the session: every client is told by its transport.
+## Live settings (LS2): the values in force from now on ({id: number}, checked by the desk; {} for none), the
+## desk's revision, and the change's note ({} for none: a run starting, or nothing to announce). Put on the
+## state between ticks, never inside one; the note becomes the next tick's "tuned" event {rev, by, id, was, v,
+## when, line}, delivered once to every client like any event. For one second after a change every snapshot
+## carries the whole list (the world's tune block), and one a second after that.
+func set_tuning(values: Dictionary, rev: int, note: Dictionary = {}) -> void:
+	if values.is_empty():
+		if state.tuning != null:
+			state = state.copy()
+			state.tuning = null
+	else:
+		state = Run.with_tuning(state, values)
+	tune_rev = rev
+	var ids: Array = values.keys()
+	ids.sort()
+	_tune_list = []
+	for id: Variant in ids:
+		_tune_list.append([String(id), float(values[id])])
+	_tune_full_until = state.t + 1.0
+	if not note.is_empty():
+		_tune_events.append({"type": "tuned", "rev": rev, "by": str(note.get("by", "")), "id": str(note.get("id", "")),
+			"was": float(note.get("was", 0.0)), "v": float(note.get("v", 0.0)), "when": str(note.get("when", "")), "line": str(note.get("line", ""))})
+
 func close() -> void:
 	ended = true
 	_transport.close()
@@ -747,6 +786,10 @@ func _step(now: float) -> void:
 	var st := r.state
 	var events: Array[Dictionary] = []
 	events.append_array(extra)
+	for te in _tune_events:
+		te["t"] = t_next
+		events.append(te)
+	_tune_events = []
 	events.append_array(r.events)
 
 	# 6. After: placements, the gone, joiners.
@@ -805,6 +848,8 @@ func _step(now: float) -> void:
 		_log_event(e, tick)
 	_record()
 	_send_snapshots(ht)
+	if on_tick.is_valid():
+		on_tick.call(r.events)
 
 func _record() -> void:
 	var s := state
@@ -1129,6 +1174,10 @@ func world(full: bool = false) -> Dictionary:
 	# Solid furniture (FD7): the clients move their own bodies round it (Protocol "solid").
 	if s.furniture:
 		out["solid"] = 1
+	# Live settings (LS2): the revision in force, with the whole list in the welcome, for a second after a change
+	# and once a second after that (Protocol "tune"). Absent while never tuned.
+	if tune_rev > 0:
+		out["tune"] = [tune_rev, _tune_list.duplicate()] if full or _tune_list_due else [tune_rev]
 	return out
 
 ## Two-watcher Stillness (T19a; Protocol.enc_watch): the count as the host has it this tick, {need,
@@ -1151,8 +1200,12 @@ static func downs_block(s: Run.RunState) -> Dictionary:
 		var d: Run.Downed = s.down.get(p.id)
 		if d == null:
 			continue
-		down.append({"id": d.id, "at": d.at, "until": d.until, "by": String(d.by), "healer": d.healer,
-			"healFrom": d.heal_from if d.healer != "" else null})
+		var row := {"id": d.id, "at": d.at, "until": d.until, "by": String(d.by), "healer": d.healer,
+			"healFrom": d.heal_from if d.healer != "" else null}
+		# Live settings: a hold the host timed differently from Run.HEAL_TIME says how long it takes (Protocol "healFor").
+		if d.healer != "" and d.heal_len != Run.HEAL_TIME:
+			row["healFor"] = d.heal_len
+		down.append(row)
 	return {"down": down, "spots": s.spots.duplicate()}
 
 ## The Annex's block (Protocol.enc_annex): the crew's pad, every mark down, and this floor's notes (how
@@ -1239,6 +1292,10 @@ static func day_block(s: Run.RunState) -> Dictionary:
 	return out
 
 func _send_snapshots(ht: float) -> void:
+	_tune_list_due = false
+	if tune_rev > 0 and (state.t <= _tune_full_until + 1e-9 or state.t - _tune_last_full >= 1.0 - 1e-9):
+		_tune_list_due = true
+		_tune_last_full = state.t
 	var w := world()
 	var text := Protocol.world_json(w)
 	var in_run := state.players.size()

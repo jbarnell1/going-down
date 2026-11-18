@@ -580,11 +580,12 @@ static func call_plan(seed: String, index: int, prev_floors: int, depth: int = 1
 	if floors == prev_floors:
 		floors = fewest if floors == most else floors + 1
 	p.floors = floors
-	p.false_stop = rng.chance(FALSE_STOP_CHANCE)
+	# Live settings: the host's chance (lift.false_stop, in 100); the same one draw either way.
+	p.false_stop = rng.chance(FALSE_STOP_CHANCE if tuning == null or not tuning.has(&"lift.false_stop") else Settings.f(tuning, &"lift.false_stop", 25.0) / 100.0)
 	p.extra = FALSE_STOP_EXTRA_MIN + rng.next() * (FALSE_STOP_EXTRA_MAX - FALSE_STOP_EXTRA_MIN) if p.false_stop else 0.0
 	p.floor_time = Settings.f(tuning, &"lift.floor_time", FLOOR_TIME)
 	p.wait = p.delay + floors * p.floor_time + p.extra
-	p.darks = dark_schedule(seed, index, p.wait, depth, long_dark)
+	p.darks = dark_schedule(seed, index, p.wait, depth, long_dark, tuning)
 	return p
 
 static func _need(gaps: Array[float], n: int) -> float:
@@ -600,15 +601,22 @@ static func _need(gaps: Array[float], n: int) -> float:
 ## BLINK_FIRST_AFTER (a short wait gets fewer, never no blackout); spare time stretches the gaps
 ## and delays the first blink.
 ## Every wait draws the same seven numbers, whatever fits. `long_dark` (see the header): the blackout is
-## LONG_BLACKOUT_* seconds instead, but never longer than leaves room for the ladder's first blink.
-static func dark_schedule(seed: String, index: int, wait: float, depth: int, long_dark: bool = false) -> Array[DarkStretch]:
+## LONG_BLACKOUT_* seconds instead, but never longer than leaves room for the ladder's first blink. `tuning` (live
+## settings): the host's blackout bounds (dark.min, dark.max; dark.first_min, dark.first_max on the first floor) and its
+## warning (dark.warning), stamped into the plan at the call; the same draws either way.
+static func dark_schedule(seed: String, index: int, wait: float, depth: int, long_dark: bool = false, tuning: Settings.Values = null) -> Array[DarkStretch]:
 	var rng := Rng.make_rng(seed).fork("call:%d:dark" % index)
 	var lo := BLACKOUT_FIRST_MIN if depth <= 1 else BLACKOUT_MIN
 	var hi := BLACKOUT_FIRST_MAX if depth <= 1 else BLACKOUT_MAX
 	if long_dark:
 		lo = LONG_BLACKOUT_FIRST_MIN if depth <= 1 else LONG_BLACKOUT_MIN
 		hi = LONG_BLACKOUT_FIRST_MAX if depth <= 1 else LONG_BLACKOUT_MAX
-	var black := minf(lo + rng.next() * (hi - lo), maxf(1.0, wait - BLACKOUT_WARNING))
+	var warn := BLACKOUT_WARNING
+	if tuning != null:
+		lo = Settings.f(tuning, &"dark.first_min" if depth <= 1 else &"dark.min", lo)
+		hi = Settings.f(tuning, &"dark.first_max" if depth <= 1 else &"dark.max", hi)
+		warn = Settings.f(tuning, &"dark.warning", BLACKOUT_WARNING)
+	var black := minf(lo + rng.next() * (hi - lo), maxf(1.0, wait - warn))
 	var gaps: Array[float] = []
 	for g: Array in BLINK_GAPS:
 		var a: float = g[0]
@@ -619,9 +627,9 @@ static func dark_schedule(seed: String, index: int, wait: float, depth: int, lon
 	if long_dark:
 		# The long dark never eats the whole wait: the first blink, its warning and its gap still fit after
 		# BLINK_FIRST_AFTER (the shortest wait, 25 s, keeps a blackout of about 14 s and one blink).
-		black = minf(black, maxf(1.0, wait - BLACKOUT_WARNING - BLINK_FIRST_AFTER - _need(gaps, 1)))
+		black = minf(black, maxf(1.0, wait - warn - BLINK_FIRST_AFTER - _need(gaps, 1)))
 	var black_at := wait - black
-	var room := black_at - BLACKOUT_WARNING - BLINK_FIRST_AFTER
+	var room := black_at - warn - BLINK_FIRST_AFTER
 	var n := BLINK_LADDER.size()
 	while n > 0 and _need(gaps, n) > room + 1e-9:
 		n -= 1
@@ -631,8 +639,8 @@ static func dark_schedule(seed: String, index: int, wait: float, depth: int, lon
 	var gap: Array[float] = []
 	for k in n:
 		gap.append(minf(BLINK_GAP_STRETCH_MAX, gaps[k] + stretch))
-	var out: Array[DarkStretch] = [DarkStretch.make(black_at, black, BLACKOUT_WARNING, true)]
-	var cursor := black_at - BLACKOUT_WARNING
+	var out: Array[DarkStretch] = [DarkStretch.make(black_at, black, warn, true)]
+	var cursor := black_at - warn
 	# Backwards from the blackout: the longest blink nearest it.
 	for k in range(n - 1, -1, -1):
 		var length := BLINK_LADDER[k]
@@ -803,6 +811,8 @@ class Downed:
 	## Who is holding F beside them ("" for nobody), and the host time that hold began (-1 for none).
 	var healer: String = ""
 	var heal_from: float = -1.0
+	## Seconds that hold takes, stamped as it begins (HEAL_TIME, or the host's heal.time then: live settings).
+	var heal_len: float = HEAL_TIME
 
 	func copy() -> Downed:
 		var d := Downed.new()
@@ -812,6 +822,7 @@ class Downed:
 		d.by = by
 		d.healer = healer
 		d.heal_from = heal_from
+		d.heal_len = heal_len
 		return d
 
 class RunState:
@@ -1294,13 +1305,29 @@ static func _tuned_hunt(s: RunState, dark: bool, fallback: float) -> float:
 		return Settings.f(s.tuning, &"temp.dark_speed" if dark else &"temp.speed", fallback)
 	return Settings.f(s.tuning, &"orderly.dark_speed" if dark else &"orderly.speed", fallback)
 
+## The Lonely Temp's chase speed (live settings: temp.speed lit, temp.dark_speed in the blackout, temp.alone_speed
+## with a crew of one), or -1 (Lonely's own constants, sim/lonely.gd CHASE_SPEED and SOLO_CHASE_SPEED) when the
+## host has not set it: an untuned run passes -1 and Lonely chases exactly as it always did.
+static func _tuned_chase(s: RunState, solo: bool) -> float:
+	if s.tuning == null:
+		return -1.0
+	if solo:
+		return Settings.f(s.tuning, &"temp.alone_speed", -1.0)
+	return Settings.f(s.tuning, &"temp.dark_speed" if blacked_out(s) else &"temp.speed", -1.0)
+
 ## Seconds of sprinting a player's tank holds in this run (Stamina.Stamina.tank): more when paced.
 static func sprint_seconds(s: RunState) -> float:
-	return Stamina.PACED_SPRINT_SECONDS if s != null and s.paced else Stamina.SPRINT_SECONDS
+	var today := Stamina.PACED_SPRINT_SECONDS if s != null and s.paced else Stamina.SPRINT_SECONDS
+	# Live settings: the host's tank (stamina.tank). The host resizes every tank to it, keeping how full it is.
+	return Settings.f(s.tuning, &"stamina.tank", today) if s != null else today
 
 ## The boarding window of this run (seconds from the doors opening to the bell).
 static func board_time(s: RunState) -> float:
-	return BOARD_TIME_WAITS if s.car_waits else BOARD_TIME
+	return Settings.f(s.tuning, &"lift.board", BOARD_TIME_WAITS if s.car_waits else BOARD_TIME)
+
+## The most a crew may hold the doors at one stop (live settings: lift.hold), stamped as the doors open.
+static func hold_limit(s: RunState) -> float:
+	return Settings.f(s.tuning, &"lift.hold", HOLD_LIMIT)
 
 ## The car waits: everyone on their feet who is not in `aboard` as the car leaves is left out for the day.
 static func _leave_out(s: RunState, players: Array[RunPlayer], aboard: Dictionary) -> void:
@@ -1750,7 +1777,7 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 		if e["type"] == "countEnd" and bool(e["last"]) and s.phase == &"coming":
 			s.phase = &"boarding"
 			s.bell_left = board_time(s)
-			s.hold_left = HOLD_LIMIT
+			s.hold_left = hold_limit(s)
 			s.held = false
 			s.call = null
 			s.blink = null
@@ -2216,9 +2243,10 @@ static func _step_downs(s: RunState, players: Array[RunPlayer], input_of: Dictio
 				events.append({"type": "healStop", "t": t, "playerId": d.healer, "target": p.id})
 			nd.healer = healer
 			nd.heal_from = t - dt if healer != "" else -1.0
+			nd.heal_len = Settings.f(s.tuning, &"heal.time", HEAL_TIME)
 			if healer != "":
-				events.append({"type": "healStart", "t": t, "playerId": healer, "target": p.id, "from": nd.heal_from, "done": nd.heal_from + HEAL_TIME})
-		if healer != "" and t - nd.heal_from >= HEAL_TIME - EPS:
+				events.append({"type": "healStart", "t": t, "playerId": healer, "target": p.id, "from": nd.heal_from, "done": nd.heal_from + nd.heal_len})
+		if healer != "" and t - nd.heal_from >= nd.heal_len - EPS:
 			# Healed: back on their feet where they lie.
 			down.erase(p.id)
 			var np := p.copy()
@@ -2227,7 +2255,7 @@ static func _step_downs(s: RunState, players: Array[RunPlayer], input_of: Dictio
 			players[k] = np
 			events.append({"type": "healed", "t": t, "playerId": p.id, "by": healer, "at": np.body})
 			if s.orderly.mode == &"bending" and str(s.orderly.bend_target) == p.id:
-				s.orderly = Entity.stand_off(s.orderly, HEAL_QUIET)
+				s.orderly = Entity.stand_off(s.orderly, Settings.f(s.tuning, &"heal.quiet", HEAL_QUIET))
 			_seek_heal(s, np)
 			continue
 		if t >= nd.until - EPS:
@@ -2272,7 +2300,7 @@ static func _seek_heal(s: RunState, p: RunPlayer) -> void:
 		nq.phase = &"out"
 		nq.hide = -1
 		nq.peeking = false
-		nq.health = HEAL_HEALTH
+		nq.health = Settings.f(s.tuning, &"heal.health", HEAL_HEALTH)
 		nq.body = p.body
 		nq.last = p.body
 		list.append(nq)
@@ -2463,7 +2491,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 					s.phase = &"boarding"
 					s.lure = false
 					s.bell_left = board_time(s)
-					s.hold_left = HOLD_LIMIT
+					s.hold_left = hold_limit(s)
 					s.held = false
 					events.append({"type": "carArrived", "t": t, "wait": t - c.at})
 					events.append({"type": "doorsOpened", "t": t, "depth": s.depth, "reason": "boarding"})
@@ -2625,7 +2653,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			np.side = null
 			players[i] = np
 		s.phase = &"riding"
-		s.timer = RIDE_TIME
+		s.timer = Settings.f(s.tuning, &"lift.ride", RIDE_TIME)
 		s.blink = null
 		s.lure = false
 		events.append({"type": "carLeft", "t": t, "reason": "ride"})
@@ -3242,7 +3270,7 @@ static func _step_lonely(s: RunState, players: Array[RunPlayer], input_of: Dicti
 		var i := _inp(p, input_of)
 		views.append(_view_of(i, _is_active(p, input_of) and not p.aboard, blind or i.blind))
 	var before := s.orderly
-	var er := Lonely.step(s.plan, before, lonely_people(s, players, input_of), views, dt, players.size() <= 1, s.relocation)
+	var er := Lonely.step(s.plan, before, lonely_people(s, players, input_of), views, dt, players.size() <= 1, s.relocation, _tuned_chase(s, players.size() <= 1))
 	var next := er.state
 	# Belt and braces: it can never end a tick in (or overlapping) the car.
 	if rect_distance(car.rect, next.body.x, next.body.z) < Entity.ORDERLY_RADIUS - 1e-3 and next.body.level == car.level:

@@ -33,12 +33,19 @@
 #    grab at 1 m) is the same again: `playroom_tuned` true, false, or null to follow the game's deck.
 #  - Solid furniture (sim/run.gd furniture, sim/furniture.gd, FD7) is the same again: `furniture` true, false, or
 #    null to follow the game's deck.
+#  - Live settings (docs/floors/live-settings.md LS3): the room owns a desk exactly as the server's room does
+#    (net/tuning_desk.gd), and the player is the host. The game gives it the file user://settings.json
+#    (open_settings); under automation (auto=1) it has none, so no scripted playthrough reads a saved change.
 extends "res://net/room_client.gd"
 
 const Host = preload("res://net/host.gd")
 const HostRules = preload("res://net/host_rules.gd")
 const Move = preload("res://sim/move.gd")
 const Places = preload("res://sim/places.gd")
+const TuningDesk = preload("res://net/tuning_desk.gd")
+
+## The file playing alone keeps the host's changes in (client/main.gd passes it unless automated).
+const SETTINGS_FILE := "user://settings.json"
 
 ## The local player's id in every run (events say "playerId": "me").
 const ME := "me"
@@ -70,6 +77,8 @@ var playroom_tuned: Variant = null
 var furniture: Variant = null
 ## Cost of the host's ticks on this machine (microseconds, summed), for the stats hook.
 var host_us := 0
+## Live settings: this room's desk (no file until open_settings gives it one).
+var desk: TuningDesk = TuningDesk.new()
 var _vt := 0.0
 var _last_real := -1.0
 var _host_pipe: Transport.Pipe = null
@@ -85,6 +94,15 @@ func open_local(seed_: String, player_name: String, entity: bool, face: String =
 	host_id = ME
 	people = [[ME, player_name, false, false, false, face]]
 	status = "lobby"
+	_take_tune(desk.message(ME))
+
+## Live settings: the desk keeps its changes in `file` ("" for none), read now. The join line says what is changed.
+func open_settings(file: String) -> void:
+	desk = TuningDesk.new(file, func(text: String) -> void: print(text))
+	_take_tune(desk.message(ME, {}, desk.join_line()))
+	if host != null:
+		desk.run_started()
+		host.set_tuning(desk.in_force(), desk.rev)
 
 ## Ready-up alone (findables-and-day.md section 2): the same card, and READY starts the run at once.
 ## Watching the tape is not ready; un-readying with a run on changes nothing.
@@ -171,6 +189,10 @@ func start_run() -> void:
 			host.place_player(ME, p.body)
 	client = Client.new(_client_pipe, "host", _name, _vt, Session.INTERP_DELAY, Session.INPUT_INTERVAL, _face)
 	client.draw_in_dark = o
+	# Live settings: everything asked for is in force from the first tick.
+	desk.run_started()
+	host.on_tick = Callable(self, "_tune_tick")
+	host.set_tuning(desk.in_force(), desk.rev)
 	run_on = true
 	status = "running"
 	people = [[ME, _name, my_ready, false, true, _face]]
@@ -200,6 +222,7 @@ func _close_run() -> void:
 	host = null
 	client = null
 	run_on = false
+	desk.run_ended()
 
 func poll(now: float) -> void:
 	if _last_real < 0.0:
@@ -207,6 +230,8 @@ func poll(now: float) -> void:
 	_vt += clampf(now - _last_real, 0.0, MAX_STEP) * maxf(0.0, time_scale)
 	_last_real = now
 	_now = _vt
+	for note in desk.poll(now):
+		_tune_apply(note)
 	if host != null:
 		var t0 := Time.get_ticks_usec()
 		host.update(_vt)
@@ -228,3 +253,36 @@ func leave() -> void:
 func place(body: Move.Body) -> void:
 	if host != null:
 		host.place_player(ME, body)
+
+# ---------------------------------------------------------------------------------------------
+# Live settings: the player is the host, and the desk is this room's.
+
+func is_host() -> bool:
+	return true
+
+func tune_set(id: StringName, value: float) -> bool:
+	return _tune_result(desk.ask(id, value, _name, ME, _vt))
+
+func tune_reset(id: StringName) -> bool:
+	return _tune_result(desk.reset(id, _name, ME, _vt))
+
+func tune_reset_all() -> bool:
+	return _tune_result(desk.reset_all(_name, ME, _vt))
+
+func _tune_result(res: Array) -> bool:
+	if res[0] != &"":
+		tune_refusals.append({"id": "", "why": String(res[0])})
+		return true
+	if not (res[1] as Dictionary).is_empty():
+		_tune_apply(res[1])
+	return true
+
+func _tune_apply(note: Dictionary) -> void:
+	_take_tune(desk.message(ME, note))
+	if host != null:
+		host.set_tuning(desk.in_force(), desk.rev, note)
+
+func _tune_tick(events: Array) -> void:
+	if desk.on_events(events) and host != null:
+		host.set_tuning(desk.in_force(), desk.rev)
+		_take_tune(desk.message(ME))

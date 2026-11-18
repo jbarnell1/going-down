@@ -2,7 +2,7 @@
 # downs block of the newest snapshot (net/client.gd downs() and spots(): who is down, the host time they
 # went down and the host time they are out unless healed, who holds F beside them since when, and this
 # floor's red spots), counted against the host clock as this screen estimates it (play_link.gd "hostNow").
-# Nothing is predicted: the timer is `until - hostNow`, the heal's bar `(hostNow - healFrom) / HEAL_TIME`.
+# Nothing is predicted: the timer is `until - hostNow`, the heal's bar `(hostNow - healFrom) / HEAL_TIME` (the host's own `healFor` when it sends one).
 #  - Down (your own status "down"): the timer big and red at the top, "DOWN  7", with a bar that drains
 #    over the run's own down time (until - at), and two lines: what can happen ("A CREWMATE CAN HOLD F
 #    BESIDE YOU", or with nobody left on their feet "NOBODY IS LEFT TO HELP YOU UP") and what you can do
@@ -93,7 +93,7 @@ func update(s: Dictionary, my: String, names: Dictionary, holding: bool) -> void
 		var healer := str(dd["healer"])
 		if healer != "" and dd["healFrom"] != null:
 			line = "%s IS HELPING YOU UP" % _name(names, healer)
-			heal = clampf((hn - float(dd["healFrom"])) / Run.HEAL_TIME, 0.0, 1.0)
+			heal = clampf((hn - float(dd["healFrom"])) / float(dd.get("healFor", Run.HEAL_TIME)), 0.0, 1.0)
 		elif _anyone_standing(s):
 			line = "A CREWMATE CAN HOLD F BESIDE YOU"
 		else:
@@ -126,7 +126,7 @@ func update(s: Dictionary, my: String, names: Dictionary, holding: bool) -> void
 	prompt = "HOLD F TO HELP"
 	fill = 0.0
 	if holding and healer == my and rd["healFrom"] != null:
-		fill = clampf((hn - float(rd["healFrom"])) / Run.HEAL_TIME, 0.0, 1.0)
+		fill = clampf((hn - float(rd["healFrom"])) / float(rd.get("healFor", Run.HEAL_TIME)), 0.0, 1.0)
 
 static func _row(downs: Array, id: String) -> Variant:
 	for d: Dictionary in downs:

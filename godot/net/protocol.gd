@@ -29,6 +29,7 @@ const Run = preload("res://sim/run.gd")
 const TapeLib = preload("res://sim/tape.gd")
 const Stamina = preload("res://sim/stamina.gd")
 const Face = preload("res://face/face_codec.gd")
+const Settings = preload("res://sim/settings.gd")
 
 const PROTOCOL_VERSION := 1
 
@@ -162,7 +163,8 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    day, seek, quota and annex blocks or null: [[[player id, host time down, host time out unless healed,
 ##    DOWN_BY index, healer id or "", host time the heal hold began or null], ...], [[player id, x, z, level,
 ##    y, host time], ...] (this floor's red spots, where each tape fell)]. Times are host times, never
-##    durations: a heal is done at healFrom + Run.HEAL_TIME, the timer runs out at the second time;
+##    durations: a heal is done at healFrom + Run.HEAL_TIME (or + a 7th element, the hold's own seconds, when the
+##    host's live settings timed it otherwise: "healFor"), the timer runs out at the second time;
 ##  - events "downed" {playerId, until, by, at}, "healStart" {playerId (the healer), target, from, done},
 ##    "healStop" {playerId, target}, "healed" {playerId, by, at} and "out" {playerId, at, spot (null when the
 ##    car left without them)}. The resident's own "caught" still comes first, as before.
@@ -182,6 +184,12 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ## with it, so a run without it sends exactly what it did before:
 ##  - the world gains a 24th element, 1 ("solid" decoded: 1), with the 16th to 23rd null when absent: each client
 ##    then moves its own body round the floor's solid pieces (net/session.gd move_local).
+## Live settings (docs/floors/live-settings.md LS2; net/tuning_desk.gd). New in the Godot game, and only ever sent once
+## the host has changed a setting (the revision is above 0), so a run without a change sends exactly what it did:
+##  - the world gains a 25th element, the tune block ("tune" decoded): [rev] or, in the welcome, for a second after
+##    a change and once a second after that, [rev, [[id, value], ...]] (every value in force that is not the game's),
+##    with the 16th to 24th null when absent. A client keeps the newest list as its tuning (net/client.gd);
+##  - the event "tuned" {rev, by, id, was, v, when, line}: the one-line notice of a change going into the run.
 
 ## Telemetry (client/telemetry.gd -> server/night_log.gd). New in the Godot game: [1, "T", kind, body] for kind
 ## "hb" (a heartbeat: body is a small JSON object as text) or "log" (one error or warning line), and
@@ -362,7 +370,40 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < 23:
 			out.append(null)
 		out.append(1)
+	if w.get("tune") != null:
+		while out.size() < 24:
+			out.append(null)
+		out.append(enc_tune(w["tune"]))
 	return out
+
+## The tune block (see the header) from its readable form [rev] or [rev, [[id, value], ...]].
+static func enc_tune(k: Array) -> Array:
+	if k.size() < 2:
+		return [k[0]]
+	var list: Array = []
+	for e: Array in k[1]:
+		list.append([String(e[0]), e[1]])
+	return [k[0], list]
+
+## The tune block: [rev] or [rev, [[id, value], ...]]. An entry this build's registry does not know, or whose
+## value Settings.check refuses, is left out (never a reason to drop the snapshot).
+static func dec_tune(c: _V, w: Variant) -> Array:
+	var a := _a(c, w, 1, 2)
+	if c.bad:
+		return []
+	var rev := _i(c, a[0], 1, MAX_COUNT)
+	if a.size() == 1:
+		return [rev]
+	var list: Array = []
+	for ew: Variant in _a(c, a[1], 0, 256):
+		if not ew is Array or (ew as Array).size() != 2 or not (ew as Array)[0] is String or not _is_num((ew as Array)[1]):
+			continue
+		var id := StringName((ew as Array)[0])
+		var why := Settings.check(id, (ew as Array)[1])
+		if why == &"id" or why == &"range":
+			continue
+		list.append([String(id), float((ew as Array)[1])])
+	return [rev, list]
 
 ## The watch block (see the header) from its readable form {need, watchers: [ids]}.
 static func enc_watch(k: Dictionary) -> Array:
@@ -385,7 +426,10 @@ static func dec_watch(c: _V, w: Variant) -> Dictionary:
 static func enc_downs(k: Dictionary) -> Array:
 	var down: Array = []
 	for d: Dictionary in k["down"]:
-		down.append([d["id"], q3(d["at"]), q3(d["until"]), DOWN_BY.find(String(d["by"])), d["healer"], null if d["healFrom"] == null else q3(d["healFrom"])])
+		var row: Array = [d["id"], q3(d["at"]), q3(d["until"]), DOWN_BY.find(String(d["by"])), d["healer"], null if d["healFrom"] == null else q3(d["healFrom"])]
+		if d.get("healFor") != null:
+			row.append(q3(d["healFor"]))
+		down.append(row)
 	var spots: Array = []
 	for p: Dictionary in k["spots"]:
 		spots.append([p["playerId"], q2(p["x"]), q2(p["z"]), p["level"], q2(p["y"]), q3(p["t"])])
@@ -397,11 +441,14 @@ static func dec_downs(c: _V, w: Variant) -> Dictionary:
 		return {}
 	var down: Array = []
 	for dw: Variant in _a(c, a[0], 0, 64):
-		var d := _a(c, dw, 6, 6)
+		var d := _a(c, dw, 6, 7)
 		if c.bad:
 			return {}
-		down.append({"id": _s(c, d[0]), "at": _f(c, d[1]), "until": _f(c, d[2]), "by": _code(c, DOWN_BY, d[3]), "healer": _s(c, d[4]),
-			"healFrom": _opt_num(c, d[5])})
+		var row := {"id": _s(c, d[0]), "at": _f(c, d[1]), "until": _f(c, d[2]), "by": _code(c, DOWN_BY, d[3]), "healer": _s(c, d[4]),
+			"healFrom": _opt_num(c, d[5])}
+		if d.size() > 6:
+			row["healFor"] = _f(c, d[6], 0.0, 60.0)
+		down.append(row)
 	var spots: Array = []
 	for pw: Variant in _a(c, a[1], 0, 256):
 		var p := _a(c, pw, 6, 6)
@@ -693,7 +740,7 @@ static func _opt_num(c: _V, v: Variant) -> Variant:
 	return null if v == null else _f(c, v)
 
 static func dec_world(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 15, 24)
+	var a := _a(c, w, 15, 25)
 	if c.bad:
 		return {}
 	var blink: Variant = null
@@ -767,8 +814,10 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 		out["reloc"] = _i(c, a[21], 0, MAX_COUNT)
 	if a.size() > 22 and (a[22] != null or a.size() == 23):
 		out["lonely"] = _s(c, a[22], MAX_NAME * 2)
-	if a.size() > 23:
+	if a.size() > 23 and (a[23] != null or a.size() == 24):
 		out["solid"] = _i(c, a[23], 1, 1)
+	if a.size() > 24:
+		out["tune"] = dec_tune(c, a[24])
 	return out
 
 static func _dec_report(c: _V, w: Variant) -> Dictionary:
