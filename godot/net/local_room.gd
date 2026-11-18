@@ -176,7 +176,7 @@ func start_run() -> void:
 	var o := owner_0833_on()
 	# The day quota's lock goes with the floor quota (net/host_rules.gd turns it on only with days too).
 	var q := quota_on()
-	rules = HostRules.new(entity_on, 1, Session.deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on())
+	rules = HostRules.new(entity_on, HostRules.start_depth_by_arg(), Session.deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on())
 	# Method callables hold no reference to this object, so the pipes do not keep it alive.
 	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
 	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))

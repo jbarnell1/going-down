@@ -242,6 +242,25 @@ func _capped(s: Run.RunState) -> Run.RunState:
 	c.floor_needed = _quota_cap
 	return c
 
+## Test-only: `floor=N` (a whole number above 1, as a desktop or server argument after `--` or the web page's
+## ?floor=N), honoured only together with `auto=1`: runs start on floor N of the deck, so a check or a look at a
+## deep place (the Arboretum is floor 5) need not ride down to it. 1 when not asked.
+static func start_depth_by_arg() -> int:
+	var depth := 1
+	var auto := false
+	for raw in OS.get_cmdline_user_args():
+		var a := raw.trim_prefix("--")
+		if a.begins_with("floor=") and a.substr(6).is_valid_int():
+			depth = int(a.substr(6))
+		auto = auto or a == "auto=1"
+	if OS.has_feature("web"):
+		var q := str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('floor') ?? ''", true))
+		var au := str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('auto') ?? ''", true))
+		if q.is_valid_int():
+			depth = int(q)
+		auto = auto or au == "1"
+	return clampi(depth, 1, 60) if auto else 1
+
 ## Test-only: whether this server was started with `watchers=0` (an argument after `--`): Stillness is then
 ## held by one look at any crew size, as before T19a (tools/net_local.mjs; server/room.gd).
 static func watchers_off_by_arg() -> bool:

@@ -64,6 +64,9 @@ var emergency_nodes: Array[Node3D] = []
 ## The ambient colour as lit, and in the dark with the emergency lighting on (see ambient_color).
 const AMBIENT_LIT := Color(0.55, 0.6, 0.6)
 var ambient_dark := Color(0.5, 0.08, 0.03)
+## The ambient light's colour with the lights on: the Clinic's unless a place's dressing sets its own (the
+## Arboretum's deep blue dusk).
+var ambient_lit := AMBIENT_LIT
 var _rng := RandomNumberGenerator.new()
 var _t := 0.0
 var _level := 1.0
@@ -137,6 +140,9 @@ func build(p: Dictionary, seed_text: String) -> void:
 		return
 	if str(p.get("place", "clinic")) == "playroom":  # the Playroom's look (client/playroom_view.gd)
 		preload("res://client/playroom_view.gd").dress(self)
+		return
+	if str(p.get("place", "clinic")) == "arboretum":  # the Arboretum's look (client/arboretum_view.gd)
+		preload("res://client/arboretum_view.gd").dress(self)
 		return
 	_make_materials()
 	_build_floors_and_ceilings()
@@ -625,7 +631,7 @@ func set_light_level(k: float) -> void:
 ## The ambient light's colour, lit (emergency 0) to the dark with the emergency lighting on (1). The
 ## Clinic's dark is red; a place's dressing may set its own (the Annex: green, never red).
 func ambient_color(emergency: float) -> Color:
-	return AMBIENT_LIT.lerp(ambient_dark, emergency)
+	return ambient_lit.lerp(ambient_dark, emergency)
 
 ## The emergency lighting, 0 (off) to 1 (fully on).
 func set_emergency(k: float) -> void:

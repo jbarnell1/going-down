@@ -259,6 +259,8 @@ var _seed := ""
 var _depth := 0
 var _clinic := false
 var _place := ""
+## Another player's footstep, handed to the place's view when it plays its own: Callable(pos, gain_db) -> bool.
+var step_hook := Callable()
 var _plan := {}
 var _copier_at: Variant = null    # the Annex: the seeded copy room's photocopier (or null)
 var _hum_by_place := {}           # place -> the bed in the hum's place ("" = the Clinic's hum)
@@ -362,6 +364,8 @@ func setup(world_parent: Node3D) -> void:
 	for k: Array in [["annex", "annex/office"], ["playroom", "playroom/room"], ["prison", "prison/night"]]:
 		var st := _rec(str(k[1]), true)
 		_hum_by_place[k[0]] = st if st != null else hum.stream
+	# The Arboretum has no tubes to hum: silence in the hum's place (its wind and crickets are its view's).
+	_hum_by_place["arboretum"] = _wav(_buf(0.5), true)
 	crawl_loop = _player2d(_rec("player/crawl", true), "Effects")
 	drag_loop = _player2d(_rec("annex/drag", true), "Entity")
 	vent = _player2d(_rec("clinic/vent", true), "Ambience")
@@ -616,6 +620,9 @@ func update(delta: float, sq: Dictionary, pose: Variant, tick_hz: float, loudnes
 func step_at(pos: Vector3, gain_db: float) -> void:
 	if _steps.is_empty() or not _ok("steps"):
 		return
+	# A place whose ground has a voice plays its own (the Arboretum: client/arboretum_view.gd step_at).
+	if step_hook.is_valid() and step_hook.call(pos, gain_db):
+		return
 	var sp := _steps[_step_next]
 	_step_next = (_step_next + 1) % _steps.size()
 	if recorded.has("step"):
@@ -726,7 +733,7 @@ func world(delta: float, s: Dictionary, emergency: float) -> void:
 	var blackout := bool(s.get("blackout", false))
 	# The vent is the Clinic's (and the lift's): the office, play centre and prison night beds carry their
 	# own air (the vent comes back where a bed's file is missing).
-	_loop(vent, "vent", not (_place in ["annex", "playroom", "prison"]) or _hum_by_place.get(_place) == _hum_by_place.get(""), BASE_DB - 4.0)
+	_loop(vent, "vent", not (_place in ["annex", "playroom", "prison", "arboretum"]) or _hum_by_place.get(_place) == _hum_by_place.get(""), BASE_DB - 4.0)
 	_events(s)
 	_loop(drone, "drone", blackout and emergency > 0.0, BASE_DB + linear_to_db(clampf(emergency, 0.05, 1.0)))
 	_loop(monitor, "room", _clinic and _monitor_on and not blackout, BASE_DB)
@@ -912,7 +919,8 @@ func _orderly(delta: float, o: Dictionary) -> void:
 ## Someone was taken. Mine: the roar in my face, then the chewing. Someone else's: heard from where it is.
 ## On the Playroom, found and down are client/hide_view.gd's (the found-you sting, the fall): nothing here.
 func caught(mine: bool, pos: Variant) -> void:
-	if _place == "playroom":
+	# (The Arboretum's snatch is the shears closing, from the Groundskeeper's own view: no roar.)
+	if _place == "playroom" or _place == "arboretum":
 		return
 	# The roar is the caught placeholder for every resident; after it, the Orderly chews and the Temp's
 	# stapler goes into you.

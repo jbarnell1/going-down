@@ -40,6 +40,7 @@ extends Node
 const PlayLink = preload("res://client/play_link.gd")
 const Session = preload("res://net/session.gd")
 const Places = preload("res://sim/places.gd")
+const GroundskeeperView = preload("res://client/groundskeeper_view.gd")
 const EyeHeight = preload("res://client/eye_height.gd")
 const RoomClient = preload("res://net/room_client.gd")
 const LocalRoom = preload("res://net/local_room.gd")
@@ -96,6 +97,13 @@ var link: PlayLink = null
 var sub: SubViewport
 var env: Environment
 var cam: Camera3D
+## The near light (the owner, 18 Nov: "When it's dark stuff in your immediate vicinity should have a little light
+## like most games do"): in any darkness, on every floor, this player's own screen lights what is within about
+## 3 m of them, dimly and coolly, gone by 4 m. A light at the player's eyes in their own view only: nobody else
+## sees it, no rule reads it, and it adds nothing to any figure (it lights the world near the player).
+var near_light: OmniLight3D
+const NEAR_LIGHT_ENERGY := 1.1
+const NEAR_LIGHT_REACH := 4.0
 var world: Node3D
 var level: Level
 var lift: Lift
@@ -454,6 +462,16 @@ func _build_view() -> void:
 	cam.far = 60.0
 	sub.add_child(cam)
 	cam.current = true
+	near_light = OmniLight3D.new()
+	near_light.name = "NearLight"
+	near_light.light_color = Color(0.62, 0.72, 1.0)
+	near_light.omni_range = NEAR_LIGHT_REACH
+	near_light.omni_attenuation = 1.6
+	near_light.light_energy = 0.0
+	near_light.light_specular = 0.2
+	near_light.shadow_enabled = false
+	near_light.visible = false
+	cam.add_child(near_light)
 	orderly = OrderlyView.new()
 	orderly.name = "Orderly"
 	sub.add_child(orderly)
@@ -755,6 +773,10 @@ func _build_floor(plan: Dictionary) -> void:
 	world.add_child(level)
 	level.build(plan, str(snap.get("seed", seed)))
 	sfx.set_floor(plan, str(snap.get("seed", seed)))
+	# A place's own fog and footsteps (the Arboretum's: client/arboretum_view.gd).
+	env.fog_light_color = level.get_meta(&"fog_color", Color(0.05, 0.06, 0.06))
+	env.fog_density = float(level.get_meta(&"fog_density", 0.035))
+	sfx.step_hook = Callable(level.get_meta(&"arboretum"), "step_at") if level.has_meta(&"arboretum") else Callable()
 	lift = Lift.new()
 	lift.name = "Lift"
 	world.add_child(lift)
@@ -781,10 +803,12 @@ func _use_resident(plan: Dictionary) -> void:
 			kind = "temp"
 		"playroom":  # the Minder (client/minder_view.gd): not Stillness, so it follows the un-held pose
 			kind = "minder"
+		"arboretum":  # the Groundskeeper (client/groundskeeper_view.gd): it hears; looking does nothing
+			kind = "groundskeeper"
 	# The prison has no resident (Places.resident names none): nothing is drawn there.
 	_no_resident = Places.resident(StringName(str(plan.get("place", "")))).name == ""
 	if kind != _resident_kind:
-		var view: Node3D = TempView.new() if kind == "temp" else (MinderView.new() if kind == "minder" else OrderlyView.new())
+		var view: Node3D = TempView.new() if kind == "temp" else (MinderView.new() if kind == "minder" else (GroundskeeperView.new() if kind == "groundskeeper" else OrderlyView.new()))
 		view.name = kind.capitalize()
 		orderly.queue_free()
 		orderly = view
@@ -797,6 +821,8 @@ func _use_resident(plan: Dictionary) -> void:
 	if orderly is MinderView:
 		(orderly as MinderView).set_floor(link.plan, level)
 		(orderly as MinderView).follow(link)
+	if kind == "groundskeeper":
+		orderly.call(&"set_floor", level)
 
 # --- input --------------------------------------------------------------------------------------
 
@@ -1173,6 +1199,10 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	level.update_lights(dt, cam.global_position)
 	env.ambient_light_color = level.ambient_color(emergency)
 	env.ambient_light_energy = lerpf(0.12, 0.05, emergency) * maxf(light, emergency)
+	# The near light: as much as it is dark (a place that is dark with its lamps on says how much: the Arboretum).
+	var near := clampf(maxf(1.0 - light, float(level.get_meta(&"near_light", 0.0))), 0.0, 1.0)
+	near_light.light_energy = NEAR_LIGHT_ENERGY * near * float(level.get_meta(&"near_light_gain", 1.0))
+	near_light.visible = near > 0.02
 	env.background_color = Color(0.02, 0.025, 0.025) * light
 
 	# The lift: doors, indicator, votes, buttons.
@@ -1559,6 +1589,10 @@ func _present(events: Array, now: int) -> void:
 					left_at = now
 			"called":
 				sfx.play("chime")
+			"twigCrack":
+				# The Arboretum: a twig fall cracked under someone (sim/noise.gd); everyone hears where.
+				if level != null and level.has_meta(&"arboretum"):
+					level.get_meta(&"arboretum").call(&"crack", float(e["x"]), float(e["z"]))
 			"indicator":
 				sfx.play("ding", -4.0)
 			"falseStop":
@@ -1627,6 +1661,11 @@ func _present(events: Array, now: int) -> void:
 					raise_latch = false
 					if str(e.get("by", "")) == "catch":
 						_turn_until = now + TURN_MS
+					# The Arboretum (sim/run.gd): how many more times a friend can get you up on this floor.
+					if e.has("more"):
+						var more := int(e["more"])
+						hud.note = "DOWN. %d MORE." % more if more > 0 else "DOWN. NO MORE AFTER THIS."
+						_note_until = now + 7000
 			"healed":
 				if mine:
 					_turn_until = -1
@@ -1681,6 +1720,15 @@ func _show_end(now: int) -> void:
 
 ## Whether the prison's lights are out on this screen: the host's lights-out time has come by the host
 ## clock as estimated here (never by when the news arrived).
+## The Arboretum, for the checks: the ground under this player as the view has it, and what the view drew.
+func _garden_state() -> Variant:
+	if level == null or not level.has_meta(&"arboretum"):
+		return null
+	var view: Object = level.get_meta(&"arboretum")
+	var out: Dictionary = view.call(&"check")
+	out["ground"] = view.call(&"surface_at", cam.global_position.x, cam.global_position.z)
+	return out
+
 func _is_lights_out(s: Dictionary) -> bool:
 	var dv: Variant = s.get("day")
 	if not dv is Dictionary or int(s["depth"]) != 0 or bool(s.get("goingUp", false)):
@@ -1981,6 +2029,11 @@ func _command(c: String) -> String:
 			pending_call = true
 		"pick":
 			pending_pick = true
+		"garden":
+			# The Arboretum as its view drew it (surfaces, landmarks, lamps): for the tools.
+			if level == null or not level.has_meta(&"arboretum"):
+				return JSON.stringify({"error": "not the Arboretum"})
+			return JSON.stringify(level.get_meta(&"arboretum").call(&"describe"))
 		"teleport":
 			if not in_game:
 				return JSON.stringify({"ok": false, "error": "no run"})
@@ -2145,6 +2198,8 @@ func _test_state() -> Dictionary:
 			"level": o["level"], "drawn": orderly.visible, "pose": o.get("pose"), "squeak": o["squeak"], "taken": o["taken"],
 			"look": orderly.call(&"look") if orderly.has_method(&"look") else {}},
 		"others": oth,
+		"nearLight": {"energy": near_light.light_energy, "on": near_light.visible, "reach": near_light.omni_range},
+		"garden": _garden_state(),
 		"emotesSeen": emotes_seen,
 		"net": {"local": link.local, "id": link.my_id(), "bytesIn": link.rc.bytes_in, "bytesOut": link.rc.bytes_out, "now": _now(),
 			"watchedPairs": link.watched_pairs, "watchedMoves": link.watched_moves},

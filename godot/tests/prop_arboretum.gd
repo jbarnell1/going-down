@@ -23,6 +23,10 @@
 #      never twice running; a deck without it never has one.
 #  10. Hiding, read for a blind resident, on a real floor: it comes to a hide it heard and takes whoever is
 #      inside; a hide it did not hear is safe.
+#  11. The place on screen (client/arboretum_view.gd, piece AR3): the view a client builds from the plan's seed
+#      and depth is the host's garden (the same hash), the surface it reports under every cell is the host's, it
+#      has a lamp for every landmark (and the pavilion's bulb), every trunk is drawn, and it asks for the near
+#      light. (The pictures and the two-client playthrough are tools/garden_shots.mjs and tools/play_arboretum.mjs.)
 # Deliberate breaks (PROP_ARBORETUM_BREAK): any_thicket (clumps may touch, in lines of any length: 1 goes red),
 # twig_on_moss (a twig fall on the moss: 3 goes red). PROP_ARBORETUM_RECORD=1 writes the hashes file.
 extends RefCounted
@@ -43,6 +47,8 @@ const Landing = preload("res://sim/landing.gd")
 const Hearing = preload("res://sim/hearing.gd")
 const HostRules = preload("res://net/host_rules.gd")
 const M = preload("res://sim/jsmath.gd")
+const PlanDump = preload("res://client/plan_dump.gd")
+const LevelScript = preload("res://client/level.gd")
 
 const QUICK_SEEDS := 40
 const SEEDS := 800
@@ -836,4 +842,42 @@ func test_hiding_for_a_blind_resident(t: T) -> void:
 			else:
 				t.check(not taken and not leaned and s.players[0].status == &"ok", "%s hide %d: a hide it did not hear: leaned %s, taken %s" % [seed, h.id, leaned, taken])
 	t.check(cases >= 4, "cases tried: %d" % cases)
+	_cache = {}
+
+# ---------------------------------------------------------------------------------------------
+# 11. The place on screen.
+
+func test_the_view_draws_the_hosts_garden(t: T) -> void:
+	_apply_break()
+	for i in (2 if t.quick else 6):
+		var plan := floor_of(i * 3)
+		var g := Arboretum.garden_of(plan)
+		var level: Node3D = LevelScript.new()
+		level.call(&"build", PlanDump.dump(plan, Run.car_geometry(plan)), plan.seed)
+		var view: Object = level.get_meta(&"arboretum") if level.has_meta(&"arboretum") else null
+		if not t.check(view != null, "%s: the level was not dressed as the Arboretum" % key_of(i * 3)):
+			level.free()
+			continue
+		var wrong := 0
+		for c in W * H:
+			var got: String = view.call(&"surface_at", (c % W + 0.5) * 2.0, (c / W + 0.5) * 2.0)
+			if got != Noises.SURFACE_NAMES[g.cells[c]]:
+				wrong += 1
+		t.eq(wrong, 0, "%s: cells whose surface on screen is not the host's" % key_of(i * 3))
+		var chk: Dictionary = view.call(&"check")
+		var drawn: Dictionary = chk["drawn"]
+		var trunks := 0
+		for pc in Furniture.pieces_for(plan):
+			if pc.kind == &"trunk":
+				trunks += 1
+		var thicket := 0
+		for c in g.thicket:
+			thicket += c
+		t.check(chk["hash"] == Arboretum.floor_hash(plan), "%s: the view's garden is not the host's" % key_of(i * 3))
+		t.check(int(chk["lamps"]) == g.landmarks.size() + 1 and int(drawn.get("lamp", 0)) == g.landmarks.size(), "%s: %d lights for %d landmarks" % [key_of(i * 3), int(chk["lamps"]), g.landmarks.size()])
+		t.check(int(drawn.get("trunk", 0)) == trunks and int(drawn.get("thicket", 0)) >= thicket and int(drawn.get("dead_tree", 0)) == g.dead.size(),
+			"%s: drawn %s, the floor has %d trunks, %d thicket cells, %d dead trees" % [key_of(i * 3), str(drawn), trunks, thicket, g.dead.size()])
+		t.check(float(level.get_meta(&"near_light", 0.0)) > 0.5, "%s: the floor does not ask for the near light" % key_of(i * 3))
+		t.check((chk["sounds"] as Array).size() >= 20, "the stand-in sounds are listed")
+		level.free()
 	_cache = {}
