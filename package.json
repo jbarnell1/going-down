@@ -14,7 +14,7 @@
     "e2e": "playwright test",
     "scan": "node hub/scan-secrets.mjs --all",
     "deploy:live": "node scripts/deploy-live.mjs",
-    "test:hub": "node hub/smoke.mjs",
+    "test:hub": "node hub/test-task-agents.mjs && node hub/smoke.mjs",
     "e2e:update": "playwright test tests/e2e/visual.spec.ts --update-snapshots",
     "godot:reference": "node godot/tools/godot.mjs reference",
     "godot:test": "node godot/tools/godot.mjs test",
