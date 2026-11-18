@@ -541,6 +541,7 @@ func test_the_car_is_safe(t: T) -> void:
 # sim/day.gd's and sim/prison.gd's own functions, not run.gd's.
 
 const DayRigLib = preload("res://tests/day_rig.gd")
+const Instr = preload("res://sim/instrument.gd")
 const Day = preload("res://sim/day.gd")
 const Prison = preload("res://sim/prison.gd")
 const Places = preload("res://sim/places.gd")
@@ -855,6 +856,97 @@ func test_no_tape_is_banked_twice_or_from_the_floor(t: T) -> void:
 # and "The lock"). A crew of bots plays whole days with days, the floor quota and the lock on; the readings
 # are recorded by fixture (DayRigLib.record: the floor's and the day's earned rise as a closed reading
 # makes them). The oracles are the design's words and sim/day.gd's quota, not run.gd's lock.
+
+## A crew of three with days, the floor quota and the lock, at the boarding of floor 1 (the floor quota
+## recorded by fixture so the call works), everyone standing on BANK.
+static func _lock_boarding(seed: String) -> DayRigLib.DayRig:
+	var rig := DayRigLib.DayRig.new(seed, _ids(3))
+	rig.st = Run.with_day_lock(Run.with_quota(rig.st))
+	rig.until(func(s: Run.RunState) -> bool: return s.phase == &"away", 60.0)
+	rig.st = DayRigLib.record(rig.st, "p0", float(rig.st.floor_needed) + 1.0, "lk-floor")
+	rig.until(func(s: Run.RunState) -> bool: return s.phase == &"boarding", 120.0)
+	for _k in roundi(1.0 / DayRigLib.DT):
+		rig.step()
+	return rig
+
+## A copy of the run with player `id` holding a reading still open (worth `value`, recording a moment ago).
+static func _open_reading(st: Run.RunState, id: String, value: float) -> Run.RunState:
+	var s := st.copy()
+	var c := st.crew.copy()
+	var members: Array[Instr.CrewMember] = []
+	for m in st.crew.members:
+		if m.id != id:
+			members.append(m)
+			continue
+		var nm := m.copy()
+		nm.instrument = m.instrument.copy()
+		var o := Instr.OpenReading.new()
+		o.entity_id = st.entity_id
+		o.trait_name = &"stillness"
+		o.value = value
+		o.duration = 5.0
+		o.quiet = 0.0
+		o.peak_rate = 10.0
+		nm.instrument.current = o
+		members.append(nm)
+	c.members = members
+	s.crew = c
+	return s
+
+static func _closed_by(events: Array[Dictionary], id: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for e in events:
+		if e["type"] == "readingClosed" and e["playerId"] == id:
+			out.append(e)
+	return out
+
+# FD2: a reading still open when the car leaves is earned today, exactly once. At a BANK the bell's flush
+# closes it onto the tape and adds it to the day's earned (and to what the day is settled on). At the bell
+# the lock is decided BEFORE that flush: a crew just short of the quota with an open reading that would
+# cover it is refused, and the reading counts once it closes on the ride down (the run's own tick).
+func test_fd2_an_open_reading_at_the_bell_is_earned_once(t: T) -> void:
+	# A BANK: the day met, an open reading of 200 on p0 aboard.
+	var rig := _lock_boarding("lock-flush")
+	if not t.check(rig.st.phase == &"boarding", "never boarded"):
+		return
+	var q := Run.day_quota_now(rig.st)
+	var s := rig.st.copy()
+	s.day_earned = float(q)
+	s = _open_reading(s, "p0", 200.0)
+	s.bell_left = DayRigLib.DT * 0.5
+	rig.st = s
+	var r := rig.step()
+	var types := {}
+	for e in r.events:
+		types[String(e["type"])] = e
+	t.check(types.has("banked") and not types.has("bankRefused"), "the met day banks: %s" % str(types.keys()))
+	var closed := _closed_by(r.events, "p0")
+	t.eq(closed.size(), 1, "the bell's flush closes p0's open reading, once")
+	t.eq(rig.st.day_earned, float(q) + 200.0, "the flushed reading is earned today (depth 1 pays 1x)")
+	t.eq(int(types.get("dayEnded", {}).get("result", {}).get("earned", -1)), q + 200, "the day is settled on it")
+	var after := rig.st.day_earned
+	for _k in roundi(4.0 / DayRigLib.DT):
+		rig.step()
+	t.eq(rig.st.day_earned, after, "never counted twice")
+	# A refused vote: 50 short, an open reading of 200 that would cover it.
+	var rig2 := _lock_boarding("lock-before-flush")
+	var q2 := Run.day_quota_now(rig2.st)
+	var s2 := rig2.st.copy()
+	s2.day_earned = float(q2 - 50)
+	s2 = _open_reading(s2, "p0", 200.0)
+	s2.bell_left = DayRigLib.DT * 0.5
+	rig2.st = s2
+	var r2 := rig2.step()
+	var types2 := {}
+	for e in r2.events:
+		types2[String(e["type"])] = e
+	t.check(types2.has("bankRefused") and not types2.has("banked"), "the lock is decided before the flush: refused at %d of %d with 200 open: %s" % [q2 - 50, q2, str(types2.keys())])
+	t.eq(rig2.st.day_earned, float(q2 - 50), "nothing flushed on a refused vote")
+	var got: Array[Dictionary] = []
+	for _k in roundi(4.0 / DayRigLib.DT):
+		got.append_array(_closed_by(rig2.step().events, "p0"))
+	t.eq(got.size(), 1, "the open reading closes on the ride down")
+	t.eq(rig2.st.day_earned, float(q2 - 50) + 200.0, "and is earned today, once")
 
 ## The ids aboard at this tick's bell (its doorsClosed), or [].
 static func _aboard_at_bell(events: Array[Dictionary]) -> Array:

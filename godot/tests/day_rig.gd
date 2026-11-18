@@ -188,8 +188,9 @@ class DayRig:
 		events.append_array(r.events)
 		st = r.state
 		for e in r.events:
-			if e["type"] == "newDay":
-				# Every day's resident parked too, as the host does with the resident off.
+			if e["type"] == "newDay" or e["type"] == "rodeDown":
+				# Every floor's and every day's resident parked too, as the host does with the resident off
+				# (net/host_rules.gd step): a crew that rides down is never caught by the next floor's.
 				st = st.copy()
 				st.orderly = HostRules.parked_orderly(st)
 		return r
