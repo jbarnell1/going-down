@@ -112,11 +112,20 @@ const ROWS: Array = [
 	[&"minder.stroll", &"minder", "STROLL SPEED", "tidying, outside a count", "m/s", 1.2, 0.6, 2.0, 0.1, &"now", &"LS4", F],
 	[&"minder.search_speed", &"minder", "SEARCH SPEED", "going from hide to hide in a count", "m/s", 3.0, 1.5, 4.5, 0.1, &"now", &"LS1", F],
 	[&"minder.run_speed", &"minder", "RUN SPEED", "running down someone it has found", "m/s", 7.0, 4.0, 9.0, 0.25, &"now", &"LS1", F],
-	[&"minder.hide_time", &"minder", "TIME TO HIDE", "the free seconds at the start of a count", "s", 6.0, 3.0, 60.0, 1.0, &"next", &"LS4", F],
+	# The tuned Playroom (T15m, sim/seek.gd) is on in the game's rooms: the first count gives 30 s to hide, each
+	# later one 5 s more (to the fourth), the last count 30; every search lasts 30 s; the anger bar fills in 2 s
+	# of sprinting or 3 noises and cools from full in 50 s. Without it (tests only) a count's hide is HIDE_TIME.
+	[&"minder.hide_time", &"minder", "TIME TO HIDE", "the free seconds at the start of the first count", "s", 30.0, 3.0, 60.0, 1.0, &"next", &"LS4", F],
+	[&"minder.hide_more", &"minder", "EACH COUNT HIDES LONGER BY", "seconds more to hide at each later count, to the fourth", "s", 5.0, 0.0, 15.0, 1.0, &"next", &"LS4", F],
+	[&"minder.last_hide", &"minder", "TIME TO HIDE, THE LAST COUNT", "the free seconds at the start of the count the lift call starts", "s", 30.0, 3.0, 60.0, 1.0, &"next", &"LS4", F],
+	[&"minder.search", &"minder", "IT SEARCHES FOR", "how long a count's search lasts after the time to hide", "s", 30.0, 10.0, 90.0, 5.0, &"next", &"LS4", F],
 	[&"minder.last_count", &"minder", "THE LAST COUNT LASTS", "the count the lift call starts", "s", 40.0, 20.0, 90.0, 5.0, &"next", &"LS4", F],
 	[&"minder.calm", &"minder", "CALM AFTER A COUNT", "nothing can start a new count for this long", "s", 15.0, 5.0, 60.0, 5.0, &"next", &"LS4", F],
 	[&"minder.sight", &"minder", "SEES AS FAR AS", "its sight in a count", "m", 12.0, 6.0, 20.0, 1.0, &"now", &"LS4", F],
 	[&"minder.found_after", &"minder", "FOUND AFTER", "how long in its sight before you are found", "s", 1.0, 0.3, 3.0, 0.1, &"now", &"LS4", F],
+	[&"minder.anger_sprint", &"minder", "SPRINTING FILLS ITS ANGER IN", "seconds of sprinting that fill an empty anger bar", "s", 2.0, 0.5, 10.0, 0.5, &"now", &"LS4", F],
+	[&"minder.anger_noise", &"minder", "ONE NOISE ADDS TO ITS ANGER", "a ball pit, a flap, a dropped tape or an emote", "in 100", 34.0, 5.0, 100.0, 1.0, &"now", &"LS4", W],
+	[&"minder.anger_cool", &"minder", "ITS ANGER COOLS FROM FULL IN", "seconds of quiet that empty a full anger bar", "s", 50.0, 10.0, 300.0, 5.0, &"now", &"LS4", F],
 	# The lift and the dark. "Time for the elevator to return" is the first three rows.
 	[&"lift.floors_min", &"lift", "CAR STARTS, FEWEST FLOORS AWAY", "the shortest the indicator can start from", "floors", 6.0, 2.0, 19.0, 1.0, &"next", &"LS1", W],
 	[&"lift.floors_max", &"lift", "CAR STARTS, MOST FLOORS AWAY", "the longest", "floors", 12.0, 3.0, 20.0, 1.0, &"next", &"LS1", W],
@@ -169,7 +178,16 @@ const ROWS: Array = [
 ## The pieces whose rows the rules read today (`wired`). LS4, LS5 and LS6 add theirs as they wire them.
 const WIRED_PIECES: Array[StringName] = [&"LS1"]
 ## Rows of later pieces the rules already read (wired one group at a time, each with its proof).
-const WIRED_IDS: Array[StringName] = []
+const WIRED_IDS: Array[StringName] = [
+	# LS4: the lift and the dark.
+	&"lift.false_stop", &"lift.board", &"lift.hold", &"lift.ride",
+	&"dark.min", &"dark.max", &"dark.first_min", &"dark.first_max", &"dark.warning",
+	# LS4: the Minder (the tuned Playroom).
+	&"minder.stroll", &"minder.hide_time", &"minder.hide_more", &"minder.last_hide", &"minder.search",
+	&"minder.anger_sprint", &"minder.anger_noise", &"minder.anger_cool",
+	# LS5: the tank, and the heal.
+	&"stamina.tank", &"heal.time", &"heal.quiet", &"heal.health",
+]
 
 ## The least wait of a call is its start delay plus the floors: sim/run.gd CALL_START_DELAY_MIN (this file
 ## does not load run.gd, which loads it; tests/prop_settings.gd checks they are equal).

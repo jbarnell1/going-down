@@ -1195,8 +1195,12 @@ static func downs_block(s: Run.RunState) -> Dictionary:
 		var d: Run.Downed = s.down.get(p.id)
 		if d == null:
 			continue
-		down.append({"id": d.id, "at": d.at, "until": d.until, "by": String(d.by), "healer": d.healer,
-			"healFrom": d.heal_from if d.healer != "" else null})
+		var row := {"id": d.id, "at": d.at, "until": d.until, "by": String(d.by), "healer": d.healer,
+			"healFrom": d.heal_from if d.healer != "" else null}
+		# Live settings: a hold the host timed differently from Run.HEAL_TIME says how long it takes (Protocol "healFor").
+		if d.healer != "" and d.heal_len != Run.HEAL_TIME:
+			row["healFor"] = d.heal_len
+		down.append(row)
 	return {"down": down, "spots": s.spots.duplicate()}
 
 ## The Annex's block (Protocol.enc_annex): the crew's pad, every mark down, and this floor's notes (how

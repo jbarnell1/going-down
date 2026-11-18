@@ -643,6 +643,7 @@ static func create_seek(plan: Floor.FloorPlan, player_ids: Array[String], floor_
 
 ## `tuning`: live settings (sim/settings.gd; null: none), the host's search and run speeds.
 static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: FloorInput = null, tuning: Settings.Values = null) -> SeekStep:
+	_live = tuning
 	if fl == null:
 		fl = FloorInput.new()
 	var s := prev.copy()
@@ -1077,7 +1078,7 @@ static func _wander_step(s: SeekState, m: MinderState, dt: float) -> void:
 	var cells: Array[Floor.Pos] = s.floor.way_in[zid]
 	var c := cells[0]
 	_goal_body(plan, m, &"round", zid, Move.body_at_cell(plan, c))
-	var r := _walk(plan, m, WANDER_SPEED, dt, false)
+	var r := _walk(plan, m, Settings.f(_live, &"minder.stroll", WANDER_SPEED), dt, false)
 	m.anim = &"walk"
 	if r == 1:
 		m.timer = STRAIGHTEN_TIME
@@ -1359,11 +1360,36 @@ static func tune(s0: SeekState) -> SeekState:
 	s.tuned = true
 	return s
 
-## What a provocation adds to the anger this tick.
-static func anger_gain(why: StringName, dt: float) -> float:
+## Live settings (sim/settings.gd): the tuning of the step in progress (step_seek sets it first; null: none). Only
+## the T15m numbers below and the stroll read it, each with today's constant when the host has not set it.
+static var _live: Settings.Values = null
+
+## What a provocation adds to the anger this tick. `tuning`: the host's minder.anger_sprint (seconds of sprinting
+## to a full bar) and minder.anger_noise (a lump, in 100).
+static func anger_gain(why: StringName, dt: float, tuning: Settings.Values = null) -> float:
+	if why == &"sprint" and tuning != null and tuning.has(&"minder.anger_sprint"):
+		return dt / Settings.f(tuning, &"minder.anger_sprint", 2.0)
 	if ANGER_RATES.has(why):
 		return float(ANGER_RATES[why]) * dt
+	if ANGER_LUMPS.has(why) and tuning != null and tuning.has(&"minder.anger_noise"):
+		return Settings.f(tuning, &"minder.anger_noise", 34.0) / 100.0
 	return float(ANGER_LUMPS.get(why, 0.0))
+
+## How much the anger cools a second (ANGER_COOL, or one over the host's minder.anger_cool seconds).
+static func anger_cool(tuning: Settings.Values = null) -> float:
+	if tuning != null and tuning.has(&"minder.anger_cool"):
+		return 1.0 / Settings.f(tuning, &"minder.anger_cool", 50.0)
+	return ANGER_COOL
+
+## A tuned count's seconds to hide: TUNED_HIDE_LENGTHS by the count's number (TUNED_LAST_HIDE for the last), or
+## the host's minder.hide_time plus minder.hide_more a count after the first (to the fourth), minder.last_hide.
+static func tuned_hide(tuning: Settings.Values, counts: int, last: bool) -> float:
+	if last:
+		return Settings.f(tuning, &"minder.last_hide", TUNED_LAST_HIDE)
+	var k := mini(counts - 1, TUNED_HIDE_LENGTHS.size() - 1)
+	if tuning == null or not (tuning.has(&"minder.hide_time") or tuning.has(&"minder.hide_more")):
+		return TUNED_HIDE_LENGTHS[k]
+	return Settings.f(tuning, &"minder.hide_time", TUNED_HIDE_LENGTHS[0]) + Settings.f(tuning, &"minder.hide_more", TUNED_HIDE_LENGTHS[1] - TUNED_HIDE_LENGTHS[0]) * k
 
 ## Step 4 with T15m on: the hint events, then the anger, and a count when it is full.
 static func _tuned_provoke(s: SeekState, t: float, dt: float, noisy: Dictionary, moved_of: Dictionary, input_of: Dictionary,
@@ -1389,7 +1415,7 @@ static func _tuned_provoke(s: SeekState, t: float, dt: float, noisy: Dictionary,
 		s.anger = clampf((s.calm_until - t) / CALM_TIME, 0.0, 1.0)
 		return
 	if not _may_provoke(s, t, fl):
-		s.anger = maxf(0.0, s.anger - ANGER_COOL * dt)
+		s.anger = maxf(0.0, s.anger - anger_cool(_live) * dt)
 		return
 	var level := s.anger
 	var gained := false
@@ -1397,7 +1423,7 @@ static func _tuned_provoke(s: SeekState, t: float, dt: float, noisy: Dictionary,
 		if not noisy.has(p.id):
 			continue
 		for why: StringName in noisy[p.id]:
-			var g := anger_gain(why, dt)
+			var g := anger_gain(why, dt, _live)
 			if g <= 0.0:
 				continue
 			gained = true
@@ -1405,13 +1431,13 @@ static func _tuned_provoke(s: SeekState, t: float, dt: float, noisy: Dictionary,
 			if level >= 1.0 - EPS:
 				_start_count(s, t, p.id, why, false, events)
 				return
-	s.anger = level if gained else maxf(0.0, level - ANGER_COOL * dt)
+	s.anger = level if gained else maxf(0.0, level - anger_cool(_live) * dt)
 
 ## A count starting with T15m on: its hiding and search lengths, the bar full, and a player being dragged
 ## to the table seated at once.
 static func _tuned_count(s: SeekState, t: float, last: bool, events: Array[Dictionary]) -> void:
-	s.hide_len = TUNED_LAST_HIDE if last else TUNED_HIDE_LENGTHS[mini(s.counts - 1, TUNED_HIDE_LENGTHS.size() - 1)]
-	s.len = TUNED_SEARCH
+	s.hide_len = tuned_hide(_live, s.counts, last)
+	s.len = Settings.f(_live, &"minder.search", TUNED_SEARCH)
 	s.anger = 1.0
 	var m := s.minder
 	if (m.mode == &"grab" or m.mode == &"drag") and m.victim != "":

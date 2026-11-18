@@ -811,6 +811,8 @@ class Downed:
 	## Who is holding F beside them ("" for nobody), and the host time that hold began (-1 for none).
 	var healer: String = ""
 	var heal_from: float = -1.0
+	## Seconds that hold takes, stamped as it begins (HEAL_TIME, or the host's heal.time then: live settings).
+	var heal_len: float = HEAL_TIME
 
 	func copy() -> Downed:
 		var d := Downed.new()
@@ -820,6 +822,7 @@ class Downed:
 		d.by = by
 		d.healer = healer
 		d.heal_from = heal_from
+		d.heal_len = heal_len
 		return d
 
 class RunState:
@@ -1314,7 +1317,9 @@ static func _tuned_chase(s: RunState, solo: bool) -> float:
 
 ## Seconds of sprinting a player's tank holds in this run (Stamina.Stamina.tank): more when paced.
 static func sprint_seconds(s: RunState) -> float:
-	return Stamina.PACED_SPRINT_SECONDS if s != null and s.paced else Stamina.SPRINT_SECONDS
+	var today := Stamina.PACED_SPRINT_SECONDS if s != null and s.paced else Stamina.SPRINT_SECONDS
+	# Live settings: the host's tank (stamina.tank). The host resizes every tank to it, keeping how full it is.
+	return Settings.f(s.tuning, &"stamina.tank", today) if s != null else today
 
 ## The boarding window of this run (seconds from the doors opening to the bell).
 static func board_time(s: RunState) -> float:
@@ -2238,9 +2243,10 @@ static func _step_downs(s: RunState, players: Array[RunPlayer], input_of: Dictio
 				events.append({"type": "healStop", "t": t, "playerId": d.healer, "target": p.id})
 			nd.healer = healer
 			nd.heal_from = t - dt if healer != "" else -1.0
+			nd.heal_len = Settings.f(s.tuning, &"heal.time", HEAL_TIME)
 			if healer != "":
-				events.append({"type": "healStart", "t": t, "playerId": healer, "target": p.id, "from": nd.heal_from, "done": nd.heal_from + HEAL_TIME})
-		if healer != "" and t - nd.heal_from >= HEAL_TIME - EPS:
+				events.append({"type": "healStart", "t": t, "playerId": healer, "target": p.id, "from": nd.heal_from, "done": nd.heal_from + nd.heal_len})
+		if healer != "" and t - nd.heal_from >= nd.heal_len - EPS:
 			# Healed: back on their feet where they lie.
 			down.erase(p.id)
 			var np := p.copy()
@@ -2249,7 +2255,7 @@ static func _step_downs(s: RunState, players: Array[RunPlayer], input_of: Dictio
 			players[k] = np
 			events.append({"type": "healed", "t": t, "playerId": p.id, "by": healer, "at": np.body})
 			if s.orderly.mode == &"bending" and str(s.orderly.bend_target) == p.id:
-				s.orderly = Entity.stand_off(s.orderly, HEAL_QUIET)
+				s.orderly = Entity.stand_off(s.orderly, Settings.f(s.tuning, &"heal.quiet", HEAL_QUIET))
 			_seek_heal(s, np)
 			continue
 		if t >= nd.until - EPS:
@@ -2294,7 +2300,7 @@ static func _seek_heal(s: RunState, p: RunPlayer) -> void:
 		nq.phase = &"out"
 		nq.hide = -1
 		nq.peeking = false
-		nq.health = HEAL_HEALTH
+		nq.health = Settings.f(s.tuning, &"heal.health", HEAL_HEALTH)
 		nq.body = p.body
 		nq.last = p.body
 		list.append(nq)

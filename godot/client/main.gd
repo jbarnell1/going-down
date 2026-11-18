@@ -884,6 +884,7 @@ func _process(delta: float) -> void:
 	if Time.get_ticks_msec() > _note_until:
 		hud.note = ""
 	settings_panel.rc = link.rc if link != null else null
+	hide_view.tuning = link.client().tuning if link != null and link.client() != null else null
 	if link == null:
 		hud.menu_on = menu_overlay
 		return

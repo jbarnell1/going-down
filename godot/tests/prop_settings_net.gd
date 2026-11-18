@@ -36,6 +36,7 @@ const RoomClient = preload("res://net/room_client.gd")
 const Client = preload("res://net/client.gd")
 const LocalRoom = preload("res://net/local_room.gd")
 const SettingsPanel = preload("res://client/settings_panel.gd")
+const DownView = preload("res://client/down_view.gd")
 
 const SECRET := "settings-test-passphrase"
 const DIR := "user://ls_settings_test"
@@ -495,3 +496,31 @@ func test_the_panel_reads_the_registry(t: T) -> void:
 	t.check(str(w[3]) == "FROM THE NEXT FLOOR. NOW 3.0", "a waiting value says so, with the value in force: %s" % str(w))
 	p.free()
 	lr.leave()
+# ---------------------------------------------------------------------------------------------
+# 6. LS5 on the client: a heal hold the host timed with heal.time is drawn by the host's own length.
+
+func test_the_heal_bar_follows_the_hosts_hold(t: T) -> void:
+	var s := Run.create_run("ls5-wire", ["a", "b"] as Array[String], [], false, false, true)
+	var d := Run.Downed.new()
+	d.id = "a"
+	d.at = 100.0
+	d.until = 110.0
+	d.by = &"catch"
+	d.healer = "b"
+	d.heal_from = 104.0
+	d.heal_len = 6.0
+	s = s.copy()
+	s.down = {"a": d}
+	var block := Host.downs_block(s)
+	t.eq(block["down"][0].get("healFor"), 6.0, "the host's block carries the hold's own seconds")
+	var c := Protocol._V.new()
+	var back := Protocol.dec_downs(c, JSON.parse_string(JSON.stringify(Protocol.enc_downs(block))))
+	t.check(not c.bad and float(back["down"][0]["healFor"]) == 6.0, "and it survives the wire: %s" % str(back))
+	var v := DownView.new()
+	var snap := {"downs": back, "hostNow": 107.0, "me": {"id": "a", "status": "down", "x": 0.0, "z": 0.0, "level": 0},
+		"others": [{"id": "b", "status": "ok", "x": 1.0, "z": 0.0, "level": 0}]}
+	v.update(snap, "a", {"a": "Ann", "b": "Bob"}, false)
+	t.check(absf(v.heal - 0.5) < 1e-6, "the heal bar: 3 of the host's 6 s held = %.3f (not 3 of Run.HEAL_TIME)" % v.heal)
+	# At today's length nothing new is sent: the block is what it always was.
+	d.heal_len = Run.HEAL_TIME
+	t.check(not Host.downs_block(s)["down"][0].has("healFor"), "a hold of Run.HEAL_TIME sends no healFor")

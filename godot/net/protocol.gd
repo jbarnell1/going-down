@@ -163,7 +163,8 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    day, seek, quota and annex blocks or null: [[[player id, host time down, host time out unless healed,
 ##    DOWN_BY index, healer id or "", host time the heal hold began or null], ...], [[player id, x, z, level,
 ##    y, host time], ...] (this floor's red spots, where each tape fell)]. Times are host times, never
-##    durations: a heal is done at healFrom + Run.HEAL_TIME, the timer runs out at the second time;
+##    durations: a heal is done at healFrom + Run.HEAL_TIME (or + a 7th element, the hold's own seconds, when the
+##    host's live settings timed it otherwise: "healFor"), the timer runs out at the second time;
 ##  - events "downed" {playerId, until, by, at}, "healStart" {playerId (the healer), target, from, done},
 ##    "healStop" {playerId, target}, "healed" {playerId, by, at} and "out" {playerId, at, spot (null when the
 ##    car left without them)}. The resident's own "caught" still comes first, as before.
@@ -425,7 +426,10 @@ static func dec_watch(c: _V, w: Variant) -> Dictionary:
 static func enc_downs(k: Dictionary) -> Array:
 	var down: Array = []
 	for d: Dictionary in k["down"]:
-		down.append([d["id"], q3(d["at"]), q3(d["until"]), DOWN_BY.find(String(d["by"])), d["healer"], null if d["healFrom"] == null else q3(d["healFrom"])])
+		var row: Array = [d["id"], q3(d["at"]), q3(d["until"]), DOWN_BY.find(String(d["by"])), d["healer"], null if d["healFrom"] == null else q3(d["healFrom"])]
+		if d.get("healFor") != null:
+			row.append(q3(d["healFor"]))
+		down.append(row)
 	var spots: Array = []
 	for p: Dictionary in k["spots"]:
 		spots.append([p["playerId"], q2(p["x"]), q2(p["z"]), p["level"], q2(p["y"]), q3(p["t"])])
@@ -437,11 +441,14 @@ static func dec_downs(c: _V, w: Variant) -> Dictionary:
 		return {}
 	var down: Array = []
 	for dw: Variant in _a(c, a[0], 0, 64):
-		var d := _a(c, dw, 6, 6)
+		var d := _a(c, dw, 6, 7)
 		if c.bad:
 			return {}
-		down.append({"id": _s(c, d[0]), "at": _f(c, d[1]), "until": _f(c, d[2]), "by": _code(c, DOWN_BY, d[3]), "healer": _s(c, d[4]),
-			"healFrom": _opt_num(c, d[5])})
+		var row := {"id": _s(c, d[0]), "at": _f(c, d[1]), "until": _f(c, d[2]), "by": _code(c, DOWN_BY, d[3]), "healer": _s(c, d[4]),
+			"healFrom": _opt_num(c, d[5])}
+		if d.size() > 6:
+			row["healFor"] = _f(c, d[6], 0.0, 60.0)
+		down.append(row)
 	var spots: Array = []
 	for pw: Variant in _a(c, a[1], 0, 256):
 		var p := _a(c, pw, 6, 6)
