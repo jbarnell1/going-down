@@ -4,10 +4,10 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 77 of 115.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 90.
-- **Now:** nothing in progress
-- **Last CI result seen:** passed on a650c60
+- **Gates passed:** 7 of 14. **Tasks done:** 78 of 115.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 92.
+- **Now:** T25b The exported server proves itself. The builder is back on the server's start-up self-check and the exported-build check
+- **Last CI result seen:** passed on 6b17496
 - **Answers applied up to:** 2026-11-17T21:11:49.720Z
 
 ## Tasks
@@ -225,15 +225,16 @@
   - Evidence: Merged as e54eed3. Checker: quick 230/230, the Lonely/Temp/notes/relocate tests 25/25, ref_* 18/18 with 0 values differing, net_local 10/10, play_down 24/24; two deliberate breaks (company never seen; every holder may record) each turned two tests red. Merged with the 0833 fixes by hand (Lonely is the last rules switch); 241/241 on the merge commit.
 - [ ] **T22** `todo` Live settings for the host
   - Why: On game night the host can slow a monster that's too fast, lengthen the lift's return or the time you have down, and much more, from an in-game panel, while everyone plays
+  - To do: One path has no test: the Temp's speed setting when it runs the old stand-still rule (not used in the game's rooms, where it hunts the lonely). Add a proof or drop that read
 - [x] **T25** `done` Crash reports, metrics and a same-night hotfix
   - Why: If something breaks on game night we see exactly what happened on whose PC, fix it, and send everyone a new build within minutes
   - Evidence: Crash reports and logs go to the server, F9 sends a report, an out-of-date game is refused with a clear message, and one command builds, checks, promotes and packages (used for this build: 22 minutes). In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
-- [ ] **T25b** `todo` The exported server proves itself
+- [ ] **T25b** `doing` The exported server proves itself
   - Why: The real server build was missing its data files and no test noticed; it now checks itself at start, and the build chain tests the exported build
 - [x] **T23** `done` The announcer's hints
   - Why: The lift's announcer teaches the game with snide, creepy hints: board on time or lose your pay, the quota, sneaking in the Playroom, instruments out
   - Evidence: The announcer's hints: 76 lines in both voices, 30 wired in, HINTS on H. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
-- [ ] **T23b** `todo` Voice touch-ups: a grab line, a reworded hint
+- [ ] **T23b** `doing` Voice touch-ups: a grab line, a reworded hint
   - Why: The Minder's grab gets its own line; 'You are not alone on this floor now' is reworded so it does not give away the Temp's rule
 - [ ] **T24** `todo` The story: the tape, the nightly tapes and the clues
   - Why: A blue-and-yellow VCR orientation tape on joining, a new tape each night in the prison, and clues on every floor that the monsters were once crews like yours
@@ -275,15 +276,14 @@
 - [x] **T20e** `done` The day quota you can see, and no going home short
   - Why: You know how close you are to the day's target; BANK is refused until it is met, with a snide line from the announcer; in the prison you can only shop and sleep
   - Evidence: The day's quota is on screen (corner line, lift monitor, prison board), BANK is LOCKED until it is met, and a refused vote rides down with a snide line. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
-- [ ] **T20f** `todo` Controls card and a ready-up screen
+- [x] **T20f** `done` Controls card and a ready-up screen
   - Why: Everyone reads the controls and readies up, then drops into the lift together; the lift waits and never pushes anyone out
-  - To do: Your car answer: the car waits as long as anyone is aboard; a returning car waits 30 s before its doors close; anyone left out then dies and wakes in the prison without the credits they earned
-  - To do: Your rule: holding the car open all game must never count. The only way off a floor is quota met, car gone, call, car comes back. Check it and test it
-- [ ] **T20g** `todo` Things to find: drawers, gurneys, credits, poem notes
+  - Evidence: Joining now goes: face, the orientation tape on a first join (skippable, WATCH THE TAPE replays it), then the Ready-up screen with the controls card; everyone drops into the car together after a 5-second count, the host can start without stragglers after 30 seconds, late joiners wait for the next stop. In the promoted build of 18 Nov 06:48 (commit 6b17496); the promote check passed everything incl. the ready-up check 18/18 and the desktop playthrough 46/46; lab-box server updated and the remote test passed.
+- [ ] **T20g** `doing` Things to find: drawers, gurneys, credits, poem notes
   - Why: Searching furniture (F TO OPEN DRAWER) turns up credits, obscure poems about the monster's rule, and something to restore you
-- [ ] **T26** `todo` The Arboretum: a dark forest floor and the Groundskeeper
+- [ ] **T26** `doing` The Arboretum: a dark forest floor and the Groundskeeper
   - Why: A new place: no corridors, you steer by landmarks and sound, and a blind monster comes to noise. You asked for the scariest one yet, and dark
-- [ ] **T27** `todo` A brightness setting with a calibration screen
+- [ ] **T27** `doing` A brightness setting with a calibration screen
   - Why: The Arboretum is very dark; each player sets brightness on their own screen at the start or in settings so dark is dark but not blind
 - [ ] **T21a** `todo` A four-slot inventory
   - Why: Four squares at the bottom of the screen, scroll or 1-4 to pick what is in your hand; the instrument is always in the other hand; store items take a slot
@@ -390,6 +390,18 @@
 
 ## Activity (newest first)
 
+- 2026-11-18 12:59Z Paused T22: waiting for In the 06:48 build: the F8 panel, the saved file and 32 settings. Still to wire: the rest of the list. For the server to keep settings across restarts the owner makes one folder on the lab box
+- 2026-11-18 12:59Z NEW BUILD in play/ (18 Nov 06:48): the Ready-up screen with the controls card, the orientation tape on a first join, and the host's F8 settings panel with 32 working settings. Server updated to match; remote test passed. Zip: play/GoingDown-2026-11-18-0648.zip
+- 2026-11-18 12:59Z Finished T20f: Controls card and a ready-up screen.
+- 2026-11-18 12:52Z Usage: 95% of the week's limit at 06:52 with four builders running (about 3% every 15 minutes). When it reaches 100% everything stops until the owner's reset or plan bump; the builders commit as they go, so nothing is lost
+- 2026-11-18 12:48Z Started T25b: The exported server proves itself. The builder is back on the server's start-up self-check and the exported-build check
+- 2026-11-18 12:48Z Started T23b: Voice touch-ups: a grab line, a reworded hint. With the brightness builder: the grab line, the reworded hint, the long hint's check
+- 2026-11-18 12:48Z Started T27: A brightness setting with a calibration screen. The builder is back on the brightness card and the voice touch-ups
+- 2026-11-18 12:48Z Started T20g: Things to find: drawers, gurneys, credits, poem notes. The builder is back on searching: trimming the loot, then the on-screen prompt, bar and note reader
+- 2026-11-18 12:48Z Started T26: The Arboretum: a dark forest floor and the Groundskeeper. The Fable builder is back on the Arboretum (rules, then layout, then the dark place on screen)
+- 2026-11-18 12:30Z Promote check passed everything with the ready-up screen and the settings panel in: 327 tests, web 42/42, desktop 46/46, sound, down-and-heal 24, day 16, Playroom 12, ready-up 18, settings 16, network 20, mix, furniture walk. The build is being made
+- 2026-11-18 11:27Z Paused T22: waiting for Checked and merging into main with the ready-up screen; both go into the next build
+- 2026-11-18 11:06Z Paused T20f: waiting for Checked and merging into main; it goes into the next build
 - 2026-11-18 10:54Z Paused T20g: waiting for Paused part-built when the usage limit was hit; waiting for your decision on how to spend the 9% of the week that is left
 - 2026-11-18 10:54Z Paused T25b: waiting for Paused part-built when the usage limit was hit; waiting for your decision on how to spend the 9% of the week that is left
 - 2026-11-18 10:54Z Paused T23b: waiting for Paused part-built when the usage limit was hit; waiting for your decision on how to spend the 9% of the week that is left
@@ -418,15 +430,3 @@
 - 2026-11-18 05:56Z Added task T26: The Arboretum: a dark forest floor and the Groundskeeper.
 - 2026-11-18 05:47Z Owner on the orientation tape: 'The VHS is amazing.' It stays as built; the nightly tapes will follow the same look and voice
 - 2026-11-18 05:47Z Owner: Temp gets ink tears; Mixamo for the Temp and Orderly tomorrow morning; skill tree: the five listed upgrades plus more of my choosing; passphrase steps wanted in the morning
-- 2026-11-18 05:46Z Owner's answers 3-15 recorded: solo is meant to hide; the Temp chases faster (3.9) and its speed, the Playroom's search time and the anger bar become settings; grab in the calm too, with its own line; day quota stays on a drop-out; some furniture comes back; monsters walk around furniture soon; one hint reworded
-- 2026-11-18 05:46Z Added task T23b: Voice touch-ups: a grab line, a reworded hint.
-- 2026-11-18 05:46Z Added task T20k: Monsters walk around furniture.
-- 2026-11-18 05:46Z Added task T20j: Furniture back in the lobby, atrium and break room.
-- 2026-11-18 05:44Z Owner's answers: do everything, it need not all finish overnight; features stop Thursday evening. Three builders started: ready-up and controls card, the host settings panel, searchable furniture
-- 2026-11-18 05:44Z Started T20g: Things to find: drawers, gurneys, credits, poem notes. A builder is making the rules for searching drawers, gurneys and cabinets: credits, poem notes and juice cartons; the on-screen part follows
-- 2026-11-18 05:44Z Linked T20g to the North Star: A7.
-- 2026-11-18 05:44Z Started T22: Live settings for the host. A builder is making the host's F8 settings panel, the saved settings file, and wiring more settings (each monster's speeds, lift return, down and heal times, blackout length)
-- 2026-11-18 05:44Z Started T20f: Controls card and a ready-up screen. A builder is making the ready-up screen, the controls card, and the orientation tape playing before it on a first join
-- 2026-11-18 05:44Z Linked T20f to the North Star: nothing in it (new from the owner's play of 17 Nov; joining builds on H1).
-- 2026-11-18 05:27Z Furniture collision is on main (297 tests). The full promote check is running on the combined copy (day quota + furniture): tests, export, web and desktop playthroughs, sound, down-and-heal, the day check, the Playroom check, network, the furniture walk
-- 2026-11-18 05:09Z Paused T20d: waiting for Checked (284 tests, both breaks caught, playthroughs 42/42 and 46/46 with solid furniture); merging into main; it goes into the next build
