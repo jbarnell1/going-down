@@ -3,7 +3,8 @@
 // and the hub's Status page reads state.json.
 //
 //   node hub/track.mjs iteration
-//   node hub/track.mjs start T2a "what is happening, in plain words"
+//   node hub/track.mjs start T2a "what is happening, in plain words" [--agent claude|openai]
+//   node hub/track.mjs assign T2a --agent claude       label an already active task without restarting it
 //   node hub/track.mjs done T2a --summary "what is now true and how it was checked" --media shot.png:"caption" --media map.txt
 //   node hub/track.mjs media T3 render.png:"second pass, front view"      attach pictures to a task at any time
 //   node hub/track.mjs gate G2 passed "evidence" [--media ...]           passed | unverified | open
@@ -19,8 +20,11 @@
 //   node hub/track.mjs deadline <iso time> "who decided and why"           move the loop's time limit (the owner's call only)
 //   node hub/track.mjs note "one line for the activity feed"
 //   node hub/track.mjs show                                                print the short status the loop reads
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { once } from 'node:events';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -39,6 +43,29 @@ function save(s) {
 }
 const die = (m) => { console.error(m); process.exit(1); };
 
+// Two chats can update different tasks at once. Hold the lock across load, edit and save.
+async function lockState() {
+  const checkout = createHash('sha256').update(realpathSync.native(path.dirname(STATE))).digest('hex');
+  const name = `going-down-tracker-${checkout}`;
+  // Each address is local, and the kernel releases it even if the writer is killed.
+  let address = { host: '127.0.0.1', port: 16_384 + (Number.parseInt(checkout.slice(0, 4), 16) % 32_768) };
+  if (process.platform === 'win32') address = { path: `\\\\.\\pipe\\${name}` };
+  if (process.platform === 'linux') address = { path: `\0${name}` };
+  const deadline = Date.now() + 10000;
+  for (;;) {
+    try {
+      const holder = createServer((socket) => socket.destroy()).listen({ ...address, exclusive: true });
+      await once(holder, 'listening');
+      holder.unref();
+      return;
+    } catch (error) {
+      if (error.code !== 'EADDRINUSE') throw error;
+      if (Date.now() >= deadline) die('Tracker is busy. Try again when the other writer finishes.');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+}
+
 // --- arguments: positionals, plus repeatable --flag value ---
 const argv = process.argv.slice(2);
 const cmd = argv.shift();
@@ -50,6 +77,17 @@ for (let i = 0; i < argv.length; i++) {
   else pos.push(a);
 }
 const flag = (k) => flags[k]?.[0];
+
+function taskAgent() {
+  if (flags.agent) {
+    const labels = new Map([['openai', 'OpenAI Codex'], ['claude', 'Claude']]);
+    return labels.get(flag('agent')) ?? die('--agent must be openai or claude');
+  }
+  const codex = Boolean(process.env.CODEX_THREAD_ID);
+  const claude = Boolean(process.env.CLAUDECODE || process.env.CLAUDE_CODE_ENTRYPOINT);
+  if (codex === claude) return undefined;
+  return codex ? 'OpenAI Codex' : 'Claude';
+}
 
 const kindOf = (file) => ({ '.png': 'image', '.jpg': 'image', '.jpeg': 'image', '.webp': 'image', '.txt': 'text', '.glb': 'model', '.mp3': 'audio', '.wav': 'audio' }[path.extname(file).toLowerCase()] ?? 'file');
 
@@ -96,7 +134,7 @@ function render(s) {
   L.push(`- **Answers applied up to:** ${s.answersAppliedTo ?? 'none yet'}`, '');
   L.push('## Tasks', '');
   for (const t of s.tasks) {
-    L.push(`- [${t.status === 'done' ? 'x' : ' '}] **${t.id}** \`${t.status}\` ${t.title}${t.gates?.length ? ` (${t.gates.join(', ')})` : ''}`);
+    L.push(`- [${t.status === 'done' ? 'x' : ' '}] **${t.id}** \`${t.status}\` ${t.title}${t.agent ? ' · ' + t.agent : ''}${t.gates?.length ? ` (${t.gates.join(', ')})` : ''}`);
     if (t.why) L.push(`  - Why: ${t.why}`);
     if (t.summary) L.push(`  - Evidence: ${t.summary}`);
     if (t.blocked) L.push(`  - BLOCKED: ${t.blocked}`);
@@ -112,13 +150,14 @@ function render(s) {
 }
 
 if (!cmd) die('usage: node hub/track.mjs <command> ... (see the top of this file)');
+if (cmd !== 'show') await lockState();
 const s = load();
 switch (cmd) {
   case 'show': {
     const t = s.tasks.find((x) => x.id === s.now);
     console.log(`iteration ${s.iteration} | gates ${s.gates.filter((g) => g.status === 'passed').length}/${s.gates.length} | started ${s.startedAt} | limit ${s.deadlineAt}`);
     console.log(`now: ${t ? `${t.id} ${t.title} [${t.status}]` : 'nothing'} | ci: ${s.ci ? `${s.ci.status} ${s.ci.commit}` : 'none'} | answers applied to: ${s.answersAppliedTo ?? 'none'}`);
-    for (const x of s.tasks) console.log(`  ${x.status.padEnd(7)} ${x.id.padEnd(5)} ${x.title}${x.blocked ? '  BLOCKED' : ''}`);
+    for (const x of s.tasks) console.log(`  ${x.status.padEnd(7)} ${x.id.padEnd(5)} ${x.title}${x.agent ? ' · ' + x.agent : ''}${x.blocked ? '  BLOCKED' : ''}`);
     process.exit(0);
   }
   case 'render': break;
@@ -136,11 +175,18 @@ switch (cmd) {
     if (t.status === 'done' && !flags.reopen) die(`${t.id} is done; pass --reopen to start it again`);
     if (!t.ns) die(`${t.id} has no North Star link. Look first:  node hub/ns.mjs find <words>   then:  node hub/track.mjs link ${t.id} <ids>   (or: link ${t.id} none --why "...")`);
     if (t.ns.length) spawnSync(process.execPath, [path.join(ROOT, 'hub', 'ns.mjs'), 'show', ...t.ns], { stdio: 'inherit' });
+    t.agent = taskAgent();
     t.status = 'doing'; t.startedAt ??= now(); delete t.blocked; delete t.waiting;
     // Several steps can be in progress at once (parallel agents): each keeps its own line.
     if (pos[1]) { t.doingText = pos[1]; t.doingAt = now(); }
     s.now = t.id; s.nowText = pos[1] ?? '';
-    feed(s, `Started ${t.id}: ${t.title}.${pos[1] ? ' ' + pos[1] : ''}`, 'start');
+    feed(s, `${t.agent ? t.agent + ' started' : 'Started'} ${t.id}: ${t.title}.${pos[1] ? ' ' + pos[1] : ''}`, 'start');
+    break;
+  }
+  case 'assign': {
+    const t = task(s, pos[0]);
+    if (t.status !== 'doing' || !flags.agent) die('assign needs an active task and --agent claude or openai');
+    t.agent = taskAgent();
     break;
   }
   case 'done': {
