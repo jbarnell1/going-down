@@ -47,6 +47,9 @@ const HideView = preload("res://client/hide_view.gd")
 const QuotaView = preload("res://client/quota_view.gd")
 const DownView = preload("res://client/down_view.gd")
 const HintCues = preload("res://client/hint_cues.gd")
+## Logs, crash and F9 reports for game night (client/telemetry.gd): read-only on this node.
+const Telemetry = preload("res://client/telemetry.gd")
+const BuildInfo = preload("res://net/build_info.gd")
 
 const VFOV := 70.0
 const SENS := 0.0022
@@ -254,6 +257,7 @@ func _ready() -> void:
 		_test_server = TCPServer.new()
 		var err := _test_server.listen(_test_port, "127.0.0.1")
 		print("test channel on 127.0.0.1:%d %s" % [_test_port, "ready" if err == OK else "FAILED %d" % err])
+	add_child(Telemetry.new(self))
 	start.remember = not automated
 	if automated:
 		# A test starts with no hint record and never writes the player's (user://hints.cfg).
@@ -569,6 +573,8 @@ func _close_words(code: int) -> String:
 			return "THE ROOM IS FULL: 8 PLAYERS ARE IN."
 		4003, 4004, 4005, 4006:
 			return "THE SERVER DROPPED THIS GAME: CODE %d." % code
+		4007:
+			return BuildInfo.OUT_OF_DATE.to_upper()
 	if not _ever_connected:
 		return "CANNOT REACH THE SERVER. CHECK THE ADDRESS. AFTER WRONG PASSPHRASES IT REFUSES THIS PC FOR UP TO A MINUTE."
 	if code == 1001:

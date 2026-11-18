@@ -54,7 +54,17 @@ node godot/tools/net_local.mjs 4451      # the network end to end on this PC (se
 node godot/tools/play_net.mjs --port=4460  # two game windows and a browser on one server (see Playing together)
 node godot/tools/godot.mjs import        # only the import pass (assets, the client's class names)
 node godot/tools/sync_client.mjs         # copy the client in again from spikes/godot-client
+node godot/tools/night_logs.mjs --ssh USER@HOST  # game night: fetch the server's log over ssh, save it, summarise it
+node godot/tools/hotfix.mjs "the fix"    # game night: tests, export, playthroughs, promote, package, server; prints the deploy
+node godot/tools/hotfix.mjs --dry-run "the fix"  # the same steps and deploy commands, nothing run
 ```
+
+Game night's logs (server/README.md "The night's log"): every game keeps its own log in
+`user://telemetry/` (the session, the last one, the last crashed one, F9 reports with a picture) and sends
+a heartbeat, its error lines and F9 reports to the server, which prints them as JSON lines with its own
+(joins, leaves, runs, catches, tick cost). F9 in the game sends a report ("Report sent, thank you").
+`npm run godot:export` writes the build id (the commit) into the builds; the server refuses a game of
+another build with "Your game is out of date".
 
 The runner itself, without npm:
 

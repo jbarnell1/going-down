@@ -172,6 +172,17 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##  - the world gains a 24th element, 1 ("solid" decoded: 1), with the 16th to 23rd null when absent: each client
 ##    then moves its own body round the floor's solid pieces (net/session.gd move_local).
 
+## Telemetry (client/telemetry.gd -> server/night_log.gd). New in the Godot game: [1, "T", kind, body] for kind
+## "hb" (a heartbeat: body is a small JSON object as text) or "log" (one error or warning line), and
+## [1, "T", kind, body, report id, part, parts] for "rep" (part of an F9 report) or "crash" (the tail of a
+## session that crashed). Sent on its own frame, "t|<text>", in the lobby or a run; never part of a run's
+## messages. The server only logs it (rate limited per player, and never executed or trusted), and drops
+## one that does not decode instead of closing the connection.
+const TELEMETRY_KINDS: Array[String] = ["hb", "log", "rep", "crash"]
+const MAX_TELEMETRY_LINE := 500
+const MAX_TELEMETRY_PART := 3000
+const MAX_TELEMETRY_PARTS := 8
+
 ## Limits on what a client may send (the server refuses anything outside them).
 const MAX_NAME := 32
 const MAX_SEEN := 8
@@ -585,6 +596,10 @@ static func encode(m: Dictionary) -> String:
 			var k := EMOTES.find(String(m["emote"]))
 			if k >= 0:
 				return JsJson.stringify([PROTOCOL_VERSION, "M", m["player"], k, m["t"]])
+		"telemetry":
+			if String(m["kind"]) in ["rep", "crash"]:
+				return JSON.stringify([PROTOCOL_VERSION, "T", m["kind"], m["body"], m["id"], m["part"], m["parts"]])
+			return JSON.stringify([PROTOCOL_VERSION, "T", m["kind"], m["body"]])
 	push_error("protocol: cannot encode %s" % str(m["type"]))
 	return ""
 
@@ -869,6 +884,18 @@ static func decode(text: String) -> Variant:
 			if a.size() != 5:
 				return null
 			out = {"type": "emoted", "player": _s(c, a[2]), "emote": _code(c, EMOTES, a[3]), "t": _f(c, a[4])}
+		"T":
+			# Telemetry (see TELEMETRY_KINDS): [1, "T", kind, body] or, for a report, [..., id, part, parts].
+			if a.size() < 4 or not a[2] is String or not (a[2] as String) in TELEMETRY_KINDS:
+				return null
+			var report := String(a[2]) in ["rep", "crash"]
+			if a.size() != (7 if report else 4):
+				return null
+			out = {"type": "telemetry", "kind": a[2], "body": _s(c, a[3], MAX_TELEMETRY_PART if report else MAX_TELEMETRY_LINE)}
+			if report:
+				out["parts"] = _i(c, a[6], 1, MAX_TELEMETRY_PARTS)
+				out["id"] = _i(c, a[4], 1, MAX_COUNT)
+				out["part"] = _i(c, a[5], 0, int(out["parts"]) - 1)
 		_:
 			return null
 	return null if c.bad else out
