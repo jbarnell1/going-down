@@ -51,6 +51,7 @@ const Playroom = preload("res://sim/playroom.gd")
 const Seek = preload("res://sim/seek.gd")
 const Hides = preload("res://sim/hides.gd")
 const Furniture = preload("res://sim/furniture.gd")
+const SearchView = preload("res://client/search_view.gd")
 
 const PLAYER_RADIUS := 0.3
 ## The eyes of a player lying on their bunk (whole centimetres: it goes to the host as the frame's eye).
@@ -208,6 +209,9 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 		if s_phase != _hide_wait_phase:
 			_hide_wait = 0.0
 	var held_here := seek_row != null and (s_phase != "out" or s_status != "ok" or _hide_wait > 0.0) and not crawling
+	# Findables (FD10, client/search_view.gd): while the host has this player searching, the body is rooted.
+	var searching := SearchView.searching_in(latest.get("find"), str(c.id))
+	held_here = held_here or searching
 
 	# 1. The player's own body (src/game/player.ts control), or the test's auto-walk.
 	tank = c.correct_stamina(tank)
@@ -317,6 +321,9 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 		_hide_wait = HIDE_WAIT
 		_hide_wait_phase = s_phase
 	lf.peek = seek_row != null and s_status == "ok" and s_phase == "inside" and not hide_cam.is_empty() and bool(hide_cam["peek"])
+	# Findables (FD10): F held to search (main.gd decides when F means a search), sprint with it. Never predicted.
+	lf.search = playing and inp.get("search") == true
+	lf.search_fast = lf.search and inp.get("searchFast") == true
 	var f := rc.frame(now, lf)
 	frame = f
 	var placed: Variant = null
@@ -379,6 +386,8 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	# Down first, then out (null in a run without it): the host's downs block, as client.gd downs() and
 	# spots() read it; its times are host times, counted against "hostNow" (client/down_view.gd).
 	snap["downs"] = latest.get("downs")
+	# Findables (FD10, null in a run without them): the host's find block (client.gd findables()).
+	snap["find"] = latest.get("find")
 	if plan_dict.has("_new"):
 		plan_dict.erase("_new")
 		snap["plan"] = plan_dict
