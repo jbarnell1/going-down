@@ -126,6 +126,43 @@ func show_pose(pose: Variant, show: bool) -> void:
 	ap.seek(ct, true)
 	_watched_walk(anim == "walk" or anim == "duck")
 
+## Tests: everything about how the figure is drawn that could make it stand out in the dark (T20a: drawn
+## as it is, nothing added: no glow, no outline). Per mesh its overrides, overlay, transparency and shadow;
+## per surface material whether it glows (emission), ignores the lights (unshaded) or draws a second pass
+## (an outline); and any light under the figure. `sig` is all of it in one string: a tools/playthrough.mjs
+## check compares it lit and dark, and wants no glow, unshaded surface, outline pass, overlay or light.
+func look() -> Dictionary:
+	var parts: Array[String] = []
+	var glow := 0
+	var unshaded := 0
+	var passes := 0
+	var overlays := 0
+	var meshes := 0
+	for mi: MeshInstance3D in find_children("*", "MeshInstance3D", true, false):
+		meshes += 1
+		if mi.material_overlay != null:
+			overlays += 1
+		parts.append("%s o%s v%s t%.3f s%d" % [mi.name, str(mi.material_override), str(mi.material_overlay), mi.transparency, mi.cast_shadow])
+		if mi.mesh == null:
+			continue
+		for i in mi.mesh.get_surface_count():
+			var m := mi.get_active_material(i)
+			parts.append("  %d %s" % [i, str(m)])
+			while m != null:
+				if m is BaseMaterial3D:
+					var bm := m as BaseMaterial3D
+					if bm.emission_enabled:
+						glow += 1
+					if bm.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED:
+						unshaded += 1
+					parts.append("    e%s %s u%d" % [bm.emission_enabled, str(bm.emission), bm.shading_mode])
+				if m.next_pass != null:
+					passes += 1
+				m = m.next_pass
+	var lights := find_children("*", "Light3D", true, false).size()
+	return {"meshes": meshes, "glow": glow, "unshaded": unshaded, "passes": passes, "overlays": overlays, "lights": lights,
+		"sig": "\n".join(parts).sha256_text().substr(0, 16)}
+
 ## Bent over a downed player (sim/entity.gd "bending", pose "bend"; North Star B6: "bends down to your
 ## face as if it is eating you"). The model has no bend clip: the reach held at its end (the arms out), the
 ## spine folded forward over BEND_IN seconds of the pose's clock, and the neck and head working down and up
