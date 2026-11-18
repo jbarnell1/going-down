@@ -66,6 +66,9 @@ const InventoryViewScript = preload("res://client/inventory_view.gd")
 ## Logs, crash and F9 reports for game night (client/telemetry.gd): read-only on this node.
 const Telemetry = preload("res://client/telemetry.gd")
 const BuildInfo = preload("res://net/build_info.gd")
+## The player's brightness and its card (client/brightness.gd, client/brightness_card.gd).
+const Brightness = preload("res://client/brightness.gd")
+const BrightnessCard = preload("res://client/brightness_card.gd")
 
 const VFOV := 70.0
 const SENS := 0.0022
@@ -156,6 +159,9 @@ const TURN_RATE := 5.0
 const TURN_MS := 3500
 var screen: TextureRect
 var tape_mat: ShaderMaterial
+## The player's brightness (the tape's last step) and the card that sets it (Esc menu B; first launch).
+var brightness := Brightness.new()
+var bright_card: BrightnessCard
 
 var seed := "alpha"
 var quality := "light"
@@ -320,6 +326,10 @@ func _ready() -> void:
 		announcer.hints.from_save({})
 		# A test draws its own faces and must never change the player's saved one.
 		FaceCodec.save_path = "user://face/test_last_face.txt"
+	# The player's brightness: read from their settings file (a test plays at the default, never touching it).
+	brightness.persist = not automated
+	brightness.load_saved()
+	_apply_brightness(brightness.level)
 	if not join_arg.is_empty():
 		start.address = join_arg
 	if not name_arg.is_empty():
@@ -333,6 +343,9 @@ func _ready() -> void:
 		start.open_face("join_submit" if filled else "join")
 	else:
 		_show_start("title")
+	# THE BRIGHTNESS HOOK: the card once on a PC's first launch, over the title, before any game is joined and
+	# so before the orientation tape (_pre_run also holds the tape while the card is open). Never under auto=1.
+	if not automated and not brightness.saved: bright_card.start()
 	load_ms = Time.get_ticks_msec() - t0
 	print("client ready in %d ms; quality %s" % [load_ms, quality])
 	for a in OS.get_cmdline_user_args():
@@ -531,6 +544,11 @@ func _build_view() -> void:
 	kiosk.remember = true
 	add_child(kiosk)
 	kiosk.changed.connect(_kiosk_changed)
+	bright_card = BrightnessCard.new()
+	bright_card.name = "BrightnessCard"
+	bright_card.setting = brightness
+	add_child(bright_card)
+	bright_card.changed.connect(_apply_brightness)
 	# Live settings (LS3): over everything, the game going on underneath.
 	var panel_layer := CanvasLayer.new()
 	panel_layer.layer = 50
@@ -667,6 +685,9 @@ static func run_view_on(my_ready: bool, _run_on: bool, playing: bool) -> bool:
 ## Before the run: the tape the first time, then Ready-up, kept in step with the room.
 func _pre_run(rc: RoomClient, now: float) -> void:
 	if not _tape_decided:
+		# The brightness card first (a first launch), then the tape: it waits until the card is done.
+		if bright_card.is_open():
+			return
 		_tape_decided = true
 		if StartScreen.wants_tape(start.tape_seen, automated, tape_arg):
 			rc.set_ready(false, true)
@@ -843,6 +864,12 @@ func _input(event: InputEvent) -> void:
 	if (event is InputEventMouseButton or event is InputEventKey) and event.is_pressed() and not _gesture:
 		_gesture = true
 		_welcome_pending = false
+	if bright_card.is_open():
+		# The brightness card has the keys (its slider, Enter done) and its own mouse.
+		if event is InputEventKey:
+			bright_card.key(event as InputEventKey)
+			get_viewport().set_input_as_handled()
+		return
 	if _settings_input(event):
 		return
 	if mode != "game":
@@ -854,6 +881,8 @@ func _input(event: InputEvent) -> void:
 				menu_overlay = not menu_overlay
 			elif menu_overlay and k0.pressed and not k0.echo and k0.physical_keycode == KEY_H:
 				_set_hints(not announcer.hints.enabled)
+			elif menu_overlay and k0.pressed and not k0.echo and k0.physical_keycode == KEY_B:
+				_open_brightness()
 			elif not menu_overlay:
 				start.key(k0)
 			get_viewport().set_input_as_handled()
@@ -923,6 +952,8 @@ func _input(event: InputEvent) -> void:
 			pending_hide_fast = Input.is_action_pressed("sprint")
 		elif k.physical_keycode == KEY_H:
 			_set_hints(not announcer.hints.enabled)
+		elif k.physical_keycode == KEY_B and hud.menu_on:
+			_open_brightness()
 		elif k.physical_keycode == KEY_T:
 			var st: float = tape_mat.get_shader_parameter("strength")
 			tape_mat.set_shader_parameter("strength", 0.0 if st > 0.5 else 1.0)
@@ -952,6 +983,35 @@ func inv_key(key: String) -> bool:
 		_:
 			return false
 	return true
+
+## BRIGHTNESS (the Esc menu's B): the card over whatever is on screen; the game goes on behind it.
+func _open_brightness() -> void:
+	menu_overlay = false
+	wheel_open = false
+	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	bright_card.start()
+
+## The player's brightness on the picture: the tape's last step (client/tape.gdshader).
+func _apply_brightness(lv: int) -> void:
+	var p := Brightness.params(lv)
+	tape_mat.set_shader_parameter("bright_lift", p["lift"])
+	tape_mat.set_shader_parameter("bright_gamma", p["gamma"])
+
+## Tests: the window's mean brightness (every 4th pixel each way).
+func _window_luma() -> Dictionary:
+	var img := get_viewport().get_texture().get_image()
+	var y_sum := 0.0
+	var l_sum := 0.0
+	var n := 0
+	for y in range(0, img.get_height(), 4):
+		for x in range(0, img.get_width(), 4):
+			var c := img.get_pixel(x, y)
+			y_sum += 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+			var l := c.srgb_to_linear()
+			l_sum += 0.2126 * l.r + 0.7152 * l.g + 0.0722 * l.b
+			n += 1
+	return {"mean": y_sum / maxi(n, 1), "linear": l_sum / maxi(n, 1), "level": brightness.level}
 
 ## HINTS: ON / OFF (the Esc menu's H): the announcer's hints, kept for this player in user://hints.cfg.
 func _set_hints(on: bool) -> void:
@@ -1130,7 +1190,7 @@ func _game_input(dt: float) -> Dictionary:
 		r = t_move[1]
 		sprint = t_move[2]
 		creep = t_move[3]
-	elif mode == "game" and not kiosk.is_open() and not settings_panel.is_open():
+	elif mode == "game" and not kiosk.is_open() and not settings_panel.is_open() and not bright_card.is_open():
 		f = Input.get_action_strength("forward") - Input.get_action_strength("back")
 		r = Input.get_action_strength("right") - Input.get_action_strength("left")
 		sprint = Input.is_action_pressed("sprint")
@@ -1357,7 +1417,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	hud.wheel_sel = _wheel_sel() if wheel_open else -1
 	# The menu (the controls) shows after Esc, while the mouse is free. Free without Esc (the browser on
 	# entering, or the window lost the mouse): one line, CLICK TO LOOK, instead (findables-and-day.md section 2).
-	var free := error_text == "" and not automated and not wheel_open and not kiosk.is_open() and not settings_panel.is_open() and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and hud.end_lines.is_empty()
+	var free := error_text == "" and not automated and not wheel_open and not kiosk.is_open() and not settings_panel.is_open() and not bright_card.is_open() and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and hud.end_lines.is_empty()
 	hud.menu_on = t_menu or (free and _esc_menu)
 	hud.click_to_look = free and not _esc_menu and not t_menu
 	if _now() - float(_entry.get("enteredAt", -INF)) < WELCOME_HOLD and hud.menu_on:
@@ -2256,6 +2316,28 @@ func _command(c: String) -> String:
 			if p.size() >= 2:
 				_set_hints(p[1] == "on")
 			return JSON.stringify({"on": announcer.hints.enabled})
+		"brightness":
+			# brightness [<0..20> | open | done | left | right]: the player's setting (never saved under automation).
+			if p.size() >= 2:
+				match p[1]:
+					"open": _open_brightness()
+					"done": bright_card.done()
+					"left": bright_card.step(-1)
+					"right": bright_card.step(1)
+					_:
+						brightness.set_level(int(p[1]))
+						_apply_brightness(brightness.level)
+			return JSON.stringify({"level": brightness.level, "open": bright_card.is_open(), "saved": brightness.saved, "persist": brightness.persist,
+				"lift": tape_mat.get_shader_parameter("bright_lift"), "gamma": tape_mat.get_shader_parameter("bright_gamma")})
+		"luma":
+			# The mean of the window as drawn: the gamma-encoded luma (Rec. 709 weights) and the linear luminance.
+			return JSON.stringify(_window_luma())
+		"overlays":
+			# overlays 0 | 1: tests only: hide the crisp layers over the picture (the display, a hide's dark
+			# inside) so a picture can be measured as the tape draws it.
+			var on := p.size() < 2 or p[1] != "0"
+			hud.visible = on
+			hide_view.overlay.visible = on
 		"props":
 			return JSON.stringify(level.prop_spots if level != null else [])
 		"down":

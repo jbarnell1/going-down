@@ -3,7 +3,7 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 93,
+  "iteration": 94,
   "now": "T25b",
   "nowText": "Server self-check, exported-build check and play_net for the day lock: builder resumed",
   "ci": {
@@ -2636,14 +2636,13 @@
       "id": "T20g",
       "title": "Things to find: drawers, gurneys, credits, poem notes",
       "why": "Searching furniture (F TO OPEN DRAWER) turns up credits, obscure poems about the monster's rule, and something to restore you",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [
         "A7"
       ],
       "startedAt": "2026-11-18T05:44:41.664Z",
-      "doingText": "Searching: builder resumed; rules, balance trim and on-screen parts are committed on its branch, finishing checks and merging main",
-      "doingAt": "2026-11-18T14:14:18.637Z"
+      "waiting": "Built and checked on its branch (349 tests, five breaks caught); being merged into main, then it goes into the next build"
     },
     {
       "id": "T26",
@@ -2724,9 +2723,7 @@
         "F1",
         "G1"
       ],
-      "todo": [
-        "Waiting on the owner: what trade nodes cost (old crew badges is a proposal) and whether layer 1 costs credits"
-      ]
+      "todo": []
     },
     {
       "id": "T31",
@@ -3337,9 +3334,28 @@
     {
       "at": "2026-11-17T21:12:37.151Z",
       "text": "Your answers applied: blackout 20-24 s and a longer wait for the car so a few blinks come first; left-out players wake with the crew; monsters at 3.8; live settings as recommended; all hints recorded in both voices; better story names coming; left-out players keep their bed but draw a new face and get a new number (the next monster wears the old face); the bedtime tape plays on the ride up and the car waits for it unless most skip. Voice cap raised to 100,000 characters."
+    },
+    {
+      "at": "2026-11-18T15:00:06.696Z",
+      "text": "The cabinet in each cell gets six slots unless the owner says otherwise (they decided the cabinet, not its size)."
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-18T15:07:22.825Z",
+      "text": "Paused T20g: waiting for Built and checked on its branch (349 tests, five breaks caught); being merged into main, then it goes into the next build",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T15:00:06.697Z",
+      "text": "Took a default: The cabinet in each cell gets six slots unless the owner says otherwise (they decided the cabinet, not its size).",
+      "kind": "decision"
+    },
+    {
+      "at": "2026-11-18T15:00:06.578Z",
+      "text": "Owner: yes to old crew badges as the price of trade nodes, the first layer costs credits, and the inventory and shop come before the Groundskeeper's figure.",
+      "kind": "note"
+    },
     {
       "at": "2026-11-18T14:48:42.206Z",
       "text": "All notes brought up to date for a change of agent: AGENTS.md written, the North Star folded to Draft 6, the handoff notes rewritten, the README and loop notes corrected.",
@@ -4324,21 +4340,6 @@
       "at": "2026-11-17T17:18:23.485Z",
       "text": "New pictures for T16k: The Temp as a proper Blender figure.",
       "kind": "media"
-    },
-    {
-      "at": "2026-11-17T17:09:21.725Z",
-      "text": "Paused T19a: waiting for Checked: 210 quick tests, all 26 stored-result tests unchanged, both deliberate breaks red. Being merged into the main code now",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T17:02:34.095Z",
-      "text": "Started T16k: The Temp as a proper Blender figure. Judging round 1 done (bright corridor 3-4/10, dark 6-7/10; all three like the drawn face over a hidden head). The builder is now fixing the sheet so it looks worn and stapled on, the mannequin arms and neck, and the stapler and notes",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T17:01:03.149Z",
-      "text": "Started T16k: The Temp as a proper Blender figure. Judging round 1: Fable done; Opus judges now",
-      "kind": "start"
     }
   ]
 }

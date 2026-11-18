@@ -332,12 +332,25 @@ func later(id: String, delay_ms: int, unless := "") -> void:
 ## One of the count's lines: `line` is a key of CountLines.LINES ("hide", "search", "found", "done",
 ## "last_called"), or "number" with `number` the seconds left; `text` the caption. The recording plays
 ## when there is one (for a number, only the numbers recorded).
-func say_count(line: String, text: String, ms: int, number := -1, length := 0) -> void:
+## The Minder's grab outside a count (T15m: a "found" event with cause "grab"): a line of its own, not "Found
+## you". One of the moment "grab"'s lines is dealt per grab, never the same twice running; the caption is the
+## line, and it plays on the count's player. Returns the line's id ("" when none is recorded).
+func say_grab(ms: int) -> String:
+	var id := _deal("grab")
+	if id == "":
+		return ""
+	last_of["grab"] = id
+	say_count("grab", str(lines[id].plain), ms, -1, 0, id)
+	return id
+
+func say_count(line: String, text: String, ms: int, number := -1, length := 0, line_id := "") -> void:
 	var now := _ms()
 	caption = text
 	caption_until = now + ms
-	var id := ""
-	if line == "number":
+	var id := line_id
+	if id != "":
+		pass
+	elif line == "number":
 		id = CountLines.number_line(number, length)
 	else:
 		id = str(CountLines.LINES.get(line, ""))
