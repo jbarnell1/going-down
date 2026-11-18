@@ -145,6 +145,8 @@ var start_at := -1.0
 var updates := 0
 ## Seed of the next run ("" draws one at random); tests set it.
 var fixed_seed := ""
+## The floor the next run starts on (1, the game's; server.gd's test argument depth=N sets it).
+var first_depth := 1
 ## The day loop in the next run (the game's; tests may turn it off).
 var days := true
 ## The floor quota in the next run (the game's; tests may turn it off): the call button does nothing
@@ -347,7 +349,7 @@ func _start(now: float) -> void:
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
 	var q := quota and not HostRules.quota_off_by_arg(false)
 	# The day quota's lock goes with the floor quota (net/host_rules.gd): quota=0 turns both off.
-	rules = HostRules.new(true, 1, Places.FULL, days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory)
+	rules = HostRules.new(true, first_depth, Places.FULL, days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory)
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))

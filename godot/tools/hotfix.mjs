@@ -11,10 +11,13 @@
 //   promote    npm run godot:promote -- "<note>"   (play/GoingDown.exe, play/web/)
 //   package    npm run godot:package               (play/GoingDown-<time>.zip for the friends)
 //   server     node godot/tools/godot.mjs export server  (godot/export/server/GoingDownServer.x86_64)
+//   exported   node godot/tools/exported_server_check.mjs: the EXPORTED builds, not the project folder: the
+//              Windows exe as a server from a folder holding only the exe (it must read its data, take a
+//              player and post the Annex's sticky notes), and every data file inside the Linux server's pack
 // Then it PRINTS the commands that put the new server on the lab box. It never runs them: deploying is
 // done by hand. The box is named by the environment variable GD_LAB_SSH (USER@HOST) and the folder there
 // by GD_LAB_DIR (default going-down); neither is ever written into the repository.
-// Options: --web-port=4440 --down-port=4466 --net-port=4451 (the playthroughs' ports), --skip=a,b (leave
+// Options: --web-port=4440 --down-port=4466 --net-port=4451 --exported-port=4492 (the playthroughs' ports), --skip=a,b (leave
 // steps out, said loudly), and for checking this script itself: --stub=a,b|all (a step prints instead of
 // running), --fail-at=STEP (that stub fails).
 import { spawn, spawnSync } from 'node:child_process';
@@ -37,6 +40,7 @@ const failAt = flag('fail-at', '');
 const webPort = Number(flag('web-port', 4440));
 const downPort = Number(flag('down-port', 4466));
 const netPort = Number(flag('net-port', 4451));
+const exportedPort = Number(flag('exported-port', 4492));
 const note = argv.filter((a) => !a.startsWith('--')).join(' ').trim();
 const node = process.execPath;
 const sshTarget = process.env.GD_LAB_SSH || 'USER@HOST';
@@ -96,6 +100,7 @@ const steps = [
   ['promote', `npm run godot:promote -- "${note}"`, () => run(node, [join(root, 'scripts', 'promote-godot.mjs'), note])],
   ['package', 'npm run godot:package', () => run(node, [join(root, 'scripts', 'package-godot.mjs')])],
   ['server', 'node godot/tools/godot.mjs export server', () => run(node, [join(here, 'godot.mjs'), 'export', 'server'])],
+  ['exported', `node godot/tools/exported_server_check.mjs --port=${exportedPort}`, () => run(node, [join(here, 'exported_server_check.mjs'), `--port=${exportedPort}`])],
 ];
 for (const s of [...stubs, ...skips, ...(failAt ? [failAt] : [])]) {
   if (s !== 'all' && !steps.some(([name]) => name === s)) {
