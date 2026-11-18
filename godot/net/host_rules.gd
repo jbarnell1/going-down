@@ -57,6 +57,10 @@
 #    ask for it (the server's always, playing alone with the game's deck), so players slide along the Clinic's and
 #    the Annex's chairs, beds, cabinets and desks instead of walking through them. prepare() turns it on before the
 #    first tick.
+#  - Findables (sim/run.gd findables, sim/findables.gd, FD9): off unless asked (`findables`, the last parameter); the
+#    game's rooms ask for it (the server's always, playing alone with the game's deck), so the Clinic's and the
+#    Annex's drawers, gurneys, lockers, copiers and boxes can be searched (F held) for credits, notes and cartons.
+#    prepare() turns it on before the first tick. The soft catch keeps what was opened and found on the real tick.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -103,10 +107,13 @@ var playroom_tuned: bool
 var day_lock: bool
 ## Solid furniture (off unless asked; sim/run.gd furniture, FD7).
 var furniture: bool
+## Findables (off unless asked; sim/run.gd findables, FD9).
+var findables: bool
 
 func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false,
 		watchers_: bool = false, relocation_: bool = false, long_dark_: bool = false, paced_: bool = false, car_waits_: bool = false,
-		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false, furniture_: bool = false) -> void:
+		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false, furniture_: bool = false, findables_: bool = false) -> void:
+	findables = findables_
 	playroom_tuned = playroom_tuned_
 	furniture = furniture_
 	relocation = relocation_
@@ -213,6 +220,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_day_lock(s)
 	if furniture and not s.furniture:
 		s = Run.with_furniture(s)
+	if findables and not s.findables:
+		s = Run.with_findables(s)
 	return _capped(s)
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web
@@ -329,6 +338,10 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 		# The Annex's marks and notes too: the catch's note was triggered by the real tick.
 		st.annex = r.state.annex
 		st.note_seq = r.state.note_seq
+		# Findables (FD9): what was opened and found on the real tick (the credits ride on its crew's tapes).
+		st.find = r.state.find
+		st.lore_used = r.state.lore_used
+		st.items = r.state.items
 		st.players = players
 		st.summary = null
 		var kept_events: Array[Dictionary] = []
@@ -372,4 +385,6 @@ static func _copy_input(i: Run.PlayerInput) -> Run.PlayerInput:
 	n.light = i.light
 	n.mark = i.mark
 	n.peel = i.peel
+	n.search = i.search
+	n.search_fast = i.search_fast
 	return n

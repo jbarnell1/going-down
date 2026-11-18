@@ -57,6 +57,10 @@ const QuotaView = preload("res://client/quota_view.gd")
 const DownView = preload("res://client/down_view.gd")
 const HintCues = preload("res://client/hint_cues.gd")
 const DayView = preload("res://client/day_view.gd")
+# Findables on screen (FD10): client/search_view.gd (the prompt, the bar, what is open) and client/note_reader.gd.
+const SearchView = preload("res://client/search_view.gd")
+const NoteReaderScript = preload("res://client/note_reader.gd")
+const FindablesRules = preload("res://sim/findables.gd")
 ## Logs, crash and F9 reports for game night (client/telemetry.gd): read-only on this node.
 const Telemetry = preload("res://client/telemetry.gd")
 const BuildInfo = preload("res://net/build_info.gd")
@@ -121,6 +125,12 @@ var hide_view: HideView
 var quota_view := QuotaView.new()
 ## Down first, then out on screen: your timer, the help prompt, the out screen, the red spots (client/down_view.gd).
 var down_view := DownView.new()
+## Findables (FD10): the search's prompt, bar and open pieces, and the reader over the HUD; the test's F for a
+## search (null: the keyboard; "careful", "fast" or "off"); a find block has been seen in this run.
+var search_view := SearchView.new()
+var note_reader: NoteReaderScript
+var t_search: Variant = null
+var _finds_seen := false
 ## The hints this screen triggers itself (client/hint_cues.gd; the gate is client/hints.gd, AH1).
 var hint_cues := HintCues.new()
 ## The day quota on screen (FD3): the HUD's corner line, the lift's day monitor and BANK paint, CLOSED UNTIL MORNING (client/day_view.gd).
@@ -407,6 +417,7 @@ func _read_options() -> void:
 			"pass": pass_arg = val
 			"delay": delay_arg = clampf(float(val), 0.0, 2.0)
 			"hidebreak": HideView.test_break = val
+			"searchbreak": SearchView.test_break = val
 			"tape": tape_arg = val != "0"
 			"ready": ready_arg = val != "0"
 	if OS.has_feature("web"):
@@ -496,6 +507,10 @@ func _build_view() -> void:
 	hide_view.setup(self, sub)
 	hud = Hud.new()
 	add_child(hud)
+	# Findables (FD10): the reader and the search's HUD bits, over the HUD.
+	note_reader = NoteReaderScript.new()
+	note_reader.name = "NoteReader"
+	hud.add_child(note_reader)
 	start = StartScreen.new()
 	start.name = "StartScreen"
 	add_child(start)
@@ -731,6 +746,8 @@ func _clear_world() -> void:
 	sfx.clear_floor()
 	hide_view.reset()
 	down_view.reset()
+	search_view.reset()
+	note_reader.close()
 	spots_root = null
 
 # --- runs and floors ----------------------------------------------------------------------------
@@ -753,6 +770,9 @@ func _on_new_run() -> void:
 	hud.set_seed(str(link.client().seed) if link.client().seed != null else seed)
 	quota_view.reset()
 	down_view.reset()
+	search_view.reset()
+	note_reader.close()
+	_finds_seen = false
 	_turn_until = -1
 	# The welcome is held WELCOME_HOLD seconds (the car and the crew first, then the voice). In a browser
 	# nothing is heard before the first click or key (autoplay rules): it also waits for one.
@@ -880,6 +900,12 @@ func _input(event: InputEvent) -> void:
 				_wheel_release()
 			return
 		if not k.pressed or k.echo:
+			return
+		# Findables (FD10): the reader takes F (put it down), N in the Esc menu (the notes read), 1 to 9 in the list.
+		if k.physical_keycode != KEY_ESCAPE and note_reader.key(k):
+			return
+		if k.physical_keycode == KEY_F and search_view.read_id != "":
+			note_reader.open(search_view.read_id)
 			return
 		if k.physical_keycode == KEY_ESCAPE:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -1147,7 +1173,9 @@ func _game_input(dt: float) -> Dictionary:
 	var hfov := rad_to_deg(2.0 * atan(tan(deg_to_rad(VFOV) * 0.5) * aspect))
 	return {"dt": dt, "f": f, "r": r, "sprint": sprint, "creep": creep, "yaw": yaw, "pitch": pitch,
 		"hfov": hfov, "vfov": VFOV, "raised": raised and not still, "call": call, "hold": hold, "pickUp": pick, "still": still, "use": use,
-		"hide": hide, "hideFast": hide_fast, "peek": peek}
+		"hide": hide, "hideFast": hide_fast, "peek": peek,
+		# Findables (FD10): F held for the search client/search_view.gd offered on the last frame.
+		"search": search_view.want_search and not hide and not call, "searchFast": search_view.want_fast}
 
 func _game_frame(s: Dictionary, dt: float) -> void:
 	var now := Time.get_ticks_msec()
@@ -1167,6 +1195,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	announcer.day_lock_on = DayView.lock_of(s.get("day")) != null
 	announcer.my_id = link.my_id()
 	_present(s.get("events", []), now)
+	_show_finds_events(s, now)
 	for em: Dictionary in s.get("emotes", []):
 		others.play_emote(str(em["player"]), str(em["emote"]))
 		emotes_seen.append({"player": em["player"], "emote": em["emote"]})
@@ -1329,6 +1358,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	var holding: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and not settings_panel.is_open() and Input.is_action_pressed("use"))
 	down_view.update(s, link.my_id(), link.names(), holding)
 	var me_down := str(me["status"]) == "down" or str(me["status"]) == "out" or _left_out(s)
+	_update_search(s, me, home, station, me_down or ended or noise or kiosk.is_open() or _lights_out)
 	if not ended and not noise and not kiosk.is_open() and not _lights_out and not me_down:
 		if down_view.prompt != "":
 			prompt = down_view.prompt
@@ -1348,7 +1378,12 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 			prompt = "F  <|> HOLD"
 		elif _tape_in_reach(me):
 			prompt = "F  PICK UP"
+		elif search_view.prompt != "":
+			# Findables (FD10): the piece in reach, or your search under way with its bar.
+			prompt = search_view.prompt
+			hud.prompt_fill = search_view.fill
 	hud.prompt = prompt
+	_show_finds(s, now)
 	_show_day_lock(s)
 	_show_quota(now)
 	if me_down:
@@ -1394,6 +1429,8 @@ func _show_day_lock(s: Dictionary) -> void:
 	hud.day_line = day_view.hud_line
 	hud.day_met = day_view.met
 	if lift != null:
+		# Findables (FD10): riding down, the next floor's sheet is the day view's third row too.
+		day_view.rows = _ride_rows(s, day_view.rows)
 		lift.show_day(day_view.rows)
 		lift.set_bank_locked(day_view.locked)
 
@@ -1420,6 +1457,64 @@ func car_waiting_text(latest: Variant, names: Dictionary, now: int) -> String:
 ## out of the run until the crew gets home.
 func _left_out(s: Dictionary) -> bool:
 	return s.get("day") != null and str((s["me"] as Dictionary)["status"]) == "leftBehind"
+
+# --- findables on screen (FD10: client/search_view.gd, client/note_reader.gd) ----------------------------
+
+## The search's words this frame: whether F means a search (no other prompt or hide has it), the reader closed
+## by moving.
+func _update_search(s: Dictionary, me: Dictionary, home: bool, station: String, off: bool) -> void:
+	search_view.use_plan(link.plan)
+	var moving := false
+	if not t_move.is_empty():
+		moving = absf(float(t_move[0])) > SearchView.MOVE_LETS_GO or absf(float(t_move[1])) > SearchView.MOVE_LETS_GO
+	elif mode == "game":
+		moving = Input.get_vector("left", "right", "back", "forward").length() > SearchView.MOVE_LETS_GO
+	if moving and note_reader.open_id != "":
+		note_reader.close()
+	var f_held: bool = (str(t_search) == "careful" or str(t_search) == "fast") if t_search != null \
+		else (mode == "game" and not kiosk.is_open() and not note_reader.is_open() and Input.is_action_pressed("use"))
+	var sprint: bool = str(t_search) == "fast" if t_search != null else (mode == "game" and Input.is_action_pressed("sprint"))
+	var bed: Variant = s.get("bed")
+	var blocked := off or down_view.prompt != "" or (home and bed is Dictionary and (bool((bed as Dictionary)["inBed"]) or bool((bed as Dictionary)["atBunk"]))) \
+		or station != "" or bool(me.get("canCall", false)) or bool(me.get("nearHold", false)) or _tape_in_reach(me) or int(s.get("nearHide", -1)) >= 0
+	search_view.update(s, link.my_id(), yaw, f_held, sprint, moving, blocked)
+
+## This frame's search events: your result line and note (into the reader), the noise of a rushed search.
+func _show_finds_events(s: Dictionary, now: int) -> void:
+	var nid := search_view.on_events(s.get("events", []), link.my_id(), sfx, now)
+	if nid != "":
+		note_reader.open(nid)
+
+## What is open, the lobby's sheet, the reader's HUD bits, and the sheet on the lift monitor riding down.
+func _show_finds(s: Dictionary, now: int) -> void:
+	var block: Variant = s.get("find")
+	_finds_seen = _finds_seen or block is Dictionary
+	search_view.show_opened(spots_root, block)
+	search_view.show_sheet(lift, block, link.plan.seed if link.plan != null else "", Vector3(-Lift.CALL_BUTTON.x, 1.42, Lift.LAND + 0.03))
+	note_reader.menu_on = hud.menu_on
+	note_reader.black = hud.black
+	note_reader.prompt_on = hud.prompt != "" and hud.prompt == search_view.prompt
+	note_reader.prompt2 = search_view.prompt2
+	note_reader.result = search_view.result_now(now)
+	note_reader.juice = search_view.juice
+
+## The day monitor's rows, with the next floor's sheet in the third row while riding down (findables-and-day.md:
+## "the same on the monitor's fourth row during the ride down"; the stakes row it takes is for boarding only).
+func _ride_rows(s: Dictionary, rows: PackedStringArray) -> PackedStringArray:
+	if not _finds_seen or rows.size() < 2 or str(s.get("phase", "")) != "riding" or bool(s.get("goingUp", false)):
+		return rows
+	var c := link.client()
+	if c == null or c.seed == null or not c.latest is Dictionary:
+		return rows
+	var next := int(s["depth"]) + 1
+	var plan := Session.plan_for(str(c.seed), next)
+	if not FindablesRules.place_on(plan.place):
+		return rows
+	var crew := 0
+	for p: Dictionary in (c.latest as Dictionary)["players"]:
+		if str(p["status"]) != "leftBehind":
+			crew += 1
+	return PackedStringArray([rows[0], rows[1], SearchView.sheet_for(plan, plan.seed, Run.floor_quota(next, maxi(1, crew)))])
 
 ## Down first, then out (client/down_view.gd, already updated this frame): your timer and its lines (once
 ## the catch's noise has passed), the out screen, the red spots for everyone. Caught and down, the camera
@@ -2020,6 +2115,23 @@ func _command(c: String) -> String:
 			pending_hide_fast = p.size() > 1 and p[1] == "fast"
 		"peek":
 			t_peek = null if p[1] == "-" else p[1] == "1"
+		"search":
+			# Findables (FD10): F held for a search: careful | fast (with sprint) | off | - (the keyboard's).
+			t_search = null if p[1] == "-" else p[1]
+		"pieces":
+			# The floor's searchable pieces, where to stand at each and its prompt.
+			return JSON.stringify(search_view.pieces_plain())
+		"reader":
+			# reader close | list | read <id> | key N (the reader's key, as pressed)
+			if p[1] == "close":
+				note_reader.close()
+				note_reader.list_on = false
+			elif p[1] == "list":
+				note_reader.list_on = true
+				note_reader.close()
+			elif p[1] == "read" and p.size() > 2:
+				note_reader.open(p[2])
+			return JSON.stringify(note_reader.describe())
 		"hides":
 			if link == null:
 				return "[]"
@@ -2241,6 +2353,9 @@ func _test_state() -> Dictionary:
 			"camY": cam.position.y, "board": _board, "count": hud.count_text, "bigNote": hud.big_note,
 			"fade": hud.fade, "lightsOut": _lights_out, "goingUp": s.get("goingUp", false), "centerNote": hud.center_note,
 			"hudBoard": hud.board_lines, "dayBoard": _prison_lines("day"), "reportBoard": _prison_lines("report"), "residentDrawn": orderly.visible},
+		# Findables (FD10): the host's block, what this screen shows, the reader, the day monitor's rows.
+		"find": {"host": s.get("find"), "view": search_view.describe(), "reader": note_reader.describe(), "hudPrompt": hud.prompt,
+			"fill": hud.prompt_fill, "monitor": lift.day_rows if lift != null else []},
 		"day": s.get("day"), "hostNow": s.get("hostNow"), "bed": s.get("bed"), "seed": s.get("seed"),
 		"seek": s.get("seek"), "mySeek": s.get("mySeek"), "countEvent": s.get("countEvent"), "nearHide": s.get("nearHide"), "hideCam": s.get("hideCam"),
 		"place": link.plan_dict.get("place", ""),
