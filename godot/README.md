@@ -45,7 +45,7 @@ the npm scripts use `tools/godot/Godot_v4.7.2-stable_win64_console.exe` under th
 
 ```sh
 npm run godot:test                       # everything, default sizes; exit code 0 only if all pass
-npm run godot:test -- --quick            # the quick set, for every commit: about a minute, every test file
+npm run godot:test -- --quick            # the quick set, for every commit: about 20 minutes on this PC, every test file
 npm run godot:test -- ref_rng prop_clinic  # only these test files
 npm run godot:test -- --full             # property tests at the Vitest sizes (slow: see Timing)
 npm run godot:reference                  # regenerate tests/reference/ from src/ (needs Node; installs tsx here)

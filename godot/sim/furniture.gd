@@ -10,8 +10,8 @@
 #    footprint cut back on the gap side so a player's body (PLAYER_R) fits on the front spot with 2 cm to
 #    spare (a bed loses 7 cm, a desk 2 cm, the meeting table 27 cm of its 65; a cabinet nothing). A desk's
 #    chair and the meeting table's chairs come with their hide (`group`), wherever they fit;
-#  - the searchable pieces will be owned by sim/findables.gd (FD8). It does not exist yet, so no piece is
-#    searchable today;
+#  - the searchable pieces are owned by sim/findables.gd (FD8): pieces_for asks it (Findables.mark_searchable)
+#    which of the plain pieces below can be searched, and sets their `searchable` flag;
 #  - the rest are plain solid pieces added here: chairs, wheelchairs, gurneys, cabinets and drawers in the
 #    Clinic (the glb models the client had placed by itself), and in the Annex the filing cabinets, plants,
 #    water coolers, copiers, shelves, boxes, the break room's counter and fridge, the atrium's chair rows.
@@ -185,7 +185,13 @@ static func pieces_for(plan: Floor.FloorPlan, floor_seed: String = "", depth: in
 		_clinic(c, sd, dp)
 	else:
 		_annex(c)
+	# The searchable flag: sim/findables.gd decides (FD8). Loaded, not preloaded: findables.gd reads this file.
+	if _findables == null:
+		_findables = load("res://sim/findables.gd")
+	_findables.mark_searchable(plan, c.out, sd, dp, c.hides)
 	return c.out
+
+static var _findables: GDScript = null
 
 # ---------------------------------------------------------------------------------------------
 # Building pieces.
@@ -489,5 +495,10 @@ static func plain(list: Array[Piece]) -> Array:
 			"block": [p.block.position.x, p.block.position.y, p.block.size.x, p.block.size.y]})
 	return out
 
+## The list's hash (tests/reference/furniture_hashes.json): every field but `searchable`, which sim/findables.gd
+## decides and tests/reference/findables_hashes.json covers, so the furniture's stored hashes stand as recorded.
 static func hash_of(list: Array[Piece]) -> String:
-	return Playroom.hash_plain(plain(list))
+	var rows := plain(list)
+	for r: Dictionary in rows:
+		r["searchable"] = false
+	return Playroom.hash_plain(rows)

@@ -35,10 +35,10 @@ func _initialize() -> void:
 	Session.deck = Places.FULL
 	_room = GardenRoom.new(_ws, say)
 	_room.fixed_seed = str(args.get("seed", ""))
-	_room.start_depth = int(args.get("depth", "5"))
+	_room.first_depth = int(args.get("depth", "5"))
 	Engine.max_fps = 250
 	_t0 = Time.get_ticks_usec()
-	say("garden server listening on 127.0.0.1:%d, runs start at depth %d" % [port, _room.start_depth])
+	say("garden server listening on 127.0.0.1:%d, runs start at depth %d" % [port, _room.first_depth])
 
 func _process(_delta: float) -> bool:
 	if _ws == null:

@@ -5,6 +5,7 @@
 # Ready-up (server/room.gd): every player sends ready once the room has `expect` people; the starter also
 # sends START at once, which must not start the run early (START WITHOUT is the host's, after 30 s).
 #   build=ID: the build id this client says in its hello (net/build_info.gd; the server is given the same).
+#   stop_after_note=S: end the session S seconds after the first Annex sticky note (RESULT notes, noteText, depth).
 # A player also sends the server one heartbeat, one error line and one F9 report (client/telemetry.gd's
 # message shapes), for the night's log (server/night_log.gd; tools/net_local.mjs checks it).
 # A player plays a scripted session through net/room_client.gd at 60 frames a second: out of the
@@ -128,6 +129,14 @@ func _player(t: float) -> void:
 			res["watchedMoves"] += 1
 	prev = f
 	frames_log.append([f.render_time, f.seeing])
+	# The Annex's sticky notes on this screen (tools/exported_server_check.mjs: the server read its notes data).
+	res["depth"] = c.local_depth
+	var notes := c.notes()
+	if notes.size() > int(res.get("notes", 0)):
+		res["notes"] = notes.size()
+		if not res.has("noteAt"):
+			res["noteAt"] = t
+			res["noteText"] = str(notes[0]["text"])
 	if body == null:
 		return
 	# The script.
@@ -176,7 +185,9 @@ func _player(t: float) -> void:
 		_look_at(car.door_x, car.door_z, body.y + 1.65)
 	# The run is over at "ended"; with the day loop on (the server's game), a bank or a wipe rides the
 	# crew up to the prison instead, so seeing that settle is the end of this session too.
-	if done_at < 0.0 and (phase == "ended" or _settled(c)):
+	# stop_after_note=S: the session is over S seconds after the first sticky note (exported_server_check.mjs).
+	var noted: bool = args.has("stop_after_note") and res.has("noteAt") and t - float(res["noteAt"]) >= float(args["stop_after_note"])
+	if done_at < 0.0 and (phase == "ended" or _settled(c) or noted):
 		done_at = t
 	if done_at >= 0.0 and t - done_at > 3.0:
 		_report(c)

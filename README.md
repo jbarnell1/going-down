@@ -1,6 +1,6 @@
 # Going Down
 
-A co-op suspense game for the browser. A crew rides an elevator down through a building that gets worse on every floor, and gets paid for getting close to the things that live there.
+A co-op suspense game for Windows, with a browser build as the backup. A crew rides an elevator down through a building that gets worse on every floor, and gets paid for getting close to the things that live there.
 
 The civilisation above never stopped building upward: hospitals on top of TV stations on top of storage halls, each new age laid over the last. You are convicts, sentenced to explore what is underneath. Earn enough down there and you buy your freedom.
 
@@ -8,9 +8,9 @@ The civilisation above never stopped building upward: hospitals on top of TV sta
 
 *The Orderly, first pass. It gets a second one.*
 
-**[Play the latest build](https://jbarnell1.github.io/going-down/)** in a desktop browser or on a phone. Every build that passes all checks is published there.
+**[The first browser version](https://jbarnell1.github.io/going-down/)** is still published and is no longer changed. The game has since moved to the Godot engine and is played from a downloaded Windows build with a small server at home.
 
-> **Status: very early.** You can walk a generated floor; nothing lives on it yet. This repository is being built in the open by an AI-assisted work loop, one verified step at a time. "Going Down" is a working title.
+> **Status, 18 November 2026: playable with friends, still being built.** Three places (a clinic, an endless office, a soft-play area), each with its own resident and its own rule; a lift, a floor quota and a day quota; a prison to come home to; an announcer; live settings for the host. A fourth place, a dark forest indoors, is being built. This repository is built in the open by an AI-assisted work loop, one verified step at a time. "Going Down" is a working title.
 
 ## The idea
 
@@ -28,28 +28,34 @@ Entities follow rules they never break. Learning the rule is how you survive, an
 
 | Part | Choice |
 |---|---|
-| Game | TypeScript, three.js, Vite. First-person, under a low-resolution tape-playback look. |
-| Multiplayer | Peer to peer in the browser. One player hosts. No game server, no accounts. |
-| Rules | A pure logic layer with no rendering, so hundreds of runs can be simulated in tests. |
+| Game | Godot 4.7.2, typed GDScript, one codebase. First-person, under a low-resolution tape-playback look. |
+| Multiplayer | A small dedicated server at home runs the rules and keeps everyone in step. Playing alone runs the same rules inside the game. |
+| Rules | A pure logic layer with no drawing and no network, so hundreds of runs can be simulated in tests. Every rule change sits behind a flag. |
 | Characters | Modelled, rigged and animated in Blender by script. Each script rebuilds its figure from nothing. |
-| Checks | Vitest for the rules, Playwright for the real game, gitleaks on every push. |
+| Checks | Rule tests on every commit, scripted playthroughs of the real game on every build, a secret scan on every commit, CI on a clean Linux machine. |
 
 ### Where things are
 
+- `AGENTS.md` : the rules for any coding agent working here. Start with it.
+- `godot/` : the game. `sim/` the rules, `net/` the network, `server/` the home server, `client/` what you see and hear, `tests/`, `tools/`. See `godot/README.md`.
 - `loop/` : how the work is run. `LOOP.md` is the rulebook for one iteration, `ENDPOINT.md` is the list of gates that define "done", and `PROGRESS.md` is the live state with evidence for every finished task.
-- `docs/VOICE.md` : how the elevator voice is written and directed.
-- `assets_src/blender/` : the scripts that build each character. `assets_src/renders/` has their review renders.
+- `docs/VOICE.md` : how the elevator voice is written and directed. `docs/ART-NOTES.md` : what was learned making the figures.
+- `assets_src/` : the Blender scripts that build each character, their review renders, the voice scripts.
 - `hub/` : a small local server for checking in on the latest build, the loop's status, and open design questions.
-- `src/` : the game, once the first task lands.
+- `src/`, `tests/` : the first browser version in TypeScript. Frozen; kept as the reference the Godot rules were proved against.
 
 ## Running it
 
+You need the Godot 4.7.2 engine. Point `GODOT` at its console build, then:
+
 ```bash
 npm ci
-npm run dev
+node godot/tools/godot.mjs import
+npm run godot:test -- --quick
+npm run godot:export
 ```
 
-Useful flags on the URL: `?bots=3` fills the crew with bot players so one person can test everything, `?debug=1` opens a test panel, `?seed=` picks the building.
+The Windows build lands in `godot/export/windows/`. Open `godot/project.godot` in the editor to run it from source.
 
 ## Credits and inspirations
 

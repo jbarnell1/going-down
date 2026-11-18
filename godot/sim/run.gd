@@ -251,6 +251,40 @@
 # (Move.settle). The residents never read the list: they walk exactly as before, through any piece their path
 # crosses (the list keeps pieces against walls and off every cell's middle, so that is rare: the meeting table
 # and the beds' last few centimetres).
+# Findables (FD9, `findables`, with_findables: docs/floors/findables-and-day.md section 3; sim/findables.gd;
+# net/host_rules.gd turns it on for the game's rooms; tests and every stored result leave it off, and then nothing
+# below happens). On a Clinic or an Annex the run holds `find` (a Findables.FindFloor: the fill, what has been
+# opened, the searches under way), made the first tick the arrival doors are open (the fill's credits are units
+# of the floor's quota as set on arrival) and dropped on the next floor; `lore_used` keeps the lore pages dealt
+# tonight; `items` what each player has found to carry, {id: {item: count}}.
+#  - Stepped before the resident, every tick the doors have opened on the floor (not while riding), for every
+#    player: F held (PlayerInput.search), sprint with it (search_fast), and able (on their feet, active, out of
+#    the car, out of any hide, not sprinting). Findables.step says the rest (the two speeds, what stops a search,
+#    one opening per piece). Its events are run events.
+#  - While searching a player is rooted where the search began, their instrument is away (an open reading
+#    closes as a lowered instrument's does), and their eyes are in the drawer: never a watcher (their view is
+#    blind, as when sat back in a hide), still huntable. Lonely's company is unchanged.
+#  - A rushed search's noise ("searchNoise") wakes a resident still standing where the floor began, as the call
+#    does ("startedHunting").
+#  - Credits found go onto the finder's own tape as a reading of trait "found" (entity "found", worth the
+#    credits, never multiplied by depth), so they ride with the tape: dropped, picked up, banked and lost with
+#    it, and banked as pay. They count towards the day's earned (with the day lock) the tick they are found,
+#    and never towards the floor quota (no "readingClosed": the call still needs the instrument, C9).
+#  - A carton of juice adds one to the finder's items[JUICE]. That is all, until the inventory and the nerve
+#    bar exist: nothing drinks it, no stamina changes. Cartons do not go home: items empty every morning.
+# The four-slot inventory (S1, `inventory`, with_inventory: docs/floors/skill-tree.md; sim/inventory.gd; net/host_rules.gd
+# turns it on for the game's rooms; tests and every stored result leave it off, and then nothing below happens).
+# `bags` holds each player's four slots, `pickups` what lies on this floor (gone when the plan changes).
+#  - Stepped each tick after the crew's tapes (not on the tick the crew banks or the run ends): first everyone who is
+#    not on their feet (down, caught, out, left behind) drops all they carry where they are ("itemDropped" {why:
+#    "down"}); then, for each player on their feet and active, in the run's player order: the slot asked for
+#    (PlayerInput.inv_select), then one request (inv_op): "drop" the selected slot at the feet, "take" a pickup in
+#    reach (as much as fits), "give" the selected slot to a crewmate on their feet within the hand reach (as much
+#    as fits). A request that cannot be done is refused ("invRefused" {playerId, op, why: full, theirFull, reach,
+#    empty, gone}) and changes nothing.
+#  - With findables, a carton found goes into the finder's bag instead of `items`. No room: the piece is not
+#    opened, the carton stays in the furniture, and "searchFull" {playerId, piece} says so (searchDone is not sent).
+#  - The morning clears every bag and every pickup.
 # Live settings (docs/floors/live-settings.md, sim/settings.gd): `tuning` is null unless the host's desk put one
 # there (with_tuning). The rules read the host's numbers through Settings.f with today's constant as the
 # fallback, so a run without one computes exactly as before. Read so far (LS1): the Stillness residents' hunt
@@ -306,6 +340,8 @@ const Settings = preload("res://sim/settings.gd")
 const Furniture = preload("res://sim/furniture.gd")
 const Noises = preload("res://sim/noise.gd")
 const Hearing = preload("res://sim/hearing.gd")
+const Findables = preload("res://sim/findables.gd")
+const Inventory = preload("res://sim/inventory.gd")
 
 # ---------------------------------------------------------------------------------------------
 # Tuning.
@@ -990,6 +1026,21 @@ class RunState:
 	## Solid furniture (FD7, with_furniture; sim/furniture.gd): players slide along the floor's pieces. Off:
 	## nothing blocks but walls, as every stored result has it.
 	var furniture: bool = false
+	## Findables (FD9, with_findables; sim/findables.gd). Off: nothing below is ever made or read.
+	var findables: bool = false
+	## This floor's findables (a Findables.FindFloor), or null; the lore pages dealt tonight; each player's
+	## found items {id: {item: count}}. Replaced, never edited.
+	var find: Variant = null
+	var lore_used: Array = []
+	var items: Dictionary = {}
+	## The four-slot inventory (S1, with_inventory; sim/inventory.gd). Off: nothing below is ever made or read.
+	var inventory: bool = false
+	## Each player's slots {id: Inventory.Bag}; the floor's pickups (Inventory.Pickup) and the plan they lie on;
+	## the next pickup's id. Replaced, never edited.
+	var bags: Dictionary = {}
+	var pickups: Array = []
+	var pickups_plan: Variant = null
+	var pickup_seq: int = 0
 
 	## Live settings (sim/settings.gd): the host's numbers in force in this run, or null for none (every test
 	## and stored result). The rules read it with Settings.f, falling back to today's constant. Replaced,
@@ -1008,6 +1059,15 @@ class RunState:
 		s.day_met = day_met
 		s.playroom_tuned = playroom_tuned
 		s.furniture = furniture
+		s.findables = findables
+		s.find = find
+		s.lore_used = lore_used
+		s.items = items
+		s.inventory = inventory
+		s.bags = bags
+		s.pickups = pickups
+		s.pickups_plan = pickups_plan
+		s.pickup_seq = pickup_seq
 		s.two_watchers = two_watchers
 		s.relocation = relocation
 		s.seed = seed
@@ -1106,6 +1166,14 @@ class PlayerInput:
 	var mark: bool = false
 	## The id of a mark to peel back onto the pad (F held on it for Marks.PEEL_SECONDS), or -1.
 	var peel: int = -1
+	## Findables (see the header): F held to search the piece in reach, and sprint held with it (rushed).
+	var search: bool = false
+	var search_fast: bool = false
+	## The inventory (S1, see the header): the slot asked for (0 to 3, -1 for none); one request this tick,
+	## &"drop", &"take" (inv_arg: the pickup's id) or &"give" (inv_arg: the crewmate's id), or &"" for none.
+	var inv_select: int = -1
+	var inv_op: StringName = &""
+	var inv_arg: Variant = null
 
 	static func make(id_: String, body_: Move.Body, eye_: float, yaw_: float, pitch_: float, h_fov: float, v_fov: float) -> PlayerInput:
 		var p := PlayerInput.new()
@@ -1330,6 +1398,25 @@ static func with_playroom_tuned(s0: RunState) -> RunState:
 static func with_furniture(s0: RunState) -> RunState:
 	var s := s0.copy()
 	s.furniture = true
+	return s
+
+## Turns findables on (FD9, see the header): nothing opened, no pages dealt, nothing carried.
+static func with_findables(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.findables = true
+	s.find = null
+	s.lore_used = []
+	s.items = {}
+	return s
+
+## Turns the four-slot inventory on (S1, see the header): empty hands, nothing on the floor.
+static func with_inventory(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.inventory = true
+	s.bags = {}
+	s.pickups = []
+	s.pickups_plan = null
+	s.pickup_seq = 0
 	return s
 
 ## The floor's solid pieces for players in this run (Furniture.solids_of), or null when furniture is off.
@@ -2868,6 +2955,10 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		s.lure = false
 		events.append({"type": "carLeft", "t": t, "reason": "ride"})
 
+	# ---- Findables (FD9, see the header): searches, before the resident.
+	if s.findables:
+		_step_findables(s, players, input_of, t, events)
+
 	# ---- 2. The Orderly (not while riding: that floor is behind the crew).
 	var entity_ticks: Array[Instr.EntityTick] = []
 	var who := resident_of(s)
@@ -2911,7 +3002,8 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 					views.append(_view_of(i, false, false))
 			else:
 				var hv := _hidden_view(s, i, blind or i.blind)
-				views.append(hv if hv != null else _view_of(i, true, blind or i.blind))
+				# A searcher's eyes are in the drawer (findables): huntable, never a watcher.
+				views.append(hv if hv != null else _view_of(i, true, blind or i.blind or searching(s, p.id)))
 		# The call pulls it toward the landing, until it gets there.
 		var s2 := float(s.plan.cell_size)
 		var lx := (s.plan.landing.x + 0.5) * s2
@@ -3003,7 +3095,10 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	for p in players:
 		var i: PlayerInput = input_of.get(p.id)
 		if i != null and i.raised != null:
-			crew = Instr.set_raised(crew, p.id, bool(i.raised) and p.status == &"ok")
+			crew = Instr.set_raised(crew, p.id, bool(i.raised) and p.status == &"ok" and not searching(s, p.id))
+		elif searching(s, p.id):
+			# Searching (findables): the instrument is away.
+			crew = Instr.set_raised(crew, p.id, false)
 	s.crew = crew
 	var crew_players: Array[Instr.CrewPlayer] = []
 	for p in players:
@@ -3045,6 +3140,10 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			s.crew = up.crew
 			if up.event != null:
 				events.append(_with_t(up.event, t))
+
+	# ---- The four-slot inventory (S1, see the header).
+	if s.inventory:
+		_step_inventory(s, players, input_of, t, events)
 
 	# ---- The floor quota met: said once per floor, while the crew is still on it.
 	if s.quota and not s.quota_met and not at_home(s) and s.phase != &"riding" and s.floor_needed > 0 and quota_reached(s):
@@ -3377,6 +3476,14 @@ static func _morning(s: RunState, players: Array[RunPlayer], t: float, events: A
 	if s.day_lock:
 		s.day_earned = 0.0
 		s.day_met = false
+	if s.findables:
+		# Cartons do not go home (findables, see the header).
+		s.items = {}
+	if s.inventory and Inventory.test_break != "no_clear":
+		# Everything carried or left lying is cleared overnight (the inventory, see the header).
+		s.bags = {}
+		s.pickups = []
+		s.pickups_plan = null
 	var f := _floor_for(s.seed, 1, s.deck)
 	var bodies := {}
 	for i in players.size():
@@ -3537,3 +3644,257 @@ static func _active_aboard(players: Array[RunPlayer], input_of: Dictionary) -> A
 		if _is_active(p, input_of) and p.aboard:
 			out.append(p)
 	return out
+
+# ---------------------------------------------------------------------------------------------
+# Findables (FD9; see the header).
+
+## Whether this floor has findables in this run.
+static func finds_here(s: RunState) -> bool:
+	return s.findables and not at_home(s) and s.plan != null and Findables.place_on(s.plan.place)
+
+## Whether a player is searching now.
+static func searching(s: RunState, id: String) -> bool:
+	return s.find != null and Findables.searching(s.find as Findables.FindFloor, id)
+
+## The floor's quota as set on arrival, for the fill's credit units: the quota's own number, else what it would be.
+static func find_base(s: RunState, players: Array[RunPlayer]) -> int:
+	return s.floor_needed if s.quota and s.floor_needed > 0 else floor_quota(s.depth, quota_crew(players))
+
+## Whether a player is in, getting into or getting out of a hide.
+static func _in_hide(s: RunState, id: String) -> bool:
+	if s.hiding == null:
+		return false
+	var hp := Hiding.player_of(s.hiding as Hiding.HidingState, id)
+	return hp != null and hp.phase != &"out"
+
+## One tick of searching (see the header). Updates `s` (find, crew, day_earned, items, the resident woken),
+## `players` (rooted bodies) and appends the events.
+static func _step_findables(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, events: Array[Dictionary]) -> void:
+	if s.find != null and (not finds_here(s) or (s.find as Findables.FindFloor).plan != s.plan):
+		s.find = null
+	if not finds_here(s) or s.phase == &"riding" or s.phase == &"arriving":
+		return
+	if s.find == null:
+		var day := s.day_state.day if s.days and s.day_state != null else 1
+		var ff := Findables.start_floor(s.plan, s.plan.seed, s.depth, find_base(s, players), Findables.trait_for(s.plan.place, s.lonely), day, s.lore_used)
+		s.find = ff
+		if ff.fill.page != "":
+			var used := s.lore_used.duplicate()
+			used.append(ff.fill.page)
+			s.lore_used = used
+	var inputs: Array[Findables.SearchInput] = []
+	for p in players:
+		var i: PlayerInput = input_of.get(p.id)
+		var able := i != null and p.status == &"ok" and _is_active(p, input_of) and not p.aboard and not _in_hide(s, p.id) \
+			and i.gait != &"sprint" and not i.hide_use
+		inputs.append(Findables.SearchInput.make(p.id, p.body, i.yaw if i != null else 0.0, i != null and i.search, i != null and i.search_fast, able))
+	var r := Findables.step(s.find as Findables.FindFloor, inputs, t)
+	s.find = r.floor
+	events.append_array(r.events)
+	# A rushed search is loud: a resident still standing where the floor began wakes, as at the call.
+	if not r.noisy.is_empty() and s.orderly.mode == &"waiting" and (resident_of(s).stillness or resident_of(s).trait_name == &"lonely"):
+		var o := s.orderly.copy()
+		o.mode = &"hunting"
+		o.replan_in = 0.0
+		s.orderly = o
+		events.append({"type": "startedHunting", "t": t})
+	for row in r.found:
+		var by := str(row["by"])
+		if str(row["what"]) == "credits":
+			_add_found(s, by, int(row["credits"]), int(row["piece"]), t)
+		elif str(row["what"]) == "juice" and s.inventory:
+			# The inventory (S1): the carton goes into the finder's bag, or stays in the furniture.
+			_carton_found(s, by, int(row["piece"]), t, events)
+		elif str(row["what"]) == "juice":
+			var items := s.items.duplicate()
+			var mine: Dictionary = (items.get(by, {}) as Dictionary).duplicate()
+			mine[String(Findables.JUICE)] = int(mine.get(String(Findables.JUICE), 0)) + 1
+			items[by] = mine
+			s.items = items
+	# Rooted: a searcher stands where the search began.
+	var ff2: Findables.FindFloor = s.find
+	for k in players.size():
+		var sr: Findables.Search = ff2.searches.get(players[k].id)
+		if sr != null:
+			var np := players[k].copy()
+			np.body = sr.spot
+			players[k] = np
+
+## Credits found: a reading of trait "found" on the finder's own tape (it rides with the tape), and the day's
+## earned (with the day lock). Never the floor quota.
+static func _add_found(s: RunState, id: String, credits: int, piece: int, t: float) -> void:
+	if credits <= 0:
+		return
+	var m := Instr.member(s.crew, id)
+	if m == null:
+		return
+	var rd := TapeLib.Reading.new()
+	rd.id = "found-%d-%d-%d" % [s.day_index, s.depth, piece]
+	rd.player_id = id
+	rd.entity_id = "found"
+	rd.trait_name = &"found"
+	rd.value = float(credits)
+	rd.duration = 0.0
+	rd.peak_rate = 0.0
+	rd.closed_at = t
+	var nm := m.copy()
+	nm.tape = TapeLib.add_reading(m.tape, rd)
+	var c := s.crew.copy()
+	for k in c.members.size():
+		if c.members[k].id == id:
+			c.members[k] = nm
+	s.crew = c
+	if s.day_lock:
+		s.day_earned += float(credits)
+	if Findables.test_break == "floor_earned" and s.quota:
+		# The deliberate break: found credits counted on the floor quota.
+		s.floor_earned += float(credits)
+
+## What a tape holds in found credits (its "found" readings).
+static func found_on(tape: TapeLib.Tape) -> float:
+	var sum := 0.0
+	for r in tape.readings:
+		if r.trait_name == &"found":
+			sum += r.value
+	return sum
+
+# ---------------------------------------------------------------------------------------------
+# The four-slot inventory (S1; see the header).
+
+## A carton found by `by` (the inventory on): into their bag, or, with no room, left in the piece (not opened) and
+## "searchFull" instead of "searchDone".
+static func _carton_found(s: RunState, by: String, piece: int, t: float, events: Array[Dictionary]) -> void:
+	var r := Inventory.add(Inventory.bag_of(s.bags, by), String(Findables.JUICE), 1, Inventory.stack_limit(s.tuning, by))
+	if r.added > 0:
+		var bags := s.bags.duplicate()
+		bags[by] = r.bag
+		s.bags = bags
+		return
+	var ff := (s.find as Findables.FindFloor).copy()
+	ff.opened.erase(piece)
+	s.find = ff
+	for k in range(events.size() - 1, -1, -1):
+		var e := events[k]
+		if str(e.get("type")) == "searchDone" and str(e.get("playerId")) == by and int(e.get("piece", -1)) == piece:
+			events.remove_at(k)
+			break
+	events.append({"type": "searchFull", "t": t, "playerId": by, "piece": piece})
+
+## Every bag and pickup as one list of items ({item: count}): what the world holds (tests count it).
+static func items_in_world(s: RunState) -> Dictionary:
+	return Inventory.world_totals(s.bags, s.pickups)
+
+## One tick of the inventory (see the header). Updates `s` (bags, pickups) and appends the events.
+static func _step_inventory(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, events: Array[Dictionary]) -> void:
+	if s.pickups_plan != s.plan:
+		# A new floor (or home): what lay on the last one is gone with it.
+		s.pickups = []
+		s.pickups_plan = s.plan
+	var bags := s.bags
+	var pickups := s.pickups
+	var seq := s.pickup_seq
+	var touched := false
+	# Not on their feet: everything they carry falls where they are (B6).
+	for p in players:
+		if p.status == &"ok":
+			continue
+		var b: Inventory.Bag = bags.get(p.id)
+		if b == null or b.is_empty():
+			continue
+		if not touched:
+			bags = bags.duplicate()
+			pickups = pickups.duplicate()
+			touched = true
+		var nb := b
+		for k in Inventory.SLOTS:
+			if nb.count(k) <= 0:
+				continue
+			seq += 1
+			pickups.append(Inventory.Pickup.make(seq, nb.item(k), nb.count(k), p.body))
+			events.append({"type": "itemDropped", "t": t, "playerId": p.id, "pickup": seq, "item": nb.item(k), "count": nb.count(k), "at": p.body, "why": "down"})
+			nb = Inventory.clear_slot(nb, k)
+		bags[p.id] = nb
+	# The requests, in the run's player order.
+	for p in players:
+		var i: PlayerInput = input_of.get(p.id)
+		if i == null or p.status != &"ok" or not _is_active(p, input_of) or (i.inv_select < 0 and i.inv_op == &""):
+			continue
+		if not touched:
+			bags = bags.duplicate()
+			pickups = pickups.duplicate()
+			touched = true
+		var b := Inventory.bag_of(bags, p.id)
+		if i.inv_select >= 0 and i.inv_select < Inventory.SLOTS and i.inv_select != b.sel:
+			b = Inventory.select(b, i.inv_select)
+			bags[p.id] = b
+		if i.inv_op == &"":
+			continue
+		var refuse := func(why: String) -> void:
+			events.append({"type": "invRefused", "t": t, "playerId": p.id, "op": String(i.inv_op), "why": why})
+		if s.phase == &"riding" or _in_hide(s, p.id) or searching(s, p.id):
+			refuse.call("busy")
+			continue
+		var k := b.sel
+		match i.inv_op:
+			&"drop":
+				if b.count(k) <= 0:
+					refuse.call("empty")
+					continue
+				seq += 1
+				pickups.append(Inventory.Pickup.make(seq, b.item(k), b.count(k), p.body))
+				events.append({"type": "itemDropped", "t": t, "playerId": p.id, "pickup": seq, "item": b.item(k), "count": b.count(k), "at": p.body, "why": "drop"})
+				if Inventory.test_break != "dup_drop":
+					bags[p.id] = Inventory.clear_slot(b, k)
+			&"take":
+				var at := -1
+				for n in pickups.size():
+					if i.inv_arg != null and (pickups[n] as Inventory.Pickup).id == int(i.inv_arg):
+						at = n
+						break
+				if at < 0:
+					refuse.call("gone")
+					continue
+				var pk: Inventory.Pickup = pickups[at]
+				if not Inventory.within(p.body, pk.at, Inventory.PICKUP_REACH):
+					refuse.call("reach")
+					continue
+				var r := Inventory.add(b, pk.item, pk.count, Inventory.stack_limit(s.tuning, p.id))
+				if r.added <= 0:
+					refuse.call("full")
+					continue
+				bags[p.id] = r.bag
+				if r.left > 0:
+					pickups[at] = Inventory.Pickup.make(pk.id, pk.item, r.left, pk.at)
+				else:
+					pickups.remove_at(at)
+				events.append({"type": "itemTaken", "t": t, "playerId": p.id, "pickup": pk.id, "item": pk.item, "count": r.added, "left": r.left})
+			&"give":
+				if b.count(k) <= 0:
+					refuse.call("empty")
+					continue
+				var q: RunPlayer = null
+				for o in players:
+					if i.inv_arg != null and o.id == str(i.inv_arg):
+						q = o
+				if q == null or q.id == p.id or q.status != &"ok" or not _is_active(q, input_of):
+					refuse.call("gone")
+					continue
+				if not Inventory.within(p.body, q.body, Inventory.hand_reach(s.tuning)):
+					refuse.call("reach")
+					continue
+				var r := Inventory.add(Inventory.bag_of(bags, q.id), b.item(k), b.count(k), Inventory.stack_limit(s.tuning, q.id))
+				if r.added <= 0:
+					refuse.call("theirFull")
+					continue
+				bags[q.id] = r.bag
+				var nb := b.copy()
+				var n_left := b.count(k) - r.added
+				nb.slots[k] = [b.item(k) if n_left > 0 else "", n_left]
+				bags[p.id] = nb
+				events.append({"type": "itemGiven", "t": t, "playerId": p.id, "to": q.id, "item": b.item(k), "count": r.added})
+			_:
+				refuse.call("op")
+	if touched:
+		s.bags = bags
+		s.pickups = pickups
+		s.pickup_seq = seq

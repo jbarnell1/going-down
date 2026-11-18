@@ -40,6 +40,10 @@ const MENU_ROWS: Array[Array] = [
 	["RIGHT MOUSE", "HOLD THE INSTRUMENT UP"],
 	["F", "CALL / HOLD DOORS / PICK UP / SLEEP / HIDE"],
 	["HOLD F BY A FRIEND", "HELP THEM UP"],
+	# The four-slot inventory (S1, client/inventory_view.gd).
+	["1 2 3 4 / WHEEL", "PICK WHAT YOU HOLD"],
+	["G", "DROP WHAT YOU HOLD"],
+	["F FACING A FRIEND", "GIVE THEM WHAT YOU HOLD"],
 	["W IN A HIDE", "LEAN TO THE GAP"],
 	["T", "TAPE LOOK ON / OFF"],
 	["HOLD R", "EMOTE WHEEL: AIM, LET GO"],
@@ -409,6 +413,7 @@ func _draw_wheel(px: float) -> void:
 func menu_rows() -> Array[Array]:
 	var rows: Array[Array] = MENU_ROWS.duplicate()
 	rows.append(["H", "HINTS: ON" if hints_on else "HINTS: OFF"])
+	rows.append(["B", "BRIGHTNESS"])
 	return rows
 
 func _draw_menu() -> void:

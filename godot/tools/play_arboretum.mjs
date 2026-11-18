@@ -14,7 +14,7 @@
 // With --shots=1 (windowed only) it also takes pictures along the way into export/shots/arboretum/.
 // Prints `N passed, M failed`; exit code 1 on any failure.
 //   node godot/tools/play_arboretum.mjs [--port=4470] [--seed=garden-1] [--headless=1]
-// Ports 4460-4479 only; the games' test channels are on port+1 and port+2. Windowed: start
+// Ports 4460-4479 or 4490-4499 only; the games' test channels are on port+1 and port+2. Windowed: start
 // .local/guard-mouse.ps1 beside it. Every process it starts is stopped.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -32,7 +32,7 @@ const headless = arg('headless', '0') === '1';
 const godot = process.env.GODOT || join(root, 'tools', 'godot', 'Godot_v4.7.2-stable_win64_console.exe');
 if (!existsSync(godot)) throw new Error(`no engine at ${godot}: set GODOT`);
 const testPorts = [port + 1, port + 2];
-for (const p of [port, ...testPorts]) if (!(p >= 4460 && p <= 4479)) throw new Error(`port ${p} is outside 4460-4479`);
+for (const p of [port, ...testPorts]) if (!((p >= 4460 && p <= 4479) || (p >= 4490 && p <= 4499))) throw new Error(`port ${p} is outside 4460-4479 and 4490-4499`);
 const shots = resolve(project, 'export', 'shots', 'arboretum');
 mkdirSync(shots, { recursive: true });
 const SECRET = 'test-passphrase';

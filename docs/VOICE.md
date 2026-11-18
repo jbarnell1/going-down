@@ -108,9 +108,15 @@ To add a third (for example Sarah, already shortlisted, whose three audition lin
 - A group in `lines.json` may name its voices (`groups.tape.voices: ["Bella"]`): `--all`, `--publish`, the audition page and `check.mjs` then make, ship and check its lines in those voices only, the manifest lists them on the line (`"voices": ["bella"]`), and `check.mjs` fails if the ledger shows one recorded in another voice.
 - Five beats of the tape, one take each, 958 characters. Bella read them at 0.83 to 0.97 of the design's seconds. The tape cuts its pictures on the pauses between sentences (`node godot/tools/tape_cues.mjs`, which writes the cue times into `godot/data/tapes.json`); run it again after any re-take.
 
+## Learned on 2026-11-18 (the grab, hint_listen_1, hint_hide_2)
+
+- The Minder's grab outside a count has its own moment, `grab` (`grab_1` to `grab_3`, group `playroom`, one take each): `godot/client/announcer.gd` `say_grab` deals one per grab from a shuffled deck (never the same twice running) and captions it with the line itself. "Found you" stays for a count's find.
+- `hint_listen_1` was reworded (owner, 18 Nov: its old first sentence, about not being alone, could give away a resident's rule). Its old takes were replaced, not kept beside the new ones.
+- A line read slowly on purpose may carry its own upper limit for the duration check: `"slow": 1.8` on the line in `lines.json` (a number from 1 to 2.0). `check.mjs` uses it for that line only; every other line keeps 1.6. `hint_hide_2` has it: its spaced list runs 1.61x (Bella) and 1.74x (Brian) the estimate in take 1, four takes agree the slow read is right, and the owner kept take 1.
+
 ## Checks the loop can run
 
 - Every line id in `lines.json` has a file in `public/assets/voice/`.
-- Duration is between 0.4 and 1.6 times the estimate from word count plus pauses. Outside that range usually means a tag was spoken aloud or a sound effect was produced.
+- Duration is between 0.4 and 1.6 times the estimate from word count plus pauses (or the line's own `"slow"` allowance, for a line read slowly on purpose). Outside that range usually means a tag was spoken aloud or a sound effect was produced.
 - No clipping; loudness within 1 LU of target.
 - The ledger total is under the cap.

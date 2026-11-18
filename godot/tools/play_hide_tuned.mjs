@@ -20,7 +20,7 @@
 // Ports 4460-4479 only; the games' test channels are on port+1 and port+2. Windowed: start
 // .local/guard-mouse.ps1 beside it. Every process it starts is stopped.
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -265,6 +265,16 @@ try {
   check(`${G.label === 'A' ? 'Ann' : 'Bob'}, walking up to it outside a count, is grabbed within 1 m, on both screens, and no count starts`,
     grabbed && grabbed.mySeek.status === 'found' && rowG && rowG.status !== 'ok' && !w.seek.counting && w.seek.n === 1,
     `${grabbed?.mySeek?.status} at ${r3(grabbed?.orderly?.distance)} m; on the other screen ${rowG?.status}; counting ${w.seek.counting}, counts ${w.seek.n}`);
+  // The grab has its own line (one of grab_1..3, client/announcer.gd say_grab), never "Found you", on both screens.
+  {
+    const grabLines = JSON.parse(readFileSync(join(project, 'assets', 'voice', 'manifest.json'), 'utf8')).lines.filter((l) => l.moment === 'grab').map((l) => l.plain);
+    const gs = await G.state();
+    const ws = await W.state();
+    const lastG = gs.captions.at(-1) ?? '';
+    const lastW = ws.captions.at(-1) ?? '';
+    check('the grab says its own line on both screens (not "Found you")', grabLines.length === 3 && grabLines.includes(lastG) && grabLines.includes(lastW) && !gs.captions.some((c) => /^FOUND YOU/.test(c)),
+      `grabbed screen "${lastG}", other screen "${lastW}"`);
+  }
   g = await until(G.state, (s) => s.orderly?.mode === 'drag' || s.mySeek?.status === 'taken', 4000, 50);
   await G.shot('04-grabbed-and-dragged.png');
   g = await until(G.state, (s) => s.mySeek?.status === 'taken', 65000, 200);

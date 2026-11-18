@@ -1,7 +1,8 @@
 # play_arboretum's room (tools/play_arboretum.mjs, through tools/garden_server.gd): the home server's own room
 # (server/room.gd, every rule the game's rooms turn on), unchanged but for where a run starts and what the
 # check needs to be quick and sure. Tests only.
-#  - The run starts on floor `start_depth` (the Arboretum is floor 5 of the game's deck).
+#  - The run starts on the room's `first_depth` (server/room.gd), 5 here: the Arboretum is floor 5 of the
+#    game's deck.
 #  - Down lasts 60 s (the live setting down.time), so the script has time to draw the Groundskeeper off and
 #    creep back to heal.
 #  - The Groundskeeper starts at `keeper_at`, a spot 12 to 15 m from the first whistle instead of the landmark
@@ -16,11 +17,14 @@ const Noises = preload("res://sim/noise.gd")
 const Floor = preload("res://sim/floor.gd")
 const Move = preload("res://sim/move.gd")
 
-var start_depth := 5
 ## The five stations' middles (metres: x, z), the Groundskeeper's spot, and the floor's hash, once a run started.
 var stations: Array[Vector2] = []
 var keeper_at := Vector2.ZERO
 var garden_hash := ""
+
+func _init(ws: WsServer, log: Callable) -> void:
+	super(ws, log)
+	first_depth = 5
 
 func _start(now: float) -> void:
 	# The ready players, as the room's own start (server/room.gd ready-up).
@@ -31,7 +35,7 @@ func _start(now: float) -> void:
 	var seed := fixed_seed
 	if seed.is_empty():
 		seed = Crypto.new().generate_random_bytes(6).hex_encode()
-	rules = HostRules.new(true, start_depth, Places.FULL, days, false, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, false, furniture)
+	rules = HostRules.new(true, first_depth, Places.FULL, days, false, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, false, furniture, findables, inventory)
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(self, "_prepare"), Callable(rules, "step"))
@@ -45,7 +49,7 @@ func _start(now: float) -> void:
 	var parts := PackedStringArray()
 	for s in stations:
 		parts.append("%.1f,%.1f" % [s.x, s.y])
-	_log.call("garden: run %d at depth %d stations %s keeper %.1f,%.1f hash %s" % [epoch, start_depth, " ".join(parts), keeper_at.x, keeper_at.y, garden_hash])
+	_log.call("garden: run %d at depth %d stations %s keeper %.1f,%.1f hash %s" % [epoch, first_depth, " ".join(parts), keeper_at.x, keeper_at.y, garden_hash])
 
 func _prepare(s0: Run.RunState) -> Run.RunState:
 	var s := rules.prepare(s0)

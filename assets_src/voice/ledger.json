@@ -1,7 +1,7 @@
 {
   "about": "Every ElevenLabs request the game has made. Never edit by hand.",
   "cap": 50000,
-  "total": 38436,
+  "total": 38874,
   "entries": [
     {
       "id": "arrived_1",
@@ -5238,6 +5238,94 @@
       "time": "2026-11-18T00:36:54.376Z",
       "hash": "fdf2f696397173421e726835",
       "file": "assets_src/voice/takes/brian/bank_refused_8/take-1.mp3"
+    },
+    {
+      "id": "grab_1",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 37,
+      "billed": 16,
+      "time": "2026-11-18T08:06:54.087Z",
+      "hash": "dc78a1eb091d0659665805eb",
+      "file": "assets_src/voice/takes/bella/grab_1/take-1.mp3"
+    },
+    {
+      "id": "grab_2",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 37,
+      "billed": 16,
+      "time": "2026-11-18T08:06:55.059Z",
+      "hash": "a83e7af7c9ac26d302530891",
+      "file": "assets_src/voice/takes/bella/grab_2/take-1.mp3"
+    },
+    {
+      "id": "grab_3",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 58,
+      "billed": 26,
+      "time": "2026-11-18T08:06:56.379Z",
+      "hash": "bc6e3b18f25e9ea87ce3468f",
+      "file": "assets_src/voice/takes/bella/grab_3/take-1.mp3"
+    },
+    {
+      "id": "hint_listen_1",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 87,
+      "billed": 38,
+      "time": "2026-11-18T08:06:57.671Z",
+      "hash": "3dbc69b38ce1532fdbde3d0d",
+      "file": "assets_src/voice/takes/bella/hint_listen_1/take-1.mp3"
+    },
+    {
+      "id": "grab_1",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 37,
+      "billed": 16,
+      "time": "2026-11-18T08:16:07.250Z",
+      "hash": "443f242ab63283027ab8e385",
+      "file": "assets_src/voice/takes/brian/grab_1/take-1.mp3"
+    },
+    {
+      "id": "grab_2",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 37,
+      "billed": 16,
+      "time": "2026-11-18T08:16:08.273Z",
+      "hash": "48341c4d12daa385ebaadb8e",
+      "file": "assets_src/voice/takes/brian/grab_2/take-1.mp3"
+    },
+    {
+      "id": "grab_3",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 58,
+      "billed": 26,
+      "time": "2026-11-18T08:16:09.479Z",
+      "hash": "8fa7a98fbff2214200f3b425",
+      "file": "assets_src/voice/takes/brian/grab_3/take-1.mp3"
+    },
+    {
+      "id": "hint_listen_1",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 87,
+      "billed": 38,
+      "time": "2026-11-18T08:16:10.872Z",
+      "hash": "1628aae53d648b6d67427690",
+      "file": "assets_src/voice/takes/brian/hint_listen_1/take-1.mp3"
     }
   ]
 }

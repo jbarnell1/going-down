@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 90,
-  "now": null,
-  "nowText": "",
+  "iteration": 99,
+  "now": "AV3",
+  "nowText": "Reviewing existing floor captures and sound cues. Studying tile, carpet and padded surfaces in the Clinic, Annex and Playroom.",
   "ci": {
     "status": "passed",
-    "commit": "a650c60",
-    "at": "2026-11-18T10:54:02.720Z"
+    "commit": "c1d7193",
+    "at": "2026-11-18T17:25:50.194Z"
   },
   "answersAppliedTo": "2026-11-17T21:11:49.720Z",
   "tasks": [
@@ -2241,7 +2241,10 @@
           "at": "2026-11-18T07:51:17.635Z"
         }
       ],
-      "waiting": "The panel, the saved file and 32 working settings are built; a checker is going over the branch before it merges"
+      "waiting": "In the 06:48 build: the F8 panel, the saved file and 32 settings. Still to wire: the rest of the list. For the server to keep settings across restarts the owner makes one folder on the lab box",
+      "todo": [
+        "One path has no test: the Temp's speed setting when it runs the old stand-still rule (not used in the game's rooms, where it hunts the lonely). Add a proof or drop that read"
+      ]
     },
     {
       "id": "T25",
@@ -2267,7 +2270,8 @@
       "ns": [],
       "nsWhy": "tooling and a server start-up guard",
       "startedAt": "2026-11-18T08:06:49.845Z",
-      "waiting": "Paused part-built when the usage limit was hit; waiting for your decision on how to spend the 9% of the week that is left"
+      "agent": "Claude",
+      "waiting": "On main; goes into the next build"
     },
     {
       "id": "T23",
@@ -2293,7 +2297,7 @@
       "ns": [],
       "nsWhy": "voice lines from the owner's answers of 18 Nov",
       "startedAt": "2026-11-18T07:51:18.144Z",
-      "waiting": "Paused part-built when the usage limit was hit; waiting for your decision on how to spend the 9% of the week that is left"
+      "waiting": "On main; goes into the next build"
     },
     {
       "id": "T24",
@@ -2556,7 +2560,18 @@
       "status": "todo",
       "gates": [],
       "ns": [],
-      "nsWhy": "set dressing from the owner's answer of 18 Nov"
+      "nsWhy": "set dressing from the owner's answer of 18 Nov",
+      "startedAt": "2026-11-18T17:34:01.979Z",
+      "media": [
+        {
+          "src": "T20j/20261118T175229-furniture_4_annex_atrium.png",
+          "caption": "Annex atrium from the doorway. Benches and planters leave the walking route clear.",
+          "kind": "image",
+          "at": "2026-11-18T17:52:29.989Z"
+        }
+      ],
+      "reservedFor": "openai",
+      "waiting": "Combined furniture and resident checks passed, including the dedicated room. Waiting for the inventory landing and shared test ports."
     },
     {
       "id": "T20k",
@@ -2565,7 +2580,10 @@
       "status": "todo",
       "gates": [],
       "ns": [],
-      "nsWhy": "new from the owner's answer of 18 Nov; fairness contract applies"
+      "nsWhy": "new from the owner's answer of 18 Nov; fairness contract applies",
+      "startedAt": "2026-11-18T17:34:02.098Z",
+      "reservedFor": "openai",
+      "waiting": "The long Clinic and Annex routes and live host checks passed. Waiting with the furniture change for the shared test ports."
     },
     {
       "id": "T20e",
@@ -2608,14 +2626,11 @@
       "id": "T20f",
       "title": "Controls card and a ready-up screen",
       "why": "Everyone reads the controls and readies up, then drops into the lift together; the lift waits and never pushes anyone out",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [],
       "nsWhy": "new from the owner's play of 17 Nov; joining builds on H1",
-      "todo": [
-        "Your car answer: the car waits as long as anyone is aboard; a returning car waits 30 s before its doors close; anyone left out then dies and wakes in the prison without the credits they earned",
-        "Your rule: holding the car open all game must never count. The only way off a floor is quota met, car gone, call, car comes back. Check it and test it"
-      ],
+      "todo": [],
       "startedAt": "2026-11-17T16:12:27.525Z",
       "media": [
         {
@@ -2625,7 +2640,10 @@
           "at": "2026-11-18T08:06:49.440Z"
         }
       ],
-      "waiting": "Built (controls card, READY, a 5-second count, late joiners, the tape on a first join); a checker is going over the branch before it merges"
+      "waiting": "Checked and merging into main; it goes into the next build",
+      "nsCheck": "The owner's request of 17 Nov (no dropping into the lift before the controls; everyone together), on top of H1. Q and G are left off the card until those keys do something. Not yet seen by a person: mouse capture on entry.",
+      "finishedAt": "2026-11-18T12:59:01.715Z",
+      "summary": "Joining now goes: face, the orientation tape on a first join (skippable, WATCH THE TAPE replays it), then the Ready-up screen with the controls card; everyone drops into the car together after a 5-second count, the host can start without stragglers after 30 seconds, late joiners wait for the next stop. In the promoted build of 18 Nov 06:48 (commit 6b17496); the promote check passed everything incl. the ready-up check 18/18 and the desktop playthrough 46/46; lab-box server updated and the remote test passed."
     },
     {
       "id": "T20g",
@@ -2637,7 +2655,21 @@
         "A7"
       ],
       "startedAt": "2026-11-18T05:44:41.664Z",
-      "waiting": "Paused part-built when the usage limit was hit; waiting for your decision on how to spend the 9% of the week that is left"
+      "waiting": "On main; goes into the next build",
+      "media": [
+        {
+          "src": "T20g/20261118T150808-1-prompt.png",
+          "caption": "The prompt at a locker: F to check it, Shift+F to rifle it",
+          "kind": "image",
+          "at": "2026-11-18T15:08:08.665Z"
+        },
+        {
+          "src": "T20g/20261118T150808-6-opened-from-bob.png",
+          "caption": "An opened locker as a crewmate sees it, with the note left inside",
+          "kind": "image",
+          "at": "2026-11-18T15:08:08.778Z"
+        }
+      ]
     },
     {
       "id": "T26",
@@ -2650,7 +2682,41 @@
         "B1"
       ],
       "startedAt": "2026-11-18T06:21:01.721Z",
-      "waiting": "Paused part-built when the usage limit was hit; waiting for your decision on how to spend the 9% of the week that is left"
+      "agent": "Claude",
+      "media": [
+        {
+          "src": "T26/20261118T164433-2_lamp_pool_from_the_dark.png",
+          "caption": "The Arboretum: one lamp's pool of moss and leaves seen through a gap in the thicket",
+          "kind": "image",
+          "at": "2026-11-18T16:44:33.219Z"
+        },
+        {
+          "src": "T26/20261118T164433-05_the_lean.png",
+          "caption": "The lean, with the stand-in figure made of boxes: an eyeless ridged face tilted into your near light",
+          "kind": "image",
+          "at": "2026-11-18T16:44:33.338Z"
+        },
+        {
+          "src": "T26/20261118T164433-4_blackout_gravel_and_near_light.png",
+          "caption": "In a blackout only the pale gravel walk shows, lit by the light around you",
+          "kind": "image",
+          "at": "2026-11-18T16:44:33.465Z"
+        }
+      ],
+      "waiting": "Rules, forest generator and the place on screen are built and checked on its branch, with a stand-in figure and stand-in sounds. Waits to be merged after the server check; the real figure, voice and pinecones are a later task",
+      "reservedFor": "claude"
+    },
+    {
+      "id": "T26b",
+      "title": "The Groundskeeper: Blender figure, voice, pinecones, a full playthrough",
+      "why": "The Arboretum's resident is a stand-in until it has its own body and voice",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "B11",
+        "B8",
+        "A2"
+      ]
     },
     {
       "id": "T27",
@@ -2661,7 +2727,15 @@
       "ns": [],
       "nsWhy": "new from the owner on 18 Nov; a per-player display setting",
       "startedAt": "2026-11-18T07:51:17.985Z",
-      "waiting": "Paused part-built when the usage limit was hit; waiting for your decision on how to spend the 9% of the week that is left"
+      "waiting": "On main; goes into the next build",
+      "media": [
+        {
+          "src": "T27/20261118T154041-brightness-card-default.png",
+          "caption": "The brightness card: raise until the left badge is barely there",
+          "kind": "image",
+          "at": "2026-11-18T15:40:41.900Z"
+        }
+      ]
     },
     {
       "id": "T21a",
@@ -2670,7 +2744,63 @@
       "status": "todo",
       "gates": [],
       "ns": [],
-      "nsWhy": "new from the owner on 17 Nov (Questions page); amendment recorded"
+      "nsWhy": "new from the owner on 17 Nov (Questions page); amendment recorded",
+      "startedAt": "2026-11-18T15:08:08.530Z",
+      "agent": "Claude",
+      "media": [
+        {
+          "src": "T21a/20261118T173943-2-one-item.png",
+          "caption": "Four squares at the bottom of the screen; a found carton of juice sits in slot 1 and is in hand",
+          "kind": "image",
+          "at": "2026-11-18T17:39:43.988Z"
+        }
+      ],
+      "waiting": "Built on its branch (369 tests, 15 of 15 in its playthrough, four deliberate breaks caught). Goes onto main after the build in progress, then gets its own full check",
+      "reservedFor": "claude"
+    },
+    {
+      "id": "T28",
+      "title": "The shop: six things to buy",
+      "why": "Credits finally buy something you can carry down: markers, a flashbulb, a glow stick, a wind-up toy, speed juice, smelling salts",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "F1",
+        "G1"
+      ]
+    },
+    {
+      "id": "T29",
+      "title": "A cabinet in your cell",
+      "why": "Only what you put in your cabinet before bed is kept; everything else is cleared overnight",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "G1",
+        "C6"
+      ]
+    },
+    {
+      "id": "T30",
+      "title": "The skill tree window and trades",
+      "why": "Everyone can take the first layer of all four branches, then each player goes deeper in one trade",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "F1",
+        "G1"
+      ],
+      "todo": []
+    },
+    {
+      "id": "T31",
+      "title": "The first eight skills working in play",
+      "why": "Deep Pockets, Second Wind, Soft Shoes, Long Burn, Quick Fingers, Field Dressing, Steady Gaze, Throwing Arm",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "F1"
+      ]
     },
     {
       "id": "T21b",
@@ -3092,6 +3222,118 @@
       "nsCheck": "Tooling.",
       "finishedAt": "2026-11-18T04:36:02.083Z",
       "summary": "The build checks match the new rules, and a test loads every script. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed."
+    },
+    {
+      "id": "HUB1",
+      "title": "Agent names on the Progress page",
+      "why": "See which work Claude and OpenAI are doing.",
+      "status": "done",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "Progress reporting for the development team.",
+      "startedAt": "2026-11-18T15:41:37.378Z",
+      "agent": "OpenAI Codex",
+      "doingText": "Landing the accepted tracker and handoff changes.",
+      "doingAt": "2026-11-18T17:34:02.230Z",
+      "finishedAt": "2026-11-18T17:35:41.835Z",
+      "summary": "Live progress lists each agent. PR 2 and its crash-recovery fix are on main at bece7e6. The killed-writer check passed independently; the public work board and private inbox are active.",
+      "todo": []
+    },
+    {
+      "id": "AV1",
+      "title": "Arboretum art and lighting review",
+      "why": "Make forest surfaces, silhouettes and landmarks readable and unsettling. Compare identical views before and after.",
+      "status": "doing",
+      "gates": [],
+      "ns": [
+        "A2",
+        "A6"
+      ],
+      "agent": "OpenAI Codex",
+      "startedAt": "2026-11-18T17:53:31.684Z",
+      "doingText": "OpenAI Codex is reviewing and refining the garden materials and silhouettes.",
+      "doingAt": "2026-11-18T17:53:31.686Z",
+      "reservedFor": "openai"
+    },
+    {
+      "id": "AV2",
+      "title": "Arboretum sound review and listening comparison",
+      "why": "Give the crew an audible sense of the garden without masking the resident or the surface underfoot.",
+      "status": "todo",
+      "gates": [],
+      "ns": [
+        "A2",
+        "B11"
+      ],
+      "startedAt": "2026-11-18T17:53:31.852Z",
+      "media": [
+        {
+          "src": "AV2/20261118T180512-before.wav",
+          "caption": "Original mix. Moss, leaves and gravel at 4 to 11 seconds. Listen for the ring of silence and badges after 12 seconds.",
+          "kind": "audio",
+          "at": "2026-11-18T18:05:12.657Z"
+        },
+        {
+          "src": "AV2/20261118T180512-after.wav",
+          "caption": "Revised mix on the same 20-second route. Headphones recommended. The closing shears land at 18 seconds.",
+          "kind": "audio",
+          "at": "2026-11-18T18:05:12.661Z"
+        },
+        {
+          "src": "AV2/20261118T180512-garden-matched-comparison.mp3",
+          "caption": "Level-matched comparison. Original first, one second of silence, revision at 0:21. Real Godot audio from a controlled route.",
+          "kind": "audio",
+          "at": "2026-11-18T18:05:12.665Z"
+        }
+      ],
+      "reservedFor": "openai",
+      "waiting": "The paired recordings and level-matched comparison are ready for listening on this page. The combined Arboretum preview is being checked."
+    },
+    {
+      "id": "AV3",
+      "title": "Review and refine the Clinic, Annex and Playroom art and audio",
+      "why": "Give each place a distinct look and sound. Show before and after examples for owner feedback.",
+      "status": "doing",
+      "gates": [],
+      "ns": [
+        "A2",
+        "A11",
+        "B11"
+      ],
+      "media": [
+        {
+          "src": "AV3/20261118T180040-floor-review-baselines.jpg",
+          "caption": "First-pass review of the Clinic lobby, Annex atrium, Playroom party table, and Arboretum path.",
+          "kind": "image",
+          "at": "2026-11-18T18:00:40.143Z"
+        }
+      ],
+      "todo": [
+        "Clinic: break up the repeated clean tile grid and bare door edges. Listen from the doorway for the approaching trolley under the ventilation.",
+        "Annex: give the carpet, wall panels and bench frames distinct surfaces while keeping office junctions identical. Check the silence between stapler clicks.",
+        "Playroom: soften the foam edges and break up the uniform party props. Check that the speaker tune leaves room for the count bell."
+      ],
+      "agent": "OpenAI Codex",
+      "startedAt": "2026-11-18T18:02:46.635Z",
+      "doingText": "Reviewing existing floor captures and sound cues. Studying tile, carpet and padded surfaces in the Clinic, Annex and Playroom.",
+      "doingAt": "2026-11-18T18:02:46.636Z",
+      "reservedFor": "openai"
+    },
+    {
+      "id": "HUB2",
+      "title": "Reserve North Star tasks for Claude, Codex or either agent",
+      "why": "See who owns upcoming work before a builder starts.",
+      "status": "done",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "Development coordination.",
+      "agent": "OpenAI Codex",
+      "startedAt": "2026-11-18T17:53:31.941Z",
+      "doingText": "Separating planned ownership from current activity.",
+      "doingAt": "2026-11-18T17:53:31.942Z",
+      "finishedAt": "2026-11-18T18:07:57.238Z",
+      "summary": "The Progress page and North Star task lookup show work reserved for Claude, reserved for OpenAI Codex, or free for either. Reservations survive a pause. The competing claim failed in the test. All 143 app checks and the hub smoke check passed.",
+      "todo": []
     }
   ],
   "gates": [
@@ -3271,9 +3513,428 @@
     {
       "at": "2026-11-17T21:12:37.151Z",
       "text": "Your answers applied: blackout 20-24 s and a longer wait for the car so a few blinks come first; left-out players wake with the crew; monsters at 3.8; live settings as recommended; all hints recorded in both voices; better story names coming; left-out players keep their bed but draw a new face and get a new number (the next monster wears the old face); the bedtime tape plays on the ride up and the car waits for it unless most skip. Voice cap raised to 100,000 characters."
+    },
+    {
+      "at": "2026-11-18T15:00:06.696Z",
+      "text": "The cabinet in each cell gets six slots unless the owner says otherwise (they decided the cabinet, not its size)."
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-18T18:08:08.559Z",
+      "text": "Paused AV2: waiting for The paired recordings and level-matched comparison are ready for listening on this page. The combined Arboretum preview is being checked.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T18:08:08.490Z",
+      "text": "Paused T20k: waiting for The long Clinic and Annex routes and live host checks passed. Waiting with the furniture change for the shared test ports.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T18:08:08.419Z",
+      "text": "Paused T20j: waiting for Combined furniture and resident checks passed, including the dedicated room. Waiting for the inventory landing and shared test ports.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T18:07:57.240Z",
+      "text": "Finished HUB2: Reserve North Star tasks for Claude, Codex or either agent.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T18:07:57.154Z",
+      "text": "Reserved T26 for Claude.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T18:07:57.066Z",
+      "text": "Reserved T21a for Claude.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T18:07:56.983Z",
+      "text": "Reserved HUB2 for OpenAI Codex.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T18:07:56.905Z",
+      "text": "Reserved T20k for OpenAI Codex.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T18:07:56.827Z",
+      "text": "Reserved T20j for OpenAI Codex.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T18:07:56.746Z",
+      "text": "Reserved AV3 for OpenAI Codex.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T18:07:56.670Z",
+      "text": "Reserved AV2 for OpenAI Codex.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T18:07:56.593Z",
+      "text": "Reserved AV1 for OpenAI Codex.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T18:05:12.665Z",
+      "text": "New pictures for AV2: Arboretum sound review and listening comparison.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-18T18:02:46.636Z",
+      "text": "OpenAI Codex started AV3: Review and refine the Clinic, Annex and Playroom art and audio. Reviewing existing floor captures and sound cues. Studying tile, carpet and padded surfaces in the Clinic, Annex and Playroom.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T18:00:40.143Z",
+      "text": "New pictures for AV3: Review and refine the Clinic, Annex and Playroom art and audio.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-18T17:53:31.943Z",
+      "text": "OpenAI Codex started HUB2: Reserve North Star tasks for Claude, Codex or either agent. Separating planned ownership from current activity.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T17:53:31.853Z",
+      "text": "OpenAI Codex started AV2: Arboretum sound review and listening comparison. OpenAI Codex is auditing the garden mix and preparing comparable listening samples.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T17:53:31.686Z",
+      "text": "OpenAI Codex started AV1: Arboretum art and lighting review. OpenAI Codex is reviewing and refining the garden materials and silhouettes.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T17:53:31.530Z",
+      "text": "Added task HUB2: Reserve North Star tasks for Claude, Codex or either agent.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T17:53:31.454Z",
+      "text": "Added task AV3: Review and refine the Clinic, Annex and Playroom art and audio.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T17:53:31.307Z",
+      "text": "Added task AV2: Arboretum sound review and listening comparison.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T17:53:31.172Z",
+      "text": "Added task AV1: Arboretum art and lighting review.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T17:52:29.989Z",
+      "text": "New pictures for T20j: Furniture back in the lobby, atrium and break room.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-18T17:48:10.929Z",
+      "text": "The promote check passed on every step. The new build is being made now: searching, the brightness card, the Minder's grab lines, the server self-check.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T17:39:44.123Z",
+      "text": "Paused T21a: waiting for Built on its branch (369 tests, 15 of 15 in its playthrough, four deliberate breaks caught). Goes onto main after the build in progress, then gets its own full check",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T17:39:43.988Z",
+      "text": "New pictures for T21a: A four-slot inventory.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-18T17:35:41.836Z",
+      "text": "Finished HUB1: Agent names on the Progress page.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T17:34:02.232Z",
+      "text": "OpenAI Codex started HUB1: Agent names on the Progress page. Landing the accepted tracker and handoff changes.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T17:34:02.100Z",
+      "text": "OpenAI Codex started T20k: Monsters walk around furniture. Making residents route around solid furniture while preserving their rules.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T17:34:01.981Z",
+      "text": "OpenAI Codex started T20j: Furniture back in the lobby, atrium and break room. Adding the approved seating, planters and break-room furniture while preserving clear routes.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T17:33:54.258Z",
+      "text": "The Progress page now shows which agent is on each task (pull request 2 landed), and the two agents can message and wake each other.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T17:22:51.507Z",
+      "text": "Paused HUB1: waiting for Tracker recovery and direct handoff instructions pushed in PR 2. Waiting for Claude to recheck commit 97b94f5.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T17:16:19.554Z",
+      "text": "OpenAI Codex started HUB1: Agent names on the Progress page. Addressing Claude's tracker review and wiring direct agent handoffs.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T16:48:32.801Z",
+      "text": "Paused T25b: waiting for On main; goes into the next build",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T16:48:32.654Z",
+      "text": "Main now has searching, the brightness card, the grab lines and the server self-check (358 tests passed). The promote check is running; a new build follows if it is green.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T16:44:33.587Z",
+      "text": "Paused T26: waiting for Rules, forest generator and the place on screen are built and checked on its branch, with a stand-in figure and stand-in sounds. Waits to be merged after the server check; the real figure, voice and pinecones are a later task",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T16:44:33.465Z",
+      "text": "New pictures for T26: The Arboretum: a dark forest floor and the Groundskeeper.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-18T16:44:33.338Z",
+      "text": "New pictures for T26: The Arboretum: a dark forest floor and the Groundskeeper.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-18T16:44:33.219Z",
+      "text": "New pictures for T26: The Arboretum: a dark forest floor and the Groundskeeper.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-18T16:17:06.727Z",
+      "text": "Paused T20g: waiting for On main; goes into the next build",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T16:17:06.574Z",
+      "text": "Paused T23b: waiting for On main; goes into the next build",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T16:17:06.437Z",
+      "text": "Paused T27: waiting for On main; goes into the next build",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T16:17:06.315Z",
+      "text": "Brightness card and voice touch-ups are on main (355 tests passed). The server self-check is being merged next; it now also checks the poems file that searching added.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T16:02:17.781Z",
+      "text": "Paused T25b: waiting for Built and checked on its branch: the server refuses to start if a data file is missing, a new check runs the exported builds, play_net is green at 41 of 41. Waits its turn to be merged after the brightness card",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T15:49:13.945Z",
+      "text": "Paused HUB1: waiting for Live on the home Progress page and independently checked. OpenAI Codex PR #2 is ready for review and merge.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T15:43:48.688Z",
+      "text": "Searching is on main (349 tests passed). Brightness and voice are being merged on their own branch, then main is moved forward to it.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T15:41:37.379Z",
+      "text": "Started HUB1: Agent names on the Progress page. OpenAI Codex is connecting its work to the Progress page and checking the labels over the home link.",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T15:41:31.954Z",
+      "text": "Added task HUB1: Agent names on the Progress page.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T15:40:41.900Z",
+      "text": "New pictures for T27: A brightness setting with a calibration screen.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-18T15:40:41.767Z",
+      "text": "Paused T23b: waiting for Recorded and checked on its branch (three grab lines, the reworded hint); merged together with the brightness card",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T15:40:41.655Z",
+      "text": "Paused T27: waiting for Built and checked on its branch (calibration card, saved per player, measured on web and desktop); waits for the searching merge to finish committing, then it is merged",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T15:08:08.778Z",
+      "text": "New pictures for T20g: Things to find: drawers, gurneys, credits, poem notes.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-18T15:08:08.665Z",
+      "text": "New pictures for T20g: Things to find: drawers, gurneys, credits, poem notes.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-18T15:08:08.531Z",
+      "text": "Started T21a: A four-slot inventory. A builder is making the four-slot inventory: squares at the bottom of the screen, keys 1 to 4 and the scroll wheel, drop, pick up, hand to a crewmate",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T15:07:22.825Z",
+      "text": "Paused T20g: waiting for Built and checked on its branch (349 tests, five breaks caught); being merged into main, then it goes into the next build",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T15:00:06.697Z",
+      "text": "Took a default: The cabinet in each cell gets six slots unless the owner says otherwise (they decided the cabinet, not its size).",
+      "kind": "decision"
+    },
+    {
+      "at": "2026-11-18T15:00:06.578Z",
+      "text": "Owner: yes to old crew badges as the price of trade nodes, the first layer costs credits, and the inventory and shop come before the Groundskeeper's figure.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:48:42.206Z",
+      "text": "All notes brought up to date for a change of agent: AGENTS.md written, the North Star folded to Draft 6, the handoff notes rewritten, the README and loop notes corrected.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:48:41.985Z",
+      "text": "Added task T26b: The Groundskeeper: Blender figure, voice, pinecones, a full playthrough.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:48:41.824Z",
+      "text": "Added task T31: The first eight skills working in play.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:48:41.627Z",
+      "text": "Added task T30: The skill tree window and trades.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:48:41.366Z",
+      "text": "Added task T29: A cabinet in your cell.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:48:41.111Z",
+      "text": "Added task T28: The shop: six things to buy.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:39:58.499Z",
+      "text": "Owner approved the skill tree's shape; a cabinet in each cell keeps items overnight; trade nodes will cost something found while exploring (proposal: old crew badges, waiting for a yes).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:30:24.665Z",
+      "text": "Skill tree and shop redesigned for the owner (skills are training, assets are shop items; one trade per player past the first layer). Waiting for their go-ahead before anything is built.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:14:19.043Z",
+      "text": "09:15 owner reset the Fable limit: weekly all-models 67%, Fable 4%, 5-hour 10%. All four builders resumed.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T14:14:18.962Z",
+      "text": "Started T25b: The exported server proves itself. Server self-check, exported-build check and play_net for the day lock: builder resumed",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T14:14:18.853Z",
+      "text": "Started T23b: Voice touch-ups: a grab line, a reworded hint. Voice touch-ups: builder resumed; the Minder's grab line and the reworded hint are committed on its branch",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T14:14:18.750Z",
+      "text": "Started T27: A brightness setting with a calibration screen. Brightness card: builder resumed; committed on its branch, finishing checks",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T14:14:18.638Z",
+      "text": "Started T20g: Things to find: drawers, gurneys, credits, poem notes. Searching: builder resumed; rules, balance trim and on-screen parts are committed on its branch, finishing checks and merging main",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T14:14:18.447Z",
+      "text": "Started T26: The Arboretum: a dark forest floor and the Groundskeeper. Arboretum: the Fable builder is back on it after the usage reset (rules and generator done; finishing the place on screen with a stand-in figure and the near light)",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T12:59:01.934Z",
+      "text": "Paused T22: waiting for In the 06:48 build: the F8 panel, the saved file and 32 settings. Still to wire: the rest of the list. For the server to keep settings across restarts the owner makes one folder on the lab box",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T12:59:01.817Z",
+      "text": "NEW BUILD in play/ (18 Nov 06:48): the Ready-up screen with the controls card, the orientation tape on a first join, and the host's F8 settings panel with 32 working settings. Server updated to match; remote test passed. Zip: play/GoingDown-2026-11-18-0648.zip",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T12:59:01.716Z",
+      "text": "Finished T20f: Controls card and a ready-up screen.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T12:52:23.407Z",
+      "text": "Usage: 95% of the week's limit at 06:52 with four builders running (about 3% every 15 minutes). When it reaches 100% everything stops until the owner's reset or plan bump; the builders commit as they go, so nothing is lost",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T12:48:50.763Z",
+      "text": "Started T25b: The exported server proves itself. The builder is back on the server's start-up self-check and the exported-build check",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T12:48:50.656Z",
+      "text": "Started T23b: Voice touch-ups: a grab line, a reworded hint. With the brightness builder: the grab line, the reworded hint, the long hint's check",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T12:48:50.547Z",
+      "text": "Started T27: A brightness setting with a calibration screen. The builder is back on the brightness card and the voice touch-ups",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T12:48:50.437Z",
+      "text": "Started T20g: Things to find: drawers, gurneys, credits, poem notes. The builder is back on searching: trimming the loot, then the on-screen prompt, bar and note reader",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T12:48:50.249Z",
+      "text": "Started T26: The Arboretum: a dark forest floor and the Groundskeeper. The Fable builder is back on the Arboretum (rules, then layout, then the dark place on screen)",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T12:30:45.855Z",
+      "text": "Promote check passed everything with the ready-up screen and the settings panel in: 327 tests, web 42/42, desktop 46/46, sound, down-and-heal 24, day 16, Playroom 12, ready-up 18, settings 16, network 20, mix, furniture walk. The build is being made",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T11:27:54.727Z",
+      "text": "Paused T22: waiting for Checked and merging into main with the ready-up screen; both go into the next build",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T11:06:25.773Z",
+      "text": "Paused T20f: waiting for Checked and merging into main; it goes into the next build",
+      "kind": "note"
+    },
     {
       "at": "2026-11-18T10:54:03.532Z",
       "text": "Paused T20g: waiting for Paused part-built when the usage limit was hit; waiting for your decision on how to spend the 9% of the week that is left",
@@ -3857,421 +4518,6 @@
     {
       "at": "2026-11-17T21:34:10.189Z",
       "text": "The Temp's Lonely rule passed its check (230 quick tests, two deliberate breaks caught) and is being merged into main",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T21:34:10.081Z",
-      "text": "Started T24: The story: the tape, the nightly tapes and the clues. A builder is making the VCR orientation tape now: blue and yellow, narrated, with a video you can watch here when it is done",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T21:26:55.075Z",
-      "text": "Paused T24: waiting for Script final with your names. The VCR tape (ST1, recorded narration) goes to the next free builder, first in line",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T21:14:19.491Z",
-      "text": "Paused T25: waiting for Planned; starts with the next free builder (high priority for Friday)",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T21:14:19.346Z",
-      "text": "Added task T25: Crash reports, metrics and a same-night hotfix.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T21:12:37.152Z",
-      "text": "Took a default: Your answers applied: blackout 20-24 s and a longer wait for the car so a few blinks come first; left-out players wake with the crew; monsters at 3.8; live settings as recommended; all hints recorded in both voices; better story names coming; left-out players keep their bed but draw a new face and get a new number (the next monster wears the old face); the bedtime tape plays on the ride up and the car waits for it unless most skip. Voice cap raised to 100,000 characters.",
-      "kind": "decision"
-    },
-    {
-      "at": "2026-11-17T21:12:37.027Z",
-      "text": "Applied the owner's new answers.",
-      "kind": "answers"
-    },
-    {
-      "at": "2026-11-17T21:07:39.211Z",
-      "text": "Everything from today is in the main code and pushed: down and heal, the two-watcher Orderly, monsters slipping away, hiding everywhere, your quick fixes and your second batch of sounds. A full build check is running before it becomes your playable build.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T21:07:39.108Z",
-      "text": "Paused TB: waiting for Merged into main and pushed. In the build check now",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T20:58:20.219Z",
-      "text": "Paused T24: waiting for Written: the story (the city Datum, the company Upwell, the sealed district Lowfield, crews before you), a 68-second orientation tape in 21 shots, three bedtime tapes for Friday, 14 notes and clues on each monster. Four questions on your Questions page. Building waits for your OK on the tape script",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T20:53:52.277Z",
-      "text": "Paused TB: waiting for Checked green (three mix runs in a row, breathing builds from 27 m, the beds dip under the voice every time). Merging into main and pushing",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T20:49:16.165Z",
-      "text": "Started T23: The announcer's hints. An Opus builder is recording the 38 hints in both voices and wiring the ones whose moments exist in the game today",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T20:49:16.079Z",
-      "text": "Started T19c: The Temp's own mechanic. Built: the Temp now hunts whoever is alone (nobody within 8 m and nobody in sight within 20 m), chases at 3.9 m/s, breaks off the moment you have company and slips away to someone else, leaving a 'Gone to see' note. A Sonnet agent is re-running the checks",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T20:47:49.168Z",
-      "text": "Started T24: The story: the tape, the nightly tapes and the clues. Fable is writing the story bible, the orientation tape script and storyboard, the nightly tapes, the notes and the clues",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T20:47:49.012Z",
-      "text": "Added task T24: The story: the tape, the nightly tapes and the clues.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T20:41:39.384Z",
-      "text": "Paused T23: waiting for Written: 38 snide hints with two takes each (e.g. 'Do not delay in boarding. Miss the car, and we keep your credits.'). Three questions on your Questions page. Recording and wiring wait for a free builder",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T20:40:00.818Z",
-      "text": "Paused T20f: waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T20:40:00.694Z",
-      "text": "Paused T20h: waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T20:40:00.605Z",
-      "text": "Paused T20c: waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T20:40:00.518Z",
-      "text": "Paused T20a: waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T20:34:56.370Z",
-      "text": "Started T15m: Playroom tuning from your play. An Opus builder is giving you 30-45 s to hide, a ball pit you can see out of, an anger bar, and a Minder that wanders and only grabs you within a metre until it's angry",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T20:34:56.177Z",
-      "text": "Started T23: The announcer's hints. Fable is writing the announcer's hints: snide, creepy lines that teach boarding, the quota, the BANK lock, sneaking in the Playroom, instruments out",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T20:34:56.074Z",
-      "text": "Started T22: Live settings for the host. Designed (59 settings in six groups, F8 opens the host panel). An Opus builder is making the settings list and wiring the first ten: each monster's speed, the lift's return, the down timer",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T20:33:45.347Z",
-      "text": "Added task T23: The announcer's hints.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T20:33:26.161Z",
-      "text": "Took a default: Live settings designed (docs/floors/live-settings.md): 59 settings in six groups, F8 opens the host panel. Five questions on the Questions page; building on the recommended defaults.",
-      "kind": "decision"
-    },
-    {
-      "at": "2026-11-17T20:23:31.312Z",
-      "text": "Started T22: Live settings for the host. Fable is designing the settings: which numbers, how they're grouped, how a change reaches every player safely mid-game",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T20:23:31.225Z",
-      "text": "Added task T22: Live settings for the host.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T20:16:48.064Z",
-      "text": "Paused T19b: waiting for Merged into main and pushed (225 quick tests; relocation never lands on any of 6,204 hiding spots over 80 floors; network 10/10; down check 24/24). Goes into your next build",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T19:54:05.384Z",
-      "text": "Started TB: Your second batch of sounds in the game. The sound builder is back on the mix fix after the pause",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T19:54:05.226Z",
-      "text": "Started T19c: The Temp's own mechanic. The Opus builder is back on the Temp's Lonely rule after the pause",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T19:54:05.071Z",
-      "text": "Started T20f: Controls card and a ready-up screen. Built; a Sonnet agent is re-running its checks (restarted after the pause)",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T19:54:04.986Z",
-      "text": "Started T20h: A bit more stamina, monsters paced to match. Built; a Sonnet agent is re-running its checks (restarted after the pause)",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T19:54:04.846Z",
-      "text": "Started T20c: Longer blackouts before the car comes. Built; a Sonnet agent is re-running its checks (restarted after the pause)",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T19:54:04.706Z",
-      "text": "Started T20a: The Orderly stays visible in the dark. Built; a Sonnet agent is re-running its checks (restarted after the pause)",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T19:54:04.548Z",
-      "text": "Paused T19b: waiting for Being merged into the main code now with its tests (relocation now also avoids landing on hiding spots)",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T17:50:20.887Z",
-      "text": "Paused T19e: waiting for Merged into main and pushed (219 quick tests, relocation/watchers/downs full tests, 3-player network 10/10, down check 24/24). Goes into your next build",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T17:33:45.033Z",
-      "text": "Paused T19e: waiting for Checked green; merge into main committing now with its tests (background b4axi33yd); verify and push when usage resets",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T17:33:44.781Z",
-      "text": "Paused T20f: waiting for Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T17:33:44.526Z",
-      "text": "Paused T20h: waiting for Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T17:33:44.246Z",
-      "text": "Paused T20c: waiting for Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T17:33:44.041Z",
-      "text": "Paused T20a: waiting for Built (worktree-agent-a53942b460470560c, head 5e5004e); its independent check was stopped by the usage limit. Re-run the check when usage resets",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T17:33:43.809Z",
-      "text": "Paused TB: waiting for Paused: usage limit reached; the mix fix was in progress (worktree-agent-a9d98f0ff17540e95). Restart when usage resets",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T17:33:43.598Z",
-      "text": "Paused T19c: waiting for Paused: usage limit reached; builder stopped early (worktree-agent-ab87781c91fa45e54). Restart when usage resets",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T17:33:32.035Z",
-      "text": "Paused T19e: waiting for Checked: 216 quick tests, 98 relocations over 80 floors all fair, stored results unchanged, both deliberate breaks red. Being merged into the main code",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T17:33:31.946Z",
-      "text": "Paused T16k: waiting for Modelled and judged twice (round 2 fixes made: soft untucked tail, a hunched lopsided outline, the sheet covering every edge). Merged into the main code. Waits for your Mixamo animations: assets_src/mixamo/export/temp.fbx",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T17:33:31.807Z",
-      "text": "New pictures for T16k: The Temp as a proper Blender figure.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T17:24:07.256Z",
-      "text": "Paused T19a: waiting for Merged into main and pushed with its network check; goes into your next build",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T17:24:07.172Z",
-      "text": "Started T19c: The Temp's own mechanic. An Opus builder is making the Temp's own rule, Lonely: it hunts whoever is out of sight of everyone and far from them, slightly faster than walking, and slips away once you rejoin someone",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T17:24:07.026Z",
-      "text": "Started T20f: Controls card and a ready-up screen. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T17:24:06.917Z",
-      "text": "Started T20h: A bit more stamina, monsters paced to match. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T17:24:06.735Z",
-      "text": "Started T20c: Longer blackouts before the car comes. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T17:24:06.561Z",
-      "text": "Started T20a: The Orderly stays visible in the dark. Built (the Orderly drawn in the dark, 20-24 s blackouts, 7 s of sprint with monsters at 3.8 m/s, the car waits and a returning car waits 30 s). A Sonnet agent is re-running the checks",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T17:20:20.879Z",
-      "text": "Started T16k: The Temp as a proper Blender figure. Judging round 2 done (bright 3-4/10, dark 5-7/10). Second revision under way: a natural untucked shirt tail, a hunched, lopsided outline that reads wrong from far away, the sheet covering every edge",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T17:18:23.681Z",
-      "text": "Started T16k: The Temp as a proper Blender figure. Revised (sheet wrapped and stapled on, dishevelled as you asked: coffee stain, shirt tail out, tie half undone; arms deliberately too long). Judging round 2 running",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T17:18:23.485Z",
-      "text": "New pictures for T16k: The Temp as a proper Blender figure.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T17:09:21.725Z",
-      "text": "Paused T19a: waiting for Checked: 210 quick tests, all 26 stored-result tests unchanged, both deliberate breaks red. Being merged into the main code now",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T17:02:34.095Z",
-      "text": "Started T16k: The Temp as a proper Blender figure. Judging round 1 done (bright corridor 3-4/10, dark 6-7/10; all three like the drawn face over a hidden head). The builder is now fixing the sheet so it looks worn and stapled on, the mannequin arms and neck, and the stapler and notes",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T17:01:03.149Z",
-      "text": "Started T16k: The Temp as a proper Blender figure. Judging round 1: Fable done; Opus judges now",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T17:01:02.994Z",
-      "text": "Started T19e: Monsters slip away and reappear out of view. Built: when nobody has seen the Orderly for a while, it slips away out of everyone's sight and reappears 12-20 m from a player, with a sound first. A Sonnet agent is re-running its checks",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T17:00:40.601Z",
-      "text": "Down and heal is merged into the main code and pushed. The three-player network check now allows the one move you decided watchers see (the Orderly bent over a downed player, working in place) and still goes red if it walks while watched (checked with a deliberate break).",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T16:58:33.917Z",
-      "text": "The Temp's first judge (shown only pictures): the face sheet over a real head and the tilted head work; in the dark it scores 6.5/10. Weak: the sheet looks like a flat board, thin tube arms with mitten hands, trousers too short. Two more judges, then the fixes.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T16:57:55.939Z",
-      "text": "Started TB: Your second batch of sounds in the game. Back with its builder: make the breathing grow louder as it nears every time, and the beds' hum dip reliably under the voice",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T16:57:55.679Z",
-      "text": "Started T16k: The Temp as a proper Blender figure. Built in Blender (3,812 triangles, T-pose with spread fingers, stapler and notes separate). Judging round 1: Fable now, two Opus judges when builder slots free",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T16:57:55.465Z",
-      "text": "New pictures for T16k: The Temp as a proper Blender figure.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T16:57:55.338Z",
-      "text": "New pictures for T16k: The Temp as a proper Blender figure.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T16:56:24.157Z",
-      "text": "Paused TB: waiting for Checked: tests, export and the browser sound check all pass, and the far-carry breaks go red. But the mix check is unstable: the beds' duck under the voice misses by about 1 dB in 2 of 3 runs, and the 'breathing grows as it nears' check failed 2 of 3 (at 5 m it was sometimes quieter than at 20 m). Goes back to its builder when a builder slot frees",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T16:22:27.336Z",
-      "text": "Paused T8a: waiting for Merged into main with its screen (T8c); goes into your next build",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T16:22:27.223Z",
-      "text": "Paused T8c: waiting for Checked: 209 quick tests, the two-player down check 24/24, a deliberate break (no HOLD F TO HELP) turned it red. Merged into main; re-running the three-player network test on main before your next build",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T16:12:27.656Z",
-      "text": "Sound batch 2 built: a roar 55 m away is now heard (it was silent), and the breathing starts at about 26 m instead of 9 m.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T16:12:27.526Z",
-      "text": "Started T20f: Controls card and a ready-up screen. Part of the same Opus job: the car waits while anyone is aboard; a returning car waits 30 s; anyone left out wakes in the prison without their credits (the ready-up screen comes later)",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T16:12:27.415Z",
-      "text": "Started T20h: A bit more stamina, monsters paced to match. Part of the same Opus job: more stamina, monster speeds retuned so catches stay as likely",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T16:12:27.190Z",
-      "text": "Started T20c: Longer blackouts before the car comes. Part of the same Opus job: blackouts last longer before the car comes",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T16:12:26.892Z",
-      "text": "Started T20a: The Orderly stays visible in the dark. An Opus builder is drawing the Orderly as normal in the dark (no glow), with longer blackouts, more stamina, and a lift that waits",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T16:12:26.586Z",
-      "text": "Started TB: Your second batch of sounds in the game. Built: all your new sounds wired in, scares carry across the floor, the Orderly's breathing starts from 28 m. A Sonnet agent is re-running the sound and mix checks",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T16:02:51.011Z",
-      "text": "Started T16k: The Temp as a proper Blender figure. An Opus builder is studying two tutorials, then modelling the Temp in Blender in a T-pose with spread fingers, ready for Mixamo",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T16:02:50.622Z",
-      "text": "New pictures for T8c: Down and healed on screen.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T16:02:50.380Z",
-      "text": "New pictures for T8c: Down and healed on screen.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T16:02:50.199Z",
-      "text": "Started T8c: Down and healed on screen. Built (you crawl with a DOWN timer, a friend sees HOLD F TO HELP and a filling bar, out leaves a red stain). A Sonnet agent is re-running its checks",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T16:01:56.102Z",
-      "text": "Your eight new crewmate clips are in (helping a friend, lying hurt, getting up, pointing, sitting, prone, cheering, terrified); they go into the crewmate model with the next builder. The Orderly's T-pose now has its fingers fanned and thumbs forward.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:52:49.558Z",
-      "text": "New pictures for T19b: Hiding places on every floor.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T15:52:43.306Z",
-      "text": "Paused T19b: waiting for Checked: 210 quick tests; 800 Clinics and 800 Annexes all have a hide within 14 steps of every corridor; nobody in a hide was ever caught without being seen getting in; the Playroom unchanged; all three deliberate breaks red. Goes into your build after the down-and-heal screen merges",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:49:43.164Z",
-      "text": "New pictures for T20i: The Orderly and crewmates animated in Mixamo.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T15:46:28.281Z",
-      "text": "Paused T16k: waiting for You asked for it: next free Opus builder (study, build, two judge rounds; T-pose export for Mixamo; face sheet stays swappable)",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:46:28.183Z",
-      "text": "Added task T16k: The Temp as a proper Blender figure.",
       "kind": "note"
     }
   ]

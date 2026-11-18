@@ -151,6 +151,15 @@ class LocalFrame:
 	## mark to peel (F held on it for Marks.PEEL_SECONDS ended this frame) or -1.
 	var mark := false
 	var peel := -1
+	## Findables (FD9): F held to search the piece in reach (Findables.piece_in_reach), and sprint held with it
+	## (the rushed search). Sent while held; the host decides when a search starts, stops and ends.
+	var search := false
+	var search_fast := false
+	## The inventory (S1): the slot asked for (0 to 3, -1 for no change this frame) and a request this frame:
+	## "drop", "take" (inv_arg the pickup's id) or "give" (inv_arg the crewmate's id), "" for none.
+	var inv_select := -1
+	var inv_op := ""
+	var inv_arg: Variant = null
 
 ## One rendered frame: what to draw.
 class Frame:
@@ -278,6 +287,11 @@ var _fast_hides := 0
 var _marks := 0
 var _peels := 0
 var _peel_id := -1
+## The inventory (S1): the slot asked for (-1: never asked), requests made so far, and the newest.
+var _inv_sel := -1
+var _invs := 0
+var _inv_op := ""
+var _inv_arg: Variant = null
 ## The Annex's notes this client has, by id (the welcome's and the "note" events).
 var _notes := {}
 var _ack_ht := -INF
@@ -401,6 +415,22 @@ func day_lock() -> Variant:
 		return null
 	return {"day": d["day"], "earned": d["earned"], "quota": d["quota"], "locked": d["locked"], "aboard": d["aboard"],
 		"each": d["each"], "stakes": d["stakes"]}
+
+## Findables (FD9) as the newest snapshot has them: {opened: [{piece, by, what, credits, note, fast, t}] (by piece
+## id: draw these open; a note or page id reads with Findables.note_lines), searching: [{playerId, piece, fast,
+## from, done}] (host times: a bar fills over (now - from) / (done - from)), items: [{playerId, juice}], base (the
+## floor's quota as set on arrival: Findables.fill_for's base, for the sheet)}, or null when there is nothing.
+func findables() -> Variant:
+	if latest == null:
+		return null
+	return latest.get("find")
+
+## The inventory (S1) as the newest snapshot has it: {bags: [{playerId, sel, slots: [[item, count] x4]}], pickups:
+## [{id, item, count, at}]}, or null in a run without it.
+func inventory() -> Variant:
+	if latest == null:
+		return null
+	return latest.get("inv")
 
 ## Down first, then out: who is down as the newest snapshot has it, [{id, at, until, by, healer, healFrom}]
 ## (host times: out at `until` unless healed; a heal is done at healFrom + Run.HEAL_TIME). Empty when nobody
@@ -734,6 +764,12 @@ func frame(now: float, local: LocalFrame) -> Frame:
 	if local.peel >= 0:
 		_peels += 1
 		_peel_id = local.peel
+	if local.inv_select >= 0:
+		_inv_sel = local.inv_select
+	if local.inv_op != "":
+		_invs += 1
+		_inv_op = local.inv_op
+		_inv_arg = local.inv_arg
 	latch_released = false
 	if id == null or seed == null:
 		if now - _last_join >= 0.5:
@@ -1079,6 +1115,10 @@ func _send(now: float, cam: Pose.Camera, local: LocalFrame, rt: float) -> void:
 		m["use"] = true
 	if local.peek:
 		m["peek"] = true
+	if local.search:
+		m["search"] = true
+		if local.search_fast:
+			m["searchFast"] = true
 	if _hides > 0:
 		m["hides"] = _hides
 		m["fastHides"] = _fast_hides
@@ -1086,6 +1126,11 @@ func _send(now: float, cam: Pose.Camera, local: LocalFrame, rt: float) -> void:
 		m["marks"] = _marks
 		m["peels"] = _peels
 		m["peelId"] = _peel_id
+	if _inv_sel >= 0 or _invs > 0:
+		m["invSel"] = _inv_sel
+		m["invs"] = _invs
+		m["invOp"] = _inv_op
+		m["invArg"] = _inv_arg
 	if local.stamina != null:
 		var copy := Stamina.Stamina.new()
 		copy.level = local.stamina.level

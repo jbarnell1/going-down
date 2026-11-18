@@ -12,7 +12,12 @@
 # is the worst since the last line), `build=ID` (tests: this server's build id, net/build_info.gd), `settings=PATH`
 # (the live settings file, docs/floors/live-settings.md: the host's changes are saved there, with PATH.tmp,
 # PATH.log and PATH.bad beside it, read again at start and whenever it is edited by hand; also the environment
-# variable GD_SETTINGS_FILE; with neither, the changes last until the server stops and nothing is written).
+# variable GD_SETTINGS_FILE; with neither, the changes last until the server stops and nothing is written),
+# `depth=N` (tests: every run starts on floor N, so tools/exported_server_check.mjs reaches the Annex without
+# riding down; printed as a TEST line), `test_unreadable=FILE` (tests: the data check treats data/FILE as
+# missing, so the refusal below can be proved).
+# Before it listens it reads every data file the rules need (server/data_check.gd): `data: N files read`,
+# or `not started: the build is missing data/<file>`, a night-log line {"ev":"notStarted"} and exit code 4.
 # Beside the plain lines it writes the night's log, one JSON object per line (server/night_log.gd).
 # The passphrase: the environment variable GD_JOIN_SECRET, or the first line of the file named by
 # GD_JOIN_SECRET_FILE (keep it outside the repository). Without one the server refuses to start.
@@ -22,7 +27,9 @@ const WsServer = preload("res://net/ws_server.gd")
 const Room = preload("res://server/room.gd")
 const Session = preload("res://net/session.gd")
 const Places = preload("res://sim/places.gd")
+const HostRules = preload("res://net/host_rules.gd")
 const NightLog = preload("res://server/night_log.gd")
+const DataCheck = preload("res://server/data_check.gd")
 
 var _ws: WsServer
 var _room: Room
@@ -44,6 +51,15 @@ func _ready() -> void:
 		say("not started: pass -- server port=N")
 		get_tree().quit(2)
 		return
+	# Everything the rules read from data/ at run time, through their own loaders (server/data_check.gd),
+	# before anything else: a build without them must not take players.
+	var data := DataCheck.run(args.get("test_unreadable", ""))
+	if not data["ok"]:
+		say("not started: the build is missing data/%s (%s)" % [data["missing"], data["why"]])
+		NightLog.new().emit("notStarted", {"reason": "data", "file": "data/" + String(data["missing"]), "why": data["why"]})
+		get_tree().quit(4)
+		return
+	say("data: %d files read" % data["files"])
 	var insecure: bool = args.get("insecure", "0") == "1"
 	var secret := OS.get_environment("GD_JOIN_SECRET")
 	var file := OS.get_environment("GD_JOIN_SECRET_FILE")
@@ -81,6 +97,9 @@ func _ready() -> void:
 	Session.deck = Places.FULL
 	_room = Room.new(_ws, say)
 	_room.fixed_seed = args.get("seed", "")
+	if args.has("depth"):
+		_room.first_depth = HostRules.start_depth_by_arg(true)
+		say("TEST: every run starts at depth %d (depth=; tools/exported_server_check.mjs only)" % _room.first_depth)
 	var settings_file: String = args.get("settings", OS.get_environment("GD_SETTINGS_FILE"))
 	if not settings_file.is_empty():
 		_room.desk = Room.TuningDesk.new(settings_file, say)

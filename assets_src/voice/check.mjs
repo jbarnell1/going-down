@@ -6,7 +6,8 @@
 // For every shipped voice (voices.ship) and every line in lines.json: public/assets/voice/<voice>/<id>.mp3
 // exists and the line is in the manifest; its
 // duration is 0.4 to 1.6 times the estimate (words at 2.5 a second, plus the pauses its tags and
-// ellipses ask for; far outside that usually means a tag was read aloud or a sound effect produced);
+// ellipses ask for; far outside that usually means a tag was read aloud or a sound effect produced;
+// a line read slowly on purpose may set its own upper limit, "slow": 1.8, up to 2.0, for that line only);
 // no clipping (sample peak under -0.1 dBFS, true peak at most -1 dBTP); loudness within 1 LU of
 // -16 LUFS. The Godot copy in godot/assets/voice matches. And the ledger is under the cap.
 import { existsSync, readFileSync } from 'node:fs';
@@ -27,6 +28,10 @@ const CAP = 50_000;
 const WORDS_PER_SECOND = 2.5;
 const PAUSE = { '[short pause]': 0.5, '[pause]': 1.6, '[long pause]': 2.5 };
 const MIN_CLIP = 1.0;
+/** The longest a read may run against its estimate, unless the line sets its own "slow" allowance. */
+const MAX_RATIO = 1.6;
+/** The most a "slow" allowance may be: a line read slowly on purpose, never a tag read aloud. */
+const MAX_SLOW = 2.0;
 
 /** Expected seconds for a line: its spoken words, plus its pauses. */
 export function estimate(line) {
@@ -56,6 +61,7 @@ for (const line of cfg.lines) {
   if (ids.has(line.id)) fails.push(`${line.id}: duplicate id`);
   ids.add(line.id);
   if (!cfg.moments[line.moment]) fails.push(`${line.id}: unknown moment ${line.moment}`);
+  if (line.slow !== undefined && !(typeof line.slow === 'number' && line.slow >= 1 && line.slow <= MAX_SLOW)) fails.push(`${line.id}: "slow" ${line.slow} must be a number from 1 to ${MAX_SLOW}`);
   if (!manifest.lines.some((l) => l.id === line.id && l.plain === line.plain)) fails.push(`${line.id}: missing or stale in manifest.json (run --publish)`);
 }
 for (const voice of ship) for (const line of cfg.lines) {
@@ -70,7 +76,10 @@ for (const voice of ship) for (const line of cfg.lines) {
   const est = estimate(line);
   const k = m.duration / est;
   const bad = [];
-  if (!(k >= 0.4 && k <= 1.6)) bad.push(`duration ${m.duration.toFixed(2)} s is ${k.toFixed(2)}x the estimate`);
+  // A line read slowly on purpose carries its own upper limit ("slow" in lines.json, e.g. hint_hide_2's
+  // spaced list); every other line keeps 1.6.
+  const most = line.slow ?? MAX_RATIO;
+  if (!(k >= 0.4 && k <= most)) bad.push(`duration ${m.duration.toFixed(2)} s is ${k.toFixed(2)}x the estimate (limit ${most}x${line.slow ? ', its own "slow"' : ''})`);
   if (!(m.samplePeak < -0.1)) bad.push(`sample peak ${m.samplePeak} dBFS (clipping)`);
   if (!(m.truePeak <= -1)) bad.push(`true peak ${m.truePeak} dBTP`);
   if (!(Math.abs(m.lufs - TARGET_LUFS) <= 1)) bad.push(`loudness ${m.lufs} LUFS`);

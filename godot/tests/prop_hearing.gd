@@ -29,10 +29,16 @@
 #   9. A player sitting in a hide is silent and safe unless the noise it came to was that hide's own.
 #  10. Off elsewhere: with its resident off nothing is ever heard or taken; a crew in the car is never taken; and
 #      an instrument tick with no pay computes exactly as before.
+#  11. Searching and carrying on the garden floor (sim/findables.gd, sim/inventory.gd, both on as in the game's
+#      rooms). The Arboretum has no findables: the place says so, no piece of a real floor is searchable, and a
+#      player holding the search key starts no search and makes no noise. The four slots work as anywhere:
+#      a carton put down lies on the garden's ground, a crewmate in reach picks it up, the Groundskeeper does
+#      not hear either, and whoever it takes drops all they carry where they fall. Nothing is made or lost.
 # Deliberate breaks (PROP_HEARING_BREAK): moss_creep (it hears a silent creep on moss: 3's creeps-out-on-moss
 # goes red), far_take (it takes a player standing outside its reach at the end of a lean: 3 goes red),
 # short_lean (the lean is shorter when it will not snatch: 3's identical lean goes red), record_listening (the
-# instrument records while it listens: 6 goes red).
+# instrument records while it listens: 6 goes red), dup_drop (sim/inventory.gd's own break: a dropped carton
+# stays in the hand as well: 11's "nothing made or lost" goes red).
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -48,6 +54,11 @@ const Stamina = preload("res://sim/stamina.gd")
 const Rng = preload("res://sim/rng.gd")
 const M = preload("res://sim/jsmath.gd")
 const Protocol = preload("res://net/protocol.gd")
+const Findables = preload("res://sim/findables.gd")
+const Inventory = preload("res://sim/inventory.gd")
+const Furniture = preload("res://sim/furniture.gd")
+const Arboretum = preload("res://sim/arboretum.gd")
+const PropInventory = preload("res://tests/prop_inventory.gd")
 
 const DT := 0.05
 const EPS := 1e-6
@@ -80,6 +91,7 @@ static func _apply_break() -> void:
 	var b := OS.get_environment("PROP_HEARING_BREAK")
 	Noises.test_break = b if b == "moss_creep" else ""
 	Hearing.test_break = b if (b == "far_take" or b == "short_lean" or b == "record_listening") else ""
+	Inventory.test_break = b if b == "dup_drop" else ""
 
 # ---------------------------------------------------------------------------------------------
 # A garden for the tests: an open field with a void border (the car's space at the top), and its ground.
@@ -1100,3 +1112,82 @@ func test_off_elsewhere(t: T) -> void:
 		var out := Instr.step_crew(plan, crew, cp, ets, DT)
 		rates.append(Instr.member(out.crew, "a").instrument.rate)
 	t.check(rates[0] > 0.0 and rates[0] == rates[1] and rates[0] == rates[3] and absf(rates[2] - 2.0 * rates[0]) < 1e-9, "the pay multiplier: %s" % str(rates))
+
+# ---------------------------------------------------------------------------------------------
+# 11. Searching and carrying on the garden floor.
+
+func test_searching_and_carrying_on_the_garden_floor(t: T) -> void:
+	_apply_break()
+	# No findables here: the place, and every piece of real floors.
+	t.check(not Findables.place_on(Places.ARBORETUM), "the Arboretum is a place with findables")
+	var searchable := 0
+	var pieces := 0
+	for k in (1 if t.quick else 4):
+		var real := Arboretum.generate_arboretum("carry-%d" % k, 5)
+		for pc in Furniture.pieces_for(real):
+			pieces += 1
+			if pc.searchable:
+				searchable += 1
+		t.eq(Findables.spots_for(real).size(), 0, "carry-%d: searchable pieces on a real floor" % k)
+	t.check(searchable == 0 and pieces > 0, "%d of %d pieces of real floors are searchable" % [searchable, pieces])
+	# A run out on the field with both rules on: a (empty hands) and b (two cartons in two slots) 1 m apart on
+	# moss, the Groundskeeper 13 m off.
+	var ids: Array[String] = ["a", "b"]
+	var a_at := at(12.0, 40.0)
+	var b_at := at(11.0, 40.0)
+	var s := Run.with_inventory(Run.with_findables(garden_run(ids, {"a": a_at, "b": b_at}, at(24.0, 40.0))))
+	s = PropInventory.with_bags(s, {"b": [["juice", 1], ["juice", 1]]})
+	var all: Array[Dictionary] = []
+	var r := Run.step_run(s, PropInventory.ins2(input("a", a_at, &"creep"), input("b", b_at, &"creep")), DT)
+	s = r.state
+	# The search key, held and rushed: nothing.
+	for _n in 20:
+		var ia := input("a", a_at, &"creep")
+		ia.search = true
+		ia.search_fast = true
+		r = Run.step_run(s, PropInventory.ins2(ia, input("b", b_at, &"creep")), DT)
+		s = r.state
+		all.append_array(r.events)
+	var searches := 0
+	for e in all:
+		if str(e["type"]).begins_with("search"):
+			searches += 1
+	t.check(s.find == null and searches == 0, "holding the search key on the garden floor: find %s, %d search events" % [str(s.find), searches])
+	t.check(s.garden != null and s.garden.keeper.mode == &"listening", "it heard the search key")
+	# b puts a carton down; a picks it up.
+	r = Run.step_run(s, PropInventory.ins2(input("a", a_at, &"creep"), PropInventory.req(input("b", b_at, &"creep"), &"drop", null, 0)), DT)
+	s = r.state
+	all.append_array(r.events)
+	var dropped := events_of(r.events, "itemDropped")
+	t.check(dropped.size() == 1 and str(dropped[0]["why"]) == "drop" and s.pickups.size() == 1, "a carton put down lies on the ground: %s" % str(dropped))
+	t.eq(Run.items_in_world(s), {"juice": 2}, "after the drop: nothing made or lost")
+	if dropped.size() == 1:
+		r = Run.step_run(s, PropInventory.ins2(PropInventory.req(input("a", a_at, &"creep"), &"take", int(dropped[0]["pickup"])), input("b", b_at, &"creep")), DT)
+		s = r.state
+		all.append_array(r.events)
+		var taken := events_of(r.events, "itemTaken")
+		t.check(taken.size() == 1 and Inventory.bag_of(s.bags, "a").totals() == {"juice": 1} and s.pickups.is_empty(), "a crewmate in reach picks it up: %s" % str(taken))
+	for _n in 20:
+		r = Run.step_run(s, PropInventory.ins2(input("a", a_at, &"creep"), input("b", b_at, &"creep")), DT)
+		s = r.state
+		all.append_array(r.events)
+	t.check(s.garden.keeper.mode == &"listening" and events_of(all, "keeperTilt").is_empty(), "it heard a carton put down or picked up")
+	# b whistles and stands; a creeps away on the moss. b is taken and drops what it carries where it falls.
+	var a_body := a_at
+	var whistled := false
+	var fell: Array[Dictionary] = []
+	for _n in int(30.0 / DT):
+		if player(s, "b").status != &"ok":
+			break
+		a_body = at(a_body.x, a_body.z + O_CREEP * DT)
+		var ib := input("b", b_at, &"creep")
+		ib.emote_sound = not whistled
+		whistled = true
+		r = Run.step_run(s, PropInventory.ins2(input("a", a_body, &"creep"), ib), DT)
+		s = r.state
+		fell.append_array(events_of(r.events, "itemDropped"))
+	t.check(player(s, "b").status != &"ok" and player(s, "a").status == &"ok", "the whistler was taken and the one who crept off was not (%s, %s)" % [player(s, "b").status, player(s, "a").status])
+	t.check(fell.size() == 1 and str(fell[0]["why"]) == "down" and str(fell[0]["playerId"]) == "b" and flat(fell[0]["at"], b_at) < 0.01,
+		"whoever it takes drops what they carry where they fall: %s" % str(fell))
+	t.check(Inventory.bag_of(s.bags, "b").is_empty() and s.pickups.size() == 1, "the taken player's hands are empty and the carton lies there (%d on the ground)" % s.pickups.size())
+	t.eq(Run.items_in_world(s), {"juice": 2}, "after the snatch: nothing made or lost")

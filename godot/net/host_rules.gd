@@ -57,6 +57,13 @@
 #    ask for it (the server's always, playing alone with the game's deck), so players slide along the Clinic's and
 #    the Annex's chairs, beds, cabinets and desks instead of walking through them. prepare() turns it on before the
 #    first tick.
+#  - Findables (sim/run.gd findables, sim/findables.gd, FD9): off unless asked (`findables`, the last parameter); the
+#    game's rooms ask for it (the server's always, playing alone with the game's deck), so the Clinic's and the
+#    Annex's drawers, gurneys, lockers, copiers and boxes can be searched (F held) for credits, notes and cartons.
+#    prepare() turns it on before the first tick. The soft catch keeps what was opened and found on the real tick.
+#  - The four-slot inventory (sim/run.gd inventory, sim/inventory.gd, S1): off unless asked (`inventory`, the last
+#    parameter); the game's rooms ask for it. prepare() turns it on before the first tick. The soft catch keeps the
+#    bags and the pickups of the real tick (what the caught player carried fell where they were caught).
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -103,10 +110,17 @@ var playroom_tuned: bool
 var day_lock: bool
 ## Solid furniture (off unless asked; sim/run.gd furniture, FD7).
 var furniture: bool
+## Findables (off unless asked; sim/run.gd findables, FD9).
+var findables: bool
+## The four-slot inventory (off unless asked; sim/run.gd inventory, S1).
+var inventory: bool
 
 func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false,
 		watchers_: bool = false, relocation_: bool = false, long_dark_: bool = false, paced_: bool = false, car_waits_: bool = false,
-		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false, furniture_: bool = false) -> void:
+		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false, furniture_: bool = false, findables_: bool = false,
+		inventory_: bool = false) -> void:
+	inventory = inventory_
+	findables = findables_
 	playroom_tuned = playroom_tuned_
 	furniture = furniture_
 	relocation = relocation_
@@ -213,6 +227,10 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_day_lock(s)
 	if furniture and not s.furniture:
 		s = Run.with_furniture(s)
+	if findables and not s.findables:
+		s = Run.with_findables(s)
+	if inventory and not s.inventory:
+		s = Run.with_inventory(s)
 	return _capped(s)
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web
@@ -242,24 +260,31 @@ func _capped(s: Run.RunState) -> Run.RunState:
 	c.floor_needed = _quota_cap
 	return c
 
-## Test-only: `floor=N` (a whole number above 1, as a desktop or server argument after `--` or the web page's
-## ?floor=N), honoured only together with `auto=1`: runs start on floor N of the deck, so a check or a look at a
-## deep place (the Arboretum is floor 5) need not ride down to it. 1 when not asked.
-static func start_depth_by_arg() -> int:
+## Test-only, and THE one reader of the floor a run starts on: runs start on floor N of the deck, so a check
+## or a look at a deep place (the Arboretum is floor 5) need not ride down to it. 1 when not asked. Two
+## spellings reach it, and both end as a room's first depth (server/room.gd `first_depth`, the depth
+## net/local_room.gd gives its rules):
+##  - a dedicated server (`server` true: server/server.gd): its argument `depth=N`, alone
+##    (tools/exported_server_check.mjs passes depth=3);
+##  - a client playing alone (`server` false: net/local_room.gd): `floor=N` (a desktop argument after `--`, or the
+##    web page's ?floor=N), honoured only together with `auto=1`.
+## Kept to the deck's fixed floors (sim/places.gd FIXED), whichever spelling asked.
+static func start_depth_by_arg(server := false) -> int:
 	var depth := 1
-	var auto := false
+	var auto := server
+	var key := "depth=" if server else "floor="
 	for raw in OS.get_cmdline_user_args():
 		var a := raw.trim_prefix("--")
-		if a.begins_with("floor=") and a.substr(6).is_valid_int():
-			depth = int(a.substr(6))
+		if a.begins_with(key) and a.substr(key.length()).is_valid_int():
+			depth = int(a.substr(key.length()))
 		auto = auto or a == "auto=1"
-	if OS.has_feature("web"):
+	if not server and OS.has_feature("web"):
 		var q := str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('floor') ?? ''", true))
 		var au := str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('auto') ?? ''", true))
 		if q.is_valid_int():
 			depth = int(q)
 		auto = auto or au == "1"
-	return clampi(depth, 1, 60) if auto else 1
+	return clampi(depth, 1, Places.FIXED.size() - 1) if auto else 1
 
 ## Test-only: whether this server was started with `watchers=0` (an argument after `--`): Stillness is then
 ## held by one look at any crew size, as before T19a (tools/net_local.mjs; server/room.gd).
@@ -348,6 +373,15 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 		# The Annex's marks and notes too: the catch's note was triggered by the real tick.
 		st.annex = r.state.annex
 		st.note_seq = r.state.note_seq
+		# Findables (FD9): what was opened and found on the real tick (the credits ride on its crew's tapes).
+		st.find = r.state.find
+		st.lore_used = r.state.lore_used
+		st.items = r.state.items
+		# The inventory (S1): the bags and pickups of the real tick.
+		st.bags = r.state.bags
+		st.pickups = r.state.pickups
+		st.pickups_plan = r.state.pickups_plan
+		st.pickup_seq = r.state.pickup_seq
 		st.players = players
 		st.summary = null
 		var kept_events: Array[Dictionary] = []
@@ -391,4 +425,9 @@ static func _copy_input(i: Run.PlayerInput) -> Run.PlayerInput:
 	n.light = i.light
 	n.mark = i.mark
 	n.peel = i.peel
+	n.search = i.search
+	n.search_fast = i.search_fast
+	n.inv_select = i.inv_select
+	n.inv_op = i.inv_op
+	n.inv_arg = i.inv_arg
 	return n

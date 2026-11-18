@@ -77,6 +77,7 @@ const SECTIONS: Array = [
 	[&"stamina", &"players", "STAMINA"],
 	[&"down", &"players", "DOWN AND HEALING"],
 	[&"health", &"players", "HEALTH (THE PLAYROOM)"],
+	[&"carry", &"players", "CARRYING"],
 	[&"earning", &"earning", "EARNING"],
 	[&"hiding", &"hiding", "HIDING"],
 	[&"moving", &"speeds", "MOVING"],
@@ -179,6 +180,10 @@ const ROWS: Array = [
 	[&"health.sprint", &"health", "SPRINTING COSTS", "health a second of sprinting", "a second", 8.0, 0.0, 20.0, 1.0, &"now", &"LS5", F],
 	[&"health.rest", &"health", "STANDING GIVES BACK", "health a second of standing", "a second", 1.0, 0.0, 5.0, 0.25, &"now", &"LS5", F],
 	[&"heal.health", &"health", "A HEAL GIVES BACK", "the health a heal puts back", "health", 50.0, 10.0, 100.0, 5.0, &"next", &"LS5", F],
+	# Players: carrying (the four-slot inventory, S1; sim/inventory.gd). Four slots is fixed. The stack goes into force
+	# at lights out, when every bag is empty, so a slot never holds more than the number in force.
+	[&"inv.stack", &"carry", "ONE SLOT HOLDS", "how many of the same item stack in one slot", "items", 1.0, 1.0, 5.0, 1.0, &"day", &"S1", W],
+	[&"inv.hand_reach", &"carry", "HAND OVER WITHIN", "giver's feet to the crewmate's", "m", 1.5, 0.5, 3.0, 0.1, &"floor", &"S1", F],
 	# Earning.
 	[&"quota.each", &"earning", "FLOOR QUOTA, EACH PLAYER", "floor 1's quota for one player", "credits", 400.0, 100.0, 1000.0, 25.0, &"floor", &"LS5", W],
 	[&"quota.step", &"earning", "QUOTA GROWS, A FLOOR", "times this for every floor deeper", "times", 1.45, 1.0, 2.0, 0.05, &"floor", &"LS5", F],
@@ -214,6 +219,8 @@ const WIRED_IDS: Array[StringName] = [
 	# AR1: the Groundskeeper (the Arboretum).
 	&"groundskeeper.speed", &"groundskeeper.dark_speed", &"groundskeeper.reach", &"groundskeeper.lean_range",
 	&"groundskeeper.lean", &"groundskeeper.heals",
+	# S1: carrying.
+	&"inv.stack", &"inv.hand_reach",
 ]
 
 ## The least wait of a call is its start delay plus the floors: sim/run.gd CALL_START_DELAY_MIN (this file

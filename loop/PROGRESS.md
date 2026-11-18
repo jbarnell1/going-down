@@ -4,10 +4,10 @@
 
 ## Status
 
-- **Gates passed:** 7 of 14. **Tasks done:** 77 of 115.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 90.
-- **Now:** nothing in progress
-- **Last CI result seen:** passed on a650c60
+- **Gates passed:** 7 of 14. **Tasks done:** 80 of 125.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 99.
+- **Now:** AV3 Review and refine the Clinic, Annex and Playroom art and audio. Reviewing existing floor captures and sound cues. Studying tile, carpet and padded surfaces in the Clinic, Annex and Playroom.
+- **Last CI result seen:** passed on c1d7193
 - **Answers applied up to:** 2026-11-17T21:11:49.720Z
 
 ## Tasks
@@ -63,7 +63,7 @@
 - [x] **T6e** `done` Blinks that grow into a blackout
   - Why: The owner wants the wait for the car to build: each blink longer than the last, ending in a long dark stretch that drives the crew away from the lift, then a mad dash back with the Orderly after them
   - Evidence: While you wait for the car the blinks now grow (1, 1.5, 2.5, 4, 6 seconds) and end in a blackout: 9 to 10 seconds on a run's first floor, 12 to 15 deeper, after a 3-second warning and the announcer's line. Amber strips along the floor and red glows over doors let you run; the Orderly is never drawn in the dark, only heard. The lights return as the car arrives. In 300 simulated waits per depth a crew that stays by the lift always loses someone, and a crew that runs and comes back loses someone 2 to 4 percent of the time and nearly always makes the car. I re-ran everything myself (143 logic tests, 52 browser tests) and broke it on purpose twice: drawing the Orderly in the dark and shrinking the blackout to one second both turned tests red.
-- [ ] **T14** `todo` Dress the Clinic
+- [ ] **T14** `todo` Dress the Clinic · Free for either agent
   - Why: Beds, trolleys, curtains, signs and grime, so rooms stop being empty boxes. Props built in Blender, textures made with Gemini inside the art budget.
   - To do: Owner's rule: downsample every prop and texture before it goes in the game. Low triangle counts, small textures; the tape look hides detail.
   - To do: Props are in tools/props/: kenney-furniture-kit/x (glb), quaternius-house-interior/FBX, polyhaven/<id> (1k gltf, heavy: decimate hard and shrink textures to 256 or less). Hashes and LICENCE.txt in each folder; add credits to CREDITS.md.
@@ -73,9 +73,9 @@
 - [x] **T6d** `done` Even voice loudness and thirty more announcer lines
   - Why: The owner found the voice much quieter after being caught than in the car, and the same lines get tiring
   - Evidence: The announcer is now even: the landing speaker never drops below 55 percent of its near level, and the taken, wipe, banked, blackout and lights lines always play at full level wherever you are. 35 new lines for both voices (54 in all); each moment cycles through all its lines before repeating. One bug found in my re-run and fixed: the thank-you-for-calling line sometimes expired while queued behind two long lines. Checked by numbers and by putting the old level back to see the test fail; nobody has heard it yet.
-- [ ] **T7b** `todo` Bot crewmates and the test panel (G14)
+- [ ] **T7b** `todo` Bot crewmates and the test panel · Free for either agent (G14)
   - Why: So you can test a full crew alone on the live link.
-- [ ] **T8** `todo` Going down, cameras and the wipe (G8, G9)
+- [ ] **T8** `todo` Going down, cameras and the wipe · Free for either agent (G8, G9)
   - Why: Being caught puts you on the cameras, and a full wipe ends the run.
   - To do: Owner asked (2026-11-16): an animated being-caught sequence with noise. The Orderly's reach filling the view, the tape tearing, a loud burst; then the downed view. Later is fine, after more of the game is settled.
   - To do: New from the owner (16 Nov): caught means downed first. A crewmate can heal you for about 10 seconds; only if nobody does do you go out to the security cameras. The camera drops when downed
@@ -87,6 +87,7 @@
 - [x] **T7g** `done` Crewmates in motion: no foot sliding, name tags readable at 8 m, drawn faces on the mask screens
   - Why: Your friends' figures move like people and you can tell who is who across a room
   - Evidence: In the build you play: crewmates whose feet don't slide (0.8-4.3% slip headless, under 12% live), a real sneak when creeping, your drawn face on your mask screen, and name tags only within 2 m, as you chose.
+  - Waiting for checked (foot slip 0.8-4.3% headless, 5.7-11.8% live, tags only within 2 m, faces on the masks; breaks red); merged after the combined check that is running on the main copy finishes
 - [x] **T7f** `done` Draw your face
   - Why: North Star H1: each player doodles a face before the run and it shows on the screen mask their crewmate figure wears, glowing in the dark, and on the lift monitor
   - Evidence: Your drawn face is in the game. After Play alone or Join friends you draw it (it opens on your last one, Enter keeps it); it travels once when you join, the others and late joiners get it, and it shows on your crewmate's mask and on a new monitor in the lift. A bad or oversized face is dropped and the player still joins. Independently checked: browser 29/29, desktop 33/33, two players 27/27, three players 10/10; switching off the face relay turned three checks red. Promoted (play/GoingDown.exe, d94e306); the lab-box server is updated and a two-player game through the public path passed.
@@ -111,19 +112,22 @@
 - [x] **T6f** `done` A bigger elevator
   - Why: The car is a 2 metre square today, so each side of the BANK or DOWN choice is 1 metre wide: cramped for four and a crush for eight
   - Evidence: In the build you play: the lift car is 4 m by 4 m with a 1.8 m door; checked on 225 floors with room for the whole crew, and the drawn lift matches the rules' car.
+  - Waiting for checked (4 m by 4 m, 1.8 m door, 225 floors) and merged (beb4fed); promoted with the next build
 - [x] **T2c** `done` The camera drops when you creep
   - Why: Creeping should feel like ducking, and what you can see over things should change with it
   - Evidence: The camera drops when you creep (1.13 m, where teammates see your head) and when down (0.45 m), easing over 0.2 s. The eye height the rules judge 'looking' from equals the camera on every frame: 0 of 3,040 inputs off. Teammates see a creeping crewmate crouched with the mask at that eye. Independently checked; both breaks red. Merged 88efc2d.
 - [x] **T5q** `done` A quota before the lift can be called
   - Why: You cannot just ride straight back up: the crew has to earn a set amount on the instrument on each floor before the call button works
   - Evidence: In the build you play (play/GoingDown-2026-11-17-0833.zip): the call button does nothing until the crew has recorded enough on this floor (400 per player on floor 1, 45% more each floor down); dropped tapes still count; a solo reader meets floor 1 in about 2 minutes. Also fixed: a step beside the lift car could snap you inside it. A two-player game over the public address saw the call refused on both screens.
+  - Waiting for re-checked (solo meets floor 1 every time, worst 2:16; the lift-car snap bug fixed and tested; the quota never grows mid-floor); goes into your build with its call panel (T5r)
 - [x] **T5r** `done` The quota on screen
   - Why: The call panel shows RECORDED 640 OF 1200, a refused press says NOT YET, and the announcer says when the quota is met
   - Evidence: In the build you play: RECORDED n OF m above the call button and under the prompt, a buzz and NOT YET on a refused press, QUOTA MET. CALL THE CAR. and an announcer line when it's met. Checked 14/14, the panel always showing the host's numbers.
-- [ ] **T16h** `todo` Crew marks and the Temp's sticky notes in the run
+- [ ] **T16h** `todo` Crew marks and the Temp's sticky notes in the run · Free for either agent
   - Why: In the Annex the crew's three marks are the only directions you can trust, and the Temp leaves notes about you by name
+  - Waiting for checked (four players, 837 lost messages, identical marks and notes; marks never move; no note while the Temp is watched; four breaks red); goes into your build with the marks screen (T16j)
   - To do: The 14-notes cap is only caught because templates run out at 21; assert 14 directly
-- [ ] **T16j** `todo` Marks, notes and the pad on screen
+- [ ] **T16j** `todo` Marks, notes and the pad on screen · Free for either agent
   - Why: You press Q to slap down an arrow everyone can see, the pad count shows, and the Temp's notes appear on the walls
 - [x] **P3** `done` Playing together through the home server
   - Why: One small server at home runs the rules and keeps everyone in sync, so friends in their own houses can join and nobody's browser has to host
@@ -134,34 +138,36 @@
 - [x] **P4** `done` Light browser build and a download for friends
   - Why: Friends either click a link that loads in a few seconds or run a small downloaded file
   - Evidence: The download for friends: play/GoingDown-2026-11-16-1943.zip (54 MB) holds the Windows game and a READ ME FIRST. I checked the READ ME's wording against the real start screen and keys. The browser build is compressed (24.6 MB sent) and GitHub runs the quick Godot tests on every push.
+  - Waiting for nothing; done
 - [x] **T17** `done` Godot tests on GitHub too
   - Why: Today the Godot tests only run on this PC before each commit; a clean machine catches what this one hides
   - Evidence: The Godot tests now run on GitHub's machines on every push, with the engine checked against its published fingerprint first. The first run passed 47 of 47 in 90 seconds, read from GitHub's log. A fresh copy of the code had passed them on this PC before that.
 - [x] **T14a** `done` Shrink the downloaded props for the game
   - Why: Rooms need beds, chairs, trolleys and clutter to feel like a place and to hide behind; the pieces must be tiny so the game stays fast
   - Evidence: 26 hospital props are ready for the game: bed, gurney, wheelchair, crutches, chairs, bench, desks, cabinets, shelves, sink, toilet, bins, lights, extinguisher, wet-floor sign, camera, duct and pipes. All 26 together are 0.7 MB and about 9,300 triangles, with flat colours or one tiny picture each. I checked the file sizes, the list against the files, and looked at the sheets. Not yet seen inside the running game; placing them in rooms is the room-dressing task.
-- [ ] **T6c** `todo` Elevator polish
+- [ ] **T6c** `todo` Elevator polish · Free for either agent
   - Why: Let the doors close early once everyone is aboard, a bell warning the logic knows about, doors that take real time to close, and the phone's call and hold buttons tested.
-- [ ] **T9** `todo` The shadow trigger (G11)
+- [ ] **T9** `todo` The shadow trigger · Free for either agent (G11)
   - Why: A shadow crossing a doorway in a quiet moment: a scare trigger, never the monster.
-- [ ] **T9b** `todo` A second Orderly on deeper floors
+- [ ] **T9b** `todo` A second Orderly on deeper floors · Free for either agent
   - Why: The owner's idea: with two, nobody can watch both, so the crew has to split who looks where
 - [x] **T3b** `done` The Orderly, third pass
   - Why: After it moves and the tape look is on: real sewn lids instead of button-like discs, mottled skin, a stained gown that stands out from the walls, a narrower grin.
   - Evidence: The Orderly now wears a torn, stained gown: the hem hangs in strips that swing on their own bones, half a sleeve is gone, the eyelids are sewn. Seen in the running game in the watched and within-reach screenshots; all browser tests pass with it. Its own maker says the face is still a pale blob beyond about 3 m.
-- [ ] **T10** `todo` Frame rate (G10)
+- [ ] **T10** `todo` Frame rate · Free for either agent (G10)
   - Why: Measured on this PC with four players, then fixed until it is smooth.
   - To do: The Clinic bench shows 258 real lights plus 152 emergency lights against a 256 label; check whether that limit is per view and whether the Clinic needs trimming
-- [ ] **T11** `todo` Final validation (G1, G12)
+- [ ] **T11** `todo` Final validation · Free for either agent (G1, G12)
   - Why: A fresh reviewer audits everything against the gates and the fairness rules.
-- [ ] **T12** `todo` Orientation: the training floor
+- [ ] **T12** `todo` Orientation: the training floor · Free for either agent
   - Why: Floor one of every run, where nothing can hurt you and a cardboard statue on wheels teaches the instrument. Without it nothing shows a new player to raise the instrument and turn their back.
-- [ ] **T13** `todo` Phone picture crash on your Pixel
+- [ ] **T13** `todo` Phone picture crash on your Pixel · Free for either agent
   - Why: Parked at your request. The phone reported a PowerVR D-Series graphics chip. Its browser threw the picture away on the very first frame, restored it, then lost it again about six seconds later while the Orderly was on screen; the game then switched itself to the lighter level. Next step when picked up: three test links (no Orderly, no tape look, lightest level) to find which part that chip's driver cannot take. Computers are unaffected.
-- [ ] **T1b** `todo` More than one floor skeleton
+- [ ] **T1b** `todo` More than one floor skeleton · Free for either agent
   - Why: Every Clinic floor shares one skeleton today, which will feel samey by the third floor.
-- [ ] **T15** `todo` A floor where you have to hide
+- [ ] **T15** `todo` A floor where you have to hide · Free for either agent
   - Why: The owner's idea for a later floor: when its entity is angry enough, a voice tells the crew to hide, the lights go out, music starts, and anyone found during the search dies
+  - Waiting for its pieces T15a to T15h; Fable's design is docs/floors/playarea.md
   - To do: Owner's words (2026-11-16): 'if the entity is aggro'ed enough, it kicks off a voice that tells players to hide. If they're found before timer goes off, they're killed. Otherwise, the entity follows it's normal rules. (only move when looking etc) The level goes dark, creepy music starts playing, and players have to find a place. You'll have to research how to make a good ai bot that explores rooms so that the challenge is actually challenging. Staying visible and just running away kills you. Once count is finished, moving faster than creep drains health maybe?'
   - To do: My reading, to confirm with the owner: (1) an anger level rises with noise (sprinting, calls, readings); (2) at the top, the announcer starts a count (about 20 s), lights go out, music starts; (3) when the count ends a search runs for a set time: the entity checks rooms and hiding places; anyone it finds is taken; moving faster than a creep costs health; (4) when the search time is up it goes back to its usual rule. Hiding places come from the props (lockers, under beds, cupboards, behind curtains).
   - To do: Research before building (one agent, written up in docs): how games make a searcher that feels smart and fair. Start from occupancy / probability maps (the searcher keeps a belief of where players could be and checks the likeliest spots), last-known-position search, a director that nudges it toward players without telling it exactly (Alien: Isolation's two-part design), and hiding-spot checks with tells so a hidden player can hold their breath. Must stay deterministic from the seed and simulate hundreds of rounds: good hiders usually live, runners die, nobody dies to pure luck.
@@ -170,132 +176,181 @@
 - [x] **T16e** `done` The place deck: the third floor down is the Annex
   - Why: Floors stop being all Clinic; the yellow office arrives at floor 3 and the Playroom at floor 4
   - Evidence: In the build you play (play/GoingDown-2026-11-17-0344.zip): floors 1-2 are the Clinic, floor 3 the Annex, floor 4 the Playroom, then a seeded draw that never repeats a place twice running. A separate checker rode a real game down to floors 3 and 4 (pictures), host and players built every floor identically, and four deliberate breaks went red.
+  - Waiting for checked and merged (beb4fed); promoted to the build you play together with the sounds once their check finishes
 - [x] **T15a** `done` The Playroom floor generator
   - Why: Floor 4 becomes a soft-play centre with ball pits, crawl dens, a party room and places to hide
   - Evidence: In the build you play: floor 4 is generated as a soft-play centre with ball pits, crawl dens, party rooms, toddler corners, hiding places, squeaky tiles and zones; 800 test floors, identical on Linux and Windows.
+  - Waiting for checked and merged (3ecc027); it reaches the build you play once the place deck (T16e) puts the Playroom at floor 4
 - [x] **T16g** `done` The Temp's figure and its stapler
   - Why: Something actually lives in the Annex: an office worker with a crewmate's drawing for a face
   - Evidence: In the build you play: the Temp stands in the Annex, an office worker with a photocopy of a crewmate's drawn face, clicking its stapler, still and silent while seen. Checked by temp_check (five checks) and a deliberate break.
+  - Waiting for checked and merged (1ff6027); you meet it once the floor order (T16e) puts the Annex at floor 3
 - [x] **T16f** `done` The Temp's body in the rules
   - Why: The Temp is shorter, clicks a stapler, and stops the moment you look
   - Evidence: In the build you play: the Temp uses its own body in the rules (1.8 m, a click every 1.2 m and every 4 s waiting unseen, silent while seen), with the Orderly's stored results unchanged.
+  - Waiting for checked and merged (800382e); it takes effect when the floor order puts the Temp in the Annex
 - [x] **T18j** `done` The day in the run: bank, ride up, sleep, day 2
   - Why: Vote BANK and you ride up to the prison, go to bed, and wake to a new day going down
   - Evidence: In the build you play (play/GoingDown-2026-11-17-0602.zip): BANK rides up to the prison, holding F at your bunk lies you down, the bedtime count can't be stopped, and day 2 starts at floor 1 on its own seed. Three bots over a link that lost 1,960 messages agreed with the host at every stop; four deliberate breaks red; a two-player game over the public address banked and rode up.
+  - Waiting for checked (every player agreed with the host at every stop over a link that lost 1,960 messages; four deliberate breaks red); it goes into the build together with its screens (T18k), because the old screens stop at BANK
 - [x] **T15b** `done` The count, the Minder and health, as rules
   - Why: What makes the seeker fair and a real threat
   - Evidence: In the build you play: the count, the Minder's search, the four ways of being found and health run in the game (see T15d/T15e).
+  - Waiting for checked and merged; it runs in a game once the count is wired into the run (T15d)
 - [x] **T15c** `done` The Playroom's look and a stand-in Minder
   - Why: Padded primary colours, a ball pit, netting and signs that print the hiding odds
   - Evidence: In the build you play: the Playroom's look (padded primaries, ball pits, netting, signs printing each area's hiding odds, real count dark) with a stand-in Minder that never freezes when seen; the Blender Minder replaces it next.
+  - Waiting for checked and merged (5b384b9); you walk it once the floor order puts the Playroom at floor 4
 - [x] **T15d** `done` The count in the run and over the network
   - Why: Somebody sprints, the lights die, and the ball pit actually saves you, the same for every player
   - Evidence: In the build you play (play/GoingDown-2026-11-17-0642.zip): on floor 4 any sprint, noise or light starts a count, the Minder searches with printed odds, the four ways of being found, health after a count, and the last count when you call the lift. Three clients on lossy links agreed on every count; breaks red.
+  - Waiting for checked (all three clients agreed on every count over a link that lost 2,550 messages; walking never starts a count); goes into your build with its screens (T15e)
 - [x] **T15e** `done` The count on screen
   - Why: HIDE, the dark, climbing into hiding places and peeking at a glowing balloon
   - Evidence: In the build you play: HIDE, the lights going bank by bank, STARTED BY, hiding places with F, peeking with W, the bell and the announcer's countdown, the health bar, FOUND, and the party table. Two screens 0.3 s apart in delay went dark within 0.003 s; found at 1.0 s on both; health equal to the host's. A public-address game passed after promoting.
 - [x] **T18k** `done` Bed and the day board on screen
   - Why: The prison shows what the crew banked and HOLD F TO SLEEP works
   - Evidence: In the build you play: the ride up, the report board (owed, banked, short by, streak, misses left, the roll's odds, each share), HOLD F TO SLEEP, IN BED n OF m, lights out on host time, and waking on day 2. Two players read the host's total on their boards and woke together; a board drawn from the client's own sum went red.
-- [ ] **T15g** `todo` The Minder, modelled, rigged and animated in Blender
+- [ ] **T15g** `todo` The Minder, modelled, rigged and animated in Blender · Free for either agent
   - Why: The stand-in becomes a tall padded attendant with a bobbing balloon head
+  - Waiting for checked and merged; it goes into the game in T15k
   - To do: When it goes into the game, raise the mask's glow so the face reads in count dark (the final pass made the mask smaller and dimmer)
 - [x] **T15k** `done` The Blender Minder in the game
   - Why: The stand-in figure in the Playroom becomes the judged model with its ten animations
   - Evidence: In the build you play: the Blender Minder in the Playroom, all ten clips from the rules' poses, feet that don't slide, never frozen when seen, its music box to 30 m. In the dark at 10 m its mask reads as a glowing point (a to-do).
+  - Waiting for checked and merged (7dc9958); marked done once it's in the build you play, with the day screens
 - [x] **T15i** `done` The count's voice lines
   - Why: The lift's announcer tells you to hide, counts down, and says 'Coming, ready or not'
   - Evidence: Recorded and checked: Hide, forty/thirty/twenty and ten to one, Coming ready or not, Found you, All done, and the last count's line, in both voices, at the same loudness as the other announcer lines; voice budget 22,560 of 50,000; no key anywhere in the repo. They play once the count's screens land (T15e); takes are on the audition page.
-- [ ] **T15h** `todo` The party table for found players
+- [ ] **T15h** `todo` The party table for found players · Free for either agent
   - Why: Found players sit in paper hats with a horn until a friend fetches them
 - [x] **T8a** `done` Down first, then out
   - Why: Being caught drops you; a friend holding F puts you back up
   - Evidence: Caught means down first: a friend heals you with F in about 3 seconds, or you are out after 10. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
+  - Waiting for Merged into main with its screen (T8c); goes into your next build
 - [x] **T8c** `done` Down and healed on screen
   - Why: When you go down you crawl with a 10-second timer; a friend sees HOLD F TO HELP and a fill bar; out leaves a red spot
   - Evidence: Down and healed on screen: the view drops, a DOWN timer, HOLD F TO HELP with a bar, the out screen and a red spot. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
+  - Waiting for Checked: 209 quick tests, the two-player down check 24/24, a deliberate break (no HOLD F TO HELP) turned it red. Merged into main; re-running the three-player network test on main before your next build
 - [x] **T19a** `done` Freeze takes two watchers
   - Why: The Orderly keeps moving if only one of you is looking: it takes two (or, with two players, either of you) to hold it
   - Evidence: With three or more players the Orderly needs two watchers to hold it; one watcher only slows its walk towards them. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
+  - Waiting for Merged into main and pushed with its network check; goes into your next build
 - [x] **T19b** `done` Hiding places on every floor
   - Why: Under hospital beds, inside cabinets (E), under desks (Ctrl) - so a re-rolled monster on any floor can be survived
   - Evidence: Hiding places on every floor: under beds and in cabinets in the Clinic, under desks and tables and in cabinets in the Annex; found only if it saw you get in. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
+  - Waiting for Merged into main and pushed (225 quick tests; relocation never lands on any of 6,204 hiding spots over 80 floors; network 10/10; down check 24/24). Goes into your next build
 - [x] **T19c** `done` The Temp's own mechanic
   - Why: No two monsters share a rule: the Temp needs its own way to hunt and to be recorded
   - Evidence: Merged as e54eed3. Checker: quick 230/230, the Lonely/Temp/notes/relocate tests 25/25, ref_* 18/18 with 0 values differing, net_local 10/10, play_down 24/24; two deliberate breaks (company never seen; every holder may record) each turned two tests red. Merged with the 0833 fixes by hand (Lonely is the last rules switch); 241/241 on the merge commit.
-- [ ] **T22** `todo` Live settings for the host
+- [ ] **T22** `todo` Live settings for the host · Free for either agent
   - Why: On game night the host can slow a monster that's too fast, lengthen the lift's return or the time you have down, and much more, from an in-game panel, while everyone plays
+  - Waiting for In the 06:48 build: the F8 panel, the saved file and 32 settings. Still to wire: the rest of the list. For the server to keep settings across restarts the owner makes one folder on the lab box
+  - To do: One path has no test: the Temp's speed setting when it runs the old stand-still rule (not used in the game's rooms, where it hunts the lonely). Add a proof or drop that read
 - [x] **T25** `done` Crash reports, metrics and a same-night hotfix
   - Why: If something breaks on game night we see exactly what happened on whose PC, fix it, and send everyone a new build within minutes
   - Evidence: Crash reports and logs go to the server, F9 sends a report, an out-of-date game is refused with a clear message, and one command builds, checks, promotes and packages (used for this build: 22 minutes). In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
-- [ ] **T25b** `todo` The exported server proves itself
+  - Waiting for Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update
+- [ ] **T25b** `todo` The exported server proves itself · Free for either agent
   - Why: The real server build was missing its data files and no test noticed; it now checks itself at start, and the build chain tests the exported build
+  - Waiting for On main; goes into the next build
 - [x] **T23** `done` The announcer's hints
   - Why: The lift's announcer teaches the game with snide, creepy hints: board on time or lose your pay, the quota, sneaking in the Playroom, instruments out
   - Evidence: The announcer's hints: 76 lines in both voices, 30 wired in, HINTS on H. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
-- [ ] **T23b** `todo` Voice touch-ups: a grab line, a reworded hint
+  - Waiting for Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update
+- [ ] **T23b** `todo` Voice touch-ups: a grab line, a reworded hint · Free for either agent
   - Why: The Minder's grab gets its own line; 'You are not alone on this floor now' is reworded so it does not give away the Temp's rule
-- [ ] **T24** `todo` The story: the tape, the nightly tapes and the clues
+  - Waiting for On main; goes into the next build
+- [ ] **T24** `todo` The story: the tape, the nightly tapes and the clues · Free for either agent
   - Why: A blue-and-yellow VCR orientation tape on joining, a new tape each night in the prison, and clues on every floor that the monsters were once crews like yours
+  - Waiting for The orientation tape is in the build but not yet played on joining (that comes with the ready-up screen); nightly tapes and clues not built
   - To do: Your answers: better names (Fable proposing); left out = keep your bed, draw a new face, get a new number, and the next monster wears your old face; bedtime tape on the lift monitor during the ride up, the car waits for it unless over half skip; tape shot 16: the diamond body for two frames, then one more two-frame flicker
   - To do: Names chosen: Lidgate, the Soke, Continuance, 'Leave it with us.', Lidgate Reception Centre, Day Release, Crew 41 (script updated)
   - To do: After the merge reaches main: copy the tape's five takes into assets_src/voice/takes and rewrite the audition page there (generate.mjs --page), so the tape's narration can be auditioned beside the hints
-- [ ] **T19d** `todo` Traits re-roll per floor
+- [ ] **T19d** `todo` Traits re-roll per floor · Free for either agent
   - Why: Recognising the monster never tells you how to survive it
+  - Waiting for design written (docs/floors/traits-and-hiding.md); built after T19a, T19b, T19e and T19c
 - [x] **T19e** `done` Monsters slip away and reappear out of view
   - Why: Every monster relocates out of everyone's sight in a way that fits its rule, so you can lose track of it
   - Evidence: A monster nobody can see may slip away and turn up out of view near a player. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
+  - Waiting for Merged into main and pushed (219 quick tests, relocation/watchers/downs full tests, 3-player network 10/10, down check 24/24). Goes into your next build
 - [x] **T20a** `done` The Orderly stays visible in the dark
   - Why: When the lights go out you should still glimpse it moving, not have it vanish
   - Evidence: The Orderly is drawn as it is in the dark: no glow, no outline, just hard to see. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
-- [ ] **T20b** `todo` The Orderly pushes a real trolley
+  - Waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build
+- [ ] **T20b** `todo` The Orderly pushes a real trolley · Free for either agent
   - Why: Its squeak comes from a trolley you can see it roll
-- [ ] **T20i** `todo` The Orderly and crewmates animated in Mixamo
+- [ ] **T20i** `todo` The Orderly and crewmates animated in Mixamo · Free for either agent
   - Why: Better movement: the Orderly pushing its trolley, crewmates crawling when down, kneeling to help, lying under beds
+  - Waiting for Exported the Orderly and the crewmate for Mixamo (assets_src/mixamo/export, instructions in assets_src/mixamo/README.md). Waits for your animation files
   - To do: Bake the 8 new crewmate clips into crewmate.glb (build_crewmate.py CLIPS): Dig And Plant Seeds = help, Tonic Seizure = down idle, Getting Up, Pointing, Sitting Idle = party table, Prone Idle = under a bed, Cheering, Terrified; then use them for down/heal, hiding and the emote wheel. The Orderly's clips wait until you have time
-- [ ] **T16k** `todo` The Temp as a proper Blender figure
+- [ ] **T16k** `todo` The Temp as a proper Blender figure · Free for either agent
   - Why: A real modelled office worker with the photocopied face sheet, stapler and notes, ready to animate in Mixamo
+  - Waiting for Modelled and judged twice (round 2 fixes made: soft untucked tail, a hunched lopsided outline, the sheet covering every edge). Merged into the main code. Waits for your Mixamo animations: assets_src/mixamo/export/temp.fbx
   - To do: Your direction: more dishevelled - a coffee stain, half the shirt tail untucked, the tie half undone, like he doesn't take care of himself
-- [ ] **T20c** `todo` Longer blackouts before the car comes
+- [ ] **T20c** `todo` Longer blackouts before the car comes · Free for either agent
   - Why: Once the lights start dimming, the dark should hold longer while you wait for the lift
+  - Waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build
   - To do: Your answer: make the car take longer to arrive so a few blinks come before the full blackout (today about 2 blinks on average)
 - [x] **T20h** `done` A bit more stamina, monsters paced to match
   - Why: You can run a little longer, and the monsters are retuned so they stay just as dangerous
   - Evidence: Seven seconds of sprint, and the monsters hunt faster to match. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
+  - Waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build
 - [x] **T15m** `done` Playroom tuning from your play
   - Why: A warning line on arrival to sneak, more time to hide, the ball pit lowers your view so you can watch it search, an anger bar, and a reminder to get your instrument out
   - Evidence: Playroom tuned: 30-45 seconds to hide, a view out of the ball pit, the anger bar, the Minder grabs within 1 m and drags you to the party table. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
+  - Waiting for Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update
 - [x] **T20d** `done` Furniture you bump into
   - Why: Beds, chairs, cabinets and desks block you, which hiding needs
   - Evidence: Chairs, beds, desks and cabinets on the Clinic and the Annex are solid for players, from one list in the rules; every hide is still reachable and nobody gets stuck. In the promoted build of 18 Nov 00:37 (commit 7790209); promote check passed everything incl. the furniture walk and getting in and out of a bed and a cabinet; lab-box server updated and the remote test passed.
-- [ ] **T20j** `todo` Furniture back in the lobby, atrium and break room
+  - Waiting for Checked (284 tests, both breaks caught, playthroughs 42/42 and 46/46 with solid furniture); merging into main; it goes into the next build
+- [ ] **T20j** `todo` Furniture back in the lobby, atrium and break room · Reserved for OpenAI Codex
   - Why: You asked for some of the dropped pieces back: benches, planters and waiting chairs along the walls, and the break-room table
-- [ ] **T20k** `todo` Monsters walk around furniture
+  - Waiting for Combined furniture and resident checks passed, including the dedicated room. Waiting for the inventory landing and shared test ports.
+- [ ] **T20k** `todo` Monsters walk around furniture · Reserved for OpenAI Codex
   - Why: Today they pass through it; you asked for them to walk around it soon. The Annex cubicle pods come back with this
+  - Waiting for The long Clinic and Annex routes and live host checks passed. Waiting with the furniture change for the shared test ports.
 - [x] **T20e** `done` The day quota you can see, and no going home short
   - Why: You know how close you are to the day's target; BANK is refused until it is met, with a snide line from the announcer; in the prison you can only shop and sleep
   - Evidence: The day's quota is on screen (corner line, lift monitor, prison board), BANK is LOCKED until it is met, and a refused vote rides down with a snide line. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
-- [ ] **T20f** `todo` Controls card and a ready-up screen
+  - Waiting for Both test gaps fixed by its builder (40 bot days pass at full size in 73 s; a new test covers both earned paths); a checker is confirming, then it merges
+- [x] **T20f** `done` Controls card and a ready-up screen
   - Why: Everyone reads the controls and readies up, then drops into the lift together; the lift waits and never pushes anyone out
-  - To do: Your car answer: the car waits as long as anyone is aboard; a returning car waits 30 s before its doors close; anyone left out then dies and wakes in the prison without the credits they earned
-  - To do: Your rule: holding the car open all game must never count. The only way off a floor is quota met, car gone, call, car comes back. Check it and test it
-- [ ] **T20g** `todo` Things to find: drawers, gurneys, credits, poem notes
+  - Evidence: Joining now goes: face, the orientation tape on a first join (skippable, WATCH THE TAPE replays it), then the Ready-up screen with the controls card; everyone drops into the car together after a 5-second count, the host can start without stragglers after 30 seconds, late joiners wait for the next stop. In the promoted build of 18 Nov 06:48 (commit 6b17496); the promote check passed everything incl. the ready-up check 18/18 and the desktop playthrough 46/46; lab-box server updated and the remote test passed.
+  - Waiting for Checked and merging into main; it goes into the next build
+- [ ] **T20g** `todo` Things to find: drawers, gurneys, credits, poem notes · Free for either agent
   - Why: Searching furniture (F TO OPEN DRAWER) turns up credits, obscure poems about the monster's rule, and something to restore you
-- [ ] **T26** `todo` The Arboretum: a dark forest floor and the Groundskeeper
+  - Waiting for On main; goes into the next build
+- [ ] **T26** `todo` The Arboretum: a dark forest floor and the Groundskeeper · Reserved for Claude
   - Why: A new place: no corridors, you steer by landmarks and sound, and a blind monster comes to noise. You asked for the scariest one yet, and dark
-- [ ] **T27** `todo` A brightness setting with a calibration screen
+  - Waiting for Rules, forest generator and the place on screen are built and checked on its branch, with a stand-in figure and stand-in sounds. Waits to be merged after the server check; the real figure, voice and pinecones are a later task
+- [ ] **T26b** `todo` The Groundskeeper: Blender figure, voice, pinecones, a full playthrough · Free for either agent
+  - Why: The Arboretum's resident is a stand-in until it has its own body and voice
+- [ ] **T27** `todo` A brightness setting with a calibration screen · Free for either agent
   - Why: The Arboretum is very dark; each player sets brightness on their own screen at the start or in settings so dark is dark but not blind
-- [ ] **T21a** `todo` A four-slot inventory
+  - Waiting for On main; goes into the next build
+- [ ] **T21a** `todo` A four-slot inventory · Reserved for Claude
   - Why: Four squares at the bottom of the screen, scroll or 1-4 to pick what is in your hand; the instrument is always in the other hand; store items take a slot
-- [ ] **T21b** `todo` The nerve bar
+  - Waiting for Built on its branch (369 tests, 15 of 15 in its playthrough, four deliberate breaks caught). Goes onto main after the build in progress, then gets its own full check
+- [ ] **T28** `todo` The shop: six things to buy · Free for either agent
+  - Why: Credits finally buy something you can carry down: markers, a flashbulb, a glow stick, a wind-up toy, speed juice, smelling salts
+- [ ] **T29** `todo` A cabinet in your cell · Free for either agent
+  - Why: Only what you put in your cabinet before bed is kept; everything else is cleared overnight
+- [ ] **T30** `todo` The skill tree window and trades · Free for either agent
+  - Why: Everyone can take the first layer of all four branches, then each player goes deeper in one trade
+- [ ] **T31** `todo` The first eight skills working in play · Free for either agent
+  - Why: Deep Pockets, Second Wind, Soft Shoes, Long Burn, Quick Fingers, Field Dressing, Steady Gaze, Throwing Arm
+- [ ] **T21b** `todo` The nerve bar · Free for either agent
   - Why: Your nerve drops near monsters and in the dark, and a juice carton steadies you
 - [x] **TB** `done` Your second batch of sounds in the game
   - Why: The Annex, the Playroom and the crew get their own recorded sounds: staplers, office tone, the music box, squeaky tiles, the ball pit, the Minder's wheeze, breathing that isn't wet
   - Evidence: Your second batch of sounds: the Annex, Playroom, lift and prison recordings, scares that carry across the floor, breathing that starts far out. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
-- [ ] **T11a** `todo` A whole run with bots, headless
+  - Waiting for Merged into main and pushed. In the build check now
+- [ ] **T11a** `todo` A whole run with bots, headless · Free for either agent
   - Why: Proof the build plays end to end, from the Clinic to day 2
-- [ ] **T16** `todo` The Annex, the second place
+- [ ] **T16** `todo` The Annex, the second place · Free for either agent
   - Why: The first playable has three places and two residents; the Annex and the Temp are next, so the crew meets a different kind of floor after the Clinic
+  - Waiting for the tests rework (T0g). The Annex rules and generator are done and committed; putting the Annex into the game comes after the rule changes.
 - [x] **T16a** `done` The Annex floor generator
   - Why: The repeating office with corridors that loop back: built from the seed, tested on 800 floors
   - Evidence: The Annex generator builds 800 seeded floors that are all reachable, stable by hash and within the room budget, with the lift zone clear. An independent check made three deliberate breaks and each turned tests red. Committed f37fd78.
@@ -308,8 +363,9 @@
 - [x] **T16d** `done` The Annex's look: the endless yellow office, built and pictured
   - Why: Floor 3 must look like nowhere you have been, and every repeated room must look exactly the same
   - Evidence: The Annex look is in the main game: yellowed walls, mustard carpet, flat pale light, identical dressing for every room of the same shape (2,169 compared), hanging LIFT signs by one rule, green emergency light in a blackout and no red, 124 real lights (under Godot's 256), 1.9 ms a frame against the Clinic's 3.1. Independently checked with five deliberate breaks. Not yet placed in a run (that is the place deck).
-- [ ] **T18** `todo` The prison: the bank room, upgrades, a day quota and beds
+- [ ] **T18** `todo` The prison: the bank room, upgrades, a day quota and beds · Free for either agent
   - Why: You asked for a home between runs: choosing not to go deeper brings the crew back to the prison, where the bank room sells upgrades, a day's earnings must meet a quota, and the day ends when everyone climbs into bed
+  - Waiting for the tests rework and the rule changes. Upgrades, the prison plan, the day rules, the report and the save are all done and committed; the prison look and the day in the run come next.
 - [x] **T18a** `done` Upgrade rules
   - Why: The five first upgrades, bought from your own share in the bank room, and the one taken by a roll when a day quota is missed
   - Evidence: Upgrades: five nodes are bought from each player's own share, with undo. A missed day loses one upgrade through a single seeded roll whose odds are known before the roll. Checked with two deliberate breaks. Committed f37fd78.
@@ -336,10 +392,10 @@
 - [x] **T18h** `done` The day rules: a test for when nobody owns an upgrade
   - Why: The lift monitor must say NOTHING TO TAKE, and nobody may lose anything, when nobody owns an upgrade
   - Evidence: Added a test: when nobody owns an upgrade the lift monitor says NOTHING TO TAKE and nobody loses anything, and in a mixed crew only owners can lose one. Day tests 10 passed; a deliberate break turned it red. Committed 514d0e2.
-- [ ] **S** `todo` Stretch: voice that fades with distance, a second trait, the Tenant, a second place
+- [ ] **S** `todo` Stretch: voice that fades with distance, a second trait, the Tenant, a second place · Free for either agent
   - Why: Only if every gate is green with time left.
   - To do: Owner (2026-11-16): 'multiple different types of entities once we program other levels'. Each new place brings its own entity with its own rule.
-- [ ] **T7d** `todo` Playing across two home networks
+- [ ] **T7d** `todo` Playing across two home networks · Free for either agent
   - Why: Friends at home need to join the host; some home routers block direct browser-to-browser links unless a relay helps
   - To do: Owner's answer (2026-11-16): 'Every one in their own house'. So every player joins over the internet from a different home network, and friends use the PUBLIC play link, not the tailnet hub. This is now needed for game night.
   - To do: Plan: (1) a connection test in the lobby that says plainly whether a direct link to the host works and what kind of router each side has, plus a short note the owner can send a friend to try it this week; (2) a relay (TURN) path for the pairs that cannot link directly. The public build is a static site in a public repo, so the relay's secret cannot live in it: use a provider that hands out short-lived credentials through a tiny free hosted function the owner deploys, or a free-tier static credential that is quota-limited. Research current free offerings first, then give the owner exact sign-up steps on the Questions page. (3) Also warn in the lobby that the host must keep the game tab in front (a background tab stalls the run).
@@ -348,6 +404,23 @@
 - [x] **TP** `done` Bring the build checks up to the new rules
   - Why: The build that carries your 0833 fixes can't reach play/ until the scripted playthroughs agree with the new rules (the Orderly drawn in the dark, downs, the longer blackout)
   - Evidence: The build checks match the new rules, and a test loads every script. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.
+  - Waiting for Built and passing on its branch; merging into main, then the promote check
+- [x] **HUB1** `done` Agent names on the Progress page · Completed by OpenAI Codex
+  - Why: See which work Claude and OpenAI are doing.
+  - Evidence: Live progress lists each agent. PR 2 and its crash-recovery fix are on main at bece7e6. The killed-writer check passed independently; the public work board and private inbox are active.
+- [ ] **AV1** `doing` Arboretum art and lighting review · In progress with OpenAI Codex · Reserved for OpenAI Codex
+  - Why: Make forest surfaces, silhouettes and landmarks readable and unsettling. Compare identical views before and after.
+- [ ] **AV2** `todo` Arboretum sound review and listening comparison · Reserved for OpenAI Codex
+  - Why: Give the crew an audible sense of the garden without masking the resident or the surface underfoot.
+  - Waiting for The paired recordings and level-matched comparison are ready for listening on this page. The combined Arboretum preview is being checked.
+- [ ] **AV3** `doing` Review and refine the Clinic, Annex and Playroom art and audio · In progress with OpenAI Codex · Reserved for OpenAI Codex
+  - Why: Give each place a distinct look and sound. Show before and after examples for owner feedback.
+  - To do: Clinic: break up the repeated clean tile grid and bare door edges. Listen from the doorway for the approaching trolley under the ventilation.
+  - To do: Annex: give the carpet, wall panels and bench frames distinct surfaces while keeping office junctions identical. Check the silence between stapler clicks.
+  - To do: Playroom: soften the foam edges and break up the uniform party props. Check that the speaker tune leaves room for the count bell.
+- [x] **HUB2** `done` Reserve North Star tasks for Claude, Codex or either agent · Completed by OpenAI Codex
+  - Why: See who owns upcoming work before a builder starts.
+  - Evidence: The Progress page and North Star task lookup show work reserved for Claude, reserved for OpenAI Codex, or free for either. Reservations survive a pause. The competing claim failed in the test. All 143 app checks and the hub smoke check passed.
 
 ## Gates
 
@@ -387,46 +460,47 @@
 - 2026-11-17: Your answers applied: Lonely as designed (solo Annex: Lonely but slower than one player); eye marks shown; F for cabinets; relocation as designed and on for the Minder (wanders, grabs within 1 m, hunts once angered, voice says don't run); day quota counts everything earned; a wipe is the missed day; juice carton AND a nerve bar; a 4-slot inventory; quick noisy search; ready-up as recommended; the car waits while anyone is aboard, and a returning car waits 30 s, then anyone left out dies and wakes in the prison without their credits.
 - 2026-11-17: Live settings designed (docs/floors/live-settings.md): 59 settings in six groups, F8 opens the host panel. Five questions on the Questions page; building on the recommended defaults.
 - 2026-11-17: Your answers applied: blackout 20-24 s and a longer wait for the car so a few blinks come first; left-out players wake with the crew; monsters at 3.8; live settings as recommended; all hints recorded in both voices; better story names coming; left-out players keep their bed but draw a new face and get a new number (the next monster wears the old face); the bedtime tape plays on the ride up and the car waits for it unless most skip. Voice cap raised to 100,000 characters.
+- 2026-11-18: The cabinet in each cell gets six slots unless the owner says otherwise (they decided the cabinet, not its size).
 
 ## Activity (newest first)
 
-- 2026-11-18 10:54Z Paused T20g: waiting for Paused part-built when the usage limit was hit; waiting for your decision on how to spend the 9% of the week that is left
-- 2026-11-18 10:54Z Paused T25b: waiting for Paused part-built when the usage limit was hit; waiting for your decision on how to spend the 9% of the week that is left
-- 2026-11-18 10:54Z Paused T23b: waiting for Paused part-built when the usage limit was hit; waiting for your decision on how to spend the 9% of the week that is left
-- 2026-11-18 10:54Z Paused T27: waiting for Paused part-built when the usage limit was hit; waiting for your decision on how to spend the 9% of the week that is left
-- 2026-11-18 10:54Z Paused T26: waiting for Paused part-built when the usage limit was hit; waiting for your decision on how to spend the 9% of the week that is left
-- 2026-11-18 10:54Z NEW BUILD in play/ (18 Nov 02:45): same game as 00:37, and the server now carries its data files. Server updated, remote test passed. USAGE WARNING: 91% of this week's plan limit is used and it resets Sunday, after game night; the four paused builders stay paused until you say how to spend what is left
-- 2026-11-18 08:06Z Started T25b: The exported server proves itself. A builder is adding a start-up self-check to the server, a check of the exported build in the build chain, and bringing the three-player network playthrough up to the day quota
-- 2026-11-18 08:06Z Added task T25b: The exported server proves itself.
-- 2026-11-18 08:06Z Paused T20f: waiting for Built (controls card, READY, a 5-second count, late joiners, the tape on a first join); a checker is going over the branch before it merges
-- 2026-11-18 08:06Z New pictures for T20f: Controls card and a ready-up screen.
-- 2026-11-18 08:02Z Started T20g: Things to find: drawers, gurneys, credits, poem notes. Searching rules are built; the same builder is trimming how much is hidden and building the on-screen prompt, bar and note reader
-- 2026-11-18 08:02Z Searching rules are built (drawers, gurneys, lockers, filing drawers, boxes, copiers; credits, 9 poems, 14 story pages, juice cartons). Its builder also spotted a real bug: the server build left the game's data files out, so on the real server the Annex's notes, the awards and the upgrade list could not load. Fixed with a test; the server is being rebuilt and redeployed
-- 2026-11-18 07:51Z Started T23b: Voice touch-ups: a grab line, a reworded hint. Queued behind the brightness card with the same builder: a grab line for the Minder, a reworded hint, and the long hint's check
-- 2026-11-18 07:51Z Started T27: A brightness setting with a calibration screen. A builder is making the brightness card (set once per PC, changeable from the Esc menu), then the voice touch-ups
-- 2026-11-18 07:51Z Paused T22: waiting for The panel, the saved file and 32 working settings are built; a checker is going over the branch before it merges
-- 2026-11-18 07:51Z New pictures for T22: Live settings for the host.
-- 2026-11-18 07:23Z CI stopped itself again: the test step had its own 15-minute stop inside the job. Raised it; not a test failure
-- 2026-11-18 07:22Z CI failed on 6f0708c.
-- 2026-11-18 06:56Z The skill tree is designed: four branches (Lamp, Ear, Hands, Nerve), twenty upgrades that each add something to do, ten of them for Friday; it waits for your look before anyone builds it
-- 2026-11-18 06:47Z NEW BUILD in play/ (18 Nov 00:37): solid furniture, plus everything in the 22:25 build. The lab-box server matches it and the remote test passed. Zip for friends: play/GoingDown-2026-11-18-0037.zip
-- 2026-11-18 06:47Z Finished T20d: Furniture you bump into.
-- 2026-11-18 06:21Z Started T26: The Arboretum: a dark forest floor and the Groundskeeper. A Fable builder is making the Arboretum: the noise rules and the Groundskeeper, the forest layout, then the dark place on screen with a stand-in figure
-- 2026-11-18 06:13Z Promote check with furniture passed everything: 297 tests, web 42/42, desktop 46/46, sound, down-and-heal 24/24, the day check 16/16, the Playroom check 12/12, network 17/17, mix 45/45, the furniture walk. The build is being made and promoted now
-- 2026-11-18 05:58Z The Arboretum is designed (a dark forest, ground that is loud or quiet underfoot, and the Groundskeeper: blind, comes to noise, leans to your face if you stand still). Building starts when a builder frees up; the brightness setting is its own small task
-- 2026-11-18 05:56Z Added task T27: A brightness setting with a calibration screen.
-- 2026-11-18 05:56Z Added task T26: The Arboretum: a dark forest floor and the Groundskeeper.
-- 2026-11-18 05:47Z Owner on the orientation tape: 'The VHS is amazing.' It stays as built; the nightly tapes will follow the same look and voice
-- 2026-11-18 05:47Z Owner: Temp gets ink tears; Mixamo for the Temp and Orderly tomorrow morning; skill tree: the five listed upgrades plus more of my choosing; passphrase steps wanted in the morning
-- 2026-11-18 05:46Z Owner's answers 3-15 recorded: solo is meant to hide; the Temp chases faster (3.9) and its speed, the Playroom's search time and the anger bar become settings; grab in the calm too, with its own line; day quota stays on a drop-out; some furniture comes back; monsters walk around furniture soon; one hint reworded
-- 2026-11-18 05:46Z Added task T23b: Voice touch-ups: a grab line, a reworded hint.
-- 2026-11-18 05:46Z Added task T20k: Monsters walk around furniture.
-- 2026-11-18 05:46Z Added task T20j: Furniture back in the lobby, atrium and break room.
-- 2026-11-18 05:44Z Owner's answers: do everything, it need not all finish overnight; features stop Thursday evening. Three builders started: ready-up and controls card, the host settings panel, searchable furniture
-- 2026-11-18 05:44Z Started T20g: Things to find: drawers, gurneys, credits, poem notes. A builder is making the rules for searching drawers, gurneys and cabinets: credits, poem notes and juice cartons; the on-screen part follows
-- 2026-11-18 05:44Z Linked T20g to the North Star: A7.
-- 2026-11-18 05:44Z Started T22: Live settings for the host. A builder is making the host's F8 settings panel, the saved settings file, and wiring more settings (each monster's speeds, lift return, down and heal times, blackout length)
-- 2026-11-18 05:44Z Started T20f: Controls card and a ready-up screen. A builder is making the ready-up screen, the controls card, and the orientation tape playing before it on a first join
-- 2026-11-18 05:44Z Linked T20f to the North Star: nothing in it (new from the owner's play of 17 Nov; joining builds on H1).
-- 2026-11-18 05:27Z Furniture collision is on main (297 tests). The full promote check is running on the combined copy (day quota + furniture): tests, export, web and desktop playthroughs, sound, down-and-heal, the day check, the Playroom check, network, the furniture walk
-- 2026-11-18 05:09Z Paused T20d: waiting for Checked (284 tests, both breaks caught, playthroughs 42/42 and 46/46 with solid furniture); merging into main; it goes into the next build
+- 2026-11-18 18:08Z Paused AV2: waiting for The paired recordings and level-matched comparison are ready for listening on this page. The combined Arboretum preview is being checked.
+- 2026-11-18 18:08Z Paused T20k: waiting for The long Clinic and Annex routes and live host checks passed. Waiting with the furniture change for the shared test ports.
+- 2026-11-18 18:08Z Paused T20j: waiting for Combined furniture and resident checks passed, including the dedicated room. Waiting for the inventory landing and shared test ports.
+- 2026-11-18 18:07Z Finished HUB2: Reserve North Star tasks for Claude, Codex or either agent.
+- 2026-11-18 18:07Z Reserved T26 for Claude.
+- 2026-11-18 18:07Z Reserved T21a for Claude.
+- 2026-11-18 18:07Z Reserved HUB2 for OpenAI Codex.
+- 2026-11-18 18:07Z Reserved T20k for OpenAI Codex.
+- 2026-11-18 18:07Z Reserved T20j for OpenAI Codex.
+- 2026-11-18 18:07Z Reserved AV3 for OpenAI Codex.
+- 2026-11-18 18:07Z Reserved AV2 for OpenAI Codex.
+- 2026-11-18 18:07Z Reserved AV1 for OpenAI Codex.
+- 2026-11-18 18:05Z New pictures for AV2: Arboretum sound review and listening comparison.
+- 2026-11-18 18:02Z OpenAI Codex started AV3: Review and refine the Clinic, Annex and Playroom art and audio. Reviewing existing floor captures and sound cues. Studying tile, carpet and padded surfaces in the Clinic, Annex and Playroom.
+- 2026-11-18 18:00Z New pictures for AV3: Review and refine the Clinic, Annex and Playroom art and audio.
+- 2026-11-18 17:53Z OpenAI Codex started HUB2: Reserve North Star tasks for Claude, Codex or either agent. Separating planned ownership from current activity.
+- 2026-11-18 17:53Z OpenAI Codex started AV2: Arboretum sound review and listening comparison. OpenAI Codex is auditing the garden mix and preparing comparable listening samples.
+- 2026-11-18 17:53Z OpenAI Codex started AV1: Arboretum art and lighting review. OpenAI Codex is reviewing and refining the garden materials and silhouettes.
+- 2026-11-18 17:53Z Added task HUB2: Reserve North Star tasks for Claude, Codex or either agent.
+- 2026-11-18 17:53Z Added task AV3: Review and refine the Clinic, Annex and Playroom art and audio.
+- 2026-11-18 17:53Z Added task AV2: Arboretum sound review and listening comparison.
+- 2026-11-18 17:53Z Added task AV1: Arboretum art and lighting review.
+- 2026-11-18 17:52Z New pictures for T20j: Furniture back in the lobby, atrium and break room.
+- 2026-11-18 17:48Z The promote check passed on every step. The new build is being made now: searching, the brightness card, the Minder's grab lines, the server self-check.
+- 2026-11-18 17:39Z Paused T21a: waiting for Built on its branch (369 tests, 15 of 15 in its playthrough, four deliberate breaks caught). Goes onto main after the build in progress, then gets its own full check
+- 2026-11-18 17:39Z New pictures for T21a: A four-slot inventory.
+- 2026-11-18 17:35Z Finished HUB1: Agent names on the Progress page.
+- 2026-11-18 17:34Z OpenAI Codex started HUB1: Agent names on the Progress page. Landing the accepted tracker and handoff changes.
+- 2026-11-18 17:34Z OpenAI Codex started T20k: Monsters walk around furniture. Making residents route around solid furniture while preserving their rules.
+- 2026-11-18 17:34Z OpenAI Codex started T20j: Furniture back in the lobby, atrium and break room. Adding the approved seating, planters and break-room furniture while preserving clear routes.
+- 2026-11-18 17:33Z The Progress page now shows which agent is on each task (pull request 2 landed), and the two agents can message and wake each other.
+- 2026-11-18 17:22Z Paused HUB1: waiting for Tracker recovery and direct handoff instructions pushed in PR 2. Waiting for Claude to recheck commit 97b94f5.
+- 2026-11-18 17:16Z OpenAI Codex started HUB1: Agent names on the Progress page. Addressing Claude's tracker review and wiring direct agent handoffs.
+- 2026-11-18 16:48Z Paused T25b: waiting for On main; goes into the next build
+- 2026-11-18 16:48Z Main now has searching, the brightness card, the grab lines and the server self-check (358 tests passed). The promote check is running; a new build follows if it is green.
+- 2026-11-18 16:44Z Paused T26: waiting for Rules, forest generator and the place on screen are built and checked on its branch, with a stand-in figure and stand-in sounds. Waits to be merged after the server check; the real figure, voice and pinecones are a later task
+- 2026-11-18 16:44Z New pictures for T26: The Arboretum: a dark forest floor and the Groundskeeper.
+- 2026-11-18 16:44Z New pictures for T26: The Arboretum: a dark forest floor and the Groundskeeper.
+- 2026-11-18 16:44Z New pictures for T26: The Arboretum: a dark forest floor and the Groundskeeper.
+- 2026-11-18 16:17Z Paused T20g: waiting for On main; goes into the next build

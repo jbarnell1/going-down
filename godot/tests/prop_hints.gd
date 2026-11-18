@@ -6,7 +6,9 @@
 # exactly one of the hint and its line; the place rules (the Playroom's own hints, hint_reroll, the four
 # lines a place makes wrong); no hint starts in the last 11 s of a count or 6 s before a number; every
 # hint's words are 20 or fewer and name no trait and no body. Also: the table matches the recordings,
-# the first-timer hints retire after two nights, HINTS: OFF stops them.
+# the first-timer hints retire after two nights, HINTS: OFF stops them. And the Minder's grab outside a
+# count (T15m): its own line dealt per grab (never the same twice running, the caption the line), on the
+# count's player, so no hint starts over it either.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -58,7 +60,8 @@ class Night:
 	var said_seen := 0
 	var count_lines: Array = []   # [from, to] of every count line and number "playing"
 	var bad := {}
-	var counted := {"started": 0, "expired": 0, "cut": 0, "replaces": 0, "playroom_counts": 0}
+	var counted := {"started": 0, "expired": 0, "cut": 0, "replaces": 0, "playroom_counts": 0, "grabs": 0}
+	var last_grab := ""
 
 	func fail(rule: String, what: String) -> void:
 		if not bad.has(rule):
@@ -87,6 +90,26 @@ class Night:
 			fail("a hint stopped a line", "%s at %d stopped %s" % [id, now, before.get("id", "")])
 		_check_logs()
 		return ok
+
+	## The Minder's grab outside a count: its own line, never the same twice running, the caption its words.
+	func grab() -> void:
+		counted["grabs"] += 1
+		var id: String = a.say_grab(2200)
+		# (said_count keeps its last 80: the newest is the last.)
+		var said: Dictionary = a.said_count[-1] if not a.said_count.is_empty() else {}
+		if id == "" or str(said.get("id", "")) != id or str(a.lines[id].moment) != "grab":
+			fail("grab", "at %d: dealt %s, said %s" % [now, id, str(said)])
+		elif str(said["text"]) != str(a.lines[id].plain) or str(said["line"]) != "grab":
+			fail("grab", "at %d: %s captioned \"%s\"" % [now, id, said["text"]])
+		if id != "" and id == last_grab:
+			fail("grab", "at %d: %s twice running" % [now, id])
+		last_grab = id
+		if id != "":
+			for c: Array in count_lines:
+				if c[2] == "count" and int(c[1]) > now:
+					c[1] = now
+			count_lines.append([now, now + a._length_ms(id, 2200), "count"])
+		_check_logs()
 
 	func say(line: String, text: String, ms: int, number := -1, length := 0) -> void:
 		a.say_count(line, text, ms, number, length)
@@ -263,6 +286,9 @@ class Night:
 				var e := {"type": ty, "playerId": rng.pick(["ann", "bo", "cy"]), "blackout": rng.next() < 0.5, "side": rng.pick([null, "bank", "down"]),
 					"reason": rng.pick(["unloaded", "empty", "ride"]), "inBed": false}
 				events([e])
+			elif r < 0.0172 and pl == "playroom":
+				# Outside a count the Minder grabs someone.
+				grab()
 			elif r < 0.018:
 				var bt := now
 				var was_dark: bool = a.blackout_on
@@ -334,7 +360,8 @@ func _nights(t: T, n: int, label: String) -> Dictionary:
 func test_nights(t: T) -> void:
 	var n := 20 if t.quick else 200
 	var totals := _nights(t, n, "hints")
-	t.note("%d nights: %d hints started, %d expired, %d cut, %d replace checks, %d Playroom counts" % [n, totals.started, totals.expired, totals.cut, totals.replaces, totals.playroom_counts])
+	t.note("%d nights: %d hints started, %d expired, %d cut, %d replace checks, %d Playroom counts, %d grabs" % [n, totals.started, totals.expired, totals.cut, totals.replaces, totals.playroom_counts, totals.grabs])
+	t.check(int(totals.grabs) > 0, "no grab in the nights: the grab line is untested")
 	# Not vacuous: hints play, some expire, some are cut, the Playroom counts run.
 	t.check(int(totals.started) > n, "too few hints started (%d)" % totals.started)
 	t.check(int(totals.expired) > 0, "no hint ever expired: the expiry rule is untested")
@@ -380,7 +407,8 @@ func test_table_matches_recordings(t: T) -> void:
 
 func test_words(t: T) -> void:
 	for l: Dictionary in _load_manifest().get("lines", []):
-		if not str(l.moment).begins_with("hint_"):
+		# The hints, and the grab's lines (they must not say the Minder's rule either: C2).
+		if not str(l.moment).begins_with("hint_") and str(l.moment) != "grab":
 			continue
 		var plain := str(l.plain)
 		var words := plain.split(" ", false)
@@ -431,6 +459,39 @@ func test_retire_and_off(t: T) -> void:
 	a.set_hints_on(true)
 	t.check(a.hint("hint_left_you"), "on again: the hint is asked for")
 	a.free()
+
+## The Minder's grab outside a count (T15m): its own three lines, one dealt per grab and never the same twice
+## running, the caption the line itself; a count's find still says "Found you"; and hint_listen_1 no longer
+## says anything about being alone.
+func test_grab_lines(t: T) -> void:
+	var m := _load_manifest()
+	var grabs: Array = (m.get("lines", []) as Array).filter(func(l: Dictionary) -> bool: return str(l.moment) == "grab")
+	t.eq(grabs.size(), 3, "grab lines recorded")
+	t.check(int(m.moments.get("grab", {}).get("priority", -1)) >= 4, "the grab's priority in the manifest")
+	var a := _make("grab")
+	a.start_run(true, "g")
+	a.place = "playroom"
+	var seen := {}
+	var last := ""
+	var n := 60 if t.quick else 600
+	for i in n:
+		a.clock_ms += 3000
+		var id: String = a.say_grab(2200)
+		var said: Dictionary = a.said_count[-1]
+		t.check(id.begins_with("grab_"), "grab %d dealt %s" % [i, id])
+		t.check(id != last, "grab %d: %s twice running" % [i, id])
+		t.check(str(said["id"]) == id and str(said["text"]) == str(a.lines[id].plain), "grab %d: said %s, the caption \"%s\"" % [i, said["id"], said["text"]])
+		t.check(not str(said["text"]).to_upper().begins_with("FOUND YOU"), "grab %d says Found you" % i)
+		last = id
+		seen[id] = true
+	t.eq(seen.size(), 3, "every grab line dealt over %d grabs" % n)
+	# A count's find is still "Found you!".
+	a.say_count("found", "FOUND YOU, BO!", 2200)
+	t.eq(str(a.said_count[-1]["id"]), "count_found_1", "a count's find says Found you")
+	a.free()
+	for l: Dictionary in m.get("lines", []):
+		if str(l.id) == "hint_listen_1":
+			t.check(not str(l.plain).to_lower().contains("alone"), "hint_listen_1 no longer says alone: %s" % l.plain)
 
 func test_place_lines(t: T) -> void:
 	var a := _make("places")

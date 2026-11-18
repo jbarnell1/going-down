@@ -16,6 +16,10 @@
 //   - the emote wheel: one aims and lets go, the other sees the emote on that figure;
 //   - a watched Orderly never moves on the watcher's screen (consecutive seeing frames) while the
 //     other looks away;
+//   - a catch in the wait (the blackout, or a relocated Orderly) puts the player DOWN on both screens, and the
+//     one still on their feet walks over and holds F to get them up, as a player would (down first, then out);
+//     since the long dark and relocation, two players standing still were both caught before the car came
+//     and nobody was left to vote BANK;
 //   - the call, boarding and BANK: the car rides UP to the prison for both (no end screen); both read
 //     the same banked total on the report board, the host's; each holds F at their own bunk (the count
 //     IN BED n OF 2 on both screens, F gets you up again); lights out on both at one host time; both
@@ -86,6 +90,43 @@ async function game(label, testport, extra, pos) {
   return { label, g, cmd, state, shot, close };
 }
 
+/** A player's status after a catch (down first, then out: sim/run.gd downs; "caught" without that rule). */
+const DOWNED = ['down', 'out', 'caught'];
+/** Both screens just after `me` was caught: their own screen played the catch, the other draws them downed where they lie. */
+async function catchView(me, other) {
+  await sleep(300);
+  const s = await me.state();
+  const o = await other.state();
+  const fig = (o.others ?? []).find((x) => x.id === s.me.id);
+  const off = fig ? Math.hypot(fig.at[0] - s.me.x, fig.at[2] - s.me.z) : Infinity;
+  return { ok: s.client.caught === true && DOWNED.includes(s.me.status) && fig?.downed === true && off < 0.15,
+    detail: `${s.me.id} (${s.me.status}): own screen caught ${s.client.caught}; the other draws them downed ${fig?.downed}, ${off.toFixed(3)} m from where they lie` };
+}
+/** `up` walks to `down` (down, not out), faces them and holds F (the test channel's use) until they are up. */
+async function help(up, down) {
+  await up.cmd('raise 0');
+  let d = await down.state();
+  let u = await up.state();
+  const t = Date.now();
+  while (Date.now() - t < 5000 && u.me.status === 'ok' && d.me.status === 'down' && Math.hypot(u.me.x - d.me.x, u.me.z - d.me.z) > 0.9) {
+    await up.cmd(`face ${d.me.x} ${d.me.z} ${d.me.y + 0.3}`);
+    await up.cmd('move 1 0 0 0');
+    await sleep(60);
+    u = await up.state();
+    d = await down.state();
+  }
+  await up.cmd('stopmove');
+  await up.cmd(`face ${d.me.x} ${d.me.z} ${d.me.y + 0.2}`);
+  await up.cmd('use 1');
+  d = await until(down.state, (s) => s.me.status !== 'down', 6000, 50);
+  await up.cmd('use 0');
+  // The helper's screen draws them standing once the snapshots catch up (interpolation lags the host a little).
+  u = await until(up.state, (s) => (s.others ?? []).find((x) => x.id === d.me.id)?.downed === false, 2000, 50);
+  const fig = (u.others ?? []).find((x) => x.id === d.me.id);
+  return { ok: d.me.status === 'ok' && u.me.status === 'ok' && fig?.downed === false,
+    detail: `${up.label} helped ${down.label}: ${down.label} ${d.me.status}, ${up.label} ${u.me.status}, on ${up.label}'s screen downed ${fig?.downed}` };
+}
+
 const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` (${detail})` : ''}`); };
 async function until(fn, pred, ms = 30000, every = 100) {
@@ -107,11 +148,11 @@ async function drawFace(c, steps, shot = '') {
 
 // ---- The server.
 // quota=0: no floor quota (North Star C9), so the scripted call works without recording first; the quota
-// itself is proved headless in godot/tests/prop_quota_net.gd.
+// itself is proved headless in godot/tests/prop_quota_net.gd, and the day quota's lock (a locked BANK refused,
+// the car riding down) with real game clients in tools/play_day.mjs. quota=0 turns that lock off too.
 const server = launch(['--headless', '--', 'server', `port=${port}`, 'bind=127.0.0.1', 'seed=alpha', 'stats=10', 'quota=0'], { env: { GD_JOIN_SECRET: SECRET }, echo: 'server' });
 await until(async () => server.lines.join('\n'), (t) => t.includes('listening on') || server.exited, 20000);
 if (!server.lines.join('\n').includes('listening on')) { console.log('the server did not start'); process.exit(1); }
-
 let A = null;
 let B = null;
 try {
@@ -343,7 +384,9 @@ try {
   let watchShot = false;
   const moved = { max: 0 };
   let last = null;
-  const caught = new Map(); // label -> {at, dark, others' view of the figure}
+  const caught = new Map(); // label -> {at, dark, view: both screens just after the catch}
+  const downNow = new Set();
+  const helped = []; // help() results
   const t0 = Date.now();
   while (Date.now() - t0 < 150000) {
     a = await A.state();
@@ -361,11 +404,16 @@ try {
     last = { seeing: a.orderly.seeing, x: a.orderly.x, z: a.orderly.z };
     if (!a.client.noise && a.orderly.level === a.me.level && a.orderly.distance < 30 && a.orderly.pose) await A.cmd(`face ${a.orderly.x} ${a.orderly.z} ${(a.orderly.pose?.y ?? 0) + 1.6}`);
     // The blackout at the end of every wait (run.gd dark_schedule) is the Orderly's time to hunt: nobody
-    // can see it, so it may catch whoever is nearest. Caught players sit out until the car rides down.
+    // can see it, so it may catch whoever is nearest; and a relocating Orderly (sim/relocate.gd) may arrive
+    // beside whoever looks away. A catch puts them DOWN (down first, then out: sim/run.gd downs); the one
+    // still on their feet goes and holds F beside them, as a player would, so someone is left to vote.
     for (const [me, other, s, o] of [[A, B, a, b], [B, A, b, a]]) {
-      if (s.me.status === 'caught' && !caught.has(me.label)) {
-        caught.set(me.label, { at: ((Date.now() - t0) / 1000).toFixed(1), dark: s.dark, blackout: s.blackout });
-        console.log(`  ${me.label} caught after ${caught.get(me.label).at} s of the wait (dark ${s.dark}, blackout ${s.blackout})`);
+      if (s.me.status === 'ok') downNow.delete(me.label);
+      if (DOWNED.includes(s.me.status) && !downNow.has(me.label)) {
+        downNow.add(me.label);
+        if (!caught.has(me.label)) caught.set(me.label, { at: ((Date.now() - t0) / 1000).toFixed(1), dark: s.dark, blackout: s.blackout, view: await catchView(me, other) });
+        console.log(`  ${me.label} caught after ${((Date.now() - t0) / 1000).toFixed(1)} s of the wait (dark ${s.dark}, blackout ${s.blackout})`);
+        if (o.me.status === 'ok' && s.me.status === 'down') helped.push(await help(other, me));
       }
     }
     await sleep(60);
@@ -378,22 +426,14 @@ try {
   const statsA = JSON.parse(await A.cmd('stats'));
   const statsB = JSON.parse(await B.cmd('stats'));
   // A catch comes from the host: the caught player's own screen plays the catch, and the crewmate sees
-  // their figure downed where they were taken (until the downed-and-healed rules replace this).
+  // their figure downed where they were taken (sampled just after the catch, before any help).
   if (caught.size) {
-    await sleep(1500);
+    const views = [...caught.values()].map((c) => c.view);
+    check('a crewmate caught in the wait is caught on both screens (from the host)', views.every((v) => v.ok), views.map((v) => v.detail).join('; '));
+    for (const h of helped) check('the crewmate on their feet holds F beside the one who is down, and gets them up (on both screens)', h.ok, h.detail);
     a = await A.state();
     b = await B.state();
-    const views = [];
-    let ok = true;
-    for (const [s, o] of [[a, b], [b, a]]) {
-      if (s.me.status !== 'caught') continue;
-      const fig = (o.others ?? []).find((x) => x.id === s.me.id);
-      ok &&= s.client.caught === true && fig?.downed === true && Math.hypot(fig.at[0] - s.me.x, fig.at[2] - s.me.z) < 0.15;
-      views.push(`${s.me.id}: own screen caught ${s.client.caught}; the other draws them downed ${fig?.downed}, ${fig ? Math.hypot(fig.at[0] - s.me.x, fig.at[2] - s.me.z).toFixed(3) : '?'} m from where they lie`);
-    }
-    check('a crewmate caught in the blackout is caught on both screens (from the host)', ok && views.length > 0, views.join('; '));
-    const victim = a.me.status === 'caught' ? A : B;
-    await victim.shot('10b-caught-own-view.png');
+    if (DOWNED.includes(a.me.status) || DOWNED.includes(b.me.status)) await (DOWNED.includes(a.me.status) ? A : B).shot('10b-caught-own-view.png');
   } else {
     console.log('  nobody was caught in the blackout');
   }
@@ -417,13 +457,21 @@ try {
     await c.cmd('stopmove');
   };
   a = await until(A.state, (s) => s.phase === 'boarding' || s.phase === 'ended', 60000);
-  if (caught.size === 1) {
-    // The lights are back: the one on their feet looks at the one who went down.
-    const [down, up] = caught.has('A') ? [A, B] : [B, A];
-    const ds = await down.state();
-    await up.cmd(`face ${ds.me.x} ${ds.me.z} ${ds.me.y + 0.3}`);
-    await sleep(300);
-    await up.shot(`10c-${up.label === 'A' ? 'ann' : 'bob'}-sees-the-caught-crewmate.png`);
+  {
+    // The lights are back: one down (caught in the blackout) and one on their feet: the one standing looks at
+    // the one who went down and helps them up before boarding, as a player would.
+    a = await A.state();
+    b = await B.state();
+    const pair = a.me.status === 'down' && b.me.status === 'ok' ? [A, B] : b.me.status === 'down' && a.me.status === 'ok' ? [B, A] : null;
+    if (pair) {
+      const [down, up] = pair;
+      const ds = await down.state();
+      await up.cmd(`face ${ds.me.x} ${ds.me.z} ${ds.me.y + 0.3}`);
+      await sleep(300);
+      await up.shot(`10c-${up.label === 'A' ? 'ann' : 'bob'}-sees-the-caught-crewmate.png`);
+      const h = await help(up, down);
+      check('at the car: the crewmate on their feet gets the one who is down up (on both screens)', h.ok, h.detail);
+    }
   }
   await Promise.all([board(A), board(B)]);
   a = await A.state();

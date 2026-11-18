@@ -33,6 +33,10 @@
 #    grab at 1 m) is the same again: `playroom_tuned` true, false, or null to follow the game's deck.
 #  - Solid furniture (sim/run.gd furniture, sim/furniture.gd, FD7) is the same again: `furniture` true, false, or
 #    null to follow the game's deck.
+#  - Findables (sim/run.gd findables, sim/findables.gd, FD9) are the same again: `findables` true, false, or null to
+#    follow the game's deck.
+#  - The four-slot inventory (sim/run.gd inventory, sim/inventory.gd, S1) is the same again: `inventory` true, false,
+#    or null to follow the game's deck.
 #  - Live settings (docs/floors/live-settings.md LS3): the room owns a desk exactly as the server's room does
 #    (net/tuning_desk.gd), and the player is the host. The game gives it the file user://settings.json
 #    (open_settings); under automation (auto=1) it has none, so no scripted playthrough reads a saved change.
@@ -75,6 +79,10 @@ var lonely: Variant = null
 var playroom_tuned: Variant = null
 ## Solid furniture (sim/run.gd furniture, FD7): true, false, or null to follow the game's deck.
 var furniture: Variant = null
+## Findables (sim/run.gd findables, FD9): true, false, or null to follow the game's deck.
+var findables: Variant = null
+## The four-slot inventory (sim/run.gd inventory, S1): true, false, or null to follow the game's deck.
+var inventory: Variant = null
 ## Cost of the host's ticks on this machine (microseconds, summed), for the stats hook.
 var host_us := 0
 ## Live settings: this room's desk (no file until open_settings gives it one).
@@ -163,6 +171,18 @@ func furniture_on() -> bool:
 		return bool(furniture)
 	return Session.deck == Places.FULL
 
+## Whether the next run has findables (sim/run.gd findables, FD9).
+func findables_on() -> bool:
+	if findables != null:
+		return bool(findables)
+	return Session.deck == Places.FULL
+
+## Whether the next run has the four-slot inventory (sim/run.gd inventory, S1).
+func inventory_on() -> bool:
+	if inventory != null:
+		return bool(inventory)
+	return Session.deck == Places.FULL
+
 ## The room's clock: local seconds, scaled by time_scale.
 func room_time() -> float:
 	return _vt
@@ -176,7 +196,7 @@ func start_run() -> void:
 	var o := owner_0833_on()
 	# The day quota's lock goes with the floor quota (net/host_rules.gd turns it on only with days too).
 	var q := quota_on()
-	rules = HostRules.new(entity_on, HostRules.start_depth_by_arg(), Session.deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on())
+	rules = HostRules.new(entity_on, HostRules.start_depth_by_arg(), Session.deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on())
 	# Method callables hold no reference to this object, so the pipes do not keep it alive.
 	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
 	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))
