@@ -762,8 +762,16 @@ func _build_furniture() -> void:
 		add_child(n)
 		var foot := Rect2(n.position.x + box.position.x, n.position.z + box.position.z, box.size.x, box.size.z)
 		furniture_drawn.append({"piece": pc.id, "kind": String(pc.kind), "rect": foot})
-		prop_spots.append({"room": pc.room, "level": pc.level, "piece": pc.id, "kind": String(pc.kind),
-			"foot": [foot.position.x, foot.position.y, foot.size.x, foot.size.y], "tipped": false})
+		# The cell it stands in against its wall, and that wall's side (the scripted playthroughs look at a prop
+		# from inside its room and from beyond that wall: the `props` test command).
+		var wv := Vector2i(FloorLib.dir_dx(pc.wall), FloorLib.dir_dy(pc.wall)) if pc.wall != &"" else Vector2i.ZERO
+		var cell := Vector2i(floori(pc.x / 200.0), floori(pc.y / 200.0))
+		if wv.x != 0:
+			cell.x = floori((pc.wall_at - wv.x * 100) / 200.0)
+		elif wv.y != 0:
+			cell.y = floori((pc.wall_at - wv.y * 100) / 200.0)
+		prop_spots.append({"room": pc.room, "level": pc.level, "piece": pc.id, "kind": String(pc.kind), "cx": cell.x, "cy": cell.y,
+			"wall": [wv.x, wv.y], "foot": [foot.position.x, foot.position.y, foot.size.x, foot.size.y], "tipped": false})
 		props_placed += 1
 
 static var _prop_scenes := {}

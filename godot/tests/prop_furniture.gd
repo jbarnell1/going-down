@@ -546,6 +546,18 @@ func test_drawn_is_solid(t: T) -> void:
 				bad += 1
 				if bad <= 5:
 					t.check(false, "%s: piece %d (%s): the mesh is %.3f m off its footprint, solid %s" % [tag, id, pc.kind, off, pc.solid])
+		# The `props` test command's rows (the scripted playthroughs look at a Clinic prop from inside its room
+		# and from beyond its wall): every row names its room's cell and the solid wall it stands against.
+		if p.place == &"clinic":
+			for sp: Dictionary in lv.get("prop_spots"):
+				var cell := Floor.Pos.make(int(sp["level"]), int(sp.get("cx", -1)), int(sp.get("cy", -1)))
+				var wall: Array = sp.get("wall", [0, 0])
+				var side := Floor.dir_from_vec(int(wall[0]), int(wall[1])) if absi(int(wall[0])) + absi(int(wall[1])) == 1 else &""
+				var wall_ok := side != &"" and Furniture._wall_solid(p, cell.level, Vector3i(cell.x, cell.y, Playroom.DIRS.find(side)))
+				if Floor.room_id_at(p, cell.level, cell.x, cell.y) != int(sp["room"]) or not wall_ok:
+					bad += 1
+					if bad <= 5:
+						t.check(false, "%s: the props row for piece %d names cell %d,%d and wall %s" % [tag, int(sp["piece"]), cell.x, cell.y, str(wall)])
 		for pc: Furniture.Piece in list:
 			if not seen.has(pc.id):
 				bad += 1
