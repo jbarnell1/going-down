@@ -57,7 +57,7 @@
     },
     "day": {
       "title": "The waiting car and the empty day",
-      "about": "Lines from docs/floors/findables-and-day.md whose triggers exist today: the car waiting for someone aboard (car_waiting) and nobody coming back (day_wiped). bank_refused and day_met wait for the BANK lock and the day's earned (FD2).",
+      "about": "Lines from docs/floors/findables-and-day.md section 1: the car waiting for someone aboard (car_waiting), nobody coming back (day_wiped), the refused BANK (bank_refused) and the day quota met (day_met).",
       "audition": "One take each."
     },
     "tape": {
@@ -317,6 +317,14 @@
     "tape": {
       "priority": 1,
       "when": "never dealt by the announcer: the orientation tape plays these by id (godot/client/orientation_tape.gd)"
+    },
+    "bank_refused": {
+      "priority": 4,
+      "when": "the vote said BANK but today's quota is not met: the car goes down anyway (in place of the ride line; FD2 \"bankRefused\")"
+    },
+    "day_met": {
+      "priority": 3,
+      "when": "the crew has earned the day quota: BANK is open (once a day; FD2 \"dayMet\")"
     }
   },
   "lines": [
@@ -2293,6 +2301,149 @@
         "similarity_boost": 0.75
       },
       "note": "Shots 17 to 20. Ends on the slogan, delighted."
+    },
+    {
+      "id": "bank_refused_1",
+      "moment": "bank_refused",
+      "group": "day",
+      "text": "[delighted] The vote was unanimous! [short pause] It was also wrong. Going down.",
+      "plain": "The vote was unanimous! It was also wrong. Going down.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Thrilled by the teamwork, then a polite correction; never cross."
+    },
+    {
+      "id": "bank_refused_2",
+      "moment": "bank_refused",
+      "group": "day",
+      "text": "[professional] I've counted your votes, and I've counted your credits. [short pause] Only one of those was enough. Going down!",
+      "plain": "I've counted your votes, and I've counted your credits. Only one of those was enough. Going down!",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "An accountant reading the result; bright on the last two words."
+    },
+    {
+      "id": "bank_refused_3",
+      "moment": "bank_refused",
+      "group": "day",
+      "text": "[warmly] You've asked for up. I admire that. [short pause] Going down!",
+      "plain": "You've asked for up. I admire that. Going down!",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Genuinely fond of the request, cheerfully refusing it."
+    },
+    {
+      "id": "bank_refused_4",
+      "moment": "bank_refused",
+      "group": "day",
+      "text": "[professional] The BANK side is working perfectly. [short pause] So am I. Going down.",
+      "plain": "The BANK side is working perfectly. So am I. Going down.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Calm customer service, a little smug on \"so am I\"."
+    },
+    {
+      "id": "bank_refused_5",
+      "moment": "bank_refused",
+      "group": "day",
+      "text": "[professional] Democracy has been noted. The quota has not been met. [short pause] One of these matters.",
+      "plain": "Democracy has been noted. The quota has not been met. One of these matters.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Dry read: professional, a little dismissive, never cross."
+    },
+    {
+      "id": "bank_refused_6",
+      "moment": "bank_refused",
+      "group": "day",
+      "text": "[warmly] Home is for people who have paid for today. You are people who have not. Going down!",
+      "plain": "Home is for people who have paid for today. You are people who have not. Going down!",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Kindly explaining a simple rule to children."
+    },
+    {
+      "id": "bank_refused_7",
+      "moment": "bank_refused",
+      "group": "day",
+      "text": "[professional] Up is a privilege. Privileges are listed on the board. Going down!",
+      "plain": "Up is a privilege. Privileges are listed on the board. Going down!",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "A recorded policy announcement, bright and final."
+    },
+    {
+      "id": "bank_refused_8",
+      "moment": "bank_refused",
+      "group": "day",
+      "text": "[delighted] Lovely teamwork, everyone. Wrong direction, though. [short pause] Going down, with enthusiasm!",
+      "plain": "Lovely teamwork, everyone. Wrong direction, though. Going down, with enthusiasm!",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Delighted throughout; the enthusiasm is real."
+    },
+    {
+      "id": "day_met_1",
+      "moment": "day_met",
+      "group": "day",
+      "text": "[delighted] Today is paid for! BANK is now open. [short pause] So is DOWN.",
+      "plain": "Today is paid for! BANK is now open. So is DOWN.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Bright good news; the last clause is a cheerful nudge."
+    },
+    {
+      "id": "day_met_2",
+      "moment": "day_met",
+      "group": "day",
+      "text": "[warmly] Day quota met! You may go home. [short pause] You may also be braver than that.",
+      "plain": "Day quota met! You may go home. You may also be braver than that.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Warm congratulations, then a gentle dare."
+    },
+    {
+      "id": "day_met_3",
+      "moment": "day_met",
+      "group": "day",
+      "text": "[professional] That's today's debt covered. Anything further is greed, [short pause] and we encourage greed.",
+      "plain": "That's today's debt covered. Anything further is greed, and we encourage greed.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Concierge polish; \"we encourage greed\" said as a genuine company value."
     }
   ]
 }

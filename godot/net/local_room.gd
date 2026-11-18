@@ -17,6 +17,7 @@
 #    the floor) is the same: `quota` true, false, or null to follow the game's deck. With the resident off
 #    (`entity_on` false) it is always off (net/host_rules.gd): nothing could ever be recorded. The
 #    scripted playthroughs start the game with `auto=1 quota=0` to turn it off (HostRules.quota_off_by_arg).
+#    The day quota's lock (sim/run.gd day_lock, FD2) follows it: on with the quota (and days), off with it.
 #  - Down first, then out (sim/run.gd downs: a catch puts the player down for ten seconds, then out) is the
 #    same again: `downs` true, false, or null to follow the game's deck. Alone nobody can heal you: down,
 #    then out, then (with nobody left standing) the wipe.
@@ -134,7 +135,9 @@ func start_run() -> void:
 	runs += 1
 	epoch += 1
 	var o := owner_0833_on()
-	rules = HostRules.new(entity_on, 1, Session.deck, days_on(), quota_on(), downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on())
+	# The day quota's lock goes with the floor quota (net/host_rules.gd turns it on only with days too).
+	var q := quota_on()
+	rules = HostRules.new(entity_on, 1, Session.deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q)
 	# Method callables hold no reference to this object, so the pipes do not keep it alive.
 	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
 	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))

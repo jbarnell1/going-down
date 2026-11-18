@@ -25,11 +25,18 @@
 # The waiting car (FD4) and nobody coming back (findables-and-day.md): the moments "car_waiting" (asked
 # for by hint_cues.gd with the panel's CAR WAITING FOR as a second caption line) and "day_wiped" (home
 # after a wipe that took someone's upgrade).
+#
+# The day quota (FD3, findables-and-day.md "The lines"): "bankRefused" asks for "bank_refused" (one line dealt
+# per refusal, never the same twice running) in place of that bell's ride line, and "dayMet" for "day_met";
+# both with the caption "EARNED 1650 OF 2400" from the event (the recordings carry no numbers); a day_met
+# line stands in for the floor's quota line when both come in one tick (it says the call works, and more). hint_day
+# stands in for the ride line on the night's first ride down of its first day (days on).
 class_name Announcer
 extends Node
 
 const CountLines = preload("res://client/count_lines.gd")
 const Hints = preload("res://client/hints.gd")
+const DayCaption = preload("res://client/day_view.gd")
 
 const EXPIRE_MS := 4000
 const EXPIRE_LONG_MS := 9000
@@ -72,6 +79,8 @@ var hints := Hints.new()
 var my_id := ""
 var place := ""
 var days_on := false
+## The run has the day quota's lock (the day block carries earned; set by main.gd each frame): the monitor shows the day.
+var day_lock_on := false
 var count_ctx := {}
 ## Save the player's hint record (off under automation and in tests).
 var persist := true
@@ -90,6 +99,7 @@ var _after_count: Array = []
 # asked for, an Annex seen tonight, marks placed this floor, someone in bed since home, a wipe today and
 # whether it took an upgrade.
 var _day_n := 0
+var _rides := 0
 var _boardings := 0
 var _vote_cued := false
 var _annex_seen := false
@@ -147,6 +157,7 @@ func start_run(new_night := true, night_key := "") -> void:
 	if new_night:
 		hints.new_night(night_key if night_key != "" else "%d-%d" % [int(Time.get_unix_time_from_system()), _rng.randi() % 100000], now)
 		_day_n = 0
+		_rides = 0
 		_boardings = 0
 		_vote_cued = false
 		_annex_seen = false
@@ -165,11 +176,19 @@ func on_events(events: Array, first_depth := 1) -> void:
 	# Down first, then out: a catch that puts its player down is not yet a loss (a crewmate may get them
 	# up), so the "taken" line waits for the "out".
 	var downed := {}
+	# The day lock (FD3): a refused BANK's line stands in for the ride line of the same bell.
+	var refused := false
+	# The day quota met (FD3) says more than the floor's quota line of the same tick: it stands in for it.
+	var day_met := false
 	for e: Dictionary in events:
 		if e.type == "wiped":
 			wiped = true
 		elif e.type == "downed":
 			downed[str(e.get("playerId", ""))] = true
+		elif e.type == "bankRefused":
+			refused = true
+		elif e.type == "dayMet":
+			day_met = true
 	for e: Dictionary in events:
 		match str(e.type):
 			"doorsOpened":
@@ -180,10 +199,18 @@ func on_events(events: Array, first_depth := 1) -> void:
 			"carLeft":
 				if e.reason == "unloaded" or e.reason == "empty":
 					request("left")
-				elif e.reason == "ride":
-					# hint_day would replace this line on the night's first ride down; it waits for the day
-					# quota on the lift monitor (FD2), so the ride line plays as before.
-					request("ride")
+				elif e.reason == "ride" and not refused:
+					# The night's first ride down of its first day (with the day quota on the monitor): hint_day
+					# in place of the ride line; refused, the ride line plays.
+					_rides += 1
+					if not (day_lock_on and _day_n == 0 and _rides == 1 and hint("hint_day")):
+						request("ride")
+			"bankRefused":
+				# The vote said BANK, the day is not paid: the car goes down anyway, and says so. The line
+				# carries no numbers; the caption under it does.
+				request("bank_refused", EXPIRE_LONG_MS, DayCaption.caption(e))
+			"dayMet":
+				request("day_met", EXPIRE_BOARD_MS, DayCaption.caption(e))
 			"called":
 				# On the Playroom the call starts the last count: the count's own line says so (hide_view.gd).
 				if not bool(e.get("last", false)):
@@ -235,7 +262,9 @@ func on_events(events: Array, first_depth := 1) -> void:
 					_bed_seen = true
 			"quotaMet":
 				# The floor quota (North Star C9): the call button now works. Without a recording, a caption.
-				if by_moment.has("quota"):
+				if day_met:
+					pass   # the day_met line says it, and more
+				elif by_moment.has("quota"):
 					request("quota", EXPIRE_LONG_MS)
 				else:
 					caption = QUOTA_CAPTION

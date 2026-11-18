@@ -1,7 +1,7 @@
 {
   "about": "Every ElevenLabs request the game has made. Never edit by hand.",
   "cap": 50000,
-  "total": 36082,
+  "total": 38436,
   "entries": [
     {
       "id": "arrived_1",
@@ -4952,6 +4952,292 @@
       "time": "2026-11-17T21:38:59.017Z",
       "hash": "3b09eefb284b6ef4f1f3249f",
       "file": "assets_src/voice/takes/bella/tape_orient_e/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_1",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 80,
+      "billed": 35,
+      "time": "2026-11-17T23:49:16.624Z",
+      "hash": "39364de79dabb8c31a827430",
+      "file": "assets_src/voice/takes/bella/bank_refused_1/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_2",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 126,
+      "billed": 55,
+      "time": "2026-11-17T23:49:18.602Z",
+      "hash": "0140ae6695743c4d2361be8f",
+      "file": "assets_src/voice/takes/bella/bank_refused_2/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_3",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 70,
+      "billed": 31,
+      "time": "2026-11-17T23:49:19.941Z",
+      "hash": "587daacf25050aa96e01115d",
+      "file": "assets_src/voice/takes/bella/bank_refused_3/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_4",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 85,
+      "billed": 37,
+      "time": "2026-11-17T23:49:21.168Z",
+      "hash": "9827290c2d83a18d1f3d43f5",
+      "file": "assets_src/voice/takes/bella/bank_refused_4/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_5",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 104,
+      "billed": 46,
+      "time": "2026-11-17T23:49:23.023Z",
+      "hash": "af19cbbc3eae03d12ca25c80",
+      "file": "assets_src/voice/takes/bella/bank_refused_5/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_6",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 93,
+      "billed": 41,
+      "time": "2026-11-17T23:49:24.825Z",
+      "hash": "2ad378a2edbeee629b27d4a9",
+      "file": "assets_src/voice/takes/bella/bank_refused_6/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_7",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 81,
+      "billed": 36,
+      "time": "2026-11-17T23:49:26.159Z",
+      "hash": "8bc031d188f534235e5cdc0a",
+      "file": "assets_src/voice/takes/bella/bank_refused_7/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_8",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 88,
+      "billed": 39,
+      "time": "2026-11-17T23:49:27.853Z",
+      "hash": "69646db758dffa889dd7b8fc",
+      "file": "assets_src/voice/takes/bella/bank_refused_8/take-1.mp3"
+    },
+    {
+      "id": "day_met_1",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 74,
+      "billed": 33,
+      "time": "2026-11-17T23:49:29.281Z",
+      "hash": "e00686a0ede241f0cab438cf",
+      "file": "assets_src/voice/takes/bella/day_met_1/take-1.mp3"
+    },
+    {
+      "id": "day_met_2",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 88,
+      "billed": 39,
+      "time": "2026-11-17T23:49:31.104Z",
+      "hash": "79d6b544b30ea0e619036bbc",
+      "file": "assets_src/voice/takes/bella/day_met_2/take-1.mp3"
+    },
+    {
+      "id": "day_met_3",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 108,
+      "billed": 48,
+      "time": "2026-11-17T23:49:32.926Z",
+      "hash": "4dfb7818e9bff517fb32d1f8",
+      "file": "assets_src/voice/takes/bella/day_met_3/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_1",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 80,
+      "billed": 35,
+      "time": "2026-11-17T23:55:45.674Z",
+      "hash": "dad1f965b6f70209db40959c",
+      "file": "assets_src/voice/takes/brian/bank_refused_1/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_2",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 126,
+      "billed": 55,
+      "time": "2026-11-17T23:55:47.580Z",
+      "hash": "7ce14cfd81a92bd075aa5a43",
+      "file": "assets_src/voice/takes/brian/bank_refused_2/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_3",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 70,
+      "billed": 31,
+      "time": "2026-11-17T23:55:49.015Z",
+      "hash": "d1a851cc0836fc1443b0397d",
+      "file": "assets_src/voice/takes/brian/bank_refused_3/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_4",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 85,
+      "billed": 37,
+      "time": "2026-11-17T23:55:50.365Z",
+      "hash": "26232e05a933966459d26735",
+      "file": "assets_src/voice/takes/brian/bank_refused_4/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_5",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 104,
+      "billed": 46,
+      "time": "2026-11-17T23:55:52.042Z",
+      "hash": "1e26fd547a05840ada203085",
+      "file": "assets_src/voice/takes/brian/bank_refused_5/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_6",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 93,
+      "billed": 41,
+      "time": "2026-11-17T23:55:53.733Z",
+      "hash": "ec6385ccd232a16c9e52e5e2",
+      "file": "assets_src/voice/takes/brian/bank_refused_6/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_7",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 81,
+      "billed": 36,
+      "time": "2026-11-17T23:55:55.222Z",
+      "hash": "09fd142a4afdc41f8b82767f",
+      "file": "assets_src/voice/takes/brian/bank_refused_7/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_8",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 88,
+      "billed": 39,
+      "time": "2026-11-17T23:55:57.030Z",
+      "hash": "010cc1dcdda21427e109b0b0",
+      "file": "assets_src/voice/takes/brian/bank_refused_8/take-1.mp3"
+    },
+    {
+      "id": "day_met_1",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 74,
+      "billed": 33,
+      "time": "2026-11-17T23:55:58.671Z",
+      "hash": "fb1d617678bb347924c76786",
+      "file": "assets_src/voice/takes/brian/day_met_1/take-1.mp3"
+    },
+    {
+      "id": "day_met_2",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 88,
+      "billed": 39,
+      "time": "2026-11-17T23:56:00.347Z",
+      "hash": "10f431b2d28bdb9ed98769e7",
+      "file": "assets_src/voice/takes/brian/day_met_2/take-1.mp3"
+    },
+    {
+      "id": "day_met_3",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 108,
+      "billed": 48,
+      "time": "2026-11-17T23:56:02.203Z",
+      "hash": "f42f2b43939fb157bdd106ff",
+      "file": "assets_src/voice/takes/brian/day_met_3/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_8",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 74,
+      "billed": 33,
+      "time": "2026-11-18T00:11:18.446Z",
+      "hash": "91619c4e816398c0b070b021",
+      "file": "assets_src/voice/takes/bella/bank_refused_8/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_8",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 74,
+      "billed": 33,
+      "time": "2026-11-18T00:17:25.145Z",
+      "hash": "77684a42940c1ceb935e1526",
+      "file": "assets_src/voice/takes/brian/bank_refused_8/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_8",
+      "voice": "Bella",
+      "voiceId": "hpp4J3VqNfWAUOO0d1Us",
+      "take": 1,
+      "characters": 106,
+      "billed": 47,
+      "time": "2026-11-18T00:29:34.283Z",
+      "hash": "8903dc6f1843ae95f3cf40c7",
+      "file": "assets_src/voice/takes/bella/bank_refused_8/take-1.mp3"
+    },
+    {
+      "id": "bank_refused_8",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 106,
+      "billed": 47,
+      "time": "2026-11-18T00:36:54.376Z",
+      "hash": "fdf2f696397173421e726835",
+      "file": "assets_src/voice/takes/brian/bank_refused_8/take-1.mp3"
     }
   ]
 }

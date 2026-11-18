@@ -29,7 +29,9 @@
 #
 # The run has the floor quota (`quota`, on unless a test turns it off: sim/run.gd, North Star C9): the
 # call button does nothing until the crew has recorded enough on the floor. A server started with the
-# argument `quota=0` has none (test-only: tools/play_net.mjs passes it; HostRules.quota_off_by_arg).
+# argument `quota=0` has none (test-only: tools/play_net.mjs passes it; HostRules.quota_off_by_arg). With the
+# quota comes the day quota's lock (sim/run.gd day_lock, FD2): BANK is refused until the crew has earned the
+# day's quota; `quota=0` turns it off too.
 #
 # The run has down first, then out (`downs`, on unless a test turns it off: sim/run.gd, North Star B6): a
 # catch puts the player down for ten seconds, a crewmate holding F beside them for three puts them back up,
@@ -213,7 +215,9 @@ func _start(now: float) -> void:
 	for id: String in people:
 		roster.append(id)
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
-	rules = HostRules.new(true, 1, Places.FULL, days, quota and not HostRules.quota_off_by_arg(false), downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned)
+	var q := quota and not HostRules.quota_off_by_arg(false)
+	# The day quota's lock goes with the floor quota (net/host_rules.gd): quota=0 turns both off.
+	rules = HostRules.new(true, 1, Places.FULL, days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q)
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))

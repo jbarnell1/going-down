@@ -5,7 +5,9 @@
 # above the doors. Built in the car's frame: origin at the middle of the doorway on the wall line at floor
 # height, x to the right walking in, z OUT of the car (the car is z = -depth .. 0), y up.
 # Like src/render/elevator.ts. It only shows what the rules say (doors open, indicator, votes), and on
-# a monitor on the back wall every crewmate's drawn face (set_faces).
+# a monitor on the back wall every crewmate's drawn face (set_faces). Under it the day monitor (show_day:
+# the day quota's rows, client/day_view.gd), and the BANK half's paint turns hatched grey and LOCKED while the
+# host says BANK is locked (set_bank_locked; FD3).
 class_name Lift
 extends Node3D
 
@@ -31,8 +33,8 @@ const LAND := Level.WALL_T * 0.5
 ## (64 x 64 for one or two players) with a 2-pixel gap, four to a row, drawn with nearest filtering.
 const MON_W := 138
 const MON_H := 70
-const MON_SIZE := Vector2(1.6, 1.6 * MON_H / MON_W)
-const MON_Y := 1.98
+const MON_SIZE := Vector2(1.2, 1.2 * MON_H / MON_W)
+const MON_Y := 2.14
 const MON_BG := Color("#0b0f0e")
 ## The car's light, at full.
 const LAMP_ENERGY := 0.8
@@ -42,6 +44,15 @@ const QUOTA_PX := Vector2i(88, 21)
 const QUOTA_SIZE := Vector2(0.84, 0.84 * 21.0 / 88.0)
 const QUOTA_RISE := 0.38
 const QUOTA_BG := Color("#0b0605")
+## The day monitor (show_day, FD3): a wide strip on the back wall under the faces monitor, big enough to read from
+## anywhere in the car through the tape: at most DAY_COLS characters of the HUD's pixel font a line, rows 1 and 2
+## wrapped to fit, row 3 (the stakes, boarding only) one line scrolling by at DAY_SCROLL characters a second.
+## Its picture in pixels, its size and height on the wall.
+const DAY_COLS := 28
+const DAY_PX := Vector2i(DAY_COLS * 6 + 4, 44)
+const DAY_SIZE := Vector2(2.8, 2.8 * 44.0 / (DAY_COLS * 6 + 4))
+const DAY_Y := 1.36
+const DAY_SCROLL := 3.0
 
 ## The car as the rules give it (plan.car): half its width, its depth, half its door.
 var half := 2.0
@@ -81,6 +92,17 @@ var _quota_node: Node3D
 var _quota_img: Image
 var _quota_tex: ImageTexture
 var _quota_key := "-"
+## The day monitor (client/day_view.gd): the rows it shows ([] blank), and the BANK paint: locked
+## (hatched grey, LOCKED) while the host says so, else amber.
+var day_rows: Array[String] = []
+var bank_locked := false
+var _day_img: Image
+var _day_tex: ImageTexture
+var _day_key := "-"
+var _day_scroll := 0.0
+var _bank_floor: MeshInstance3D
+var _bank_open_mat: ShaderMaterial
+var _bank_locked_mat: ShaderMaterial
 
 ## Builds the lift for the rules' car (plan.car). `left_wall`: the landing cell has a wall on its left as
 ## you face the lift (Level.lift_left_wall), so the call button goes on it.
@@ -121,9 +143,11 @@ func build(car: Dictionary, left_wall := false) -> void:
 	_box(Vector3(-door_half * 0.5, DOOR_H * 0.5, -0.0475), Vector3(door_half, DOOR_H, 0.035), door_mat, _left)
 	_box(Vector3(door_half * 0.5, DOOR_H * 0.5, -0.0475), Vector3(door_half, DOOR_H, 0.035), door_mat, _right)
 	# Floor: BANK on the left walking in (x < 0), DOWN on the right.
-	_bank_mat = Level.prop_material(Color.WHITE, _paint("BANK", Color("#e8a21c"), Color("#2a1a05"), false))
+	_bank_open_mat = Level.prop_material(Color.WHITE, _paint("BANK", Color("#e8a21c"), Color("#2a1a05"), false))
+	_bank_locked_mat = Level.prop_material(Color.WHITE, _paint("LOCKED", Color("#6d6f6c"), Color("#151515"), false, true))
+	_bank_mat = _bank_open_mat
 	_down_mat = Level.prop_material(Color.WHITE, _paint("DOWN", Color("#b8231c"), Color("#f6efe6"), true))
-	_floor_half(-1.0, _bank_mat)
+	_bank_floor = _floor_half(-1.0, _bank_mat)
 	_floor_half(1.0, _down_mat)
 	# The car's light.
 	_lamp_panel = Level.glow_material(Color(0.9, 0.95, 1.0), 1.0)
@@ -170,6 +194,20 @@ func build(car: Dictionary, left_wall := false) -> void:
 	add_child(mon)
 	var none: Array[String] = []
 	set_faces(none)
+	# The day monitor, a strip under the faces (FD3).
+	_day_img = Image.create(DAY_PX.x, DAY_PX.y, false, Image.FORMAT_RGB8)
+	_day_img.fill(MON_BG)
+	_day_tex = ImageTexture.create_from_image(_day_img)
+	_box(Vector3(0, DAY_Y, -depth + 0.015), Vector3(DAY_SIZE.x + 0.08, DAY_SIZE.y + 0.06, 0.03), dark)
+	var dq := QuadMesh.new()
+	dq.size = DAY_SIZE
+	var dm := MeshInstance3D.new()
+	dm.name = "DayMonitor"
+	dm.mesh = dq
+	dm.material_override = Level.glow_material(Color.WHITE, 0.95, _day_tex)
+	dm.position = Vector3(0, DAY_Y, -depth + 0.032)
+	add_child(dm)
+	show_day(PackedStringArray())
 	# The call button, left of the doors: on the landing wall beyond the landing cell when the lobby is
 	# wider than it, else on the landing cell's own left wall, near the doors. Hold button inside.
 	_call_mat = Level.glow_material(Color(1.0, 0.55, 0.15), 0.25)
@@ -237,7 +275,7 @@ func _box(pos: Vector3, size: Vector3, mat: Material, parent: Node3D = null) -> 
 	return mi
 
 ## One painted half of the car's floor: `side` -1 is BANK (left walking in), 1 is DOWN.
-func _floor_half(side: float, mat: ShaderMaterial) -> void:
+func _floor_half(side: float, mat: ShaderMaterial) -> MeshInstance3D:
 	var q := PlaneMesh.new()
 	q.size = Vector2(half, depth - 0.1)
 	var mi := MeshInstance3D.new()
@@ -246,14 +284,21 @@ func _floor_half(side: float, mat: ShaderMaterial) -> void:
 	mi.material_override = mat
 	mi.position = Vector3(side * half * 0.5, 0.006, -depth * 0.5)
 	add_child(mi)
+	return mi
 
 # The floor paint (src/render/elevator.ts paintHalf): the word twice, stretched along the car, against
-# the dividing line, with a hazard edge along it.
-func _paint(word: String, fill: Color, ink: Color, edge_left: bool) -> ImageTexture:
+# the dividing line, with a hazard edge along it. `hatched`: diagonal stripes over the fill (the locked BANK).
+func _paint(word: String, fill: Color, ink: Color, edge_left: bool, hatched := false) -> ImageTexture:
 	var w := 48
 	var h := 92
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	img.fill(fill)
+	if hatched:
+		var stripe := fill.darkened(0.35)
+		for y in h:
+			for x in w:
+				if posmod(x + y, 8) < 3:
+					img.set_pixel(x, y, stripe)
 	var ex := 0 if edge_left else w - 3
 	for y in range(0, h, 6):
 		var c := Color("#f2d43a") if (y / 6) % 2 == 0 else Color("#151515")
@@ -342,12 +387,62 @@ func quota_point() -> Vector3:
 
 ## The panel's line on two rows: after "RECORDED", after a full stop, or after a colon.
 static func quota_rows(text: String) -> PackedStringArray:
-	for cut: String in ["RECORDED ", ". ", ": "]:
+	for cut: String in ["RECORDED ", "CLOSED ", ". ", ": "]:
 		var i := text.find(cut)
 		if i >= 0:
 			var at := i + cut.length()
 			return PackedStringArray([text.left(at).strip_edges(), text.substr(at).strip_edges()])
 	return PackedStringArray([text])
+
+## The day monitor's rows (client/day_view.gd): row 1 pale, row 2 amber (green once BANK is open), each wrapped
+## at DAY_COLS; row 3 pale, scrolling (update() moves it). [] blanks it.
+func show_day(rows: PackedStringArray) -> void:
+	var key := "|".join(rows)
+	if key == _day_key or _day_img == null:
+		return
+	_day_key = key
+	day_rows.assign(Array(rows))
+	_day_scroll = 0.0
+	_draw_day()
+
+## The lines the day monitor draws now: rows 1 and 2 wrapped, then row 3's window of DAY_COLS characters.
+func day_lines() -> PackedStringArray:
+	var out := PackedStringArray()
+	for i in mini(day_rows.size(), 2):
+		out.append_array(PixelFont.wrap(day_rows[i], DAY_COLS))
+	if day_rows.size() > 2:
+		var tape := day_rows[2] + "    "
+		var at := int(_day_scroll) % tape.length()
+		out.append((tape + tape).substr(at, DAY_COLS))
+	return out
+
+func _draw_day() -> void:
+	_day_img.fill(MON_BG)
+	var lines := day_lines()
+	var row2 := PixelFont.wrap(day_rows[0], DAY_COLS).size() if not day_rows.is_empty() else 0
+	var row3 := row2 + (PixelFont.wrap(day_rows[1], DAY_COLS).size() if day_rows.size() > 1 else 0)
+	var y := 2
+	for i in lines.size():
+		if y > DAY_PX.y - 8:
+			break
+		var ink := Color("#d8ddd9")
+		if i >= row2 and i < row3:
+			ink = Color("#8dff9e") if day_rows[1].begins_with("BANK OPEN") else Color("#ffb02a")
+		PixelFont.blit(_day_img, lines[i], Vector2i(2, y), ink)
+		y += 10
+	_day_tex.update(_day_img)
+
+## The BANK half's paint: hatched grey and LOCKED, or its amber.
+func set_bank_locked(on: bool) -> void:
+	if on == bank_locked or _bank_floor == null:
+		return
+	bank_locked = on
+	_bank_mat = _bank_locked_mat if on else _bank_open_mat
+	_bank_floor.material_override = _bank_mat
+
+## Tests: the middle of the day monitor in the world.
+func day_point() -> Vector3:
+	return to_global(Vector3(0, DAY_Y, -depth + 0.032))
 
 ## The monitor shows these faces (FaceCodec text each, "" for a crewmate who drew none) side by side.
 func set_faces(codes: Array[String]) -> void:
@@ -411,6 +506,11 @@ func set_light(k: float) -> void:
 
 func update(delta: float) -> void:
 	_t += delta
+	if day_rows.size() > 2 and _day_img != null:
+		var was := int(_day_scroll)
+		_day_scroll += delta * DAY_SCROLL
+		if int(_day_scroll) != was:
+			_draw_day()
 	doors = move_toward(doors, doors_target, delta / DOOR_SECONDS)
 	var e := doors * doors * (3.0 - 2.0 * doors)
 	_left.position.x = -(door_half - PANEL_TUCK) * e

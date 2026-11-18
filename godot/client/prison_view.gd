@@ -16,6 +16,7 @@ const Walls = preload("res://sim/walls.gd")
 const Landing = preload("res://sim/landing.gd")
 const Run = preload("res://sim/run.gd")
 const Prison = preload("res://sim/prison.gd")
+const Day = preload("res://sim/day.gd")
 
 const S := 2.0                         # Level.S, the cell size
 const T := 0.07                        # half of Level.WALL_T: a wall face stands this far off the wall line
@@ -698,10 +699,16 @@ static func report_text(result: Variant, names: Dictionary) -> Array[String]:
 		return out
 	var r: Dictionary = result
 	var kind := str(r.get("kind", ""))
-	var verdict := "MADE" if kind == "made" else ("GAME OVER" if kind == "game_over" else "SHORT")
+	# A wipe is the missed day whatever was earned (FD1): it is never "short", and "SHORT BY 0" (a wipe after
+	# the quota was met) would read as a mistake.
+	var wiped := bool(r.get("wiped", false))
+	var verdict := "MADE" if kind == "made" else ("GAME OVER" if kind == "game_over" else ("NOBODY CAME BACK" if wiped else "SHORT"))
 	out.append("DAY %d  %s" % [int(r["day"]), verdict])
 	out.append("OWED %d  BANKED %d" % [int(r["quota"]), int(r["banked"])])
-	out.append("SHORT BY %d" % int(r["short_by"]))
+	if wiped:
+		out.append("EARNED %d: NOTHING CAME BACK" % int(r.get("earned", 0)))
+	else:
+		out.append("SHORT BY %d" % int(r["short_by"]))
 	out.append("STREAK %d  MISSES LEFT %d" % [int(r["streak"]), int(r["misses_left"])])
 	# The odds of the roll a miss makes, always printed (promise 2): the rules' own words, with names.
 	var odds := str(r.get("odds", ""))
@@ -726,9 +733,20 @@ static func report_text(result: Variant, names: Dictionary) -> Array[String]:
 		out.append("%s %d  %d" % [_name(str(id), names).rpad(8).left(8), int(shares[id]), int(credits.get(id, 0))])
 	return out
 
-## The day board by the lift: the day, what is owed, and bed.
+## The day board by the lift (FD3, findables-and-day.md "Where it is shown"): today's result, tomorrow's
+## quota, the misses this night, and bed. Before a day is settled: the day and what is owed.
 static func day_text(day: Dictionary, count: String) -> Array[String]:
-	var out: Array[String] = ["DAY %d" % int(day["day"]), "OWED %d" % int(day["quota"])]
+	var out: Array[String] = ["DAY %d" % int(day["day"])]
+	var r: Variant = day.get("result")
+	if r is Dictionary and (r as Dictionary).has("next_quota"):
+		var rd: Dictionary = r
+		var kind := str(rd.get("kind", ""))
+		var today := "MADE" if kind == "made" else ("GAME OVER" if kind == "game_over" else ("NOBODY CAME BACK" if bool(rd.get("wiped", false)) else "SHORT"))
+		out.append("TODAY " + today)
+		out.append("TOMORROW OWES %d" % int(rd["next_quota"]))
+		out.append("MISSES %d OF %d" % [0 if kind == "game_over" else int(rd.get("misses", 0)), Day.MISSES_FOR_GAME_OVER])
+	else:
+		out.append("OWED %d" % int(day["quota"]))
 	if count != "":
 		out.append(count)
 	return out
