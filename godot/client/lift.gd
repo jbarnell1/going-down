@@ -33,8 +33,8 @@ const LAND := Level.WALL_T * 0.5
 ## (64 x 64 for one or two players) with a 2-pixel gap, four to a row, drawn with nearest filtering.
 const MON_W := 138
 const MON_H := 70
-const MON_SIZE := Vector2(1.6, 1.6 * MON_H / MON_W)
-const MON_Y := 1.98
+const MON_SIZE := Vector2(1.2, 1.2 * MON_H / MON_W)
+const MON_Y := 2.14
 const MON_BG := Color("#0b0f0e")
 ## The car's light, at full.
 const LAMP_ENERGY := 0.8
@@ -44,12 +44,15 @@ const QUOTA_PX := Vector2i(88, 21)
 const QUOTA_SIZE := Vector2(0.84, 0.84 * 21.0 / 88.0)
 const QUOTA_RISE := 0.38
 const QUOTA_BG := Color("#0b0605")
-## The day monitor (show_day, FD3): a strip on the back wall under the faces monitor, three rows of the
-## pixel font (the third wraps onto a fourth), its picture in pixels, its size and height on the wall.
-const DAY_PX := Vector2i(240, 54)
-const DAY_SIZE := Vector2(1.6, 1.6 * 54.0 / 240.0)
-const DAY_Y := 1.30
-const DAY_COLS := 39
+## The day monitor (show_day, FD3): a wide strip on the back wall under the faces monitor, big enough to read from
+## anywhere in the car through the tape: at most DAY_COLS characters of the HUD's pixel font a line, rows 1 and 2
+## wrapped to fit, row 3 (the stakes, boarding only) one line scrolling by at DAY_SCROLL characters a second.
+## Its picture in pixels, its size and height on the wall.
+const DAY_COLS := 28
+const DAY_PX := Vector2i(DAY_COLS * 6 + 4, 44)
+const DAY_SIZE := Vector2(2.8, 2.8 * 44.0 / (DAY_COLS * 6 + 4))
+const DAY_Y := 1.36
+const DAY_SCROLL := 3.0
 
 ## The car as the rules give it (plan.car): half its width, its depth, half its door.
 var half := 2.0
@@ -96,6 +99,7 @@ var bank_locked := false
 var _day_img: Image
 var _day_tex: ImageTexture
 var _day_key := "-"
+var _day_scroll := 0.0
 var _bank_floor: MeshInstance3D
 var _bank_open_mat: ShaderMaterial
 var _bank_locked_mat: ShaderMaterial
@@ -390,25 +394,42 @@ static func quota_rows(text: String) -> PackedStringArray:
 			return PackedStringArray([text.left(at).strip_edges(), text.substr(at).strip_edges()])
 	return PackedStringArray([text])
 
-## The day monitor's rows (client/day_view.gd): row 1 pale, row 2 amber (green once BANK is open), the
-## rest pale; long rows wrap. [] blanks it.
+## The day monitor's rows (client/day_view.gd): row 1 pale, row 2 amber (green once BANK is open), each wrapped
+## at DAY_COLS; row 3 pale, scrolling (update() moves it). [] blanks it.
 func show_day(rows: PackedStringArray) -> void:
 	var key := "|".join(rows)
 	if key == _day_key or _day_img == null:
 		return
 	_day_key = key
 	day_rows.assign(Array(rows))
+	_day_scroll = 0.0
+	_draw_day()
+
+## The lines the day monitor draws now: rows 1 and 2 wrapped, then row 3's window of DAY_COLS characters.
+func day_lines() -> PackedStringArray:
+	var out := PackedStringArray()
+	for i in mini(day_rows.size(), 2):
+		out.append_array(PixelFont.wrap(day_rows[i], DAY_COLS))
+	if day_rows.size() > 2:
+		var tape := day_rows[2] + "    "
+		var at := int(_day_scroll) % tape.length()
+		out.append((tape + tape).substr(at, DAY_COLS))
+	return out
+
+func _draw_day() -> void:
 	_day_img.fill(MON_BG)
+	var lines := day_lines()
+	var row2 := PixelFont.wrap(day_rows[0], DAY_COLS).size() if not day_rows.is_empty() else 0
+	var row3 := row2 + (PixelFont.wrap(day_rows[1], DAY_COLS).size() if day_rows.size() > 1 else 0)
 	var y := 2
-	for i in rows.size():
+	for i in lines.size():
+		if y > DAY_PX.y - 8:
+			break
 		var ink := Color("#d8ddd9")
-		if i == 1:
-			ink = Color("#8dff9e") if rows[i].begins_with("BANK OPEN") else Color("#ffb02a")
-		for part in PixelFont.wrap(rows[i], DAY_COLS):
-			if y > DAY_PX.y - 9:
-				break
-			PixelFont.blit(_day_img, part, Vector2i(3, y), ink)
-			y += 10
+		if i >= row2 and i < row3:
+			ink = Color("#8dff9e") if day_rows[1].begins_with("BANK OPEN") else Color("#ffb02a")
+		PixelFont.blit(_day_img, lines[i], Vector2i(2, y), ink)
+		y += 10
 	_day_tex.update(_day_img)
 
 ## The BANK half's paint: hatched grey and LOCKED, or its amber.
@@ -485,6 +506,11 @@ func set_light(k: float) -> void:
 
 func update(delta: float) -> void:
 	_t += delta
+	if day_rows.size() > 2 and _day_img != null:
+		var was := int(_day_scroll)
+		_day_scroll += delta * DAY_SCROLL
+		if int(_day_scroll) != was:
+			_draw_day()
 	doors = move_toward(doors, doors_target, delta / DOOR_SECONDS)
 	var e := doors * doors * (3.0 - 2.0 * doors)
 	_left.position.x = -(door_half - PANEL_TUCK) * e

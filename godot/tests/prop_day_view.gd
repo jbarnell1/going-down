@@ -94,6 +94,17 @@ func test_the_lift_monitor_and_the_bank_paint(t: T) -> void:
 			locked_n += 1
 		t.eq(bool(lift.get("bank_locked")), bool(b["locked"]), "sample %d: the BANK paint reads LOCKED exactly when the host says locked" % i)
 		t.eq(Array(lift.get("day_rows")), Array(v.rows), "sample %d: the monitor shows the rows" % i)
+		# Readable from the car: no line longer than DAY_COLS, rows 1 and 2 shown whole (wrapped), row 3 a window of it.
+		var lines: PackedStringArray = lift.call("day_lines")
+		var first := v.rows.slice(0, 2)
+		var whole := PackedStringArray()
+		for k in lines.size():
+			t.check(lines[k].length() <= LiftScript.DAY_COLS, "sample %d: line %d is %d characters" % [i, k, lines[k].length()])
+			if k < lines.size() - (1 if v.rows.size() > 2 else 0):
+				whole.append(lines[k])
+		t.eq(" ".join(whole), " ".join(first), "sample %d: rows 1 and 2 are on the monitor whole" % i)
+		if v.rows.size() > 2:
+			t.check((v.rows[2] + "    " + v.rows[2]).contains(lines[lines.size() - 1]), "sample %d: the last line is a window of row 3" % i)
 	t.check(locked_n > 50 and locked_n < 350, "not vacuous: %d of 400 locked" % locked_n)
 	var d: Dictionary = lift.call("drawn_car")
 	t.check((d["bank"] as AABB).size.x > 1.5, "the BANK half is still drawn its full width")
