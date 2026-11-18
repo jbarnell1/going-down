@@ -259,6 +259,9 @@ var reports_unheld := 0
 ## What each snapshot said of the count, by tick: [host time, need, watcher ids]. Never rewritten by a
 ## put-back (it is what the clients were told).
 var _sent_watch := {}
+## Ready-up (server/room.gd): the peers a stop may admit ({peer: true}), or null to admit every spectator
+## (the default: every reference session and the game alone).
+var admit_only: Variant = null
 var _transport: Transport.Transport
 var _start_local: float
 var _players := {}  # id -> HostPlayer, in arrival order
@@ -825,11 +828,13 @@ func _place(id: String, body: Move.Body, depth: int, s: Run.RunState) -> void:
 	p.body_ct = null
 	p.claim = null
 
-## Spectators waiting for the next stop join the run now (the car is here, doors shut, crew inside).
+## Spectators waiting for the next stop join the run now (the car is here, doors shut, crew inside). With
+## `admit_only` set (the home server's room: ready-up, findables-and-day.md section 2) only those it lists
+## (by peer) are taken; the rest wait for a later stop.
 func _admit(s: Run.RunState) -> Run.RunState:
 	var waiting: Array[HostPlayer] = []
 	for p: HostPlayer in _players.values():
-		if not p.in_run and p.connected and not p.left:
+		if not p.in_run and p.connected and not p.left and (admit_only == null or (admit_only as Dictionary).has(p.peer)):
 			waiting.append(p)
 	if waiting.is_empty():
 		return s

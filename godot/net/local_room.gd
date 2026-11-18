@@ -8,7 +8,8 @@
 #  - The player's own body is trusted (net/host.gd `trusted`: no speed check), so the test hooks
 #    (teleport, walk at any pace) work alone; with friends the server checks every body.
 #  - A run starts at once when asked (no lobby, nobody to wait for), and the next run's seed is the
-#    seed with "-1", "-2", ... appended (as the single-player game always did).
+#    seed with "-1", "-2", ... appended (as the single-player game always did). Ready-up alone: the player
+#    is the host, and set_ready(true) (the controls card's I'M READY) starts the run at once.
 #  - `time_scale` runs the room's clock (host and client together) faster or slower: tests only.
 #  - The day loop (sim/run.gd days: BANK rides up to the prison, bed starts the next day) is on in the
 #    game and off in tests: `days` true or false says so; left null it follows the game's deck (on when
@@ -81,8 +82,18 @@ func open_local(seed_: String, player_name: String, entity: bool, face: String =
 	_face = face
 	entity_on = entity
 	my_id = ME
-	people = [[ME, player_name]]
+	host_id = ME
+	people = [[ME, player_name, false, false, false, face]]
 	status = "lobby"
+
+## Ready-up alone (findables-and-day.md section 2): the same card, and READY starts the run at once.
+## Watching the tape is not ready; un-readying with a run on changes nothing.
+func set_ready(on: bool, tape: bool = false) -> void:
+	my_ready = on
+	my_tape = tape and not on
+	people = [[ME, _name, on, my_tape, run_on, _face]]
+	if on and not run_on:
+		start_run()
 
 ## Whether the next run has the day loop.
 func days_on() -> bool:
@@ -162,6 +173,7 @@ func start_run() -> void:
 	client.draw_in_dark = o
 	run_on = true
 	status = "running"
+	people = [[ME, _name, my_ready, false, true, _face]]
 
 func _to_client(to: String, data: String) -> void:
 	if to == ME and _client_pipe != null:

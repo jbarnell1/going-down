@@ -20,6 +20,16 @@ var my_id := ""
 var people: Array = []
 var epoch := 0
 var run_on := false
+## Ready-up (server/room.gd): the host's id; when the count ends and when the host may start without the
+## others, on this client's clock (-1: no count / not yet); the run's floor (-1 with no run). Each people
+## row is [id, name, ready, tape, inRun, face] (older servers: [id, name]).
+var host_id := ""
+var start_at := -1.0
+var without_at := -1.0
+var run_depth := -1
+## What this client last said: ready, and watching the tape.
+var my_ready := false
+var my_tape := false
 ## The NetClient of the current run (null in the lobby).
 var client: Client = null
 ## Tests: seconds added to every message in each direction (a slow link), and how many arrived.
@@ -59,14 +69,31 @@ func set_face(face: String) -> bool:
 	if Protocol.valid_face(face) == "":
 		return false
 	_face = face
+	if status == "lobby" or status == "running":
+		_send_lobby_face()
 	if client != null and not client.ended:
 		client.change_face(face, _now)
-		_flush(_now)
+	_flush(_now)
 	return true
 
-## Starts a run (from the lobby; the server ignores it while one is on).
+## The host's START WITHOUT (server/room.gd: the host only, 30 s after readying; ignored otherwise).
 func start_run() -> void:
 	_queue("m|" + JSON.stringify({"t": "start"}))
+
+## Ready or not (the Ready-up screen's I'M READY). `tape`: not ready, watching the orientation tape.
+func set_ready(on: bool, tape: bool = false) -> void:
+	my_ready = on
+	my_tape = tape and not on
+	var m := {"t": "ready", "on": on}
+	if my_tape:
+		m["tape"] = true
+	_queue("m|" + JSON.stringify(m))
+	_flush(_now)
+
+## The face shown beside this player's name on the Ready-up list.
+func _send_lobby_face() -> void:
+	if _face != "":
+		_queue("m|" + JSON.stringify({"t": "face", "face": _face}))
 
 func set_player_name(n: String) -> void:
 	_name = n
@@ -146,10 +173,23 @@ func _on_text(text: String, now: float) -> void:
 			"you":
 				my_id = String(p["id"])
 				status = "lobby"
+				_send_lobby_face()
 			"lobby":
 				people = p["people"]
 				epoch = int(p["epoch"])
+				var was_on := run_on
 				run_on = bool(p["running"])
+				host_id = str(p.get("host", ""))
+				# The server's clock to this one's: what is left, from now.
+				var srv := float(p.get("now", 0.0))
+				var sa := float(p.get("startAt", -1.0))
+				var wa := float(p.get("withoutAt", -1.0))
+				start_at = now + (sa - srv) if sa >= 0.0 else -1.0
+				without_at = now + (wa - srv) if wa >= 0.0 else -1.0
+				run_depth = int(p.get("depth", -1))
+				if was_on and not run_on:
+					# Back on the Ready-up screen: the server has forgotten everyone's ready.
+					my_ready = false
 				if run_on and epoch > _epoch_joined:
 					_join_run(epoch, now)
 				elif not run_on and client != null:

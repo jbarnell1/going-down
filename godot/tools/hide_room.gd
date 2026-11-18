@@ -8,15 +8,14 @@ var start_depth := 4
 var tuned := false
 
 func _start(now: float) -> void:
-	if host != null or people.is_empty():
+	# The ready players, as the room's own start (server/room.gd ready-up).
+	var roster := _start_roster()
+	if host != null or roster.is_empty():
 		return
 	epoch += 1
 	var seed := fixed_seed
 	if seed.is_empty():
 		seed = Crypto.new().generate_random_bytes(6).hex_encode()
-	var roster: Array[String] = []
-	for id: String in people:
-		roster.append(id)
 	rules = HostRules.new(true, start_depth, Places.FULL, days, false, false, false, false, false, false, false, false, tuned)
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
