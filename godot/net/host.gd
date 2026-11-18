@@ -1121,6 +1121,9 @@ func world(full: bool = false) -> Dictionary:
 	if not Run.at_home(s) and Run.resident_of(s).trait_name == &"lonely":
 		var o := s.orderly
 		out["lonely"] = str(o.lonely_target) if o.lonely_phase == &"chase" and o.lonely_target != null else ""
+	# Solid furniture (FD7): the clients move their own bodies round it (Protocol "solid").
+	if s.furniture:
+		out["solid"] = 1
 	return out
 
 ## Two-watcher Stillness (T19a; Protocol.enc_watch): the count as the host has it this tick, {need,

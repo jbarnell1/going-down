@@ -33,6 +33,8 @@ const ANNEX_VIEW := preload("res://client/annex_view.gd")
 const Hides = preload("res://sim/hides.gd")
 const ClinicPlan = preload("res://sim/clinic.gd")
 const PlayroomLib = preload("res://sim/playroom.gd")
+const Furniture = preload("res://sim/furniture.gd")
+const FloorLib = preload("res://sim/floor.gd")
 
 var plan: Dictionary
 var W: int
@@ -75,6 +77,10 @@ var prop_spots: Array[Dictionary] = []
 ## closets and the nurses' station (and wherever the rules topped one up), drawn from the rules' list.
 var hides: Array[PlayroomLib.Hide] = []
 var mat_hide: ShaderMaterial
+## The floor's furniture (sim/furniture.gd, FD7) on the Clinic and the Annex, and what was drawn for each piece
+## (tests: {piece, kind, rect}: the mesh's floor footprint, world x, z, measured from what was drawn).
+var pieces: Array = []
+var furniture_drawn: Array[Dictionary] = []
 
 static var _shared := {}
 
@@ -136,12 +142,10 @@ func build(p: Dictionary, seed_text: String) -> void:
 	_build_floors_and_ceilings()
 	_build_walls()
 	_build_stairs()
-	_build_hides()
+	_build_furniture()
 	_commit_chunks()
 	_build_lights()
 	_build_signs_and_decals()
-	if props_on:
-		_place_props()
 
 # --- data helpers ---------------------------------------------------------------------------
 
@@ -729,31 +733,39 @@ func _build_signs_and_decals() -> void:
 			m2.rotate_object_local(Vector3.FORWARD, _rng.randf_range(-0.5, 0.5) if is_hand else 0.0)
 			add_child(m2)
 
-# --- hiding places ----------------------------------------------------------------------------
+# --- furniture -------------------------------------------------------------------------------
 
-## The rules' hides for this Clinic (sim/hides.gd), each piece of furniture at its inside spot, open
-## towards its gap (client/annex_view.gd hide_boxes, in the Clinic's white and steel).
-func _build_hides() -> void:
+## The rules' furniture for this Clinic (sim/furniture.gd, FD7): the one list of floor-standing pieces, which is
+## also what blocks a player (sim/move.gd Solids) and what hides them. The hides (sim/hides.gd) are drawn in the
+## Clinic's white and steel (client/annex_view.gd hide_boxes), the plain pieces as their glb models, each centred
+## on its footprint and turned to its facing. Nothing floor-standing is placed here by itself any more.
+func _build_furniture() -> void:
 	var fp := ClinicPlan.generate_clinic(str(plan.seed), int(plan.depth))
 	if fp.width != W or fp.height != H:
 		push_error("level: the Clinic plan for %s/%d does not match the one being drawn" % [plan.seed, plan.depth])
 		return
 	hides = Hides.hides_for(fp, str(plan.seed))
-	for h in hides:
-		ANNEX_VIEW.draw_hide_into(self, h, true, "hidef")
+	pieces = Furniture.pieces_for(fp, str(plan.seed), int(plan.depth))
+	for pc: Furniture.Piece in pieces:
+		if pc.hide >= 0:
+			var h: PlayroomLib.Hide = hides[pc.hide]
+			ANNEX_VIEW.draw_hide_into(self, h, true, "hidef")
+			furniture_drawn.append({"piece": pc.id, "kind": String(pc.kind), "rect": ANNEX_VIEW.boxes_rect(ANNEX_VIEW.hide_xf(h), ANNEX_VIEW.hide_boxes(h.kind, true))})
+			continue
+		var f := Vector2(FloorLib.dir_dx(pc.facing), FloorLib.dir_dy(pc.facing))
+		# The glb's front faces +z: turn it to the piece's facing.
+		var n := _make_prop(String(pc.kind), atan2(f.x, f.y), 0.0)
+		var box := _prop_box(n)
+		var cx := pc.x / 100.0
+		var cz := pc.y / 100.0
+		n.position = Vector3(cx - (box.position.x + box.size.x * 0.5), pc.level * LH - box.position.y, cz - (box.position.z + box.size.z * 0.5))
+		add_child(n)
+		var foot := Rect2(n.position.x + box.position.x, n.position.z + box.position.z, box.size.x, box.size.z)
+		furniture_drawn.append({"piece": pc.id, "kind": String(pc.kind), "rect": foot})
+		prop_spots.append({"room": pc.room, "level": pc.level, "piece": pc.id, "kind": String(pc.kind),
+			"foot": [foot.position.x, foot.position.y, foot.size.x, foot.size.y], "tipped": false})
+		props_placed += 1
 
-# --- props ------------------------------------------------------------------------------------
-
-# Which props go in which room kind, and roughly how many per cell of floor.
-## The wards' beds are their hiding places (_build_hides), so no other beds stand there.
-const ROOM_PROPS := {
-	"ward": ["side_table", "wheelchair", "cabinet_tall", "chair_waiting", "side_table"],
-	"exam": ["gurney", "drawers_low", "chair_desk", "cabinet_tall", "side_table"],
-	"station": ["chair_desk", "drawers_low", "cabinet_tall", "chair_waiting"],
-	"closet": ["cabinet_tall", "drawers_low"],
-	"lobby": ["chair_waiting", "chair_waiting", "chair_waiting", "wheelchair", "side_table"],
-	"atrium": ["chair_waiting", "wheelchair", "gurney"],
-}
 static var _prop_scenes := {}
 static var _prop_mat_cache := {}
 
@@ -796,95 +808,6 @@ func _prop_box(n: Node3D) -> AABB:
 		first = false
 	return box
 
-# Floor rectangles (x, z) kept clear: a doorway's approach on the room side, 1.5 m wide, 1.3 m deep.
-func _door_zones(level: int, room_id: int) -> Array[Rect2]:
-	var out: Array[Rect2] = []
-	for d: Dictionary in plan.doors:
-		if int(d.level) != level:
-			continue
-		for end: Array in [[int(d.ax), int(d.ay), int(d.bx), int(d.by)], [int(d.bx), int(d.by), int(d.ax), int(d.ay)]]:
-			var x: int = end[0]
-			var y: int = end[1]
-			if x < 0 or y < 0 or x >= W or y >= H or room_at[level][y * W + x] != room_id:
-				continue
-			var mid := (Vector2(x + 0.5, y + 0.5) + Vector2(end[2] + 0.5, end[3] + 0.5)) * 0.5 * S
-			var into := (Vector2(x + 0.5, y + 0.5) * S - mid).normalized()
-			var along := Vector2(-into.y, into.x)
-			var p0 := mid - along * 0.75
-			var p1 := mid + along * 0.75 + into * 1.3
-			out.append(Rect2(Vector2(minf(p0.x, p1.x), minf(p0.y, p1.y)), (p1 - p0).abs()))
-	return out
-
-func _place_props() -> void:
-	for r: Dictionary in plan.rooms:
-		var k: String = r.kind
-		if not ROOM_PROPS.has(k):
-			continue
-		var level := int(r.level)
-		var rid := int(r.id)
-		var rx := int(r.x)
-		var ry := int(r.y)
-		var rw := int(r.w)
-		var rh := int(r.h)
-		var t := corruption(level, rx + rw / 2, ry + rh / 2)
-		var list: Array = ROOM_PROPS[k]
-		var count := clampi(int(rw * rh / 3.0) + 1, 1, 6)
-		# Everything must stand inside the room's walls (their faces, not their centre lines), clear of
-		# its doorways and of each other. Props have no collision: the rules do not know them.
-		var inset := WALL_T * 0.5 + PROP_MARGIN
-		var inner := Rect2(rx * S + inset, ry * S + inset, rw * S - 2.0 * inset, rh * S - 2.0 * inset)
-		var keep_out := _door_zones(level, rid)
-		var taken: Array[Rect2] = []
-		# Clear of the hiding places' furniture.
-		for hd in hides:
-			if hd.level == level:
-				taken.append(ANNEX_VIEW.hide_foot(hd).grow(0.1))
-		for i in count:
-			for tries in 12:
-				var cx := rx + _rng.randi_range(0, rw - 1)
-				var cy := ry + _rng.randi_range(0, rh - 1)
-				if dist[pidx(level, cx, cy)] <= 3:
-					continue
-				var wall := _wall_side(level, cx, cy)
-				if wall == Vector2i.ZERO:
-					continue
-				var yaw := atan2(-float(wall.x), -float(wall.y))
-				if k == "lobby" or k == "atrium":
-					yaw += _rng.randf_range(-0.6, 0.6)
-				var tip := 0.0
-				# More of it knocked over the further from the lift.
-				if _rng.randf() < smoothstep(0.35, 1.0, t) * 0.7:
-					tip = (PI * 0.5) * (1.0 if _rng.randf() < 0.5 else -1.0)
-					yaw += _rng.randf_range(-1.2, 1.2)
-				var n := _make_prop(list[_rng.randi_range(0, list.size() - 1)], yaw, tip)
-				var box := _prop_box(n)
-				# Back against the wall face, slid a little along it, standing on the floor.
-				var cc := cell_center(level, cx, cy)
-				var pos := Vector3(cc.x + _rng.randf_range(-0.4, 0.4), level * LH - box.position.y, cc.z + _rng.randf_range(-0.4, 0.4))
-				var face_x := (cx + 0.5 + wall.x * 0.5) * S - wall.x * inset
-				var face_z := (cy + 0.5 + wall.y * 0.5) * S - wall.y * inset
-				if wall.x == 1: pos.x = face_x - box.end.x
-				elif wall.x == -1: pos.x = face_x - box.position.x
-				if wall.y == 1: pos.z = face_z - box.end.z
-				elif wall.y == -1: pos.z = face_z - box.position.z
-				var foot := Rect2(pos.x + box.position.x, pos.z + box.position.z, box.size.x, box.size.z)
-				var ok := inner.encloses(foot)
-				for z: Rect2 in keep_out:
-					ok = ok and not z.intersects(foot)
-				for o: Rect2 in taken:
-					ok = ok and not o.grow(0.05).intersects(foot)
-				if not ok:
-					n.free()
-					continue
-				n.position = pos
-				add_child(n)
-				taken.append(foot)
-				prop_spots.append({"room": rid, "level": level, "cx": cx, "cy": cy, "wall": [wall.x, wall.y],
-					"foot": [foot.position.x, foot.position.y, foot.size.x, foot.size.y], "tipped": tip != 0.0})
-				props_placed += 1
-				if tip != 0.0:
-					props_overturned += 1
-				break
 # A solid wall side of a room cell (not a door), as a unit vector, or zero.
 func _wall_side(level: int, x: int, y: int) -> Vector2i:
 	var opts := []

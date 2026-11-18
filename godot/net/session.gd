@@ -84,12 +84,14 @@ static func doors_open_in(phase: Variant) -> bool:
 	return phase == "unloading" or phase == "boarding"
 
 ## Moves the local player the way the run does (move_in_run: walls, stairs, the car's doorway while
-## the doors are open). move_in_run takes a whole RunState but reads only the plan, the car and the phase.
-static func move_local(plan: Floor.FloorPlan, phase: Variant, body: Move.Body, dx: float, dz: float, radius: float = PLAYER_RADIUS) -> Move.Body:
+## the doors are open). move_in_run takes a whole RunState but reads only the plan, the car, the phase and
+## whether the run's furniture is solid (`solid`: the world's "solid", Protocol; sim/run.gd furniture).
+static func move_local(plan: Floor.FloorPlan, phase: Variant, body: Move.Body, dx: float, dz: float, radius: float = PLAYER_RADIUS, solid: bool = false) -> Move.Body:
 	var view := Run.RunState.new()
 	view.plan = plan
 	view.car = car_for(plan)
 	view.phase = StringName(phase)
+	view.furniture = solid
 	return Run.move_in_run(view, body, dx, dz, radius)
 
 ## Whether a camera could be showing the Orderly drawn at `pose` (Pose.camera_sees with the plan's car).

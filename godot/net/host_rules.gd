@@ -48,6 +48,10 @@
 #  - The Playroom tuned from the owner's first play (sim/run.gd playroom_tuned, sim/seek.gd T15m): off unless
 #    asked (`playroom_tuned`); the game's rooms ask for it, so there are 30-45 s to hide, an anger bar, and the
 #    Minder grabs anyone within 1 m outside a count. prepare() turns it on before the first tick.
+#  - Solid furniture (sim/run.gd furniture, sim/furniture.gd, FD7): off unless asked (`furniture`); the game's rooms
+#    ask for it (the server's always, playing alone with the game's deck), so players slide along the Clinic's and
+#    the Annex's chairs, beds, cabinets and desks instead of walking through them. prepare() turns it on before the
+#    first tick.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -90,11 +94,14 @@ var car_waits: bool
 var lonely: bool
 ## The Playroom tuned from the owner's first play (off unless asked; sim/run.gd playroom_tuned, T15m).
 var playroom_tuned: bool
+## Solid furniture (off unless asked; sim/run.gd furniture, FD7).
+var furniture: bool
 
 func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false,
 		watchers_: bool = false, relocation_: bool = false, long_dark_: bool = false, paced_: bool = false, car_waits_: bool = false,
-		lonely_: bool = false, playroom_tuned_: bool = false) -> void:
+		lonely_: bool = false, playroom_tuned_: bool = false, furniture_: bool = false) -> void:
 	playroom_tuned = playroom_tuned_
+	furniture = furniture_
 	relocation = relocation_
 	lonely = lonely_
 	_entity_on = entity_on
@@ -192,6 +199,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_lonely(s)
 	if playroom_tuned and not s.playroom_tuned:
 		s = Run.with_playroom_tuned(s)
+	if furniture and not s.furniture:
+		s = Run.with_furniture(s)
 	return _capped(s)
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web
