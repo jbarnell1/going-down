@@ -1,8 +1,8 @@
-# The place deck (sim/places.gd; North Star A2 and B11, owner decisions of 17 Nov): the prison at depth 0,
-# Clinic at 1 and 2, the Annex at 3, the Playroom at 4, then a seeded draw that never repeats the floor
-# above; one way to make a plan, used by the host's run and by every client; the resident each place
+# The place deck (sim/places.gd; North Star A2 and B11, owner decisions of 17 and 18 Nov): the prison at depth 0,
+# Clinic at 1 and 2, the Annex at 3, the Playroom at 4, the Arboretum at 5, then a seeded draw that never
+# repeats the floor above; one way to make a plan, used by the host's run and by every client; the resident each place
 # brings. Checked here:
-#   - the order over many seeds, and no place twice running from 5 on;
+#   - the order over many seeds, and no place twice running from 6 on;
 #   - Places.generate makes each place with its own generator, the same plan every time, and every
 #     place's car zone (Annex and Playroom included) is void where the 4 m car stands;
 #   - a run takes a deck: none given is Clinic only (the run every stored result was recorded from), and
@@ -34,7 +34,7 @@ const Transport = preload("res://net/transport.gd")
 const Protocol = preload("res://net/protocol.gd")
 const Pose = preload("res://net/pose.gd")
 
-const ORDER: Array[StringName] = [&"prison", &"clinic", &"clinic", &"annex", &"playroom"]
+const ORDER: Array[StringName] = [&"prison", &"clinic", &"clinic", &"annex", &"playroom", &"arboretum"]
 
 func test_the_order_and_no_repeats(t: T) -> void:
 	var seeds := 200
@@ -59,12 +59,12 @@ func test_the_order_and_no_repeats(t: T) -> void:
 				bad.append("%s d%d differs on a second call" % [seed, depth])
 			prev = p
 	t.check(bad.is_empty(), "the order: %s" % ", ".join(bad.slice(0, 6)))
-	# Not vacuous: the draw from 5 uses all three places, roughly evenly.
-	var drawn := seeds * (deepest - 4)
+	# Not vacuous: the draw from 6 uses all four places, roughly evenly.
+	var drawn := seeds * (deepest - 5)
 	for p: StringName in Places.FULL:
 		var n := int(counts.get(p, 0))
 		t.check(n > drawn / 5, "%s drawn only %d times of %d" % [p, n, drawn])
-	t.note("%d seeds: prison, clinic, clinic, annex, playroom at depths 0 to 4; depths 5 to %d drew %s with no place twice running" % [seeds, deepest, str(counts)])
+	t.note("%d seeds: prison, clinic, clinic, annex, playroom, arboretum at depths 0 to 5; depths 6 to %d drew %s with no place twice running" % [seeds, deepest, str(counts)])
 	# Other decks: Clinic only is every floor a Clinic (the prison stays at 0).
 	for depth in range(1, 12):
 		t.eq(Places.place_at("x", depth, Places.CLINIC_ONLY), &"clinic", "Clinic only at depth %d" % depth)

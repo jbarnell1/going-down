@@ -36,6 +36,7 @@ const Rng = preload("res://sim/rng.gd")
 const Floor = preload("res://sim/floor.gd")
 const Walls = preload("res://sim/walls.gd")
 const Playroom = preload("res://sim/playroom.gd")
+const Arboretum = preload("res://sim/arboretum.gd")
 
 const CM := 200
 ## [capacity, eye height cm, gap half-angle degrees, gap range cm (0: no limit but the room), inset cm].
@@ -71,6 +72,9 @@ static func hides_for(plan: Floor.FloorPlan, floor_seed: String = "") -> Array[P
 			return _clinic(plan, sd)
 		&"annex":
 			return _annex(plan)
+		&"arboretum":
+			# The garden's own: sheds, benches, the bandstand's underside, hollow logs (sim/arboretum.gd).
+			return Arboretum.hides(plan)
 	var none: Array[Playroom.Hide] = []
 	return none
 

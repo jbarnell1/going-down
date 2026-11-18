@@ -2,11 +2,12 @@
 # floor is a different place, drawn from a deck by the shared seed; the place decides its resident) and
 # B11 (the Orderly lives in the Clinic, the Temp in the Annex); owner decisions of 17 Nov: the prison is
 # depth 0, the floor after the Annex is the Playroom (its resident the Minder hunts by hearing, not by
-# Stillness), and from floor 5 the deck draws Clinic, Annex or Playroom by the seed, never the same twice
-# running. Pure and deterministic; the host and every client call the same functions.
+# Stillness); of 18 Nov: the Arboretum is the fifth floor ("It can be fifth"; its Groundskeeper hears:
+# sim/hearing.gd), and from floor 6 the deck draws Clinic, Annex, Playroom or Arboretum by the seed, never the
+# same twice running. Pure and deterministic; the host and every client call the same functions.
 #
-#   place_at(seed, depth, deck)  prison at 0; Clinic at 1 and 2, Annex at 3, Playroom at 4; from 5 a
-#                                seeded draw from the deck, never the place of the floor above.
+#   place_at(seed, depth, deck)  prison at 0; Clinic at 1 and 2, Annex at 3, Playroom at 4, Arboretum at 5;
+#                                from 6 a seeded draw from the deck, never the place of the floor above.
 #   generate(seed, depth, deck)  THE way a plan is made: the generator of place_at's place.
 #   resident(place)              who lives there: name, whether Stillness rules it, its instrument trait.
 #
@@ -15,7 +16,8 @@
 #
 # A deck is the list of places a run may draw. Runs default to CLINIC_ONLY (every floor a Clinic, as
 # every stored run result was recorded); the game passes FULL. With a deck that lacks a fixed floor's
-# place (depths 1 to 4), that floor is drawn like the floors from 5.
+# place (depths 1 to 5), that floor is drawn like the floors from 6: so BEFORE_ARBORETUM, the game's deck
+# as it was before the Arboretum, still gives exactly the floors it always gave, at every depth.
 extends RefCounted
 
 const Floor = preload("res://sim/floor.gd")
@@ -23,6 +25,7 @@ const Clinic = preload("res://sim/clinic.gd")
 const Annex = preload("res://sim/annex.gd")
 const Playroom = preload("res://sim/playroom.gd")
 const Prison = preload("res://sim/prison.gd")
+const Arboretum = preload("res://sim/arboretum.gd")
 const Entity = preload("res://sim/entity.gd")
 const Rng = preload("res://sim/rng.gd")
 
@@ -36,9 +39,12 @@ const ARBORETUM := &"arboretum"
 ## Every floor a Clinic: the default of a run, so the stored goldens stay as recorded.
 const CLINIC_ONLY: Array[StringName] = [&"clinic"]
 ## The game's deck.
-const FULL: Array[StringName] = [&"clinic", &"annex", &"playroom"]
+const FULL: Array[StringName] = [&"clinic", &"annex", &"playroom", &"arboretum"]
+## The game's deck before the Arboretum: every floor it gives is the floor it gave then (anything recorded
+## with it, at any depth, is unchanged).
+const BEFORE_ARBORETUM: Array[StringName] = [&"clinic", &"annex", &"playroom"]
 ## The fixed floors, by depth (index 0 is the prison, which is never drawn).
-const FIXED: Array[StringName] = [&"prison", &"clinic", &"clinic", &"annex", &"playroom"]
+const FIXED: Array[StringName] = [&"prison", &"clinic", &"clinic", &"annex", &"playroom", &"arboretum"]
 
 ## The Minder's stroll outside a count (seek.gd WANDER_SPEED).
 const WANDER_SPEED := 1.2
@@ -133,6 +139,8 @@ static func generate(seed: String, depth: int, deck: Array = FULL) -> Floor.Floo
 			return Annex.generate_annex(seed, depth)
 		PLAYROOM:
 			return Playroom.generate_playroom(seed, depth)
+		ARBORETUM:
+			return Arboretum.generate_arboretum(seed, depth)
 	return Clinic.generate_clinic(seed, depth)
 
 ## The resident a floor starts with, at plan.entity_start in its own body. THE one place a floor's

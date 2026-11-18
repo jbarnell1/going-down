@@ -41,6 +41,7 @@ const Walls = preload("res://sim/walls.gd")
 const Move = preload("res://sim/move.gd")
 const Playroom = preload("res://sim/playroom.gd")
 const Hides = preload("res://sim/hides.gd")
+const Arboretum = preload("res://sim/arboretum.gd")
 
 const CM := 200
 ## A player's body radius, cm (net/session.gd PLAYER_RADIUS).
@@ -90,6 +91,18 @@ const KINDS := {
 	&"cabinet": [90, 60, true],
 	&"desk": [160, 80, false],
 	&"table": [180, 100, false],
+	# The Arboretum (sim/arboretum.gd): trunks, the dead trees, lamp posts, the small landmarks' pieces, its hides.
+	&"trunk": [30, 30, true],
+	&"dead_tree": [50, 50, true],
+	&"lamp": [20, 20, true],
+	&"fountain": [120, 120, false],
+	&"statue": [120, 60, false],
+	&"arch": [120, 40, true],
+	&"sundial": [80, 80, false],
+	&"shed": [90, 60, true],
+	&"bench": [180, 60, false],
+	&"under": [120, 50, false],
+	&"log": [160, 50, false],
 }
 const TURNED: Array[StringName] = [&"wheelchair", &"gurney"]
 ## The Annex meeting room's table (client/annex_view.gd draws it): 4.4 by 1.3 m.
@@ -156,6 +169,14 @@ static func pieces_for(plan: Floor.FloorPlan, floor_seed: String = "", depth: in
 	var sd := floor_seed if floor_seed != "" else plan.seed
 	var dp := depth if depth >= 0 else plan.depth
 	var c := _ctx(plan)
+	if plan.place == &"arboretum":
+		# The Arboretum: its hides, then the garden's props where the generator stood them (sim/arboretum.gd:
+		# landmark pieces, lamp posts, dead trees, trunks), every one solid.
+		for h in Hides.hides_for(plan, sd):
+			_add_hide(c, h)
+		for pr: Array in Arboretum.props(plan):
+			_commit(c, _piece(c, pr[0], -1, 0, pr[1], pr[2], pr[3]))
+		return c.out
 	if plan.place != &"clinic" and plan.place != &"annex":
 		return c.out
 	for h in Hides.hides_for(plan, sd):
