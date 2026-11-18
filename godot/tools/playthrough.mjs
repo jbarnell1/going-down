@@ -329,6 +329,23 @@ s = await until((s) => s.blackout === true && s.client.emergency >= 1, 8000, 50)
 check('the blackout: dark, emergency lighting on', s.blackout && s.client.emergency >= 1, `emergency ${s.client.emergency}`);
 await wait(200);
 await shot('blackout-emergency-strips');
+// The player's brightness (client/brightness.gd, the tape's last step) is clamped so that at its top the
+// blackout is still dark: the mean of this blackout frame at the lowest, the default and the highest setting.
+{
+  const luma = {};
+  for (const [name, level] of [['min', 0], ['max', 20], ['default', 10]]) {
+    await cmd(`brightness ${level}`);
+    await wait(150);
+    luma[name] = JSON.parse(await cmd('luma'));
+    await shot(`blackout-brightness-${name}`);
+  }
+  const f = (k) => `${luma[k].mean.toFixed(4)} (linear ${luma[k].linear.toFixed(4)})`;
+  const up = luma.max.mean / luma.default.mean;
+  const down = luma.min.mean / luma.default.mean;
+  check('the brightness range keeps the blackout dark (max at most about 2.2x the default, min about 0.6x)',
+    luma.min.mean < luma.default.mean && luma.default.mean < luma.max.mean && up <= 2.3 && down >= 0.5,
+    `mean luma min ${f('min')}, default ${f('default')}, max ${f('max')}; max/default ${up.toFixed(2)}, min/default ${down.toFixed(2)}`);
+}
 // In the dark the Orderly is drawn as it is (owner, 17 Nov: "If the lights are off, don't make a
 // silhouette, just don't hide it"; net/client.gd draw_in_dark, T20a). This replaces the old rule (never
 // drawn while dark): on every dark frame it is not hidden (unless it has us: taken, or the catch's noise),
