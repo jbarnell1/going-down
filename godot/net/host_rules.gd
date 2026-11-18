@@ -61,6 +61,9 @@
 #    game's rooms ask for it (the server's always, playing alone with the game's deck), so the Clinic's and the
 #    Annex's drawers, gurneys, lockers, copiers and boxes can be searched (F held) for credits, notes and cartons.
 #    prepare() turns it on before the first tick. The soft catch keeps what was opened and found on the real tick.
+#  - The four-slot inventory (sim/run.gd inventory, sim/inventory.gd, S1): off unless asked (`inventory`, the last
+#    parameter); the game's rooms ask for it. prepare() turns it on before the first tick. The soft catch keeps the
+#    bags and the pickups of the real tick (what the caught player carried fell where they were caught).
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -109,10 +112,14 @@ var day_lock: bool
 var furniture: bool
 ## Findables (off unless asked; sim/run.gd findables, FD9).
 var findables: bool
+## The four-slot inventory (off unless asked; sim/run.gd inventory, S1).
+var inventory: bool
 
 func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false,
 		watchers_: bool = false, relocation_: bool = false, long_dark_: bool = false, paced_: bool = false, car_waits_: bool = false,
-		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false, furniture_: bool = false, findables_: bool = false) -> void:
+		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false, furniture_: bool = false, findables_: bool = false,
+		inventory_: bool = false) -> void:
+	inventory = inventory_
 	findables = findables_
 	playroom_tuned = playroom_tuned_
 	furniture = furniture_
@@ -222,6 +229,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_furniture(s)
 	if findables and not s.findables:
 		s = Run.with_findables(s)
+	if inventory and not s.inventory:
+		s = Run.with_inventory(s)
 	return _capped(s)
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web
@@ -342,6 +351,11 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 		st.find = r.state.find
 		st.lore_used = r.state.lore_used
 		st.items = r.state.items
+		# The inventory (S1): the bags and pickups of the real tick.
+		st.bags = r.state.bags
+		st.pickups = r.state.pickups
+		st.pickups_plan = r.state.pickups_plan
+		st.pickup_seq = r.state.pickup_seq
 		st.players = players
 		st.summary = null
 		var kept_events: Array[Dictionary] = []
@@ -387,4 +401,7 @@ static func _copy_input(i: Run.PlayerInput) -> Run.PlayerInput:
 	n.peel = i.peel
 	n.search = i.search
 	n.search_fast = i.search_fast
+	n.inv_select = i.inv_select
+	n.inv_op = i.inv_op
+	n.inv_arg = i.inv_arg
 	return n

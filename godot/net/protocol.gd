@@ -31,6 +31,7 @@ const Stamina = preload("res://sim/stamina.gd")
 const Face = preload("res://face/face_codec.gd")
 const Findables = preload("res://sim/findables.gd")
 const Settings = preload("res://sim/settings.gd")
+const Inventory = preload("res://sim/inventory.gd")
 
 const PROTOCOL_VERSION := 1
 
@@ -206,6 +207,20 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    a change and once a second after that, [rev, [[id, value], ...]] (every value in force that is not the game's),
 ##    with the 16th to 24th null when absent. A client keeps the newest list as its tuning (net/client.gd);
 ##  - the event "tuned" {rev, by, id, was, v, when, line}: the one-line notice of a change going into the run.
+## The four-slot inventory (sim/run.gd inventory, sim/inventory.gd; S1). New in the Godot game, and only ever sent in a
+## run with it, so a run without it sends exactly what it did before:
+##  - the input gains four elements after the Annex's (which, with the Playroom's, are then sent as 0 when unused,
+##    27 in all): [invSel, invs, invOp, invArg]. invSel is the slot the player asks to hold (0 to 3, -1 for none
+##    asked yet); invs counts the requests made so far and invOp (INV_OPS index) and invArg are the newest:
+##    "drop" (arg 0), "take" (arg the pickup's id) or "give" (arg the crewmate's id). Decoded "invSel", "invs",
+##    "invOp", "invArg" only when sent;
+##  - the world gains a 27th element, the inv block ("inv" decoded), with the 16th to 26th null when absent:
+##    [[[player id, selected slot, [slot, slot, slot, slot]], ...], [[pickup id, item, count, body], ...]], a slot
+##    [item, count] or 0 for empty, an item its index in Inventory.ITEMS;
+##  - events "itemDropped" {playerId, pickup, item, count, at, why: drop, down}, "itemTaken" {playerId, pickup,
+##    item, count, left}, "itemGiven" {playerId, to, item, count}, "invRefused" {playerId, op, why: full,
+##    theirFull, reach, empty, gone, busy} and "searchFull" {playerId, piece} (a carton found with no room).
+const INV_OPS: Array[String] = ["", "drop", "take", "give"]
 
 ## Telemetry (client/telemetry.gd -> server/night_log.gd). New in the Godot game: [1, "T", kind, body] for kind
 ## "hb" (a heartbeat: body is a small JSON object as text) or "log" (one error or warning line), and
@@ -398,7 +413,52 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < 25:
 			out.append(null)
 		out.append(enc_find(w["find"]))
+	if w.get("inv") != null:
+		while out.size() < 26:
+			out.append(null)
+		out.append(enc_inv(w["inv"]))
 	return out
+
+## The inv block (see the header) from its readable form {bags: [{playerId, sel, slots: [[item, count] x4]}],
+## pickups: [{id, item, count, at (a body)}]}.
+static func enc_inv(k: Dictionary) -> Array:
+	var bags: Array = []
+	for b: Dictionary in k["bags"]:
+		var slots: Array = []
+		for s: Array in b["slots"]:
+			slots.append([Inventory.ITEMS.find(String(s[0])), s[1]] if int(s[1]) > 0 else 0)
+		bags.append([b["playerId"], b["sel"], slots])
+	var pickups: Array = []
+	for p: Dictionary in k["pickups"]:
+		pickups.append([p["id"], Inventory.ITEMS.find(String(p["item"])), p["count"], _enc_body(p["at"])])
+	return [bags, pickups]
+
+static func dec_inv(c: _V, w: Variant) -> Dictionary:
+	var a := _a(c, w, 2, 2)
+	if c.bad:
+		return {}
+	var bags: Array = []
+	for bw: Variant in _a(c, a[0], 0, 64):
+		var b := _a(c, bw, 3, 3)
+		if c.bad:
+			return {}
+		var slots: Array = []
+		for sw: Variant in _a(c, b[2], Inventory.SLOTS, Inventory.SLOTS):
+			if _is_num(sw) and float(sw) == 0.0:
+				slots.append(["", 0])
+				continue
+			var s := _a(c, sw, 2, 2)
+			if c.bad:
+				return {}
+			slots.append([_code(c, Inventory.ITEMS, s[0]), _i(c, s[1], 1, MAX_COUNT)])
+		bags.append({"playerId": _s(c, b[0]), "sel": _i(c, b[1], 0, Inventory.SLOTS - 1), "slots": slots})
+	var pickups: Array = []
+	for pw: Variant in _a(c, a[1], 0, 1024):
+		var p := _a(c, pw, 4, 4)
+		if c.bad:
+			return {}
+		pickups.append({"id": _i(c, p[0], 0, MAX_COUNT), "item": _code(c, Inventory.ITEMS, p[1]), "count": _i(c, p[2], 1, MAX_COUNT), "at": _dec_body(c, p[3])})
+	return {"bags": bags, "pickups": pickups}
 
 ## The find block (see the header) from its readable form {opened: [{piece, by, what, credits, note, fast, t}],
 ## searching: [{playerId, piece, fast, from, done}], items: [{playerId, juice}], base}.
@@ -698,13 +758,21 @@ static func encode(m: Dictionary) -> String:
 				q2(m["hFovDeg"]), q2(m["vFovDeg"]), flags, m["calls"], m["pickUps"], m["ackEvent"], m["ackHt"], floor3(m["renderTime"]), m["placeAck"], seen]
 			var marks := int(m.get("marks", 0))
 			var peels := int(m.get("peels", 0))
-			if int(m.get("hides", 0)) > 0 or marks > 0 or peels > 0:
+			# The inventory (see the header): its four after the Annex's, which are then sent even when unused.
+			var inv := m.get("invSel") != null or int(m.get("invs", 0)) > 0
+			if int(m.get("hides", 0)) > 0 or marks > 0 or peels > 0 or inv:
 				inp.append(int(m.get("hides", 0)))
 				inp.append(int(m.get("fastHides", 0)))
-			if marks > 0 or peels > 0:
+			if marks > 0 or peels > 0 or inv:
 				inp.append(marks)
 				inp.append(peels)
 				inp.append(int(m.get("peelId", -1)))
+			if inv:
+				var op := String(m.get("invOp", ""))
+				inp.append(int(m.get("invSel", -1)))
+				inp.append(int(m.get("invs", 0)))
+				inp.append(INV_OPS.find(op))
+				inp.append(str(m["invArg"]) if op == "give" else (int(m["invArg"]) if op == "take" else 0))
 			return JsJson.stringify(inp)
 		"join":
 			var j: Array = [PROTOCOL_VERSION, "J", m["name"], m["ct"]]
@@ -807,7 +875,7 @@ static func _opt_num(c: _V, v: Variant) -> Variant:
 	return null if v == null else _f(c, v)
 
 static func dec_world(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 15, 26)
+	var a := _a(c, w, 15, 27)
 	if c.bad:
 		return {}
 	var blink: Variant = null
@@ -885,8 +953,10 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 		out["solid"] = _i(c, a[23], 1, 1)
 	if a.size() > 24 and (a[24] != null or a.size() == 25):
 		out["tune"] = dec_tune(c, a[24])
-	if a.size() > 25:
+	if a.size() > 25 and (a[25] != null or a.size() == 26):
 		out["find"] = dec_find(c, a[25])
+	if a.size() > 26:
+		out["inv"] = dec_inv(c, a[26])
 	return out
 
 static func _dec_report(c: _V, w: Variant) -> Dictionary:
@@ -949,7 +1019,7 @@ static func decode(text: String) -> Variant:
 						st.tank = _f(c, sa[2], 1.0, 60.0)
 					out["stamina"] = st
 		"I":
-			if a.size() != 18 and a.size() != 20 and a.size() != 23:
+			if a.size() != 18 and a.size() != 20 and a.size() != 23 and a.size() != 27:
 				return null
 			var f := _i(c, a[10], 0, 511)
 			var gait := (f >> 3) & 3
@@ -974,15 +1044,27 @@ static func decode(text: String) -> Variant:
 				out["search"] = true
 			if f & 256:
 				out["searchFast"] = true
-			if a.size() == 20 or (a.size() == 23 and not (_is_num(a[18]) and float(a[18]) == 0.0)):
+			if a.size() == 20 or (a.size() >= 23 and not (_is_num(a[18]) and float(a[18]) == 0.0)):
 				out["hides"] = _i(c, a[18], 1, MAX_COUNT)
 				out["fastHides"] = _i(c, a[19], 0, out["hides"])
-			elif a.size() == 23 and not (_is_num(a[19]) and float(a[19]) == 0.0):
+			elif a.size() >= 23 and not (_is_num(a[19]) and float(a[19]) == 0.0):
 				return null
-			if a.size() == 23:
+			if a.size() >= 23:
 				out["marks"] = _i(c, a[20], 0, MAX_COUNT)
 				out["peels"] = _i(c, a[21], 0, MAX_COUNT)
 				out["peelId"] = _i(c, a[22], -1, MAX_COUNT)
+			if a.size() == 27:
+				# The inventory (see the header).
+				out["invSel"] = _i(c, a[23], -1, Inventory.SLOTS - 1)
+				out["invs"] = _i(c, a[24], 0, MAX_COUNT)
+				var op := _code(c, INV_OPS, a[25])
+				out["invOp"] = op
+				if op == "give":
+					out["invArg"] = _s(c, a[26])
+				elif op == "take":
+					out["invArg"] = _i(c, a[26], 0, MAX_COUNT)
+				else:
+					out["invArg"] = _i(c, a[26], 0, 0)
 		"J":
 			# [1, "J", name, ct] or [1, "J", name, ct, face]; a face that is not valid is no face.
 			if a.size() != 4 and a.size() != 5:

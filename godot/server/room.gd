@@ -76,6 +76,7 @@
 # players slide along the Clinic's and the Annex's pieces instead of walking through them.
 # The run has findables (`findables`, on unless a test turns it off: sim/run.gd, sim/findables.gd; FD9): the
 # Clinic's and the Annex's drawers, gurneys, lockers, copiers and boxes can be searched for credits, notes, juice.
+# The run has the four-slot inventory (`inventory`, on unless a test turns it off: sim/run.gd, sim/inventory.gd; S1).
 extends RefCounted
 
 const Run = preload("res://sim/run.gd")
@@ -170,6 +171,8 @@ var playroom_tuned := true
 var furniture := true
 ## Findables in the next run (the game's; tests may turn it off: sim/run.gd findables, sim/findables.gd, FD9).
 var findables := true
+## The four-slot inventory in the next run (the game's; tests may turn it off: sim/run.gd inventory, S1).
+var inventory := true
 ## Tick cost, for the log: total and worst microseconds, and ticks.
 var tick_us := 0
 var tick_max_us := 0
@@ -344,7 +347,7 @@ func _start(now: float) -> void:
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
 	var q := quota and not HostRules.quota_off_by_arg(false)
 	# The day quota's lock goes with the floor quota (net/host_rules.gd): quota=0 turns both off.
-	rules = HostRules.new(true, 1, Places.FULL, days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables)
+	rules = HostRules.new(true, 1, Places.FULL, days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory)
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))

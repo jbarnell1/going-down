@@ -324,6 +324,11 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	# Findables (FD10): F held to search (main.gd decides when F means a search), sprint with it. Never predicted.
 	lf.search = playing and inp.get("search") == true
 	lf.search_fast = lf.search and inp.get("searchFast") == true
+	# The inventory (S1, client/inventory_view.gd): the slot asked for and one request; the host decides both.
+	if c.playing and status == "ok":
+		lf.inv_select = int(inp.get("invSel", -1))
+		lf.inv_op = str(inp.get("invOp", ""))
+		lf.inv_arg = inp.get("invArg")
 	var f := rc.frame(now, lf)
 	frame = f
 	var placed: Variant = null
@@ -388,6 +393,8 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	snap["downs"] = latest.get("downs")
 	# Findables (FD10, null in a run without them): the host's find block (client.gd findables()).
 	snap["find"] = latest.get("find")
+	# The inventory (S1, null in a run without it): the host's inv block (client.gd inventory()).
+	snap["inv"] = latest.get("inv")
 	if plan_dict.has("_new"):
 		plan_dict.erase("_new")
 		snap["plan"] = plan_dict

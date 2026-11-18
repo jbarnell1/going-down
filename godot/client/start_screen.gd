@@ -42,7 +42,8 @@ const SETTINGS := "user://join.cfg"
 const TAPE_SAVE := "user://tape.cfg"
 const OrientationTape = preload("res://client/orientation_tape.gd")
 ## The controls card (findables-and-day.md section 2): what a first-timer needs in the first minute. The
-## design's Q (STICK AN ARROW) and G (DRINK) rows are left out: neither key does anything in the game yet.
+## design's Q (STICK AN ARROW) and G (DRINK) rows are left out: neither does anything in the game yet. The
+## four-slot inventory (S1, skill-tree.md) adds its two rows after F; its brief gives G to dropping what you hold.
 const CARD_ROWS: Array[Array] = [
 	["W A S D, MOUSE", "WALK, LOOK"],
 	["SHIFT", "SPRINT. IT TIRES YOU"],
@@ -50,6 +51,8 @@ const CARD_ROWS: Array[Array] = [
 	["E", "INSTRUMENT OUT / AWAY"],
 	["RIGHT MOUSE", "HOLD IT UP TO RECORD"],
 	["F", "USE: CALL THE LIFT, SEARCH, HIDE, PICK UP"],
+	["1 2 3 4, WHEEL", "PICK WHAT YOU HOLD"],
+	["G", "DROP WHAT YOU HOLD"],
 	["HOLD R", "EMOTES"],
 	["ESC", "THIS CARD AGAIN"],
 ]

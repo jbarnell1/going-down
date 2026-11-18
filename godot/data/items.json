@@ -1,0 +1,7 @@
+{
+  "about": "The items a slot can hold (sim/inventory.gd ITEMS lists the same ids in the same order). id: the rules' id; short: what the square prints; name: the item in a sentence; usable: whether it can be used from the hand (nothing is used yet: the nerve bar and the shop come later).",
+  "items": [
+    {"id": "juice", "short": "JUICE", "name": "A CARTON OF JUICE", "usable": true},
+    {"id": "badge", "short": "BADGE", "name": "AN OLD CREW BADGE", "usable": false}
+  ]
+}

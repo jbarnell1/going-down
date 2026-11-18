@@ -40,6 +40,8 @@ const CountRun = preload("res://tests/prop_count_run.gd")
 const PropSeek = preload("res://tests/prop_seek.gd")
 const PropLonely = preload("res://tests/prop_lonely.gd")
 const Lonely = preload("res://sim/lonely.gd")
+const Inventory = preload("res://sim/inventory.gd")
+const PropInventory = preload("res://tests/prop_inventory.gd")
 
 const DT := 0.05
 const EPS := 1e-9
@@ -84,13 +86,16 @@ const PROOFS := {
 	&"heal.time": "test_heal_time_and_quiet",
 	&"heal.quiet": "test_heal_time_and_quiet",
 	&"heal.health": "test_heal_health",
+	# S1: carrying (the four-slot inventory).
+	&"inv.stack": "test_inventory_stack_and_hand_reach",
+	&"inv.hand_reach": "test_inventory_stack_and_hand_reach",
 }
 
 ## The rows of later pieces wired so far (sim/settings.gd WIRED_IDS), in the registry's order.
 const MORE: Array[StringName] = [&"minder.stroll", &"minder.hide_time", &"minder.hide_more", &"minder.last_hide", &"minder.search",
 	&"minder.anger_sprint", &"minder.anger_noise", &"minder.anger_cool",
 	&"lift.false_stop", &"lift.board", &"lift.hold", &"lift.ride", &"dark.min", &"dark.max", &"dark.first_min", &"dark.first_max", &"dark.warning",
-	&"stamina.tank", &"heal.time", &"heal.quiet", &"heal.health"]
+	&"stamina.tank", &"heal.time", &"heal.quiet", &"heal.health", &"inv.stack", &"inv.hand_reach"]
 
 ## The game's value of every setting: the constant the game uses, with the rooms' switches on (paced, the long
 ## dark, the car waits: net/host_rules.gd). This table, not the registry, is the test's oracle.
@@ -153,6 +158,8 @@ static func game_values() -> Dictionary:
 		&"health.sprint": Seek.SPRINT_DRAIN,
 		&"health.rest": Seek.REST_GAIN,
 		&"heal.health": Run.HEAL_HEALTH,
+		&"inv.stack": float(Inventory.STACK),
+		&"inv.hand_reach": Inventory.HAND_REACH,
 		&"quota.each": float(Run.QUOTA_PER_PLAYER),
 		&"quota.step": Run.QUOTA_DEPTH_STEP,
 		&"pay.step": Run.DEPTH_PAY_STEP,
@@ -179,7 +186,7 @@ static func ten_at_today() -> Dictionary:
 func test_registry_rows(t: T) -> void:
 	var game := game_values()
 	var rows := Settings.list()
-	t.eq(rows.size(), 66, "rows in the registry")
+	t.eq(rows.size(), 68, "rows in the registry")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -229,7 +236,7 @@ func test_registry_rows(t: T) -> void:
 	t.check(wired == want and want.size() == TEN.size() + MORE.size(), "the wired rows are exactly those of LS1 and the groups wired since, in order: %s" % str(wired))
 	t.eq(by_group.get(&"residents", 0), 26, "residents")
 	t.eq(by_group.get(&"lift", 0), 12, "the lift and the dark")
-	t.eq(by_group.get(&"players", 0), 13, "players")
+	t.eq(by_group.get(&"players", 0), 15, "players")
 	t.eq(by_group.get(&"earning", 0), 8, "earning")
 	t.eq(by_group.get(&"hiding", 0), 3, "hiding")
 	t.eq(by_group.get(&"speeds", 0), 4, "player speeds, the last group")
@@ -1241,6 +1248,37 @@ func test_heal_health(t: T) -> void:
 		t.eq(Seek.player_of(s.seek, "p0").health, v, "heal.health = %.0f: the healed player's health" % v)
 	var r0 := CountRun.Rig.new("ls5-health-0")
 	t.eq(Settings.f(r0.st.tuning, &"heal.health", Run.HEAL_HEALTH), Run.HEAL_HEALTH, "untuned: Run.HEAL_HEALTH")
+
+## S1, carrying: ONE SLOT HOLDS (a pickup of five juice taken into empty hands: slot 1 holds exactly the number, the rest
+## stays on the floor) and HAND OVER WITHIN (a hand-over 5 cm inside the reach goes through, 5 cm outside is refused),
+## each at least, today's and most, through the rules.
+func test_inventory_stack_and_hand_reach(t: T) -> void:
+	var ids: Array[String] = ["p0", "p1"]
+	var s0 := PropInventory.open_doors(PropInventory.inv_run("ls-inv", ids))
+	var a := PropInventory.spot(s0, -1.5, -0.7)
+	var b := PropInventory.spot(s0, -1.5, 0.7)
+	var row := Settings.row(&"inv.stack")
+	for v: float in [row.lo, row.today, row.hi]:
+		var s := s0.copy()
+		s.pickups = [Inventory.Pickup.make(1, "juice", 5, a)]
+		s.pickups_plan = s.plan
+		s = Run.with_tuning(s, {&"inv.stack": v})
+		var r := PropInventory.tick(s, PropInventory.ins2(PropInventory.req(PropInventory.inp("p0", a), &"take", 1), PropInventory.inp("p1", b)))
+		var bag := Inventory.bag_of(r.state.bags, "p0")
+		t.eq(bag.count(0), roundi(v), "inv.stack = %d: slot 1 holds" % roundi(v))
+		t.eq(Run.items_in_world(r.state), {"juice": 5}, "inv.stack = %d: nothing made or lost" % roundi(v))
+	var dx := b.x - a.x
+	var dz := b.z - a.z
+	var dl := sqrt(dx * dx + dz * dz)
+	var hr := Settings.row(&"inv.hand_reach")
+	for v: float in [hr.lo, hr.today, hr.hi]:
+		var s := Run.with_tuning(PropInventory.with_bags(s0, {"p0": [["badge", 1]]}), {&"inv.hand_reach": v})
+		for d: float in [v - 0.05, v + 0.05]:
+			var at := Move.Body.make(a.x + dx / dl * d, a.z + dz / dl * d, a.level, a.y)
+			var r := PropInventory.tick(s, PropInventory.ins2(PropInventory.req(PropInventory.inp("p0", a), &"give", "p1"), PropInventory.inp("p1", at)))
+			t.eq(Inventory.bag_of(r.state.bags, "p1").totals().size(), 1 if d < v else 0, "inv.hand_reach = %.1f: a hand-over at %.2f m" % [v, d])
+	t.eq(Inventory.stack_limit(null, "p0"), Inventory.STACK, "untuned: Inventory.STACK")
+	t.eq(Inventory.hand_reach(null), Inventory.HAND_REACH, "untuned: Inventory.HAND_REACH")
 
 # ---------------------------------------------------------------------------------------------
 # 5. Every wired id has a proof.

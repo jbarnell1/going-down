@@ -61,6 +61,8 @@ const DayView = preload("res://client/day_view.gd")
 const SearchView = preload("res://client/search_view.gd")
 const NoteReaderScript = preload("res://client/note_reader.gd")
 const FindablesRules = preload("res://sim/findables.gd")
+# The four-slot inventory on screen (S1): client/inventory_view.gd.
+const InventoryViewScript = preload("res://client/inventory_view.gd")
 ## Logs, crash and F9 reports for game night (client/telemetry.gd): read-only on this node.
 const Telemetry = preload("res://client/telemetry.gd")
 const BuildInfo = preload("res://net/build_info.gd")
@@ -128,6 +130,16 @@ var search_view := SearchView.new()
 var note_reader: NoteReaderScript
 var t_search: Variant = null
 var _finds_seen := false
+## The four-slot inventory (S1): the squares, F's take and give, the refusals (client/inventory_view.gd); what the
+## keys asked for since the last frame (a slot 0 to 3 or -1, a wheel step, a request and its argument); the slot
+## last asked for and when (so a quick scroll counts from it, not from a snapshot that has not caught up).
+var inv_view: InventoryViewScript
+var pending_inv_sel := -1
+var pending_inv_step := 0
+var pending_inv_op := ""
+var pending_inv_arg: Variant = null
+var _inv_want := -1
+var _inv_want_at := -100000
 ## The hints this screen triggers itself (client/hint_cues.gd; the gate is client/hints.gd, AH1).
 var hint_cues := HintCues.new()
 ## The day quota on screen (FD3): the HUD's corner line, the lift's day monitor and BANK paint, CLOSED UNTIL MORNING (client/day_view.gd).
@@ -498,6 +510,10 @@ func _build_view() -> void:
 	note_reader = NoteReaderScript.new()
 	note_reader.name = "NoteReader"
 	hud.add_child(note_reader)
+	# The four-slot inventory (S1): the squares at the bottom, over the HUD.
+	inv_view = InventoryViewScript.new()
+	inv_view.name = "InventoryView"
+	hud.add_child(inv_view)
 	start = StartScreen.new()
 	start.name = "StartScreen"
 	add_child(start)
@@ -727,6 +743,7 @@ func _clear_world() -> void:
 	down_view.reset()
 	search_view.reset()
 	note_reader.close()
+	inv_view.reset()
 	spots_root = null
 
 # --- runs and floors ----------------------------------------------------------------------------
@@ -751,6 +768,8 @@ func _on_new_run() -> void:
 	down_view.reset()
 	search_view.reset()
 	note_reader.close()
+	inv_view.reset()
+	_inv_want = -1
 	_finds_seen = false
 	_turn_until = -1
 	# The welcome is held WELCOME_HOLD seconds (the car and the crew first, then the voice). In a browser
@@ -851,6 +870,9 @@ func _input(event: InputEvent) -> void:
 		if mb.pressed and not automated and mb.button_index == MOUSE_BUTTON_LEFT and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not wheel_open:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			_esc_menu = false
+		elif mb.pressed and not wheel_open and (mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+			# The four-slot inventory (S1): the wheel steps through the squares.
+			inv_key("down" if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN else "up")
 	elif event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
 		if wheel_open:
@@ -888,6 +910,12 @@ func _input(event: InputEvent) -> void:
 			raise_latch = not raise_latch
 		elif k.physical_keycode == KEY_F and _station() == "kiosk":
 			_open_kiosk()
+		elif k.physical_keycode >= KEY_1 and k.physical_keycode <= KEY_4:
+			inv_key(str(k.physical_keycode - KEY_1 + 1))
+		elif k.physical_keycode == KEY_G:
+			inv_key("g")
+		elif k.physical_keycode == KEY_F and inv_key("f"):
+			pass
 		elif k.physical_keycode == KEY_F:
 			pending_call = true
 			pending_pick = true
@@ -898,6 +926,32 @@ func _input(event: InputEvent) -> void:
 		elif k.physical_keycode == KEY_T:
 			var st: float = tape_mat.get_shader_parameter("strength")
 			tape_mat.set_shader_parameter("strength", 0.0 if st > 0.5 else 1.0)
+
+## The four-slot inventory's keys (S1): "1" to "4", "up" / "down" (the wheel), "g" (drop what you hold), "f" (take or
+## give, only while the inventory's prompt is the one on screen: heal, the bunk, the lift, a tape and a hide come
+## first). Returns whether the key was the inventory's. The host decides everything; this only asks.
+func inv_key(key: String) -> bool:
+	if mode != "game" or snap.is_empty() or snap.get("inv") == null or kiosk.is_open() or settings_panel.is_open():
+		return false
+	match key:
+		"1", "2", "3", "4":
+			pending_inv_sel = int(key) - 1
+			pending_inv_step = 0
+		"up":
+			pending_inv_step -= 1
+		"down":
+			pending_inv_step += 1
+		"g":
+			pending_inv_op = "drop"
+			pending_inv_arg = 0
+		"f":
+			if inv_view.prompt == "" or hud.prompt != inv_view.prompt:
+				return false
+			pending_inv_op = inv_view.f_op
+			pending_inv_arg = inv_view.f_arg
+		_:
+			return false
+	return true
 
 ## HINTS: ON / OFF (the Esc menu's H): the announcer's hints, kept for this player in user://hints.cfg.
 func _set_hints(on: bool) -> void:
@@ -1109,13 +1163,31 @@ func _game_input(dt: float) -> Dictionary:
 	pending_hide = false
 	pending_hide_fast = false
 	var peek: bool = t_peek if t_peek != null else (in_hide and f > 0.0)
+	# The four-slot inventory (S1): the slot asked for (a quick scroll counts on from the last one asked) and a request.
+	var inv_sel := -1
+	var now_ms := Time.get_ticks_msec()
+	if pending_inv_sel >= 0:
+		inv_sel = pending_inv_sel
+	elif pending_inv_step != 0:
+		var base: int = _inv_want if (_inv_want >= 0 and now_ms - _inv_want_at < 800) else int(inv_view.sel)
+		inv_sel = posmod(base + pending_inv_step, 4)
+	if inv_sel >= 0:
+		_inv_want = inv_sel
+		_inv_want_at = now_ms
+	var inv_op := pending_inv_op
+	var inv_arg: Variant = pending_inv_arg
+	pending_inv_sel = -1
+	pending_inv_step = 0
+	pending_inv_op = ""
+	pending_inv_arg = null
 	var aspect := 480.0 / 270.0
 	var hfov := rad_to_deg(2.0 * atan(tan(deg_to_rad(VFOV) * 0.5) * aspect))
 	return {"dt": dt, "f": f, "r": r, "sprint": sprint, "creep": creep, "yaw": yaw, "pitch": pitch,
 		"hfov": hfov, "vfov": VFOV, "raised": raised and not still, "call": call, "hold": hold, "pickUp": pick, "still": still, "use": use,
 		"hide": hide, "hideFast": hide_fast, "peek": peek,
 		# Findables (FD10): F held for the search client/search_view.gd offered on the last frame.
-		"search": search_view.want_search and not hide and not call, "searchFast": search_view.want_fast}
+		"search": search_view.want_search and not hide and not call, "searchFast": search_view.want_fast,
+		"invSel": inv_sel, "invOp": inv_op, "invArg": inv_arg}
 
 func _game_frame(s: Dictionary, dt: float) -> void:
 	var now := Time.get_ticks_msec()
@@ -1136,6 +1208,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	announcer.my_id = link.my_id()
 	_present(s.get("events", []), now)
 	_show_finds_events(s, now)
+	inv_view.on_events(s.get("events", []), link.my_id(), link.names(), now)
 	for em: Dictionary in s.get("emotes", []):
 		others.play_emote(str(em["player"]), str(em["emote"]))
 		emotes_seen.append({"player": em["player"], "emote": em["emote"]})
@@ -1298,6 +1371,11 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	var holding: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and not settings_panel.is_open() and Input.is_action_pressed("use"))
 	down_view.update(s, link.my_id(), link.names(), holding)
 	var me_down := str(me["status"]) == "down" or str(me["status"]) == "out" or _left_out(s)
+	# The four-slot inventory (S1): the squares and what F would take or give here, from the host's block.
+	var lc0 := link.client()
+	inv_view.update(s.get("inv"), link.my_id(), me if not (me_down or ended or noise or _lights_out) else {}, s.get("others", []), yaw, lc0.tuning if lc0 != null else null)
+	inv_view.hidden_now = hud.black or not hud.end_lines.is_empty() or hud.menu_on or hud.out_on
+	inv_view.show_pickups(spots_root)
 	_update_search(s, me, home, station, me_down or ended or noise or kiosk.is_open() or _lights_out)
 	if not ended and not noise and not kiosk.is_open() and not _lights_out and not me_down:
 		if down_view.prompt != "":
@@ -1318,10 +1396,16 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 			prompt = "F  <|> HOLD"
 		elif _tape_in_reach(me):
 			prompt = "F  PICK UP"
+		elif inv_view.f_op == "take" and int(s.get("nearHide", -1)) < 0:
+			# The four-slot inventory (S1): an item on the floor in reach.
+			prompt = inv_view.prompt
 		elif search_view.prompt != "":
 			# Findables (FD10): the piece in reach, or your search under way with its bar.
 			prompt = search_view.prompt
 			hud.prompt_fill = search_view.fill
+		elif inv_view.f_op == "give" and int(s.get("nearHide", -1)) < 0:
+			# The four-slot inventory (S1): facing a crewmate with something in hand (a search in reach comes first).
+			prompt = inv_view.prompt
 	hud.prompt = prompt
 	_show_finds(s, now)
 	_show_day_lock(s)
@@ -1416,7 +1500,8 @@ func _update_search(s: Dictionary, me: Dictionary, home: bool, station: String, 
 	var sprint: bool = str(t_search) == "fast" if t_search != null else (mode == "game" and Input.is_action_pressed("sprint"))
 	var bed: Variant = s.get("bed")
 	var blocked := off or down_view.prompt != "" or (home and bed is Dictionary and (bool((bed as Dictionary)["inBed"]) or bool((bed as Dictionary)["atBunk"]))) \
-		or station != "" or bool(me.get("canCall", false)) or bool(me.get("nearHold", false)) or _tape_in_reach(me) or int(s.get("nearHide", -1)) >= 0
+		or station != "" or bool(me.get("canCall", false)) or bool(me.get("nearHold", false)) or _tape_in_reach(me) or int(s.get("nearHide", -1)) >= 0 \
+		or inv_view.f_op == "take"
 	search_view.update(s, link.my_id(), yaw, f_held, sprint, moving, blocked)
 
 ## This frame's search events: your result line and note (into the reader), the noise of a rushed search.
@@ -2058,6 +2143,23 @@ func _command(c: String) -> String:
 		"search":
 			# Findables (FD10): F held for a search: careful | fast (with sprint) | off | - (the keyboard's).
 			t_search = null if p[1] == "-" else p[1]
+		"inv":
+			# The four-slot inventory (S1): inv key 1|2|3|4|up|down|g|f (as the key or the wheel is pressed) |
+			# inv demo off | inv demo <sel> <item:count,item:count,...> (draws a row nothing in the game can fill yet;
+			# the screenshot of a full row) | inv (what the squares show).
+			if p.size() >= 3 and p[1] == "key":
+				return JSON.stringify({"ok": inv_key(p[2]), "view": inv_view.describe()})
+			if p.size() >= 3 and p[1] == "demo":
+				inv_view.demo_slots = []
+				inv_view.demo_sel = -1
+				if p[2] != "off" and p.size() >= 4:
+					inv_view.demo_sel = int(p[2])
+					for part: String in p[3].split(","):
+						var kv := part.split(":")
+						inv_view.demo_slots.append([kv[0] if kv[0] != "-" else "", int(kv[1]) if kv.size() > 1 else 0])
+					while inv_view.demo_slots.size() < 4:
+						inv_view.demo_slots.append(["", 0])
+			return JSON.stringify(inv_view.describe())
 		"pieces":
 			# The floor's searchable pieces, where to stand at each and its prompt.
 			return JSON.stringify(search_view.pieces_plain())
@@ -2236,6 +2338,16 @@ func _screen_state() -> Dictionary:
 		"withoutOk": start.without_ok, "tapePlaying": start.tape != null and start.tape.playing, "tapeSeen": start.tape_seen,
 		"card": StartScreen.card_lines(), "entry": _entry}
 
+## The inv block with its bodies as plain {x, y, z, level} (for the test channel's JSON).
+static func _inv_plain(block: Variant) -> Variant:
+	if not block is Dictionary:
+		return null
+	var pk: Array = []
+	for p: Dictionary in (block as Dictionary)["pickups"]:
+		var at: Variant = p["at"]
+		pk.append({"id": p["id"], "item": p["item"], "count": p["count"], "at": {"x": at.x, "y": at.y, "z": at.z, "level": at.level} if at is Object else at})
+	return {"bags": (block as Dictionary)["bags"], "pickups": pk}
+
 func _test_state() -> Dictionary:
 	var s := snap
 	if mode != "game" or s.is_empty() or s.has("waiting") or level == null:
@@ -2274,6 +2386,8 @@ func _test_state() -> Dictionary:
 		# Findables (FD10): the host's block, what this screen shows, the reader, the day monitor's rows.
 		"find": {"host": s.get("find"), "view": search_view.describe(), "reader": note_reader.describe(), "hudPrompt": hud.prompt,
 			"fill": hud.prompt_fill, "monitor": lift.day_rows if lift != null else []},
+		# The four-slot inventory (S1): the host's block, what the squares show, the prompt on screen.
+		"inv": {"host": _inv_plain(s.get("inv")), "view": inv_view.describe(), "hudPrompt": hud.prompt},
 		"day": s.get("day"), "hostNow": s.get("hostNow"), "bed": s.get("bed"), "seed": s.get("seed"),
 		"seek": s.get("seek"), "mySeek": s.get("mySeek"), "countEvent": s.get("countEvent"), "nearHide": s.get("nearHide"), "hideCam": s.get("hideCam"),
 		"place": link.plan_dict.get("place", ""),

@@ -33,9 +33,13 @@ func test_the_controls_card(t: T) -> void:
 		["E", "INSTRUMENT OUT / AWAY"], ["RIGHT MOUSE", "HOLD IT UP TO RECORD"], ["F", "USE: CALL THE LIFT, SEARCH, HIDE, PICK UP"],
 		["Q", "STICK AN ARROW"], ["G", "DRINK"], ["HOLD R", "EMOTES"], ["ESC", "THIS CARD AGAIN"],
 	]
-	# Q and G do nothing in the game yet (no key handler sends a mark or a drink): their rows wait.
+	# Q and G (DRINK) do nothing in the game yet (no key handler sends a mark or a drink): their rows wait.
 	var want: Array = design.filter(func(r: Array) -> bool: return r[0] != "Q" and r[0] != "G")
-	t.eq(StartScreenScript.CARD_ROWS.size(), want.size(), "the card has the design's rows but Q and G")
+	# The four-slot inventory (S1, skill-tree.md; its brief): what you hold, and G drops it, after F.
+	var f_at := want.find(["F", "USE: CALL THE LIFT, SEARCH, HIDE, PICK UP"]) + 1
+	want.insert(f_at, ["G", "DROP WHAT YOU HOLD"])
+	want.insert(f_at, ["1 2 3 4, WHEEL", "PICK WHAT YOU HOLD"])
+	t.eq(StartScreenScript.CARD_ROWS.size(), want.size(), "the card has the design's rows but Q and DRINK, and the inventory's two")
 	for i in mini(want.size(), StartScreenScript.CARD_ROWS.size()):
 		t.eq(StartScreenScript.CARD_ROWS[i], want[i], "card row %d" % i)
 	t.eq(StartScreenScript.CARD_LINES, ["RECORD WHAT LIVES ON EACH FLOOR.", "MEET THE QUOTA. CALL THE LIFT.", "STAND ON BANK TO GO HOME, DOWN TO GO DEEPER."] as Array[String], "the three lines under it")

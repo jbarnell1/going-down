@@ -127,6 +127,7 @@ const Day = preload("res://sim/day.gd")
 const Seek = preload("res://sim/seek.gd")
 const Hiding = preload("res://sim/hiding.gd")
 const Findables = preload("res://sim/findables.gd")
+const Inventory = preload("res://sim/inventory.gd")
 
 const EPS := 1e-9
 const TICK := Session.TICK
@@ -195,6 +196,11 @@ class HostPlayer:
 	var mark_pending := false
 	var peels := 0
 	var peel_pending := -1
+	## The inventory (S1): the slot asked for (-1: none yet), the requests counted so far, and the newest one not
+	## yet given to the run ([op, arg], or [] for none).
+	var inv_sel := -1
+	var invs := 0
+	var inv_pending: Array = []
 
 class History:
 	var o: Entity.OrderlyState
@@ -630,6 +636,12 @@ func _on_input(p: HostPlayer, m: Dictionary, ht: float) -> void:
 	if int(m.get("peels", 0)) > p.peels:
 		p.peels = int(m["peels"])
 		p.peel_pending = int(m.get("peelId", -1))
+	# The inventory (S1): the slot asked for is kept; a new request waits for the next tick.
+	if m.get("invSel") != null:
+		p.inv_sel = int(m["invSel"])
+	if int(m.get("invs", 0)) > p.invs:
+		p.invs = int(m["invs"])
+		p.inv_pending = [StringName(str(m.get("invOp", ""))), m.get("invArg")]
 	_step_gait(p, m)
 	# The body: not until the client has the latest placement; never further than they could go.
 	if p.place != null and int(m["placeAck"]) < int(p.place["seq"]):
@@ -741,6 +753,7 @@ func _step(now: float) -> void:
 			p.emote_pending = false
 			p.mark_pending = false
 			p.peel_pending = -1
+			p.inv_pending = []
 			continue
 		if p == null or not _playing(p) or p.input == null:
 			if p != null:
@@ -749,6 +762,7 @@ func _step(now: float) -> void:
 				p.emote_pending = false
 				p.mark_pending = false
 				p.peel_pending = -1
+				p.inv_pending = []
 			continue
 		var m: Dictionary = p.input
 		var pc: Variant = _pending_catch
@@ -777,6 +791,11 @@ func _step(now: float) -> void:
 		# Findables (sim/run.gd): F held to search, sprint held with it.
 		inp.search = m.get("search", false) == true
 		inp.search_fast = m.get("searchFast", false) == true
+		# The inventory (sim/run.gd): the slot asked for, and the newest request.
+		inp.inv_select = p.inv_sel
+		if not p.inv_pending.is_empty():
+			inp.inv_op = p.inv_pending[0]
+			inp.inv_arg = p.inv_pending[1]
 		inputs.append(inp)
 		p.call_pending = false
 		p.pick_pending = false
@@ -784,6 +803,7 @@ func _step(now: float) -> void:
 		p.emote_pending = false
 		p.mark_pending = false
 		p.peel_pending = -1
+		p.inv_pending = []
 
 	# 5. The run.
 	var r: Run.RunStep = _step_fn.call(s, inputs, TICK)
@@ -1191,7 +1211,22 @@ func world(full: bool = false) -> Dictionary:
 	var fb: Variant = find_block(s)
 	if fb != null:
 		out["find"] = fb
+	# The inventory (S1): every player's slots and what lies on the floor (Protocol "inv").
+	if s.inventory:
+		out["inv"] = inv_block(s)
 	return out
+
+## The inventory (S1; Protocol.enc_inv): {bags: [{playerId, sel, slots}], pickups: [{id, item, count, at}]}, every
+## player in the run's order (an empty bag for one who has never held anything).
+static func inv_block(s: Run.RunState) -> Dictionary:
+	var bags: Array = []
+	for rp in s.players:
+		var b := Inventory.bag_of(s.bags, rp.id)
+		bags.append({"playerId": rp.id, "sel": b.sel, "slots": b.slots.duplicate(true)})
+	var pickups: Array = []
+	for pk: Inventory.Pickup in s.pickups:
+		pickups.append({"id": pk.id, "item": pk.item, "count": pk.count, "at": pk.at})
+	return {"bags": bags, "pickups": pickups}
 
 ## Findables (FD9; Protocol.enc_find): {opened, searching, items, base} as the host has it this tick, or null when
 ## the run has none, or there is nothing to say (off a Clinic or an Annex, with nobody carrying anything).
