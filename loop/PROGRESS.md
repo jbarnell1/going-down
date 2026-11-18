@@ -5,9 +5,9 @@
 ## Status
 
 - **Gates passed:** 7 of 14. **Tasks done:** 63 of 109.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 67.
-- **Now:** T24 The story: the tape, the nightly tapes and the clues. A builder is making the VCR orientation tape now: blue and yellow, narrated, with a video you can watch here when it is done
-- **Last CI result seen:** passed on cb7c7a0
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 75.
+- **Now:** T20d Furniture you bump into. A builder is making chairs, cabinets, desks and hospital beds solid for players, with every hide still reachable
+- **Last CI result seen:** passed on 1459c3b
 - **Answers applied up to:** 2026-11-17T21:11:49.720Z
 
 ## Tasks
@@ -222,16 +222,17 @@
 - [x] **T19c** `done` The Temp's own mechanic
   - Why: No two monsters share a rule: the Temp needs its own way to hunt and to be recorded
   - Evidence: Merged as e54eed3. Checker: quick 230/230, the Lonely/Temp/notes/relocate tests 25/25, ref_* 18/18 with 0 values differing, net_local 10/10, play_down 24/24; two deliberate breaks (company never seen; every holder may record) each turned two tests red. Merged with the 0833 fixes by hand (Lonely is the last rules switch); 241/241 on the merge commit.
-- [ ] **T22** `doing` Live settings for the host
+- [ ] **T22** `todo` Live settings for the host
   - Why: On game night the host can slow a monster that's too fast, lengthen the lift's return or the time you have down, and much more, from an in-game panel, while everyone plays
 - [ ] **T25** `todo` Crash reports, metrics and a same-night hotfix
   - Why: If something breaks on game night we see exactly what happened on whose PC, fix it, and send everyone a new build within minutes
-- [ ] **T23** `doing` The announcer's hints
+- [ ] **T23** `todo` The announcer's hints
   - Why: The lift's announcer teaches the game with snide, creepy hints: board on time or lose your pay, the quota, sneaking in the Playroom, instruments out
-- [ ] **T24** `doing` The story: the tape, the nightly tapes and the clues
+- [ ] **T24** `todo` The story: the tape, the nightly tapes and the clues
   - Why: A blue-and-yellow VCR orientation tape on joining, a new tape each night in the prison, and clues on every floor that the monsters were once crews like yours
   - To do: Your answers: better names (Fable proposing); left out = keep your bed, draw a new face, get a new number, and the next monster wears your old face; bedtime tape on the lift monitor during the ride up, the car waits for it unless over half skip; tape shot 16: the diamond body for two frames, then one more two-frame flicker
   - To do: Names chosen: Lidgate, the Soke, Continuance, 'Leave it with us.', Lidgate Reception Centre, Day Release, Crew 41 (script updated)
+  - To do: After the merge reaches main: copy the tape's five takes into assets_src/voice/takes and rewrite the audition page there (generate.mjs --page), so the tape's narration can be auditioned beside the hints
 - [ ] **T19d** `todo` Traits re-roll per floor
   - Why: Recognising the monster never tells you how to survive it
 - [ ] **T19e** `todo` Monsters slip away and reappear out of view
@@ -251,13 +252,13 @@
   - To do: Your answer: make the car take longer to arrive so a few blinks come before the full blackout (today about 2 blinks on average)
 - [ ] **T20h** `todo` A bit more stamina, monsters paced to match
   - Why: You can run a little longer, and the monsters are retuned so they stay just as dangerous
-- [ ] **T15m** `doing` Playroom tuning from your play
+- [ ] **T15m** `todo` Playroom tuning from your play
   - Why: A warning line on arrival to sneak, more time to hide, the ball pit lowers your view so you can watch it search, an anger bar, and a reminder to get your instrument out
   - To do: Hide time is 6 s today (the 30-45 s is the seeking). Make it 30-45 s to hide, counted aloud
   - To do: Your Minder answer: it just wanders; within 1 m it grabs you and drags you to the party table; once angered it hunts actively, and the intercom says not to run while it hunts; relocation is on for it
-- [ ] **T20d** `todo` Furniture you bump into
+- [ ] **T20d** `doing` Furniture you bump into
   - Why: Beds, chairs, cabinets and desks block you, which hiding needs
-- [ ] **T20e** `todo` The day quota you can see, and no going home short
+- [ ] **T20e** `doing` The day quota you can see, and no going home short
   - Why: You know how close you are to the day's target; BANK is refused until it is met, with a snide line from the announcer; in the prison you can only shop and sleep
 - [ ] **T20f** `todo` Controls card and a ready-up screen
   - Why: Everyone reads the controls and readies up, then drops into the lift together; the lift waits and never pushes anyone out
@@ -324,11 +325,12 @@
   - To do: Plan: (1) a connection test in the lobby that says plainly whether a direct link to the host works and what kind of router each side has, plus a short note the owner can send a friend to try it this week; (2) a relay (TURN) path for the pairs that cannot link directly. The public build is a static site in a public repo, so the relay's secret cannot live in it: use a provider that hands out short-lived credentials through a tiny free hosted function the owner deploys, or a free-tier static credential that is quota-limited. Research current free offerings first, then give the owner exact sign-up steps on the Questions page. (3) Also warn in the lobby that the host must keep the game tab in front (a background tab stalls the run).
   - To do: Owner (2026-11-16): 'We can definitely run a server on either mo's pc or the homelab pc... server should just be responsible for handling client updates and keeping everyone in sync.' This changes the plan: the game's host logic already runs without a browser (it does in the tests), so a small always-on game server on the lab box can host every run. Friends then connect to it, nobody's router has to accept a direct link, no relay account is needed, and the host's tab going to the background no longer stalls the run. Open point: friends are outside the tailnet, so the server needs one public door; that choice is the owner's (question server-door).
   - To do: Superseded by P3 (the home server in Godot) after the owner chose to play the Godot build on Friday. No relay is being built for the old browser game.
-- [ ] **TP** `todo` Bring the build checks up to the new rules
+- [ ] **TP** `doing` Bring the build checks up to the new rules
   - Why: The build that carries your 0833 fixes can't reach play/ until the scripted playthroughs agree with the new rules (the Orderly drawn in the dark, downs, the longer blackout)
   - To do: playthrough.mjs: the blackout and dark checks still expect the Orderly hidden; owner said draw it (T20a)
   - To do: playthrough.mjs: alone, being caught in the longer, faster blackout now means down, out and the wipe; the run then rides away and every later check fails
   - To do: sound_web.mjs: blackout never seen, so the hum-silent and emergency-drone checks fail; same cause
+  - To do: Add a quick test that loads every script in godot/ (client too): a duplicate constant from the Lonely + sounds merge broke sfx.gd on main and 241 quick tests passed anyway
 
 ## Gates
 
@@ -371,43 +373,43 @@
 
 ## Activity (newest first)
 
+- 2026-11-18 01:19Z Main now holds the Playroom changes, live settings, the announcer hints, the orientation tape and crash reports with the hotfix pipeline (pushed). play/ is still build 0833 until the scripted playthroughs pass. The audition page lists the tape's narration beside the hints
+- 2026-11-18 01:19Z Paused T25: waiting for Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update
+- 2026-11-18 01:19Z Paused T24: waiting for Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update
+- 2026-11-18 01:19Z Paused T23: waiting for Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update
+- 2026-11-18 01:19Z Paused T22: waiting for Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update
+- 2026-11-18 01:19Z Paused T15m: waiting for Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update
+- 2026-11-18 01:03Z Combined-branch check: 277 quick tests, each piece's own tests, the voice check, the hotfix dry run and five deliberate breaks all as expected. It also caught a real bug: with crash reports in, the test servers dropped every player (code 4005). Fixed in the room; down-and-heal is 24/24 and the Playroom check 12/12 again
+- 2026-11-18 00:52Z The usage limit paused all four agents for a few minutes around 18:45; it has reset and all four are running again from where they stopped
+- 2026-11-17 23:43Z The combined branch (Lonely, Playroom tuning, live settings, hints, the tape, crash reports) passed 277 quick tests; a checker is now running the scripted checks and five deliberate breaks on it before it goes to main
+- 2026-11-17 23:40Z Owner: difficulty progression (stronger bosses and/or inherited curses) is tomorrow's decision; skill trees to be thought about too. Nothing is briefed until they decide
+- 2026-11-17 23:38Z Started T20d: Furniture you bump into. A builder is making chairs, cabinets, desks and hospital beds solid for players, with every hide still reachable
+- 2026-11-17 23:38Z Started TP: Bring the build checks up to the new rules. A builder is finishing the build-check update from the kept partial work
+- 2026-11-17 23:27Z Started T20e: The day quota you can see, and no going home short. A builder is making the day quota screens: the lift monitor rows, BANK LOCKED paint, the corner line and the snide refusal lines
+- 2026-11-17 23:27Z Paused T20d: waiting for Stopped when you sent a message mid-run; waiting for your go-ahead to restart
+- 2026-11-17 23:27Z Paused TP: waiting for Stopped when you sent a message mid-run; its partial work is kept; waiting for your go-ahead to restart
+- 2026-11-17 23:21Z Paused T25: waiting for Built; waiting to be merged and checked with the other finished pieces
+- 2026-11-17 23:21Z Crash reports and the hotfix pipeline are built: every client error and a heartbeat go to the server's log, F9 sends a report, the server refuses an out-of-date game with a clear message, one command fetches and summarises the night's logs, and one command runs tests, build, promote and package and prints the deploy steps; 249 quick tests pass, eight deliberate breaks caught
+- 2026-11-17 23:15Z Started T20d: Furniture you bump into. A builder is making chairs, cabinets, desks and hospital beds solid for players, with every hide still reachable
+- 2026-11-17 23:15Z Linked T20d to the North Star: nothing in it (new from the owner's play of 17 Nov; no North Star mechanic covers furniture collision).
+- 2026-11-17 23:14Z Paused T20e: waiting for Rules built; the screens start once the combined branch (Playroom, settings, hints, tape) is committed
+- 2026-11-17 23:14Z Day quota lock built (rules and network): BANK is locked until the day's quota is earned, a refused vote rides down with the same tapes, and holding the car open never counts as an ending; 247 quick tests pass, four deliberate breaks caught. The screens and voice lines are next
+- 2026-11-17 22:32Z New pictures for T15m: Playroom tuning from your play.
+- 2026-11-17 22:32Z New pictures for T15m: Playroom tuning from your play.
+- 2026-11-17 22:23Z The orientation tape is built: 21 shots in 65 s, five narration beats in Bella (958 characters), hold Space to skip; watch the video under the story task
+- 2026-11-17 22:23Z Paused T24: waiting for The tape is built (65 s, narrated, video posted); waiting for its merge and check
+- 2026-11-17 22:23Z Started T20e: The day quota you can see, and no going home short. A builder is making the day quota lock: BANK stays locked until the day's quota is earned, a refused vote rides down with a snide line; the screens come next
+- 2026-11-17 22:21Z Live settings (first piece) reported: 59 settings in the list, 10 already change the game (Orderly/Temp/Minder speeds, lift floors and seconds a floor, the down timer); 239 tests pass at full size with stored results unchanged
+- 2026-11-17 22:21Z New pictures for T24: The story: the tape, the nightly tapes and the clues.
+- 2026-11-17 22:21Z New pictures for T24: The story: the tape, the nightly tapes and the clues.
+- 2026-11-17 22:07Z Started T25: Crash reports, metrics and a same-night hotfix. A builder is making crash reports, logs on the server, an F9 report key, a version check on joining, and a one-command hotfix pipeline for Friday night
+- 2026-11-17 22:06Z Paused T15m: waiting for Built; re-testing on top of the Lonely rule, then its check
+- 2026-11-17 22:06Z Paused T22: waiting for Built and committed (59 host settings, the first ten read by the rules); waiting for its check and merge
+- 2026-11-17 22:06Z Paused T23: waiting for Its check and merge, after the Playroom tuning and live settings
+- 2026-11-17 22:06Z Announcer hints built: 76 lines recorded in both voices (12,088 characters), 26 wired in, 12 waiting on features not built yet (day quota, findables, the shop). HINTS on/off is on H. Listen first: hint_board_1, hint_play_no_run_1, and both takes of hint_hide_2 on the audition page
+- 2026-11-17 22:06Z Started TP: Bring the build checks up to the new rules. A builder is updating the build checks to the new rules (Orderly drawn in the dark, downs, longer blackout) and adding a test that loads every script
+- 2026-11-17 22:02Z Caught a merge break on main (two branches each added PHONE_DB to the sound script, so the game could not load its sounds); fixed and committing. Every game script parses again.
 - 2026-11-17 21:47Z Finished T19c: The Temp's own mechanic.
 - 2026-11-17 21:47Z Promote check of a84aa2b: tests 230/230, play_down 24/24, net_local 10/10, mix 45/45 green; play_web 31/42, play_desktop 34/46 and sound_web red. The checks predate the 0833 rule changes; a builder brings them up to date before the promote
 - 2026-11-17 21:47Z Added task TP: Bring the build checks up to the new rules.
 - 2026-11-17 21:34Z Playroom tuning is built (30-45 s to hide, ball-pit view, anger bar, the 1 m grab); it waits for its check after the Lonely merge
-- 2026-11-17 21:34Z The Temp's Lonely rule passed its check (230 quick tests, two deliberate breaks caught) and is being merged into main
-- 2026-11-17 21:34Z Started T24: The story: the tape, the nightly tapes and the clues. A builder is making the VCR orientation tape now: blue and yellow, narrated, with a video you can watch here when it is done
-- 2026-11-17 21:26Z Paused T24: waiting for Script final with your names. The VCR tape (ST1, recorded narration) goes to the next free builder, first in line
-- 2026-11-17 21:14Z Paused T25: waiting for Planned; starts with the next free builder (high priority for Friday)
-- 2026-11-17 21:14Z Added task T25: Crash reports, metrics and a same-night hotfix.
-- 2026-11-17 21:12Z Took a default: Your answers applied: blackout 20-24 s and a longer wait for the car so a few blinks come first; left-out players wake with the crew; monsters at 3.8; live settings as recommended; all hints recorded in both voices; better story names coming; left-out players keep their bed but draw a new face and get a new number (the next monster wears the old face); the bedtime tape plays on the ride up and the car waits for it unless most skip. Voice cap raised to 100,000 characters.
-- 2026-11-17 21:12Z Applied the owner's new answers.
-- 2026-11-17 21:07Z Everything from today is in the main code and pushed: down and heal, the two-watcher Orderly, monsters slipping away, hiding everywhere, your quick fixes and your second batch of sounds. A full build check is running before it becomes your playable build.
-- 2026-11-17 21:07Z Paused TB: waiting for Merged into main and pushed. In the build check now
-- 2026-11-17 20:58Z Paused T24: waiting for Written: the story (the city Datum, the company Upwell, the sealed district Lowfield, crews before you), a 68-second orientation tape in 21 shots, three bedtime tapes for Friday, 14 notes and clues on each monster. Four questions on your Questions page. Building waits for your OK on the tape script
-- 2026-11-17 20:53Z Paused TB: waiting for Checked green (three mix runs in a row, breathing builds from 27 m, the beds dip under the voice every time). Merging into main and pushing
-- 2026-11-17 20:49Z Started T23: The announcer's hints. An Opus builder is recording the 38 hints in both voices and wiring the ones whose moments exist in the game today
-- 2026-11-17 20:49Z Started T19c: The Temp's own mechanic. Built: the Temp now hunts whoever is alone (nobody within 8 m and nobody in sight within 20 m), chases at 3.9 m/s, breaks off the moment you have company and slips away to someone else, leaving a 'Gone to see' note. A Sonnet agent is re-running the checks
-- 2026-11-17 20:47Z Started T24: The story: the tape, the nightly tapes and the clues. Fable is writing the story bible, the orientation tape script and storyboard, the nightly tapes, the notes and the clues
-- 2026-11-17 20:47Z Added task T24: The story: the tape, the nightly tapes and the clues.
-- 2026-11-17 20:41Z Paused T23: waiting for Written: 38 snide hints with two takes each (e.g. 'Do not delay in boarding. Miss the car, and we keep your credits.'). Three questions on your Questions page. Recording and wiring wait for a free builder
-- 2026-11-17 20:40Z Paused T20f: waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build
-- 2026-11-17 20:40Z Paused T20h: waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build
-- 2026-11-17 20:40Z Paused T20c: waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build
-- 2026-11-17 20:40Z Paused T20a: waiting for Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build
-- 2026-11-17 20:34Z Started T15m: Playroom tuning from your play. An Opus builder is giving you 30-45 s to hide, a ball pit you can see out of, an anger bar, and a Minder that wanders and only grabs you within a metre until it's angry
-- 2026-11-17 20:34Z Started T23: The announcer's hints. Fable is writing the announcer's hints: snide, creepy lines that teach boarding, the quota, the BANK lock, sneaking in the Playroom, instruments out
-- 2026-11-17 20:34Z Started T22: Live settings for the host. Designed (59 settings in six groups, F8 opens the host panel). An Opus builder is making the settings list and wiring the first ten: each monster's speed, the lift's return, the down timer
-- 2026-11-17 20:33Z Added task T23: The announcer's hints.
-- 2026-11-17 20:33Z Took a default: Live settings designed (docs/floors/live-settings.md): 59 settings in six groups, F8 opens the host panel. Five questions on the Questions page; building on the recommended defaults.
-- 2026-11-17 20:23Z Started T22: Live settings for the host. Fable is designing the settings: which numbers, how they're grouped, how a change reaches every player safely mid-game
-- 2026-11-17 20:23Z Added task T22: Live settings for the host.
-- 2026-11-17 20:16Z Paused T19b: waiting for Merged into main and pushed (225 quick tests; relocation never lands on any of 6,204 hiding spots over 80 floors; network 10/10; down check 24/24). Goes into your next build
-- 2026-11-17 19:54Z Started TB: Your second batch of sounds in the game. The sound builder is back on the mix fix after the pause
-- 2026-11-17 19:54Z Started T19c: The Temp's own mechanic. The Opus builder is back on the Temp's Lonely rule after the pause
-- 2026-11-17 19:54Z Started T20f: Controls card and a ready-up screen. Built; a Sonnet agent is re-running its checks (restarted after the pause)
-- 2026-11-17 19:54Z Started T20h: A bit more stamina, monsters paced to match. Built; a Sonnet agent is re-running its checks (restarted after the pause)
-- 2026-11-17 19:54Z Started T20c: Longer blackouts before the car comes. Built; a Sonnet agent is re-running its checks (restarted after the pause)
-- 2026-11-17 19:54Z Started T20a: The Orderly stays visible in the dark. Built; a Sonnet agent is re-running its checks (restarted after the pause)
-- 2026-11-17 19:54Z Paused T19b: waiting for Being merged into the main code now with its tests (relocation now also avoids landing on hiding spots)
-- 2026-11-17 17:50Z Paused T19e: waiting for Merged into main and pushed (219 quick tests, relocation/watchers/downs full tests, 3-player network 10/10, down check 24/24). Goes into your next build
