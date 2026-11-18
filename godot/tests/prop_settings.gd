@@ -38,20 +38,24 @@ const HostRules = preload("res://net/host_rules.gd")
 const Snap = preload("res://tests/snap.gd")
 const CountRun = preload("res://tests/prop_count_run.gd")
 const PropSeek = preload("res://tests/prop_seek.gd")
+const PropLonely = preload("res://tests/prop_lonely.gd")
+const Lonely = preload("res://sim/lonely.gd")
 
 const DT := 0.05
 const EPS := 1e-9
 
-## The ten LS1 wires, in the registry's order.
-const TEN: Array[StringName] = [&"orderly.speed", &"orderly.dark_speed", &"temp.speed", &"temp.dark_speed",
+## The LS1 wires, in the registry's order: the first ten, and the Lonely Temp's chase alone (temp.alone_speed),
+## added with the Lonely fix.
+const TEN: Array[StringName] = [&"orderly.speed", &"orderly.dark_speed", &"temp.speed", &"temp.dark_speed", &"temp.alone_speed",
 	&"minder.search_speed", &"minder.run_speed", &"lift.floors_min", &"lift.floors_max", &"lift.floor_time", &"down.time"]
 
 ## Every wired id's proof: the test in this file that measures the thing it changes.
 const PROOFS := {
 	&"orderly.speed": "test_orderly_and_temp_speeds_lit",
 	&"orderly.dark_speed": "test_orderly_and_temp_speeds_in_the_blackout",
-	&"temp.speed": "test_orderly_and_temp_speeds_lit",
-	&"temp.dark_speed": "test_orderly_and_temp_speeds_in_the_blackout",
+	&"temp.speed": "test_temp_chase_speeds_under_lonely",
+	&"temp.dark_speed": "test_temp_chase_speeds_under_lonely",
+	&"temp.alone_speed": "test_temp_chase_speeds_under_lonely",
 	&"minder.search_speed": "test_minder_search_and_run_pace",
 	&"minder.run_speed": "test_minder_search_and_run_pace",
 	&"lift.floors_min": "test_lift_wait_over_500_plans_and_in_a_run",
@@ -73,9 +77,10 @@ static func game_values() -> Dictionary:
 		&"reloc.near_max": Relocate.NEAR_MAX,
 		&"orderly.speed": Run.PACED_HUNT_SPEED,
 		&"orderly.dark_speed": Run.PACED_BLACKOUT_HUNT_SPEED,
-		# The Temp is stepped by the same call as the Orderly (sim/run.gd), at the same paced speeds.
-		&"temp.speed": Run.PACED_HUNT_SPEED,
-		&"temp.dark_speed": Run.PACED_BLACKOUT_HUNT_SPEED,
+		# The Temp is Lonely in the game's rooms (sim/lonely.gd): its chase, lit and in the blackout, and alone.
+		&"temp.speed": Lonely.CHASE_SPEED,
+		&"temp.dark_speed": Lonely.CHASE_SPEED,
+		&"temp.alone_speed": Lonely.SOLO_CHASE_SPEED,
 		&"minder.stroll": Seek.WANDER_SPEED,
 		&"minder.search_speed": Seek.SEARCH_SPEED,
 		&"minder.run_speed": Seek.RUN_SPEED,
@@ -139,7 +144,7 @@ static func ten_at_today() -> Dictionary:
 func test_registry_rows(t: T) -> void:
 	var game := game_values()
 	var rows := Settings.list()
-	t.eq(rows.size(), 59, "rows in the registry")
+	t.eq(rows.size(), 60, "rows in the registry")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -182,12 +187,14 @@ func test_registry_rows(t: T) -> void:
 	var wired: Array[StringName] = []
 	for s in Settings.list(true):
 		wired.append(s.id)
-	t.check(wired == TEN, "the wired rows are exactly the ten of LS1, in order: %s" % str(wired))
-	t.eq(by_group.get(&"residents", 0), 19, "residents")
+	t.check(wired == TEN, "the wired rows are exactly those of LS1, in order: %s" % str(wired))
+	t.eq(by_group.get(&"residents", 0), 20, "residents")
 	t.eq(by_group.get(&"lift", 0), 12, "the lift and the dark")
-	t.eq(by_group.get(&"players", 0), 17, "players")
+	t.eq(by_group.get(&"players", 0), 13, "players")
 	t.eq(by_group.get(&"earning", 0), 8, "earning")
 	t.eq(by_group.get(&"hiding", 0), 3, "hiding")
+	t.eq(by_group.get(&"speeds", 0), 4, "player speeds, the last group")
+	t.eq(group_order[group_order.size() - 1], &"speeds", "player speeds come last")
 	t.eq(Settings.LIFT_DELAY_MIN, Run.CALL_START_DELAY_MIN, "the pair rule's start delay is the run's")
 	t.check(Settings.pair_broken({}).is_empty(), "today's values keep every pair rule: %s" % Settings.pair_broken({}))
 	t.eq(Settings.text(&"orderly.speed", 3.6), "3.60 M/S", "the panel's words")
@@ -249,7 +256,7 @@ static func game_floor(seed: String, depth: int, n: int) -> Run.RunState:
 	var ids: Array[String] = []
 	for k in n:
 		ids.append("p%d" % k)
-	var rules := HostRules.new(true, depth, Places.FULL, false, false, true, true, true, true, true, true)
+	var rules := HostRules.new(true, depth, Places.FULL, false, false, true, true, true, true, true, true, true)
 	var st := rules.prepare(Run.create_run(seed, ids, Places.FULL))
 	var plan := st.plan
 	var dist := Floor.distances_from(plan, plan.landing)
@@ -354,7 +361,7 @@ func test_untuned_empty_and_all_at_today_match_tick_for_tick(t: T) -> void:
 		places[base.plan.place] = int(places.get(base.plan.place, 0)) + 1
 		var style: StringName = &"stay" if i % 2 == 0 else &"flee"
 		var lanes: Array[Lane] = [Lane.new(base, style), Lane.new(Run.with_tuning(base, {}), style), Lane.new(Run.with_tuning(base, ten_at_today()), style)]
-		t.check(lanes[0].st.tuning == null and lanes[1].st.tuning != null and lanes[1].st.tuning.size() == 0 and lanes[2].st.tuning.size() == 10, "%s: the three tunings" % seed)
+		t.check(lanes[0].st.tuning == null and lanes[1].st.tuning != null and lanes[1].st.tuning.size() == 0 and lanes[2].st.tuning.size() == TEN.size(), "%s: the three tunings" % seed)
 		for k in roundi(secs / DT):
 			var prints: Array = []
 			var evs0: Array[Dictionary] = []
@@ -461,7 +468,8 @@ static func pace(seed: String, depth: int, given: Dictionary, dark: bool) -> Pac
 func _speed_proof(t: T, dark: bool) -> void:
 	var seeds := 1 if t.quick else 3
 	var lines: Array[String] = []
-	for who: Array in [[&"orderly", 1], [&"temp", 3]]:
+	# The Orderly only: the Temp is Lonely in the game (test_temp_chase_speeds_under_lonely).
+	for who: Array in [[&"orderly", 1]]:
 		var id := StringName("%s.%s" % [who[0], "dark_speed" if dark else "speed"])
 		# The other resident's id at the other end of its range: a read of the wrong id shows.
 		var other := StringName("%s.%s" % ["temp" if who[0] == &"orderly" else "orderly", "dark_speed" if dark else "speed"])
@@ -715,6 +723,91 @@ func test_down_time(t: T) -> void:
 		t.check(got[0] >= 0.0 and absf(got[1] - got[0] - Run.DOWN_TIME) < 1e-6 and got[2] >= got[1] - 1e-6 and got[2] < got[1] + DT + 1e-6,
 			"changed to %.0f s while down: downed %.3f, until %.3f, out %.3f" % [retune, got[0], got[1], got[2]])
 	t.note("out came down.time after downed at %s; already down keeps its time" % ", ".join(lines))
+
+## The Lonely Temp's chase (sim/lonely.gd, on in the game's rooms) over the first second after it starts: a setup of
+## tests/prop_lonely.gd (the Temp 8 to 15 m from b0 with a clear line, facing them), b0 standing; with a crew (b1
+## 40 m off, so b0 is lonely) unless `solo`, lit unless `dark` (the blackout on: Run.blacked_out). Returns
+## [metres, top speed, chase ticks, dark ticks].
+static func lonely_chase(row: Array, given: Dictionary, solo: bool, dark: bool) -> PackedFloat64Array:
+	var ids: Array[String] = ["b0"]
+	if not solo:
+		ids.append("b1")
+	var s := PropLonely.floor_run(str(row[0]), ids, false, false)
+	var plan := s.plan
+	if dark:
+		# The crew calls the car from the landing and waits there until the blackout is on (the Temp parked).
+		s.orderly = HostRules.parked_orderly(s)
+		var at_car := {}
+		for id in ids:
+			at_car[id] = Run.car_body(s.car, -1.0, 0.0 if id == "b0" else 0.5)
+		s = PropLonely.stand(s, at_car)
+		var first := true
+		for _k in roundi(90.0 / DT):
+			if Run.blacked_out(s):
+				break
+			var ins := PropLonely.inputs(s, at_car, false)
+			ins[0].call = first
+			first = false
+			s = Run.step_run(s, ins, DT).state
+	var tb := PropLonely.cell_body(plan, row[1])
+	var pb := PropLonely.cell_body(plan, row[2])
+	var bodies := {"b0": pb}
+	if not solo:
+		bodies["b1"] = PropLonely.cell_body(plan, row[3])
+	s = PropLonely.temp_at(PropLonely.stand(s, bodies), tb, Entity.yaw_toward(pb.x - tb.x, pb.z - tb.z))
+	s = Run.with_tuning(s, given) if not given.is_empty() else s
+	var out := PackedFloat64Array([0.0, 0.0, 0.0, 0.0])
+	for _k in roundi(1.0 / DT):
+		var before := s.orderly.body
+		var r := Run.step_run(s, PropLonely.inputs(s, bodies, false), DT)
+		s = r.state
+		if s.orderly.lonely_phase != &"chase" or s.orderly.mode != &"hunting":
+			break
+		out[0] += M.hypot2(s.orderly.body.x - before.x, s.orderly.body.z - before.z)
+		out[1] = maxf(out[1], s.orderly.speed)
+		out[2] += 1.0
+		if Run.blacked_out(s):
+			out[3] += 1.0
+	return out
+
+func test_temp_chase_speeds_under_lonely(t: T) -> void:
+	var n := 3 if t.quick else 8
+	var setups: Array = PropLonely.new()._line_setups(n, 9.0, 15.0)
+	t.check(setups.size() >= 2, "setups found: %d" % setups.size())
+	var lines: Array[String] = []
+	# [id, solo, dark]
+	for c: Array in [[&"temp.speed", false, false], [&"temp.dark_speed", false, true], [&"temp.alone_speed", true, false]]:
+		var id: StringName = c[0]
+		var row := Settings.row(id)
+		# The other two at the far end of their ranges: a read of the wrong id shows.
+		var others: Array[StringName] = []
+		for o: StringName in [&"temp.speed", &"temp.dark_speed", &"temp.alone_speed"]:
+			if o != id:
+				others.append(o)
+		for setup: Array in setups:
+			var untuned := lonely_chase(setup, {}, c[1], c[2])
+			var tag0 := "%s %s" % [setup[0], id]
+			t.check(untuned[2] == roundi(1.0 / DT) and (not c[2] or untuned[3] == untuned[2]), "%s: untuned, chased for the whole second (%d ticks, %d dark)" % [tag0, untuned[2], untuned[3]])
+			var want_today := Lonely.SOLO_CHASE_SPEED if c[1] else Lonely.CHASE_SPEED
+			t.check(absf(untuned[1] - want_today) < 1e-6, "%s: untuned chase %.4f m/s, Lonely's own %.2f" % [tag0, untuned[1], want_today])
+			var last := -1.0
+			for v: float in [row.lo, row.today, row.hi]:
+				var given := {id: v}
+				for o in others:
+					var orow := Settings.row(o)
+					given[o] = orow.hi if v < row.hi else orow.lo
+				var got := lonely_chase(setup, given, c[1], c[2])
+				var tag := "%s = %.2f" % [tag0, v]
+				t.check(got[2] == roundi(1.0 / DT), "%s: chased for the whole second (%d ticks)" % [tag, got[2]])
+				t.check(absf(got[1] - v) < 0.02, "%s: top speed %.3f m/s" % [tag, got[1]])
+				t.check(got[0] <= v * 1.0 + 0.05 and got[0] >= v * 0.85, "%s: %.2f m in 1 s" % [tag, got[0]])
+				t.check(got[0] > last, "%s: %.2f m is not more than at the slower speed (%.2f m)" % [tag, got[0], last])
+				last = got[0]
+				if v == row.today:
+					t.check(got[0] == untuned[0] and got[1] == untuned[1], "%s: today's value is the untuned run (%.4f m against %.4f m)" % [tag, got[0], untuned[0]])
+				if setup == setups[0]:
+					lines.append("%s %.2f: %.2f m" % [id, v, got[0]])
+	t.note("the Lonely Temp's first second of a chase (%d setups): %s" % [setups.size(), ", ".join(lines)])
 
 # ---------------------------------------------------------------------------------------------
 # 5. Every wired id has a proof.

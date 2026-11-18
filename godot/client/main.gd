@@ -41,6 +41,8 @@ const Move = preload("res://sim/move.gd")
 const Prison = preload("res://sim/prison.gd")
 const PrisonView = preload("res://client/prison_view.gd")
 const FaceKiosk = preload("res://client/face_kiosk.gd")
+## Live settings (LS3): the host's panel and the notice line, F8.
+const SettingsPanel = preload("res://client/settings_panel.gd")
 const Run = preload("res://sim/run.gd")
 const Day = preload("res://sim/day.gd")
 const HideView = preload("res://client/hide_view.gd")
@@ -99,6 +101,7 @@ var start: StartScreen
 ## The face kiosk's editor over the game (client/face_kiosk.gd): opened by F at the prison's kiosk, or
 ## by the test hook. Done changes the face for everyone in the run.
 var kiosk: FaceKiosk
+var settings_panel: SettingsPanel
 var inst_view: InstrumentView
 ## The Playroom's count and hiding on screen (client/hide_view.gd).
 var hide_view: HideView
@@ -465,6 +468,13 @@ func _build_view() -> void:
 	kiosk.remember = true
 	add_child(kiosk)
 	kiosk.changed.connect(_kiosk_changed)
+	# Live settings (LS3): over everything, the game going on underneath.
+	var panel_layer := CanvasLayer.new()
+	panel_layer.layer = 50
+	add_child(panel_layer)
+	settings_panel = SettingsPanel.new()
+	settings_panel.name = "SettingsPanel"
+	panel_layer.add_child(settings_panel)
 	sfx = Sfx.new()
 	add_child(sfx)
 	var audio3d := Node3D.new()
@@ -505,6 +515,8 @@ func _play_alone() -> void:
 	lr.open_local(seed, nm, entity_on, start.face_code)
 	# The game's run is a run of days: BANK rides up to the prison, bed starts the next day.
 	lr.days = true
+	# Live settings: alone, the player's own changes are kept in user://settings.json (none under automation).
+	lr.open_settings("" if automated else LocalRoom.SETTINGS_FILE)
 	lr.start_run()
 	link = PlayLink.new(lr, true)
 	start.error = ""
@@ -699,6 +711,8 @@ func _input(event: InputEvent) -> void:
 		if _welcome_pending:
 			_welcome_pending = false
 			announcer.start_run()
+	if _settings_input(event):
+		return
 	if mode != "game":
 		# The start screen: Esc shows the controls; everything else is the screen's.
 		if event is InputEventKey:
@@ -869,6 +883,7 @@ func _process(delta: float) -> void:
 	hud.hints_on = announcer.hints.enabled
 	if Time.get_ticks_msec() > _note_until:
 		hud.note = ""
+	settings_panel.rc = link.rc if link != null else null
 	if link == null:
 		hud.menu_on = menu_overlay
 		return
@@ -937,7 +952,7 @@ func _game_input(dt: float) -> Dictionary:
 		r = t_move[1]
 		sprint = t_move[2]
 		creep = t_move[3]
-	elif mode == "game" and not kiosk.is_open():
+	elif mode == "game" and not kiosk.is_open() and not settings_panel.is_open():
 		f = Input.get_action_strength("forward") - Input.get_action_strength("back")
 		r = Input.get_action_strength("right") - Input.get_action_strength("left")
 		sprint = Input.is_action_pressed("sprint")
@@ -945,7 +960,7 @@ func _game_input(dt: float) -> Dictionary:
 	var raised: bool = t_raise if t_raise != null else (raise_latch or (mode == "game" and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)))
 	var me: Dictionary = snap.get("me", {})
 	var hold: bool = t_hold if t_hold != null else (mode == "game" and Input.is_action_pressed("use") and bool(me.get("nearHold", false)))
-	var use: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and Input.is_action_pressed("use"))
+	var use: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and not settings_panel.is_open() and Input.is_action_pressed("use"))
 	var call: bool = pending_call and bool(me.get("canCall", false))
 	# The Playroom: F at a hide's front, or in a hide, is for the hide (the call wins at the lift).
 	var my_seek: Variant = snap.get("mySeek")
@@ -1127,14 +1142,14 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	hud.wheel_labels = EMOTE_LABELS
 	hud.wheel_sel = _wheel_sel() if wheel_open else -1
 	# The menu (the controls) shows whenever the mouse is free: after Esc, and before the first click.
-	hud.menu_on = t_menu or (error_text == "" and not automated and not wheel_open and not kiosk.is_open() and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and hud.end_lines.is_empty())
+	hud.menu_on = t_menu or (error_text == "" and not automated and not wheel_open and not kiosk.is_open() and not settings_panel.is_open() and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and hud.end_lines.is_empty())
 	var prompt := ""
 	var station := _station()
 	var bed: Variant = s.get("bed")
 	var home := s.get("day") != null and int(s["depth"]) == 0 and bed is Dictionary
 	hud.prompt_fill = -1.0
 	# Down first, then out (client/down_view.gd): your own timer or the out screen, or a crewmate to help.
-	var holding: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and Input.is_action_pressed("use"))
+	var holding: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and not settings_panel.is_open() and Input.is_action_pressed("use"))
 	down_view.update(s, link.my_id(), link.names(), holding)
 	var me_down := str(me["status"]) == "down" or str(me["status"]) == "out" or _left_out(s)
 	if not ended and not noise and not kiosk.is_open() and not _lights_out and not me_down:
@@ -1727,6 +1742,8 @@ func _command(c: String) -> String:
 					return "unknown draw command"
 		"faces":
 			return JSON.stringify(_faces_state())
+		"panel":
+			return _panel_command(p, c)
 		"kiosk":
 			# The face kiosk's editor during a run, as F at the prison's kiosk opens it.
 			if p.size() < 2:
@@ -2031,3 +2048,78 @@ func _test_state() -> Dictionary:
 		"bells": sfx.bells.duplicate(), "seekHist": _seek_hist.duplicate(), "camPos": [cam.position.x, cam.position.y, cam.position.z],
 		"events": event_counts,
 	}
+
+# --- live settings (LS3) ------------------------------------------------------------------------
+
+## F8 opens and closes the settings panel (in a run and on the start screens); while it is open it has the keys
+## and the mouse. True when the event was the panel's.
+func _settings_input(event: InputEvent) -> bool:
+	if event is InputEventKey:
+		var k := event as InputEventKey
+		if k.pressed and not k.echo and k.physical_keycode == KEY_F8 and not kiosk.is_open():
+			settings_panel.toggle()
+			if settings_panel.is_open() and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+				Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+			get_viewport().set_input_as_handled()
+			return true
+		if settings_panel.is_open():
+			settings_panel.key(k)
+			get_viewport().set_input_as_handled()
+			return true
+	elif settings_panel.is_open() and (event is InputEventMouseButton or event is InputEventMouseMotion):
+		settings_panel.mouse(event)
+		get_viewport().set_input_as_handled()
+		return true
+	return false
+
+## Tests: the panel. panel open | close | state | key NAME [shift] | set ID VALUE | reset ID | resetall | select SECTION | click X Y
+func _panel_command(p: PackedStringArray, _c: String) -> String:
+	if p.size() < 2:
+		return "panel what"
+	match p[1]:
+		"open":
+			settings_panel.open()
+		"close":
+			settings_panel.close()
+		"state":
+			return JSON.stringify(settings_panel.describe())
+		"key":
+			if p.size() < 3:
+				return "key what"
+			var ev := InputEventKey.new()
+			ev.physical_keycode = OS.find_keycode_from_string(p[2])
+			ev.shift_pressed = p.size() > 3 and p[3] == "shift"
+			ev.pressed = true
+			_settings_input(ev)
+			var up := ev.duplicate() as InputEventKey
+			up.pressed = false
+			if ev.physical_keycode != KEY_F8:
+				_settings_input(up)
+		"set":
+			if p.size() < 4:
+				return "set id value"
+			return "sent" if settings_panel.set_value(StringName(p[2]), float(p[3])) else "not the host"
+		"reset":
+			if p.size() < 3:
+				return "reset id"
+			return "sent" if settings_panel.reset_row(StringName(p[2])) else "not the host"
+		"resetall":
+			return "sent" if settings_panel.reset_all() else "not the host"
+		"forceset":
+			# A change sent to the room whoever this player is (the server's host check, from a real client).
+			if p.size() < 4 or link == null or link.local:
+				return "forceset id value (with friends)"
+			link.rc.call("_queue", "m|" + JSON.stringify({"t": "tune", "id": p[2], "v": float(p[3])}))
+			link.rc.call("_flush", INF)
+			return "sent"
+		"select":
+			if p.size() < 3:
+				return "select section"
+			return "ok" if settings_panel.select(StringName(p[2])) else "no such section"
+		"click":
+			if p.size() < 4:
+				return "click x y"
+			return "hit" if settings_panel.click(Vector2(float(p[2]), float(p[3]))) else "missed"
+		_:
+			return "unknown panel command"
+	return "ok"

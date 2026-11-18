@@ -11,6 +11,8 @@
 #   client -> server  m|{"t":"start"}        start a run (in the lobby; ignored while one runs)
 #                     m|{"t":"name","name":"..."}
 #                     m|{"t":"ping"}         keeps a lobby connection alive (any message does)
+#                     m|{"t":"tune",...}     live settings: the host's change (see the block at the end; the
+#                                            server answers with "tune" to everyone or "tuneNo" to the sender)
 #                     n<E>|<protocol text>   input, join, leave, ping, emote or face change ("C") of run E
 #                                            (the host passes emotes on to the others, rate limited; a
 #                                            join may carry the player's drawn face, which the host passes
@@ -61,6 +63,7 @@ const Host = preload("res://net/host.gd")
 const HostRules = preload("res://net/host_rules.gd")
 const Places = preload("res://sim/places.gd")
 const WsServer = preload("res://net/ws_server.gd")
+const TuningDesk = preload("res://net/tuning_desk.gd")
 
 ## Seconds after a bank or a wipe before the room goes back to the lobby.
 const END_LINGER := 10.0
@@ -140,10 +143,14 @@ var _last_lobby := -INF
 var _dirty := false
 var _log: Callable
 var _day_logged := 1
+## Live settings (LS2): the room's desk (server/server.gd gives it the settings file; none by default).
+var desk: TuningDesk
+var _tune_host := ""
 
 func _init(ws: WsServer, log: Callable) -> void:
 	_ws = ws
 	_log = log
+	desk = TuningDesk.new("", log)
 
 func running() -> bool:
 	return host != null
@@ -164,6 +171,7 @@ func update(now: float) -> void:
 			"joined":
 				people[e["id"]] = e["name"]
 				_ws.send(e["id"], "m|" + JSON.stringify({"t": "you", "id": e["id"]}))
+				_tune_joined(e["id"])
 				_dirty = true
 			"left":
 				people.erase(e["id"])
@@ -173,6 +181,7 @@ func update(now: float) -> void:
 			"message":
 				_on_message(e["id"], e["data"], now)
 	_ws.events.clear()
+	_tune_update(now)
 	if host != null:
 		var tick0 := host.tick
 		var t0 := Time.get_ticks_usec()
@@ -203,6 +212,7 @@ func _end_run() -> void:
 	_log.call("run %d over, back to the lobby" % epoch)
 	host.close()
 	host = null
+	desk.run_ended()
 	rules = null
 	_transport = null
 	_ended_at = -1.0
@@ -225,6 +235,10 @@ func _start(now: float) -> void:
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))
+	# Live settings: everything asked for is in force from the first tick.
+	desk.run_started()
+	host.on_tick = Callable(self, "_tune_tick")
+	host.set_tuning(desk.in_force(), desk.rev)
 	_dirty = true
 	_log.call("run %d started with %d players" % [epoch, roster.size()])
 
@@ -248,6 +262,8 @@ func _on_message(id: String, data: String, now: float) -> void:
 					_dirty = true
 			"ping":
 				pass
+			"tune":
+				_on_tune(id, p, now)
 			_:
 				_ws.kick(id, WsServer.CLOSE_PROTOCOL, "bad message")
 		return
@@ -267,3 +283,85 @@ func _on_message(id: String, data: String, now: float) -> void:
 		_transport.push(id, text)
 		return
 	_ws.kick(id, WsServer.CLOSE_PROTOCOL, "bad message")
+
+# =============================================================================================
+# Live settings (docs/floors/live-settings.md LS2): the host, the desk, the room messages.
+#   client -> server  m|{"t":"tune","id":"orderly.speed","v":3.6}    the host asks for a value
+#                     m|{"t":"tune","id":"orderly.speed","reset":true}   one back to the game's
+#                     m|{"t":"tune","reset":"all"}                    every one back
+#   server -> client  m|{"t":"tune","rev":R,"host":id,"set":{...},"file":bool,"saved":"...","force":{...}?,
+#                        "line":"..."?,"note":{...}?}   to everyone on every change (the line is the notice), to a
+#                                                       joiner as they arrive, and to everyone when the host changes
+#                     m|{"t":"tuneNo","id":"...","why":"host"|"id"|"range"|"pair"|"busy"}   to the sender alone
+# A refused change changes nothing and never closes the connection; a "tune" that is not a Dictionary does (as
+# any m| message).
+
+# ---- WHO THE HOST IS: the one place the room decides it. ------------------------------------------------
+# The first arrival still in the room; passed on in arrival order as people leave. The ready-up screen's
+# own host (FD5) is meant to replace this body when both land: everything below asks only this function.
+func _settings_host_id() -> String:
+	for id: String in people:
+		return id
+	return ""
+# ---- end of who the host is -----------------------------------------------------------------------------
+
+func _tune_name(id: String) -> String:
+	return str(people.get(id, "THE HOST"))
+
+func _tune_send_all(m: Dictionary) -> void:
+	var text := "m|" + JSON.stringify(m)
+	for id: String in people:
+		_ws.send(id, text)
+
+func _tune_joined(id: String) -> void:
+	_tune_host = _settings_host_id()
+	_ws.send(id, "m|" + JSON.stringify(desk.message(_tune_host, {}, desk.join_line())))
+
+## Every frame: the host passed on (everyone is told), and the file looked at for a hand edit.
+func _tune_update(now: float) -> void:
+	var h := _settings_host_id()
+	if h != _tune_host:
+		_tune_host = h
+		if h != "":
+			_log.call("settings: the host is now %s" % h)
+		_tune_send_all(desk.message(h))
+	for note in desk.poll(now):
+		_log.call("settings: " + str(note["line"]).to_lower())
+		_tune_send_all(desk.message(h, note))
+		if host != null:
+			host.set_tuning(desk.in_force(), desk.rev, note)
+
+## After every tick of the run: the car leaving lets the waiting `floor` values in, lights out the `day` ones.
+func _tune_tick(events: Array) -> void:
+	if desk.on_events(events) and host != null:
+		host.set_tuning(desk.in_force(), desk.rev)
+		_tune_send_all(desk.message(_tune_host))
+
+func _tune_refuse(id: String, setting: String, why: String) -> void:
+	_ws.send(id, "m|" + JSON.stringify({"t": "tuneNo", "id": setting, "why": why}))
+
+func _on_tune(id: String, p: Dictionary, now: float) -> void:
+	var setting := str(p.get("id", "")) if p.get("id") is String else ""
+	if id != _settings_host_id():
+		_tune_refuse(id, setting, "host")
+		return
+	var res: Array
+	if p.get("reset") is String and p["reset"] == "all":
+		res = desk.reset_all(_tune_name(id), id, now)
+	elif setting.is_empty():
+		_tune_refuse(id, setting, "id")
+		return
+	elif p.get("reset") is bool and p["reset"]:
+		res = desk.reset(StringName(setting), _tune_name(id), id, now)
+	else:
+		res = desk.ask(StringName(setting), p.get("v"), _tune_name(id), id, now)
+	if res[0] != &"":
+		_tune_refuse(id, setting, String(res[0]))
+		return
+	var note: Dictionary = res[1]
+	if note.is_empty():
+		return
+	_log.call("settings: " + str(note["line"]).to_lower())
+	_tune_send_all(desk.message(_tune_host, note))
+	if host != null:
+		host.set_tuning(desk.in_force(), desk.rev, note)

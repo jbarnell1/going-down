@@ -58,6 +58,18 @@ node godot/tools/night_logs.mjs godot/export/night-logs/*.log --errors-only
 node godot/tools/hotfix.mjs "what the fix is"            # tests, export, playthroughs, promote, package, server; prints the deploy commands
 ```
 
+## Live settings (the host's F8 panel)
+
+The first player in the room is the host (passed on in arrival order). Their changes in the F8 panel are
+checked by `net/tuning_desk.gd` and announced to everyone as one line. With `settings=PATH` (or the
+environment variable `GD_SETTINGS_FILE`) the server keeps them in that JSON file, `{"v":1, "rev":N,
+"saved":"...", "by":"NAME", "set":{"orderly.speed":3.6}}` (only what differs from the game's numbers), with a
+history of one line a change in `PATH.log`; it reads the file at start and again within 2 s of a hand edit
+(announced as THE HOUSE). It writes nothing else. In the container that means a mounted folder:
+`run-on-host.sh` mounts `~/going-down-settings` at `/settings` when that folder exists (owned by uid 10001).
+Without one the changes last until the server stops. Playing alone, the game keeps its own in
+`user://settings.json`. `node godot/tools/play_settings.mjs` checks it end to end.
+
 ## Running it
 
 Locally (Windows, for tests):

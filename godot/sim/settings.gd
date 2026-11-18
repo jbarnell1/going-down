@@ -62,6 +62,8 @@ const GROUPS: Array = [
 	[&"players", "PLAYERS"],
 	[&"earning", "EARNING"],
 	[&"hiding", "HIDING"],
+	# The owner, 17 Nov: player speeds come last.
+	[&"speeds", "PLAYER SPEEDS"],
 ]
 
 ## The sections inside the groups, in order: [id, group, title].
@@ -71,12 +73,12 @@ const SECTIONS: Array = [
 	[&"temp", &"residents", "THE TEMP (THE ANNEX)"],
 	[&"minder", &"residents", "THE MINDER (THE PLAYROOM)"],
 	[&"lift", &"lift", "THE LIFT AND THE DARK"],
-	[&"moving", &"players", "MOVING"],
 	[&"stamina", &"players", "STAMINA"],
 	[&"down", &"players", "DOWN AND HEALING"],
 	[&"health", &"players", "HEALTH (THE PLAYROOM)"],
 	[&"earning", &"earning", "EARNING"],
 	[&"hiding", &"hiding", "HIDING"],
+	[&"moving", &"speeds", "MOVING"],
 ]
 
 ## Whole numbers (read with i()): marked W in ROWS.
@@ -100,9 +102,12 @@ const ROWS: Array = [
 	# The Orderly (the Clinic).
 	[&"orderly.speed", &"orderly", "HUNT SPEED", "how fast it comes while nobody holds it", "m/s", 3.8, 2.4, 4.8, 0.05, &"now", &"LS1", F],
 	[&"orderly.dark_speed", &"orderly", "SPEED IN THE BLACKOUT", "the same, while the lights are out before the car", "m/s", 3.8, 2.4, 4.8, 0.05, &"now", &"LS1", F],
-	# The Temp (the Annex). When Lonely (T19c) is built its chase speed takes over temp.speed.
-	[&"temp.speed", &"temp", "HUNT SPEED", "how fast it comes while nobody holds it", "m/s", 3.8, 2.4, 4.8, 0.05, &"now", &"LS1", F],
-	[&"temp.dark_speed", &"temp", "SPEED IN THE BLACKOUT", "the same, while the lights are out before the car", "m/s", 3.8, 2.4, 4.8, 0.05, &"now", &"LS1", F],
+	# The Temp (the Annex). Lonely (T19c, sim/lonely.gd) is on in the game's rooms: its chase speed is temp.speed
+	# (temp.dark_speed in the blackout, temp.alone_speed with a crew of one), today's its CHASE_SPEED and
+	# SOLO_CHASE_SPEED. Without Lonely (tests only) the Temp's Stillness hunt reads the same two ids.
+	[&"temp.speed", &"temp", "HUNT SPEED", "how fast it chases a player who is alone", "m/s", 3.9, 2.4, 4.8, 0.05, &"now", &"LS1", F],
+	[&"temp.dark_speed", &"temp", "SPEED IN THE BLACKOUT", "the same, while the lights are out before the car", "m/s", 3.9, 2.4, 4.8, 0.05, &"now", &"LS1", F],
+	[&"temp.alone_speed", &"temp", "HUNT SPEED, PLAYING ALONE", "its chase in a run of one player (slower than a walk)", "m/s", 2.6, 1.5, 4.5, 0.1, &"now", &"LS1", F],
 	# The Minder (the Playroom).
 	[&"minder.stroll", &"minder", "STROLL SPEED", "tidying, outside a count", "m/s", 1.2, 0.6, 2.0, 0.1, &"now", &"LS4", F],
 	[&"minder.search_speed", &"minder", "SEARCH SPEED", "going from hide to hide in a count", "m/s", 3.0, 1.5, 4.5, 0.1, &"now", &"LS1", F],
@@ -125,11 +130,6 @@ const ROWS: Array = [
 	[&"dark.first_min", &"lift", "FIRST FLOOR'S BLACKOUT, SHORTEST", "the same on the first floor of a day", "s", 14.0, 5.0, 40.0, 1.0, &"next", &"LS4", F],
 	[&"dark.first_max", &"lift", "FIRST FLOOR'S BLACKOUT, LONGEST", "the same on the first floor of a day", "s", 16.0, 5.0, 40.0, 1.0, &"next", &"LS4", F],
 	[&"dark.warning", &"lift", "BLACKOUT WARNING", "the long flicker before it", "s", 3.0, 1.0, 6.0, 0.5, &"next", &"LS4", F],
-	# Players: moving.
-	[&"player.walk", &"moving", "WALK", "a player's walking speed", "m/s", 3.0, 2.0, 4.0, 0.1, &"floor", &"LS6", F],
-	[&"player.sprint", &"moving", "SPRINT", "a player's sprinting speed", "m/s", 5.0, 3.5, 7.0, 0.1, &"floor", &"LS6", F],
-	[&"player.creep", &"moving", "CREEP", "a player's creeping speed", "m/s", 1.2, 0.6, 2.0, 0.1, &"floor", &"LS6", F],
-	[&"player.raised", &"moving", "WALK WITH THE INSTRUMENT UP", "the cap while recording", "m/s", 2.2, 1.0, 4.0, 0.1, &"floor", &"LS6", F],
 	# Players: stamina.
 	[&"stamina.tank", &"stamina", "A FULL TANK SPRINTS FOR", "seconds of sprinting in a full tank", "s", 7.0, 3.0, 15.0, 0.5, &"now", &"LS5", F],
 	[&"stamina.refill_walk", &"stamina", "REFILL, WALKING", "empty to full", "s", 8.0, 3.0, 20.0, 0.5, &"now", &"LS5", F],
@@ -159,10 +159,17 @@ const ROWS: Array = [
 	[&"hide.in_slow", &"hiding", "GETTING IN, QUIETLY", "seconds to get into a hide quietly", "s", 1.5, 0.5, 4.0, 0.1, &"next", &"LS6", F],
 	[&"hide.in_fast", &"hiding", "GETTING IN, FAST AND LOUD", "seconds to get into a hide fast", "s", 0.5, 0.2, 2.0, 0.1, &"next", &"LS6", F],
 	[&"hide.reach", &"hiding", "HIDE FROM WITHIN", "how near a hide F works", "m", 1.2, 0.8, 2.5, 0.1, &"floor", &"LS6", F],
+	# Player speeds, last (the owner: "player speeds come last").
+	[&"player.walk", &"moving", "WALK", "a player's walking speed", "m/s", 3.0, 2.0, 4.0, 0.1, &"floor", &"LS6", F],
+	[&"player.sprint", &"moving", "SPRINT", "a player's sprinting speed", "m/s", 5.0, 3.5, 7.0, 0.1, &"floor", &"LS6", F],
+	[&"player.creep", &"moving", "CREEP", "a player's creeping speed", "m/s", 1.2, 0.6, 2.0, 0.1, &"floor", &"LS6", F],
+	[&"player.raised", &"moving", "WALK WITH THE INSTRUMENT UP", "the cap while recording", "m/s", 2.2, 1.0, 4.0, 0.1, &"floor", &"LS6", F],
 ]
 
 ## The pieces whose rows the rules read today (`wired`). LS4, LS5 and LS6 add theirs as they wire them.
 const WIRED_PIECES: Array[StringName] = [&"LS1"]
+## Rows of later pieces the rules already read (wired one group at a time, each with its proof).
+const WIRED_IDS: Array[StringName] = []
 
 ## The least wait of a call is its start delay plus the floors: sim/run.gd CALL_START_DELAY_MIN (this file
 ## does not load run.gd, which loads it; tests/prop_settings.gd checks they are equal).
@@ -231,7 +238,7 @@ static func _load() -> void:
 		s.holds = r[9]
 		s.piece = r[10]
 		s.whole = r[11]
-		s.wired = WIRED_PIECES.has(s.piece)
+		s.wired = WIRED_PIECES.has(s.piece) or WIRED_IDS.has(s.id)
 		_rows.append(s)
 		_by_id[s.id] = s
 

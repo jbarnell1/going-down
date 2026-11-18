@@ -41,6 +41,7 @@ const MENU_ROWS: Array[Array] = [
 	["T", "TAPE LOOK ON / OFF"],
 	["HOLD R", "EMOTE WHEEL: AIM, LET GO"],
 	["TAP R", "CLOSE THE WHEEL"],
+	["F8", "HOST SETTINGS"],
 	["ESC", "THIS MENU"],
 ]
 ## The menu's setting row: the announcer's hints (H; client/hints.gd, kept per player).

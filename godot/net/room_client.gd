@@ -29,6 +29,20 @@ var received := 0
 var bytes_in := 0
 var bytes_out := 0
 
+## Live settings (docs/floors/live-settings.md LS2; net/tuning_desk.gd): what the host has asked for ({id:
+## number}, only what differs from the game's), the desk's revision, who the host is, the values in force when
+## some wait for the next floor or tomorrow ({id: number}, else the asked-for list), whether the server keeps a
+## file and when it was last saved; the one-line notices not yet shown (the panel takes them), and the newest
+## refusals of this player's own changes ({id, why}).
+var tune_asked := {}
+var tune_force: Variant = null
+var tune_rev := 0
+var tune_host := ""
+var tune_file := false
+var tune_saved := ""
+var tune_lines: Array[String] = []
+var tune_refusals: Array[Dictionary] = []
+
 var _ws := WebSocketPeer.new()
 var _secret: String
 var _name: String
@@ -92,6 +106,55 @@ func send_telemetry(m: Dictionary) -> bool:
 	_flush(_now)
 	return true
 
+## Whether this player is the host (the only one whose changes the room takes).
+func is_host() -> bool:
+	return my_id != "" and my_id == tune_host
+
+## The host asks for a value. False (nothing sent) unless this player is the host.
+func tune_set(id: StringName, value: float) -> bool:
+	return _tune_send({"t": "tune", "id": String(id), "v": value})
+
+## The host puts one setting back to the game's value.
+func tune_reset(id: StringName) -> bool:
+	return _tune_send({"t": "tune", "id": String(id), "reset": true})
+
+## The host puts every setting back.
+func tune_reset_all() -> bool:
+	return _tune_send({"t": "tune", "reset": "all"})
+
+func _tune_send(m: Dictionary) -> bool:
+	if not is_host():
+		return false
+	_queue("m|" + JSON.stringify(m))
+	_flush(_now)
+	return true
+
+## The values in force (the asked-for list unless some wait).
+func tune_in_force() -> Dictionary:
+	return tune_force if tune_force != null else tune_asked
+
+## A room "tune" message (also net/local_room.gd's own desk): the host's list, and its line once.
+func _take_tune(p: Dictionary) -> void:
+	tune_rev = int(p.get("rev", 0))
+	tune_host = str(p.get("host", ""))
+	tune_file = p.get("file", false) == true
+	tune_saved = str(p.get("saved", ""))
+	var set := {}
+	var given: Variant = p.get("set")
+	if given is Dictionary:
+		for k: Variant in given:
+			if given[k] is float or given[k] is int:
+				set[StringName(str(k))] = float(given[k])
+	tune_asked = set
+	tune_force = null
+	if p.get("force") is Dictionary:
+		var force := {}
+		for k: Variant in p["force"]:
+			force[StringName(str(k))] = float(p["force"][k])
+		tune_force = force
+	if p.get("line") is String and not (p["line"] as String).is_empty():
+		tune_lines.append(p["line"])
+
 func _queue(text: String) -> void:
 	_out.append([_now + delay, text])
 
@@ -146,6 +209,10 @@ func _on_text(text: String, now: float) -> void:
 			"you":
 				my_id = String(p["id"])
 				status = "lobby"
+			"tune":
+				_take_tune(p)
+			"tuneNo":
+				tune_refusals.append({"id": str(p.get("id", "")), "why": str(p.get("why", ""))})
 			"lobby":
 				people = p["people"]
 				epoch = int(p["epoch"])
