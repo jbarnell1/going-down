@@ -5,7 +5,7 @@
 ## Status
 
 - **Gates passed:** 7 of 14. **Tasks done:** 78 of 120.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 93.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 94.
 - **Now:** T25b The exported server proves itself. Server self-check, exported-build check and play_net for the day lock: builder resumed
 - **Last CI result seen:** passed on 6b17496
 - **Answers applied up to:** 2026-11-17T21:11:49.720Z
@@ -279,7 +279,7 @@
 - [x] **T20f** `done` Controls card and a ready-up screen
   - Why: Everyone reads the controls and readies up, then drops into the lift together; the lift waits and never pushes anyone out
   - Evidence: Joining now goes: face, the orientation tape on a first join (skippable, WATCH THE TAPE replays it), then the Ready-up screen with the controls card; everyone drops into the car together after a 5-second count, the host can start without stragglers after 30 seconds, late joiners wait for the next stop. In the promoted build of 18 Nov 06:48 (commit 6b17496); the promote check passed everything incl. the ready-up check 18/18 and the desktop playthrough 46/46; lab-box server updated and the remote test passed.
-- [ ] **T20g** `doing` Things to find: drawers, gurneys, credits, poem notes
+- [ ] **T20g** `todo` Things to find: drawers, gurneys, credits, poem notes
   - Why: Searching furniture (F TO OPEN DRAWER) turns up credits, obscure poems about the monster's rule, and something to restore you
 - [ ] **T26** `doing` The Arboretum: a dark forest floor and the Groundskeeper
   - Why: A new place: no corridors, you steer by landmarks and sound, and a blind monster comes to noise. You asked for the scariest one yet, and dark
@@ -295,7 +295,6 @@
   - Why: Only what you put in your cabinet before bed is kept; everything else is cleared overnight
 - [ ] **T30** `todo` The skill tree window and trades
   - Why: Everyone can take the first layer of all four branches, then each player goes deeper in one trade
-  - To do: Waiting on the owner: what trade nodes cost (old crew badges is a proposal) and whether layer 1 costs credits
 - [ ] **T31** `todo` The first eight skills working in play
   - Why: Deep Pockets, Second Wind, Soft Shoes, Long Burn, Quick Fingers, Field Dressing, Steady Gaze, Throwing Arm
 - [ ] **T21b** `todo` The nerve bar
@@ -398,9 +397,13 @@
 - 2026-11-17: Your answers applied: Lonely as designed (solo Annex: Lonely but slower than one player); eye marks shown; F for cabinets; relocation as designed and on for the Minder (wanders, grabs within 1 m, hunts once angered, voice says don't run); day quota counts everything earned; a wipe is the missed day; juice carton AND a nerve bar; a 4-slot inventory; quick noisy search; ready-up as recommended; the car waits while anyone is aboard, and a returning car waits 30 s, then anyone left out dies and wakes in the prison without their credits.
 - 2026-11-17: Live settings designed (docs/floors/live-settings.md): 59 settings in six groups, F8 opens the host panel. Five questions on the Questions page; building on the recommended defaults.
 - 2026-11-17: Your answers applied: blackout 20-24 s and a longer wait for the car so a few blinks come first; left-out players wake with the crew; monsters at 3.8; live settings as recommended; all hints recorded in both voices; better story names coming; left-out players keep their bed but draw a new face and get a new number (the next monster wears the old face); the bedtime tape plays on the ride up and the car waits for it unless most skip. Voice cap raised to 100,000 characters.
+- 2026-11-18: The cabinet in each cell gets six slots unless the owner says otherwise (they decided the cabinet, not its size).
 
 ## Activity (newest first)
 
+- 2026-11-18 15:07Z Paused T20g: waiting for Built and checked on its branch (349 tests, five breaks caught); being merged into main, then it goes into the next build
+- 2026-11-18 15:00Z Took a default: The cabinet in each cell gets six slots unless the owner says otherwise (they decided the cabinet, not its size).
+- 2026-11-18 15:00Z Owner: yes to old crew badges as the price of trade nodes, the first layer costs credits, and the inventory and shop come before the Groundskeeper's figure.
 - 2026-11-18 14:48Z All notes brought up to date for a change of agent: AGENTS.md written, the North Star folded to Draft 6, the handoff notes rewritten, the README and loop notes corrected.
 - 2026-11-18 14:48Z Added task T26b: The Groundskeeper: Blender figure, voice, pinecones, a full playthrough.
 - 2026-11-18 14:48Z Added task T31: The first eight skills working in play.
@@ -438,6 +441,3 @@
 - 2026-11-18 08:06Z Paused T20f: waiting for Built (controls card, READY, a 5-second count, late joiners, the tape on a first join); a checker is going over the branch before it merges
 - 2026-11-18 08:06Z New pictures for T20f: Controls card and a ready-up screen.
 - 2026-11-18 08:02Z Started T20g: Things to find: drawers, gurneys, credits, poem notes. Searching rules are built; the same builder is trimming how much is hidden and building the on-screen prompt, bar and note reader
-- 2026-11-18 08:02Z Searching rules are built (drawers, gurneys, lockers, filing drawers, boxes, copiers; credits, 9 poems, 14 story pages, juice cartons). Its builder also spotted a real bug: the server build left the game's data files out, so on the real server the Annex's notes, the awards and the upgrade list could not load. Fixed with a test; the server is being rebuilt and redeployed
-- 2026-11-18 07:51Z Started T23b: Voice touch-ups: a grab line, a reworded hint. Queued behind the brightness card with the same builder: a grab line for the Minder, a reworded hint, and the long hint's check
-- 2026-11-18 07:51Z Started T27: A brightness setting with a calibration screen. A builder is making the brightness card (set once per PC, changeable from the Esc menu), then the voice touch-ups

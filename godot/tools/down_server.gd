@@ -1,7 +1,7 @@
 # play_down's server: the home server (server/server.gd) on 127.0.0.1 with its own room code
 # (tools/down_room.gd: the game's room, its resident moved only when the test asks), and a control line for
 # the test on 127.0.0.1:`ctl` (one command a line, one JSON reply a line): `behind <name>` sends the resident
-# after that player from just behind them; `info` reads the host. Tests only; the passphrase is the
+# after that player from just behind them; `info` reads the host; `finds` the floor's findables (play_search.mjs). Tests only; the passphrase is the
 # environment's GD_JOIN_SECRET, as for the real server.
 #   godot --headless --path godot -s res://tools/down_server.gd -- port=4466 ctl=4469 seed=down-1
 extends SceneTree
@@ -10,6 +10,7 @@ const WsServer = preload("res://net/ws_server.gd")
 const DownRoom = preload("res://tools/down_room.gd")
 const Session = preload("res://net/session.gd")
 const Places = preload("res://sim/places.gd")
+const Findables = preload("res://sim/findables.gd")
 
 var _ws: WsServer
 var _room: DownRoom
@@ -91,4 +92,14 @@ func _command(line: String, now: float) -> Dictionary:
 			return r
 		"info":
 			return _room.info()
+		"finds":
+			# Findables (tools/play_search.mjs): this floor's fill and sheet and what the host has opened.
+			var h: Variant = _room.host
+			if h == null or h.state.find == null:
+				return {"ok": false, "error": "no findables here"}
+			var ff: Variant = h.state.find
+			var contents := {}
+			for id: int in ff.fill.contents:
+				contents[str(id)] = ff.fill.contents[id]
+			return {"ok": true, "sheet": Findables.sheet_text(ff.fill), "base": ff.fill.base, "contents": contents, "opened": Findables.opened_rows(ff)}
 	return {"ok": false, "error": "unknown command"}
