@@ -315,13 +315,22 @@ static func clear_at(plan: Floor.FloorPlan, solids: Solids, level: int, x: float
 
 ## Where a body standing in a solid box (put there by a drag, a grab, a relocation, or furniture turning on
 ## under it) is pushed out to: the nearest spot (5 cm rings, out to SETTLE_REACH) in its own cell or one it
-## could step to, clear of walls and boxes. The body itself when it is clear, or when no spot is found.
+## could step to, clear of walls and boxes by SETTLE_SPARE more than its radius (so it lands in the open, never
+## in a pocket only just its own width, say between a piece's end and a corner), or, when there is no such
+## spot, by its radius alone. The body itself when it is clear, or when no spot is found.
 const SETTLE_REACH := 2.0
 const SETTLE_STEP := 0.05
+const SETTLE_SPARE := 0.05
 
 static func settle(plan: Floor.FloorPlan, solids: Solids, body: Body, r: float) -> Body:
 	if solids == null or box_clearance(solids, body.level, body.x, body.z) >= r - CLEARANCE_SLACK:
 		return body
+	var spot := _settle_at(plan, solids, body, r + SETTLE_SPARE)
+	if spot == null:
+		spot = _settle_at(plan, solids, body, r)
+	return spot if spot != null else body
+
+static func _settle_at(plan: Floor.FloorPlan, solids: Solids, body: Body, r: float) -> Body:
 	var s := float(plan.cell_size)
 	var from := cell_of(plan, body)
 	var best_d := INF
@@ -366,7 +375,7 @@ static func settle(plan: Floor.FloorPlan, solids: Solids, body: Body, r: float) 
 				best_d = d
 				best = Vector3(x, z, level)
 	if best_d == INF:
-		return body
+		return null
 	return Body.make(best.x, best.y, int(best.z), feet_height(plan, int(best.z), best.x, best.y))
 
 ## A walk round the solid boxes for a body of radius r along a find_path route (`cells`, from the body's cell;
