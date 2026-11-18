@@ -32,7 +32,8 @@ godot/
   tools/              godot.mjs (npm scripts); dump_reference.ts, property_counts.ts, bridge_script.ts and
                       rules_host.ts (write tests/reference); sync_client.mjs; the synced browser and
                       desktop checks (playthrough.mjs, play_web.mjs, play_desktop.mjs, sound_web.mjs,
-                      measure_web.mjs, serve.mjs); the network checks (net_local.mjs, play_net.mjs); the
+                      measure_web.mjs, serve.mjs; careful.mjs: waiting for the car in a hide, as a
+                      careful player does now that a catch alone is the wipe); the network checks (net_local.mjs, play_net.mjs); the
                       mix (mix_check.gd + mix_check.mjs, sfx_levels.gd)
   export/             the builds and the playthroughs' pictures (ignored by git)
 ```

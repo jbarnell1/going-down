@@ -12,6 +12,7 @@
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { hideForTheWait } from './careful.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -169,6 +170,22 @@ if (audible && st.orderly) {
   await cmd(`face ${plan.car.doorX} ${plan.car.doorZ} 2.0`);
   await page.waitForTimeout(300);
   await cmd('call');
+  // Since the owner's 17 Nov changes (a longer blackout, faster residents, and alone a catch is down, out
+  // and the wipe, which ends the wait before the blackout) nobody survives the wait standing at the lift
+  // with their back to the Orderly. A careful player waits in a hide it did not see them get into
+  // (tools/careful.mjs); the lights and the sounds are the same in there.
+  const state = async () => JSON.parse(await cmd('state'));
+  const until = async (pred, ms, every = 100) => {
+    const end = Date.now() + ms;
+    let s = await state();
+    while (!pred(s) && Date.now() < end) { await page.waitForTimeout(every); s = await state(); }
+    return s;
+  };
+  const ctx = { cmd, state, wait: (ms) => page.waitForTimeout(ms), until };
+  await until((s) => s.phase === 'coming', 3000, 50);
+  const hid = await hideForTheWait(ctx);
+  const w = hid.s;
+  console.log(`  waiting for the car in hide ${hid.hide?.id} (${hid.hide?.kind}), got in with ${hid.note}: ${w.mySeek?.phase}, status ${w.me.status}, reasons ${w.events?.reason ?? 0}`);
   await cmd('timescale 2');
   const lights = [];
   let droneHeard = -Infinity;
@@ -186,6 +203,10 @@ if (audible && st.orderly) {
     await page.waitForTimeout(100);
   }
   await cmd('timescale 1');
+  {
+    const e = await state();
+    console.log(`  the wait ended: phase ${e.phase}, status ${e.me?.status}, caught ${e.events?.caught ?? 0} times, in hide: ${e.mySeek?.phase}`);
+  }
   let darkLoud = 0;
   let darkN = 0;
   let litHeard = 0;
