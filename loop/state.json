@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 82,
-  "now": null,
-  "nowText": "",
+  "iteration": 86,
+  "now": "T20g",
+  "nowText": "A builder is making the rules for searching drawers, gurneys and cabinets: credits, poem notes and juice cartons; the on-screen part follows",
   "ci": {
     "status": "passed",
-    "commit": "72f92d4",
-    "at": "2026-11-18T03:20:18.905Z"
+    "commit": "27c8c04",
+    "at": "2026-11-18T05:05:16.732Z"
   },
   "answersAppliedTo": "2026-11-17T21:11:49.720Z",
   "tasks": [
@@ -2228,12 +2228,13 @@
       "id": "T22",
       "title": "Live settings for the host",
       "why": "On game night the host can slow a monster that's too fast, lengthen the lift's return or the time you have down, and much more, from an in-game panel, while everyone plays",
-      "status": "todo",
+      "status": "doing",
       "gates": [],
       "ns": [],
       "nsWhy": "new from the owner on 17 Nov; a testing and hosting tool, amendment recorded",
       "startedAt": "2026-11-17T20:23:31.311Z",
-      "waiting": "The settings list and the first ten working settings are in the build; the host's F8 panel and the saved file are not built yet"
+      "doingText": "A builder is making the host's F8 settings panel, the saved settings file, and wiring more settings (each monster's speeds, lift return, down and heal times, blackout length)",
+      "doingAt": "2026-11-18T05:44:41.187Z"
     },
     {
       "id": "T25",
@@ -2264,6 +2265,15 @@
       "finishedAt": "2026-11-18T04:36:01.796Z",
       "summary": "The announcer's hints: 76 lines in both voices, 30 wired in, HINTS on H. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.",
       "todo": []
+    },
+    {
+      "id": "T23b",
+      "title": "Voice touch-ups: a grab line, a reworded hint",
+      "why": "The Minder's grab gets its own line; 'You are not alone on this floor now' is reworded so it does not give away the Temp's rule",
+      "status": "todo",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "voice lines from the owner's answers of 18 Nov"
     },
     {
       "id": "T24",
@@ -2513,7 +2523,25 @@
           "at": "2026-11-18T03:40:50.762Z"
         }
       ],
-      "waiting": "Built; the web and desktop playthroughs pass with solid furniture (42/42 and 46/46); a checker is going over the branch before it merges"
+      "waiting": "Checked (284 tests, both breaks caught, playthroughs 42/42 and 46/46 with solid furniture); merging into main; it goes into the next build"
+    },
+    {
+      "id": "T20j",
+      "title": "Furniture back in the lobby, atrium and break room",
+      "why": "You asked for some of the dropped pieces back: benches, planters and waiting chairs along the walls, and the break-room table",
+      "status": "todo",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "set dressing from the owner's answer of 18 Nov"
+    },
+    {
+      "id": "T20k",
+      "title": "Monsters walk around furniture",
+      "why": "Today they pass through it; you asked for them to walk around it soon. The Annex cubicle pods come back with this",
+      "status": "todo",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "new from the owner's answer of 18 Nov; fairness contract applies"
     },
     {
       "id": "T20e",
@@ -2556,28 +2584,50 @@
       "id": "T20f",
       "title": "Controls card and a ready-up screen",
       "why": "Everyone reads the controls and readies up, then drops into the lift together; the lift waits and never pushes anyone out",
-      "status": "todo",
+      "status": "doing",
       "gates": [],
       "ns": [],
-      "nsWhy": "new from the owner on 17 Nov; not in the North Star yet (amendment recorded)",
+      "nsWhy": "new from the owner's play of 17 Nov; joining builds on H1",
       "todo": [
         "Your car answer: the car waits as long as anyone is aboard; a returning car waits 30 s before its doors close; anyone left out then dies and wakes in the prison without the credits they earned",
         "Your rule: holding the car open all game must never count. The only way off a floor is quota met, car gone, call, car comes back. Check it and test it"
       ],
       "startedAt": "2026-11-17T16:12:27.525Z",
-      "waiting": "Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build"
+      "doingText": "A builder is making the ready-up screen, the controls card, and the orientation tape playing before it on a first join",
+      "doingAt": "2026-11-18T05:44:41.032Z"
     },
     {
       "id": "T20g",
       "title": "Things to find: drawers, gurneys, credits, poem notes",
       "why": "Searching furniture (F TO OPEN DRAWER) turns up credits, obscure poems about the monster's rule, and something to restore you",
+      "status": "doing",
+      "gates": [],
+      "ns": [
+        "A7"
+      ],
+      "startedAt": "2026-11-18T05:44:41.664Z",
+      "doingText": "A builder is making the rules for searching drawers, gurneys and cabinets: credits, poem notes and juice cartons; the on-screen part follows",
+      "doingAt": "2026-11-18T05:44:41.665Z"
+    },
+    {
+      "id": "T26",
+      "title": "The Arboretum: a dark forest floor and the Groundskeeper",
+      "why": "A new place: no corridors, you steer by landmarks and sound, and a blind monster comes to noise. You asked for the scariest one yet, and dark",
       "status": "todo",
       "gates": [],
       "ns": [
-        "C2",
-        "G1"
-      ],
-      "waiting": "Designed: hold F to search drawers, gurneys and lockers for credits, poem notes and juice cartons. Waits for furniture in the rules (T20d) and a free builder"
+        "A2",
+        "B1"
+      ]
+    },
+    {
+      "id": "T27",
+      "title": "A brightness setting with a calibration screen",
+      "why": "The Arboretum is very dark; each player sets brightness on their own screen at the start or in settings so dark is dark but not blind",
+      "status": "todo",
+      "gates": [],
+      "ns": [],
+      "nsWhy": "new from the owner on 18 Nov; a per-player display setting"
     },
     {
       "id": "T21a",
@@ -3190,6 +3240,91 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-18T05:58:51.577Z",
+      "text": "The Arboretum is designed (a dark forest, ground that is loud or quiet underfoot, and the Groundskeeper: blind, comes to noise, leans to your face if you stand still). Building starts when a builder frees up; the brightness setting is its own small task",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T05:56:14.101Z",
+      "text": "Added task T27: A brightness setting with a calibration screen.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T05:56:13.977Z",
+      "text": "Added task T26: The Arboretum: a dark forest floor and the Groundskeeper.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T05:47:37.277Z",
+      "text": "Owner on the orientation tape: 'The VHS is amazing.' It stays as built; the nightly tapes will follow the same look and voice",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T05:47:09.693Z",
+      "text": "Owner: Temp gets ink tears; Mixamo for the Temp and Orderly tomorrow morning; skill tree: the five listed upgrades plus more of my choosing; passphrase steps wanted in the morning",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T05:46:37.127Z",
+      "text": "Owner's answers 3-15 recorded: solo is meant to hide; the Temp chases faster (3.9) and its speed, the Playroom's search time and the anger bar become settings; grab in the calm too, with its own line; day quota stays on a drop-out; some furniture comes back; monsters walk around furniture soon; one hint reworded",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T05:46:36.900Z",
+      "text": "Added task T23b: Voice touch-ups: a grab line, a reworded hint.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T05:46:36.720Z",
+      "text": "Added task T20k: Monsters walk around furniture.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T05:46:36.482Z",
+      "text": "Added task T20j: Furniture back in the lobby, atrium and break room.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T05:44:41.782Z",
+      "text": "Owner's answers: do everything, it need not all finish overnight; features stop Thursday evening. Three builders started: ready-up and controls card, the host settings panel, searchable furniture",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T05:44:41.666Z",
+      "text": "Started T20g: Things to find: drawers, gurneys, credits, poem notes. A builder is making the rules for searching drawers, gurneys and cabinets: credits, poem notes and juice cartons; the on-screen part follows",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T05:44:41.448Z",
+      "text": "Linked T20g to the North Star: A7.",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T05:44:41.187Z",
+      "text": "Started T22: Live settings for the host. A builder is making the host's F8 settings panel, the saved settings file, and wiring more settings (each monster's speeds, lift return, down and heal times, blackout length)",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T05:44:41.034Z",
+      "text": "Started T20f: Controls card and a ready-up screen. A builder is making the ready-up screen, the controls card, and the orientation tape playing before it on a first join",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T05:44:40.861Z",
+      "text": "Linked T20f to the North Star: nothing in it (new from the owner's play of 17 Nov; joining builds on H1).",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T05:27:31.480Z",
+      "text": "Furniture collision is on main (297 tests). The full promote check is running on the combined copy (day quota + furniture): tests, export, web and desktop playthroughs, sound, down-and-heal, the day check, the Playroom check, network, the furniture walk",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T05:09:22.526Z",
+      "text": "Paused T20d: waiting for Checked (284 tests, both breaks caught, playthroughs 42/42 and 46/46 with solid furniture); merging into main; it goes into the next build",
+      "kind": "note"
+    },
     {
       "at": "2026-11-18T04:36:19.585Z",
       "text": "Paused T22: waiting for The settings list and the first ten working settings are in the build; the host's F8 panel and the saved file are not built yet",
@@ -4103,91 +4238,6 @@
     {
       "at": "2026-11-17T15:08:32.144Z",
       "text": "Your notes from playing are in: the Orderly vanishing in the dark, no trolley, longer blackouts, the day quota and the prison, a ready-up screen, findables, furniture collision. Seven tasks added (T20a-g); a designer is writing up the day quota, ready-up and findables, and a code lookup is finding the causes of the bugs.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:08:32.040Z",
-      "text": "Added task T20g: Things to find: drawers, gurneys, credits, poem notes.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:08:31.842Z",
-      "text": "Added task T20f: Controls card and a ready-up screen.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:08:31.708Z",
-      "text": "Added task T20e: The day quota you can see, and no going home short.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:08:31.507Z",
-      "text": "Added task T20d: Furniture you bump into.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:08:31.280Z",
-      "text": "Added task T20c: Longer blackouts before the car comes.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:08:31.050Z",
-      "text": "Added task T20b: The Orderly pushes a real trolley.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:08:30.660Z",
-      "text": "Added task T20a: The Orderly stays visible in the dark.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:01:23.770Z",
-      "text": "T19a built: with three or more players up it takes two people looking to freeze the Orderly; one or two players, one look is enough. Eye marks on screen show how many are watching (hidden switch until you decide).",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T15:01:23.539Z",
-      "text": "Started T19e: Monsters slip away and reappear out of view. An Opus builder is making monsters slip away out of everyone's sight and reappear 12-20 m from a player, heard before seen",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T15:01:23.320Z",
-      "text": "Started T19a: Freeze takes two watchers. A Sonnet agent is checking the two-watcher rule: the full test set, and two deliberate breaks that must turn it red",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T14:57:20.881Z",
-      "text": "Started T8c: Down and healed on screen. An Opus builder is putting going down on screen: you crawl with a ten-second timer, a friend sees HOLD F TO HELP and a fill bar, out leaves a red spot",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T14:56:26.416Z",
-      "text": "Started T8c: Down and healed on screen. x",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T14:53:19.236Z",
-      "text": "Started T19b: Hiding places on every floor. A Sonnet agent is checking hiding places in the Clinic and the Annex",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T14:53:15.698Z",
-      "text": "New build in play/ (play/GoingDown-2026-11-17-0833.zip): the floor quota and its call panel, and the fix for a step beside the lift snapping you inside. Lab-box server updated; a two-player game over the public address passed.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T14:53:13.742Z",
-      "text": "Finished T5r: The quota on screen.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T14:53:10.603Z",
-      "text": "Finished T5q: A quota before the lift can be called.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T13:55:49.017Z",
-      "text": "Paused T8a: waiting for checked (200 bot runs, all four deliberate breaks red, no golden changed); goes into your build with its screen (T8c)",
       "kind": "note"
     }
   ]

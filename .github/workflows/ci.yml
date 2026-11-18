@@ -49,7 +49,8 @@ jobs:
   # Separate from the browser game above, and nothing waits on it.
   godot:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The quick set passed 15 minutes when the furniture tests joined it (18 Nov 2026).
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
