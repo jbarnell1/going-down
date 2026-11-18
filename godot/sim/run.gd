@@ -243,6 +243,14 @@
 # section: 30-45 s to hide, then a 30 s search; an anger bar the provocations fill, a count when it is full; the
 # Minder grabs anyone within 1 m outside a count and drags them to the party table; and the hint events
 # ("playroomArrived", "sprintDuringHunt") for the announcer.
+# Solid furniture (FD7, `furniture`, with_furniture: docs/floors/findables-and-day.md section 4; net/host_rules.gd
+# turns it on for the game's rooms; tests and every stored result leave it off, and then nothing below happens).
+# Players' bodies (move_in_run: the local player, the bots, a crawl) slide along every solid piece of the
+# floor's one list (sim/furniture.gd, Furniture.solids_of) as along walls, and a body found standing inside one
+# (dragged, grabbed, relocated, or there when the flag turned on) is first pushed out to the nearest clear spot
+# (Move.settle). The residents never read the list: they walk exactly as before, through any piece their path
+# crosses (the list keeps pieces against walls and off every cell's middle, so that is rare: the meeting table
+# and the beds' last few centimetres).
 # Live settings (docs/floors/live-settings.md, sim/settings.gd): `tuning` is null unless the host's desk put one
 # there (with_tuning). The rules read the host's numbers through Settings.f with today's constant as the
 # fallback, so a run without one computes exactly as before. Read so far (LS1): the Stillness residents' hunt
@@ -275,6 +283,7 @@ const Relocate = preload("res://sim/relocate.gd")
 const Stamina = preload("res://sim/stamina.gd")
 const Lonely = preload("res://sim/lonely.gd")
 const Settings = preload("res://sim/settings.gd")
+const Furniture = preload("res://sim/furniture.gd")
 
 # ---------------------------------------------------------------------------------------------
 # Tuning.
@@ -921,6 +930,9 @@ class RunState:
 	## The Playroom tuned from the owner's first play (T15m, with_playroom_tuned; sim/seek.gd "T15m"). Off: the
 	## Playroom's rules are exactly as every stored result has them.
 	var playroom_tuned: bool = false
+	## Solid furniture (FD7, with_furniture; sim/furniture.gd): players slide along the floor's pieces. Off:
+	## nothing blocks but walls, as every stored result has it.
+	var furniture: bool = false
 
 	## Live settings (sim/settings.gd): the host's numbers in force in this run, or null for none (every test
 	## and stored result). The rules read it with Settings.f, falling back to today's constant. Replaced,
@@ -935,6 +947,7 @@ class RunState:
 		s.day_earned = day_earned
 		s.day_met = day_met
 		s.playroom_tuned = playroom_tuned
+		s.furniture = furniture
 		s.two_watchers = two_watchers
 		s.relocation = relocation
 		s.seed = seed
@@ -1253,6 +1266,18 @@ static func with_playroom_tuned(s0: RunState) -> RunState:
 		s.seek = Seek.tune(s.seek as Seek.SeekState)
 	return s
 
+## Turns solid furniture on (FD7, see the header): from now on players slide along every floor's pieces.
+static func with_furniture(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.furniture = true
+	return s
+
+## The floor's solid pieces for players in this run (Furniture.solids_of), or null when furniture is off.
+static func solids_in(state: RunState) -> Move.Solids:
+	if state == null or not state.furniture or state.plan == null:
+		return null
+	return Furniture.solids_of(state.plan)
+
 ## The run with this tuning in force (live settings, sim/settings.gd): `given` is {id: number}, checked by
 ## the caller with Settings.check. An empty set reads exactly like none.
 static func with_tuning(s0: RunState, given: Dictionary) -> RunState:
@@ -1361,16 +1386,19 @@ static func move_in_run(state: RunState, body: Move.Body, dx: float, dz: float, 
 	var n := maxi(1, int(ceil(dist / 0.05)))
 	var cur := body
 	var open := doors_open(state)
+	var solids := solids_in(state)
+	if solids != null:
+		cur = Move.settle(state.plan, solids, cur, radius)
 	for _i in n:
-		cur = _move_step(state.plan, state.car, open, cur, dx / n, dz / n, radius)
+		cur = _move_step(state.plan, state.car, open, cur, dx / n, dz / n, radius, solids)
 	return cur
 
 static func _clamp(x: float, lo: float, hi: float) -> float:
 	return maxf(lo, minf(hi, x))
 
-static func _move_step(plan: Floor.FloorPlan, car: CarGeometry, open: bool, cur: Move.Body, sx: float, sz: float, r: float) -> Move.Body:
+static func _move_step(plan: Floor.FloorPlan, car: CarGeometry, open: bool, cur: Move.Body, sx: float, sz: float, r: float, solids: Move.Solids = null) -> Move.Body:
 	if cur.level != car.level:
-		return Move.move_with_collision(plan, cur, sx, sz, r)
+		return Move.move_with_collision(plan, cur, sx, sz, r, solids)
 	var here := car_local(car, cur.x, cur.z)
 	var next := car_local(car, cur.x + sx, cur.z + sz)
 	var band := car.door_width / 2.0 - r
@@ -1384,7 +1412,7 @@ static func _move_step(plan: Floor.FloorPlan, car: CarGeometry, open: bool, cur:
 	if not zone:
 		if open and next_in_channel:
 			return car_body(car, next[0], next[1])
-		return Move.move_with_collision(plan, cur, sx, sz, r)
+		return Move.move_with_collision(plan, cur, sx, sz, r, solids)
 	var inside_v := car.width / 2.0 - r
 	var max_u := car.depth - r
 	if open and absf(next[1]) <= band + EPS:

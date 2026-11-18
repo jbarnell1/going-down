@@ -178,6 +178,10 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##  - the world gains a 23rd element, who it chases ("lonely" decoded: a player id, or "" for nobody), with the
 ##    16th to 22nd null when absent. A client that has it never holds the figure (looking does nothing);
 ##  - the events "chaseStarted" {playerId, at (a body), yaw} and "chaseEnded" {playerId, why}.
+## Solid furniture (sim/run.gd furniture, sim/furniture.gd; FD7). New in the Godot game, and only ever sent in a run
+## with it, so a run without it sends exactly what it did before:
+##  - the world gains a 24th element, 1 ("solid" decoded: 1), with the 16th to 23rd null when absent: each client
+##    then moves its own body round the floor's solid pieces (net/session.gd move_local).
 
 ## Telemetry (client/telemetry.gd -> server/night_log.gd). New in the Godot game: [1, "T", kind, body] for kind
 ## "hb" (a heartbeat: body is a small JSON object as text) or "log" (one error or warning line), and
@@ -354,6 +358,10 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < 22:
 			out.append(null)
 		out.append(String(w["lonely"]))
+	if w.get("solid") != null:
+		while out.size() < 23:
+			out.append(null)
+		out.append(1)
 	return out
 
 ## The watch block (see the header) from its readable form {need, watchers: [ids]}.
@@ -685,7 +693,7 @@ static func _opt_num(c: _V, v: Variant) -> Variant:
 	return null if v == null else _f(c, v)
 
 static func dec_world(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 15, 23)
+	var a := _a(c, w, 15, 24)
 	if c.bad:
 		return {}
 	var blink: Variant = null
@@ -757,8 +765,10 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 		out["watch"] = dec_watch(c, a[20])
 	if a.size() > 21 and (a[21] != null or a.size() == 22):
 		out["reloc"] = _i(c, a[21], 0, MAX_COUNT)
-	if a.size() > 22:
+	if a.size() > 22 and (a[22] != null or a.size() == 23):
 		out["lonely"] = _s(c, a[22], MAX_NAME * 2)
+	if a.size() > 23:
+		out["solid"] = _i(c, a[23], 1, 1)
 	return out
 
 static func _dec_report(c: _V, w: Variant) -> Dictionary:

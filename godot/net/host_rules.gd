@@ -53,6 +53,10 @@
 #    day quota. prepare() turns it on before the first tick, and only when the run has days and the floor
 #    quota (with nothing to record, or the test switch quota=0, it stays off and a short BANK is a missed
 #    day as before). The soft catch keeps the day's earned from the real tick, like the floor's.
+#  - Solid furniture (sim/run.gd furniture, sim/furniture.gd, FD7): off unless asked (`furniture`); the game's rooms
+#    ask for it (the server's always, playing alone with the game's deck), so players slide along the Clinic's and
+#    the Annex's chairs, beds, cabinets and desks instead of walking through them. prepare() turns it on before the
+#    first tick.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -97,11 +101,14 @@ var lonely: bool
 var playroom_tuned: bool
 ## The day quota's lock (off unless asked; only with days and the floor quota both on).
 var day_lock: bool
+## Solid furniture (off unless asked; sim/run.gd furniture, FD7).
+var furniture: bool
 
 func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false,
 		watchers_: bool = false, relocation_: bool = false, long_dark_: bool = false, paced_: bool = false, car_waits_: bool = false,
-		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false) -> void:
+		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false, furniture_: bool = false) -> void:
 	playroom_tuned = playroom_tuned_
+	furniture = furniture_
 	relocation = relocation_
 	lonely = lonely_
 	day_lock = day_lock_
@@ -204,6 +211,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 	# resident off, and never with the test switch quota=0).
 	if day_lock and s.days and s.quota and not s.day_lock:
 		s = Run.with_day_lock(s)
+	if furniture and not s.furniture:
+		s = Run.with_furniture(s)
 	return _capped(s)
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web

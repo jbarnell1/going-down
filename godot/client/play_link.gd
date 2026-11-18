@@ -50,6 +50,7 @@ const Places = preload("res://sim/places.gd")
 const Playroom = preload("res://sim/playroom.gd")
 const Seek = preload("res://sim/seek.gd")
 const Hides = preload("res://sim/hides.gd")
+const Furniture = preload("res://sim/furniture.gd")
 
 const PLAYER_RADIUS := 0.3
 ## The eyes of a player lying on their bunk (whole centimetres: it goes to the host as the frame's eye).
@@ -179,6 +180,8 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	var latest: Dictionary = c.latest
 	_use_floor(str(c.seed), c.local_depth)
 	var phase := str(latest["phase"])
+	# Solid furniture (FD7): the host says so in every world ("solid"); the body slides along the pieces.
+	var solid: bool = latest.get("solid") != null
 	var me_row: Variant = _row(latest, str(c.id))
 	var status := str(me_row["status"]) if me_row != null else "ok"
 	var dt := clampf(float(inp.get("dt", 0.0)), 0.0, 0.1)
@@ -219,7 +222,8 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 			_auto = null
 			auto_status = "done"
 		else:
-			body = Follow.step_path_walk(plan, _auto, b0, _auto_pace * dt, PLAYER_RADIUS)
+			# With solid furniture the walk plans its way round the pieces (sim/follow.gd).
+			body = Follow.step_path_walk(plan, _auto, b0, _auto_pace * dt, PLAYER_RADIUS, Furniture.solids_of(plan) if solid else null)
 			var mx := body.x - b0.x
 			var mz := body.z - b0.z
 			if M.hypot2(mx, mz) > 1e-4:
@@ -248,7 +252,7 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 				sp = CRAWL_PACE
 			var sn := M.sin_js(in_yaw)
 			var cs := M.cos_js(in_yaw)
-			body = Session.move_local(plan, phase, body, (-sn * nf + cs * nr) * sp * dt, (-cs * nf - sn * nr) * sp * dt, PLAYER_RADIUS)
+			body = Session.move_local(plan, phase, body, (-sn * nf + cs * nr) * sp * dt, (-cs * nf - sn * nr) * sp * dt, PLAYER_RADIUS, solid)
 			speed = sp
 	if before != null and body != null and dt > 0.0:
 		tank = Stamina.step_stamina(tank, gait, M.hypot2(body.x - before.x, body.z - before.z) / dt, dt)
@@ -834,7 +838,7 @@ func nudge(dx: float, dz: float) -> Dictionary:
 		return {"ok": false}
 	if not local and M.hypot2(dx, dz) > 0.7:
 		return {"ok": false, "error": "too far for the server"}
-	body = Session.move_local(plan, rc.client.latest["phase"], body, dx, dz, PLAYER_RADIUS)
+	body = Session.move_local(plan, rc.client.latest["phase"], body, dx, dz, PLAYER_RADIUS, (rc.client.latest as Dictionary).get("solid") != null)
 	return {"ok": true, "body": _body_plain(body)}
 
 ## Walks along the rules' own path to a cell. With friends no faster than walking (the server checks),

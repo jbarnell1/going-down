@@ -17,6 +17,10 @@
 # - Emergency lighting (Level.set_emergency, driven by the run's blackout as for the Clinic): green
 #   running-man signs over every door, green arrows under the LIFT signs (the same looping rule) and a
 #   pale green spotlight over every junction.
+# - Furniture (sim/furniture.gd, FD7): every floor-standing piece is drawn from the rules' one list, which is
+#   also what blocks a player and what hides them; the list is the same for same-shaped rooms. Only the
+#   pictures (posters, clocks, maps, whiteboards) are still laid out here, by the shape, kept off the walls
+#   behind tall pieces.
 # - Hiding places (sim/hides.gd, T19b; docs/floors/traits-and-hiding.md section 4): a desk in every office
 #   (it is the office's desk), four in the cubicles, one in the break room; a tall slatted cabinet in every
 #   closet and store (and wherever the rules topped one up); the meeting room's table is its hide. They
@@ -65,6 +69,7 @@ const Playroom = preload("res://sim/playroom.gd")
 const Hides = preload("res://sim/hides.gd")
 const AnnexPlan = preload("res://sim/annex.gd")
 const FloorLib = preload("res://sim/floor.gd")
+const Furniture = preload("res://sim/furniture.gd")
 
 var lv: Level
 var W := 0
@@ -115,8 +120,10 @@ static func dress(level: Level) -> RefCounted:
 	v._panels_and_lights()
 	v._signs()
 	v.hides = Hides.hides_for(AnnexPlan.generate_annex(str(level.plan.seed), int(level.plan.depth)), str(level.plan.seed))
+	# The furniture is the rules' (sim/furniture.gd): drawn whatever props_on says, since it blocks you.
+	v._furniture()
 	if level.props_on:
-		v._dress_rooms()
+		v._pictures()
 	v._commit()
 	return v
 
@@ -936,6 +943,8 @@ class Layout:
 	var props: Array = []
 	## [type, point on the wall line (Vector2), outward normal (Vector2)]
 	var pics: Array = []
+	## Pictures only (the furniture is the rules'): no prop is put down.
+	var pics_only := false
 
 static func _foot(type: String, at: Vector2, f: Vector2) -> Rect2:
 	var p: Dictionary = catalogue()[type]
@@ -960,6 +969,8 @@ static func _fits(l: Layout, foot: Rect2) -> bool:
 	return true
 
 static func _put(l: Layout, type: String, at: Vector2, f: Vector2, turn := 0.0) -> bool:
+	if l.pics_only:
+		return false
 	var foot := _foot(type, at, f)
 	if not _fits(l, foot):
 		return false
@@ -995,8 +1006,11 @@ static func _pic(l: Layout, type: String, skip := 0) -> bool:
 		return true
 	return false
 
-static func layout_for(sh: Shape, kind: String, rng_seed: int, pre: Array[Rect2] = [], desk_hidden := false) -> Layout:
+## `pics_only`: only the pictures, kept off the wall slots within a metre of `tall` (canonical points on the wall
+## behind the rules' tall pieces).
+static func layout_for(sh: Shape, kind: String, rng_seed: int, pre: Array[Rect2] = [], desk_hidden := false, pics_only := false, tall: Array[Vector2] = []) -> Layout:
 	var l := Layout.new()
+	l.pics_only = pics_only
 	l.taken.append_array(pre)
 	l.rng.seed = rng_seed
 	l.cwm = sh.cw * S
@@ -1041,6 +1055,10 @@ static func layout_for(sh: Shape, kind: String, rng_seed: int, pre: Array[Rect2]
 	order.sort_custom(func(a: Array, b: Array) -> bool: return int(a[0]) < int(b[0]))
 	for o: Array in order:
 		l.slots.append(o[1])
+	for sl: Dictionary in l.slots:
+		for tp: Vector2 in tall:
+			if (sl.m as Vector2).distance_to(tp) < 1.0:
+				sl.tall = true
 	var mid := Vector2(l.cwm, l.chm) * 0.5
 	var long_u := l.cwm >= l.chm
 	match kind:
@@ -1121,41 +1139,71 @@ static func _outward(l: Layout, m: Vector2) -> Vector2:
 	if m.x < 0.01: return Vector2(-1, 0)
 	return Vector2(1, 0)
 
-func _dress_rooms() -> void:
+## The rules' furniture (sim/furniture.gd): each piece drawn from the list. The hides in the Annex's colours
+## (the meeting table at its full 4.4 m), the plain pieces from the catalogue, each centred on its footprint and
+## turned to its facing.
+func _furniture() -> void:
 	var cat := catalogue()
+	var fp := AnnexPlan.generate_annex(str(lv.plan.seed), int(lv.plan.depth))
+	var list := Furniture.pieces_for(fp, str(lv.plan.seed), int(lv.plan.depth))
+	lv.pieces = list
+	for pc: Furniture.Piece in list:
+		var xf: Transform3D
+		var boxes: Array
+		var type := String(pc.kind)
+		if pc.hide >= 0:
+			var h: Playroom.Hide = hides[pc.hide]
+			xf = hide_xf(h)
+			boxes = meeting_table_boxes() if h.kind == &"table" else hide_boxes(h.kind, false)
+			draw_hide_into_boxes(lv, h.level, xf, boxes, "aprops")
+			hide_pieces.append({"hide": h.id, "kind": String(h.kind), "level": h.level, "xf": xf})
+			type = "hide:" + type
+			lv.furniture_drawn.append({"piece": pc.id, "kind": String(pc.kind), "rect": boxes_rect(xf, boxes)})
+		else:
+			var f := Vector2(FloorLib.dir_dx(pc.facing), FloorLib.dir_dy(pc.facing))
+			var centre := Vector2(pc.x / 100.0, pc.y / 100.0)
+			boxes = _chair() if pc.kind == &"chair" else (cat[catalogue_name(pc.kind)] as Dictionary).boxes
+			var basis := Basis(Vector3.UP, atan2(-f.x, -f.y))
+			# The record is the piece itself (its centre and facing), as the rules have it.
+			xf = Transform3D(basis, Vector3(centre.x, pc.level * LH, centre.y))
+			# Drawn mirrored in a room whose canonical frame is a mirror image, so same-shaped rooms look
+			# alike to the last copier tray; the middle of what is drawn on the piece's centre.
+			if pc.room >= 0 and shapes.has(pc.room):
+				var rr: Dictionary = {}
+				for r: Dictionary in lv.plan.rooms:
+					if int(r.id) == pc.room:
+						rr = r
+				if not rr.is_empty() and room_xf(rr, (shapes[pc.room] as Shape).sym).basis.determinant() < 0.0:
+					basis = basis * Basis.from_scale(Vector3(-1, 1, 1))
+			var r0 := boxes_rect(Transform3D.IDENTITY, boxes)
+			var off := basis * Vector3(r0.get_center().x, 0, r0.get_center().y)
+			var dxf := Transform3D(basis, Vector3(centre.x - off.x, pc.level * LH, centre.y - off.z))
+			draw_hide_into_boxes(lv, pc.level, dxf, boxes, "aprops")
+			lv.furniture_drawn.append({"piece": pc.id, "kind": String(pc.kind), "rect": boxes_rect(dxf, boxes)})
+			lv.prop_spots.append({"room": pc.room, "level": pc.level, "type": type, "pos": [xf.origin.x, xf.origin.z]})
+			lv.props_placed += 1
+		records.append({"room": pc.room, "type": type, "xf": xf})
+
+## The catalogue's name for a piece's kind.
+static func catalogue_name(kind: StringName) -> String:
+	return "cabinet" if kind == &"filing" else String(kind)
+
+## The pictures, laid out by each room's shape, off the walls behind its tall pieces.
+func _pictures() -> void:
 	for r: Dictionary in lv.plan.rooms:
 		var rid := int(r.id)
 		var sh: Shape = shapes[rid]
-		# The hiding places first (not the meeting table, which the layout draws): their footprints in the
-		# canonical frame, kept clear of the other props.
-		var pre: Array[Rect2] = []
-		var desk_hidden := false
-		for h in hides:
-			if h.room != rid or h.kind == &"table":
+		var wm := int(r.w) * S
+		var hm := int(r.h) * S
+		var o := Vector2(int(r.x) * S, int(r.y) * S)
+		var tall: Array[Vector2] = []
+		for pc: Furniture.Piece in lv.pieces:
+			if pc.room != rid or not pc.tall:
 				continue
-			desk_hidden = desk_hidden or h.kind == &"desk"
-			var foot := hide_foot(h)
-			var o := Vector2(int(r.x) * S, int(r.y) * S)
-			var a := local_to_canon(sh.sym, int(r.w) * S, int(r.h) * S, foot.position - o)
-			var b := local_to_canon(sh.sym, int(r.w) * S, int(r.h) * S, foot.end - o)
-			pre.append(Rect2(Vector2(minf(a.x, b.x), minf(a.y, b.y)), (b - a).abs()))
-			_draw_hide(h)
-			records.append({"room": rid, "type": "hide:" + String(h.kind), "xf": hide_xf(h)})
-		# The dressing's seed is the shape's key: never the room's position.
-		var l := layout_for(sh, str(r.kind), sh.key.hash(), pre, desk_hidden and str(r.kind) == "office")
+			tall.append(local_to_canon(sh.sym, wm, hm, Vector2(pc.x / 100.0, pc.y / 100.0) - o))
+		var l := layout_for(sh, str(r.kind), sh.key.hash(), [], false, true, tall)
 		var rxf := room_xf(r, sh.sym)
 		var level := int(r.level)
-		for p: Array in l.props:
-			var type: String = p[0]
-			var f: Vector2 = p[3]
-			var yaw := atan2(-f.x, -f.y) + float(p[4])
-			var xf := rxf * Transform3D(Basis(Vector3.UP, yaw), Vector3(float(p[1]), 0, float(p[2])))
-			var st := lv._st(level, xf.origin.x, xf.origin.z, "aprops")
-			for b: Array in cat[type].boxes:
-				box(st, xf, b[0], b[1], b[2])
-			records.append({"room": rid, "type": type, "xf": xf})
-			lv.prop_spots.append({"room": rid, "level": level, "type": type, "pos": [xf.origin.x, xf.origin.z]})
-			lv.props_placed += 1
 		for p: Array in l.pics:
 			var type: String = p[0]
 			var m: Vector2 = p[1]
@@ -1239,11 +1287,37 @@ static func hide_boxes(kind: StringName, clinic: bool) -> Array:
 				_b(0.42, 0.36, 0.42, 0.35, 0.76, 0.12, BEIGE), _b(0.34, 0.27, 0.012, 0.35, 0.805, -0.094, SCREEN),
 				_b(0.46, 0.025, 0.16, 0.3, 0.76, -0.25, BEIGE_DARK), _b(0.22, 0.02, 0.3, -0.5, 0.76, -0.05, PAPER),
 			]
-			# The chair pushed back to one side of the kneehole.
-			out.append_array(_turned(_chair(), PI, Vector3(-1.05, 0, -0.55)))
+			# Its chair is a piece of its own (sim/furniture.gd), pushed back to one side of the kneehole.
 			return out
 	var out: Array = [_b(1.8, 0.05, 1.0, 0, 0.71, 0, WOOD), _b(0.12, 0.71, 0.12, -0.8, 0, -0.4, WOOD_DARK),
 		_b(0.12, 0.71, 0.12, 0.8, 0, -0.4, WOOD_DARK), _b(0.12, 0.71, 0.12, -0.8, 0, 0.4, WOOD_DARK), _b(0.12, 0.71, 0.12, 0.8, 0, 0.4, WOOD_DARK)]
+	return out
+
+## The Annex meeting room's table, the room's hide: 4.4 by 1.3 m on two wide legs (its chairs are pieces).
+static func meeting_table_boxes() -> Array:
+	return [_b(4.4, 0.05, 1.3, 0, 0.71, 0, WOOD), _b(0.3, 0.71, 0.8, -1.4, 0, 0, WOOD_DARK), _b(0.3, 0.71, 0.8, 1.4, 0, 0, WOOD_DARK)]
+
+## Boxes (in `xf`'s frame) drawn into the level's `what` chunks.
+static func draw_hide_into_boxes(level: Level, lvl: int, xf: Transform3D, boxes: Array, what: String) -> void:
+	var st := level._st(lvl, xf.origin.x, xf.origin.z, what)
+	for b: Array in boxes:
+		box(st, xf, b[0], b[1], b[2])
+
+## The floor footprint (world x, z) of boxes in `xf`'s frame.
+static func boxes_rect(xf: Transform3D, boxes: Array) -> Rect2:
+	var out := Rect2()
+	var first := true
+	for b: Array in boxes:
+		var size: Vector3 = b[0]
+		var c: Vector3 = b[1]
+		for sx: float in [-0.5, 0.5]:
+			for sz: float in [-0.5, 0.5]:
+				var p := xf * (c + Vector3(size.x * sx, 0, size.z * sz))
+				if first:
+					out = Rect2(p.x, p.z, 0, 0)
+					first = false
+				else:
+					out = out.expand(Vector2(p.x, p.z))
 	return out
 
 ## Draws one hide's furniture into the level's `what` chunks.

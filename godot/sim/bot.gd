@@ -177,8 +177,9 @@ static func _notices_behind(bot: Bot, threat: Move.Body) -> bool:
 
 ## Advances a bot by dt seconds (mutates it). `threat` is where the Orderly is, if the bot knows: it
 ## sprints away while that is close behind and its tank allows. `cap` limits its pace (a raised
-## instrument); a capped bot cannot sprint, like a player.
-static func step_bot(plan: Floor.FloorPlan, bot: Bot, dt: float, threat: Move.Body = null, cap: float = INF) -> void:
+## instrument); a capped bot cannot sprint, like a player. `solids`: the run's solid furniture (Run.solids_in),
+## which the bot walks round like a player; null (every stored run) for none.
+static func step_bot(plan: Floor.FloorPlan, bot: Bot, dt: float, threat: Move.Body = null, cap: float = INF, solids: Move.Solids = null) -> void:
 	bot.gait_left -= dt
 	if bot.gait_left <= 0.0:
 		_new_gait(bot)
@@ -197,7 +198,7 @@ static func step_bot(plan: Floor.FloorPlan, bot: Bot, dt: float, threat: Move.Bo
 		if bot.walk != null and bot.gait != &"stop":
 			var speed := Stamina.speed_for(bot.move_gait, cap)
 			var before := bot.body
-			bot.body = Follow.step_path_walk(plan, bot.walk, before, speed * dt, BOT_RADIUS)
+			bot.body = Follow.step_path_walk(plan, bot.walk, before, speed * dt, BOT_RADIUS, solids)
 			var mx := bot.body.x - before.x
 			var mz := bot.body.z - before.z
 			var moved := M.hypot2(mx, mz)
@@ -355,7 +356,7 @@ static func _follow(st: Run.RunState, bot: WaitBot, dist: float) -> bool:
 			if M.hypot2(bot.body.x - prev.x, bot.body.z - prev.z) < 1e-6:
 				break
 	elif bot.walk != null:
-		bot.body = Follow.step_path_walk(st.plan, bot.walk, bot.body, dist, BOT_RADIUS)
+		bot.body = Follow.step_path_walk(st.plan, bot.walk, bot.body, dist, BOT_RADIUS, Run.solids_in(st))
 	return M.hypot2(bot.body.x - before.x, bot.body.z - before.z) > 1e-6
 
 ## Whether the body stands in the landing cell.
