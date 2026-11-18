@@ -5,9 +5,9 @@
 ## Status
 
 - **Gates passed:** 7 of 14. **Tasks done:** 63 of 109.
-- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 75.
+- **Started:** 2026-11-16T03:38:00Z. **Time limit:** 2026-11-21T05:00:00.000Z. **Iterations:** 76.
 - **Now:** T20d Furniture you bump into. A builder is making chairs, cabinets, desks and hospital beds solid for players, with every hide still reachable
-- **Last CI result seen:** passed on 1459c3b
+- **Last CI result seen:** failed on 63c8689
 - **Answers applied up to:** 2026-11-17T21:11:49.720Z
 
 ## Tasks
@@ -373,6 +373,8 @@
 
 ## Activity (newest first)
 
+- 2026-11-18 01:45Z CI failed on 63c8689.
+- 2026-11-18 01:21Z Hints scripted check after the fix: 8 of 10, as its builder reported. The two failures are the lone player being caught while waiting for the car (out, then the wipe), the same thing the build-check update is working on
 - 2026-11-18 01:19Z Main now holds the Playroom changes, live settings, the announcer hints, the orientation tape and crash reports with the hotfix pipeline (pushed). play/ is still build 0833 until the scripted playthroughs pass. The audition page lists the tape's narration beside the hints
 - 2026-11-18 01:19Z Paused T25: waiting for Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update
 - 2026-11-18 01:19Z Paused T24: waiting for Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update
@@ -411,5 +413,3 @@
 - 2026-11-17 22:02Z Caught a merge break on main (two branches each added PHONE_DB to the sound script, so the game could not load its sounds); fixed and committing. Every game script parses again.
 - 2026-11-17 21:47Z Finished T19c: The Temp's own mechanic.
 - 2026-11-17 21:47Z Promote check of a84aa2b: tests 230/230, play_down 24/24, net_local 10/10, mix 45/45 green; play_web 31/42, play_desktop 34/46 and sound_web red. The checks predate the 0833 rule changes; a builder brings them up to date before the promote
-- 2026-11-17 21:47Z Added task TP: Bring the build checks up to the new rules.
-- 2026-11-17 21:34Z Playroom tuning is built (30-45 s to hide, ball-pit view, anger bar, the 1 m grab); it waits for its check after the Lonely merge

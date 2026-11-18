@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 75,
+  "iteration": 76,
   "now": "T20d",
   "nowText": "A builder is making chairs, cabinets, desks and hospital beds solid for players, with every hide still reachable",
   "ci": {
-    "status": "passed",
-    "commit": "1459c3b",
-    "at": "2026-11-17T22:38:16.076Z"
+    "status": "failed",
+    "commit": "63c8689",
+    "at": "2026-11-18T01:45:18.474Z"
   },
   "answersAppliedTo": "2026-11-17T21:11:49.720Z",
   "tasks": [
@@ -3125,6 +3125,16 @@
   ],
   "feed": [
     {
+      "at": "2026-11-18T01:45:18.475Z",
+      "text": "CI failed on 63c8689.",
+      "kind": "ci"
+    },
+    {
+      "at": "2026-11-18T01:21:07.159Z",
+      "text": "Hints scripted check after the fix: 8 of 10, as its builder reported. The two failures are the lone player being caught while waiting for the car (out, then the wipe), the same thing the build-check update is working on",
+      "kind": "note"
+    },
+    {
       "at": "2026-11-18T01:19:11.416Z",
       "text": "Main now holds the Playroom changes, live settings, the announcer hints, the orientation tape and crash reports with the hotfix pipeline (pushed). play/ is still build 0833 until the scripted playthroughs pass. The audition page lists the tape's narration beside the hints",
       "kind": "note"
@@ -4113,16 +4123,6 @@
       "at": "2026-11-17T12:06:23.463Z",
       "text": "Finished T18j: The day in the run: bank, ride up, sleep, day 2.",
       "kind": "done"
-    },
-    {
-      "at": "2026-11-17T12:01:44.757Z",
-      "text": "New pictures for T15e: The count on screen.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T12:01:44.666Z",
-      "text": "New pictures for T15e: The count on screen.",
-      "kind": "media"
     }
   ]
 }
