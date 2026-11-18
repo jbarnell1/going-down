@@ -9,7 +9,9 @@
 // and that the server refused: a ninth player (4002), an oversized message (4003, or 1009 from the
 // WebSocket layer), a flood (4004), a message outside the protocol (4005), and a wrong passphrase
 // (4001; after repeated failures the address is refused before any handshake), and a client of another
-// build (4007, with the out-of-date reason). And the night's log (server/night_log.gd): JSON lines for the
+// build (4007, with the out-of-date reason). Ready-up (server/room.gd): the session's players all ready and
+// the run starts after the 5 s count (A's START sent at once does not start it early); a probe checks START
+// WITHOUT: refused from a non-host and from the host before 30 s, taken from the host after. And the night's log (server/night_log.gd): JSON lines for the
 // joins, the players' heartbeats, error lines and F9 reports, the run and its events, the leaves; never the
 // passphrase, never an address.
 //   node godot/tools/net_local.mjs [port] [--save-log=FILE]   (port 4450-4459 or 4490-4499, default 4451;
@@ -88,8 +90,15 @@ check(results.every((r) => r && r.banked), 'the run banked, and every player saw
 check(results.every((r) => r && r.watchedMoves === 0), `the watched Orderly never moved on a screen that saw it (pairs of seeing frames: ${results.map((r) => r?.watchedPairs).join(', ')})`);
 check(results.some((r) => r && r.watchedPairs > 30), 'not vacuous: a screen watched the Orderly for more than half a second');
 check(results.every((r) => r && r.caughtWhileSeen === 0), `nobody was caught while their own screen showed the Orderly (catches: ${results.map((r) => r?.catches).join(', ')})`);
+// Ready-up (server/room.gd): all three ready once the room is full, A also sends START at once. START
+// WITHOUT is the host's alone, 30 s after readying, so the run waits for the 5 s count on everyone's ready.
+const waits = results.map((r) => r?.countWait);
+check(waits.every((w) => typeof w === 'number' && w >= 4.5 && w < 12), `the run starts after the 5 s count on everyone's ready, not on A's early START (ready to run on each screen: ${waits.map((w) => w?.toFixed(1)).join(', ')} s)`);
 
-const probe = async (kind) => result((await run(['--script', 'res://tests/net_e2e_client.gd', '--', `url=${url}`, `secret=${SECRET}`, 'role=probe', `kind=${kind}`, 'timeout=60', `build=${BUILD}`], { timeout: 90 }).done).out);
+const probe = async (kind, secs = 60) => result((await run(['--script', 'res://tests/net_e2e_client.gd', '--', `url=${url}`, `secret=${SECRET}`, 'role=probe', `kind=${kind}`, `timeout=${secs}`, `build=${BUILD}`], { timeout: secs + 30 }).done).out);
+const sw = await probe('startwithout', 75);
+check(sw && sw.hostIsFirst && sw.notHostStarted === false && sw.earlyStarted === false, `START from a player who is not the host, and the host's before 30 s, start nothing (${JSON.stringify(sw)})`);
+check(sw && sw.started && sw.after >= 30 && sw.hostInRun && !sw.readerInRun, `the host's START WITHOUT after 30 s starts the run with the ready host, and the player still reading stays out (after ${sw?.after?.toFixed(1)} s)`);
 const ninth = await probe('ninth');
 check(ninth && ninth.admitted === 8 && ninth.code === 4002, `a ninth player is refused (8 admitted, the ninth closed with ${ninth?.code})`);
 const big = await probe('oversize');

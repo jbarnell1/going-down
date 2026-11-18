@@ -350,11 +350,13 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 			auto_status = "interrupted"
 		_auto = null
 	# What this screen showed (the fairness rule, counted for the tests): two frames running with every eye
-	# mark lit (with one watcher needed, every frame it is seen).
+	# mark lit (with one watcher needed, every frame it is seen). The one movement a watched resident makes
+	# (B6: bent over a downed player, "anyone looking sees it bend down too") is its bend's own clock, in
+	# place: that is not a move (as tests/net_e2e_client.gd counts it).
 	var all_lit := f.seeing and f.eyes_all
 	if all_lit and _prev_seeing and f.orderly != null and _prev_pose != null:
 		watched_pairs += 1
-		if not Pose.same_pose(f.orderly, _prev_pose):
+		if not Pose.same_pose(f.orderly, _prev_pose) and not _bending_in_place(_prev_pose, f.orderly):
 			watched_moves += 1
 	_prev_seeing = all_lit
 	_prev_pose = f.orderly
@@ -717,6 +719,10 @@ func crew_faces() -> Array[String]:
 # --- the Playroom ---------------------------------------------------------------------------------
 
 ## A player's row in the snapshot's seek block, or null (another floor, or not in it).
+## Two drawn poses of the resident that differ only in the bend's clock (B6: bending over a downed player).
+static func _bending_in_place(a: Dictionary, b: Dictionary) -> bool:
+	return a["anim"] == "bend" and b["anim"] == "bend" and a["x"] == b["x"] and a["y"] == b["y"] 		and a["z"] == b["z"] and a["level"] == b["level"] and a["yaw"] == b["yaw"]
+
 static func seek_row_of(latest: Variant, id: String) -> Variant:
 	if not latest is Dictionary:
 		return null

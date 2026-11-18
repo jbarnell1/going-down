@@ -49,7 +49,8 @@ jobs:
   # Separate from the browser game above, and nothing waits on it.
   godot:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The quick set passed 15 minutes when the furniture tests joined it (18 Nov 2026).
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
@@ -74,7 +75,7 @@ jobs:
       - name: Import the Godot project
         run: timeout 300 ./Godot_v4.7.2-stable_linux.x86_64 --headless --path godot --import
       - name: Run the Godot tests
-        run: timeout 900 ./Godot_v4.7.2-stable_linux.x86_64 --headless --path godot --script res://tests/run_tests.gd -- --quick
+        run: timeout 2400 ./Godot_v4.7.2-stable_linux.x86_64 --headless --path godot --script res://tests/run_tests.gd -- --quick
 
   # The public play link. Runs only after every check above passed, and only for main,
   # so the link never holds a build that failed a test.
