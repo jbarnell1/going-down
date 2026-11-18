@@ -3,13 +3,13 @@
   "goal": "A crew of up to four rides the elevator into a bright two-level Clinic floor, finds the Orderly, takes a reading, and banks or rides down.",
   "startedAt": "2026-11-16T03:38:00Z",
   "deadlineAt": "2026-11-21T05:00:00.000Z",
-  "iteration": 76,
-  "now": "T20d",
-  "nowText": "A builder is making chairs, cabinets, desks and hospital beds solid for players, with every hide still reachable",
+  "iteration": 82,
+  "now": null,
+  "nowText": "",
   "ci": {
-    "status": "failed",
-    "commit": "63c8689",
-    "at": "2026-11-18T01:45:18.474Z"
+    "status": "passed",
+    "commit": "72f92d4",
+    "at": "2026-11-18T03:20:18.905Z"
   },
   "answersAppliedTo": "2026-11-17T21:11:49.720Z",
   "tasks": [
@@ -2122,22 +2122,23 @@
       "id": "T8a",
       "title": "Down first, then out",
       "why": "Being caught drops you; a friend holding F puts you back up",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [
         "B6"
       ],
       "startedAt": "2026-11-17T12:32:19.658Z",
       "waiting": "Merged into main with its screen (T8c); goes into your next build",
-      "todo": [
-        "Add a test that walks a body through the open doorway into the car (today it is covered only by reading the code and the passing movement tests)"
-      ]
+      "todo": [],
+      "nsCheck": "B6/F3 as the owner decided: downed first, healable, then out; alone a catch ends the day.",
+      "finishedAt": "2026-11-18T04:36:00.771Z",
+      "summary": "Caught means down first: a friend heals you with F in about 3 seconds, or you are out after 10. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed."
     },
     {
       "id": "T8c",
       "title": "Down and healed on screen",
       "why": "When you go down you crawl with a 10-second timer; a friend sees HOLD F TO HELP and a fill bar; out leaves a red spot",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [
         "B6"
@@ -2157,36 +2158,41 @@
           "at": "2026-11-17T16:02:50.622Z"
         }
       ],
-      "waiting": "Checked: 209 quick tests, the two-player down check 24/24, a deliberate break (no HOLD F TO HELP) turned it red. Merged into main; re-running the three-player network test on main before your next build"
+      "waiting": "Checked: 209 quick tests, the two-player down check 24/24, a deliberate break (no HOLD F TO HELP) turned it red. Merged into main; re-running the three-player network test on main before your next build",
+      "nsCheck": "B6 as decided: every screen shows the host's own timer and hold.",
+      "finishedAt": "2026-11-18T04:36:00.858Z",
+      "summary": "Down and healed on screen: the view drops, a DOWN timer, HOLD F TO HELP with a bar, the out screen and a red spot. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.",
+      "todo": []
     },
     {
       "id": "T19a",
       "title": "Freeze takes two watchers",
       "why": "The Orderly keeps moving if only one of you is looking: it takes two (or, with two players, either of you) to hold it",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [
         "B1",
         "C2"
       ],
       "startedAt": "2026-11-17T13:31:58.984Z",
-      "waiting": "Merged into main and pushed with its network check; goes into your next build"
+      "waiting": "Merged into main and pushed with its network check; goes into your next build",
+      "nsCheck": "B1 Stillness with the owner's two-watcher change; alone or as two, one watcher still holds it.",
+      "finishedAt": "2026-11-18T04:36:00.963Z",
+      "summary": "With three or more players the Orderly needs two watchers to hold it; one watcher only slows its walk towards them. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.",
+      "todo": []
     },
     {
       "id": "T19b",
       "title": "Hiding places on every floor",
       "why": "Under hospital beds, inside cabinets (E), under desks (Ctrl) - so a re-rolled monster on any floor can be survived",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [
         "A2",
         "B1"
       ],
       "startedAt": "2026-11-17T13:31:59.156Z",
-      "todo": [
-        "Every hiding place keeps a view out: under a bed you can look around, a cabinet shows a thin crack; same rules for being found",
-        "The under-desk view in the Annex reads as a window, not as hiding under a desk: add the desk edge to the view"
-      ],
+      "todo": [],
       "waiting": "Merged into main and pushed (225 quick tests; relocation never lands on any of 6,204 hiding spots over 80 floors; network 10/10; down check 24/24). Goes into your next build",
       "media": [
         {
@@ -2195,7 +2201,10 @@
           "kind": "image",
           "at": "2026-11-17T15:52:49.558Z"
         }
-      ]
+      ],
+      "nsCheck": "A11 hiding as the owner asked after the Playroom.",
+      "finishedAt": "2026-11-18T04:36:01.082Z",
+      "summary": "Hiding places on every floor: under beds and in cabinets in the Clinic, under desks and tables and in cabinets in the Annex; found only if it saw you get in. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed."
     },
     {
       "id": "T19c",
@@ -2224,29 +2233,37 @@
       "ns": [],
       "nsWhy": "new from the owner on 17 Nov; a testing and hosting tool, amendment recorded",
       "startedAt": "2026-11-17T20:23:31.311Z",
-      "waiting": "Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update"
+      "waiting": "The settings list and the first ten working settings are in the build; the host's F8 panel and the saved file are not built yet"
     },
     {
       "id": "T25",
       "title": "Crash reports, metrics and a same-night hotfix",
       "why": "If something breaks on game night we see exactly what happened on whose PC, fix it, and send everyone a new build within minutes",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [],
       "nsWhy": "new from the owner on 17 Nov: tooling for game night, amendment recorded",
       "startedAt": "2026-11-17T22:07:38.694Z",
-      "waiting": "Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update"
+      "waiting": "Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update",
+      "nsCheck": "Tooling asked for by the owner on 17 Nov; not a game mechanic.",
+      "finishedAt": "2026-11-18T04:36:01.938Z",
+      "summary": "Crash reports and logs go to the server, F9 sends a report, an out-of-date game is refused with a clear message, and one command builds, checks, promotes and packages (used for this build: 22 minutes). In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.",
+      "todo": []
     },
     {
       "id": "T23",
       "title": "The announcer's hints",
       "why": "The lift's announcer teaches the game with snide, creepy hints: board on time or lose your pay, the quota, sneaking in the Playroom, instruments out",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [],
       "nsWhy": "new from the owner on 17 Nov; announcer lines (H5 voice), amendment recorded",
       "startedAt": "2026-11-17T20:34:56.176Z",
-      "waiting": "Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update"
+      "waiting": "Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update",
+      "nsCheck": "The owner's request of 17 Nov for snide spoken hints; the rest wait on features not built.",
+      "finishedAt": "2026-11-18T04:36:01.796Z",
+      "summary": "The announcer's hints: 76 lines in both voices, 30 wired in, HINTS on H. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.",
+      "todo": []
     },
     {
       "id": "T24",
@@ -2279,7 +2296,7 @@
           "at": "2026-11-17T22:21:24.702Z"
         }
       ],
-      "waiting": "Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update"
+      "waiting": "The orientation tape is in the build but not yet played on joining (that comes with the ready-up screen); nightly tapes and clues not built"
     },
     {
       "id": "T19d",
@@ -2297,27 +2314,35 @@
       "id": "T19e",
       "title": "Monsters slip away and reappear out of view",
       "why": "Every monster relocates out of everyone's sight in a way that fits its rule, so you can lose track of it",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [
         "B1",
         "B11"
       ],
       "startedAt": "2026-11-17T15:01:23.538Z",
-      "waiting": "Merged into main and pushed (219 quick tests, relocation/watchers/downs full tests, 3-player network 10/10, down check 24/24). Goes into your next build"
+      "waiting": "Merged into main and pushed (219 quick tests, relocation/watchers/downs full tests, 3-player network 10/10, down check 24/24). Goes into your next build",
+      "nsCheck": "B1/B11 as designed in traits-and-hiding; never while anyone watches it.",
+      "finishedAt": "2026-11-18T04:36:01.193Z",
+      "summary": "A monster nobody can see may slip away and turn up out of view near a player. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.",
+      "todo": []
     },
     {
       "id": "T20a",
       "title": "The Orderly stays visible in the dark",
       "why": "When the lights go out you should still glimpse it moving, not have it vanish",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [
         "B11",
         "B4"
       ],
       "startedAt": "2026-11-17T15:08:32.563Z",
-      "waiting": "Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build"
+      "waiting": "Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build",
+      "nsCheck": "Owner 17 Nov: 'don't make a silhouette, just don't hide it'.",
+      "finishedAt": "2026-11-18T04:36:01.298Z",
+      "summary": "The Orderly is drawn as it is in the dark: no glow, no outline, just hard to see. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.",
+      "todo": []
     },
     {
       "id": "T20b",
@@ -2423,27 +2448,28 @@
       "id": "T20h",
       "title": "A bit more stamina, monsters paced to match",
       "why": "You can run a little longer, and the monsters are retuned so they stay just as dangerous",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [
         "B1"
       ],
       "startedAt": "2026-11-17T16:12:27.413Z",
-      "waiting": "Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build"
+      "waiting": "Merged into main and pushed (230 quick tests; network 10/10; down check 24/24). Goes into your next build",
+      "nsCheck": "B12 with the owner's 17 Nov change.",
+      "finishedAt": "2026-11-18T04:36:01.430Z",
+      "summary": "Seven seconds of sprint, and the monsters hunt faster to match. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.",
+      "todo": []
     },
     {
       "id": "T15m",
       "title": "Playroom tuning from your play",
       "why": "A warning line on arrival to sneak, more time to hide, the ball pit lowers your view so you can watch it search, an anger bar, and a reminder to get your instrument out",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [
         "A11"
       ],
-      "todo": [
-        "Hide time is 6 s today (the 30-45 s is the seeking). Make it 30-45 s to hide, counted aloud",
-        "Your Minder answer: it just wanders; within 1 m it grabs you and drags you to the party table; once angered it hunts actively, and the intercom says not to run while it hunts; relocation is on for it"
-      ],
+      "todo": [],
       "startedAt": "2026-11-17T20:34:56.369Z",
       "waiting": "Merged into main and checked (277 tests, its own tests, a deliberate break caught); waits for the promote, which waits for the build-check update",
       "media": [
@@ -2459,33 +2485,72 @@
           "kind": "image",
           "at": "2026-11-17T22:32:26.807Z"
         }
-      ]
+      ],
+      "nsCheck": "A11 with the owner's changes from their first play; fill speed and grab details are still theirs to tune.",
+      "finishedAt": "2026-11-18T04:36:01.657Z",
+      "summary": "Playroom tuned: 30-45 seconds to hide, a view out of the ball pit, the anger bar, the Minder grabs within 1 m and drags you to the party table. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed."
     },
     {
       "id": "T20d",
       "title": "Furniture you bump into",
       "why": "Beds, chairs, cabinets and desks block you, which hiding needs",
-      "status": "doing",
+      "status": "todo",
       "gates": [],
       "ns": [],
       "nsWhy": "new from the owner's play of 17 Nov; no North Star mechanic covers furniture collision",
       "startedAt": "2026-11-17T23:15:36.487Z",
-      "doingText": "A builder is making chairs, cabinets, desks and hospital beds solid for players, with every hide still reachable",
-      "doingAt": "2026-11-17T23:38:45.238Z"
+      "media": [
+        {
+          "src": "T20d/20261118T034050-furniture_1_clinic_ward.png",
+          "caption": "A Clinic ward: beds, side tables and a cabinet against the walls, all solid for players now",
+          "kind": "image",
+          "at": "2026-11-18T03:40:50.653Z"
+        },
+        {
+          "src": "T20d/20261118T034050-furniture_3_annex_meeting.png",
+          "caption": "An Annex meeting room: the table (a hiding place) and its chairs are solid",
+          "kind": "image",
+          "at": "2026-11-18T03:40:50.762Z"
+        }
+      ],
+      "waiting": "Built; the web and desktop playthroughs pass with solid furniture (42/42 and 46/46); a checker is going over the branch before it merges"
     },
     {
       "id": "T20e",
       "title": "The day quota you can see, and no going home short",
       "why": "You know how close you are to the day's target; BANK is refused until it is met, with a snide line from the announcer; in the prison you can only shop and sleep",
-      "status": "doing",
+      "status": "done",
       "gates": [],
       "ns": [
         "C6",
         "C9"
       ],
       "startedAt": "2026-11-17T15:08:32.346Z",
-      "doingText": "A builder is making the day quota screens: the lift monitor rows, BANK LOCKED paint, the corner line and the snide refusal lines",
-      "doingAt": "2026-11-17T23:27:37.515Z"
+      "media": [
+        {
+          "src": "T20e/20261118T015902-1-monitor-bank-locked.png",
+          "caption": "The day's quota in the top corner (DAY 500/1200) and LOCKED painted on the BANK half; the monitor's rows are too small to read and are being enlarged",
+          "kind": "image",
+          "at": "2026-11-18T01:59:02.940Z"
+        },
+        {
+          "src": "T20e/20261118T015903-3-monitor-bank-open.png",
+          "caption": "Quota met: the corner line turns amber (DAY 1700/1200 MET) and BANK opens",
+          "kind": "image",
+          "at": "2026-11-18T01:59:03.087Z"
+        },
+        {
+          "src": "T20e/20261118T024255-1-monitor-bank-locked.png",
+          "caption": "The lift monitor, enlarged: DAY 1. EARNED 500 OF 1200. / BANK LOCKED. 700 TO GO.",
+          "kind": "image",
+          "at": "2026-11-18T02:42:55.633Z"
+        }
+      ],
+      "waiting": "Both test gaps fixed by its builder (40 bot days pass at full size in 73 s; a new test covers both earned paths); a checker is confirming, then it merges",
+      "nsCheck": "C9 extended to the day as the owner asked on 17 Nov; tied to the floor quota, and the quota does not shrink on a drop-out (owner may change both).",
+      "finishedAt": "2026-11-18T04:36:02.215Z",
+      "summary": "The day's quota is on screen (corner line, lift monitor, prison board), BANK is LOCKED until it is met, and a refused vote rides down with a snide line. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.",
+      "todo": []
     },
     {
       "id": "T20f",
@@ -2536,14 +2601,18 @@
       "id": "TB",
       "title": "Your second batch of sounds in the game",
       "why": "The Annex, the Playroom and the crew get their own recorded sounds: staplers, office tone, the music box, squeaky tiles, the ball pit, the Minder's wheeze, breathing that isn't wet",
-      "status": "todo",
+      "status": "done",
       "gates": [],
       "ns": [
         "B11",
         "A11"
       ],
       "startedAt": "2026-11-17T13:49:58.420Z",
-      "waiting": "Merged into main and pushed. In the build check now"
+      "waiting": "Merged into main and pushed. In the build check now",
+      "nsCheck": "H3/B11 sound; mix check 45/45.",
+      "finishedAt": "2026-11-18T04:36:01.542Z",
+      "summary": "Your second batch of sounds: the Annex, Playroom, lift and prison recordings, scares that carry across the floor, breathing that starts far out. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed.",
+      "todo": []
     },
     {
       "id": "T11a",
@@ -2929,19 +2998,16 @@
       "id": "TP",
       "title": "Bring the build checks up to the new rules",
       "why": "The build that carries your 0833 fixes can't reach play/ until the scripted playthroughs agree with the new rules (the Orderly drawn in the dark, downs, the longer blackout)",
-      "status": "doing",
+      "status": "done",
       "gates": [],
       "ns": [],
       "nsWhy": "tooling: the playthrough scripts that gate a promote",
-      "todo": [
-        "playthrough.mjs: the blackout and dark checks still expect the Orderly hidden; owner said draw it (T20a)",
-        "playthrough.mjs: alone, being caught in the longer, faster blackout now means down, out and the wipe; the run then rides away and every later check fails",
-        "sound_web.mjs: blackout never seen, so the hum-silent and emergency-drone checks fail; same cause",
-        "Add a quick test that loads every script in godot/ (client too): a duplicate constant from the Lonely + sounds merge broke sfx.gd on main and 241 quick tests passed anyway"
-      ],
+      "todo": [],
       "startedAt": "2026-11-17T22:06:48.105Z",
-      "doingText": "A builder is finishing the build-check update from the kept partial work",
-      "doingAt": "2026-11-17T23:38:45.098Z"
+      "waiting": "Built and passing on its branch; merging into main, then the promote check",
+      "nsCheck": "Tooling.",
+      "finishedAt": "2026-11-18T04:36:02.083Z",
+      "summary": "The build checks match the new rules, and a test loads every script. In the promoted build of 17 Nov 22:25 (commit 273d29e); promote check passed: web playthrough 42/42, desktop 46/46, sound, down-and-heal 24/24, network 17/17; lab-box server updated and the remote test through the public address passed."
     }
   ],
   "gates": [
@@ -3124,6 +3190,176 @@
     }
   ],
   "feed": [
+    {
+      "at": "2026-11-18T04:36:19.585Z",
+      "text": "Paused T22: waiting for The settings list and the first ten working settings are in the build; the host's F8 panel and the saved file are not built yet",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T04:36:19.483Z",
+      "text": "Paused T24: waiting for The orientation tape is in the build but not yet played on joining (that comes with the ready-up screen); nightly tapes and clues not built",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T04:36:19.365Z",
+      "text": "NEW BUILD in play/ (17 Nov 22:25, commit 273d29e): the Temp's Lonely rule, your Playroom changes, the day quota on screen, announcer hints (H), crash reports and F9, new sounds, your 0833 fixes. The lab-box server matches it; the remote test through the public address passed. Zip for friends: play/GoingDown-2026-11-17-2225.zip",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T04:36:02.216Z",
+      "text": "Finished T20e: The day quota you can see, and no going home short.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T04:36:02.084Z",
+      "text": "Finished TP: Bring the build checks up to the new rules.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T04:36:01.939Z",
+      "text": "Finished T25: Crash reports, metrics and a same-night hotfix.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T04:36:01.797Z",
+      "text": "Finished T23: The announcer's hints.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T04:36:01.658Z",
+      "text": "Finished T15m: Playroom tuning from your play.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T04:36:01.543Z",
+      "text": "Finished TB: Your second batch of sounds in the game.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T04:36:01.431Z",
+      "text": "Finished T20h: A bit more stamina, monsters paced to match.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T04:36:01.299Z",
+      "text": "Finished T20a: The Orderly stays visible in the dark.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T04:36:01.194Z",
+      "text": "Finished T19e: Monsters slip away and reappear out of view.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T04:36:01.083Z",
+      "text": "Finished T19b: Hiding places on every floor.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T04:36:00.964Z",
+      "text": "Finished T19a: Freeze takes two watchers.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T04:36:00.859Z",
+      "text": "Finished T8c: Down and healed on screen.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T04:36:00.772Z",
+      "text": "Finished T8a: Down first, then out.",
+      "kind": "done"
+    },
+    {
+      "at": "2026-11-18T04:23:26.932Z",
+      "text": "Paused T20d: waiting for Built; the web and desktop playthroughs pass with solid furniture (42/42 and 46/46); a checker is going over the branch before it merges",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T04:12:09.246Z",
+      "text": "The day quota is on main (291 tests). The build is being made now: tests, export, web playthrough, down-and-heal, network check, then promote to play/ and the zip",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T03:58:42.388Z",
+      "text": "Promote check on main passed everything: 278 tests, web playthrough 42/42, desktop 46/46, sound passes (and fails muted), down-and-heal 24/24, network 17/17, mix 45/45. The day quota is merging in; then the build is made and promoted",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T03:46:19.178Z",
+      "text": "Paused T20e: waiting for Both test gaps fixed by its builder (40 bot days pass at full size in 73 s; a new test covers both earned paths); a checker is confirming, then it merges",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T03:40:50.883Z",
+      "text": "Started T20d: Furniture you bump into. Furniture is built and solid for players; its builder is now running the scripted playthroughs with it on top of today's main",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T03:40:50.762Z",
+      "text": "New pictures for T20d: Furniture you bump into.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-18T03:40:50.654Z",
+      "text": "New pictures for T20d: Furniture you bump into.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-18T03:22:40.696Z",
+      "text": "The promote check is running on main (everything except the day quota): tests, export, web and desktop playthroughs, sound, down-and-heal, network. If it passes, the new build goes to play/ and the server is updated to match",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T03:22:03.499Z",
+      "text": "Started T20e: The day quota you can see, and no going home short. The checker found two test gaps on the day quota branch (a long test that fails at full size, and one path with no test); its builder is fixing both before it merges",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T02:58:11.321Z",
+      "text": "Paused TP: waiting for Built and passing on its branch; merging into main, then the promote check",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T02:58:05.057Z",
+      "text": "Build checks updated: web playthrough 42/42, desktop 46/46, sound check passes (and fails when muted), down-and-heal 24/24, network 17/17. No game bug behind the failures. Alone: standing at the lift you are caught 18 times in 20; in a hide entered unseen, 0 in 20. Merging into main, then the promote check",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T02:42:55.773Z",
+      "text": "Paused T20e: waiting for Built, monitor readable; a checker is going over the branch before it merges",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T02:42:55.633Z",
+      "text": "New pictures for T20e: The day quota you can see, and no going home short.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-18T02:32:19.545Z",
+      "text": "CI is green again on main (8380ba9): the Linux-only crash-report test now passes there",
+      "kind": "note"
+    },
+    {
+      "at": "2026-11-18T01:59:03.298Z",
+      "text": "Started T20e: The day quota you can see, and no going home short. Day quota screens built (corner line, LOCKED paint, refusal lines, prison board); the builder is enlarging the lift monitor's text so it can be read",
+      "kind": "start"
+    },
+    {
+      "at": "2026-11-18T01:59:03.087Z",
+      "text": "New pictures for T20e: The day quota you can see, and no going home short.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-18T01:59:02.940Z",
+      "text": "New pictures for T20e: The day quota you can see, and no going home short.",
+      "kind": "media"
+    },
+    {
+      "at": "2026-11-18T01:45:53.408Z",
+      "text": "CI failed on main's newest commit: one crash-report test fails on Linux only (the check for another running copy of the game). Fixed; the commit is running its tests and CI will confirm",
+      "kind": "note"
+    },
     {
       "at": "2026-11-18T01:45:18.475Z",
       "text": "CI failed on 63c8689.",
@@ -3953,176 +4189,6 @@
       "at": "2026-11-17T13:55:49.017Z",
       "text": "Paused T8a: waiting for checked (200 bot runs, all four deliberate breaks red, no golden changed); goes into your build with its screen (T8c)",
       "kind": "note"
-    },
-    {
-      "at": "2026-11-17T13:49:58.421Z",
-      "text": "Started TB: Your second batch of sounds in the game. An Opus builder is mixing your 41 new recordings into the game, with the found-you sting made from both takes",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T13:49:58.224Z",
-      "text": "Added task TB: Your second batch of sounds in the game.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T13:45:31.541Z",
-      "text": "New pictures for T5r: The quota on screen.",
-      "kind": "media"
-    },
-    {
-      "at": "2026-11-17T13:45:31.418Z",
-      "text": "Started T5r: The quota on screen. A Sonnet agent is checking the quota on screen: the panel must always show the host's numbers",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T13:31:59.157Z",
-      "text": "Started T19b: Hiding places on every floor. An Opus builder is adding hiding places to the Clinic and the Annex: under beds, in cabinets, under desks and meeting tables",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T13:31:58.985Z",
-      "text": "Started T19a: Freeze takes two watchers. An Opus builder is making the two-watcher rule: one person looking isn't enough with three or more players",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T13:31:21.123Z",
-      "text": "Paused T19d: waiting for design written (docs/floors/traits-and-hiding.md); built after T19a, T19b, T19e and T19c",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T13:28:49.260Z",
-      "text": "Added task T8c: Down and healed on screen.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T13:28:49.095Z",
-      "text": "Started T8a: Down first, then out. A Sonnet agent is checking down first, then out: 200 bot runs, heals only within reach, out at 10 s, every client the same",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T13:25:32.339Z",
-      "text": "Added task T19e: Monsters slip away and reappear out of view.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T13:25:31.955Z",
-      "text": "Took a default: The Temp is Lonely: a player is lonely when out of sight of every other player and beyond a set distance. The Temp chases a lonely player it sees, slightly faster than them; once they reach someone it turns away, leaves out of view and reappears out of view near another player. Every monster gets out-of-view relocation that fits its trait, so players can lose track of them.",
-      "kind": "decision"
-    },
-    {
-      "at": "2026-11-17T13:25:00.179Z",
-      "text": "Started T19d: Traits re-roll per floor. Fable is designing re-rolled traits, the new two-watcher Stillness, the Temp's own rule and hiding places on every floor",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T13:12:36.541Z",
-      "text": "Added task T19d: Traits re-roll per floor.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T13:12:36.360Z",
-      "text": "Added task T19c: The Temp's own mechanic.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T13:12:36.174Z",
-      "text": "Added task T19b: Hiding places on every floor.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T13:12:35.964Z",
-      "text": "Added task T19a: Freeze takes two watchers.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T13:12:27.403Z",
-      "text": "Took a default: Owner: no two residents share a mechanic. The Orderly's freeze-when-seen becomes: one watcher is not enough, two or more watchers stop it (with two players, either one stops it; alone, you stop it). Every floor gets hiding places (under hospital beds, cabinets with E, under desks with Ctrl). The Playroom stays as built until played.",
-      "kind": "decision"
-    },
-    {
-      "at": "2026-11-17T13:00:26.337Z",
-      "text": "Paused T5q: waiting for re-checked (solo meets floor 1 every time, worst 2:16; the lift-car snap bug fixed and tested; the quota never grows mid-floor); goes into your build with its call panel (T5r)",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T12:47:02.927Z",
-      "text": "Started T5r: The quota on screen. An Opus builder is putting the quota on screen: RECORDED n OF m on the call panel, NOT YET on a refused press, the announcer when it's met",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T12:47:02.779Z",
-      "text": "New build in play/ (play/GoingDown-2026-11-17-0642.zip): the Playroom's hide and seek is playable. Sprint or make a noise on floor 4 and HIDE. starts: lights out, the bell and the countdown voice, hide with F, peek with W. Lab-box server updated; public-address game passed.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T12:47:02.670Z",
-      "text": "Started T5q: A quota before the lift can be called. A Sonnet agent is re-checking the quota fixes, including a real bug the builder found: a step beside the lift car could snap you into it",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T12:47:02.464Z",
-      "text": "Finished T15b: The count, the Minder and health, as rules.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T12:47:02.362Z",
-      "text": "Finished T15e: The count on screen.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T12:47:02.255Z",
-      "text": "Finished T15d: The count in the run and over the network.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T12:32:19.659Z",
-      "text": "Started T8a: Down first, then out. An Opus builder is making going down and being healed: caught drops you where you stood, and a friend holding F for three seconds puts you back up",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T12:25:59.657Z",
-      "text": "Sample notes from the Temp's test run: 'Welcome, Cy. Your desk is ready. It has always been ready.' / 'Bo and Cy: you are standing very close. HR has been informed.' / 'Ana is furthest from the lift. Somebody has to be.'",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T12:25:59.459Z",
-      "text": "Paused T16h: waiting for checked (four players, 837 lost messages, identical marks and notes; marks never move; no note while the Temp is watched; four breaks red); goes into your build with the marks screen (T16j)",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T12:14:42.565Z",
-      "text": "Added task T16j: Marks, notes and the pad on screen.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T12:14:42.370Z",
-      "text": "Started T16h: Crew marks and the Temp's sticky notes in the run. A Sonnet agent is checking crew marks and the Temp's notes: four players must end with the host's exact marks and notes",
-      "kind": "start"
-    },
-    {
-      "at": "2026-11-17T12:06:23.866Z",
-      "text": "New build in play/ (play/GoingDown-2026-11-17-0602.zip): the day loop (bank, ride up, report board, bed, lights out, day 2), the Blender Minder on floor 4, crewmates that move properly with tags only up close, and the count's voice lines ready. Lab-box server updated; a two-player game over the public address passed.",
-      "kind": "note"
-    },
-    {
-      "at": "2026-11-17T12:06:23.769Z",
-      "text": "Finished T7g: Crewmates in motion: no foot sliding, name tags readable at 8 m, drawn faces on the mask screens.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T12:06:23.679Z",
-      "text": "Finished T15k: The Blender Minder in the game.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T12:06:23.574Z",
-      "text": "Finished T18k: Bed and the day board on screen.",
-      "kind": "done"
-    },
-    {
-      "at": "2026-11-17T12:06:23.463Z",
-      "text": "Finished T18j: The day in the run: bank, ride up, sleep, day 2.",
-      "kind": "done"
     }
   ]
 }
