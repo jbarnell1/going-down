@@ -5,7 +5,7 @@
 // form and press it). Asserts from BOTH clients' own state:
 //   - a wrong passphrase shows the plain-words error on the start screen;
 //   - each player draws a face in the face step after Join (the editor's own controls and mouse drags);
-//   - the lobby lists both names; Start (pressed by one) starts the run for both;
+//   - the lobby (Ready-up) lists both names; READY pressed by both starts the run for both after the count;
 //   - each sees the OTHER player's drawn face on that crewmate's mask (the picture on the mask, hashed,
 //     against the face the other drew), and the lift's monitor shows both faces;
 //   - B changes face mid-run at the face kiosk (the kiosk's own editor, opened by the test hook as F
@@ -172,11 +172,14 @@ try {
     check('the browser client left; the lobby is back to two', (scr(a).people ?? []).length === 2);
   }
 
-  // ---- 4. Start (A presses it): the run starts for both.
-  await A.cmd('start');
+  // ---- 4. Both press READY: the run starts for both.
+  // Ready-up (server/room.gd, FD5/FD6): both press READY on the controls card; the run starts for both
+  // after the 5 s count.
+  await A.cmd('ready');
+  await B.cmd('ready');
   a = await until(A.state, inGame, 20000);
   b = await until(B.state, inGame, 20000);
-  check('Start in the lobby starts the run for both', inGame(a) && inGame(b), `A ${a.phase}, B ${b.phase}`);
+  check('READY from both starts the run for both', inGame(a) && inGame(b), `A ${a.phase}, B ${b.phase}`);
   await A.cmd('click');
   await B.cmd('click');
   const planA = JSON.parse(await A.cmd('plan'));

@@ -264,7 +264,8 @@ func _session(t: T, port: int, run: bool) -> Array[String]:
 			for m in tel.outbox:
 				rc.send_telemetry(m)
 			if run:
-				rc.start_run()
+				# Ready-up (server/room.gd): a lone ready player's run starts after the 5 s count.
+				rc.set_ready(true)
 		elif stage == 1 and (room.running() or not run) and i > 150:
 			stage = 2
 			rc.leave()

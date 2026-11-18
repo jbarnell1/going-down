@@ -183,8 +183,9 @@ static func _view(p: Person) -> Entity.PlayerView:
 
 ## Advances the Lonely resident by dt seconds. `views`: every player's view this tick (only for whether it is
 ## seen: firstSeen and waking); `solo`: a crew of one; `relocating`: the run relocates it (a break-off then
-## waits for that). Never mutates `prev`.
-static func step(plan: Floor.FloorPlan, prev: Entity.OrderlyState, people: Array[Person], views: Array[Entity.PlayerView], dt: float, solo: bool, relocating: bool) -> Entity.StepResult:
+## waits for that). `chase`: the chase speed the host set (live settings, sim/run.gd _tuned_chase), or -1 for
+## CHASE_SPEED (SOLO_CHASE_SPEED solo). Never mutates `prev`.
+static func step(plan: Floor.FloorPlan, prev: Entity.OrderlyState, people: Array[Person], views: Array[Entity.PlayerView], dt: float, solo: bool, relocating: bool, chase: float = -1.0) -> Entity.StepResult:
 	var k := Entity.kind_of(prev)
 	var t := prev.t + dt
 	var s := prev.copy()
@@ -294,7 +295,7 @@ static func step(plan: Floor.FloorPlan, prev: Entity.OrderlyState, people: Array
 			_start_wind_up(s, target, events)
 		else:
 			var one: Array[Entity.PlayerView] = [_view(target)]
-			Entity._hunt(plan, s, one, dt, SOLO_CHASE_SPEED if solo else CHASE_SPEED, false, k)
+			Entity._hunt(plan, s, one, dt, (SOLO_CHASE_SPEED if solo else CHASE_SPEED) if chase < 0.0 else chase, false, k)
 		_finish(prev, res, dt, k)
 		return res
 

@@ -1,5 +1,6 @@
 # The dedicated server: ONE room (server/room.gd) behind one WebSocket port (net/ws_server.gd). It
-# draws nothing, opens no file for writing, starts no process and makes no outgoing connection.
+# draws nothing, starts no process and makes no outgoing connection. It opens no file for writing but the live
+# settings file, and that only when asked for one (below).
 #
 #   GD_JOIN_SECRET=... GoingDownServer.x86_64 --headless -- server port=4450
 #   godot --headless --path godot res://server/server.tscn -- server port=4450 bind=127.0.0.1
@@ -8,7 +9,10 @@
 # `bind=ADDRESS` (default * for every interface; 127.0.0.1 for local tests), `seed=TEXT` (tests: every
 # run on this seed), `insecure=1` (no passphrase: local tests only, with a loud warning), `quit_after=S`
 # (tests: stop after S seconds), `stats=S` (seconds between cost lines in the log, default 60; the worst tick
-# is the worst since the last line), `build=ID` (tests: this server's build id, net/build_info.gd),
+# is the worst since the last line), `build=ID` (tests: this server's build id, net/build_info.gd), `settings=PATH`
+# (the live settings file, docs/floors/live-settings.md: the host's changes are saved there, with PATH.tmp,
+# PATH.log and PATH.bad beside it, read again at start and whenever it is edited by hand; also the environment
+# variable GD_SETTINGS_FILE; with neither, the changes last until the server stops and nothing is written),
 # `depth=N` (tests: every run starts on floor N, so tools/exported_server_check.mjs reaches the Annex without
 # riding down; printed as a TEST line), `test_unreadable=FILE` (tests: the data check treats data/FILE as
 # missing, so the refusal below can be proved).
@@ -95,6 +99,10 @@ func _ready() -> void:
 	if args.has("depth"):
 		_room.first_depth = clampi(int(args["depth"]), 1, Places.FIXED.size() - 1)
 		say("TEST: every run starts at depth %d (depth=; tools/exported_server_check.mjs only)" % _room.first_depth)
+	var settings_file: String = args.get("settings", OS.get_environment("GD_SETTINGS_FILE"))
+	if not settings_file.is_empty():
+		_room.desk = Room.TuningDesk.new(settings_file, say)
+		say("live settings: %s, %d changed, revision %d" % [settings_file, _room.desk.asked.size(), _room.desk.rev])
 	# A server needs no frame rate of its own: 250 loops a second is a 4 ms step for the 20 Hz ticks.
 	Engine.max_fps = 250
 	_t0 = Time.get_ticks_usec()

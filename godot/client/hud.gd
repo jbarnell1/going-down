@@ -23,6 +23,9 @@ var black := false
 var went_down := false
 var end_lines: Array = []      # [{text, strong}]
 var center_note := ""
+## The mouse is free on entering the run (the browser) or after the window lost it: one undimmed line, CLICK
+## TO LOOK, where the controls menu used to show (findables-and-day.md section 2; Esc still shows the menu).
+var click_to_look := false
 var osd_on := true
 var tape_text := ""
 ## The menu shown while the mouse is free (Esc, or before the first click): the controls.
@@ -41,6 +44,7 @@ const MENU_ROWS: Array[Array] = [
 	["T", "TAPE LOOK ON / OFF"],
 	["HOLD R", "EMOTE WHEEL: AIM, LET GO"],
 	["TAP R", "CLOSE THE WHEEL"],
+	["F8", "HOST SETTINGS"],
 	["ESC", "THIS MENU"],
 ]
 ## The menu's setting row: the announcer's hints (H; client/hints.gd, kept per player).
@@ -210,6 +214,9 @@ func _draw() -> void:
 		_draw_subtitle(px)
 	if wheel_on and not black:
 		_draw_wheel(px)
+	if click_to_look and not menu_on and not black and end_lines.is_empty():
+		var cl := "CLICK TO LOOK"
+		PixelFont.draw_shadowed(self, cl, Vector2(floorf((size.x - PixelFont.width(cl) * px) * 0.5), floorf(size.y * 0.42)), px, Color("#f4f4ec"))
 	if menu_on and not black:
 		_draw_menu()
 
