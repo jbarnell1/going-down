@@ -6,13 +6,13 @@ The files to upload are in `assets_src/mixamo/export/`:
 |---|---|---|
 | `orderly.fbx` | The Orderly (Clinic) | T-pose |
 | `crewmate.fbx` | The players' convict figure (what your friends see) | T-pose |
+| `temp.fbx` | The Temp (Annex): the office worker with a photocopied face stapled on | T-pose |
 
-The `_front`, `_side` and `_back` pictures show what each file looks like.
+The `_front`, `_side`, `_back` and `_top` pictures show what each file looks like.
 
-Two characters can't go through Mixamo:
+One character can't go through Mixamo:
 
 - **The Minder** walks on all fours, and Mixamo only rigs two-legged figures. It keeps its Blender animations.
-- **The Temp** has no model file yet. It's built from boxes in code. If you want it in Mixamo too, I'll make it a proper Blender model first.
 
 ## Steps for each character
 
@@ -47,6 +47,21 @@ Its sound is a trolley squeak, so its main walk should look like it's pushing so
 | `orderly_catch` | Bending or kneeling down over someone on the floor and grabbing at them | pick up, kneel, crouch, grab |
 | `orderly_roar` | Rearing back and screaming or roaring | scream, roar, yell |
 | `orderly_turn` (optional) | Turning on the spot | turn |
+
+## The Temp
+
+It stands still while watched and comes for whoever is alone. Its sound is a stapler, which it carries in its right hand; a pad of sticky notes is in its left. Its head (the paper sheet, staples and string) is rigid, so head-turning clips are fine. Its hands are open in the T-pose; a relaxed, slightly curled hand in the clips is best.
+
+| Save as | What it is | Search for |
+|---|---|---|
+| `temp_walk` | A tired, shuffling office walk, shoulders down. **The most important one.** | walk, tired, sad walk, drunk walk (mild) |
+| `temp_chase` | A fast, stiff, purposeful walk (about a brisk jog, not a sprint): it chases someone who is alone | fast walk, speed walk, hurried |
+| `temp_idle` | Standing nearly still, a small sway, head slightly tilted | idle, standing |
+| `temp_wait` | Standing and looking slowly around, as if waiting for a lift | looking around, waiting |
+| `temp_staple` | A short jab forward with the right hand at chest height (the stapler going in) | punch (short), stab, jab |
+| `temp_catch` | Reaching out with both hands and grabbing someone in front of it | grab, reaching, zombie attack |
+| `temp_write` (optional) | Writing on something held in the left hand | writing, taking notes |
+| `temp_turn` (optional) | Turning on the spot | turn |
 
 ## The crewmate (your players): only the missing ones, optional
 
