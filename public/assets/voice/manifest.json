@@ -197,6 +197,12 @@
     },
     "tape": {
       "priority": 1
+    },
+    "bank_refused": {
+      "priority": 4
+    },
+    "day_met": {
+      "priority": 3
     }
   },
   "lines": [
@@ -1019,6 +1025,61 @@
       "voices": [
         "bella"
       ]
+    },
+    {
+      "id": "bank_refused_1",
+      "moment": "bank_refused",
+      "plain": "The vote was unanimous! It was also wrong. Going down."
+    },
+    {
+      "id": "bank_refused_2",
+      "moment": "bank_refused",
+      "plain": "I've counted your votes, and I've counted your credits. Only one of those was enough. Going down!"
+    },
+    {
+      "id": "bank_refused_3",
+      "moment": "bank_refused",
+      "plain": "You've asked for up. I admire that. Going down!"
+    },
+    {
+      "id": "bank_refused_4",
+      "moment": "bank_refused",
+      "plain": "The BANK side is working perfectly. So am I. Going down."
+    },
+    {
+      "id": "bank_refused_5",
+      "moment": "bank_refused",
+      "plain": "Democracy has been noted. The quota has not been met. One of these matters."
+    },
+    {
+      "id": "bank_refused_6",
+      "moment": "bank_refused",
+      "plain": "Home is for people who have paid for today. You are people who have not. Going down!"
+    },
+    {
+      "id": "bank_refused_7",
+      "moment": "bank_refused",
+      "plain": "Up is a privilege. Privileges are listed on the board. Going down!"
+    },
+    {
+      "id": "bank_refused_8",
+      "moment": "bank_refused",
+      "plain": "Lovely teamwork, everyone. Wrong direction, though. Going down, with enthusiasm!"
+    },
+    {
+      "id": "day_met_1",
+      "moment": "day_met",
+      "plain": "Today is paid for! BANK is now open. So is DOWN."
+    },
+    {
+      "id": "day_met_2",
+      "moment": "day_met",
+      "plain": "Day quota met! You may go home. You may also be braver than that."
+    },
+    {
+      "id": "day_met_3",
+      "moment": "day_met",
+      "plain": "That's today's debt covered. Anything further is greed, and we encourage greed."
     }
   ]
 }

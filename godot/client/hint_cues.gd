@@ -15,9 +15,15 @@
 #   hint_hide_idle       25 s in a hide with no count running
 #   hint_play_no_run     you sprint during a Playroom search (after the crew's own first one)
 #   hint_last_miss       a new day with two misses this night
+#   hint_floor_not_day   the floor quota is met ("quotaMet") while the host says the day is locked (FD3)
+#   hint_bank_locked     boarding, someone stands on BANK while the day is locked
+#   hint_stakes          the morning, when the monitor's stakes row says someone owns an upgrade
+# (hint_day, in place of the night's first ride line, is the announcer's own: Announcer.on_events.)
 # The waiting-car lines and hints play only in a run with days (the game's rooms, where the car waits:
 # sim/run.gd car_waits); the left-behind lines say "your cell", which only a run with days has.
 extends RefCounted
+
+const DayView = preload("res://client/day_view.gd")
 
 const STRAGGLER_AT := 14.0
 const CAR_STAY_S := 10.0
@@ -26,6 +32,9 @@ const CAR_NAG_EVERY_S := 30.0
 const QUIET_NEEDLE_S := 120.0
 const HIDE_IDLE_S := 25.0
 const LAST_MISS_DELAY_MS := 2200
+## The day quota's hints (FD3): after the floor's quota line; a while into the morning.
+const FLOOR_NOT_DAY_DELAY_MS := 4500
+const STAKES_DELAY_MS := 12000
 ## A condition that holds is asked again this often while the gate refuses it.
 const RETRY_MS := 3000
 
@@ -42,8 +51,10 @@ var _unload_since := -1
 var _nags := 0
 var _hide_since := -1
 var _tried := {}
+var _stakes_key := -1
 
 func reset() -> void:
+	_stakes_key = -1
 	_status = {}
 	_winded = false
 	_sprinting = false
@@ -69,11 +80,24 @@ func update(ann: Announcer, s: Dictionary, latest: Variant, quota: Variant, car_
 	var days := s.get("day") != null
 	var phase := str(s.get("phase", ""))
 	var place := ann.place
+	# The day quota's lock (FD3): the host's day block, or null without the lock.
+	var lock: Variant = DayView.lock_of(s.get("day"))
 	for e: Dictionary in s.get("events", []):
 		if str(e.get("type", "")) == "newDay":
 			var day: Variant = s.get("day")
 			if day is Dictionary and int((day as Dictionary).get("misses", 0)) == 2:
 				ann.later("hint_last_miss", LAST_MISS_DELAY_MS)
+		elif str(e.get("type", "")) == "quotaMet" and lock is Dictionary and bool((lock as Dictionary)["locked"]):
+			# This floor is paid but today is not: after the quota line.
+			ann.later("hint_floor_not_day", FLOOR_NOT_DAY_DELAY_MS)
+	# A morning (or the first day) when someone in the crew owns an upgrade: what an empty car costs (the
+	# monitor's stakes row names an owner's loss only when somebody owns one).
+	if lock is Dictionary:
+		var dkey := int((lock as Dictionary)["day"]) * 1000 + int(s.get("depth", 0))
+		if dkey != _stakes_key and int(s.get("depth", 0)) == 1:
+			_stakes_key = dkey
+			if str((lock as Dictionary)["stakes"]).contains("LOSES ONE UPGRADE"):
+				ann.later("hint_stakes", STAKES_DELAY_MS)
 
 	# The floor: what it has seen since the doors opened.
 	var key := "%s/%d" % [str(s.get("seed", "")), int(s.get("depth", 0))]
@@ -114,10 +138,13 @@ func update(ann: Announcer, s: Dictionary, latest: Variant, quota: Variant, car_
 	# The players as the host has them.
 	var aboard_n := 0
 	var floor_n := 0
+	var on_bank := false
 	if latest is Dictionary:
 		for p: Dictionary in (latest as Dictionary).get("players", []):
 			if not bool(p.get("active", false)) or str(p.get("status", "")) != "ok":
 				continue
+			if str(p.get("side", "")) == "bank":
+				on_bank = true
 			if bool(p.get("aboard", false)):
 				aboard_n += 1
 			else:
@@ -129,6 +156,9 @@ func update(ann: Announcer, s: Dictionary, latest: Variant, quota: Variant, car_
 		if _bell_left > STRAGGLER_AT and bl <= STRAGGLER_AT and floor_n > 0:
 			ann.hint("hint_straggler")
 		_bell_left = bl
+		# Someone stands on BANK while the host says it is locked (FD3).
+		if on_bank and lock is Dictionary and bool((lock as Dictionary)["locked"]):
+			_try(ann, "hint_bank_locked", now)
 	else:
 		_bell_left = INF
 

@@ -93,6 +93,10 @@ var out_lines: Array = []
 ## all}, or {} for none. One mark per watcher needed; one lit per watcher the host counts, your own the frame
 ## you look; all lit, the row closes into a bar (it is held); one of two lit, the second pulses ("one more").
 var eyes: Dictionary = {}
+## The day quota (client/day_view.gd, FD3): the corner line under PLAY ("DAY 1650/2400"), "" for none, and
+## whether it is met (then amber, "... MET").
+var day_line := ""
+var day_met := false
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -138,6 +142,9 @@ func _draw() -> void:
 		var tw := PixelFont.width(top) * px
 		var margin := Vector2(maxf(size.x * 0.06, 16.0), maxf(size.y * 0.06, 12.0))
 		PixelFont.draw_shadowed(self, top, Vector2(size.x - margin.x - PixelFont.width("PLAY >") * px, margin.y), px, Color("#f4f4ec"))
+		if day_line != "" and not black:
+			# The day quota, under PLAY in the top corner: pale while owed, amber once met.
+			PixelFont.draw_shadowed(self, day_line, Vector2(size.x - margin.x - PixelFont.width(day_line) * px, margin.y + 12 * px), px, Color("#ffd27a") if day_met else Color("#f4f4ec"))
 		var s := start_sec + (now - t0) / 1000
 		var bottom := "SP %d:%02d:%02d" % [s / 3600, (s / 60) % 60, s % 60]
 		var bw := PixelFont.width(bottom) * px

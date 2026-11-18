@@ -2891,6 +2891,8 @@ static func _settle_day(s: RunState, t: float, banked: int, events: Array[Dictio
 	s.day_next = r.state
 	var result: Dictionary = r.facts.duplicate(true)
 	result["shares"] = r.shares.duplicate()
+	# Tomorrow's quota for today's crew (the prison's day board; the morning sizes it for whoever rides down).
+	result["next_quota"] = Day.day_quota(r.state, DAY_FLOOR_QUOTA)
 	var credits := {}
 	for id: String in _sorted_keys(r.wallets):
 		credits[id] = (r.wallets[id] as Upgrades.UpgradeState).credits

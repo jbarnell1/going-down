@@ -47,6 +47,7 @@ const HideView = preload("res://client/hide_view.gd")
 const QuotaView = preload("res://client/quota_view.gd")
 const DownView = preload("res://client/down_view.gd")
 const HintCues = preload("res://client/hint_cues.gd")
+const DayView = preload("res://client/day_view.gd")
 
 const VFOV := 70.0
 const SENS := 0.0022
@@ -104,6 +105,10 @@ var quota_view := QuotaView.new()
 var down_view := DownView.new()
 ## The hints this screen triggers itself (client/hint_cues.gd; the gate is client/hints.gd, AH1).
 var hint_cues := HintCues.new()
+## The day quota on screen (FD3): the HUD's corner line, the lift's day monitor and BANK paint, CLOSED UNTIL MORNING (client/day_view.gd).
+var day_view := DayView.new()
+## Tests: the host tick of the snapshot the day view was last drawn from.
+var _day_view_tick := -1
 ## The floor's red spots are drawn under this (rebuilt with each floor).
 var spots_root: Node3D = null
 ## Caught and down: until when (msec) the camera turns to the resident bent over you (B6: "turns you
@@ -980,6 +985,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		return
 	announcer.place = str(link.plan_dict.get("place", ""))
 	announcer.days_on = s.get("day") != null
+	announcer.day_lock_on = DayView.lock_of(s.get("day")) != null
 	announcer.my_id = link.my_id()
 	_present(s.get("events", []), now)
 	for em: Dictionary in s.get("emotes", []):
@@ -1145,6 +1151,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		elif _tape_in_reach(me):
 			prompt = "F  PICK UP"
 	hud.prompt = prompt
+	_show_day_lock(s)
 	_show_quota(now)
 	if me_down:
 		hud.quota_line = ""
@@ -1176,6 +1183,21 @@ func _show_quota(now: int) -> void:
 		lift.show_quota(car_waiting, "count", true)
 		hud.quota_line = car_waiting
 		hud.quota_tone = "count"
+	# Home for the night (FD3): the shut car's panel says so, with no voice.
+	if day_view.closed != "":
+		lift.show_quota(day_view.closed, "refused", true)
+
+## The day quota (client/day_view.gd, FD3): the HUD's corner line, the lift's day monitor and its BANK
+## paint, all from the host's day block in this frame's snapshot.
+func _show_day_lock(s: Dictionary) -> void:
+	day_view.update(s)
+	var dc := link.client()
+	_day_view_tick = int((dc.latest as Dictionary)["tick"]) if dc != null and dc.latest is Dictionary else -1
+	hud.day_line = day_view.hud_line
+	hud.day_met = day_view.met
+	if lift != null:
+		lift.show_day(day_view.rows)
+		lift.set_bank_locked(day_view.locked)
 
 ## The car waits (FD4; sim/run.gd car_waits): once the arrival doors have stood open CAR_WAIT_SHOW_MS, the
 ## words for the call panel and the HUD, "CAR WAITING FOR: DAVE" (everyone active still aboard, by name),
@@ -1580,8 +1602,11 @@ func _show_day(s: Dictionary, now: int) -> void:
 ## The ride up's headline from the settled day (the host's facts).
 func _headline(r: Dictionary, s: Dictionary) -> String:
 	var sm: Variant = s.get("summary")
-	if sm is Dictionary and bool((sm as Dictionary).get("wiped", false)):
+	if bool(r.get("wiped", false)) or (sm is Dictionary and bool((sm as Dictionary).get("wiped", false))):
 		return "GOING UP.  NOBODY CAME BACK.  NOTHING BANKED"
+	# The day lock (FD3): BANK only opens once the day is earned, so the day is made whatever came back.
+	if DayView.lock_of(s.get("day")) != null:
+		return "GOING UP.  DAY MADE.  BANKED %d" % int(r["banked"])
 	var head := "GOING UP.  BANKED %d OF %d" % [int(r["banked"]), int(r["quota"])]
 	return head + ("  MADE" if str(r["kind"]) == "made" else "  SHORT %d" % int(r["short_by"]))
 
@@ -1988,6 +2013,10 @@ func _test_state() -> Dictionary:
 			"anger": hud.anger, "angerRates": hud.anger_rates},
 		"quota": {"host": link.client().quota() if link.client() != null else null, "panel": lift.quota_text, "tone": lift.quota_tone,
 			"hud": hud.quota_line, "carWaiting": car_waiting, "view": quota_view.describe(), "at": [lift.quota_point().x, lift.quota_point().y, lift.quota_point().z]},
+		"dayLock": {"host": link.client().day_lock() if link.client() != null else null, "tick": int((link.client().latest as Dictionary)["tick"]) if link.client() != null and link.client().latest is Dictionary else -1,
+			"view": day_view.describe(), "viewTick": _day_view_tick, "hudLine": hud.day_line, "hudMet": hud.day_met, "monitor": lift.day_rows, "bankLocked": lift.bank_locked,
+			"monitorAt": [lift.day_point().x, lift.day_point().y, lift.day_point().z], "subtitle": announcer.shown(),
+			"said": announcer.history.filter(func(h: Dictionary) -> bool: return str(h.moment) in ["bank_refused", "day_met", "ride", "hint_day", "hint_bank_locked", "hint_floor_not_day", "hint_stakes"])},
 		"downs": {"host": s.get("downs"), "view": down_view.describe(), "hud": {"head": hud.down_head, "left": hud.down_left, "line": hud.down_line,
 			"line2": hud.down_line2, "heal": hud.down_heal, "out": hud.out_on, "outLines": hud.out_lines, "prompt": hud.prompt, "fill": hud.prompt_fill},
 			"turning": _turn_until > Time.get_ticks_msec(), "bend": orderly.get("bend") if orderly != null else null},

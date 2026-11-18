@@ -36,6 +36,7 @@ const Client = preload("res://net/client.gd")
 const HostRules = preload("res://net/host_rules.gd")
 const Harness = preload("res://tests/net_harness.gd")
 const DayRigLib = preload("res://tests/day_rig.gd")
+const DayView = preload("res://client/day_view.gd")
 
 ## The session's clock step, and how often each bot draws a frame (and so sends an input).
 const STEP := 0.025
@@ -60,6 +61,12 @@ class Bot:
 	var saw_all_in := {}
 	## The day lock: the host bells (by tick) this bot has compared its day block at.
 	var bells_checked := {}
+	## FD3: this bot's screen (client/day_view.gd), fed every frame like the game's; the frames compared
+	## with the host's own block at the same tick, and the client events it has passed on.
+	var view := DayView.new()
+	var view_frames := 0
+	var view_locked := 0
+	var events_seen := 0
 
 class Stop:
 	var key: String
@@ -90,6 +97,8 @@ class Sess:
 	## The day quota's lock (FD2): the whole crew votes BANK on every floor; the host's ticks of each "bell".
 	var lock := false
 	var bells: Array[int] = []
+	## Ticks whose stored state a fixture rewrote after their snapshot went out (host.act): not compared.
+	var acted := {}
 
 	func _init(seed_: String, lock_: bool = false) -> void:
 		seed = seed_
@@ -195,6 +204,49 @@ func _bot_frame(s: Sess, b: Bot) -> void:
 		b.body = f.placed
 		b.walk = null
 	_check_stops(s, b)
+	if s.lock:
+		_check_view(s, b)
+
+## FD3: what this client's screen shows (the HUD's corner line, the lift monitor's rows, the BANK paint)
+## equals what the host's own day block at the snapshot's tick makes it show, on every frame.
+func _check_view(s: Sess, b: Bot) -> void:
+	var c := b.client
+	if c.latest == null:
+		return
+	var latest: Dictionary = c.latest
+	var fresh: Array = c.events.slice(b.events_seen)
+	b.events_seen = c.events.size()
+	# As client/play_link.gd makes the game's frame: riding up once the day is settled.
+	var dv: Variant = latest.get("day")
+	var up: bool = str(latest["phase"]) == "riding" and dv is Dictionary and (dv as Dictionary)["result"] != null
+	var frame := {"day": dv, "depth": latest["depth"], "phase": latest["phase"], "goingUp": up, "events": fresh}
+	b.view.update(frame)
+	if s.acted.has(int(latest["tick"])):
+		return
+	var hs := s.host.state_at(int(latest["tick"]))
+	if hs == null:
+		return
+	# The design's words from the host's own block at that tick (not the view's code): the corner line, the
+	# monitor's rows (the third while boarding), LOCKED; nothing at home but CLOSED UNTIL MORNING for the night.
+	var hb := Host.day_block(hs)
+	var on_floor := int(latest["depth"]) >= 1 or up
+	var w_hud := ""
+	var w_rows: Array = []
+	var w_locked := false
+	if on_floor:
+		w_locked = int(hb["earned"]) < int(hb["quota"])
+		w_hud = "DAY %d/%d%s" % [int(hb["earned"]), int(hb["quota"]), "" if w_locked else " MET"]
+		w_rows = ["DAY %d. EARNED %d OF %d." % [int(hb["day"]), int(hb["earned"]), int(hb["quota"])],
+			("BANK LOCKED. %d TO GO." % (int(hb["quota"]) - int(hb["earned"]))) if w_locked else ("BANK OPEN. ABOARD %d. EACH GETS %d." % [int(hb["aboard"]), int(hb["each"])])]
+		if str(latest["phase"]) == "boarding":
+			w_rows.append(str(hb["stakes"]))
+	var w_closed := "CLOSED UNTIL MORNING" if not on_floor and str(latest["phase"]) == "night" else ""
+	b.view_frames += 1
+	if w_locked:
+		b.view_locked += 1
+	var v := b.view
+	if v.hud_line != w_hud or Array(v.rows) != w_rows or v.locked != w_locked or v.closed != w_closed:
+		s.mismatches.append("%s at tick %d: the screen %s, the host's block says %s / %s / locked %s / %s" % [b.id, int(latest["tick"]), str(v.describe()), w_hud, str(w_rows), w_locked, w_closed])
 
 ## Compares what this bot's client has with the host, for every stop it has reached and not yet checked.
 func _check_stops(s: Sess, b: Bot) -> void:
@@ -282,6 +334,7 @@ func _on_tick(s: Sess) -> void:
 		s.floor_fixtures[tape_id] = true
 		var lock := s.lock
 		var depth := st.depth
+		s.acted[s.host.tick] = true
 		s.host.act(func(rs: Run.RunState) -> Run.RunStep:
 			var x := rs
 			for i in s.ids.size():
@@ -366,6 +419,9 @@ func test_three_bots_on_a_lossy_link_agree_on_the_day_lock(t: T) -> void:
 				got.append([String(e["type"]), int(e["day"]), int(e["earned"]), int(e["quota"])])
 		t.eq(got, host_lock, "%s's refused votes and met days" % b.id)
 		t.eq(b.bells_checked.size(), s.bells.size(), "%s compared its day block at every bell" % b.id)
+		# FD3: the screen matched the host on every frame (the mismatches above), and not vacuously.
+		t.check(b.view_frames > 1000 and b.view_locked > 100 and b.view_locked < b.view_frames,
+			"%s: %d frames compared, %d of them locked" % [b.id, b.view_frames, b.view_locked])
 	t.check(s.bells.size() >= 2 * DAYS, "bells: %d" % s.bells.size())
 
 func _two_days(t: T, seed: String, lock: bool) -> Sess:
