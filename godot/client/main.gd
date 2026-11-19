@@ -45,6 +45,16 @@ const EyeHeight = preload("res://client/eye_height.gd")
 const RoomClient = preload("res://net/room_client.gd")
 const LocalRoom = preload("res://net/local_room.gd")
 const PLAYTEST_REVIEWS := {
+	"ward_ground": {
+		"pack":"WardGroundMedia.pck", "scene":"res://client/ward/review.tscn",
+		"label":"HANGING WARD / GROUND FLOOR", "title":"Going Down - Hanging Ward",
+		"size":Vector2i(1280,720),
+	},
+	"reactor": {
+		"pack": "ReactorCampaign.pck", "scene": "res://reactor_campaign.tscn",
+		"label": "REACTOR / RECOVERED CASSETTE", "title": "Going Down - Reactor Campaign Review",
+		"size": Vector2i(1280,720),
+	},
 	"ward": {
 		"pack": "WardReview.pck", "scene": "res://ward_review.tscn",
 		"label": "HANGING WARD (PROTOTYPE)", "title": "Going Down - Hanging Ward Prototype",
@@ -119,6 +129,8 @@ const CONNECT_TIMEOUT := 10.0
 const WELCOME_HOLD := 2.0
 
 var link: PlayLink = null
+var ward_room: Variant = null
+var _ward_prison_pending := false
 var sub: SubViewport
 var env: Environment
 var cam: Camera3D
@@ -311,6 +323,7 @@ var _lights_out := false
 
 ## A Windows review child mounts only the fixed sibling pack and skips all game setup and networking.
 func _owner_review_requested() -> bool:
+	if ward_room != null: return false
 	if not OS.has_feature("windows") or OS.has_feature("editor"):
 		return false
 	var args := OS.get_cmdline_user_args()
@@ -318,6 +331,9 @@ func _owner_review_requested() -> bool:
 		return false
 	for id: String in PLAYTEST_REVIEWS:
 		if args.has("owner_review=" + id):
+			if id in ["reactor","ward_ground"] and not FileAccess.file_exists(_review_pack_path(PLAYTEST_REVIEWS[id])):
+				# Keep the normal title available when the optional owner media is absent.
+				return false
 			process_mode = Node.PROCESS_MODE_DISABLED
 			_start_owner_review.call_deferred(id)
 			return true
@@ -351,6 +367,11 @@ func _start_owner_review(id: String) -> void:
 func _ready() -> void:
 	if _owner_review_requested():
 		return
+	for arg: String in OS.get_cmdline_user_args():
+		if ward_room == null and arg.begins_with("ward_review_url="):
+			process_mode = Node.PROCESS_MODE_DISABLED
+			get_tree().change_scene_to_file.call_deferred("res://client/ward/review.tscn")
+			return
 	if OS.get_cmdline_user_args().has("scene=annex_demo"):
 		process_mode = Node.PROCESS_MODE_DISABLED
 		get_tree().change_scene_to_file.call_deferred("res://client/annex_demo.tscn")
@@ -372,7 +393,7 @@ func _ready() -> void:
 		get_tree().change_scene_to_file.call_deferred("res://client/tape_demo.tscn")
 		return
 	var t0 := Time.get_ticks_msec()
-	_t0_us = Time.get_ticks_usec()
+	_t0_us = Time.get_ticks_usec() if ward_room == null else 0
 	# Where the client makes its plans: every floor from the game's deck (the third floor down is the
 	# Annex, the fourth the Playroom), the same deck the room it plays in gives the run (sim/places.gd).
 	Session.deck = Places.FULL
@@ -405,6 +426,14 @@ func _ready() -> void:
 	brightness.persist = not automated
 	brightness.load_saved()
 	_apply_brightness(brightness.level)
+	if ward_room != null:
+		link = PlayLink.new(ward_room, ward_room is LocalRoom)
+		link.continue_joined_run()
+		_ever_connected = true
+		_ward_prison_pending = true
+		ward_room = null
+		_enter_game()
+		return
 	if not join_arg.is_empty():
 		start.address = join_arg
 	if not name_arg.is_empty():
@@ -700,7 +729,7 @@ func _open_playtest() -> void:
 	if not OS.has_feature("editor"):
 		for id: String in PLAYTEST_REVIEWS:
 			var review: Dictionary = PLAYTEST_REVIEWS[id]
-			if FileAccess.file_exists(_review_pack_path(review)):
+			if id in ["reactor","ward_ground"] or FileAccess.file_exists(_review_pack_path(review)):
 				start.playtest_choices.append({"id": id, "label": review["label"]})
 	var exit_label := "END SANDBOX" if _playtest_active else "BACK TO TITLE"
 	start.playtest_choices.append({"id": "title", "label": exit_label})
@@ -732,6 +761,9 @@ func _select_playtest(id: String) -> void:
 			return
 		var exe := OS.get_executable_path()
 		var review: Dictionary = PLAYTEST_REVIEWS[id]
+		if id in ["reactor","ward_ground"] and not FileAccess.file_exists(_review_pack_path(review)):
+			start.error = "Install %s beside the game to open this review." % review["pack"]
+			return
 		start.error = ""
 		if FileAccess.file_exists(_review_pack_path(review)):
 			_playtest_review_pid = OS.create_process(exe, PackedStringArray(["--", "owner_review=" + id]))
@@ -1558,6 +1590,9 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		_build_floor(s["plan"])
 	if level == null:
 		return
+	if _ward_prison_pending and level.has_meta(&"prison"):
+		_ward_prison_pending = false
+		print("WARD REVIEW PRISON id=%s rendered=true" % link.my_id())
 	announcer.place = str(link.plan_dict.get("place", ""))
 	announcer.days_on = s.get("day") != null
 	announcer.day_lock_on = DayView.lock_of(s.get("day")) != null
@@ -1779,7 +1814,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		elif phase == "night":
 			pass   # home for the night: the car cannot be called
 		elif bool(me.get("canCall", false)):
-			prompt = "F  â–¼ CALL"
+			prompt = "F  ÃƒÂ¢Ã¢â‚¬â€œÃ‚Â¼ CALL"
 		elif bool(me.get("nearHold", false)):
 			prompt = "F  <|> HOLD"
 		elif _tape_in_reach(me):
@@ -1820,7 +1855,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 ## under the prompt while the call button is in reach or a refused press flashes.
 func _show_quota(now: int) -> void:
 	var c := link.client()
-	hud.quota_line = quota_view.update(c.quota() if c != null else null, lift, hud.prompt == "F  â–¼ CALL", now)
+	hud.quota_line = quota_view.update(c.quota() if c != null else null, lift, hud.prompt == "F  ÃƒÂ¢Ã¢â‚¬â€œÃ‚Â¼ CALL", now)
 	hud.quota_tone = quota_view.tone
 	# The car waits (FD4): standing open on arrival for whoever is still aboard, the panel says who.
 	car_waiting = car_waiting_text(c.latest if c != null else null, link.names(), now)

@@ -97,7 +97,8 @@ func stop() -> void:
 static func _sha256(b: PackedByteArray) -> PackedByteArray:
 	var h := HashingContext.new()
 	h.start(HashingContext.HASH_SHA256)
-	h.update(b)
+	if not b.is_empty():
+		h.update(b)
 	return h.finish()
 
 ## Constant time: both sides hashed to 32 bytes, every byte compared, no early exit.

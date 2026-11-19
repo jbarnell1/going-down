@@ -413,6 +413,16 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	last_ms = (Time.get_ticks_usec() - t0) / 1000.0
 	return snap
 
+## Adopt the already joined Ward client. Let its pending prison placement through,
+## while leaving event audio already played by the review behind.
+func continue_joined_run() -> void:
+	var c := rc.client
+	if c == null:
+		return
+	_new_run(c)
+	_ev_index = c.events.size()
+	_em_index = c.emotes.size()
+
 func _new_run(c: Client) -> void:
 	_client = c
 	_ev_index = 0

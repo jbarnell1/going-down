@@ -109,6 +109,9 @@
 # tunes sends exactly what it did before.
 extends RefCounted
 
+const ReactorReview := preload("res://net/reactor_review.gd")
+const Ward = preload("res://sim/ward/state.gd")
+
 const Run = preload("res://sim/run.gd")
 const Entity = preload("res://sim/entity.gd")
 const Floor = preload("res://sim/floor.gd")
@@ -290,6 +293,13 @@ var _last_catch_tick := -1
 var _next_id := 1
 var _step_fn: Callable
 var _trusted := {}
+# The isolated Ward review runs in the real host room on explicit opt-in.
+# Normal runs have no Ward state or extra snapshot bytes.
+var _reactor_review: ReactorReview
+var _reactor_plan: Floor.FloorPlan
+var _ward_review: Ward
+var _ward_plan: Floor.FloorPlan
+var _ward_use := {}
 ## Live settings (docs/floors/live-settings.md LS2; set_tuning): the revision in force (0: never tuned, and the
 ## snapshot is what it always was), the list in force, the notices waiting for the next tick, and when the
 ## snapshot next carries the whole list. on_tick: called with every tick's run events after the tick (the room's
@@ -649,6 +659,12 @@ func _on_input(p: HostPlayer, m: Dictionary, ht: float) -> void:
 	if p.place != null and int(m["placeAck"]) < int(p.place["seq"]):
 		return
 	var mb: Move.Body = m["body"]
+	if _ward_review != null and _ward_review.phase == &"departed":
+		return
+	if _ward_review != null and not _trusted.has(p.id):
+		if p.body != null and not _ward_review.walk_clear(Vector3(p.body.x, p.body.y, p.body.z), Vector3(mb.x, mb.y, mb.z)):
+			stats.clamped_inputs += 1
+			return
 	if p.body != null and p.body_ct != null and not _trusted.has(p.id):
 		var flat := M.hypot2(mb.x - p.body.x, mb.z - p.body.z)
 		# Climbing a stair adds height at most 0.8 m per metre; anything steeper counts as distance.
@@ -696,6 +712,56 @@ func _playing(p: HostPlayer) -> bool:
 		return false
 	var rp := _run_player(p.id)
 	return rp != null and rp.status == &"ok"
+
+## Enable the Ward review on the current logical floor. Normal deck selection owns this later.
+func start_ward_review(review_seed: int, place_crew := false) -> void:
+	_reactor_review = null
+	_reactor_plan = null
+	_ward_review = Ward.new(review_seed)
+	_ward_plan = state.plan
+	_ward_use.clear()
+	if place_crew:
+		for i in state.players.size():
+			var slot := Vector3(-0.28 + float(i % 2) * 0.56, 0.02, -0.55 - 0.59 * float(i / 2))
+			var at := _ward_review.lift_door() + slot
+			_place(state.players[i].id, Move.Body.make(at.x, at.z, 0, at.y), state.depth, state)
+
+func _step_ward_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> Run.RunStep:
+	var ward_events: Array[Dictionary] = []
+	var crew := {}
+	for rp in s.players:
+		crew[rp.id] = {"position": Vector3(rp.body.x, rp.body.y, rp.body.z), "aboard": rp.aboard,
+			"active": false}
+	for i in inputs:
+		if not crew.has(i.id):
+			continue
+		var row: Dictionary = crew[i.id]
+		row.position = Vector3(i.body.x, i.body.y, i.body.z)
+		row.aboard = _ward_review.in_lift(row.position)
+		row.active = not _ward_review.caught.has(i.id)
+		row.use = i.use and not _ward_use.get(i.id, false)
+		row.sprint = i.gait == &"sprint"
+		_ward_use[i.id] = i.use
+	var next_time := s.t + TICK
+	var any_out := false
+	var any_in := false
+	for row: Dictionary in crew.values():
+		if row.active:
+			if row.aboard:
+				any_in = true
+			else:
+				any_out = true
+	if any_out and not any_in:
+		ward_events.append_array(_ward_review.leave(next_time))
+	ward_events.append_array(_ward_review.step(next_time, TICK, Run.board_time(s), crew))
+	var cues: Array[Dictionary] = []
+	for cue in ward_events:
+		var event := cue.duplicate()
+		event["type"] = "ward_" + str(event["kind"])
+		event["t"] = event["at"]
+		cues.append(event)
+	return Run.step_ward(s, inputs, crew, _ward_review.posed_limb(next_time), _ward_review.phase,
+		maxf(0.0, _ward_review.depart_at - next_time), _ward_review.boarded, TICK, cues)
 
 func _step(now: float) -> void:
 	var ht := host_time(now)
@@ -811,7 +877,8 @@ func _step(now: float) -> void:
 		p.inv_pending = []
 
 	# 5. The run.
-	var r: Run.RunStep = _step_fn.call(s, inputs, TICK)
+	var ward_active := _ward_review != null and _ward_review.phase != &"departed"
+	var r: Run.RunStep = _step_ward_review(s, inputs) if ward_active else _step_fn.call(s, inputs, TICK)
 	var st := r.state
 	var events: Array[Dictionary] = []
 	events.append_array(extra)
@@ -820,6 +887,7 @@ func _step(now: float) -> void:
 		events.append(te)
 	_tune_events = []
 	events.append_array(r.events)
+	_step_reactor_review(st, inputs)
 
 	# 6. After: placements, the gone, joiners.
 	for e in r.events:
@@ -876,6 +944,16 @@ func _step(now: float) -> void:
 	if st.phase == &"arriving":
 		st = _admit(st)
 	state = st
+	if ward_active and _ward_review.phase == &"departed":
+		# The real ride-up uses the normal car geometry. Keep accepted bodies in its
+		# cabin until the normal prison placement arrives, even with old inputs in flight.
+		for rp in st.players:
+			var passenger: HostPlayer = _players.get(rp.id)
+			if passenger != null:
+				passenger.body = rp.body
+	if _ward_review != null and st.plan != _ward_plan:
+		_ward_review = null
+		_ward_plan = null
 	tick += 1
 	stats.ticks += 1
 	for e in events:
@@ -1227,6 +1305,10 @@ func world(full: bool = false) -> Dictionary:
 	# The shop and the cabinet (S2): wallets, cabinets, what is lit, the timers (Protocol "shop").
 	if s.shop and s.shop_state != null:
 		out["shop"] = shop_block(s)
+	if _ward_review != null:
+		out["ward"] = _ward_review.snapshot(s.t)
+	if _reactor_review != null:
+		out["reactor"] = _reactor_review.snapshot()
 	return out
 
 ## The shop and the cabinet (S2; Protocol.enc_shop): every player's credits and cabinet in the run's order, the glow
@@ -1437,3 +1519,37 @@ func tapes_of(id: String) -> Array[String]:
 	for t in all:
 		out.append("%s:%d:%s" % [t.id, t.readings.size(), M.to_fixed(t.total, 2)])
 	return out
+
+## Local review entry. Ordinary rooms never construct this floor.
+func start_reactor_review(review_seed: int, place_crew := false, archive_path := "") -> void:
+	_ward_review = null
+	_ward_plan = null
+	_reactor_review = ReactorReview.new(review_seed,archive_path)
+	_reactor_plan = state.plan
+	for i in state.players.size():
+		var rp := state.players[i]
+		var at := Vector3((i%3-1)*.55,0,9.3)
+		_reactor_review.player(rp.id,at,false,&"walk",0)
+		if place_crew:
+			_place(rp.id,Move.Body.make(at.x,at.z,0,at.y),state.depth,state)
+
+func _step_reactor_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> void:
+	if _reactor_review==null: return
+	if s.plan!=_reactor_plan:
+		_reactor_review = null
+		_reactor_plan = null
+		return
+	var connected := {}
+	for rp in s.players:
+		var hp: HostPlayer = _players.get(rp.id)
+		if hp!=null and hp.connected:
+			connected[rp.id] = true
+	_reactor_review.leave_missing(connected)
+	for input in inputs:
+		if connected.has(input.id):
+			_reactor_review.player(input.id,Vector3(input.body.x,input.body.y,input.body.z),input.use,input.gait,TICK)
+	_reactor_review.tick(TICK)
+
+func reactor_screening(peer: String, operation: String, ticket: int) -> bool:
+	if _reactor_review==null or not _players.has(peer) or not _players[peer].connected: return false
+	return _reactor_review.screening(peer,operation,ticket)

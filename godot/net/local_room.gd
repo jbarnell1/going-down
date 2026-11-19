@@ -231,6 +231,12 @@ func start_playtest(depth: int) -> bool:
 			return true
 	return false
 
+## Explicit owner-only review entry. This does not register a campaign destination.
+func start_reactor_review(review_seed: int, archive_path := "") -> bool:
+	if not start_playtest(1): return false
+	host.start_reactor_review(review_seed, true, archive_path)
+	return true
+
 func _prepare_playtest_prison(initial: Run.RunState) -> Run.RunState:
 	var s := rules.prepare(initial)
 	var events: Array[Dictionary] = []
@@ -360,3 +366,6 @@ func _tune_tick(events: Array) -> void:
 	if desk.on_events(events) and host != null:
 		host.set_tuning(desk.in_force(), desk.rev)
 		_take_tune(desk.message(ME))
+
+func reactor_screening(operation: String, ticket := 0) -> bool:
+	return host!=null and host.reactor_screening(ME,operation,ticket)

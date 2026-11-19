@@ -294,3 +294,9 @@ func frame(now: float, local: Client.LocalFrame) -> Client.Frame:
 	var f := client.frame(now, local)
 	_flush(now)
 	return f
+
+func reactor_screening(operation: String, ticket := 0) -> bool:
+	if not run_on or operation not in ["watch","skip","end"]: return false
+	_queue("m|"+JSON.stringify({"t":"rxFilm","op":operation,"ticket":ticket,"epoch":epoch}))
+	_flush(_now)
+	return true

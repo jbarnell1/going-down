@@ -79,7 +79,8 @@ const INSTRUMENT_HEIGHT := 1.2
 const ENTITY_CHEST := 1.7
 ## What the slip says, per trait. Printed the first time a trait is recorded in a run.
 const SLIP_TEXT := {&"stillness": "recorded while: subject moving", &"hearing": "recorded while: subject searching",
-	&"lonely": "recorded while: subject pursuing. operator alone.", &"listening": "recorded while: subject coming to a sound."}
+	&"lonely": "recorded while: subject pursuing. operator alone.", &"listening": "recorded while: subject coming to a sound.",
+	&"rigger": "recorded while: contact under load."}
 
 const EPS := 1e-9
 
@@ -163,6 +164,8 @@ class EntityTick:
 	## number}; a holder it does not name is paid as usual), or null for none: the lean pays by closeness to
 	## its reach. Every other resident leaves it null, and the rate is then computed exactly as before.
 	var pay: Variant = null
+	## A Ward limb in world space, or empty for the normal body-based distance.
+	var limb := PackedVector3Array()
 
 	static func make(id_: String, trait_: StringName, prev_: Entity.OrderlyState, next_: Entity.OrderlyState, events_: Array[Dictionary]) -> EntityTick:
 		var e := EntityTick.new()
@@ -294,7 +297,7 @@ static func trait_acting(e: EntityTick) -> bool:
 	match e.trait_name:
 		&"stillness":
 			return stillness_acting(e.prev, e.next)
-		&"hearing", &"lonely", &"listening":
+		&"hearing", &"lonely", &"listening", &"rigger":
 			return e.acting
 	return false
 
@@ -345,13 +348,19 @@ static func step_instrument(plan: Floor.FloorPlan, prev: Instrument, holder_body
 	var sensed := false
 	for e in entities:
 		var d := feet_distance(holder_body, e.next.body)
+		if not e.limb.is_empty():
+			d = INF
+			var held_at := Vector3(holder_body.x, holder_body.y + INSTRUMENT_HEIGHT, holder_body.z)
+			for index in range(1, e.limb.size()):
+				var nearest := Geometry3D.get_closest_point_to_segment(held_at, e.limb[index - 1], e.limb[index])
+				d = minf(d, held_at.distance_to(nearest))
 		if inst.distance == null or d < float(inst.distance):
 			inst.distance = d
 		if d <= SENSE_RANGE + EPS:
 			sensed = true
 		if not live:
 			continue
-		if trait_acting(e) and may_record(e, holder_id) and in_record_range(plan, holder_body, e.next.body, d) and (best == null or d < best_d):
+		if trait_acting(e) and may_record(e, holder_id) and (d <= RECORD_RANGE + EPS if not e.limb.is_empty() else in_record_range(plan, holder_body, e.next.body, d)) and (best == null or d < best_d):
 			best = e
 			best_d = d
 

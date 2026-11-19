@@ -97,6 +97,10 @@ func _ready() -> void:
 	Session.deck = Places.FULL
 	_room = Room.new(_ws, say)
 	_room.fixed_seed = args.get("seed", "")
+	_room.ward_review = bind == "127.0.0.1" and args.get("ward_review", "0") == "1"
+	_room.reactor_review = not _room.ward_review and bind == "127.0.0.1" and args.get("reactor_review","0")=="1"
+	if _room.reactor_review:
+		_room.reactor_archive_path = "user://reactor-campaigns/"+str(args.get("reactor_campaign","owner-review")).sha256_text()
 	if args.has("depth"):
 		_room.first_depth = HostRules.start_depth_by_arg(true)
 		say("TEST: every run starts at depth %d (depth=; tools/exported_server_check.mjs only)" % _room.first_depth)

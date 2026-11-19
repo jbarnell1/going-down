@@ -21,6 +21,11 @@
 # does not fit the protocol exactly is null, and never reaches the rules.
 extends RefCounted
 
+const ReactorWire = preload("res://net/reactor_wire.gd")
+const WardWire = preload("res://net/ward_wire.gd")
+const WORLD_SHOP_INDEX := 27
+const WORLD_FLOOR_EXTENSIONS_INDEX := WORLD_SHOP_INDEX + 1
+
 const Pose = preload("res://net/pose.gd")
 const JsJson = preload("res://net/jsjson.gd")
 const Move = preload("res://sim/move.gd")
@@ -433,9 +438,18 @@ static func enc_world(w: Dictionary) -> Array:
 			out.append(null)
 		out.append(enc_inv(w["inv"]))
 	if w.get("shop") != null:
-		while out.size() < 27:
+		while out.size() < WORLD_SHOP_INDEX:
 			out.append(null)
 		out.append(enc_shop(w["shop"]))
+	if w.get("ward") != null or w.get("reactor") != null:
+		var extensions := {}
+		if w.get("ward") != null:
+			extensions["ward"] = WardWire.encode(w["ward"])
+		if w.get("reactor") != null:
+			extensions["reactor"] = ReactorWire.encode(w["reactor"])
+		while out.size() < WORLD_FLOOR_EXTENSIONS_INDEX:
+			out.append(null)
+		out.append(extensions)
 	return out
 
 ## The inv block (see the header) from its readable form {bags: [{playerId, sel, slots: [[item, count] x4]}],
@@ -963,7 +977,7 @@ static func _opt_num(c: _V, v: Variant) -> Variant:
 	return null if v == null else _f(c, v)
 
 static func dec_world(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 15, 28)
+	var a := _a(c, w, 15, WORLD_FLOOR_EXTENSIONS_INDEX + 1)
 	if c.bad:
 		return {}
 	var blink: Variant = null
@@ -1045,8 +1059,25 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 		out["find"] = dec_find(c, a[25])
 	if a.size() > 26 and (a[26] != null or a.size() == 27):
 		out["inv"] = dec_inv(c, a[26])
-	if a.size() > 27:
-		out["shop"] = dec_shop(c, a[27])
+	if a.size() > WORLD_SHOP_INDEX and a[WORLD_SHOP_INDEX] != null:
+		out["shop"] = dec_shop(c, a[WORLD_SHOP_INDEX])
+	if a.size() > WORLD_FLOOR_EXTENSIONS_INDEX:
+		if not a[WORLD_FLOOR_EXTENSIONS_INDEX] is Dictionary:
+			c.bad = true
+			return {}
+		var extensions: Dictionary = a[WORLD_FLOOR_EXTENSIONS_INDEX]
+		if extensions.has("reactor"):
+			var reactor: Variant = ReactorWire.decode(extensions["reactor"])
+			if reactor == null:
+				c.bad = true
+			else:
+				out["reactor"] = reactor
+		if extensions.has("ward"):
+			var ward := WardWire.decode(extensions["ward"])
+			if ward.is_empty():
+				c.bad = true
+			else:
+				out["ward"] = ward
 	return out
 
 static func _dec_report(c: _V, w: Variant) -> Dictionary:

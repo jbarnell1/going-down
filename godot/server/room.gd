@@ -148,6 +148,7 @@ var updates := 0
 var fixed_seed := ""
 ## The floor the next run starts on (1, the game's; server.gd's test argument depth=N sets it).
 var first_depth := 1
+var ward_review := false
 ## The day loop in the next run (the game's; tests may turn it off).
 var days := true
 ## The floor quota in the next run (the game's; tests may turn it off): the call button does nothing
@@ -173,6 +174,8 @@ var playroom_tuned := true
 ## Solid furniture in the next run (the game's; tests may turn it off: sim/run.gd furniture, FD7).
 var furniture := true
 ## Restored wall furniture in the next run (T20j).
+var reactor_review := false
+var reactor_archive_path := ""
 var furniture_layout := true
 ## Findables in the next run (the game's; tests may turn it off: sim/run.gd findables, sim/findables.gd, FD9).
 var findables := true
@@ -355,10 +358,14 @@ func _start(now: float) -> void:
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
 	var q := quota and not HostRules.quota_off_by_arg(false)
 	# The day quota's lock goes with the floor quota (net/host_rules.gd): quota=0 turns both off.
-	rules = HostRules.new(true, first_depth, Places.deck_for_start_depth(first_depth), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop)
+	rules = HostRules.new(not (ward_review or reactor_review), first_depth, Places.deck_for_start_depth(first_depth), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop)
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))
+	if ward_review:
+		host.start_ward_review(seed.hash(), true)
+	elif reactor_review:
+		host.start_reactor_review(seed.hash(), true, reactor_archive_path)
 	# Live settings: everything asked for is in force from the first tick.
 	desk.run_started()
 	host.on_tick = Callable(self, "_tune_tick")
@@ -386,6 +393,9 @@ func _on_message(id: String, data: String, now: float) -> void:
 			_ws.kick(id, WsServer.CLOSE_PROTOCOL, "bad message")
 			return
 		match String(p["t"]):
+			"rxFilm":
+				if reactor_review and host!=null and p.get("epoch")==epoch and p.get("op") in ["watch","skip","end"] and (p.get("ticket") is float or p.get("ticket") is int):
+					host.reactor_screening(id,p.op,int(p.ticket))
 			"start":
 				_start_without(id, now)
 			"ready":

@@ -2938,47 +2938,10 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			departing = StringName(outcome)
 
 	if departing == &"bank":
-		# Flush open readings of those aboard onto their tapes, then bank everything aboard.
 		var aboard_ids: Array[String] = []
-		var aboard_set := {}
 		for p in _active_aboard(players, input_of):
 			aboard_ids.append(p.id)
-			aboard_set[p.id] = true
-		# The car waits: whoever it leaves on the floor has no share of this bank (see the header).
-		_leave_out(s, players, aboard_set)
-		var crew := s.crew
-		for p in players:
-			crew = Instr.set_raised(crew, p.id, false)
-		var crew_players: Array[Instr.CrewPlayer] = []
-		for p in players:
-			crew_players.append(Instr.CrewPlayer.make(p.id, p.body, aboard_ids.has(p.id)))
-		var flush_state := s.copy()
-		flush_state.crew = crew
-		var no_entities: Array[Instr.EntityTick] = []
-		for _k in 20:
-			var out := _crew_tick(flush_state, crew_players, no_entities, 0.1)
-			flush_state.crew = out.crew
-			for e in out.events:
-				events.append(_with_t(e, t))
-				# Recorded today: the day's earned counts the readings closed as the car leaves too.
-				if s.day_lock and e["type"] == "readingClosed":
-					s.day_earned += float(e["value"])
-		s.crew = flush_state.crew
-		var dep := Instr.leave_floor(s.crew, aboard_ids)
-		s.players = players
-		var summary := _summarize(s, dep.carried, false)
-		s.summary = summary
-		s.blink = null
-		events.append({"type": "banked", "t": t, "summary": summary})
-		if s.days:
-			# The day: settled on what got home (made, with the lock: a locked BANK never gets here), then the
-			# car rides up with whoever is aboard.
-			_settle_day(s, t, floori(summary.total), events, false)
-			_leave_downs(s, players, t, events)
-			_ride_up(s, players, aboard_ids, true)
-			events.append({"type": "carLeft", "t": t, "reason": "up"})
-			return res
-		s.phase = &"ended"
+		_bank(s, players, aboard_ids, t, events)
 		return res
 
 	if departing == &"ride":
@@ -3348,6 +3311,119 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 
 # ---------------------------------------------------------------------------------------------
 # The day loop (days on only; see the header).
+
+## Ward review uses the same instrument, departure, wallet and day records.
+static func step_ward(prev: RunState, inputs: Array[PlayerInput], crew_rows: Dictionary, limb: PackedVector3Array,
+		phase: StringName, bell_left: float, aboard: Array[String], dt: float, cues: Array[Dictionary]) -> RunStep:
+	var out := RunStep.new()
+	var s := prev.copy()
+	out.state = s
+	s.t += dt
+	var players: Array[RunPlayer] = []
+	var holders: Array[Instr.CrewPlayer] = []
+	var by_id := {}
+	for inp in inputs:
+		by_id[inp.id] = inp
+	var caught_events: Array[Dictionary] = []
+	var caught := {}
+	for cue in cues:
+		if cue["type"] == "ward_contact":
+			var hit := {"type": "caught", "t": s.t, "playerId": cue.id}
+			caught_events.append(hit)
+			caught[cue.id] = true
+	out.events.append_array(cues)
+	out.events.append_array(caught_events)
+	for old in prev.players:
+		var p := old.copy()
+		var row: Dictionary = crew_rows[p.id]
+		var pos: Vector3 = row.position
+		var given: PlayerInput = by_id.get(p.id)
+		p.body = Move.Body.make(pos.x, pos.z, 0, pos.y)
+		p.aboard = row.aboard
+		if caught.has(p.id):
+			p.status = &"caught"
+		var active := bool(row.active) and p.status == &"ok" and not p.aboard
+		s.crew = Instr.set_raised(s.crew, p.id, active and given != null and bool(given.raised))
+		holders.append(Instr.CrewPlayer.make(p.id, p.body, active))
+		players.append(p)
+	s.players = players
+	var entities: Array[Instr.EntityTick] = []
+	if not limb.is_empty() or not caught_events.is_empty():
+		var resident := Instr.EntityTick.make("rigger-%d" % s.depth, &"rigger", s.orderly, s.orderly, caught_events)
+		resident.acting = limb.size() > 1
+		resident.limb = limb
+		entities.append(resident)
+	var reading := _crew_tick(s, holders, entities, dt)
+	s.crew = reading.crew
+	for event in reading.events:
+		out.events.append(_with_t(event, s.t))
+		if s.day_lock and event["type"] == "readingClosed":
+			s.day_earned += float(event.value)
+	if phase != &"departed":
+		s.phase = phase
+		s.bell_left = bell_left
+		return out
+	# Ward departure is collection, so only the physically boarded crew can take money home.
+	var car_waited := s.car_waits
+	s.car_waits = true
+	s.left_out = s.left_out.duplicate()
+	for p in players:
+		if not aboard.has(p.id):
+			s.left_out[p.id] = true
+			if p.status == &"ok":
+				p.status = &"leftBehind"
+		else:
+			var slot := aboard.find(p.id)
+			p.body = car_body(s.car, 1.05 + float(slot / 2) * 0.61, -0.46 if slot % 2 == 0 else 0.46)
+	_bank(s, players, aboard, s.t, out.events, aboard.is_empty(), true)
+	s.car_waits = car_waited
+	return out
+
+static func _bank(s: RunState, players: Array[RunPlayer], aboard_ids: Array[String], t: float, events: Array[Dictionary], wiped := false, ward := false) -> void:
+	# The car waits: whoever it leaves on the floor has no share of this bank (see the header).
+	var aboard_set := {}
+	for id in aboard_ids:
+		aboard_set[id] = true
+	_leave_out(s, players, aboard_set)
+	var crew := s.crew
+	for p in players:
+		crew = Instr.set_raised(crew, p.id, false)
+	var crew_players: Array[Instr.CrewPlayer] = []
+	for p in players:
+		crew_players.append(Instr.CrewPlayer.make(p.id, p.body, aboard_ids.has(p.id)))
+	var flush_state := s.copy()
+	flush_state.crew = crew
+	var no_entities: Array[Instr.EntityTick] = []
+	for _k in 20:
+		var out := _crew_tick(flush_state, crew_players, no_entities, 0.1)
+		flush_state.crew = out.crew
+		for e in out.events:
+			events.append(_with_t(e, t))
+			# Recorded today: the day's earned counts the readings closed as the car leaves too.
+			if s.day_lock and e["type"] == "readingClosed":
+				s.day_earned += float(e["value"])
+	s.crew = flush_state.crew
+	var dep := Instr.leave_floor(s.crew, aboard_ids)
+	s.players = players
+	var summary := _summarize(s, dep.carried, wiped)
+	if ward:
+		var tape_ids: Array[String] = []
+		for tape in dep.lost:
+			tape_ids.append(tape.id)
+		events.append({"type": "ward_tapes_lost", "t": t, "tapes": tape_ids, "value": dep.lost_value})
+	s.summary = summary
+	s.blink = null
+	events.append({"type": "banked", "t": t, "summary": summary})
+	if s.days:
+		# The day: settled on what got home (made, with the lock: a locked BANK never gets here), then the
+		# car rides up with whoever is aboard.
+		_settle_day(s, t, floori(summary.total), events, wiped)
+		_leave_downs(s, players, t, events)
+		_ride_up(s, players, aboard_ids, true)
+		events.append({"type": "carLeft", "t": t, "reason": "up"})
+		return
+	s.phase = &"ended"
+
 
 ## Settles today with `banked` whole credits (Day.end_day): wallets paid, any loss rolled, the next day's
 ## state kept for the morning, the facts kept for the snapshot ("dayEnded"). `wiped`: nobody came back,
