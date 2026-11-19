@@ -762,3 +762,31 @@ func test_hiding_on_the_wire(t: T) -> void:
 	t.check(str(b.get("phase", "")) == "out" and int(b.get("hide", 0)) == -1, "b's row: %s" % str(b))
 	t.check(int(back.get("n", 1)) == 0 and not bool(back.get("counting", true)), "a count in the hiding block")
 	t.note("the hiding block goes as a seek block: a inside hide %d, b out, no count" % sc.h.id)
+
+func test_annex_top_ups_reuse_fixed_wall_slots(t: T) -> void:
+	var plan := Annex.generate_annex("arrival-a", 3)
+	var ctx := Hides._ctx(plan)
+	for room in plan.rooms:
+		var expected := Playroom._slots(plan, room, ctx.doors)
+		if expected.is_empty():
+			continue
+		var first := Hides._top_up_slots(ctx, room)
+		var slot := expected[0]
+		ctx.used[Floor.pos_index(plan, Floor.Pos.make(room.level, slot.x, slot.y))] = true
+		var repeat := Hides._top_up_slots(ctx, room)
+		t.eq(first, expected, "the same ordered perimeter slots")
+		t.check(is_same(first, repeat), "a later cabinet reuses the static perimeter after live occupancy changes")
+		return
+	t.check(false, "the Annex provides at least one wall slot")
+
+
+func test_annex_top_up_arrival_layouts_match_the_previous_resolver(t: T) -> void:
+	var baseline := {
+		"arrival-a": "7b434c2b389d0c2a",
+		"arrival-b": "4c0f3dddb6336593",
+		"arrival-c": "16b31fe2a1dbf319",
+		"arrival-d": "d74c8bb0494947ff",
+	}
+	for seed: String in baseline:
+		var plan := Annex.generate_annex(seed, 3)
+		t.eq(Hides.hash_of(Hides.hides_for(plan)), baseline[seed], "%s keeps every hide and its ID, including top-ups" % seed)

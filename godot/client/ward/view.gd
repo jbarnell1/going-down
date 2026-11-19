@@ -350,13 +350,29 @@ func _interior_ties(root: Node3D, fixture: House, shoe: Vector3) -> Array[Node3D
 		_beam(root, front, end, 0.06, 0.08, "iron")
 		_box(root, front, Vector3(0.21, 0.18, 0.21), "iron")
 		_box(root, end, Vector3(0.24, 0.23, 0.13), "wood")
-		var joint := Node3D.new()
 		var mount := _beam(root, rear_eye - inward * 1.45, rear_eye - inward * 1.25, 0.18, 0.15, "wood")
-		mount.add_child(joint)
-		_box(joint, Vector3(0, -0.20, 0), Vector3(0.075, 0.40, 0.075), "iron")
-		_box(joint, Vector3(0, -0.43, 0), Vector3(0.15, 0.14, 0.11), "rope")
-		ties.append(joint)
+		ties.append(_take_up_lever(mount))
+
+	# The first partition hides the rear lever from the entry. Bring an indicator
+	# down the entry face of the same timber frame, on the occupied side of the jamb.
+	var first_door: Vector3 = fixture.room_doors[0]
+	var entry: Vector3 = fixture.areas[&"entry"]
+	var jamb_side := signf(entry.x - first_door.x)
+	var pivot := Vector3(first_door.x + jamb_side * 0.69, 2.04, first_door.z - House.WALL_THICKNESS * 0.5 - 0.11)
+	var entry_mount := _box(root, pivot, Vector3(0.22, 0.17, 0.18), "wood")
+	_beam(root, pivot + Vector3.UP * 0.08, Vector3(pivot.x, 2.9, pivot.z), 0.05, 0.055, "iron")
+	var entry_lever := _take_up_lever(entry_mount)
+	entry_lever.name = "EntryTakeUp"
+	ties.append(entry_lever)
 	return ties
+
+
+func _take_up_lever(mount: Node3D) -> Node3D:
+	var joint := Node3D.new()
+	mount.add_child(joint)
+	_box(joint, Vector3(0, -0.20, 0), Vector3(0.075, 0.40, 0.075), "iron")
+	_box(joint, Vector3(0, -0.43, 0), Vector3(0.15, 0.14, 0.11), "rope")
+	return joint
 
 func _lift_wall(root: Node3D, wall: AABB) -> void:
 	var middle := wall.get_center()

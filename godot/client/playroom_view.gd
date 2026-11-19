@@ -142,8 +142,8 @@ func _dress(level: Level, source_plan: Floor.FloorPlan, source_hides: Array[Play
 	if fp.width != W or fp.height != H or fp.rooms.size() != (level.plan.rooms as Array).size() or fp.doors.size() != (level.plan.doors as Array).size():
 		push_error("playroom view: the plan for %s/%d does not match the one being drawn" % [level.plan.seed, level.plan.depth])
 	hides = source_hides if not source_hides.is_empty() else Playroom.hides(fp, fp.seed)
-	zones = Playroom.zones(fp)
-	squeak = Playroom.squeakers(fp, fp.seed)
+	zones = Playroom.zones(fp, hides)
+	squeak = Playroom.squeakers(fp, fp.seed, hides)
 	_materials()
 	_floors_and_ceilings()
 	_walls()

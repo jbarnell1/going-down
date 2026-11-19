@@ -932,7 +932,8 @@ static func _cubby_wall(plan: Floor.FloorPlan, room: Floor.Room, doors: Dictiona
 ## at least half the farthest walking distance from the lift, a squeaker only where the walkway still
 ## has a quiet loop without that segment. Never in the lobby, on a door's cells, on a hide's inside or
 ## front spot, on a junction or at a stair's ends. `floor_seed` "" means plan.seed. Rng fork "squeak".
-static func squeakers(plan: Floor.FloorPlan, floor_seed: String = "") -> PackedInt32Array:
+## A caller that has already resolved this plan and seed's hides can supply that list.
+static func squeakers(plan: Floor.FloorPlan, floor_seed: String = "", source_hides: Array[Hide] = []) -> PackedInt32Array:
 	var out := PackedInt32Array()
 	var lay := layout_of(plan)
 	if lay == null:
@@ -941,7 +942,8 @@ static func squeakers(plan: Floor.FloorPlan, floor_seed: String = "") -> PackedI
 	var rng := _root(sd, plan.depth).fork("squeak")
 	var n_cells := plan.width * plan.height
 	var forbidden := _door_cells(plan)
-	for h in hides(plan, sd):
+	var hide_list := source_hides if not source_hides.is_empty() else hides(plan, sd)
+	for h in hide_list:
 		for p: Vector2i in [cell_of(h.inside), cell_of(h.front)]:
 			forbidden[h.level * n_cells + p.y * plan.width + p.x] = true
 	for room in plan.rooms:
@@ -1068,14 +1070,15 @@ static func _room_quiet_joined(plan: Floor.FloorPlan, room: Floor.Room, mask: Pa
 # Zones and seats.
 
 ## zones(plan): every zone with at least one room, ascending id, with its ways in and its sign's
-## number (its hide count from hides(plan, plan.seed)).
-static func zones(plan: Floor.FloorPlan) -> Array[Zone]:
+## number (its hide count from hides(plan, plan.seed), which callers can supply if already resolved).
+static func zones(plan: Floor.FloorPlan, source_hides: Array[Hide] = []) -> Array[Zone]:
 	var out: Array[Zone] = []
 	var lay := layout_of(plan)
 	if lay == null:
 		return out
 	var count := {}
-	for h in hides(plan, plan.seed):
+	var hide_list := source_hides if not source_hides.is_empty() else hides(plan, plan.seed)
+	for h in hide_list:
 		count[h.zone] = (count.get(h.zone, 0) as int) + 1
 	var n := lay.lat.n
 	for zid in lay.zone_ids:

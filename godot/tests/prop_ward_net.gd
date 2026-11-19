@@ -467,6 +467,36 @@ func test_loaded_support_moves_before_rigger_appears_and_resets(t: T) -> void:
 		t.check(is_zero_approx(joint.rotation.z), "the interior take-up settles with its support")
 	view.free()
 
+func test_entry_side_take_up_is_visible_before_the_reach_and_clears(t: T) -> void:
+	const SEED := 4059166054
+	var view := WardViewWithoutPrivateMedia.new(SEED, Vector3.ZERO)
+	(Engine.get_main_loop() as SceneTree).root.add_child(view)
+	var ward := Ward.new(SEED)
+	var snapshot := ward.snapshot()
+	for row: Dictionary in view.houses:
+		var house: House = row.fixture
+		var entry_lever := row.ties.back() as Node3D
+		var entry: Vector3 = house.areas[&"entry"]
+		var pivot := house.to_local(entry_lever.global_position)
+		t.check(row.ties.size() == house.storeys.size() + 1 and entry_lever.name == "EntryTakeUp",
+			"each entry has a take-up in addition to the original storey levers")
+		t.check(pivot.z > entry.z and pivot.z < house.room_doors[0].z - House.WALL_THICKNESS * 0.5,
+			"the entry warning mounts in front of the first interior partition")
+	var target := 2
+	var take_up := view.houses[target].ties.back() as Node3D
+	var other := view.houses[1].ties.back() as Node3D
+	snapshot.house = target
+	snapshot.startedAt = 5.0
+	snapshot.encounter = "warning"
+	view.show_host(snapshot, 5.38, "solo", [])
+	t.check(absf(take_up.rotation.z) > 0.1 and not view.hand.visible,
+		"the entry take-up moves before there is an arm to draw")
+	t.check(is_zero_approx(other.rotation.z), "an unloaded house keeps its entry fitting still")
+	snapshot.encounter = "searching"
+	view.show_host(snapshot, 9.0, "solo", [])
+	t.check(is_zero_approx(take_up.rotation.z), "entry and rear fittings settle when search starts")
+	view.free()
+
 func test_laundry_window_reaches_around_a_corner_without_opening_other_glass(t: T) -> void:
 	var ward := Ward.new(8143)
 	var h := ward.houses[2]

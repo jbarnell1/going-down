@@ -594,3 +594,34 @@ func test_playroom_view_uses_the_floor_and_hides_already_on_the_client(t: T) -> 
 	t.check(is_same(view.get("fp"), plan), "the Playroom draws the same floor plan that the client accepted")
 	t.check(is_same(view.get("hides"), hides), "the Playroom draws the client's ordered hiding places")
 	level.free()
+
+
+func test_playroom_derived_lists_reuse_resolved_hides(t: T) -> void:
+	for seed: String in ["arrival-a", "arrival-b"]:
+		var plan := Playroom.generate_playroom(seed, 4)
+		var resolved := Playroom.hides(plan, seed)
+		var zones := Playroom.zones(plan)
+		var squeakers := Playroom.squeakers(plan, seed)
+		t.eq(Playroom.zones_plain(Playroom.zones(plan, resolved)), Playroom.zones_plain(zones), "%s retains all zone signs and entries" % seed)
+		t.eq(Playroom.squeakers(plan, seed, resolved), squeakers, "%s retains every squeaker cell" % seed)
+		if not t.check(not resolved.is_empty() and not squeakers.is_empty(), "%s offers hides and squeakers to the fixture" % seed):
+			continue
+
+		# An injected hide lets the test distinguish reusing the supplied list from recalculating it.
+		var added := Playroom.Hide.new()
+		added.zone = resolved[0].zone
+		var pos := Floor.pos_from_index(plan, squeakers[0])
+		added.level = pos.level
+		added.inside = Vector2i(pos.x * Playroom.CM + Playroom.CM / 2, pos.y * Playroom.CM + Playroom.CM / 2)
+		added.front = added.inside
+		resolved.append(added)
+		var before_sign := 0
+		var after_sign := 0
+		for zone in zones:
+			if zone.id == added.zone:
+				before_sign = zone.hides
+		for zone in Playroom.zones(plan, resolved):
+			if zone.id == added.zone:
+				after_sign = zone.hides
+		t.eq(after_sign, before_sign + 1, "%s counts the already-resolved hide on its sign" % seed)
+		t.check(not Playroom.squeakers(plan, seed, resolved).has(squeakers[0]), "%s keeps the supplied hide square quiet" % seed)

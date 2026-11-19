@@ -8,6 +8,7 @@ void fragment() {
 	ALBEDO = COLOR.rgb * mix(0.9, 1.15, grime);
 	ALPHA = COLOR.a * mix(0.82, 1.85, grime);
 	ROUGHNESS = mix(0.12, 0.75, grime);
-	SPECULAR = 0.18;
+	// Keep a glass sheen without hiding the mullions in the handheld beam.
+	SPECULAR = 0.075;
 	EMISSION = vec3(0.01, 0.014, 0.012);
 }

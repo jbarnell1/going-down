@@ -90,6 +90,8 @@ class Ctx:
 	var landing_dist: PackedInt32Array
 	## Top-ups made (cabinets added by the rules for both places).
 	var top_ups := 0
+	## The fixed Annex perimeter slots, reused across top-ups in this solve. Ctx.used still changes.
+	var annex_wall_slots := {}
 
 static func _ctx(plan: Floor.FloorPlan) -> Ctx:
 	var c := Ctx.new()
@@ -450,23 +452,30 @@ static func _top_up_level(c: Ctx, level: int, rng: Rng) -> bool:
 			return true
 	return false
 
-## A cabinet on the free wall slot nearest `from` by walking (the lowest cell index, then n e s w, on a tie).
+static func _top_up_slots(c: Ctx, room: Floor.Room) -> Array[Vector3i]:
+	if c.plan.place != &"annex":
+		return Playroom._slots(c.plan, room, c.doors)
+	if not c.annex_wall_slots.has(room.id):
+		c.annex_wall_slots[room.id] = Playroom._slots(c.plan, room, c.doors)
+	return c.annex_wall_slots[room.id]
+
+## A cabinet on the nearest free wall slot within reach. Ties keep the original room and slot order.
 static func _top_up_near(c: Ctx, from: Floor.Pos) -> bool:
 	var plan := c.plan
 	var dist := Floor.distances_from(plan, from)
 	var best := Vector3i(-1, -1, -1)
 	var best_room: Floor.Room = null
-	var best_d := 1 << 30
+	# Slots farther away could never supply this cabinet. Check distance before the live occupancy.
+	var best_d := REACH_STEPS + 1
 	for room in plan.rooms:
 		if NO_HIDES.has(room.kind):
 			continue
-		for s in Playroom._slots(plan, room, c.doors):
-			if not _cell_ok(c, room, s.x, s.y):
-				continue
-			var d := dist[Floor.pos_index(plan, Floor.Pos.make(room.level, s.x, s.y))]
-			if d >= 0 and d < best_d:
+		var row_base := room.level * plan.width * plan.height
+		for slot in _top_up_slots(c, room):
+			var d := dist[row_base + slot.y * plan.width + slot.x]
+			if d >= 0 and d < best_d and _cell_ok(c, room, slot.x, slot.y):
 				best_d = d
-				best = s
+				best = slot
 				best_room = room
 	if best_room != null and best_d <= REACH_STEPS and c.plan.place == &"annex":
 		# The Annex: by shape. In the nearest room, its best canonical free slot within reach; and the same
