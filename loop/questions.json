@@ -1963,6 +1963,27 @@
       "default": [
         "follow"
       ]
+    },
+    {
+      "id": "starter-skill-currency",
+      "title": "What should a first skill cost?",
+      "context": "The current playtest charges 600 credits for a starter skill. This question covers the first skill in each branch.",
+      "type": "single",
+      "options": [
+        {
+          "id": "credits",
+          "label": "Keep the first skills at 600 credits each",
+          "note": "A first paycheck can go toward supplies or training."
+        },
+        {
+          "id": "badge",
+          "label": "Charge one found badge for each first skill",
+          "note": "Spend pay on supplies and explore to earn skills."
+        }
+      ],
+      "default": [
+        "credits"
+      ]
     }
   ]
 }
