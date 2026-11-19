@@ -2,7 +2,7 @@
 # number is the host's: the snapshot's day block (net/client.gd day_lock(): earned, quota, locked, aboard,
 # each, stakes; sim/run.gd day_lock). Nothing is summed here: a client that added up readings it has seen
 # would drift from the host under loss.
-#  - The HUD's corner line, on a floor and in the car: "DAY 1650/2400", amber "DAY 2610/2400 MET" once met.
+#  - The HUD's corner line, on a floor and in the car: "DAY EARNED 1650/2400", amber "DAY EARNED 2610/2400 MET" once met.
 #  - The lift monitor (lift.gd show_day): row 1 "DAY 2. EARNED 1650 OF 2400.", row 2 "BANK LOCKED. 750 TO
 #    GO." or "BANK OPEN. ABOARD 2380. EACH GETS 595.", row 3 (boarding only) what a day nobody comes back
 #    from costs (sim/day.gd monitor_rows, stakes_row). Blank at home.
@@ -35,7 +35,7 @@ static func lock_of(day: Variant) -> Variant:
 static func hud_text(d: Dictionary) -> String:
 	var earned := int(d["earned"])
 	var quota := int(d["quota"])
-	return "DAY %d/%d" % [earned, quota] + ("" if bool(d["locked"]) else " MET")
+	return "DAY EARNED %d/%d" % [earned, quota] + ("" if bool(d["locked"]) else " MET")
 
 static func monitor(d: Dictionary, boarding: bool) -> PackedStringArray:
 	var r := Day.monitor_rows(int(d["day"]), int(d["earned"]), int(d["quota"]), int(d["aboard"]), int(d["each"]), str(d["stakes"]))
@@ -45,7 +45,7 @@ static func monitor(d: Dictionary, boarding: bool) -> PackedStringArray:
 
 ## The caption under a day line: the event's own numbers.
 static func caption(e: Dictionary) -> String:
-	return "EARNED %d OF %d" % [int(e.get("earned", 0)), int(e.get("quota", 0))]
+	return "DAY EARNED %d OF %d" % [int(e.get("earned", 0)), int(e.get("quota", 0))]
 
 ## `s`: the frame's snapshot (client/play_link.gd step: "day", "depth", "phase", "goingUp").
 func update(s: Dictionary) -> void:

@@ -41,6 +41,7 @@ const PlayLink = preload("res://client/play_link.gd")
 const Session = preload("res://net/session.gd")
 const Places = preload("res://sim/places.gd")
 const GroundskeeperView = preload("res://client/groundskeeper_view.gd")
+const OrientationView = preload("res://client/orientation_view.gd")
 const EyeHeight = preload("res://client/eye_height.gd")
 const RoomClient = preload("res://net/room_client.gd")
 const LocalRoom = preload("res://net/local_room.gd")
@@ -157,6 +158,7 @@ var hud: Hud
 var start: StartScreen
 var _playtest_active := false
 var _playtest_selection := -1
+var _playtest_orientation := false
 var _playtest_face := ""
 var _playtest_hints: Dictionary = {}
 var _playtest_hint_persist := true
@@ -760,6 +762,7 @@ func _open_playtest() -> void:
 	if _playtest_active:
 		start.playtest_choices.append({"id": "resume", "label": "RESUME"})
 		start.playtest_choices.append({"id": "restart", "label": "RESTART SELECTED AREA"})
+	start.playtest_choices.append({"id": "orientation", "label": "CONTINUANCE PRACTICE"})
 	for destination in LocalRoom.playtest_destinations(seed, Session.deck):
 		var depth := int(destination["depth"])
 		var area := str(destination["place"]).replace("_", " ").to_upper()
@@ -811,14 +814,17 @@ func _select_playtest(id: String) -> void:
 		if _playtest_review_pid < 0:
 			start.error = "COULD NOT OPEN PROTOTYPE"
 		return
-	if not id.is_valid_int() and id != "restart":
+	var practice := id == "orientation" or (id == "restart" and _playtest_orientation)
+	if not practice and not id.is_valid_int() and id != "restart":
 		return
-	var depth := _playtest_selection if id == "restart" else int(id)
+	var depth := 1 if practice else (_playtest_selection if id == "restart" else int(id))
 	var lr := LocalRoom.new()
 	var face := start.face_code
 	var player_name := start.player_name if not start.player_name.is_empty() else "YOU"
 	lr.open_local(seed, player_name, entity_on, face)
-	if not lr.start_playtest(depth):
+	if practice:
+		lr.start_orientation()
+	elif not lr.start_playtest(depth):
 		start.error = "THAT FLOOR IS UNAVAILABLE"
 		return
 	if not _playtest_active:
@@ -832,9 +838,10 @@ func _select_playtest(id: String) -> void:
 	_clear_world()
 	_playtest_active = true
 	_playtest_selection = depth
+	_playtest_orientation = practice
 	link = PlayLink.new(lr, true)
 	_enter_game()
-	hud.note = "F6  HOST PLAYTEST"
+	hud.note = "CONTINUANCE PRACTICE" if practice else "F6  HOST PLAYTEST"
 	_note_until = Time.get_ticks_msec() + 4000
 
 ## "Play alone": a room on this machine, a run at once.
@@ -898,6 +905,7 @@ func _back_to_title() -> void:
 	if _playtest_active:
 		_playtest_active = false
 		_playtest_selection = -1
+		_playtest_orientation = false
 		start.face_code = _playtest_face
 		kiosk.remember = true
 		announcer.hints.from_save(_playtest_hints)
@@ -1110,16 +1118,26 @@ func _use_resident(plan: Dictionary) -> void:
 			kind = "minder"
 		"arboretum":  # the Groundskeeper (client/groundskeeper_view.gd): it hears; looking does nothing
 			kind = "groundskeeper"
+		"orientation":
+			kind = "orientation"
 	# The prison has no resident (Places.resident names none): nothing is drawn there.
 	_no_resident = Places.resident(StringName(str(plan.get("place", "")))).name == ""
 	if kind != _resident_kind:
-		var view: Node3D = TempView.new() if kind == "temp" else (MinderView.new() if kind == "minder" else (GroundskeeperView.new() if kind == "groundskeeper" else OrderlyView.new()))
+		var view: Node3D
+		match kind:
+			"temp": view = TempView.new()
+			"minder": view = MinderView.new()
+			"groundskeeper": view = GroundskeeperView.new()
+			"orientation": view = OrientationView.new()
+			_: view = OrderlyView.new()
 		view.name = kind.capitalize()
 		orderly.queue_free()
 		orderly = view
 		sub.add_child(view)
 		_resident_kind = kind
 	orderly.call(&"reset")
+	if orderly is OrderlyView:
+		(orderly as OrderlyView).floor_plan = link.plan
 	if orderly is TempView:
 		(orderly as TempView).set_crew(str(snap.get("seed", seed)), link.crew_faces())
 		(orderly as TempView).set_floor(link.plan, level)
@@ -1238,7 +1256,10 @@ func _input(event: InputEvent) -> void:
 			wheel_open = false
 			_esc_menu = true
 		elif not hud.end_lines.is_empty() and Time.get_ticks_msec() - end_shown_at > 1200:
-			_new_run()
+			if _playtest_orientation:
+				_back_to_title()
+			else:
+				_new_run()
 		elif k.physical_keycode == KEY_E:
 			raise_latch = not raise_latch
 		elif k.physical_keycode == KEY_F and _station() == "kiosk":
@@ -1675,6 +1696,9 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		pitch = 0.0
 	if s.has("plan"):
 		_build_floor(s["plan"])
+	elif level == null and link.plan_dict.get("place") == "orientation":
+		# The late visitor already received this same-depth plan while still on Ready-up.
+		_build_floor(link.plan_dict)
 	if level == null:
 		return
 	if _ward_prison_pending and level.has_meta(&"prison"):
@@ -1764,13 +1788,17 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 
 	# The lift: doors, indicator, votes, buttons.
 	var phase := str(s["phase"])
+	var practice := _resident_kind == "orientation"
 	lift.set_doors(bool(s["doorsOpen"]))
 	_show_indicator(now)
 	lift.set_vote(str(me["side"]) if me.get("side") != null else "")
 	lift.set_call_lit(phase == "coming")
 	lift.set_hold_lit(bool(s["held"]))
 	lift.set_light(1.0 if not dark else 0.1)
-	lift.set_faces(link.crew_faces())
+	var faces := link.crew_faces()
+	lift.set_faces(faces)
+	if orderly is OrientationView:
+		(orderly as OrientationView).set_crew(faces)
 	var reel: Variant = _active_reel(s)
 	if reel == null or _reel_skip_at != reel["started"]:
 		_reel_skip_at = null
@@ -1808,7 +1836,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		var cd: Dictionary = cl
 		machine = (1.0 - float(cd["floorsAway"]) / maxf(1.0, float(cd["floors"]))) * (0.5 if bool(cd["falseStop"]) else 1.0) + 0.05
 	var car: Dictionary = link.plan_dict["car"]
-	sfx.update(dt, o["squeak"] if _resident_kind == "orderly" and not _no_resident else {}, o.get("pose"), tick_hz, loud, float(me["exertion"]) if not still else 0.0, bool(me["winded"]), machine,
+	sfx.update(dt, o["squeak"] if _resident_kind in ["orderly", "orientation"] and not _no_resident else {}, o.get("pose"), tick_hz, loud, float(me["exertion"]) if not still else 0.0, bool(me["winded"]), machine,
 		Vector3(float(car["doorX"]), float(car["floorY"]) + 1.5, float(car["doorZ"])), float(o.get("speed", 0.0)))
 	if not _entry.has("carUnix"):
 		_entry["carUnix"] = Time.get_unix_time_from_system() * 1000.0
@@ -1916,6 +1944,8 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 			pass   # home for the night: the car cannot be called
 		elif bool(me.get("canCall", false)):
 			prompt = "F  â–¼ CALL"
+		elif practice and phase == "boarding":
+			prompt = "ALL CREW ON BANK TO FINISH"
 		elif bool(me.get("nearHold", false)):
 			prompt = "F  <|> HOLD"
 		elif _tape_in_reach(me):
@@ -1933,7 +1963,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	hud.prompt = prompt
 	_show_finds(s, now)
 	_show_day_lock(s)
-	_show_quota(now)
+	_show_quota(s, now)
 	if me_down:
 		hud.quota_line = ""
 	_show_day(s, now)
@@ -1954,9 +1984,12 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 
 ## The floor quota (client/quota_view.gd): the call panel shows the host's quota block, and its words go
 ## under the prompt while the call button is in reach or a refused press flashes.
-func _show_quota(now: int) -> void:
+func _show_quota(s: Dictionary, now: int) -> void:
 	var c := link.client()
-	hud.quota_line = quota_view.update(c.quota() if c != null else null, lift, hud.prompt == "F  â–¼ CALL", now)
+	var q: Variant = c.quota() if c != null else null
+	hud.floor_quota_line = QuotaView.floor_hud_text(q, int(s.get("depth", 0)), str(s.get("phase", "")))
+	hud.floor_quota_met = QuotaView.floor_met(q)
+	hud.quota_line = quota_view.update(q, lift, hud.prompt == "F  â–¼ CALL", now)
 	hud.quota_tone = quota_view.tone
 	# The car waits (FD4): standing open on arrival for whoever is still aboard, the panel says who.
 	car_waiting = car_waiting_text(c.latest if c != null else null, link.names(), now)
@@ -2242,7 +2275,8 @@ func _show_indicator(now: int) -> void:
 func _present(events: Array, now: int) -> void:
 	if events.is_empty():
 		return
-	announcer.on_events(events, 1)
+	var client := link.client()
+	announcer.on_events(events, 1, client.quota() if client != null else null)
 	var my := link.my_id()
 	quota_view.on_events(events, my, sfx, now)
 	for e: Dictionary in events:
@@ -2315,11 +2349,15 @@ func _present(events: Array, now: int) -> void:
 			"banked":
 				var summary: Dictionary = e["summary"]
 				var shares: Dictionary = summary["shares"]
-				lifetime += float(shares.get(my, 0.0))
+				if _resident_kind != "orientation":
+					lifetime += float(shares.get(my, 0.0))
 				# With days there is no end screen: the car rides up to the prison (carLeft "up").
 				if snap.get("day") == null:
 					ending = {"kind": "banked", "at": now, "summary": summary}
 				sfx.ride(true)
+			"orientationHonk":
+				if orderly is OrientationView:
+					(orderly as OrientationView).honk()
 			"wiped":
 				if snap.get("day") == null:
 					ending = {"kind": "wiped", "at": now, "summary": e["summary"]}
@@ -2385,11 +2423,18 @@ func _show_end(now: int) -> void:
 	var my := link.my_id()
 	if kind == "banked":
 		var sm: Dictionary = ending["summary"]
-		var shares: Dictionary = sm["shares"]
-		hud.end_lines = [{"text": "BANKED", "strong": true}, {"text": ""}, {"text": "FLOORS %d" % int(sm["depth"])},
-			{"text": "READINGS %d" % int(sm["readings"])}, {"text": "TOTAL " + _n4(float(sm["total"])), "strong": true},
-			{"text": "YOUR SHARE " + _n4(float(shares.get(my, 0.0))), "strong": true}, {"text": ""},
-			{"text": "LIFETIME " + _n4(lifetime)}, {"text": ""}, again]
+		if _resident_kind == "orientation":
+			var next := "PRESS A KEY TO RETURN TO TITLE" if link.local else "BACK TO THE ROOM IN A MOMENT"
+			hud.end_lines = [{"text": "PRACTICE COMPLETE", "strong": true}, {"text": ""},
+				{"text": "READINGS %d" % int(sm["readings"])},
+				{"text": "PRACTICE CREDITS BANKED %d" % floori(float(sm["total"])), "strong": true},
+				{"text": ""}, {"text": next}]
+		else:
+			var shares: Dictionary = sm["shares"]
+			hud.end_lines = [{"text": "BANKED", "strong": true}, {"text": ""}, {"text": "FLOORS %d" % int(sm["depth"])},
+				{"text": "READINGS %d" % int(sm["readings"])}, {"text": "TOTAL " + _n4(float(sm["total"])), "strong": true},
+				{"text": "YOUR SHARE " + _n4(float(shares.get(my, 0.0))), "strong": true}, {"text": ""},
+				{"text": "LIFETIME " + _n4(lifetime)}, {"text": ""}, again]
 	elif kind == "wiped":
 		hud.end_lines = [{"text": "NOBODY CAME BACK UP", "strong": true}, {"text": ""}, {"text": "FLOORS %d" % int(snap["depth"])},
 			{"text": "NOTHING BANKED"}, {"text": ""}, {"text": "LIFETIME " + _n4(lifetime)}, {"text": ""}, again]
@@ -3073,7 +3118,7 @@ func _test_state() -> Dictionary:
 			"seekNote": hud.seek_note, "subtitle": hud.subtitle, "bigNote": hud.big_note, "centerNote": hud.center_note,
 			"anger": hud.anger, "angerRates": hud.anger_rates},
 		"quota": {"host": link.client().quota() if link.client() != null else null, "panel": lift.quota_text, "tone": lift.quota_tone,
-			"hud": hud.quota_line, "carWaiting": car_waiting, "view": quota_view.describe(), "at": [lift.quota_point().x, lift.quota_point().y, lift.quota_point().z]},
+			"hud": hud.quota_line, "floorHud": hud.floor_quota_line, "floorMet": hud.floor_quota_met, "carWaiting": car_waiting, "view": quota_view.describe(), "at": [lift.quota_point().x, lift.quota_point().y, lift.quota_point().z]},
 		"dayLock": {"host": link.client().day_lock() if link.client() != null else null, "tick": int((link.client().latest as Dictionary)["tick"]) if link.client() != null and link.client().latest is Dictionary else -1,
 			"view": day_view.describe(), "viewTick": _day_view_tick, "hudLine": hud.day_line, "hudMet": hud.day_met, "monitor": lift.day_rows, "bankLocked": lift.bank_locked,
 			"monitorAt": [lift.day_point().x, lift.day_point().y, lift.day_point().z], "subtitle": announcer.shown(),

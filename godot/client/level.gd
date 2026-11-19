@@ -156,6 +156,11 @@ func build(p: Dictionary, seed_text: String, source_plan: FloorLib.FloorPlan = n
 	_make_materials()
 	_build_floors_and_ceilings()
 	_build_walls()
+	if str(p.get("place", "")) == "orientation":
+		_commit_chunks()
+		_build_lights()
+		preload("res://client/orientation_view.gd").dress(self)
+		return
 	_build_stairs()
 	_build_furniture()
 	_commit_chunks()

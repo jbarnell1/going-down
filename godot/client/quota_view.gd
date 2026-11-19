@@ -23,7 +23,16 @@ var flashing := false
 ## Tests: how many refusals this screen showed.
 var refusals := 0
 
-## The panel's words for the host's quota block `q` ({earned, needed} or null): "" when there is none.
+## Whether the floor is paid from the host's current quota block.
+static func floor_met(q: Variant) -> bool:
+	return q is Dictionary and int(q.get("needed", 0)) > 0 and int(q.get("earned", 0)) >= int(q["needed"])
+
+static func floor_hud_text(q: Variant, depth: int, phase: String) -> String:
+	if depth <= 0 or phase in ["riding", "ended"] or not q is Dictionary or int(q.get("needed", 0)) <= 0:
+		return ""
+	return "FLOOR RECORDED %d/%d%s" % [int(q.get("earned", 0)), int(q["needed"]), " MET" if floor_met(q) else ""]
+
+## The panel's words for the host's quota block, or "" without one.
 static func panel_text(q: Variant) -> String:
 	if not q is Dictionary:
 		return ""
@@ -59,7 +68,7 @@ func on_events(events: Array, my_id: String, sfx: Sfx, now: int) -> void:
 ## player can press the call button. Returns the line to print under the prompt ("" for none).
 func update(q: Variant, lift: Lift, in_reach: bool, now: int) -> String:
 	var base := panel_text(q)
-	flashing = now < flash_until and base != ""
+	flashing = now < flash_until and base != "" and not floor_met(q)
 	text = flash_text if flashing else base
 	tone = "refused" if flashing else ("" if base == "" else ("met" if base.begins_with("QUOTA MET") else "count"))
 	# The flash blinks: off for a beat every other BLINK_MS.

@@ -10,6 +10,9 @@ const RIGGER_PATH := "res://assets/ward/rigger.glb"
 const HAND_PATH := "res://assets/ward/search-hand.glb"
 const Surfaces = preload("res://client/ward/surfaces.gdshader")
 const WARNING_PATH := "res://assets/ward/loaded-net.ogg"
+## The private rig is authored around the abdomen. The forward wrist sits 3.82 m
+## ahead of that origin; the host supplies the contact at the sill, not the abdomen.
+const RIGGER_WRIST := Vector3(1.81, 0.88, 3.82)
 const LIFT_DEPTH := 3.0
 
 var seed_value: int
@@ -27,6 +30,7 @@ var lift_spot := Vector3.ZERO
 var rigger: Node3D
 var animation: AnimationPlayer
 var climb_animation: StringName
+var loaded_house := -1
 var previous_arm := PackedVector3Array()
 var hand: Node3D
 var rope := MeshInstance3D.new()
@@ -104,6 +108,7 @@ func show_host(ward: Dictionary, host_now: float, id: String, crew: Array) -> vo
 	_show_crew(crew, id)
 
 func _show_rigger(ward: Dictionary, host_now: float) -> void:
+	_show_loaded_support(ward, host_now)
 	var active: bool = ward.encounter == "climbing" or ward.encounter == "searching"
 	rigger.visible = active
 	if not active:
@@ -115,13 +120,13 @@ func _show_rigger(ward: Dictionary, host_now: float) -> void:
 	var fixture: House = room.fixture
 	var shoulder := fixture.to_world(fixture.shoulder)
 	var progress := clampf((host_now - ward.startedAt - Ward.WARN_SECONDS) / Ward.CLIMB_SECONDS, 0.0, 1.0)
-	var line: Node3D = room.lines[0]
+	var line: Node3D = room.lines[fixture.loaded_support_index()]
 	var bases := line.global_position
 	bases.y = shoulder.y
 	rigger.position = (bases - Vector3.UP * 10.0).lerp(bases, minf(1.0, progress * 1.18))
 	rigger.position = rigger.position.lerp(shoulder, smoothstep(0.78, 1.0, progress))
-	line.rotation.z = sin(progress * 40.0) * 0.005 * sin(progress * PI)
-	rigger.rotation.y = (room.root as Node3D).rotation.y
+	rigger.rotation.y = (room.root as Node3D).rotation.y - fixture.window_side * PI * 0.5
+	rigger.position -= rigger.basis * RIGGER_WRIST
 	if animation != null and climb_animation != &"":
 		animation.play(climb_animation)
 		animation.pause()
@@ -154,8 +159,9 @@ func _show_crew(crew: Array, my_id: String) -> void:
 
 func play_event(event: Dictionary) -> void:
 	if event.type == "ward_line_loaded":
-		var fixture: House = houses[int(event.house)].fixture
-		load_sound.position = fixture.to_world(fixture.shoulder)
+		var house: Dictionary = houses[int(event.house)]
+		var support: Node3D = house.lines[(house.fixture as House).loaded_support_index()]
+		load_sound.global_position = support.global_position
 		load_sound.play()
 		return
 	var cues := {"ward_departed":"ward_lift_departed", "ward_last_minute":"ward_lift_last_minute",
@@ -224,6 +230,44 @@ func _beam(parent: Node3D, first: Vector3, last: Vector3, width: float, height: 
 	node.look_at(node.global_position + direction, Vector3.FORWARD if absf(direction.y) > 0.99 else Vector3.UP)
 	return node
 
+## The host's climb starts on support zero. Keep its iron shoe and far endpoints
+## fixed while the nearby rope pulls laterally; rolling a vertical beam is invisible.
+func _load_bearing_support(deck: Node3D, at: Vector3) -> Node3D:
+	var line := Node3D.new()
+	deck.add_child(line)
+	line.position = at
+	for i in 4:
+		_box(line, Vector3.ZERO, Vector3(0.07, 0.07, 1.0), "rope")
+	_pose_support(line, 0.0)
+	return line
+
+func _pose_support(line: Node3D, pull: float) -> void:
+	var points := [Vector3.DOWN * 18.0, Vector3(pull * 0.25, -2.8, pull * 0.25), Vector3.ZERO,
+		Vector3(pull * 0.71, 2.2, pull * 0.71), Vector3.UP * 25.0]
+	for i in 4:
+		var span := line.get_child(i) as Node3D
+		var first: Vector3 = points[i]
+		var last: Vector3 = points[i + 1]
+		span.position = (first + last) * 0.5
+		span.look_at(line.to_global(last), Vector3.FORWARD)
+		span.scale.z = first.distance_to(last) + 0.015
+
+func _show_loaded_support(ward: Dictionary, host_now: float) -> void:
+	var current := int(ward.house) if ward.encounter in ["warning", "climbing"] else -1
+	if loaded_house >= 0 and loaded_house != current:
+		_pose_support(houses[loaded_house].support, 0.0)
+	loaded_house = current
+	if current < 0:
+		return
+	var elapsed := maxf(0.0, host_now - float(ward.startedAt))
+	var pull := 0.0
+	if elapsed < Ward.WARN_SECONDS:
+		pull = 0.34 * sin(PI * elapsed / Ward.WARN_SECONDS)
+	else:
+		var phase := clampf((elapsed - Ward.WARN_SECONDS) / Ward.CLIMB_SECONDS, 0.0, 1.0)
+		pull = 0.17 * sin(phase * TAU * 3.0) * sin(phase * PI)
+	_pose_support(houses[current].support, pull)
+
 func _lamp(parent: Node3D, at: Vector3) -> void:
 	_box(parent, at, Vector3(0.16, 0.18, 0.11), "light")
 	var lamp := OmniLight3D.new()
@@ -256,7 +300,7 @@ func _build_house(site: Dictionary) -> void:
 		if outside and site.id == 0 and wall.position.x < bounds.position.x:
 			_lift_wall(root, wall)
 		elif outside:
-			_window_wall(root, wall)
+			_window_wall(root, wall, fixture.search_window.has_volume() and is_equal_approx(wall.position.x, fixture.search_window.position.x))
 		else:
 			_box(root, wall.get_center(), wall.size, "wood" if wall.size.y < 0.18 else shade, true)
 	_dress_house(root, site, fixture)
@@ -272,8 +316,11 @@ func _build_house(site: Dictionary) -> void:
 		for z: float in [-1.0, 1.0]:
 			var edge := Vector3(x * (across * 0.5 - 0.13), 0.02, z * (deep * 0.5 - 0.13))
 			_box(deck, edge, Vector3(0.26, 0.25, 0.26), "iron")
-			lines.append(_beam(deck, edge - Vector3.UP * 18.0, edge + Vector3.UP * 25.0, 0.07, 0.07, "rope"))
-	houses.append({"fixture": fixture, "lines": lines, "root": root})
+			if lines.size() == fixture.loaded_support_index():
+				lines.append(_load_bearing_support(deck, edge))
+			else:
+				lines.append(_beam(deck, edge - Vector3.UP * 18.0, edge + Vector3.UP * 25.0, 0.07, 0.07, "rope"))
+	houses.append({"fixture": fixture, "lines": lines, "support": lines[fixture.loaded_support_index()], "root": root})
 
 func _lift_wall(root: Node3D, wall: AABB) -> void:
 	var middle := wall.get_center()
@@ -283,7 +330,7 @@ func _lift_wall(root: Node3D, wall: AABB) -> void:
 			Vector3(wall.size.x, wall.size.y, side_width), "brick", true)
 	_box(root, Vector3(middle.x, 2.615, middle.z), Vector3(wall.size.x, 0.87, 1.24), "brick", true)
 
-func _window_wall(root: Node3D, wall: AABB) -> void:
+func _window_wall(root: Node3D, wall: AABB, open_sash := false) -> void:
 	var pane := Vector3(wall.size.x, 1.25, 1.42)
 	var center := wall.get_center()
 	var sill := 0.82
@@ -294,9 +341,10 @@ func _window_wall(root: Node3D, wall: AABB) -> void:
 	for side: float in [-1.0, 1.0]:
 		_box(root, Vector3(center.x, sill + pane.y * 0.5, center.z + side * (side_width + pane.z) * 0.5),
 			Vector3(wall.size.x, pane.y, side_width), "brick", true)
-	_box(root, Vector3(center.x, sill + pane.y * 0.5, center.z), pane, "glass", true)
-	_box(root, Vector3(center.x, sill + pane.y * 0.5, center.z), Vector3(wall.size.x + 0.05, pane.y, 0.045), "wood")
-	for y: float in [sill, sill + pane.y * 0.52, top]:
+	if not open_sash:
+		_box(root, Vector3(center.x, sill + pane.y * 0.5, center.z), pane, "glass", true)
+		_box(root, Vector3(center.x, sill + pane.y * 0.5, center.z), Vector3(wall.size.x + 0.05, pane.y, 0.045), "wood")
+	for y: float in ([sill, top] if open_sash else [sill, sill + pane.y * 0.52, top]):
 		_box(root, Vector3(center.x, y, center.z), Vector3(wall.size.x + 0.12, 0.065, pane.z + 0.10), "wood")
 	for z: float in [-0.5, 0.5]:
 		_box(root, Vector3(center.x, sill + pane.y * 0.5, center.z + pane.z * z),

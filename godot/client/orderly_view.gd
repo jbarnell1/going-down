@@ -13,6 +13,10 @@
 class_name OrderlyView
 extends Node3D
 
+const Floor = preload("res://sim/floor.gd")
+const Move = preload("res://sim/move.gd")
+var floor_plan: Floor.FloorPlan
+
 const WALK_RATE := 1.7          # src/render/entityView.ts
 const WIND_UP_TIME := 0.6       # src/sim/entity.ts (the reach clip is drawn out over it)
 const HUNT_SPEED := 3.7         # src/sim/entity.ts (stride clock)
@@ -101,6 +105,9 @@ func show_pose(pose: Variant, show: bool) -> void:
 	drawn = pose
 	position = p
 	rotation = Vector3(0, float(pose.yaw) + PI, 0)
+	var level := int(pose.get("level", 0))
+	model.position = Vector3.ZERO
+	var clearance := _wall_pose(p, level)
 	var anim: String = pose.anim
 	var t := float(pose.animTime)
 	if anim == "walk" or anim == "duck":
@@ -127,6 +134,34 @@ func show_pose(pose: Variant, show: bool) -> void:
 		ct = fmod(ct, dur)
 	_seek(clip, ct)
 	_watched_walk(anim == "walk" or anim == "duck")
+	if clearance.x > 0.0:
+		_fold_knees(0.87 * clearance.x)
+	_tuck_arms(clearance.y)
+
+## The x component folds the knees beneath a lintel. The y component brings
+## the elbows inside the jamb or wall. Only the child mesh shifts; the host
+## position, sight checks and navigation root keep their original coordinates.
+func _wall_pose(p: Vector3, level: int) -> Vector2:
+	var near_door := 0.0
+	var near_wall := 0.0
+	var opening := 0.0
+	if floor_plan != null:
+		var wall_distance := Move.wall_clearance(floor_plan, level, p.x, p.z)
+		near_wall = 1.0 - smoothstep(0.55, 1.25, wall_distance)
+		for door in floor_plan.doors:
+			if door.level != level:
+				continue
+			var centre := Vector2(door.ax + door.bx + 1, door.ay + door.by + 1) * (0.5 * floor_plan.cell_size)
+			var delta := Vector2(p.x, p.z) - centre
+			var across := absf(delta.x if door.ax == door.bx else delta.y)
+			var proximity := 1.0 - smoothstep(1.15, 1.90, delta.length())
+			near_door = maxf(near_door, proximity * (1.0 - smoothstep(0.55, 1.2, across)))
+			opening = maxf(opening, proximity * (1.0 - smoothstep(0.26, 0.62, across)))
+		var clearance_radius := lerpf(0.65, 0.49, opening)
+		if wall_distance < clearance_radius:
+			var clear := Move._push_out(floor_plan, level, p.x, p.z, clearance_radius, p.x, p.z)
+			model.position = transform.basis.inverse() * Vector3(clear[0] - p.x, 0, clear[1] - p.z)
+	return Vector2(near_door, maxf(near_wall, near_door))
 
 func _clip_for(anim: String) -> String:
 	var mixed := "mixamo_" + anim
@@ -211,8 +246,71 @@ func _show_bend(t: float, catch_active: bool) -> void:
 		if not roar_rotations.is_empty():
 			q *= Quaternion.IDENTITY.slerp(roar_rotations[j], roar_weight * 0.55)
 		skel.set_bone_pose_rotation(i, q)
+	_rotate_bone("spine", Vector3.RIGHT, 0.55 * e)
+	_fold_knees(1.00 * e)
+	_brace_hand(".L", e)
+	_brace_hand(".R", e)
 	_bent = true
 	bend = e
+
+## Fold the thighs towards the chest and the shins back under them. Compensate at
+## the hips for the change in ankle height so the feet keep the clip's floor contact.
+func _fold_knees(angle: float) -> void:
+	var lowest := INF
+	for side: String in [".L", ".R"]:
+		var foot := skel.find_bone("foot" + side)
+		lowest = minf(lowest, skel.get_bone_global_pose(foot).origin.y)
+	for side: String in [".L", ".R"]:
+		_rotate_bone("skirt.F" + side, Vector3.RIGHT, -angle)
+		_rotate_bone("skirt.B" + side, Vector3.RIGHT, angle)
+		_rotate_bone("thigh" + side, Vector3.RIGHT, -angle)
+		_rotate_bone("shin" + side, Vector3.RIGHT, 2.0 * angle)
+		_rotate_bone("foot" + side, Vector3.RIGHT, -angle)
+	var feet_y := minf(skel.get_bone_global_pose(skel.find_bone("foot.L")).origin.y,
+		skel.get_bone_global_pose(skel.find_bone("foot.R")).origin.y)
+	var hips := skel.find_bone("hips")
+	skel.set_bone_pose_position(hips, skel.get_bone_pose_position(hips) + Vector3.UP * (lowest - feet_y))
+
+func _rotate_bone(bone: String, axis: Vector3, angle: float) -> void:
+	var index := skel.find_bone(bone)
+	var pose := skel.get_bone_global_pose(index)
+	pose.basis = Basis(axis, angle) * pose.basis
+	skel.set_bone_global_pose(index, pose)
+
+## Brace the hands to either side of the prone face. Solve the two bones using
+## their lengths in the approved reach, blending from that reach as the knees fold.
+func _brace_hand(side: String, weight: float) -> void:
+	if weight <= 0.0:
+		return
+	var shoulder := skel.get_bone_global_pose(skel.find_bone("upperarm" + side)).origin
+	var elbow := skel.get_bone_global_pose(skel.find_bone("forearm" + side)).origin
+	var wrist := skel.get_bone_global_pose(skel.find_bone("hand" + side)).origin
+	var target := Vector3(shoulder.x, 0.46, 0.76)
+	var axis := (target - shoulder).normalized()
+	var upper := shoulder.distance_to(elbow)
+	var lower := elbow.distance_to(wrist)
+	var reach := clampf(shoulder.distance_to(target), absf(upper-lower)+0.001, upper+lower-0.001)
+	var along := (upper*upper - lower*lower + reach*reach) / (2.0*reach)
+	var pole := Vector3(0, 0.65, -1).slide(axis).normalized()
+	var desired_elbow := axis * along + pole * sqrt(maxf(0.0, upper*upper-along*along))
+	_aim_limb("upperarm" + side, "forearm" + side, desired_elbow, weight)
+	elbow = skel.get_bone_global_pose(skel.find_bone("forearm" + side)).origin
+	_aim_limb("forearm" + side, "hand" + side, target-elbow, weight)
+
+## Draw elbows in near a jamb, with the clip's original arm lengths.
+func _tuck_arms(weight: float) -> void:
+	if weight <= 0.0:
+		return
+	for side: String in [".L", ".R"]:
+		_aim_limb("upperarm" + side, "forearm" + side, Vector3(0, -0.95, -0.20), weight)
+		_aim_limb("forearm" + side, "hand" + side, Vector3(0, 0.12, 0.99), weight)
+
+func _aim_limb(parent: String, child: String, direction: Vector3, weight: float) -> void:
+	var a := skel.get_bone_global_pose(skel.find_bone(parent)).origin
+	var b := skel.get_bone_global_pose(skel.find_bone(child)).origin
+	var turn := Quaternion((b-a).normalized(), direction.normalized())
+	if turn.get_angle() > 0.00001:
+		_rotate_bone(parent, turn.get_axis(), turn.get_angle() * weight)
 
 ## The shared catch clock advances the dance. Blend up from the already completed bend.
 func _show_dance(t: float) -> void:

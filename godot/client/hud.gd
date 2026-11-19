@@ -105,6 +105,8 @@ var out_lines: Array = []
 var eyes: Dictionary = {}
 ## The day quota (client/day_view.gd, FD3): the corner line under PLAY ("DAY 1650/2400"), "" for none, and
 ## whether it is met (then amber, "... MET").
+var floor_quota_line := ""
+var floor_quota_met := false
 var day_line := ""
 var day_met := false
 
@@ -152,9 +154,8 @@ func _draw() -> void:
 		var tw := PixelFont.width(top) * px
 		var margin := Vector2(maxf(size.x * 0.06, 16.0), maxf(size.y * 0.06, 12.0))
 		PixelFont.draw_shadowed(self, top, Vector2(size.x - margin.x - PixelFont.width("PLAY >") * px, margin.y), px, Color("#f4f4ec"))
-		if day_line != "" and not black:
-			# The day quota, under PLAY in the top corner: pale while owed, amber once met.
-			PixelFont.draw_shadowed(self, day_line, Vector2(size.x - margin.x - PixelFont.width(day_line) * px, margin.y + 12 * px), px, Color("#ffd27a") if day_met else Color("#f4f4ec"))
+		if not black:
+			_draw_quota_corner(px, margin)
 		var s := start_sec + (now - t0) / 1000
 		var bottom := "SP %d:%02d:%02d" % [s / 3600, (s / 60) % 60, s % 60]
 		var bw := PixelFont.width(bottom) * px
@@ -169,7 +170,7 @@ func _draw() -> void:
 				PixelFont.draw_shadowed(self, tape_text, Vector2(size.x - margin.x - PixelFont.width(tape_text) * px, by - 12 * px), px, Color("#f4f4ec"))
 	if prompt != "" and not black:
 		var pw := PixelFont.width(prompt) * px
-		var pp := Vector2((size.x - pw) * 0.5, size.y * 0.62)
+		var pp := Vector2((size.x - pw) * 0.5, _prompt_y(px))
 		draw_rect(Rect2(pp - Vector2(4, 3) * px, Vector2(pw + 8 * px, 13 * px)), Color(0, 0, 0, 0.45))
 		PixelFont.draw_shadowed(self, prompt, pp, px, Color("#f4f4ec"))
 		if prompt_fill >= 0.0:
@@ -226,11 +227,30 @@ func _draw() -> void:
 	if menu_on and not black:
 		_draw_menu()
 
+func _draw_quota_corner(px: float, margin: Vector2) -> void:
+	# The Playroom count uses two centered rows near PLAY. Keep the quota rows below it.
+	var y := margin.y + (31.0 if count_text != "" or count_by != "" else 12.0) * px
+	if floor_quota_line != "":
+		var x := size.x - margin.x - PixelFont.width(floor_quota_line) * px
+		PixelFont.draw_shadowed(self, floor_quota_line, Vector2(x, y), px, Color("#ffd27a") if floor_quota_met else Color("#f4f4ec"))
+		y += 10.0 * px
+	if day_line != "":
+		var x := size.x - margin.x - PixelFont.width(day_line) * px
+		PixelFont.draw_shadowed(self, day_line, Vector2(x, y), px, Color("#ffd27a") if day_met else Color("#f4f4ec"))
+
 ## The call panel's words under the prompt: amber while counting, green once met, red (blinking) when a
 ## press was refused.
+func _prompt_y(px: float) -> float:
+	var y := size.y * 0.62
+	if quota_line != "" and subtitle != "":
+		var panel_offset := 15.0 if prompt != "" else 0.0
+		y = minf(y, _subtitle_top() - (panel_offset + 13.0) * px)
+	return y
+
+## The call panel's words under the prompt: amber while counting, green once met, red (blinking) for a refusal.
 func _draw_quota(px: float, now: int) -> void:
 	var qw := PixelFont.width(quota_line) * px
-	var qp := Vector2(floorf((size.x - qw) * 0.5), floorf(size.y * 0.62) + (15 * px if prompt != "" else 0.0))
+	var qp := Vector2(floorf((size.x - qw) * 0.5), floorf(_prompt_y(px)) + (15 * px if prompt != "" else 0.0))
 	draw_rect(Rect2(qp - Vector2(4, 3) * px, Vector2(qw + 8 * px, 13 * px)), Color(0, 0, 0, 0.55))
 	var ink := Color("#ffd27a")
 	if quota_tone == "met":
@@ -464,6 +484,9 @@ func _subtitle_rows() -> PackedStringArray:
 	return rows
 
 ## Where the subtitle box's top edge is (window pixels).
+func _subtitle_bottom() -> float:
+	return size.y * (0.87 if quota_line != "" else 0.91)
+
 func _subtitle_top() -> float:
 	var rows := _subtitle_rows()
 	var w := 10
@@ -471,7 +494,7 @@ func _subtitle_top() -> float:
 		w = maxi(w, PixelFont.width(r))
 	w += 6
 	var sc := clampf(floor(size.x * 0.92 / w), 1.0, 4.0)
-	return size.y * 0.91 - (rows.size() * 10 + 4) * sc
+	return _subtitle_bottom() - (rows.size() * 10 + 4) * sc
 
 func _draw_subtitle(_px: float) -> void:
 	var rows := _subtitle_rows()
@@ -481,7 +504,7 @@ func _draw_subtitle(_px: float) -> void:
 	w += 6
 	var h := rows.size() * 10 + 4
 	var sc := clampf(floor(size.x * 0.92 / w), 1.0, 4.0)
-	var origin := Vector2((size.x - w * sc) * 0.5, size.y * 0.91 - h * sc)
+	var origin := Vector2((size.x - w * sc) * 0.5, _subtitle_bottom() - h * sc)
 	draw_rect(Rect2(origin, Vector2(w, h) * sc), Color(0, 0, 0, 0.45))
 	for i in rows.size():
 		var r: String = rows[i]

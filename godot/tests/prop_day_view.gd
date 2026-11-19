@@ -1,7 +1,7 @@
 # The day quota on screen and in voice (FD3; docs/floors/findables-and-day.md section 1, "Where it is shown"
 # and "The lines"), headless. The two-client check over a lossy link (every frame's HUD line, monitor rows
 # and BANK paint against the host's own block at the same tick) is tests/prop_day_net.gd's lock session.
-#   1. client/day_view.gd: the HUD's corner line ("DAY 1650/2400", "... MET" once met), the monitor's rows
+#   1. client/day_view.gd: the HUD's corner line ("DAY EARNED 1650/2400", "... MET" once met), the monitor's rows
 #      (sim/day.gd monitor_rows from the block's numbers; the third only while boarding), LOCKED exactly
 #      when the host says locked, CLOSED UNTIL MORNING at home once the car is shut; nothing without the lock.
 #   2. The lift (client/lift.gd) as built: the day monitor shows the rows; the BANK paint reads LOCKED on
@@ -36,11 +36,11 @@ static func frame(d: Variant, depth: int, phase: String, up := false) -> Diction
 func test_the_hud_line_and_the_monitor_rows_are_the_hosts_numbers(t: T) -> void:
 	var v := DayView.new()
 	v.update(frame(block(2, 1650, 2400, 900, 450), 1, "away"))
-	t.eq(v.hud_line, "DAY 1650/2400", "the corner line while owed")
+	t.eq(v.hud_line, "DAY EARNED 1650/2400", "the corner line while owed")
 	t.check(not v.met and v.locked, "owed: not met, BANK locked")
 	t.eq(v.rows, PackedStringArray(["DAY 2. EARNED 1650 OF 2400.", "BANK LOCKED. 750 TO GO."]), "two rows off boarding")
 	v.update(frame(block(2, 2610, 2400, 2380, 595), 3, "boarding"))
-	t.eq(v.hud_line, "DAY 2610/2400 MET", "met: amber, MET")
+	t.eq(v.hud_line, "DAY EARNED 2610/2400 MET", "met: amber, MET")
 	t.check(v.met and not v.locked, "met: BANK open")
 	t.eq(v.rows, PackedStringArray(["DAY 2. EARNED 2610 OF 2400.", "BANK OPEN. ABOARD 2380. EACH GETS 595.", "IF NOBODY COMES BACK: NOTHING TO TAKE. MISS 1 OF 3."]), "three rows while boarding")
 	v.update(frame(block(2, 2610, 2400, 0, 0), 0, "night"))
@@ -48,7 +48,7 @@ func test_the_hud_line_and_the_monitor_rows_are_the_hosts_numbers(t: T) -> void:
 	v.update(frame(block(2, 2610, 2400, 0, 0), 0, "unloading"))
 	t.eq(v.closed, "", "home, the doors still open: not yet closed")
 	v.update(frame(block(2, 2610, 2400, 0, 0), 4, "riding", true))
-	t.eq(v.hud_line, "DAY 2610/2400 MET", "riding up: still the day's line")
+	t.eq(v.hud_line, "DAY EARNED 2610/2400 MET", "riding up: still the day's line")
 	# Without the lock (no earned in the block, or no block at all): nothing.
 	var plain := block(1, 0, 600, 0, 0)
 	plain.erase("earned")
@@ -70,7 +70,7 @@ func test_the_hud_line_and_the_monitor_rows_are_the_hosts_numbers(t: T) -> void:
 			want = want.slice(0, 2)
 		t.eq(v.rows, want, "case %d: the monitor rows are sim/day.gd's from the host's numbers" % i)
 		t.eq(v.locked, e < q, "case %d: locked exactly when the host says" % i)
-		t.eq(v.hud_line, "DAY %d/%d%s" % [e, q, "" if e < q else " MET"], "case %d: the corner line" % i)
+		t.eq(v.hud_line, "DAY EARNED %d/%d%s" % [e, q, "" if e < q else " MET"], "case %d: the corner line" % i)
 
 func test_the_lift_monitor_and_the_bank_paint(t: T) -> void:
 	var p := Clinic.generate_clinic("day-lift", 1)
@@ -162,7 +162,8 @@ func test_a_refused_vote_plays_one_bank_refused_line_with_its_caption(t: T) -> v
 				ride_n += 1
 		t.eq(refused_n, 1, "refusal %d: one bank_refused line" % i)
 		t.eq(ride_n, 0, "refusal %d: no ride line over it" % i)
-		t.check(caption.ends_with("\nEARNED %d OF 1800" % earned), "refusal %d: the caption carries the fact: %s" % [i, caption.replace("\n", " / ")])
+		t.check(caption.ends_with("\nDAY EARNED %d OF 1800" % earned), "refusal %d: the caption carries the fact: %s" % [i, caption.replace("\n", " / ")])
+	t.check(not ids.has("bank_refused_5"), "BANK never says an unlabeled quota was missed")
 	t.check(ids.size() >= 6, "the lines are dealt round: %d different over 24 refusals" % ids.size())
 	a.free()
 
@@ -189,7 +190,7 @@ func test_day_met_and_the_first_ride(t: T) -> void:
 			caption = str(a.subtitle)
 	var met := (a.history as Array).slice(from)
 	t.check(met.size() == 1 and str((met[0] as Dictionary).moment) == "day_met", "dayMet: a day_met line: %s" % str(met))
-	t.check(caption.ends_with("\nEARNED 1810 OF 1800"), "its caption: %s" % caption.replace("\n", " / "))
+	t.check(caption.contains("\nDAY EARNED 1810 OF 1800"), "its caption: %s" % caption.replace("\n", " / "))
 	# The floor's quota met in the same tick: the day_met line stands in for the quota line.
 	var c := _announcer("met-and-quota")
 	c.on_events([{"type": "quotaMet", "t": 9.0, "depth": 2, "earned": 1700, "needed": 1160, "top": "ann"},
@@ -246,3 +247,66 @@ func test_the_day_lines_are_recorded_in_both_voices(t: T) -> void:
 		if ids.has(id):
 			t.check(not str(ids[id]["plain"]).contains("0") and not str(ids[id]["plain"]).contains("1"), "%s carries no numbers" % id)
 	t.check((m as Dictionary)["moments"].has("bank_refused") and (m as Dictionary)["moments"].has("day_met"), "both moments have priorities")
+
+func test_floor_and_day_are_independent_and_floor_resets_at_descent(t: T) -> void:
+	const FloorQuota = preload("res://client/quota_view.gd")
+	var d := DayView.new()
+	for floor_paid: bool in [false, true]:
+		for day_paid: bool in [false, true]:
+			var q := {"earned": 800 if floor_paid else 299, "needed": 800}
+			d.update(frame(block(1, 1200 if day_paid else 700, 1200, 0, 0), 2, "away"))
+			t.eq(FloorQuota.floor_met(q), floor_paid, "only the floor opens CALL")
+			t.eq(d.met, day_paid, "only the day unlocks BANK")
+			t.eq(FloorQuota.floor_hud_text(q, 2, "away"), "FLOOR RECORDED %d/800%s" % [q.earned, " MET" if floor_paid else ""], "live floor recorded/required")
+			t.eq(d.hud_line, "DAY EARNED %d/1200%s" % [1200 if day_paid else 700, " MET" if day_paid else ""], "live day earned/required")
+	t.eq(FloorQuota.floor_hud_text({"earned": 800, "needed": 800}, 1, "riding"), "", "old floor disappears in transit")
+	t.eq(FloorQuota.floor_hud_text({"earned": 0, "needed": 1160}, 2, "arriving"), "FLOOR RECORDED 0/1160", "new floor starts at zero")
+	t.eq(FloorQuota.floor_hud_text({"earned": 0, "needed": 0}, 2, "away"), "", "no quota shows no floor line")
+	t.eq(FloorQuota.floor_hud_text(null, 2, "away"), "", "flag off shows no floor line")
+	t.eq(FloorQuota.floor_hud_text({"earned": 800, "needed": 800}, 0, "night"), "", "home shows no floor line")
+
+func test_day_first_intercom_uses_safe_recording_and_keeps_later_call_event(t: T) -> void:
+	var a := _announcer("quota-day-first")
+	a.day_lock_on = true
+	var day := {"type": "dayMet", "t": 5.0, "day": 1, "earned": 1200, "quota": 1200}
+	var floor_event := {"type": "quotaMet", "t": 6.0, "depth": 2, "earned": 1160, "needed": 1160, "top": "ann"}
+	a.on_events([day], 1, {"earned": 350, "needed": 1160})
+	t.eq(a.request_log.size(), 1, "payment while short makes one announcement")
+	if not a.queue.is_empty():
+		t.eq(a.queue[0].id, "day_met_3", "only the debt line is said without CALL")
+		t.check(str(a.queue[0].caption2).contains("STILL NEEDED TO CALL"), "day caption explains remaining floor requirement")
+	a.request_log.clear()
+	a.queue.clear()
+	a.on_events([day, floor_event], 1, {"earned": 1160, "needed": 1160})
+	t.eq(a.request_log.size(), 2, "separate ticks delivered together keep both announcements")
+	t.check(a.request_log.any(func(r: Dictionary) -> bool: return r.moment == "quota"), "the later CALL message survives")
+	a.request_log.clear()
+	a.queue.clear()
+	floor_event["t"] = day["t"]
+	a.on_events([day, floor_event], 1, {"earned": 1160, "needed": 1160})
+	t.eq(a.request_log.size(), 1, "real simultaneous unlock combines the captions")
+	if not a.queue.is_empty():
+		t.check(str(a.queue[0].caption2).contains("DAY EARNED") and str(a.queue[0].caption2).contains("CALL READY"), "combined cue captions both gates")
+	a.free()
+
+func test_call_refusal_flash_yields_to_the_paid_floor(t: T) -> void:
+	const FloorQuota = preload("res://client/quota_view.gd")
+	var v := FloorQuota.new()
+	v.flash_text = FloorQuota.refused_text(0, 800)
+	v.flash_until = 2200
+	t.eq(v.update({"earned": 0, "needed": 800}, null, true, 1000), v.flash_text, "early CALL shows the refusal")
+	t.eq(v.update({"earned": 800, "needed": 800}, null, true, 1001), "QUOTA MET. CALL THE CAR.", "paid floor immediately overrides old refusal")
+	t.check(not v.flashing and v.tone == "met", "paid color and gate agree")
+
+func test_quota_prompt_and_refusal_fit_above_a_long_intercom_caption(t: T) -> void:
+	const HudView = preload("res://client/hud.gd")
+	var hud := HudView.new()
+	hud.size = Vector2(640, 360)
+	hud.prompt = "F  CALL"
+	hud.quota_line = "NOT YET: 400 OF 1160"
+	hud.subtitle = "That's today's debt covered. Anything further is greed, and we encourage greed.\nDAY EARNED 1200 OF 1200\nBANK UNLOCKED. FLOOR QUOTA STILL NEEDED TO CALL."
+	t.check(hud._prompt_y(2.0) + 50.0 < hud._subtitle_top(), "CALL panel clears the caption at 640x360")
+	t.check(hud._subtitle_bottom() < 315.0, "caption clears the inventory slots")
+	hud.quota_line = ""
+	t.eq(hud._prompt_y(2.0), 360.0 * 0.62, "unrelated prompts keep the old position")
+	hud.free()

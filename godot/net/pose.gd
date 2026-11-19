@@ -8,6 +8,7 @@ const Run = preload("res://sim/run.gd")
 const Entity = preload("res://sim/entity.gd")
 const Floor = preload("res://sim/floor.gd")
 const Move = preload("res://sim/move.gd")
+const Orientation = preload("res://sim/orientation.gd")
 
 ## JavaScript's Math.round (halves round up), exact as V8 does it: ceil, then step back if that
 ## went more than half up.
@@ -112,4 +113,5 @@ static func camera_sees(plan: Floor.FloorPlan, car: Run.CarGeometry, cam: Camera
 	var views: Array[Entity.PlayerView] = [Entity.PlayerView.make("me", cam.body, cam.eye, cam.yaw, cam.pitch, cam.h_fov_deg, cam.v_fov_deg, true)]
 	if doors_open and Run.in_car(car, cam.body):
 		views.append(_threshold_view(car, cam))
-	return Entity.seen_by(plan, pose_body(pose), views) != null
+	var shape := Orientation.target_body() if plan.place == Orientation.PLACE else null
+	return Entity.seen_by(plan, pose_body(pose), views, shape) != null

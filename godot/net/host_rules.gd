@@ -126,6 +126,7 @@ var shop: bool
 var garden_cones: bool
 var garden_search: bool
 var nightly_reels: bool
+var orientation := false
 
 func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false,
 		watchers_: bool = false, relocation_: bool = false, long_dark_: bool = false, paced_: bool = false, car_waits_: bool = false,
@@ -157,6 +158,11 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 	paced = paced_
 	car_waits = car_waits_
 
+## Named opt-in for a host's standalone practice room.
+func enable_orientation() -> void:
+	orientation = true
+	deck = Places.ORIENTATION_ONLY
+
 ## Where player `i` of `n` stands in the car at the start (car-local u, v).
 static func start_spot(i: int, n: int) -> PackedFloat64Array:
 	if n <= 1:
@@ -181,6 +187,8 @@ static func parked_orderly(state: Run.RunState) -> Entity.OrderlyState:
 
 ## The first state of a run (create_run's, adjusted).
 func prepare(s0: Run.RunState) -> Run.RunState:
+	if orientation:
+		return Run.with_orientation(s0)
 	var s := s0
 	if s.deck != deck:
 		s = s.copy()

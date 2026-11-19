@@ -35,6 +35,8 @@ const ANNEX := &"annex"
 const PLAYROOM := &"playroom"
 ## The Arboretum (North Star A2): a forest indoors; its Groundskeeper hears (sim/hearing.gd).
 const ARBORETUM := &"arboretum"
+const Orientation = preload("res://sim/orientation.gd")
+const ORIENTATION_ONLY: Array[StringName] = [Orientation.PLACE]
 
 ## Every floor a Clinic: the default of a run, so the stored goldens stay as recorded.
 const CLINIC_ONLY: Array[StringName] = [&"clinic"]
@@ -88,6 +90,8 @@ static func resident(place: StringName) -> Resident:
 		ARBORETUM:
 			# Its instrument trait is "listening": it records only while it comes to a noise or leans.
 			return Resident.make("Groundskeeper", false, &"listening")
+		Orientation.PLACE:
+			return Resident.make("Practice target", true, &"stillness", Orientation.target_body())
 	return Resident.make("", false, &"")
 
 ## The resident of a place in a run with Lonely on or off (sim/run.gd resident_of; T19c): with it on the Temp
@@ -117,6 +121,8 @@ static func _deck_or_clinic(deck: Array) -> Array[StringName]:
 static func place_at(seed: String, depth: int, deck: Array = FULL) -> StringName:
 	if depth <= 0:
 		return PRISON
+	if deck == ORIENTATION_ONLY:
+		return Orientation.PLACE
 	var d := _deck_or_clinic(deck)
 	var prev := PRISON
 	var here := CLINIC
@@ -145,6 +151,8 @@ static func generate(seed: String, depth: int, deck: Array = FULL, garden_dense:
 			return Playroom.generate_playroom(seed, depth)
 		ARBORETUM:
 			return Arboretum.generate_arboretum(seed, depth, garden_dense)
+		Orientation.PLACE:
+			return Orientation.generate(seed, depth)
 	return Clinic.generate_clinic(seed, depth)
 
 ## The resident a floor starts with, at plan.entity_start in its own body. THE one place a floor's

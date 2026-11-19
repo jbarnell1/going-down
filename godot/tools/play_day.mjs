@@ -118,7 +118,7 @@ async function sampleOnce(c) {
   const hd = h.day;
   samples.frames++;
   if (hd.locked) samples.locked++; else samples.open++;
-  const wantHud = `DAY ${hd.earned}/${hd.quota}${hd.locked ? '' : ' MET'}`;
+  const wantHud = `DAY EARNED ${hd.earned}/${hd.quota}${hd.locked ? '' : ' MET'}`;
   const wantRow2 = hd.locked ? `BANK LOCKED. ${hd.quota - hd.earned} TO GO.` : `BANK OPEN. ABOARD ${hd.aboard}. EACH GETS ${hd.each}.`;
   const bad = [];
   if (v.hud !== wantHud) bad.push(`hud "${v.hud}" want "${wantHud}"`);
@@ -232,18 +232,18 @@ try {
   check('1. BANK refused: both clients got the host\'s bankRefused, the car rides down', (a.events.bankRefused ?? 0) === 1 && (b1.events.bankRefused ?? 0) === 1 && (a.events.banked ?? 0) === 0,
     `refused A ${a.events.bankRefused} B ${b1.events.bankRefused}, banked ${a.events.banked ?? 0}`);
   const said1 = (dl(a).said ?? []).filter((h) => h.moment === 'bank_refused');
-  check('a bank_refused line plays, with its caption EARNED 500 OF Q', said1.length === 1 && caption.endsWith(`\nEARNED 500 OF ${e1.quota}`), `${JSON.stringify(said1.map((h) => h.id))}, caption "${caption.replace('\n', ' / ')}"`);
+  check('a bank_refused line plays, with its caption EARNED 500 OF Q', said1.length === 1 && caption.endsWith(`\nDAY EARNED 500 OF ${e1.quota}`), `${JSON.stringify(said1.map((h) => h.id))}, caption "${caption.replace('\n', ' / ')}"`);
   a = await until(A.state, (s) => s.depth === 2 && s.phase === 'unloading', 30000, 200);
   check('the car went down: floor 2', a.depth === 2, `depth ${a.depth}, phase ${a.phase}`);
 
   // ---- 2. Floor 2: the rest of the day.
   const e2 = await callFrom(e1.quota);
   check('2. recorded the rest: the day is earned', e2.ok && e2.earned >= e2.quota, JSON.stringify(e2));
-  const metCap = `\nEARNED ${e2.earned} OF ${e2.quota}`;
-  a = await until(A.state, (s) => (s.events.dayMet ?? 0) >= 1 && (dl(s).said ?? []).some((h) => h.moment === 'day_met') && captions.some((x) => x.endsWith(metCap)), 30000, 100);
-  check('dayMet: a day_met line with its caption', (a.events.dayMet ?? 0) === 1 && (dl(a).said ?? []).some((h) => h.moment === 'day_met') && captions.some((x) => x.endsWith(metCap)),
+  const metCap = `\nDAY EARNED ${e2.earned} OF ${e2.quota}`;
+  a = await until(A.state, (s) => (s.events.dayMet ?? 0) >= 1 && (dl(s).said ?? []).some((h) => h.moment === 'day_met') && captions.some((x) => x.includes(metCap)), 30000, 100);
+  check('dayMet: a day_met line with its caption', (a.events.dayMet ?? 0) === 1 && (dl(a).said ?? []).some((h) => h.moment === 'day_met') && captions.some((x) => x.includes(metCap)),
     `dayMet ${a.events.dayMet}, said ${JSON.stringify((dl(a).said ?? []).map((h) => h.id))}, captions ${JSON.stringify(captions)}`);
-  check('the HUD line turns MET (amber)', dl(a).hudLine === `DAY ${e2.earned}/${e2.quota} MET` && dl(a).hudMet === true, `"${dl(a).hudLine}"`);
+  check('the HUD line turns MET (amber)', dl(a).hudLine === `DAY EARNED ${e2.earned}/${e2.quota} MET` && dl(a).hudMet === true, `"${dl(a).hudLine}"`);
   a = await until(A.state, (s) => s.phase === 'boarding', 90000, 200);
   await board(A);
   await board(B);

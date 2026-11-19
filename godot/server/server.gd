@@ -98,12 +98,14 @@ func _ready() -> void:
 	# The game's deck, as every client's (client/main.gd); the room gives it to each run.
 	Session.deck = Places.FULL
 	_room = Room.new(_ws, say)
-	var save := SaveSlip.key_from_env()
-	if save.ok:
-		_room.enable_stamped_profiles(save.key)
+	_room.orientation_review = bind == "127.0.0.1" and args.get("orientation", "0") == "1"
+	if not _room.orientation_review:
+		var save := SaveSlip.key_from_env()
+		if save.ok:
+			_room.enable_stamped_profiles(save.key)
 	_room.fixed_seed = args.get("seed", "")
-	_room.ward_review = bind == "127.0.0.1" and args.get("ward_review", "0") == "1"
-	_room.reactor_review = not _room.ward_review and bind == "127.0.0.1" and args.get("reactor_review","0")=="1"
+	_room.ward_review = not _room.orientation_review and bind == "127.0.0.1" and args.get("ward_review", "0") == "1"
+	_room.reactor_review = not _room.orientation_review and not _room.ward_review and bind == "127.0.0.1" and args.get("reactor_review","0")=="1"
 	if _room.reactor_review:
 		_room.reactor_archive_path = "user://reactor-campaigns/"+str(args.get("reactor_campaign","owner-review")).sha256_text()
 	if args.has("depth"):

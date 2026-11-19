@@ -90,7 +90,9 @@ func test_two_clients_see_the_host_ward(t: T) -> void:
 	t.check(ward.encounter == &"climbing", "the warned line becomes the climbing line")
 	for c in ex.clients:
 		t.check(c.latest.ward.bridgeLowered and c.latest.ward.house == control.house and c.latest.ward.encounter == "climbing", "both clients agree on the raised load")
-	ex.tick_for(5.0)
+	# A side window can be a full arm length from the entry probe. Allow the
+	# existing warning, extension speed and maximum reach before judging contact.
+	ex.tick_for(5.0 + (Ward.WARN_SECONDS + House.ArmSearch.REACH / House.ArmSearch.OUT_SPEED if fixture.search_window.has_volume() else 0.0))
 	t.check(ex.peak > 1 and ex.ward_events("contact") == 1 and ward.caught.has("two"), "one host hand reached and touched the endangered player")
 	t.eq(ex.ward_events("bridge"), 1, "a long hold never toggles the bridge back")
 
@@ -428,3 +430,77 @@ func test_ward_search_cannot_touch_a_player_through_the_upstairs_floor(t: T) -> 
 				contacts.append(str(event.id))
 	t.check(contacts.has("lower"), "the actual searching palm reaches the downstairs target")
 	t.check(not contacts.has("upper"), "the upper target over the same point is safe")
+
+class WardViewWithoutPrivateMedia extends "res://client/ward/view.gd":
+	func _build_rigger() -> void:
+		rigger = Node3D.new()
+		hand = Node3D.new()
+		add_child(rigger)
+		add_child(hand)
+		add_child(rope)
+		add_child(load_sound)
+
+func test_loaded_support_moves_before_rigger_appears_and_resets(t: T) -> void:
+	var view := WardViewWithoutPrivateMedia.new(8143, Vector3.ZERO)
+	(Engine.get_main_loop() as SceneTree).root.add_child(view)
+	var ward := Ward.new(8143)
+	var snapshot := ward.snapshot()
+	snapshot.house = 1
+	snapshot.encounter = "warning"
+	snapshot.startedAt = 5.0
+	var line: Node3D = view.houses[1].lines[0]
+	var span := line.get_child(1) as Node3D if line.get_child_count() > 1 else line
+	var idle := span.transform
+	var other: Node3D = view.houses[0].lines[0]
+	var other_span := other.get_child(1) as Node3D if other.get_child_count() > 1 else other
+	var unchanged := other_span.transform
+	view.show_host(snapshot, 5.32, "solo", [])
+	t.check(not span.transform.is_equal_approx(idle) and not view.rigger.visible, "only the line loads before the Rigger appears")
+	t.check(other_span.transform.is_equal_approx(unchanged), "the next house gives no false warning")
+	view.show_host(ward.snapshot(), 6.0, "solo", [])
+	t.check(span.transform.is_equal_approx(idle), "support settles at its original anchors")
+	view.free()
+
+func test_laundry_window_reaches_around_a_corner_without_opening_other_glass(t: T) -> void:
+	var ward := Ward.new(8143)
+	var h := ward.houses[2]
+	var face := h.search_window.get_center()
+	face.y = House.ARM_HEIGHT
+	face.z -= 0.5 # The interior partition meets the wall behind the middle of the open sash.
+	var through := Vector3(-h.window_side, 0, 0)
+	var arm := h.make_arm()
+	arm.step(0.0, {}, false)
+	t.check(arm.segment_clear(face-through*0.4, face+through*0.4), "only the open sash admits the palm")
+	var on_sill := face
+	on_sill.y = h.search_window.position.y + 0.03
+	t.check(not arm.segment_clear(on_sill-through*0.4, on_sill+through*0.4), "the sill still blocks a finite palm")
+	var entry: Vector3 = h.areas[&"entry"]
+	t.check(not arm.segment_clear(h.shoulder, entry), "the disturbed crew is screened by an inside wall")
+	arm.hear(&"entry")
+	var hit := false
+	for i in 300:
+		arm.step(0.05, {"crew": entry}, false)
+		if arm.contacts.has("crew"):
+			hit = true
+			break
+	t.check(hit and not arm.door_open, "physical palm crosses the open sash and rounds the partition with the front door shut")
+	var other := ward.houses[1]
+	t.check(not other.search_window.has_volume(), "the next house has ordinary closed glazing")
+	var sealed := Vector3(other.floor_bounds.position.x - House.WALL_THICKNESS*0.5, House.ARM_HEIGHT, other.floor_bounds.size.y*0.5)
+	t.check(not other.make_arm().segment_clear(sealed-Vector3.RIGHT*0.4, sealed+Vector3.RIGHT*0.4), "the same sweep stops at intact glass")
+	t.check(not h.walk_clear(h.to_world(face-through*0.4-Vector3.UP*House.ARM_HEIGHT), h.to_world(face+through*0.4-Vector3.UP*House.ARM_HEIGHT), true, false), "opening a sash does not create a crew route")
+
+func test_search_rig_positions_wrist_at_its_replicated_sill(t: T) -> void:
+	var view := WardViewWithoutPrivateMedia.new(8143, Vector3.ZERO)
+	(Engine.get_main_loop() as SceneTree).root.add_child(view)
+	var ward := Ward.new(8143)
+	for id: int in [1, 2]:
+		var h := ward.houses[id]
+		var frame := ward.snapshot()
+		frame.encounter = "searching"
+		frame.house = id
+		view.show_host(frame, 20.0, "", [])
+		var wrist := view.rigger.to_global(view.RIGGER_WRIST)
+		t.check(wrist.distance_to(h.to_world(h.shoulder)) < 0.002, "wrist meets the authoritative arm root")
+		t.check(not h.floor_bounds.has_point(Vector2(h.to_local(view.rigger.position).x, h.to_local(view.rigger.position).z)), "rig origin remains outside")
+	view.free()

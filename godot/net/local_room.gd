@@ -68,6 +68,7 @@ var rules: HostRules = null
 var seed := "alpha"
 var run_seed := ""
 var _playtest_depth := -1
+var _orientation_playtest := false
 var runs := 0
 var entity_on := true
 var time_scale := 1.0
@@ -230,6 +231,7 @@ func start_playtest(depth: int) -> bool:
 	for destination in playtest_destinations(seed, Session.deck):
 		if depth == int(destination["depth"]):
 			_playtest_depth = depth
+			_orientation_playtest = false
 			days = true
 			open_settings("")
 			solo_profile_path = ""
@@ -244,6 +246,16 @@ func start_reactor_review(review_seed: int, archive_path := "") -> bool:
 	if not start_playtest(1): return false
 	host.start_reactor_review(review_seed, true, archive_path)
 	return true
+
+## The safe practice route has its own run and does not load or save a campaign profile.
+func start_orientation() -> void:
+	_playtest_depth = 1
+	_orientation_playtest = true
+	open_settings("")
+	solo_profile_path = ""
+	_solo_profile.clear()
+	my_ready = true
+	start_run()
 
 func _prepare_playtest_prison(initial: Run.RunState) -> Run.RunState:
 	var s := rules.prepare(initial)
@@ -263,6 +275,8 @@ func start_run() -> void:
 	var depth := HostRules.start_depth_by_arg() if _playtest_depth < 0 else maxi(1, _playtest_depth)
 	var deck := Places.deck_for_start_depth(depth) if Session.deck == Places.FULL else Session.deck
 	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL, shop_on(), Session.deck == Places.FULL, true, true)
+	if _orientation_playtest:
+		rules.enable_orientation()
 	# Method callables hold no reference to this object, so the pipes do not keep it alive.
 	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
 	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))
@@ -280,7 +294,7 @@ func start_run() -> void:
 		if p.id == ME:
 			host.place_player(ME, p.body)
 	client = Client.new(_client_pipe, "host", _name, _vt, Session.INTERP_DELAY, Session.INPUT_INTERVAL, _face)
-	client.floor_deck = deck
+	client.floor_deck = rules.deck
 	client.garden_dense = host.state.garden_search
 	client.draw_in_dark = o
 	# Live settings: everything asked for is in force from the first tick.

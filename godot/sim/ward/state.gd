@@ -187,7 +187,7 @@ func posed_limb(now: float) -> PackedVector3Array:
 	var house := houses[resident_house]
 	if encounter == &"climbing":
 		var site: Dictionary = layout.houses[resident_house]
-		var anchor := Vector3(float(site.x) - float(site.w) * 0.5 - Layout.GALLERY + 0.13,
+		var anchor := Vector3(float(site.x) + (1.0 if house.window_side > 0 else -1.0) * (float(site.w) * 0.5 + Layout.GALLERY - 0.13),
 			float(site.z) + 0.17, float(site.y) - float(site.d) * 0.5 - Layout.GALLERY + 0.13)
 		var shoulder := house.to_world(house.shoulder)
 		var climb := clampf((now - encounter_at - WARN_SECONDS) / CLIMB_SECONDS, 0.0, 1.0)

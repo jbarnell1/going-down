@@ -337,6 +337,7 @@ extends RefCounted
 
 const Entity = preload("res://sim/entity.gd")
 const Places = preload("res://sim/places.gd")
+const Orientation = preload("res://sim/orientation.gd")
 const Seek = preload("res://sim/seek.gd")
 const Hiding = preload("res://sim/hiding.gd")
 const Day = preload("res://sim/day.gd")
@@ -1008,6 +1009,8 @@ class RunState:
 	var hiding: Variant = null
 	## The floor quota (see the header). Off: everything below stays as it is made and is never read.
 	var quota: bool = false
+	## A standalone safe practice stop, with no day, wallet or campaign advancement.
+	var orientation: bool = false
 	## Recorded on this floor: every reading closed here (depth pay included), wherever its tape went since.
 	var floor_earned: float = 0.0
 	## The same per player, {id: value} (who did most of it: the Annex's note). Replaced, never edited.
@@ -1162,6 +1165,7 @@ class RunState:
 		s.seek_call_at = seek_call_at
 		s.hiding = hiding
 		s.quota = quota
+		s.orientation = orientation
 		s.floor_earned = floor_earned
 		s.floor_by = floor_by
 		s.floor_needed = floor_needed
@@ -1349,6 +1353,18 @@ static func create_run(seed: String, player_ids: Array[String], deck: Array = []
 	if downs:
 		s = with_downs(s)
 	return with_quota(s) if quota else s
+
+## Explicit practice entry. The ordinary first stop and its legacy recordings use create_run unchanged.
+static func with_orientation(initial: RunState) -> RunState:
+	var ids: Array[String] = []
+	for player in initial.players:
+		ids.append(player.id)
+	var s := _create_run(initial.seed, ids, Places.ORIENTATION_ONLY)
+	s.orientation = true
+	s.car_waits = true
+	s.quota = true
+	s.floor_needed = Orientation.QUOTA
+	return s
 
 ## Turns down first, then out on for a run (see the header): nobody down, no red spots.
 static func with_downs(s0: RunState) -> RunState:
@@ -1559,6 +1575,8 @@ static func sprint_seconds(s: RunState) -> float:
 
 ## The boarding window of this run (seconds from the doors opening to the bell).
 static func board_time(s: RunState) -> float:
+	if s.orientation:
+		return 3.0
 	return Settings.f(s.tuning, &"lift.board", BOARD_TIME_WAITS if s.car_waits else BOARD_TIME)
 
 ## The most a crew may hold the doors at one stop (live settings: lift.hold), stamped as the doors open.
@@ -1567,7 +1585,7 @@ static func hold_limit(s: RunState) -> float:
 
 ## The car waits: everyone on their feet who is not in `aboard` as the car leaves is left out for the day.
 static func _leave_out(s: RunState, players: Array[RunPlayer], aboard: Dictionary) -> void:
-	if not s.car_waits:
+	if not s.car_waits or s.orientation:
 		return
 	var out := s.left_out.duplicate()
 	for p in players:
@@ -1700,6 +1718,32 @@ static func _threshold_view(car: CarGeometry, inp: PlayerInput) -> Entity.Player
 	var at := car_body(car, -0.02, _clamp(v, -car.door_width / 2.0, car.door_width / 2.0))
 	var body := Move.Body.make(at.x, at.z, at.level, inp.body.y)
 	return Entity.PlayerView.make(inp.id, body, inp.eye, inp.yaw, inp.pitch, inp.h_fov_deg, inp.v_fov_deg, true, false)
+
+static func _step_orientation(s: RunState, players: Array[RunPlayer], input_of: Dictionary, dt: float,
+		events: Array[Dictionary]) -> Instr.EntityTick:
+	var targets: Array[Entity.PlayerView] = []
+	var watchers: Array[Entity.PlayerView] = []
+	for p in players:
+		if not _is_active(p, input_of):
+			continue
+		var input := _inp(p, input_of)
+		if p.aboard:
+			if doors_open(s) and not input.blind:
+				watchers.append(_threshold_view(s.car, input))
+		else:
+			var view := _view_of(input, true, input.blind)
+			targets.append(view)
+			watchers.append(view)
+	var before := s.orderly
+	var step := Orientation.step_target(s.plan, before, targets, watchers, dt)
+	s.orderly = step.state
+	events.append_array(step.events)
+	var sample := Instr.EntityTick.make(s.entity_id, &"stillness", before, step.state, step.events)
+	var rates := {}
+	for target in targets:
+		rates[target.id] = Orientation.PAY_SCALE
+	sample.pay = rates
+	return sample
 
 ## Distance from a point to a rectangle (0 inside).
 static func rect_distance(r: Rect, x: float, z: float) -> float:
@@ -2799,7 +2843,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	var seek_call_by := ""
 	# The floor quota for the crew as it is: set while the car arrives (so a player admitted at the stop
 	# counts), then it can only shrink (a player who leaves the game), never grow.
-	if s.quota and not at_home(s):
+	if s.quota and not s.orientation and not at_home(s):
 		var want := floor_quota(s.depth, quota_crew(players))
 		s.floor_needed = want if (s.phase == &"arriving" or s.floor_needed <= 0) else mini(s.floor_needed, want)
 
@@ -2861,7 +2905,12 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				events.append({"type": "called", "t": t, "playerId": caller.id, "floorsAway": 0, "at": caller.body, "last": true})
 			elif caller != null:
 				var index := s.calls
-				var plan := call_plan(s.seed, index, s.last_floors, s.depth, s.long_dark, s.tuning)
+				var plan := CallPlan.new() if s.orientation else call_plan(s.seed, index, s.last_floors, s.depth, s.long_dark, s.tuning)
+				if s.orientation:
+					plan.floors = 1
+					plan.delay = 0.5
+					plan.floor_time = 2.5
+					plan.wait = plan.delay + plan.floor_time
 				s.calls = index + 1
 				s.last_floors = plan.floors
 				var c := CallState.new()
@@ -2872,9 +2921,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				c.next_at = t + plan.delay + plan.floor_time
 				s.call = c
 				s.phase = &"coming"
-				s.lure = true
+				s.lure = not s.orientation
 				# The call is loud. If the Orderly was still standing where the floor began, it wakes now.
-				if s.orderly.mode == &"waiting" and (resident_of(s).stillness or resident_of(s).trait_name == &"lonely"):
+				if not s.orientation and s.orderly.mode == &"waiting" and (resident_of(s).stillness or resident_of(s).trait_name == &"lonely"):
 					var o := s.orderly.copy()
 					o.mode = &"hunting"
 					o.replan_in = 0.0
@@ -2931,22 +2980,28 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 					s.call = null
 		&"boarding":
 			var aboard := _active_aboard(players, input_of)
-			var any_hold := false
-			for p in aboard:
-				if _inp(p, input_of).hold_doors:
-					any_hold = true
-					break
-			var holding := s.hold_left > EPS and any_hold
-			if holding != s.held:
-				s.held = holding
-				events.append({"type": "holdChanged", "t": t, "held": holding, "holdLeft": s.hold_left})
-			if holding:
-				s.hold_left = maxf(0.0, s.hold_left - dt)
-				if s.hold_left <= EPS:
-					s.held = false
-					events.append({"type": "holdChanged", "t": t, "held": false, "holdLeft": 0.0})
+			if s.orientation:
+				# The training car waits until all active crew have picked BANK.
+				var waiting := aboard.is_empty() or players.any(func(p: RunPlayer) -> bool:
+					return _is_active(p, input_of) and car_side(car, p.body) != &"bank")
+				s.bell_left = board_time(s) if waiting else s.bell_left - dt
 			else:
-				s.bell_left -= dt
+				var any_hold := false
+				for p in aboard:
+					if _inp(p, input_of).hold_doors:
+						any_hold = true
+						break
+				var holding := s.hold_left > EPS and any_hold
+				if holding != s.held:
+					s.held = holding
+					events.append({"type": "holdChanged", "t": t, "held": holding, "holdLeft": s.hold_left})
+				if holding:
+					s.hold_left = maxf(0.0, s.hold_left - dt)
+					if s.hold_left <= EPS:
+						s.held = false
+						events.append({"type": "holdChanged", "t": t, "held": false, "holdLeft": s.hold_left})
+				else:
+					s.bell_left -= dt
 		&"riding":
 			s.timer -= dt
 	_step_blink(s, t, events)
@@ -3064,6 +3119,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	var home := at_home(s)
 	if home:
 		pass  # The prison has no resident: nothing hunts there.
+	elif s.orientation:
+		if s.phase != &"ended":
+			entity_ticks = [_step_orientation(s, players, input_of, dt, events)]
 	elif s.phase != &"riding" and s.seek != null:
 		# The Playroom: the count, the search, hiding, health (sim/seek.gd; see the header).
 		entity_ticks = [_step_seek(s, players, input_of, seek_call_by, prev.t, t, dt, events)]

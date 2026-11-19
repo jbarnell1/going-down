@@ -235,7 +235,7 @@ func _check_view(s: Sess, b: Bot) -> void:
 	var w_locked := false
 	if on_floor:
 		w_locked = int(hb["earned"]) < int(hb["quota"])
-		w_hud = "DAY %d/%d%s" % [int(hb["earned"]), int(hb["quota"]), "" if w_locked else " MET"]
+		w_hud = "DAY EARNED %d/%d%s" % [int(hb["earned"]), int(hb["quota"]), "" if w_locked else " MET"]
 		w_rows = ["DAY %d. EARNED %d OF %d." % [int(hb["day"]), int(hb["earned"]), int(hb["quota"])],
 			("BANK LOCKED. %d TO GO." % (int(hb["quota"]) - int(hb["earned"]))) if w_locked else ("BANK OPEN. ABOARD %d. EACH GETS %d." % [int(hb["aboard"]), int(hb["each"])])]
 		if str(latest["phase"]) == "boarding":

@@ -29,7 +29,7 @@
 # The day quota (FD3, findables-and-day.md "The lines"): "bankRefused" asks for "bank_refused" (one line dealt
 # per refusal, never the same twice running) in place of that bell's ride line, and "dayMet" for "day_met";
 # both with the caption "EARNED 1650 OF 2400" from the event (the recordings carry no numbers); a day_met
-# line stands in for the floor's quota line when both come in one tick (it says the call works, and more). hint_day
+# line stands in for the floor's quota line only on the same tick (the caption explains both gates). hint_day
 # stands in for the ride line on the night's first ride down of its first day (days on).
 class_name Announcer
 extends Node
@@ -37,6 +37,7 @@ extends Node
 const CountLines = preload("res://client/count_lines.gd")
 const Hints = preload("res://client/hints.gd")
 const DayCaption = preload("res://client/day_view.gd")
+const FloorQuota = preload("res://client/quota_view.gd")
 
 const EXPIRE_MS := 4000
 const EXPIRE_LONG_MS := 9000
@@ -170,7 +171,7 @@ func start_run(new_night := true, night_key := "") -> void:
 	request("board", EXPIRE_BOARD_MS)
 
 ## The run's events from a frame.
-func on_events(events: Array, first_depth := 1) -> void:
+func on_events(events: Array, first_depth := 1, floor_quota: Variant = null) -> void:
 	var now := _ms()
 	var wiped := false
 	# Down first, then out: a catch that puts its player down is not yet a loss (a crewmate may get them
@@ -179,7 +180,8 @@ func on_events(events: Array, first_depth := 1) -> void:
 	# The day lock (FD3): a refused BANK's line stands in for the ride line of the same bell.
 	var refused := false
 	# The day quota met (FD3) says more than the floor's quota line of the same tick: it stands in for it.
-	var day_met := false
+	var day_met_ticks := {}
+	var floor_met_ticks := {}
 	for e: Dictionary in events:
 		if e.type == "wiped":
 			wiped = true
@@ -188,7 +190,9 @@ func on_events(events: Array, first_depth := 1) -> void:
 		elif e.type == "bankRefused":
 			refused = true
 		elif e.type == "dayMet":
-			day_met = true
+			day_met_ticks[e.get("t", 0.0)] = true
+		elif e.type == "quotaMet":
+			floor_met_ticks[e.get("t", 0.0)] = e
 	for e: Dictionary in events:
 		match str(e.type):
 			"doorsOpened":
@@ -210,13 +214,25 @@ func on_events(events: Array, first_depth := 1) -> void:
 				# carries no numbers; the caption under it does.
 				request("bank_refused", EXPIRE_LONG_MS, DayCaption.caption(e))
 			"dayMet":
-				request("day_met", EXPIRE_BOARD_MS, DayCaption.caption(e))
+				var matching: Variant = floor_met_ticks.get(e.get("t", 0.0))
+				if not day_lock_on:
+					request("day_met", EXPIRE_BOARD_MS, DayCaption.caption(e))
+				elif matching is Dictionary:
+					request("day_met", EXPIRE_BOARD_MS, DayCaption.caption(e) + "\n" + _floor_caption(matching), "day_met_1")
+				else:
+					var detail := "\nBANK UNLOCKED"
+					# A newer floor event can be in the same packet as the original day unlock.
+					var future_floor_met := floor_met_ticks.keys().any(func(when: Variant) -> bool: return float(when) > float(e.get("t", 0.0)))
+					if future_floor_met or (floor_quota is Dictionary and not FloorQuota.floor_met(floor_quota)):
+						detail += ". FLOOR QUOTA STILL NEEDED TO CALL."
+					request("day_met", EXPIRE_BOARD_MS, DayCaption.caption(e) + detail, "day_met_3")
 			"called":
 				# On the Playroom the call starts the last count: the count's own line says so (hide_view.gd).
 				if not bool(e.get("last", false)):
 					request("called", EXPIRE_LONG_MS)
 			"callRefused":
-				hint("hint_call_dead")
+				if not FloorQuota.floor_met(floor_quota):
+					hint("hint_call_dead")
 			"blinkStart":
 				if e.blackout:
 					blackout_on = true
@@ -261,14 +277,20 @@ func on_events(events: Array, first_depth := 1) -> void:
 				if bool(e.get("inBed", false)):
 					_bed_seen = true
 			"quotaMet":
+				queue = queue.filter(func(q: Dictionary) -> bool: return q.moment != "hint_call_dead")
+				if str(current.get("moment", "")) == "hint_call_dead":
+					_cut()
 				# The floor quota (North Star C9): the call button now works. Without a recording, a caption.
-				if day_met:
-					pass   # the day_met line says it, and more
+				if day_met_ticks.has(e.get("t", 0.0)):
+					pass   # the paired day line captions both facts
 				elif by_moment.has("quota"):
-					request("quota", EXPIRE_LONG_MS)
+					request("quota", EXPIRE_LONG_MS, _floor_caption(e) if day_lock_on else "")
 				else:
 					caption = QUOTA_CAPTION
 					caption_until = now + EXPIRE_MS
+
+static func _floor_caption(e: Dictionary) -> String:
+	return "FLOOR RECORDED %d OF %d. CALL READY." % [int(e.get("earned", 0)), int(e.get("needed", 0))]
 
 ## The doors open on arrival at `depth` (0: home in the prison).
 func _arrival(depth: int, first_depth: int, now: int) -> void:
@@ -408,9 +430,12 @@ func bell_soon() -> void:
 	request("bell", 7000)
 
 ## Asks for a line of `moment`. `caption2`: a second caption line under it (the waiting car's names).
-func request(moment: String, expire_ms := EXPIRE_MS, caption2 := "") -> void:
-	var id := _deal(moment)
-	if id == "":
+func request(moment: String, expire_ms := EXPIRE_MS, caption2 := "", only_id := "") -> void:
+	var id := _deal(moment) if only_id == "" else only_id
+	if id == "" or (only_id != "" and not (by_moment.get(moment, []) as Array).has(only_id)):
+		if only_id != "":
+			caption = caption2
+			caption_until = _ms() + expire_ms
 		return
 	var now := _ms()
 	request_log.append({"moment": moment, "id": id, "at": now, "place": place})
@@ -438,6 +463,9 @@ func _cut() -> void:
 ## Whether line `id` may be dealt on this place (doors_1, slip_2: the Clinic only; arrived_5, blackout_3:
 ## never on the Playroom).
 func line_ok(id: String) -> bool:
+	# The fifth BANK refusal says only "the quota", just after floor quota let the crew call.
+	if day_lock_on and id == "bank_refused_5":
+		return false
 	if PLACE_ONLY.has(id) and not (PLACE_ONLY[id] as Array).has(place):
 		return false
 	return not (PLACE_NEVER.has(id) and (PLACE_NEVER[id] as Array).has(place))

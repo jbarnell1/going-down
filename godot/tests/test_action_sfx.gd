@@ -81,3 +81,30 @@ func test_shop_item_sounds_follow_only_accepted_local_uses(t: T) -> void:
 		"only confirmed own recorded uses sound")
 	t.eq(view.flash_at, 273, "the flash effect still follows the accepted event")
 	view.free()
+
+func test_orderly_proximity_and_moving_shriek(t: T) -> void:
+	var sfx := preload("res://client/sfx.gd").new()
+	var world := Node3D.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(world)
+	var camera := Camera3D.new()
+	world.add_child(camera)
+	camera.make_current()
+	world.add_child(sfx)
+	sfx.setup(world)
+	var pose := {"x": 0.0, "y": 0.0, "z": -24.0, "anim": "walk"}
+	var frame := {"pose": pose}
+	camera.position.y = 2.2
+	var shot := sfx.play_at("shriek", Vector3(0, 2.2, -24))
+	var far_gain := shot.volume_db
+	var far_cutoff := shot.attenuation_filter_cutoff_hz
+	sfx._orderly(0.02, frame)
+	t.check(not sfx.orderly_breath.playing, "distant breath stays silent")
+	camera.position.z = -20
+	pose.z = -21.0
+	sfx._orderly(0.02, frame)
+	t.check(sfx.orderly_breath.playing, "adjacent unseen Orderly breathes")
+	t.check(shot.position.is_equal_approx(Vector3(0, 2.2, -21)) and shot.volume_db > far_gain + 8.0 and shot.attenuation_filter_cutoff_hz > far_cutoff, "ongoing shriek tracks both current poses")
+	frame.held = true
+	sfx._orderly(0.02, frame)
+	t.check(not sfx.orderly_breath.playing, "being watched silences the breath")
+	world.free()

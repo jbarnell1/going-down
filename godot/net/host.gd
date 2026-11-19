@@ -959,7 +959,8 @@ func _step(now: float) -> void:
 			else:
 				players.append(p)
 		st.players = players
-	if st.phase == &"arriving":
+	# A practice stop ends by going back up, so its called car is the only later arrival.
+	if st.phase == &"arriving" or (st.orientation and s.phase == &"coming" and st.phase == &"boarding"):
 		st = _admit(st)
 	state = st
 	if ward_active and _ward_review.phase == &"departed":

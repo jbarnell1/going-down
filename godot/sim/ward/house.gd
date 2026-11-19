@@ -27,6 +27,10 @@ var storeys: Array[Storey] = []
 var stairs: Array[Stair] = []
 var upper_envelope: Array[AABB] = []
 var door: AABB
+## Only the laundry maisonette opens a sash, on the side of the first interior doorway.
+## The original full wall stays in the player footing model. The arm uses its sill and jambs.
+var search_window := AABB()
+var window_side := 0
 var shoulder := Vector3(0.0, ARM_HEIGHT, -0.6)
 var areas: Dictionary = {}
 var room_doors := PackedVector3Array()
@@ -73,6 +77,16 @@ func _init(house: Dictionary, ward_seed: int) -> void:
 	_partition(first_z, half, first_x, 1.07)
 	_partition(second_z, half, second_x, 1.07)
 	_guides.append(Vector3(0.0, ARM_HEIGHT, 0.30))
+	if house.style == "laundry_maisonette":
+		window_side = -1 if first_x < 0 else 1
+		var outer_x := window_side * (half + wall)
+		var face_x := -half-wall if window_side < 0 else half
+		search_window = AABB(Vector3(face_x, 0.82, depth*0.5-0.71), Vector3(wall, 1.25, 1.42))
+		shoulder = Vector3(outer_x + window_side*0.6, ARM_HEIGHT, depth*0.5)
+		for side_of_jamb: float in [-0.50, 0.50]:
+			var inside_z := depth*0.5 + side_of_jamb
+			_guides.append(Vector3(outer_x + window_side*0.23, ARM_HEIGHT, inside_z))
+			_guides.append(Vector3(window_side*(half-0.32), ARM_HEIGHT, inside_z))
 	areas[&"entry"] = Vector3(-side * 0.65, 1.12, 0.55)
 	areas[&"middle"] = Vector3(side * 0.55, 1.39, (first_z + second_z) * 0.5)
 	areas[&"rear"] = Vector3(second_x, 1.19, minf(depth - 0.40, 4.77))
@@ -159,11 +173,28 @@ func _partition(z: float, half_width: float, opening_x: float, opening_width: fl
 			for clearance: float in [-1.0, 1.0]:
 				_guides.append(Vector3(opening_x + edge * 0.26, ARM_HEIGHT, z + clearance * 0.29))
 
+## Lines are ordered west-front, west-back, east-front, east-back on each deck.
+func loaded_support_index() -> int:
+	return 2 if window_side > 0 else 0
+
 func make_arm(extra_walls: Array[AABB] = []) -> ArmSearch:
 	var blockers := walls.duplicate()
+	if search_window.has_volume():
+		var face := AABB(Vector3(search_window.position.x, 0, 0),
+			Vector3(WALL_THICKNESS, HEIGHT, floor_bounds.size.y))
+		for i in blockers.size():
+			if blockers[i].is_equal_approx(face):
+				blockers.remove_at(i)
+				break
+		var start := search_window.position
+		var end := search_window.end
+		blockers.append(AABB(face.position, Vector3(face.size.x, start.y, face.size.z)))
+		blockers.append(AABB(Vector3(start.x, end.y, 0), Vector3(face.size.x, HEIGHT-end.y, face.size.z)))
+		blockers.append(AABB(Vector3(start.x, start.y, 0), Vector3(face.size.x, search_window.size.y, start.z)))
+		blockers.append(AABB(Vector3(start.x, start.y, end.z), Vector3(face.size.x, search_window.size.y, face.end.z-end.z)))
 	blockers.append_array(storeys[1].slab)
 	blockers.append_array(extra_walls)
-	return ArmSearch.new(shoulder, door, blockers, _guides, areas, _seed)
+	return ArmSearch.new(shoulder, door, blockers, _guides, areas, _seed, not search_window.has_volume())
 
 func to_world(point: Vector3) -> Vector3:
 	return _transform * point

@@ -201,7 +201,7 @@ function far() {
   // and read 15 dB low (what made "louder at 5 m than at 20 m" come and go).
   const at = (dm) => Math.max(-120, ...meta.track.filter(([, d]) => d >= dm && d <= dm + 3).map(([t]) => mAt(t)));
   console.log(`  the breathing, loudest momentary vs V coming in to: ${[30, 25, 20, 15, 10, 5, 2].map((dm) => `${dm} m ${(at(dm) - V).toFixed(1)}`).join(', ')}`);
-  check('Far: the Orderly\'s breathing is heard from 20 m or further out (Entity momentary over V-35)', onset >= 20, onset ? `first heard at ${onset.toFixed(1)} m` : 'never heard');
+  check('Far: the Orderly\'s breathing is heard only within immediate proximity (Entity momentary over V-35)', onset >= 4 && onset <= 8.5, onset ? `first heard at ${onset.toFixed(1)} m` : 'never heard');
   check('Far: the breathing builds as it nears (louder at 5 m than at 20 m), never over the voice', at(5) > at(20) && max('Entity', 'S', mk('breath'), mk('end')) <= V, `20 m ${(at(20) - V).toFixed(1)}, 5 m ${(at(5) - V).toFixed(1)} LU vs V`);
   // In the game the trolley sounds while it comes on unseen, and the breath steps back under it close in
   // (Sfx.breath_db): it must still never drop as it nears, with the trolley or without.

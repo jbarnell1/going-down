@@ -48,6 +48,7 @@ const EyeHeight = preload("res://client/eye_height.gd")
 const Day = preload("res://sim/day.gd")
 const Prison = preload("res://sim/prison.gd")
 const Places = preload("res://sim/places.gd")
+const Orientation = preload("res://sim/orientation.gd")
 const Playroom = preload("res://sim/playroom.gd")
 const Seek = preload("res://sim/seek.gd")
 const Hides = preload("res://sim/hides.gd")
@@ -461,7 +462,7 @@ func _use_floor(seed: String, depth: int, furniture_layout: bool, floor_deck: Ar
 	plan_depth = depth
 	plan_dict = PlanDump.dump(p, car, furniture_layout)
 	plan_dict["_new"] = true
-	_orderly_tpl = Entity.create_orderly(p)
+	_orderly_tpl = Places.create_resident(p) if p.place == Orientation.PLACE else Entity.create_orderly(p)
 	hides = []
 	seats = []
 	if p.place == Places.PLAYROOM:

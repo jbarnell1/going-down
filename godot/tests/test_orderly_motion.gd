@@ -90,3 +90,63 @@ func test_dance_follows_bend_and_stops_on_rescue_or_exit(t: T) -> void:
 	t.check(not view.visible and view.bend == 0.0 and not view.ap.is_playing(), "a removed resident clears its catch playback")
 	view.free()
 	fresh.free()
+
+func test_fold_lowers_head_to_prone_crew_and_keeps_both_feet_planted(t: T) -> void:
+	var view := _view()
+	view.show_pose(_pose("bend", 0.0, true), true)
+	var foot := _bone(view, "foot.R").origin.y
+	view.show_pose(_pose("bend", 0.9, true), true)
+	var head := _bone(view, "head").origin
+	t.check(head.y > 0.32 and head.y < 0.68, "head reaches prone crew height")
+	t.check(absf(_bone(view, "foot.R").origin.y - foot) < 0.06, "catch keeps the planted foot at floor level")
+	var left := _bone(view, "hand.L").origin.y
+	var right := _bone(view, "hand.R").origin.y
+	t.check(minf(left,right) > 0.12, "hands stay above the floor while bracing")
+	view.show_pose(_pose("bend", 1.10, true), true)
+	t.check(head.distance_to(_bone(view, "head").origin) > 0.015, "head works over the crew after the fold")
+	view.free()
+
+func test_door_pose_holds_still_and_keeps_approved_walk(t: T) -> void:
+	var view := _view()
+	var plan := preload("res://sim/clinic.gd").generate_clinic("av4-clinic", 1)
+	view.floor_plan = plan
+	var frame := _pose("walk", 0.0)
+	frame.x = 60.355
+	frame.z = 39.80
+	frame.level = 0
+	view.show_pose(frame, true)
+	var bones: Array[Transform3D] = []
+	for i in view.skel.get_bone_count():
+		bones.append(view.skel.get_bone_global_pose(i))
+	var placement := view.model.transform
+	view.show_pose(frame, true)
+	t.eq(view.model.transform, placement, "wall clearance is stationary on a held frame")
+	for i in bones.size():
+		t.check(view.skel.get_bone_global_pose(i).is_equal_approx(bones[i]), "held bone stays still: " + view.skel.get_bone_name(i))
+	t.eq(str(view.ap.assigned_animation), "mixamo_walk", "jamb clearance retains the approved walk")
+	t.check((view.global_position - Vector3(frame.x, 0, frame.z)).length() < 0.0001, "replicated root stays at the host position")
+	view.free()
+
+func test_clinic_door_clears_head_and_hands_from_either_side(t: T) -> void:
+	var view := _view()
+	var plan := preload("res://sim/clinic.gd").generate_clinic("av4-clinic", 1)
+	var door := plan.doors[0]
+	view.floor_plan = plan
+	var centre := Vector2(door.ax + door.bx + 1, door.ay + door.by + 1) * (0.5 * plan.cell_size)
+	var forward := Vector2(door.bx - door.ax, door.by - door.ay)
+	var across := Vector2(-forward.y, forward.x)
+	for direction: float in [-1.0, 1.0]:
+		var location := centre + direction * (0.18 * across + 0.08 * forward)
+		var pose := _pose("duck", 0.0)
+		pose.x = location.x
+		pose.z = location.y
+		pose.yaw = atan2(-forward.x * direction, -forward.y * direction)
+		pose.level = door.level
+		view.show_pose(pose, true)
+		var head := view.skel.to_global(_bone(view, "head").origin)
+		t.check(head.y < 1.96, "head and cap pass below the Clinic lintel")
+		for hand: String in ["hand.L", "hand.R"]:
+			var wrist := view.skel.to_global(_bone(view, hand).origin)
+			t.check(absf((Vector2(wrist.x, wrist.z) - centre).dot(across)) < 0.49,
+				"wrist has room inside the jamb from direction %s" % direction)
+	view.free()

@@ -23,6 +23,7 @@ var door_open := true
 var door_held_open := false
 
 var _shoulder: Vector3
+var _enters_by_door: bool
 var _door: AABB
 var _walls: Array[AABB]
 var _probes: Dictionary
@@ -36,7 +37,8 @@ var _travel := 0.0
 var _timer := 0.0
 
 func _init(shoulder: Vector3, door: AABB, walls: Array[AABB],
-		guides: PackedVector3Array, probes: Dictionary, seed_value: int) -> void:
+		guides: PackedVector3Array, probes: Dictionary, seed_value: int, enters_by_door := true) -> void:
+	_enters_by_door = enters_by_door
 	_shoulder = shoulder
 	_door = door
 	_walls = walls.duplicate()
@@ -71,7 +73,7 @@ func step(delta: float, player_contacts: Dictionary, requested_door_open: bool =
 	contacts.clear()
 	door_held_open = false
 	door_open = requested_door_open
-	if not requested_door_open and _travel > EPSILON:
+	if not requested_door_open and _travel > EPSILON and (_enters_by_door or _touches_door()):
 		# A closing door forces withdrawal. The leaf can close once the arm clears
 		# its swept volume, so it never appears through an extended limb.
 		door_held_open = _touches_door()
@@ -83,7 +85,7 @@ func step(delta: float, player_contacts: Dictionary, requested_door_open: bool =
 			&"warning":
 				remaining = _consume_timer(remaining)
 				if _timer <= EPSILON:
-					_route = _find_route(_probes[search_area]) if door_open else PackedVector3Array()
+					_route = _find_route(_probes[search_area]) if door_open or not _enters_by_door else PackedVector3Array()
 					if _route.is_empty():
 						_begin_next()
 					else:

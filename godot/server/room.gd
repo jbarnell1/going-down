@@ -150,6 +150,8 @@ var updates := 0
 var fixed_seed := ""
 ## The floor the next run starts on (1, the game's; server.gd's test argument depth=N sets it).
 var first_depth := 1
+## Explicit safe practice room. Ordinary rooms keep the existing campaign sequence.
+var orientation_review := false
 var ward_review := false
 ## The day loop in the next run (the game's; tests may turn it off).
 var days := true
@@ -236,6 +238,8 @@ func _lobby_text(now: float) -> String:
 		"garden": host != null and host.state.deck.has(Places.ARBORETUM)}
 	if host != null and host.state.garden_search:
 		lobby["gardenDense"] = true
+	if orientation_review:
+		lobby["orientation"] = true
 	return "m|" + JSON.stringify(lobby)
 
 ## The players a run starting now takes: the ready ones, in arrival order.
@@ -377,10 +381,12 @@ func _start(now: float) -> void:
 	var q := quota and not HostRules.quota_off_by_arg(false)
 	# The day quota's lock goes with the floor quota (net/host_rules.gd): quota=0 turns both off.
 	rules = HostRules.new(not (ward_review or reactor_review), first_depth, Places.deck_for_start_depth(first_depth), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop, nightly_reels, true, true)
+	if orientation_review:
+		rules.enable_orientation()
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))
-	if profiles != null:
+	if profiles != null and not orientation_review:
 		for id in roster:
 			host.state = profiles.apply_for(host.state, id, str(people[id]))
 	if ward_review:
