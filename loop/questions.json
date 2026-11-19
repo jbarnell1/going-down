@@ -1944,29 +1944,24 @@
       ]
     },
     {
-      "id": "story-names-2",
-      "title": "The new story names",
-      "context": "City above: Overton (or Lidgate, Mount Pleasant). Old district: Coldbath (or The Soke, Carr End). Company: Continuance (or Hallam Grieve, Overton Amenity). Slogan: \"Leave it with us.\" (or \"We keep things going.\", \"Nothing left unfinished.\"). Prison: Overton Reception Centre (or Approved Premises No. 1, Tarry House). Programme: Day Release (or Fresh Start, Earned Days). Crew 41 kept; a convict who missed the car comes back as seat 41-5. Aloud: \"Hello! And welcome to Continuance.\"",
+      "id": "garden-hearing-edge",
+      "title": "Which hearing behavior do you prefer for the garden playtest?",
+      "context": "See the short player example on Progress under T26, then choose the behavior you would expect.",
       "type": "single",
       "options": [
         {
-          "id": "set",
-          "label": "The recommended set: Overton, Coldbath, Continuance, \"Leave it with us.\", Overton Reception Centre, Day Release",
-          "note": "Recommended."
+          "id": "follow",
+          "label": "Keep following the uninterrupted sprint",
+          "note": "A continuous sound stays audible until it stops."
         },
         {
-          "id": "mix",
-          "label": "A mix: write which ones in the box",
-          "note": ""
-        },
-        {
-          "id": "again",
-          "label": "None of these: try again",
-          "note": ""
+          "id": "range",
+          "label": "Check hearing range on each new footstep",
+          "note": "Each step must be audible from the current position."
         }
       ],
       "default": [
-        "set"
+        "follow"
       ]
     }
   ]
