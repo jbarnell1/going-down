@@ -12,14 +12,14 @@ var selected := 0
 var ownership: int:
 	get:
 		return _states[selected]
-var _states: Array[int] = [0, 0, 0, 0, 0]
+var _states: Array[int] = [0, 0, 0, 0, 0, 0]
 var _cards: Array[int] = [0]
 var notice := ""
 var notice_until := 0
 var _action := Rect2()
 var _tabs: Array[Rect2] = []
-const NODES := ["deep_pockets", "second_wind", "soft_shoes", "quick_fingers", "long_burn"]
-const BUY_ARGS := [0, 2, 4, 5, 6]
+const NODES := ["deep_pockets", "second_wind", "soft_shoes", "quick_fingers", "long_burn", "field_dressing"]
+const BUY_ARGS := [0, 2, 4, 5, 6, 7]
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -36,7 +36,7 @@ func show_card() -> void:
 func close() -> void:
 	open = false
 
-func update(skills: Variant, wind: Variant, shoes: Variant, id: String, balance: int, events: Array, now: int, porter: Variant = null, slots: Array = [], long_burn: Variant = null) -> void:
+func update(skills: Variant, wind: Variant, shoes: Variant, id: String, balance: int, events: Array, now: int, porter: Variant = null, slots: Array = [], long_burn: Variant = null, medic: Variant = null) -> void:
 	credits = balance
 	badges = 0
 	for slot: Array in slots:
@@ -47,6 +47,7 @@ func update(skills: Variant, wind: Variant, shoes: Variant, id: String, balance:
 	_states[2] = int(shoes.get(id, 0)) if shoes is Dictionary else 0
 	_states[3] = int(porter.get(id, 0)) if porter is Dictionary else 0
 	_states[4] = int(long_burn.get(id, 0)) if long_burn is Dictionary else 0
+	_states[5] = int(medic.get(id, 0)) if medic is Dictionary else 0
 	_cards.assign([0])
 	if wind is Dictionary:
 		_cards.append(1)
@@ -56,6 +57,8 @@ func update(skills: Variant, wind: Variant, shoes: Variant, id: String, balance:
 		_cards.append(3)
 	if long_burn is Dictionary:
 		_cards.append(4)
+	if medic is Dictionary:
+		_cards.append(5)
 	if not _cards.has(selected):
 		selected = 0
 	for e: Dictionary in events:
@@ -66,7 +69,7 @@ func update(skills: Variant, wind: Variant, shoes: Variant, id: String, balance:
 				var node := Upgrades.training_node(str(e.get("node", NODES[0])))
 				notice = "%s LEARNED." % str(node.get("name", "TRAINING")).to_upper()
 			"trainingUndone":
-				if e.get("node") == "quick_fingers":
+				if int(Upgrades.trade_node(str(e.get("node", ""))).get("badge_cost", 0)) > 0:
 					notice = "TRAINING UNDONE. BADGES RETURNED."
 				else:
 					notice = "TRAINING UNDONE. CREDITS REFUNDED."
@@ -78,7 +81,7 @@ func update(skills: Variant, wind: Variant, shoes: Variant, id: String, balance:
 					"poor": "NOT ENOUGH CREDITS.",
 					"badges": "BRING TWO OLD CREW BADGES.",
 					"badge_room": "MAKE ROOM FOR BOTH BADGES, THEN UNDO.",
-					"needs": "LEARN DEEP POCKETS FIRST.",
+					"needs": "LEARN SECOND WIND FIRST." if selected == 5 else "LEARN DEEP POCKETS FIRST.",
 					"trade": "NOT YOUR TRADE.",
 					"owned": "YOU ALREADY KNOW THIS SKILL.",
 					"unstack": "DROP OR STORE EXTRA ITEMS, THEN UNDO.",
@@ -97,7 +100,7 @@ func key(event: InputEventKey) -> Array:
 			return _buy_request()
 		KEY_U:
 			return ["skill", 1] if ownership == 2 else []
-		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5:
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6:
 			var card := event.physical_keycode - KEY_1
 			if card < _cards.size():
 				selected = _cards[card]
@@ -121,6 +124,7 @@ func _buy_request() -> Array:
 	return ["skill", BUY_ARGS[selected]] if ownership == 0 else []
 
 func action_label() -> String:
+	var trade := Upgrades.trade_node(NODES[selected])
 	match ownership:
 		Upgrades.TradeOffer.LEARNED:
 			return "LEARNED"
@@ -129,9 +133,10 @@ func action_label() -> String:
 		Upgrades.TradeOffer.WRONG_TRADE:
 			return "NOT YOUR TRADE"
 		Upgrades.TradeOffer.NEEDS_INDUCTION:
-			return "REQUIRES DEEP POCKETS"
-	if selected == 3:
-		return "ENTER  TRADE %d BADGES" % int(Upgrades.trade_node(NODES[selected])["badge_cost"])
+			var prerequisite := Upgrades.induction_node(str(trade.get("requires", "")))
+			return "REQUIRES %s" % str(prerequisite.get("name", "INDUCTION")).to_upper()
+	if not trade.is_empty():
+		return "ENTER  TRADE %d BADGES" % int(trade["badge_cost"])
 	return "ENTER  BUY FOR %d" % Shop.SHARE
 
 func _draw() -> void:
@@ -140,8 +145,9 @@ func _draw() -> void:
 	var has_tabs := _cards.size() > 1
 	var grid := _cards.size() > 3
 	var extra := 12 * ((_cards.size() - 1) / 2) if grid else 0
-	var px := minf(2.0, minf(size.x / 286.0, size.y / ((127.0 if has_tabs else 102.0) + extra)))
-	var panel := Vector2(274, (115 if has_tabs else 90) + extra) * px
+	var description_extra := 10 if selected == 5 else 0
+	var px := minf(2.0, minf(size.x / 286.0, size.y / ((127.0 if has_tabs else 102.0) + extra + description_extra)))
+	var panel := Vector2(274, (115 if has_tabs else 90) + extra + description_extra) * px
 	var origin := ((size - panel) * 0.5).floor()
 	draw_rect(Rect2(origin, panel), Color(0.03, 0.035, 0.03, 0.95))
 	draw_rect(Rect2(origin, panel), AMBER, false, px)
@@ -164,8 +170,8 @@ func _draw() -> void:
 	else:
 		_row(str(node.name).to_upper(), 29, origin, px, AMBER)
 	var track := "%s  /  INDUCTION" % str(node.branch).to_upper()
-	if selected == 3:
-		track = "PORTER  /  TRADE"
+	if node.has("trade"):
+		track = "%s  /  TRADE" % str(node.trade).to_upper()
 	_row(track, (33 if has_tabs else 18) + extra, origin, px, PALE)
 	if selected == 1:
 		_row("WHEN WINDED, PRESS SPRINT AGAIN.", 45 + extra, origin, px, PALE)
@@ -177,16 +183,18 @@ func _draw() -> void:
 		_row(str(node.description).to_upper(), (45 if has_tabs else 40) + extra, origin, px, PALE)
 		if node.has("drawback"):
 			_row(str(node.drawback).to_upper(), 55 + extra, origin, px, PALE)
+		if node.has("seniority"):
+			_row(str(node.seniority).to_upper(), 65 + extra, origin, px, PALE)
 	var funds := "SPENDABLE CREDITS %d" % credits
-	if selected == 3:
+	if node.has("badge_cost"):
 		funds = "BADGES IN POCKET %d  /  COST %d" % [badges, int(node.badge_cost)]
-	_row(funds, (69 if has_tabs else 52) + extra, origin, px, PALE)
-	var action_y := (83 if has_tabs else 63) + extra
+	_row(funds, (69 if has_tabs else 52) + extra + description_extra, origin, px, PALE)
+	var action_y := (83 if has_tabs else 63) + extra + description_extra
 	_action = Rect2(origin + Vector2(5, action_y - 1) * px, Vector2(191, 10) * px)
 	_row(action_label(), action_y, origin, px, AMBER)
 	PixelFont.draw(self, "F CLOSE", origin + Vector2(217, action_y) * px, px, PALE)
 	if Time.get_ticks_msec() < notice_until:
-		_row(notice, (99 if has_tabs else 76) + extra, origin, px, PALE)
+		_row(notice, (99 if has_tabs else 76) + extra + description_extra, origin, px, PALE)
 
 func _row(line: String, y: float, origin: Vector2, px: float, ink: Color) -> void:
 	PixelFont.draw(self, line, origin + Vector2(6, y) * px, px, ink)

@@ -39,6 +39,7 @@ extends Node
 
 const PlayLink = preload("res://client/play_link.gd")
 const Session = preload("res://net/session.gd")
+const DoorShadow = preload("res://client/door_shadow.gd")
 const Places = preload("res://sim/places.gd")
 const GroundskeeperView = preload("res://client/groundskeeper_view.gd")
 const OrientationView = preload("res://client/orientation_view.gd")
@@ -169,6 +170,7 @@ var _orientation_campaign: Variant = null
 var _badge_search := true
 var _quick_fingers := true
 var _long_burn := true
+var _field_dressing := true
 var _playtest_face := ""
 var _playtest_hints: Dictionary = {}
 var _playtest_hint_persist := true
@@ -603,6 +605,7 @@ func _read_options() -> void:
 			"badge_search": _badge_search = val == "1"
 			"quick_fingers": _quick_fingers = val == "1"
 			"long_burn": _long_burn = val == "1"
+			"field_dressing": _field_dressing = val == "1"
 	if OS.has_feature("web"):
 		seed = _url("seed", seed)
 		quality = _url("quality", quality)
@@ -884,6 +887,7 @@ func _configure_campaign_trades(lr: LocalRoom) -> void:
 	lr.badge_search = full_deck and _badge_search
 	lr.quick_fingers = full_deck and _quick_fingers
 	lr.long_burn = full_deck and _long_burn
+	lr.field_dressing = full_deck and _field_dressing
 
 ## "Play alone": a room on this machine, a run at once.
 func _play_alone() -> void:
@@ -1202,7 +1206,7 @@ func _use_resident(plan: Dictionary) -> void:
 		_resident_kind = kind
 	orderly.call(&"reset")
 	if orderly is OrderlyView:
-		(orderly as OrderlyView).floor_plan = link.plan
+		(orderly as OrderlyView).set_floor(link.plan, level.pieces)
 	if orderly is TempView:
 		(orderly as TempView).set_crew(str(snap.get("seed", seed)), link.crew_faces())
 		(orderly as TempView).set_floor(link.plan, level)
@@ -1939,8 +1943,9 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		var cd: Dictionary = cl
 		machine = (1.0 - float(cd["floorsAway"]) / maxf(1.0, float(cd["floors"]))) * (0.5 if bool(cd["falseStop"]) else 1.0) + 0.05
 	var car: Dictionary = link.plan_dict["car"]
+	var trolley_at: Variant = (orderly as OrderlyView).trolley_squeak_at() if orderly is OrderlyView else null
 	sfx.update(dt, o["squeak"] if _resident_kind in ["orderly", "orientation"] and not _no_resident else {}, o.get("pose"), tick_hz, loud, float(me["exertion"]) if not still else 0.0, bool(me["winded"]), machine,
-		Vector3(float(car["doorX"]), float(car["floorY"]) + 1.5, float(car["doorZ"])), float(o.get("speed", 0.0)))
+		Vector3(float(car["doorX"]), float(car["floorY"]) + 1.5, float(car["doorZ"])), float(o.get("speed", 0.0)), trolley_at)
 	if not _entry.has("carUnix"):
 		_entry["carUnix"] = Time.get_unix_time_from_system() * 1000.0
 	# The welcome's hold runs from the first frame of the car on this screen.
@@ -2011,7 +2016,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	if cab_view.is_open() and (not at_cab or me_down or ended or _lights_out):
 		cab_view.close()
 	shop_view.update(s.get("shop"), link.my_id(), lc0.tuning if lc0 != null else null, float(s.get("hostNow", 0.0)))
-	skills_view.update(s.get("skills"), s.get("wind"), s.get("shoes"), link.my_id(), shop_view.credits, s.get("events", []), now, s.get("porter"), inv_view.slots, s.get("longBurn"))
+	skills_view.update(s.get("skills"), s.get("wind"), s.get("shoes"), link.my_id(), shop_view.credits, s.get("events", []), now, s.get("porter"), inv_view.slots, s.get("longBurn"), s.get("medic"))
 	shop_view.on_events(s.get("events", []), link.my_id(), now, sfx)
 	shop_view.show_world(spots_root, cam, s.get("shop"), float(s.get("hostNow", 0.0)), now, sfx)
 	flare_view.update(level, s.get("flares"), link.my_id(), float(s.get("hostNow", 0.0)))
@@ -2429,6 +2434,12 @@ func _present(events: Array, now: int) -> void:
 			event_log.pop_front()
 		var mine := str(e.get("playerId", "")) == my
 		match ty:
+			"doorwayShadow":
+				if mine and client != null and level != null and int(e.depth) == client.local_depth and int(e.day) == client.day_index:
+					var age := maxf(0.0, float(snap.get("t", e.t)) - float(e.t))
+					if age < DoorShadow.DURATION:
+						DoorShadow.show_at(level, e, age)
+						sfx.play_at("step", Vector3(float(e.x), float(e.y), float(e.z)), -5.0)
 			"flareUsed":
 				sfx.play_at("pop", Vector3(float(e.x), float(e.y) + 0.6, float(e.z)), 8.0)
 			"secondWind":
@@ -2975,10 +2986,10 @@ func _command(c: String) -> String:
 				pending_inv_arg = shop_view.sel
 			return JSON.stringify(shop_view.describe())
 		"skill":
-			if p.size() >= 2 and p[1] in ["f", "enter", "undo", "1", "2", "3", "4", "5"]:
+			if p.size() >= 2 and p[1] in ["f", "enter", "undo", "1", "2", "3", "4", "5", "6"]:
 				var key := InputEventKey.new()
 				key.pressed = true
-				key.physical_keycode = {"f": KEY_F, "enter": KEY_ENTER, "undo": KEY_U, "1": KEY_1, "2": KEY_2, "3": KEY_3, "4": KEY_4, "5": KEY_5}[p[1]]
+				key.physical_keycode = {"f": KEY_F, "enter": KEY_ENTER, "undo": KEY_U, "1": KEY_1, "2": KEY_2, "3": KEY_3, "4": KEY_4, "5": KEY_5, "6": KEY_6}[p[1]]
 				_input(key)
 			return JSON.stringify({"open": skills_view.is_open(), "credits": skills_view.credits, "ownership": skills_view.ownership, "notice": skills_view.notice,
 				"badges": skills_view.badges, "action": skills_view.action_label(), "selected": skills_view.selected})

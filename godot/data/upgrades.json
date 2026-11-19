@@ -70,7 +70,12 @@
       "name": "Field Dressing",
       "branch": "Nerve",
       "trade": "Medic",
-      "layer": 2
+      "layer": 2,
+      "badge_cost": 2,
+      "requires": "second_wind",
+      "description": "Revive a crewmate in half the time.",
+      "drawback": "First revive spares a heal on capped floors.",
+      "seniority": "Medic sprint tank lasts 10 percent longer."
     }
   },
   "nodes": [

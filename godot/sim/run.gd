@@ -893,6 +893,8 @@ class GardenFloor:
 	var keeper: Hearing.Keeper
 	## Times each player has been healed back up on this floor, {id: int}.
 	var heals: Dictionary = {}
+	## Medics who have used their free help here. Signed profiles keep the same key on rejoin.
+	var dressing_used: Dictionary = {}
 	## Who was healed back up on the tick before (their getting up is heard this tick), and the tapes that hit
 	## the floor then.
 	var healed: Array[String] = []
@@ -905,6 +907,7 @@ class GardenFloor:
 		g.plan = plan
 		g.keeper = keeper
 		g.heals = heals.duplicate()
+		g.dressing_used = dressing_used.duplicate()
 		g.healed = healed.duplicate()
 		g.drops = drops.duplicate()
 		g.cones_in_flight = cones_in_flight.duplicate()
@@ -1047,6 +1050,10 @@ class RunState:
 	var relocation: bool = false
 	## The owner's 17 Nov changes (see the header). Off: nothing below is ever read.
 	var long_dark: bool = false
+	var doorway_shadow := false
+	var shadow_readers: Array[String] = []
+	var shadow_quiet := 0.0
+	var shadow_shown := false
 	var paced: bool = false
 	var car_waits: bool = false
 	## The car waits: who the car left on a floor today, {id: true}, until the crew gets home. Replaced, never edited.
@@ -1096,6 +1103,7 @@ class RunState:
 	var second_wind: bool = false
 	var soft_shoes: bool = false
 	var long_burn: bool = false
+	var field_dressing := false
 	var flare := false
 	var flare_plan: Floor.FloorPlan = null
 	var flare_issued := {}
@@ -1148,6 +1156,7 @@ class RunState:
 		s.second_wind = second_wind
 		s.soft_shoes = soft_shoes
 		s.long_burn = long_burn
+		s.field_dressing = field_dressing
 		s.flare = flare
 		s.flare_plan = flare_plan
 		s.flare_issued = flare_issued
@@ -1222,6 +1231,10 @@ class RunState:
 		s.down = down
 		s.spots = spots
 		s.long_dark = long_dark
+		s.doorway_shadow = doorway_shadow
+		s.shadow_readers = shadow_readers
+		s.shadow_quiet = shadow_quiet
+		s.shadow_shown = shadow_shown
 		s.paced = paced
 		s.car_waits = car_waits
 		s.left_out = left_out
@@ -1503,7 +1516,7 @@ static func day_preview(s: RunState) -> Variant:
 		return null
 	var aboard := day_aboard(s)
 	var earned := floori(s.day_earned) if s.day_lock else aboard
-	return Day.bank_preview(s.day_state, aboard, earned, day_crew(s), s.wallets, DAY_FLOOR_QUOTA, s.quick_fingers)
+	return Day.bank_preview(s.day_state, aboard, earned, day_crew(s), s.wallets, DAY_FLOOR_QUOTA, s.quick_fingers or s.field_dressing)
 ## Turns the tuned Playroom on (T15m, see the header): every Playroom from now on (and one already reached)
 ## has the long hiding time, the anger bar, the grab at 1 m and the hint events (sim/seek.gd "T15m").
 static func with_playroom_tuned(s0: RunState) -> RunState:
@@ -1610,6 +1623,19 @@ static func with_long_burn(s0: RunState) -> RunState:
 	s.long_burn = true
 	return s
 
+static func with_field_dressing(s0: RunState) -> RunState:
+	if not (s0.second_wind and s0.shop and s0.inventory and s0.downs):
+		return s0
+	var s := s0.copy()
+	s.field_dressing = true
+	return s
+
+static func has_field_dressing(s: RunState, id: String) -> bool:
+	if not s.field_dressing:
+		return false
+	var wallet: Upgrades.UpgradeState = s.wallets.get(id)
+	return wallet != null and wallet.owned.has("field_dressing")
+
 static func training_enabled(s: RunState, id: String) -> bool:
 	match id:
 		"deep_pockets":
@@ -1622,6 +1648,8 @@ static func training_enabled(s: RunState, id: String) -> bool:
 			return s.long_burn
 		"quick_fingers":
 			return s.quick_fingers
+		"field_dressing":
+			return s.field_dressing
 	return false
 
 static func wind_spent_here(s: RunState, id: String) -> bool:
@@ -1706,10 +1734,15 @@ static func _tuned_chase(s: RunState, solo: bool) -> float:
 	return Settings.f(s.tuning, &"temp.dark_speed" if blacked_out(s) else &"temp.speed", -1.0)
 
 ## Seconds of sprinting a player's tank holds in this run (Stamina.Stamina.tank): more when paced.
-static func sprint_seconds(s: RunState) -> float:
+static func sprint_seconds(s: RunState, id: String = "") -> float:
 	var today := Stamina.PACED_SPRINT_SECONDS if s != null and s.paced else Stamina.SPRINT_SECONDS
-	# Live settings: the host's tank (stamina.tank). The host resizes every tank to it, keeping how full it is.
-	return Settings.f(s.tuning, &"stamina.tank", today) if s != null else today
+	# The host resizes the tank to the active setting, plus the player's earned Medic seniority.
+	var base := Settings.f(s.tuning, &"stamina.tank", today) if s != null else today
+	if s != null and s.field_dressing and not id.is_empty():
+		var wallet: Upgrades.UpgradeState = s.wallets.get(id)
+		if wallet != null:
+			return base * (1.0 + 0.1 * Upgrades.trade_seniority(wallet.owned, "Nerve"))
+	return base
 
 ## The boarding window of this run (seconds from the doors opening to the bell).
 static func board_time(s: RunState) -> float:
@@ -2046,6 +2079,74 @@ static func seeks(s: RunState) -> bool:
 
 ## Keeps `seek` the state of this floor: made when the crew reaches a Playroom (everyone at 100, the
 ## Minder at its start facing its wall), dropped on any other floor.
+## G11 uses one E1 source: a completed, valuable reading by this player.
+## The cue never enters the entity, recording, payout, or collision systems.
+static func step_doorway_shadow(s: RunState, inputs: Array[PlayerInput], dt: float, events: Array[Dictionary]) -> void:
+	if not s.doorway_shadow or s.shadow_shown:
+		return
+	for e in events:
+		if e.get("type") == "readingClosed" and float(e.get("value", 0.0)) > 0.0:
+			var id := str(e["playerId"])
+			if not s.shadow_readers.has(id):
+				s.shadow_readers = s.shadow_readers.duplicate()
+				s.shadow_readers.append(id)
+	if s.shadow_readers.is_empty():
+		return
+	if s.phase != &"away" or s.orientation or at_home(s) or s.call != null or s.blink != null or Places.place_at(s.seed, s.depth, s.deck) != Places.CLINIC:
+		s.shadow_quiet = 0.0
+		return
+	if s.orderly.mode not in [&"waiting", &"dormant"] or not s.down.is_empty():
+		s.shadow_quiet = 0.0
+		return
+	for i in inputs:
+		if i.gait == &"sprint" or i.raised == true or i.body.level == s.orderly.body.level and Vector2(i.body.x, i.body.z).distance_to(Vector2(s.orderly.body.x, s.orderly.body.z)) < Entity.WAKE_DISTANCE:
+			s.shadow_quiet = 0.0
+			return
+	var before := floori(s.shadow_quiet)
+	s.shadow_quiet += dt
+	if s.shadow_quiet < 3.0 or floori(s.shadow_quiet) == before:
+		return
+	for player in s.players:
+		if not s.shadow_readers.has(player.id) or player.status != &"ok" or player.aboard:
+			continue
+		for i in inputs:
+			if i.id != player.id:
+				continue
+			var cue := _shadow_door(s, i)
+			if not cue.is_empty():
+				events.append(cue)
+				s.shadow_shown = true
+				return
+
+static func _shadow_door(s: RunState, i: PlayerInput) -> Dictionary:
+	const SightModel = preload("res://sim/sight.gd")
+	var doors := s.plan.doors
+	if doors.is_empty():
+		return {}
+	var first := Rng.hash_seed(s.seed + ":door-shadow:" + i.id) % doors.size()
+	var start := Vector2(i.body.x, i.body.z)
+	var facing := Vector2(-sin(i.yaw), -cos(i.yaw))
+	var viewer := SightModel.Viewer.new()
+	viewer.body = i.body
+	viewer.eye = i.eye
+	viewer.yaw = i.yaw
+	viewer.pitch = i.pitch
+	viewer.h_fov_deg = i.h_fov_deg
+	viewer.v_fov_deg = i.v_fov_deg
+	for n in doors.size():
+		var door := doors[(first + n) % doors.size()]
+		if door.level != i.body.level:
+			continue
+		var at := Vector2(door.ax + door.bx + 1, door.ay + door.by + 1) * (s.plan.cell_size * 0.5)
+		var offset := at - start
+		if offset.length() < 2.5 or offset.length() > 9.0 or offset.normalized().dot(facing) < 0.87:
+			continue
+		var eye := SightModel.Point3.make(start.x, i.body.y + i.eye, start.y, i.body.level)
+		var threshold := SightModel.Point3.make(at.x, i.body.y + 0.15, at.y, i.body.level)
+		if SightModel.in_view_cone(viewer, threshold.x, threshold.y, threshold.z, 0.0) and SightModel.has_line_of_sight(s.plan, eye, threshold):
+			return {"type": "doorwayShadow", "playerId": i.id, "x": at.x, "y": i.body.y, "z": at.y, "alongX": door.ax == door.bx, "depth": s.depth, "day": s.day_index, "t": s.t}
+	return {}
+
 static func _sync_seek(s: RunState) -> void:
 	if not seeks(s):
 		if s.seek != null:
@@ -2397,7 +2498,13 @@ static func _garden_after(s: RunState, events: Array[Dictionary]) -> void:
 			g = s.garden.copy()
 		var id := str(e["playerId"])
 		if ty == "healed":
-			g.heals[id] = int(g.heals.get(id, 0)) + 1
+			var helper := str(e.get("by", ""))
+			var key := str(s.wind_profiles.get(helper, helper))
+			if not e.get("salts", false) and has_field_dressing(s, helper) and not g.dressing_used.has(key):
+				g.dressing_used[key] = true
+				e["freeDressing"] = true
+			else:
+				g.heals[id] = int(g.heals.get(id, 0)) + 1
 			g.healed.append(id)
 		elif e.get("at") is Move.Body:
 			g.drops.append(Noises.drop(id, e["at"], s.tuning))
@@ -2875,6 +2982,8 @@ static func _step_downs(s: RunState, players: Array[RunPlayer], input_of: Dictio
 			nd.heal_from = t - dt if healer != "" else -1.0
 			nd.heal_len = Settings.f(s.tuning, &"heal.time", HEAL_TIME)
 			if healer != "":
+				if has_field_dressing(s, healer):
+					nd.heal_len *= 0.5
 				events.append({"type": "healStart", "t": t, "playerId": healer, "target": p.id, "from": nd.heal_from, "done": nd.heal_from + nd.heal_len})
 		if healer != "" and t - nd.heal_from >= nd.heal_len - EPS:
 			# Healed: back on their feet where they lie.
@@ -3760,7 +3869,7 @@ static func _settle_day(s: RunState, t: float, banked: int, events: Array[Dictio
 	# The car waits: whoever it left out today is paid nothing today (see the header).
 	var crew := day_crew(s)
 	var earned := floori(s.day_earned) if s.day_lock else banked
-	var r := Day.end_day(s.day_state, banked, earned, crew, s.wallets, DAY_FLOOR_QUOTA, s.seed, wiped, s.quick_fingers)
+	var r := Day.end_day(s.day_state, banked, earned, crew, s.wallets, DAY_FLOOR_QUOTA, s.seed, wiped, s.quick_fingers or s.field_dressing)
 	s.wallets = r.wallets
 	s.day_next = r.state
 	var result: Dictionary = r.facts.duplicate(true)
@@ -4577,7 +4686,7 @@ static func inventory_limit(s: RunState, id: String) -> int:
 
 static func _settle_training(s: RunState, id: String, t: float, events: Array[Dictionary]) -> void:
 	var wallet: Upgrades.UpgradeState = s.wallets.get(id)
-	if wallet == null or (Upgrades.induction_node(wallet.last_id).is_empty() and not (s.quick_fingers and wallet.last_id == "quick_fingers")):
+	if wallet == null or (Upgrades.induction_node(wallet.last_id).is_empty() and not training_enabled(s, wallet.last_id)):
 		return
 	var wallets := s.wallets.duplicate()
 	wallets[id] = Upgrades.next_morning(wallet)
@@ -4604,11 +4713,12 @@ static func _skill_transaction(s: RunState, p: RunPlayer, bag: Inventory.Bag, ar
 		if not training_enabled(s, node_id):
 			return "op"
 		result = Upgrades.buy_induction(wallet, node_id, Shop.SHARE)
-	elif arg == 5:
-		if not s.quick_fingers:
+	elif arg in [5, 7]:
+		var node_id := "quick_fingers" if arg == 5 else "field_dressing"
+		if not training_enabled(s, node_id):
 			return "op"
-		var cost := int(Upgrades.trade_node("quick_fingers")["badge_cost"])
-		result = Upgrades.buy_trade(wallet, "quick_fingers", int(bag.totals().get("badge", 0)))
+		var cost := int(Upgrades.trade_node(node_id)["badge_cost"])
+		result = Upgrades.buy_trade(wallet, node_id, int(bag.totals().get("badge", 0)))
 		if result.ok:
 			next_bag = Inventory.spend(bag, "badge", cost)
 			if next_bag == null:
@@ -4620,7 +4730,7 @@ static func _skill_transaction(s: RunState, p: RunPlayer, bag: Inventory.Bag, ar
 			next_bag = _unstack_bag(bag, Inventory.stack_limit(s.tuning, p.id))
 			if next_bag == null:
 				return "unstack"
-		elif wallet.last_id == "quick_fingers":
+		elif int(Upgrades.trade_node(wallet.last_id).get("badge_cost", 0)) > 0:
 			var refund := int(Upgrades.trade_node(wallet.last_id)["badge_cost"])
 			var returned := Inventory.add(bag, "badge", refund, inventory_limit(s, p.id))
 			if returned.left > 0:

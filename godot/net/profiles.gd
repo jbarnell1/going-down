@@ -102,7 +102,7 @@ static func collect(s: Run.RunState, id: String, old: Dictionary, name_: String,
 	if s.deep_pockets:
 		fields.erase("training_refund")
 		fields.erase("training_node")
-		if wallet != null and (not Upgrades.induction_node(wallet.last_id).is_empty() or (s.quick_fingers and wallet.last_id == "quick_fingers")):
+		if wallet != null and (not Upgrades.induction_node(wallet.last_id).is_empty() or Run.training_enabled(s, wallet.last_id)):
 			fields.training_refund = wallet.last_price
 			if wallet.last_id != "deep_pockets":
 				fields.training_node = wallet.last_id

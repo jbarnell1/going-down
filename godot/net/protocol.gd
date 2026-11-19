@@ -244,8 +244,8 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ## An input with a skip vote extends its 27-element form by a host-clock timestamp (the reel's start).
 const INV_OPS: Array[String] = ["", "drop", "take", "give", "stash", "fetch", "buy", "use", "throw", "skill", "lamp"]
 # Skill request args: 0 buys Deep Pockets, 1 undoes the pending training, 2 buys
-# Second Wind, 3 asks to use it, 4 buys Soft Shoes and 5 buys Quick Fingers. "skills", "wind", and "shoes" give each trained player
-# 1 (settled), 2 (undoable), or for Second Wind, 3 (already used on this floor).
+# Second Wind, 3 asks to use it, 4 buys Soft Shoes, 5 Quick Fingers, 6 Long Burn and 7 Field Dressing.
+# Named states in the floor envelope show settled or undoable purchases, trade locks and missing prerequisites.
 
 ## Telemetry (client/telemetry.gd -> server/night_log.gd). New in the Godot game: [1, "T", kind, body] for kind
 ## "hb" (a heartbeat: body is a small JSON object as text) or "log" (one error or warning line), and
@@ -446,7 +446,7 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < WORLD_SHOP_INDEX:
 			out.append(null)
 		out.append(enc_shop(w["shop"]))
-	if w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null:
+	if w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null:
 		var extensions := {}
 		if w.get("lamps") != null:
 			var lamps := []
@@ -464,7 +464,7 @@ static func enc_world(w: Dictionary) -> Array:
 			extensions["ward"] = WardWire.encode(w["ward"])
 		if w.get("reactor") != null:
 			extensions["reactor"] = ReactorWire.encode(w["reactor"])
-		for key: String in ["skills", "wind", "shoes", "porter", "longBurn"]:
+		for key: String in ["skills", "wind", "shoes", "porter", "longBurn", "medic"]:
 			if w.get(key) != null:
 				var rows := []
 				for id: String in w[key]:
@@ -1146,7 +1146,7 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 				c.bad = true
 			else:
 				out["ward"] = ward
-		for key: String in ["skills", "wind", "shoes", "porter", "longBurn"]:
+		for key: String in ["skills", "wind", "shoes", "porter", "longBurn", "medic"]:
 			if not extensions.has(key):
 				continue
 			var skills := _a(c, extensions[key], 0, 8)
@@ -1158,7 +1158,7 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 				var pid := _s(c, row[0])
 				if pid.is_empty() or rows.has(pid):
 					c.bad = true
-				var max_status := 4 if key == "porter" else (3 if key == "wind" else 2)
+				var max_status := 4 if key in ["porter", "medic"] else (3 if key == "wind" else 2)
 				rows[pid] = _i(c, row[1], 0, max_status)
 			out[key] = rows
 	return out
@@ -1276,7 +1276,7 @@ static func decode(text: String) -> Variant:
 				elif op == "buy":
 					out["invArg"] = _i(c, a[26], 0, Shop.ITEMS.size() - 1)
 				elif op == "skill":
-					out["invArg"] = _i(c, a[26], 0, 6)
+					out["invArg"] = _i(c, a[26], 0, 7)
 				elif op == "lamp":
 					out["invArg"] = _i(c, a[26], 0, 1)
 				else:

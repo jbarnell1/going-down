@@ -132,7 +132,9 @@ var flare: bool
 var lamp: bool
 var badge_search: bool
 var quick_fingers: bool
+var doorway_shadow: bool
 var long_burn: bool
+var field_dressing: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -142,7 +144,7 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false, furniture_: bool = false, findables_: bool = false,
 		inventory_: bool = false, furniture_layout_: bool = false, resident_navigation_: bool = false,
 		shop_: bool = false, nightly_reels_: bool = false, garden_cones_: bool = false, garden_search_: bool = false,
-		deep_pockets_: bool = false, second_wind_: bool = false, soft_shoes_: bool = false, flare_: bool = false, lamp_: bool = false, badge_search_: bool = false, quick_fingers_: bool = false, long_burn_: bool = false) -> void:
+		deep_pockets_: bool = false, second_wind_: bool = false, soft_shoes_: bool = false, flare_: bool = false, lamp_: bool = false, badge_search_: bool = false, quick_fingers_: bool = false, long_burn_: bool = false, field_dressing_: bool = false, doorway_shadow_: bool = false) -> void:
 	garden_cones = garden_cones_
 	garden_search = garden_search_
 	deep_pockets = deep_pockets_
@@ -153,6 +155,8 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 	badge_search = badge_search_
 	quick_fingers = quick_fingers_
 	long_burn = long_burn_
+	field_dressing = field_dressing_
+	doorway_shadow = doorway_shadow_
 	nightly_reels = nightly_reels_
 	shop = shop_
 	inventory = inventory_
@@ -297,10 +301,15 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_garden_cones(s)
 	if garden_search and deck.has(Places.ARBORETUM) and s.findables and not s.garden_search:
 		s = Run.with_garden_search(s)
+	if doorway_shadow:
+		s = s.copy()
+		s.doorway_shadow = true
 	if badge_search:
 		s = Run.with_badge_search(s)
 	if long_burn:
 		s = Run.with_long_burn(s)
+	if field_dressing:
+		s = Run.with_field_dressing(s)
 	if quick_fingers:
 		s = Run.with_quick_fingers(s)
 	if nightly_reels and s.days:
@@ -311,6 +320,9 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_lamp(s)
 	s = _capped(s)
 	return Run.with_orientation(s, true) if orientation_prelude else s
+
+static func doorway_shadow_on_by_arg() -> bool:
+	return not OS.get_cmdline_user_args().has("doorway_shadow=0")
 
 static func garden_admission_by_arg() -> bool:
 	return not OS.get_cmdline_user_args().has("garden_admission=0")
@@ -490,6 +502,8 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 		for id: String in caught:
 			revived.append(id)
 	var state := r.state
+	if state.doorway_shadow:
+		Run.step_doorway_shadow(state, inputs, dt, events)
 	if not _entity_on:
 		for e in events:
 			if e["type"] == "rodeDown" or e["type"] == "newDay":

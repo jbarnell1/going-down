@@ -513,6 +513,20 @@ func test_same_list_for_everyone(t: T) -> void:
 # ---------------------------------------------------------------------------------------------
 # 4. What is drawn is what blocks.
 
+func test_annex_furniture_draws_from_the_resolved_hides(t: T) -> void:
+	for seed: String in ["arrival-a", "arrival-b"]:
+		var plan := Annex.generate_annex(seed, 3)
+		var hides := Hides.hides_for(plan, seed)
+		var expected := Furniture.plain(Furniture.pieces_for(plan, seed, 3, true))
+		var view := LevelScript.new()
+		# Make any fallback hide calculation observably different from the resolved list.
+		var previous_break := Hides.test_break
+		Hides.test_break = "position"
+		view.build(PlanDump.dump(plan, Run.car_geometry(plan), true), seed, plan, hides)
+		Hides.test_break = previous_break
+		t.check(Furniture.plain(view.pieces) == expected, "%s: drawing keeps the resolved furniture and collision footprints" % seed)
+		view.free()
+
 func test_drawn_is_solid(t: T) -> void:
 	_apply_break()
 	var plans: Array[Floor.FloorPlan] = []

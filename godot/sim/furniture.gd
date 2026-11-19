@@ -172,7 +172,8 @@ class Piece:
 
 ## Every floor-standing piece on the floor, in id order: the hides first (in hide id order, each followed by
 ## its chairs), then the plain pieces room by room. `floor_seed` "" means plan.seed; `depth` -1 means plan.depth.
-static func pieces_for(plan: Floor.FloorPlan, floor_seed: String = "", depth: int = -1, furniture_layout: bool = false) -> Array[Piece]:
+## The Annex view can supply the hides it already resolved for this plan.
+static func pieces_for(plan: Floor.FloorPlan, floor_seed: String = "", depth: int = -1, furniture_layout: bool = false, source_hides: Array[Playroom.Hide] = []) -> Array[Piece]:
 	var sd := floor_seed if floor_seed != "" else plan.seed
 	var dp := depth if depth >= 0 else plan.depth
 	var c := _ctx(plan)
@@ -186,7 +187,7 @@ static func pieces_for(plan: Floor.FloorPlan, floor_seed: String = "", depth: in
 		return c.out
 	if plan.place != &"clinic" and plan.place != &"annex":
 		return c.out
-	for h in Hides.hides_for(plan, sd):
+	for h in (Hides.hides_for(plan, sd) if source_hides.is_empty() else source_hides):
 		_add_hide(c, h)
 	if plan.place == &"clinic":
 		_clinic(c, sd, dp)

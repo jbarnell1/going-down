@@ -604,10 +604,10 @@ func play_at(name: String, pos: Vector3, gain_db := 0.0) -> AudioStreamPlayer3D:
 	return p
 
 ## Per frame: the trolley from the rules' audibility, the ticking, breathing, the lift's machinery.
-func update(delta: float, sq: Dictionary, pose: Variant, tick_hz: float, loudness: float, exertion: float, winded: bool, machine: float, door_pos: Vector3, speed := HUNT_SPEED) -> void:
+func update(delta: float, sq: Dictionary, pose: Variant, tick_hz: float, loudness: float, exertion: float, winded: bool, machine: float, door_pos: Vector3, speed := HUNT_SPEED, trolley_at: Variant = null) -> void:
 	var g := clampf(float(sq.get("gain", 0.0)), 0.0, 1.0)
 	if g > 0.0 and pose != null:
-		var at := Vector3(float(pose.x), float(pose.y) + 0.4, float(pose.z))
+		var at := Vector3(float(pose.x), float(pose.y) + 0.4, float(pose.z)) if trolley_at == null else (trolley_at as Vector3)
 		squeak.global_position = at
 		roll.global_position = at
 		# It is only ever heard unseen, so mostly from behind or round a corner, where the panning takes

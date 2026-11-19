@@ -24,7 +24,7 @@
 #   GDS1|<player>|<name as hex>|<credits>|<nodes, sorted, comma-separated>|<days>|<records, sorted by key, key:value comma-separated>
 #   then, only when the fields have a cabinet: |<cabinet>
 #   after the cabinet, while today's training is undoable: |<training_refund> for
-#   Deep Pockets, |<training_node>:<training_refund> for another induction, or |quick_fingers:0 for a badge trade.
+#   Deep Pockets, |<training_node>:<training_refund> for another induction, or |<trade_node>:0 for a badge trade.
 # The sealed line is the text, "|", then the stamp: 64 lowercase hex characters of
 # HMAC-SHA256(key, text). Same fields, same key: always the same line.
 #

@@ -157,6 +157,7 @@ var orientation_campaign := false
 var badge_search := false
 var quick_fingers := false
 var long_burn := false
+var field_dressing := false
 var ward_review := false
 ## The day loop in the next run (the game's; tests may turn it off).
 var days := true
@@ -216,6 +217,7 @@ var profiles: Profiles
 func configure_campaign_trades(args: Dictionary) -> void:
 	badge_search = args.get("badge_search", "1") == "1"
 	long_burn = args.get("long_burn", "1") == "1"
+	field_dressing = args.get("field_dressing", "1") == "1"
 	quick_fingers = args.get("quick_fingers", "1") == "1"
 
 func _init(ws: WsServer, log: Callable) -> void:
@@ -243,7 +245,7 @@ func _lobby_text(now: float) -> String:
 	var list: Array = []
 	for id: String in people:
 		var row := [id, people[id], ready.has(id), watching.has(id), in_run(id), faces.get(id, "")]
-		if quick_fingers:
+		if quick_fingers or field_dressing:
 			var trade := _player_trade(id)
 			if not trade.is_empty():
 				row.append(trade)
@@ -411,7 +413,7 @@ func _start(now: float) -> void:
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
 	var q := quota and not HostRules.quota_off_by_arg(false)
 	# The day quota's lock goes with the floor quota (net/host_rules.gd): quota=0 turns both off.
-	rules = HostRules.new(not (ward_review or reactor_review), first_depth, Places.deck_for_start_depth(first_depth, HostRules.garden_admission_by_arg()), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop, nightly_reels, true, true, deep_pockets and not (ward_review or reactor_review), second_wind, soft_shoes, HostRules.flare_on_by_arg() and not (ward_review or reactor_review), HostRules.lamp_on_by_arg() and not (ward_review or reactor_review), badge_search and not (ward_review or reactor_review), quick_fingers and not (ward_review or reactor_review), long_burn and not (ward_review or reactor_review))
+	rules = HostRules.new(not (ward_review or reactor_review), first_depth, Places.deck_for_start_depth(first_depth, HostRules.garden_admission_by_arg()), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop, nightly_reels, true, true, deep_pockets and not (ward_review or reactor_review), second_wind, soft_shoes, HostRules.flare_on_by_arg() and not (ward_review or reactor_review), HostRules.lamp_on_by_arg() and not (ward_review or reactor_review), badge_search and not (ward_review or reactor_review), quick_fingers and not (ward_review or reactor_review), long_burn and not (ward_review or reactor_review), field_dressing and not (ward_review or reactor_review), HostRules.doorway_shadow_on_by_arg() and not (ward_review or reactor_review or orientation_review))
 	if orientation_review:
 		rules.enable_orientation()
 	elif orientation_campaign:

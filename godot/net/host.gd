@@ -688,7 +688,7 @@ func _step_gait(p: HostPlayer, m: Dictionary) -> void:
 	var want := String(m.get("gait", "walk"))
 	var cap := Instr.max_walk_speed(m["raised"], INF)
 	# The run's tank size (bigger in a paced run: sim/run.gd sprint_seconds).
-	var tank := Run.sprint_seconds(state)
+	var tank := Run.sprint_seconds(state, p.id)
 	if p.stamina.tank != tank:
 		p.stamina = Stamina.Stamina.make(p.stamina.level, p.stamina.winded, tank)
 	var gait := String(Stamina.gait_for(p.stamina, want == "sprint", want == "creep", ground > 0.0, cap))
@@ -1381,6 +1381,14 @@ func world(full: bool = false) -> Dictionary:
 				wallet = Upgrades.UpgradeState.make()
 			porter[p.id] = Upgrades.trade_offer(wallet, "quick_fingers")
 		out["porter"] = porter
+	if s.field_dressing:
+		var medic := {}
+		for p: Run.RunPlayer in s.players:
+			var wallet: Upgrades.UpgradeState = s.wallets.get(p.id)
+			if wallet == null:
+				wallet = Upgrades.UpgradeState.make()
+			medic[p.id] = Upgrades.trade_offer(wallet, "field_dressing")
+		out["medic"] = medic
 	if s.orientation and maxf(s.orientation_standees.x, s.orientation_standees.y) >= 0.0:
 		out["orientationStandees"] = [s.orientation_standees.x, s.orientation_standees.y]
 	if s.flare:
@@ -1583,7 +1591,11 @@ func _send_snapshots(ht: float) -> void:
 		var evs := PackedStringArray()
 		var bytes := 0
 		for i in range(p.ack_event, event_log.size()):
-			var et := event_log[i].text
+			var logged := event_log[i]
+			var et := logged.text
+			# Keep the reliable event sequence contiguous without sending the private cue or position.
+			if logged.e.get("type") == "doorwayShadow" and logged.e.get("playerId") != p.id:
+				et = '{"type":"privateEvent"}'
 			var b := et.length() + 1
 			if evs.size() > 0 and bytes + b > Session.EVENT_BUDGET:
 				break

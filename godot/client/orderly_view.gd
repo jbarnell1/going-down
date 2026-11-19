@@ -14,7 +14,13 @@ class_name OrderlyView
 extends Node3D
 
 const Floor = preload("res://sim/floor.gd")
+const Furniture = preload("res://sim/furniture.gd")
 const Move = preload("res://sim/move.gd")
+const TROLLEY = preload("res://assets/props/orderly_trolley.glb")
+## Covers the cart's horizontal corners and a margin for the drawn wall thickness.
+const TROLLEY_RADIUS := 0.48
+const TROLLEY_PUSH := 0.84
+const TROLLEY_PARK := 1.52
 var floor_plan: Floor.FloorPlan
 
 const WALK_RATE := 1.7          # src/render/entityView.ts
@@ -48,6 +54,11 @@ var _stride := 0.0
 var _last := Vector3.INF
 var _skel: Skeleton3D = null
 var _twist := {}  # bone index -> [the rotation set, the change made]
+var trolley: Node3D
+var _squeak_wheel: Node3D
+var _grip_left: Node3D
+var _grip_right: Node3D
+var _trolley_solids: Move.Solids
 
 func _ready() -> void:
 	var ps: PackedScene = load("res://assets/entities/orderly.glb")
@@ -67,6 +78,12 @@ func _ready() -> void:
 	_skel = sks[0] if not sks.is_empty() else null
 	for mi: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	trolley = TROLLEY.instantiate()
+	trolley.name = "Trolley"
+	add_child(trolley)
+	_squeak_wheel = trolley.find_child("SqueakWheel", true, false)
+	_grip_left = trolley.find_child("GripLeft", true, false)
+	_grip_right = trolley.find_child("GripRight", true, false)
 	visible = false
 
 func reset() -> void:
@@ -77,6 +94,10 @@ func reset() -> void:
 	drawn = {}
 	watched_at = null
 	visible = false
+
+func set_floor(plan: Floor.FloorPlan, pieces: Array[Furniture.Piece]) -> void:
+	floor_plan = plan
+	_trolley_solids = Furniture.solids_from(plan, pieces) if plan != null else null
 
 ## The watched walk: the one watcher's eye point ([x, y, z]), or null for none. Call before show_pose.
 func set_watched(at: Variant) -> void:
@@ -99,17 +120,18 @@ func show_pose(pose: Variant, show: bool) -> void:
 		if d < 1.0:
 			_stride += d / HUNT_SPEED
 	_last = p
+	position = p
+	rotation = Vector3(0, float(pose.yaw) + PI, 0)
+	var level := int(pose.get("level", 0))
+	var anim: String = pose.anim
+	var t := float(pose.animTime)
+	_place_trolley(p, level, anim, t)
 	visible = show
 	if not show:
 		return
 	drawn = pose
-	position = p
-	rotation = Vector3(0, float(pose.yaw) + PI, 0)
-	var level := int(pose.get("level", 0))
 	model.position = Vector3.ZERO
 	var clearance := _wall_pose(p, level)
-	var anim: String = pose.anim
-	var t := float(pose.animTime)
 	if anim == "walk" or anim == "duck":
 		t = _stride
 	if not ap:
@@ -139,6 +161,28 @@ func show_pose(pose: Variant, show: bool) -> void:
 	if clearance.x > 0.0:
 		_fold_knees(0.87 * clearance.x)
 	_tuck_arms(clearance.y)
+	if anim in ["idle", "walk", "duck"] and skel != null:
+		var elbow := Vector3(0, -1, -0.55)
+		_aim_hand(".R", skel.to_local(_grip_right.global_position), elbow, 1.0)
+		if watched_at == null or anim == "idle":
+			_aim_hand(".L", skel.to_local(_grip_left.global_position), elbow, 1.0)
+
+## The cart is cosmetic. Fit it through the same walls without changing the
+## resident's authoritative position, radius, sight or catch. On release it
+## rolls clear ahead of the reach and stays parked through the bend.
+func _place_trolley(at: Vector3, level: int, anim: String, time: float) -> void:
+	var release := 1.0 if anim == "bend" else (smoothstep(0.0, WIND_UP_TIME, time) if anim == "reach" else 0.0)
+	var offset := transform.basis.z * lerpf(TROLLEY_PUSH, TROLLEY_PARK, release)
+	if floor_plan == null:
+		trolley.position = Vector3(0, 0, offset.length())
+	else:
+		var from := Move.Body.make(at.x, at.z, level, at.y)
+		var cart := Move.move_with_collision(floor_plan, from, offset.x, offset.z, TROLLEY_RADIUS, _trolley_solids)
+		trolley.global_position = Vector3(cart.x, cart.y, cart.z)
+
+## Even while the pose is outside the player's view, audio follows its wheel.
+func trolley_squeak_at() -> Vector3:
+	return _squeak_wheel.global_position
 
 ## The x component folds the knees beneath a lintel. The y component brings
 ## the elbows inside the jamb or wall. Only the child mesh shifts; the host
@@ -285,15 +329,18 @@ func _brace_hand(side: String, weight: float) -> void:
 	if weight <= 0.0:
 		return
 	var shoulder := skel.get_bone_global_pose(skel.find_bone("upperarm" + side)).origin
+	_aim_hand(side, Vector3(shoulder.x, 0.46, 0.76), Vector3(0, 0.65, -1), weight)
+
+func _aim_hand(side: String, target: Vector3, elbow_hint: Vector3, weight: float) -> void:
+	var shoulder := skel.get_bone_global_pose(skel.find_bone("upperarm" + side)).origin
 	var elbow := skel.get_bone_global_pose(skel.find_bone("forearm" + side)).origin
 	var wrist := skel.get_bone_global_pose(skel.find_bone("hand" + side)).origin
-	var target := Vector3(shoulder.x, 0.46, 0.76)
 	var axis := (target - shoulder).normalized()
 	var upper := shoulder.distance_to(elbow)
 	var lower := elbow.distance_to(wrist)
 	var reach := clampf(shoulder.distance_to(target), absf(upper-lower)+0.001, upper+lower-0.001)
 	var along := (upper*upper - lower*lower + reach*reach) / (2.0*reach)
-	var pole := Vector3(0, 0.65, -1).slide(axis).normalized()
+	var pole := elbow_hint.slide(axis).normalized()
 	var desired_elbow := axis * along + pole * sqrt(maxf(0.0, upper*upper-along*along))
 	_aim_limb("upperarm" + side, "forearm" + side, desired_elbow, weight)
 	elbow = skel.get_bone_global_pose(skel.find_bone("forearm" + side)).origin

@@ -1143,7 +1143,8 @@ static func _outward(l: Layout, m: Vector2) -> Vector2:
 ## turned to its facing.
 func _furniture(floor_plan: FloorLib.FloorPlan) -> void:
 	var cat := catalogue()
-	var list := Furniture.pieces_for(floor_plan, str(lv.plan.seed), int(lv.plan.depth), bool(lv.plan.get("furnitureLayout", false)))
+	var list := Furniture.pieces_for(floor_plan, str(lv.plan.seed), int(lv.plan.depth),
+		bool(lv.plan.get("furnitureLayout", false)), hides)
 	lv.pieces = list
 	for pc: Furniture.Piece in list:
 		var xf: Transform3D
