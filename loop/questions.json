@@ -2003,6 +2003,30 @@
         }
       ],
       "default": []
+    },
+    {
+      "id": "recording-save-owner",
+      "title": "Who should keep a recovered recording and its playback history?",
+      "context": "A crew recovers a recording and plays it in prison. When people return another night, which save should remember the recording and that it was played?",
+      "type": "single",
+      "options": [
+        {
+          "id": "campaign",
+          "label": "Keep it with the saved crew campaign",
+          "note": "Anyone who returns to that campaign can replay it. A fresh campaign starts with an empty shelf."
+        },
+        {
+          "id": "personal",
+          "label": "Keep it on each player?s record",
+          "note": "Players carry their own recovery and playback history when they join another crew."
+        },
+        {
+          "id": "run",
+          "label": "Keep it for this run only",
+          "note": "A fresh run has to recover and play its own copy."
+        }
+      ],
+      "default": []
     }
   ]
 }
