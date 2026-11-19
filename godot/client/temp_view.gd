@@ -18,7 +18,9 @@
 # The pose-hold rule (a Stillness resident): what is drawn is a pure function of the pose and of the
 # distance the drawn pose has walked. A pose held while seen (net/client.gd) has the same numbers on
 # every frame, so the figure is drawn exactly the same; no local clock moves it. Its idle fidget runs
-# on the pose's own clock (animTime), its walk on the distance walked.
+# on the pose's own clock (animTime), its walk on the distance walked. Its gait (slow or fast walk, and the
+# blend between) follows its pace over the last few tenths of a metre, and a change of what it does fades in
+# over CARRY_S of its own clock; neither moves while the pose is held (PT4, tests/test_temp_motion.gd).
 #
 # The stapler: one click per 1.2 m walked, and one each time its own clock passes a multiple of 4 s
 # while it stands (the clock stops while it is held, so a watched Temp is silent). Heard at its hand
@@ -50,8 +52,29 @@ const STEPS_FILE := "res://assets/sfx/annex/temp_steps.ogg"
 const STEPS_RANGE := 8.0
 const WALK_CYCLE := 0.95        # metres travelled in one original slow cycle
 const CHASE_CYCLE := 3.06       # metres travelled in one original fast cycle
-const CHASE_START := 2.2       # m/s, between the creep and the solo chase
-const CHASE_STOP := 1.7
+## The gait, by its pace (m/s): the slow walk below CHASE_STOP, the fast one above CHASE_START. The slow walk
+## was made for 0.57 m/s and the fast one for 1.43, so from a standstill the creep (1.3, 1.6 at prey) walks
+## slowly and Lonely's approach (2.0) and everything faster uses the fast walk (at 2.0 the slow one would run
+## 3.5 times too fast). Between the two it keeps the gait it has: the band is wide, either clip passing in it,
+## so a pace that dips at a corner (the rules slow it to about 1.0 for a tick or two) or wobbles in measuring
+## never flips it back and forth (PT4). (Build 9bf81be had 2.2 and 1.7, with 2.0 inside the band.)
+const CHASE_START := 1.8
+const CHASE_STOP := 1.2
+## Its pace is judged over the last SPEED_SPAN_M metres it walked (or SPEED_SPAN_S seconds of its clock, if
+## that comes first), from points at least TRAIL_STEP apart: never from one frame to the next. The poses come
+## to the centimetre and the millisecond, so a frame's own step at 60 to 144 frames a second could read
+## anything from half to twice its true pace, and a Temp walking at 2.0 m/s (Lonely's approach, between
+## CHASE_STOP and CHASE_START) or 2.6 (alone, its chase) flipped clip on most frames (PT4).
+const SPEED_SPAN_M := 0.3
+const SPEED_SPAN_S := 0.5
+const TRAIL_STEP := 0.05
+## Between the walk and the fast walk it blends over this many metres walked (a distance, so a held pose
+## never moves it), rather than snapping from one clip's pose to the other's.
+const BLEND_M := 0.4
+## When what it does changes (it starts or stops walking, or its standing fidget moves on from one clip to
+## the next) the last drawn pose fades into the new one over this many seconds of its own clock (never the
+## local clock: a held pose stays exactly as drawn). Not into the jab or the bend: the catch reads at once.
+const CARRY_S := 0.25
 const BEND_IN := 0.8
 const MODEL := preload("res://assets/entities/temp.glb")
 const Entity = preload("res://sim/entity.gd")
@@ -95,6 +118,21 @@ var _body_mats: Array[ShaderMaterial] = []
 var _paper_mat: ShaderMaterial
 var _gait_phase := 0.0
 var _fast := false
+## Tests only: judge the pace from one frame to the next, as the view did before PT4 (the jitter check must catch it).
+var break_frame_speed := false
+## How far the drawn gait is from the walk (0) to the fast walk (1).
+var _chase_w := 0.0
+## Recent walking points, newest last: Vector3(x, z, animTime), each at least TRAIL_STEP from the one before.
+var _trail: Array[Vector3] = []
+## The carry-over (CARRY_S): what the last pose was ("gait" for either walk), its joints before the
+## overlays, the joints being faded from, and the seconds of fade left.
+var _base_key := ""
+var _base_rot: Array[Quaternion] = []
+var _base_pos: Array[Vector3] = []
+var _carry_rot: Array[Quaternion] = []
+var _carry_pos: Array[Vector3] = []
+var _carry_left := 0.0
+var _posed_last := false
 var _held_watch: Variant = null
 var _player: AudioStreamPlayer3D
 var _staples: Array[AudioStream] = []   # the recorded clicks (empty: the made-in-code one)
@@ -151,6 +189,11 @@ func reset() -> void:
 	_dist = 0.0
 	_gait_phase = 0.0
 	_fast = false
+	_chase_w = 0.0
+	_trail.clear()
+	_base_key = ""
+	_carry_left = 0.0
+	_posed_last = false
 	_held_watch = null
 	_last = Vector3.INF
 	_last_pose = null
@@ -220,6 +263,8 @@ func show_pose(pose: Variant, show: bool) -> void:
 	if pose == null:
 		visible = false
 		_last_pose = null
+		_posed_last = false
+		_carry_left = 0.0
 		if _steps != null and _steps.playing:
 			_steps.stop()
 		return
@@ -232,17 +277,40 @@ func show_pose(pose: Variant, show: bool) -> void:
 		_held_watch = watched_at
 	var walking := anim == "walk" or anim == "duck"
 	var step := 0.0
+	var jumped := false
 	if _last != Vector3.INF:
 		var d := Vector2(p.x - _last.x, p.z - _last.z).length()
 		if d < 1.0:
 			step = d
-	if walking and step > 0.0 and _last_pose != null and _last_pose["anim"] == anim:
-		var dt := t - float(_last_pose["animTime"])
-		if dt > 0.0:
-			var speed := step / dt
+		else:
+			jumped = true
+	# Seconds of its own clock since the last pose, for the carry-over (none across a change of anim, a jump
+	# or a held pose).
+	var clock_step := 0.0
+	if not held and not jumped and _last_pose != null and _last_pose["anim"] == anim:
+		clock_step = maxf(0.0, t - float(_last_pose["animTime"]))
+	_carry_left = maxf(0.0, _carry_left - clock_step)
+	if break_frame_speed:
+		if walking and step > 0.0 and _last_pose != null and _last_pose["anim"] == anim:
+			var dt := t - float(_last_pose["animTime"])
+			if dt > 0.0:
+				# As build 9bf81be did it, thresholds and all.
+				_fast = step / dt > (1.7 if _fast else 2.2)
+	elif walking and not held:
+		# A new walk, a jump (relocation) or a clock that went back starts the trail again.
+		var go_on: bool = _last_pose != null and _last_pose["anim"] == anim and _last != Vector3.INF \
+			and Vector2(p.x - _last.x, p.z - _last.z).length() < 1.0
+		if not go_on or (not _trail.is_empty() and t < _trail.back().z):
+			_trail.clear()
+		if _trail.is_empty() or Vector2(p.x - _trail.back().x, p.z - _trail.back().y).length() >= TRAIL_STEP:
+			_trail.append(Vector3(p.x, p.z, t))
+		var speed := _trail_speed()
+		if speed >= 0.0:
 			_fast = speed > (CHASE_STOP if _fast else CHASE_START)
-	elif not walking:
+	if not walking:
 		_fast = false
+		_chase_w = 0.0
+		_trail.clear()
 	_last = p
 	_last_pose = pd.duplicate()
 	var now := Time.get_ticks_usec()
@@ -251,7 +319,11 @@ func show_pose(pose: Variant, show: bool) -> void:
 	_last_us = now
 	_dist += step
 	if walking:
-		_gait_phase = fposmod(_gait_phase + step / (CHASE_CYCLE if _fast else WALK_CYCLE), 1.0)
+		if break_frame_speed:
+			_chase_w = 1.0 if _fast else 0.0
+		else:
+			_chase_w = move_toward(_chase_w, 1.0 if _fast else 0.0, step / BLEND_M)
+		_gait_phase = fposmod(_gait_phase + step / lerpf(WALK_CYCLE, CHASE_CYCLE, _chase_w), 1.0)
 	# The clicks: per 1.2 m walked; standing, each 4 s of its own clock (stopped while held).
 	var k := floori(_dist / CLICK_STEP)
 	var click_reason := "walk" if k > _walk_k else ""
@@ -268,13 +340,32 @@ func show_pose(pose: Variant, show: bool) -> void:
 	if show or click_reason != "":
 		position = p
 		rotation = Vector3(0, float(pd["yaw"]) + PI, 0)
-		_pose_figure(anim, t, _dist)
+		_pose_figure(anim, t, _dist, clock_step, jumped)
+		_posed_last = true
+	else:
+		_posed_last = false
 	if click_reason != "":
 		_click(click_reason, _stapler.global_position)
 	_shuffle(p, step)
 	visible = show
 	if show:
 		drawn = pd
+
+## Its pace (m/s) along the trail over the last SPEED_SPAN_M metres or SPEED_SPAN_S seconds, whichever comes
+## first, or -1 while the trail is too short to say (the gait it has is kept). Drops points no longer needed.
+func _trail_speed() -> float:
+	var n := _trail.size()
+	var walked := 0.0
+	for i in range(n - 2, -1, -1):
+		var a := _trail[i]
+		var b := _trail[i + 1]
+		walked += Vector2(b.x - a.x, b.y - a.y).length()
+		var span := _trail[n - 1].z - a.z
+		if walked >= SPEED_SPAN_M or span >= SPEED_SPAN_S:
+			if i > 0:
+				_trail = _trail.slice(i)
+			return walked / span if span > 0.0 else -1.0
+	return -1.0
 
 static func _same(a: Dictionary, b: Dictionary) -> bool:
 	for k: String in ["x", "y", "z", "level", "yaw", "anim", "animTime"]:
@@ -286,14 +377,20 @@ static func _pulse(x: float) -> float:
 	return sin(x * PI) if x >= 0.0 and x < 1.0 else 0.0
 
 ## Sample only the supplied pose clock or distance. The mixer never advances on its own.
-func _pose_figure(anim: String, t: float, dist: float) -> void:
+## `clock_step` and `jumped` (show_pose) say how a carry-over starting now is cut short, or that none starts.
+func _pose_figure(anim: String, t: float, dist: float, clock_step := 0.0, jumped := false) -> void:
 	var clip := &"idle"
 	var at := t
 	var squeeze := 0.0
+	# Between the two gaits: the other clip, sampled first, and how much of it is mixed in.
+	var other := &""
+	var other_w := 0.0
 	match anim:
 		"walk", "duck":
-			clip = &"chase" if _fast else &"walk"
+			clip = &"chase" if _chase_w >= 0.5 else &"walk"
 			at = _gait_phase * _length(clip)
+			other = &"walk" if clip == &"chase" else &"chase"
+			other_w = 1.0 - _chase_w if clip == &"chase" else _chase_w
 			squeeze = _pulse(fposmod(dist, CLICK_STEP) / SQUEEZE_M)
 		"reach":
 			clip = &"reach"
@@ -310,11 +407,37 @@ func _pose_figure(anim: String, t: float, dist: float) -> void:
 				at -= idle_len
 			squeeze = _pulse(fposmod(t, STAND_CLICK) / SQUEEZE_S)
 	# Restore unkeyed joints too: every pose starts with the imported rest and the authored sample.
-	_skel.reset_bone_poses()
-	if _ap.assigned_animation != clip:
-		_ap.play(clip, 0.0)
-		_ap.pause()
-	_ap.seek(at, true, true)
+	var mix_rot: Array[Quaternion] = []
+	var mix_pos: Array[Vector3] = []
+	if other_w > 0.0001:
+		_sample_clip(other, _gait_phase * _length(other))
+		for i in _skel.get_bone_count():
+			mix_rot.append(_skel.get_bone_pose_rotation(i))
+			mix_pos.append(_skel.get_bone_pose_position(i))
+	_sample_clip(clip, at)
+	for i in mix_rot.size():
+		_skel.set_bone_pose_rotation(i, _skel.get_bone_pose_rotation(i).slerp(mix_rot[i], other_w))
+		_skel.set_bone_pose_position(i, _skel.get_bone_pose_position(i).lerp(mix_pos[i], other_w))
+	# The carry-over: a new kind of pose fades in from the last one drawn (both before the overlays).
+	var key := "gait" if anim == "walk" or anim == "duck" else String(clip)
+	if key == "reach" or key == "bend" or jumped or not _posed_last:
+		_carry_left = 0.0
+	elif key != _base_key and not _base_rot.is_empty() and not break_frame_speed:
+		_carry_rot = _base_rot.duplicate()
+		_carry_pos = _base_pos.duplicate()
+		# The change came somewhere within the clock's last step: a long step leaves less (or nothing) to fade.
+		_carry_left = maxf(0.0, CARRY_S - clock_step)
+	_base_key = key
+	if _carry_left > 0.0 and _carry_rot.size() == _skel.get_bone_count():
+		var keep := smoothstep(0.0, 1.0, _carry_left / CARRY_S)
+		for i in _carry_rot.size():
+			_skel.set_bone_pose_rotation(i, _skel.get_bone_pose_rotation(i).slerp(_carry_rot[i], keep))
+			_skel.set_bone_pose_position(i, _skel.get_bone_pose_position(i).lerp(_carry_pos[i], keep))
+	_base_rot.resize(_skel.get_bone_count())
+	_base_pos.resize(_skel.get_bone_count())
+	for i in _skel.get_bone_count():
+		_base_rot[i] = _skel.get_bone_pose_rotation(i)
+		_base_pos[i] = _skel.get_bone_pose_position(i)
 	if anim == "bend":
 		var e := smoothstep(0.0, BEND_IN, t)
 		var chew := 0.5 - 0.5 * cos(t * TAU * 1.4)
@@ -329,6 +452,14 @@ func _pose_figure(anim: String, t: float, dist: float) -> void:
 	# Update the props after the overlays so their grips stay with the visible hands.
 	for attachment: BoneAttachment3D in _attachments:
 		attachment.on_skeleton_update()
+
+## The imported rest, then one clip's authored sample at `at` seconds.
+func _sample_clip(clip: StringName, at: float) -> void:
+	_skel.reset_bone_poses()
+	if _ap.assigned_animation != clip:
+		_ap.play(clip, 0.0)
+		_ap.pause()
+	_ap.seek(at, true, true)
 
 func _length(clip: StringName) -> float:
 	return _ap.get_animation(clip).length

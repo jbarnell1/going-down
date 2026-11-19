@@ -117,8 +117,11 @@ const ROWS: Array = [
 	[&"minder.search_speed", &"minder", "SEARCH SPEED", "going from hide to hide in a count", "m/s", 3.0, 1.5, 4.5, 0.1, &"now", &"LS1", F],
 	[&"minder.run_speed", &"minder", "RUN SPEED", "running down someone it has found", "m/s", 7.0, 4.0, 9.0, 0.25, &"now", &"LS1", F],
 	# The tuned Playroom (T15m, sim/seek.gd) is on in the game's rooms: the first count gives 30 s to hide, each
-	# later one 5 s more (to the fourth), the last count 30; every search lasts 30 s; the anger bar fills in 2 s
-	# of sprinting or 3 noises and cools from full in 50 s. Without it (tests only) a count's hide is HIDE_TIME.
+	# later one 5 s more (to the fourth), the last count 30; every search lasts 30 s; the anger bar cools from
+	# full in 50 s. Without it (tests only) a count's hide is HIDE_TIME.
+	# The Minder's hunt (PT1, sim/seek.gd) is on with it in the game's rooms, so the two anger rows' game values
+	# are its own: Seek.HUNT_ANGER_SPRINT (1 s of sprinting) and Seek.HUNT_ANGER_NOISE (55 in 100 a noise).
+	# Without the hunt (tests only) an unset row is still today's old 2 s and 34.
 	[&"minder.hide_time", &"minder", "TIME TO HIDE", "the free seconds at the start of the first count", "s", 30.0, 3.0, 60.0, 1.0, &"next", &"LS4", F],
 	[&"minder.hide_more", &"minder", "EACH COUNT HIDES LONGER BY", "seconds more to hide at each later count, to the fourth", "s", 5.0, 0.0, 15.0, 1.0, &"next", &"LS4", F],
 	[&"minder.last_hide", &"minder", "TIME TO HIDE, THE LAST COUNT", "the free seconds at the start of the count the lift call starts", "s", 30.0, 3.0, 60.0, 1.0, &"next", &"LS4", F],
@@ -127,8 +130,8 @@ const ROWS: Array = [
 	[&"minder.calm", &"minder", "CALM AFTER A COUNT", "nothing can start a new count for this long", "s", 15.0, 5.0, 60.0, 5.0, &"next", &"LS4", F],
 	[&"minder.sight", &"minder", "SEES AS FAR AS", "its sight in a count", "m", 12.0, 6.0, 20.0, 1.0, &"now", &"LS4", F],
 	[&"minder.found_after", &"minder", "FOUND AFTER", "how long in its sight before you are found", "s", 1.0, 0.3, 3.0, 0.1, &"now", &"LS4", F],
-	[&"minder.anger_sprint", &"minder", "SPRINTING FILLS ITS ANGER IN", "seconds of sprinting that fill an empty anger bar", "s", 2.0, 0.5, 10.0, 0.5, &"now", &"LS4", F],
-	[&"minder.anger_noise", &"minder", "ONE NOISE ADDS TO ITS ANGER", "a ball pit, a flap, a dropped tape or an emote", "in 100", 34.0, 5.0, 100.0, 1.0, &"now", &"LS4", W],
+	[&"minder.anger_sprint", &"minder", "SPRINTING FILLS ITS ANGER IN", "seconds of sprinting that fill an empty anger bar", "s", 1.0, 0.5, 10.0, 0.5, &"now", &"LS4", F],
+	[&"minder.anger_noise", &"minder", "ONE NOISE ADDS TO ITS ANGER", "a ball pit, a flap, a dropped tape or an emote", "in 100", 55.0, 5.0, 100.0, 1.0, &"now", &"LS4", W],
 	[&"minder.anger_cool", &"minder", "ITS ANGER COOLS FROM FULL IN", "seconds of quiet that empty a full anger bar", "s", 50.0, 10.0, 300.0, 5.0, &"now", &"LS4", F],
 	# The Groundskeeper (the Arboretum; sim/hearing.gd, sim/noise.gd, sim/run.gd KEEPER_HEALS). AR1 wires its
 	# speeds, reach, timings and heals, along with the radii of the garden sounds.
@@ -180,8 +183,8 @@ const ROWS: Array = [
 	[&"down.crawl", &"down", "CRAWL SPEED", "a downed player", "m/s", 0.6, 0.0, 2.0, 0.1, &"floor", &"LS6", F],
 	[&"heal.quiet", &"down", "RESIDENT STANDS OFF AFTER A HEAL", "how long a resident that lost its downed player to a heal stays quiet", "s", 5.0, 0.0, 15.0, 1.0, &"next", &"LS5", F],
 	# Players: health (the Playroom).
-	[&"health.walk", &"health", "WALKING COSTS", "after the first count", "a second", 3.0, 0.0, 10.0, 0.5, &"now", &"LS5", F],
-	[&"health.sprint", &"health", "SPRINTING COSTS", "health a second of sprinting", "a second", 8.0, 0.0, 20.0, 1.0, &"now", &"LS5", F],
+	[&"health.walk", &"health", "WALKING COSTS", "health a second of walking, only while it hunts", "a second", 3.0, 0.0, 10.0, 0.5, &"now", &"LS5", F],
+	[&"health.sprint", &"health", "SPRINTING COSTS", "health a second of sprinting, only while it hunts", "a second", 8.0, 0.0, 20.0, 1.0, &"now", &"LS5", F],
 	[&"health.rest", &"health", "STANDING GIVES BACK", "health a second of standing", "a second", 1.0, 0.0, 5.0, 0.25, &"now", &"LS5", F],
 	[&"heal.health", &"health", "A HEAL GIVES BACK", "the health a heal puts back", "health", 50.0, 10.0, 100.0, 5.0, &"next", &"LS5", F],
 	# Players: carrying (the four-slot inventory, S1; sim/inventory.gd). Four slots is fixed. The stack goes into force

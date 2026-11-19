@@ -243,6 +243,8 @@
 # section: 30-45 s to hide, then a 30 s search; an anger bar the provocations fill, a count when it is full; the
 # Minder grabs anyone within 1 m outside a count and drags them to the party table; and the hint events
 # ("playroomArrived", "sprintDuringHunt") for the announcer.
+# The Minder's hunt (PT1, `minder_hunt`, with_minder_hunt: the same again, Seek.with_hunt): the Minder never acts on
+# an instrument, its anger fills sooner, and health drains only while it searches (seek.gd "PT1").
 # Solid furniture (FD7, `furniture`, with_furniture: docs/floors/findables-and-day.md section 4; net/host_rules.gd
 # turns it on for the game's rooms; tests and every stored result leave it off, and then nothing below happens).
 # Players' bodies (move_in_run: the local player, the bots, a crawl) slide along every solid piece of the
@@ -1083,6 +1085,9 @@ class RunState:
 	## The Playroom tuned from the owner's first play (T15m, with_playroom_tuned; sim/seek.gd "T15m"). Off: the
 	## Playroom's rules are exactly as every stored result has them.
 	var playroom_tuned: bool = false
+	## The Minder's hunt from the owner's playtest of 19 Nov (PT1, with_minder_hunt; sim/seek.gd "PT1"). Off: the
+	## Playroom's rules are exactly as every stored result has them.
+	var minder_hunt: bool = false
 	## Solid furniture (FD7, with_furniture; sim/furniture.gd): players slide along the floor's pieces. Off:
 	## nothing blocks but walls, as every stored result has it.
 	var furniture: bool = false
@@ -1151,6 +1156,7 @@ class RunState:
 		s.day_earned = day_earned
 		s.day_met = day_met
 		s.playroom_tuned = playroom_tuned
+		s.minder_hunt = minder_hunt
 		s.furniture = furniture
 		s.furniture_layout = furniture_layout
 		s.resident_navigation = resident_navigation
@@ -1551,6 +1557,15 @@ static func with_playroom_tuned(s0: RunState) -> RunState:
 	s.playroom_tuned = true
 	if s.seek != null:
 		s.seek = Seek.tune(s.seek as Seek.SeekState)
+	return s
+
+## Turns the Minder's hunt on (PT1, sim/seek.gd "PT1"): every Playroom from now on (and one already reached)
+## ignores the instrument, angers sooner and drains health only while it searches.
+static func with_minder_hunt(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.minder_hunt = true
+	if s.seek != null:
+		s.seek = Seek.with_hunt(s.seek as Seek.SeekState)
 	return s
 
 ## Turns solid furniture on (FD7, see the header): from now on players slide along every floor's pieces.
@@ -2241,6 +2256,8 @@ static func _sync_seek(s: RunState) -> void:
 	(s.seek as Seek.SeekState).t = s.t
 	if s.playroom_tuned:
 		s.seek = Seek.tune(s.seek as Seek.SeekState)
+	if s.minder_hunt:
+		s.seek = Seek.with_hunt(s.seek as Seek.SeekState)
 	s.seek_drops = []
 	s.seek_call_at = -1.0
 

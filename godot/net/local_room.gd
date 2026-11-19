@@ -249,13 +249,16 @@ static func playtest_destinations(seed_: String, deck: Array[StringName]) -> Arr
 	return out
 
 ## Start a fresh sandbox run at a destination on this machine. Reopening the same floor uses the same seed.
-func start_playtest(depth: int) -> bool:
+## `carried`: the host's changed settings from the room it jumps from (TuningDesk.asked), kept in force here
+## (in memory only: the sandbox writes no settings file).
+func start_playtest(depth: int, carried: Dictionary = {}) -> bool:
 	for destination in playtest_destinations(seed, Session.deck):
 		if depth == int(destination["depth"]):
 			_playtest_depth = depth
 			_orientation_playtest = false
 			days = true
 			open_settings("")
+			_carry_settings(carried)
 			solo_profile_path = ""
 			_solo_profile.clear()
 			my_ready = true
@@ -270,14 +273,26 @@ func start_reactor_review(review_seed: int, archive_path := "") -> bool:
 	return true
 
 ## The safe practice route has its own run and does not load or save a campaign profile.
-func start_orientation() -> void:
+func start_orientation(carried: Dictionary = {}) -> void:
 	_playtest_depth = 1
 	_orientation_playtest = true
 	open_settings("")
+	_carry_settings(carried)
 	solo_profile_path = ""
 	_solo_profile.clear()
 	my_ready = true
 	start_run()
+
+## The sandbox's desk takes the changes the host made in the room it jumped from (each checked again), so a
+## jump never quietly puts a tuned value back. In force from the run's first tick (start_run: run_started).
+func _carry_settings(carried: Dictionary) -> void:
+	for id: Variant in carried:
+		var sid := StringName(str(id))
+		if TuningDesk.Settings.row(sid) != null and TuningDesk.Settings.check(sid, float(carried[id]), desk.asked) == &"":
+			desk.asked[sid] = TuningDesk.Settings.snap(sid, float(carried[id]))
+	if not desk.asked.is_empty():
+		desk.rev += 1
+		_take_tune(desk.message(ME))
 
 func _prepare_playtest_prison(initial: Run.RunState) -> Run.RunState:
 	var s := rules.prepare(initial)
@@ -301,7 +316,8 @@ func start_run() -> void:
 	var ear := Session.deck == Places.FULL if soft_shoes == null else bool(soft_shoes)
 	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL, shop_on(), Session.deck == Places.FULL, true, true, induction, nerve, ear, HostRules.flare_on_by_arg(), HostRules.lamp_on_by_arg(), badge_search, quick_fingers, long_burn, field_dressing, HostRules.doorway_shadow_on_by_arg() and Session.deck == Places.FULL and not _orientation_playtest, steady_gaze, throwing_arm,
 		HostRules.nerve_passive_on_by_arg() and not _orientation_playtest,
-		HostRules.annex_drag_on_by_arg() and not _orientation_playtest)
+		HostRules.annex_drag_on_by_arg() and not _orientation_playtest,
+		playroom_tuned_on())
 	if _orientation_playtest:
 		rules.enable_orientation()
 	elif orientation_campaign and _playtest_depth < 0:

@@ -400,6 +400,12 @@ func top_line() -> String:
 	var h := host_name()
 	return "ONLY THE HOST CAN CHANGE THESE. HOST: %s" % (h if not h.is_empty() else "NOBODY YET")
 
+## The foot: for the host, how to change a value first (PT6: the panel says how it works on first open).
+func foot_line() -> String:
+	if is_host():
+		return "LEFT RIGHT OR CLICK: CHANGE    TAB: NEXT    HOLD BACKSPACE: RESET ALL %d    F8: CLOSE" % changed_count()
+	return "F8: CLOSE"
+
 func saved_line() -> String:
 	if rc == null:
 		return ""
@@ -610,7 +616,7 @@ func _draw_panel(px: float, now: float) -> void:
 			_text(third, Vector2(rx + 6 * px, vy + lh), px, third_col)
 		ry += row_h + 4 * px
 	# The foot.
-	var foot := "HOLD BACKSPACE: RESET ALL %d    TAB: NEXT    F8: CLOSE" % changed_count() if host else "F8: CLOSE"
+	var foot := foot_line()
 	draw_rect(Rect2(Vector2(card.position.x, card.end.y - 16 * px), Vector2(card.size.x, px * 0.5)), Color(1, 1, 1, 0.18))
 	_text(foot, Vector2(x0, card.end.y - 11 * px), px, GREY)
 	if _back_down_at >= 0.0:

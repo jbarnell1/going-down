@@ -52,7 +52,9 @@ func _check() -> void:
 	_expect(game.start.screen == "title" and game.link == null, "end sandbox returns to the title")
 	game._play_alone()
 	_f6(game)
-	_expect(game.start.screen != "playtest", "F6 has no playtest effect in an ordinary room")
+	_expect(game.start.screen == "playtest" and game.start.playtest_choices[0]["id"] == "resume", "F6 in a game played alone opens the picker, RESUME first (PT6)")
+	game.start.press("resume")
+	_expect(game.start.screen == "" and game.mode == "game", "resume goes back to the same solo game")
 	game._back_to_title()
 	game.queue_free()
 	await process_frame

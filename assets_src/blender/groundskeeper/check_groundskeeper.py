@@ -96,6 +96,19 @@ def check_blender_imports():
     assert set(rig.data.bones.keys()) == JOINTS
     by_name = {action.name: action for action in bpy.data.actions}
     assert by_name.keys() == ANIMATIONS.keys(), list(by_name)
+    # The silhouette the owner asked for on 19 Nov ("not very scary"): at rest the dead branch stands well
+    # above the head, the left hand's roots reach far past the right hand, and the body is starved.
+    rig.data.pose_position = "REST"
+    bpy.context.view_layer.update()
+    rest = [mesh.matrix_world @ v.co for v in mesh.evaluated_get(bpy.context.evaluated_depsgraph_get()).data.vertices]
+    crown = max(p.z for p in rest)
+    wide = max(abs(p.x) for p in rest)
+    waist = max(abs(p.x) for p in rest if 1.47 < p.z < 1.5)
+    assert 2.9 < crown < 3.05, f"the dead branch should stand to about 3 m, not {crown:.2f}"
+    assert wide > 1.85, f"the root fingers should reach past 1.85 m, not {wide:.2f}"
+    assert waist < .16, f"the waist should be starved, not {waist:.2f} m from the spine"
+    print(f"silhouette: branch {crown:.2f} m, reach {wide:.2f} m, waist {waist:.2f} m")
+    rig.data.pose_position = "POSE"
     rig.animation_data.use_nla = False
     for name, action in by_name.items():
         rig.animation_data.action = action

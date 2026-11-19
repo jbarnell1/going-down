@@ -43,6 +43,17 @@
 #   - hint events for the announcer: "playroomArrived" (the first tick on the floor) and "sprintDuringHunt"
 #     (a player starts sprinting while it searches).
 #
+# PT1, the owner's playtest of 19 Nov (on only for a state made with with_hunt(): sim/run.gd minder_hunt, which the
+# game's rooms turn on; off, nothing of this happens). "The goal is to make it so that when it hunts, players don't
+# just run from it, they actually hide." See the "PT1" section at the end:
+#   - an instrument ticking is never anything the Minder acts on: never a reason to look in a hide;
+#   - the anger bar fills sooner: HUNT_ANGER_SPRINT seconds of sprinting, or HUNT_ANGER_NOISE in 100 a noise
+#     (still the host's minder.anger_sprint and minder.anger_noise when set);
+#   - health drains only while it hunts (a count's search, after the time to hide, until the count ends):
+#     walking WALK_DRAIN a second, sprinting SPRINT_DRAIN. Standing, creeping or being in a hide gives back
+#     REST_GAIN a second at any time on the floor; walking or sprinting outside a search costs nothing. Never
+#     in a ride.
+#
 # Units: Move.Body metres; hides from playroom.gd are whole centimetres. Maths through jsmath.gd.
 # State is treated as immutable: step_seek copies and never edits what it was given.
 extends RefCounted
@@ -434,9 +445,12 @@ class SeekState:
 	## The grabbed player being dragged to the party table: the seat it drags them to, and the drag's start.
 	var drag_seat: int = -1
 	var drag_t0: float = 0.0
+	## PT1 (with_hunt; see the section at the end). Off: every rule above is as every stored result has it.
+	var hunt: bool = false
 
 	func copy() -> SeekState:
 		var s := SeekState.new()
+		s.hunt = hunt
 		s.tuned = tuned
 		s.hide_len = hide_len
 		s.anger = anger
@@ -790,7 +804,8 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 		if inp.horn and seeking and p.phase == &"inside":
 			_reason(s, p.hide, &"horn", p.id, t, events)
 		# The instrument ticking is a reason inside a hide within 5 m; outside a count it cannot happen.
-		if inp.ticking and seeking and p.phase == &"inside":
+		# PT1: the Minder never acts on an instrument.
+		if inp.ticking and seeking and p.phase == &"inside" and not s.hunt:
 			var hh: Playroom.Hide = s.floor.hide_by_id[p.hide]
 			var hb := hide_inside_body(plan, hh)
 			if _touching(m.body, hb, TICK_REASON_RANGE):
@@ -866,6 +881,9 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 				_found(s, p, cause, t, events)
 
 	# 7. Health.
+	if s.hunt:
+		_hunt_health(s, input_of, moved_of, seeking, fl, dt, t, events)
+		return res
 	var health_on := s.ended >= 1 and not s.counting and not fl.riding
 	if health_on:
 		for p in s.players:
@@ -1380,7 +1398,12 @@ static var _live: Settings.Values = null
 
 ## What a provocation adds to the anger this tick. `tuning`: the host's minder.anger_sprint (seconds of sprinting
 ## to a full bar) and minder.anger_noise (a lump, in 100).
-static func anger_gain(why: StringName, dt: float, tuning: Settings.Values = null) -> float:
+## `hunt` (PT1): the fallbacks are HUNT_ANGER_SPRINT and HUNT_ANGER_NOISE instead of today's rates.
+static func anger_gain(why: StringName, dt: float, tuning: Settings.Values = null, hunt: bool = false) -> float:
+	if hunt and why == &"sprint":
+		return dt / Settings.f(tuning, &"minder.anger_sprint", HUNT_ANGER_SPRINT)
+	if hunt and ANGER_LUMPS.has(why):
+		return Settings.f(tuning, &"minder.anger_noise", HUNT_ANGER_NOISE) / 100.0
 	if why == &"sprint" and tuning != null and tuning.has(&"minder.anger_sprint"):
 		return dt / Settings.f(tuning, &"minder.anger_sprint", 2.0)
 	if ANGER_RATES.has(why):
@@ -1437,7 +1460,7 @@ static func _tuned_provoke(s: SeekState, t: float, dt: float, noisy: Dictionary,
 		if not noisy.has(p.id):
 			continue
 		for why: StringName in noisy[p.id]:
-			var g := anger_gain(why, dt, _live)
+			var g := anger_gain(why, dt, _live, s.hunt)
 			if g <= 0.0:
 				continue
 			gained = true
@@ -1530,6 +1553,48 @@ static func _drag_step(s: SeekState, m: MinderState, t: float, dt: float, events
 	if r != 0 or t - s.drag_t0 >= DRAG_MAX - EPS:
 		_take(s, v, t, events)
 		_drag_end(s, m)
+
+# ---------------------------------------------------------------------------------------------
+# PT1: the owner's playtest of 19 Nov (see the header). Everything below is read only for a state made with
+# with_hunt(); a state without it is stepped exactly as every stored result has it.
+# Owner: "Making it so that it can hear the clicker going off when hunting means it is really difficult to get
+# readings. It takes too long to anger it. And the running being painful should only happen when it is aggrod,
+# not when it's not searching/hunting."
+
+## With the hunt rules on: seconds of sprinting that fill an empty anger bar, and one noise's lump in 100.
+const HUNT_ANGER_SPRINT := 1.0
+## 55, not 50: two noises a few seconds apart still fill it after the cooling between them.
+const HUNT_ANGER_NOISE := 55.0
+
+## The state with PT1 on (a copy).
+static func with_hunt(s0: SeekState) -> SeekState:
+	var s := s0.copy()
+	s.hunt = true
+	return s
+
+## Step 7 with PT1 on: walking or sprinting out of a hide drains only while it searches; standing, creeping or
+## being in a hide gives back at any time on the floor; nothing in a ride. 0 is down.
+static func _hunt_health(s: SeekState, input_of: Dictionary, moved_of: Dictionary, seeking: bool, fl: FloorInput, dt: float,
+		t: float, events: Array[Dictionary]) -> void:
+	if fl.riding:
+		return
+	for p in s.players:
+		var inp: SeekInput = input_of.get(p.id, null)
+		if inp == null or not inp.active or p.status != &"ok":
+			continue
+		var rate := REST_GAIN
+		if p.phase == &"out" and moved_of.get(p.id, false) and inp.gait != &"creep":
+			rate = 0.0
+			if seeking:
+				rate = -SPRINT_DRAIN if inp.gait == &"sprint" else -WALK_DRAIN
+		p.health = clampf(p.health + rate * dt, 0.0, HEALTH_MAX)
+		if p.health <= 0.0:
+			p.health = 0.0
+			p.status = &"down"
+			p.phase = &"out"
+			p.hide = -1
+			p.peeking = false
+			events.append({"type": "down", "t": t, "playerId": p.id})
 
 static func _drag_end(s: SeekState, m: MinderState) -> void:
 	m.mode = &"wander"

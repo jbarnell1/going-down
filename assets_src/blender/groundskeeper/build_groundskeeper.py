@@ -17,10 +17,10 @@ PROOF = REPO / "godot/export/groundskeeper"
 FPS = 30
 RNG = random.Random(91)
 PAL = [
-    (115, 105, 76), (82, 78, 61), (134, 130, 81), (72, 99, 48),
-    (94, 59, 38), (158, 114, 72), (38, 27, 21), (76, 66, 49),
+    (70, 66, 50), (36, 35, 29), (96, 92, 60), (38, 52, 30),
+    (96, 66, 44), (214, 198, 160), (8, 6, 5), (52, 45, 34),
     (155, 156, 142), (188, 146, 68), (98, 100, 90), (60, 57, 45),
-    (177, 159, 106), (77, 90, 46), (122, 112, 69), (44, 42, 37),
+    (150, 136, 92), (52, 60, 36), (84, 78, 52), (30, 28, 25),
 ]
 CLOTH, SHADOW, HEM, MOSS, BARK, SAP, CRACK, BOOT, STEEL, BRASS, OXIDE, CORD, PATCH, LEAF, CANVAS, INK = range(16)
 
@@ -41,6 +41,7 @@ def make_atlas():
                 broad += 9 * vein - 19 * max(0, sin(u * .83 + v * .019)) ** 12
             if tile in (CLOTH, SHADOW, HEM, PATCH, CANVAS):
                 broad += (1 if u % 3 else -2) + (1 if v % 3 else -2)
+                broad -= 26 * max(0, sin(u * .06 + 1.1) * cos(v * .045 + .4)) ** 2
             if tile in (MOSS, LEAF):
                 broad += 9 * sin(u * .32) * cos(v * .21)
             if tile in (STEEL, OXIDE, BRASS):
@@ -209,28 +210,28 @@ def make_rig():
 def body():
     g = Geometry()
     g.loft([
-        ((0, .013, 1.15), .165, .099, "Hips"),
-        ((-.008, .007, 1.25), .251, .153, "Hips"),
-        ((-.005, -.005, 1.39), .244, .157, "Hips"),
-        ((.006, -.014, 1.51), .207, .131, mix("Hips", "Spine", .66)),
-        ((.013, .015, 1.66), .212, .137, "Spine"),
-        ((.014, .025, 1.79), .246, .172, mix("Spine", "Chest", .52)),
-        ((.011, .041, 1.99), .318, .178, "Chest"),
-        ((.003, .038, 2.105), .336, .15, "Chest"),
-        ((-.007, .037, 2.17), .24, .108, "Chest"),
-        ((0, .014, 2.19), .102, .08, mix("Chest", "Neck", .44)),
+        ((0, .013, 1.15), .15, .09, "Hips"),
+        ((-.008, .007, 1.25), .222, .128, "Hips"),
+        ((-.005, .0, 1.39), .15, .098, "Hips"),
+        ((.006, -.004, 1.51), .112, .08, mix("Hips", "Spine", .66)),
+        ((.013, .03, 1.66), .128, .098, "Spine"),
+        ((.014, .058, 1.79), .2, .158, mix("Spine", "Chest", .52)),
+        ((.011, .088, 1.99), .236, .188, "Chest"),
+        ((.003, .07, 2.105), .292, .128, "Chest"),
+        ((-.007, .05, 2.17), .15, .08, "Chest"),
+        ((0, .014, 2.19), .07, .06, mix("Chest", "Neck", .44)),
     ], (1, 0, 0), 20, CLOTH, shade=lambda row, col: SHADOW if col in (3, 4, 5, 6, 7) or row == 0 else CLOTH)
     g.vine([(0, -.018, 2.13), (-.015, -.058, 2.24), (-.019, -.072, 2.34)],
-           [.104, .092, .073], "Neck", CRACK, 12)
+           [.062, .05, .046], "Neck", CRACK, 12)
     # The wood replaces the entire face. It has a chin and crown but no eyes or mouth.
     g.loft([
-        ((-.019, -.084, 2.265), .052, .068, "Head"),
-        ((-.033, -.105, 2.30), .089, .11, "Head"),
-        ((-.026, -.106, 2.37), .127, .13, "Head"),
-        ((-.043, -.094, 2.47), .154, .139, "Head"),
-        ((-.038, -.055, 2.57), .137, .124, "Head"),
-        ((-.064, -.015, 2.659), .093, .086, "Head"),
-        ((-.084, .012, 2.694), .018, .022, "Head"),
+        ((-.019, -.084, 2.255), .04, .06, "Head"),
+        ((-.03, -.118, 2.30), .08, .112, "Head"),
+        ((-.026, -.134, 2.38), .112, .15, "Head"),
+        ((-.04, -.12, 2.48), .122, .152, "Head"),
+        ((-.038, -.076, 2.58), .1, .124, "Head"),
+        ((-.06, -.022, 2.66), .058, .074, "Head"),
+        ((-.08, .01, 2.70), .014, .018, "Head"),
     ], (1, 0, 0), 20, BARK, .073,
         lambda row, col: (SAP if col in (12, 15, 17) else CRACK if col in (14, 18) else BARK))
 
@@ -238,16 +239,16 @@ def body():
         shoulder, elbow, wrist, _ = map(Vector, arm_points(sign))
         upper, lower, hand = ("UpperArm." + side, "Forearm." + side, "Hand." + side)
         g.loft([
-            (shoulder + Vector((-.059 * sign, 0, 0)), .104, .101, "Chest"),
-            (shoulder, .151, .153, mix("Chest", upper, .45)),
-            (shoulder.lerp(elbow, .19), .139, .132, upper),
-            (shoulder.lerp(elbow, .65), .092, .1, upper),
-            (shoulder.lerp(elbow, .89), .101, .104, mix(upper, lower, .20)),
-            (elbow, .092, .103, mix(upper, lower, .55)),
-            (elbow.lerp(wrist, .14), .1, .099, mix(upper, lower, .9)),
-            (elbow.lerp(wrist, .55), .076, .084, lower),
-            (elbow.lerp(wrist, .91), .059, .066, lower),
-            (wrist, .062, .068, mix(lower, hand, .25)),
+            (shoulder + Vector((-.059 * sign, 0, -.03)), .07, .07, "Chest"),
+            (shoulder, .092, .09, mix("Chest", upper, .45)),
+            (shoulder.lerp(elbow, .19), .074, .07, upper),
+            (shoulder.lerp(elbow, .65), .047, .05, upper),
+            (shoulder.lerp(elbow, .89), .054, .056, mix(upper, lower, .20)),
+            (elbow, .07, .074, mix(upper, lower, .55)),
+            (elbow.lerp(wrist, .14), .056, .056, mix(upper, lower, .9)),
+            (elbow.lerp(wrist, .55), .04, .044, lower),
+            (elbow.lerp(wrist, .91), .034, .038, lower),
+            (wrist, .046, .05, mix(lower, hand, .25)),
         ], (0, 0, 1), 14, CLOTH, .065, lambda row, col: SHADOW if col in (5, 6, 7, 8) else CLOTH)
         g.loft([
             (wrist, .047, .057, hand),
@@ -257,11 +258,13 @@ def body():
         ], (0, 0, 1), 12, BOOT)
         for i in range(4):
             x, y, z = wrist
-            digit = .154 + .028 * sin(i * pi / 4)
+            digit = .2 + .05 * sin(i * pi / 3)
+            spread = .05 - .034 * i
             g.vine([(x + sign * .12, y + .036 - .029 * i, z),
-                    (x + sign * digit, y + .04 - .03 * i, z - .012),
-                    (x + sign * (digit + .055 - i * .006), y + .04 - .03 * i, z - .024)],
-                   [.019, .015, .007], hand, BOOT)
+                    (x + sign * digit, y + spread, z - .008),
+                    (x + sign * (digit + .12 - i * .008), y + spread * 1.5, z - .05),
+                    (x + sign * (digit + .19 - i * .012), y + spread * 1.9, z - .12)],
+                   [.017, .014, .009, .002], hand, SAP if i == 1 else BOOT)
         x, y, z = wrist
         g.vine([(x + sign * .033, y - .049, z),
                 (x + sign * .069, y - .097, z - .003),
@@ -270,16 +273,16 @@ def body():
         hip, knee, ankle, _ = map(Vector, leg_points(sign))
         thigh, shin, foot = ("Thigh." + side, "Shin." + side, "Foot." + side)
         g.loft([
-            (hip + Vector((0, 0, .12)), .119, .133, "Hips"),
-            (hip, .14, .148, mix("Hips", thigh, .65)),
-            (hip.lerp(knee, .25), .135, .142, thigh),
-            (hip.lerp(knee, .68), .117, .113, thigh),
-            (hip.lerp(knee, .9), .112, .115, mix(thigh, shin, .25)),
-            (knee, .121, .121, mix(thigh, shin, .56)),
-            (knee.lerp(ankle, .16), .115, .109, mix(thigh, shin, .93)),
-            (knee.lerp(ankle, .38), .108, .118, shin),
-            (knee.lerp(ankle, .73), .082, .09, shin),
-            (knee.lerp(ankle, .88), .085, .09, shin),
+            (hip + Vector((0, 0, .12)), .1, .11, "Hips"),
+            (hip, .112, .118, mix("Hips", thigh, .65)),
+            (hip.lerp(knee, .25), .09, .096, thigh),
+            (hip.lerp(knee, .68), .066, .068, thigh),
+            (hip.lerp(knee, .9), .074, .078, mix(thigh, shin, .25)),
+            (knee, .094, .096, mix(thigh, shin, .56)),
+            (knee.lerp(ankle, .16), .078, .076, mix(thigh, shin, .93)),
+            (knee.lerp(ankle, .38), .064, .07, shin),
+            (knee.lerp(ankle, .73), .052, .056, shin),
+            (knee.lerp(ankle, .88), .058, .06, shin),
             (ankle, .082, .082, mix(shin, foot, .5)),
         ], (1, 0, 0), 14, CLOTH, .067,
             lambda row, col: SHADOW if row >= 8 or col in (7, 8, 9) else HEM if row == 5 and col in (3, 4) else CLOTH)
@@ -310,20 +313,46 @@ def badge(g, x, y, z, width, height, angle, tile):
 
 
 def details(g):
-    # Hide asymmetrical bark plates and a coarse split in the head's actual silhouette.
-    for i, (x, y, z) in enumerate([
-        (-.143, -.175, 2.37), (-.095, -.217, 2.32), (-.046, -.234, 2.34),
-        (.015, -.222, 2.31), (.065, -.199, 2.36), (.107, -.163, 2.40),
-    ]):
-        g.vine([(x, y + .022, z), (x - .01, y - .013, z + .092),
-                (x + .016, y - .009, z + .195), (x - .025, y + .049, z + .252)],
-               [.009, .019, .021, .006], "Head", SAP if i in (1, 4) else BARK, 7)
-    g.vine([(-.052, -.196, 2.30), (-.039, -.243, 2.38), (-.064, -.245, 2.477),
-            (-.048, -.194, 2.555), (-.088, -.11, 2.647)],
-           [.007, .012, .022, .015, .009], "Head", CRACK, 6)
-    for x, z, lean in [(-.156, 2.51, -.068), (.07, 2.55, .052), (-.027, 2.60, -.02)]:
-        g.vine([(x, -.055, z), (x + lean * .63, -.024, z + .11),
-                (x + lean, .031, z + .18)], [.035, .023, .001], "Head", BARK, 6)
+    # The split. The trunk has opened down its front from brow to chin: a black gap with pale sapwood lips.
+    # It is not a mouth and not an eye, and it is the only thing on the head that catches a torch.
+    gap = [(-.03, -.236, 2.285, .008), (-.034, -.286, 2.35, .04), (-.03, -.298, 2.43, .058),
+           (-.04, -.284, 2.50, .044), (-.046, -.232, 2.58, .02), (-.058, -.14, 2.65, .005)]
+    g.loft([((x, y, z), w, .014, "Head") for x, y, z, w in gap], (1, 0, 0), 8, CRACK, 0)
+    for side in (-1, 1):
+        g.vine([(x + side * (w + .016), y + .016 + .34 * w, z) for x, y, z, w in gap],
+               [.01, .02, .024, .021, .015, .006], "Head", SAP, 6)
+    # Splinters where the wood tore, longest on its left.
+    for x, z, lean, reach in [(-.11, 2.52, -.06, .1), (.04, 2.56, .05, .16), (-.03, 2.62, -.02, .12)]:
+        g.vine([(x, -.055, z), (x + lean * .63, -.024, z + reach * .6),
+                (x + lean, .031, z + reach)], [.03, .018, .001], "Head", BARK, 6)
+    # One dead branch has grown out through the left of the skull and kept going.
+    g.vine([(.05, -.03, 2.52), (.13, -.01, 2.66), (.15, .03, 2.82), (.24, .05, 2.93), (.27, .04, 3.0)],
+           [.04, .03, .022, .012, .002], "Head", BARK, 7)
+    g.vine([(.15, .03, 2.82), (.09, .08, 2.9), (.1, .1, 2.97)], [.016, .009, .001], "Head", BARK, 5)
+    g.vine([(.13, -.01, 2.66), (.23, -.06, 2.7), (.3, -.07, 2.78)], [.016, .009, .001], "Head", SAP, 5)
+    # Lichen hangs off the chin in a few long wet strings, over the badges.
+    for i, (x, drop) in enumerate([(-.1, .34), (-.07, .62), (-.045, .2), (-.01, .48), (.02, .74), (.05, .27), (.075, .5)]):
+        y = -.2 + .12 * abs(x + .02)
+        sway = .02 * sin(i * 2.1)
+        g.vine([(x, y, 2.31), (x + sway, y - .02, 2.31 - drop * .4), (x - sway, y - .012, 2.31 - drop * .8),
+                (x + sway * .5, y - .004, 2.31 - drop)], [.009, .007, .006, .001], "Head",
+               LEAF if i % 3 == 0 else MOSS, 4)
+    # Roots have come out through the back of the coverall and bent it into a hump.
+    for i, (x, lift) in enumerate([(-.16, .0), (-.05, .05), (.07, .03), (.17, -.03)]):
+        g.vine([(x, .15, 1.72 + lift), (x * 1.1, .27, 1.9 + lift), (x * .9, .3, 2.08 + lift),
+                (x * .6, .21, 2.2 + lift), (x * .5, .1, 2.24 + lift * .5)],
+               [.03, .05, .052, .036, .012], "Chest", BARK if i % 2 else CRACK, 7)
+    for x, z in [(-.1, 2.02), (.03, 2.1), (.13, 1.96), (-.02, 1.86)]:
+        g.vine([(x, .29, z), (x * 1.3, .4, z + .05), (x * 1.5, .47, z - .03)],
+               [.02, .011, .001], "Chest", SAP if x > .1 else BARK, 5)
+    # What is left of the coverall below the belt hangs in strips to the knees.
+    for i in range(11):
+        angle = tau * i / 11 + .2
+        x, y = .2 * cos(angle), .12 * sin(angle)
+        drop = RNG.uniform(.22, .5)
+        g.sheet([(x - .03, y, 1.3), (x + .03, y, 1.31), (x * 1.08 + .022, y * 1.08, 1.3 - drop * .6),
+                 (x * 1.1, y * 1.1, 1.3 - drop), (x * 1.06 - .028, y * 1.06, 1.3 - drop * .7)],
+                "Hips", [SHADOW, HEM, MOSS, SHADOW][i % 4], .006)
 
     # High, lopsided survey tarp running off the back and through one shoulder.
     for n in range(10):
@@ -349,10 +378,11 @@ def details(g):
                 (1.075 + drift, -.043 - drift * .42, 2.175),
                 (1.25 + drift * .2, -.023 - drift * .39, 2.143)],
                [.024, .024, .019, .011], "Forearm.L", BARK if i % 3 else SAP, 6)
-        g.vine([(1.26, -.035 + drift * .48, 2.15), (1.39, -.065 + drift * .39, 2.12 - drift * .5),
-                (1.51 + drift * .7, -.058 + drift * .75, 2.064 - drift * .45),
-                (1.55 + drift, -.042 + drift, 2.048 - drift * .67)],
-               [.019, .018, .009, .001], "Hand.L", BARK, 6)
+        g.vine([(1.26, -.035 + drift * .48, 2.15), (1.42, -.075 + drift * .5, 2.12 - drift * .5),
+                (1.62 + drift * .8, -.07 + drift * 1.1, 2.05 - drift * .6),
+                (1.8 + drift * 1.4, -.03 + drift * 1.6, 2.0 - drift),
+                (1.93 + drift * 1.6, .0 + drift * 2, 1.9 - drift * 1.6)],
+               [.02, .019, .012, .007, .001], "Hand.L", BARK if i != 2 else SAP, 6)
 
     for _ in range(43):
         scale = RNG.uniform(.023, .06)
@@ -653,6 +683,8 @@ def preview(rig):
         ("07_sweep", "sweep", .83, (-1.55, -3.72, 1.55), (0, 0, 1.26), 290, 135),
         ("08_snatch_open", "snatch", 4 / FPS, (.43, -3.25, 1.55), (0, -.4, 1.31), 190, 125),
         ("09_snatch_closed", "snatch", .2, (.43, -3.25, 1.55), (0, -.4, 1.31), 190, 125),
+        ("10_face", "listen", 0, (.3, -1.7, 1.6), (0, -.1, 2.3), 120, 60),
+        ("11_dark", "lean", 1.55, (.2, -2.2, 1.6), (0, -.4, 1.9), 35, 20),
     ]:
         rig.animation_data.action = bpy.data.actions[anim]
         frame = time * FPS

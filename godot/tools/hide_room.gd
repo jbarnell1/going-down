@@ -17,6 +17,7 @@ func _start(now: float) -> void:
 	if seed.is_empty():
 		seed = Crypto.new().generate_random_bytes(6).hex_encode()
 	rules = HostRules.new(true, start_depth, Places.FULL, days, false, false, false, false, false, false, false, false, tuned)
+	rules.minder_hunt = tuned   # PT1: in the game's rooms the hunt is on exactly when the tuned Playroom is
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))

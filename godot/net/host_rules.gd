@@ -48,6 +48,9 @@
 #  - The Playroom tuned from the owner's first play (sim/run.gd playroom_tuned, sim/seek.gd T15m): off unless
 #    asked (`playroom_tuned`); the game's rooms ask for it, so there are 30-45 s to hide, an anger bar, and the
 #    Minder grabs anyone within 1 m outside a count. prepare() turns it on before the first tick.
+#  - The Minder's hunt from the owner's playtest of 19 Nov (sim/run.gd minder_hunt, sim/seek.gd PT1): off unless
+#    asked (`minder_hunt`, the last parameter); the game's rooms ask for it with the tuned Playroom, so the Minder
+#    never acts on an instrument, angers sooner, and health drains only while it searches.
 #  - The day quota's lock (sim/run.gd day_lock, FD2): off unless asked (`day_lock`, the last parameter); the
 #    game's rooms ask for it together with the floor quota, so BANK is refused until the crew has earned the
 #    day quota. prepare() turns it on before the first tick, and only when the run has days and the floor
@@ -139,6 +142,8 @@ var steady_gaze: bool
 var throwing_arm: bool
 var nerve_passive: bool
 var annex_drag: bool
+## The Minder's hunt from the owner's playtest of 19 Nov (off unless asked; sim/run.gd minder_hunt, PT1).
+var minder_hunt: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -149,7 +154,8 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		inventory_: bool = false, furniture_layout_: bool = false, resident_navigation_: bool = false,
 		shop_: bool = false, nightly_reels_: bool = false, garden_cones_: bool = false, garden_search_: bool = false,
 		deep_pockets_: bool = false, second_wind_: bool = false, soft_shoes_: bool = false, flare_: bool = false, lamp_: bool = false, badge_search_: bool = false, quick_fingers_: bool = false, long_burn_: bool = false, field_dressing_: bool = false, doorway_shadow_: bool = false, steady_gaze_: bool = false, throwing_arm_: bool = false,
-		nerve_passive_: bool = false, annex_drag_: bool = false) -> void:
+		nerve_passive_: bool = false, annex_drag_: bool = false, minder_hunt_: bool = false) -> void:
+	minder_hunt = minder_hunt_
 	garden_cones = garden_cones_
 	garden_search = garden_search_
 	deep_pockets = deep_pockets_
@@ -284,6 +290,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_lonely(s)
 	if playroom_tuned and not s.playroom_tuned:
 		s = Run.with_playroom_tuned(s)
+	if minder_hunt and not s.minder_hunt:
+		s = Run.with_minder_hunt(s)
 	# The day lock needs something to earn: only with days and the floor quota on (so never with the
 	# resident off, and never with the test switch quota=0).
 	if day_lock and s.days and s.quota and not s.day_lock:

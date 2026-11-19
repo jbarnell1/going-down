@@ -180,8 +180,9 @@ static func game_values() -> Dictionary:
 		&"minder.hide_more": Seek.TUNED_HIDE_LENGTHS[1] - Seek.TUNED_HIDE_LENGTHS[0],
 		&"minder.last_hide": Seek.TUNED_LAST_HIDE,
 		&"minder.search": Seek.TUNED_SEARCH,
-		&"minder.anger_sprint": 1.0 / float(Seek.ANGER_RATES[&"sprint"]),
-		&"minder.anger_noise": 100.0 * float(Seek.ANGER_LUMPS[&"emote"]),
+		# The Minder's hunt (PT1) is on with it in the game's rooms: its own anger numbers.
+		&"minder.anger_sprint": Seek.HUNT_ANGER_SPRINT,
+		&"minder.anger_noise": Seek.HUNT_ANGER_NOISE,
 		&"minder.anger_cool": 1.0 / Seek.ANGER_COOL,
 		&"minder.last_count": Seek.LAST_LENGTH,
 		&"minder.calm": Seek.CALM_TIME,
@@ -402,7 +403,9 @@ static func game_floor(seed: String, depth: int, n: int) -> Run.RunState:
 	var ids: Array[String] = []
 	for k in n:
 		ids.append("p%d" % k)
-	var rules := HostRules.new(true, depth, Places.FULL, false, false, true, true, true, true, true, true, true, true)
+	# The game's switches, the Minder's hunt (PT1, the last parameter) with the tuned Playroom as the rooms have it.
+	var rules := HostRules.new(true, depth, Places.FULL, false, false, true, true, true, true, true, true, true, true,
+		false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true)
 	var st := rules.prepare(Run.create_run(seed, ids, Places.FULL))
 	var plan := st.plan
 	var dist := Floor.distances_from(plan, plan.landing)
@@ -504,6 +507,7 @@ func test_untuned_empty_and_all_at_today_match_tick_for_tick(t: T) -> void:
 		var n := 1 + (i / 4) % 4
 		var seed := "ls1-same-%d" % i
 		var base := game_floor(seed, depth, n)
+		t.check(base.minder_hunt and base.playroom_tuned, "%s: the game's switches include the Minder's hunt" % seed)
 		places[base.plan.place] = int(places.get(base.plan.place, 0)) + 1
 		var style: StringName = &"stay" if i % 2 == 0 else &"flee"
 		var lanes: Array[Lane] = [Lane.new(base, style), Lane.new(Run.with_tuning(base, {}), style), Lane.new(Run.with_tuning(base, ten_at_today()), style)]
@@ -1116,8 +1120,10 @@ func test_boarding_hold_and_ride(t: T) -> void:
 ## `given`, out on the floor, everyone creeping.
 static func tuned_rig(seed: String, given: Dictionary, t: T) -> CountRun.Rig:
 	var r := CountRun.Rig.new(seed)
-	# The game's Playroom: the tuned one (net/host_rules.gd playroom_tuned).
-	var rules := HostRules.new(true, 4, Places.FULL, false, false, false, false, false, false, false, false, false, true)
+	# The game's Playroom: the tuned one (net/host_rules.gd playroom_tuned) with the Minder's hunt (PT1, the last
+	# parameter), as the rooms have it.
+	var rules := HostRules.new(true, 4, Places.FULL, false, false, false, false, false, false, false, false, false, true,
+		false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true)
 	r.st = rules.prepare(Run.create_run(seed, CountRun.IDS, Places.FULL))
 	for p in r.st.players:
 		r.bodies[p.id] = p.body
@@ -1205,7 +1211,10 @@ func test_minder_anger_and_count_lengths(t: T) -> void:
 	t.eq(Seek.tuned_hide(null, 2, true), Seek.TUNED_LAST_HIDE, "the last count's, untuned")
 	for v: float in [5.0, 34.0, 100.0]:
 		t.eq(Seek.anger_gain(&"emote", DT, Settings.make({&"minder.anger_noise": v})), v / 100.0, "minder.anger_noise = %.0f: one noise adds %.2f" % [v, v / 100.0])
-	t.eq(Seek.anger_gain(&"emote", DT, Settings.make({&"minder.anger_noise": 34.0})), Seek.anger_gain(&"emote", DT, null), "a noise at today's: the untuned lump")
+	t.eq(Seek.anger_gain(&"emote", DT, Settings.make({&"minder.anger_noise": 34.0})), Seek.anger_gain(&"emote", DT, null), "a noise at the old 34 without the hunt: the untuned lump")
+	var nrow := Settings.row(&"minder.anger_noise")
+	t.eq(Seek.anger_gain(&"emote", DT, Settings.make({&"minder.anger_noise": nrow.today}), true), Seek.anger_gain(&"emote", DT, null, true), "a noise at today's (the hunt, as the rooms have it): the untuned lump")
+	t.check(tuned_rig("ls4-count-0", {}, t).seek().hunt, "the proofs above ran with the Minder's hunt on")
 	for v: float in [10.0, 50.0, 300.0]:
 		t.eq(Seek.anger_cool(Settings.make({&"minder.anger_cool": v})), 1.0 / v, "minder.anger_cool = %.0f: it cools %.4f a second" % [v, 1.0 / v])
 	t.eq(Seek.anger_cool(Settings.make({&"minder.anger_cool": 50.0})), Seek.anger_cool(null), "cooling at today's: the untuned rate")

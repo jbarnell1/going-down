@@ -64,6 +64,8 @@ const CARD_ROWS: Array[Array] = [
 ]
 ## The three lines under the card: the job, and nothing about how recording works (North Star C2).
 const CARD_LINES: Array[String] = ["RECORD WHAT LIVES ON EACH FLOOR.", "MEET THE QUOTA. CALL THE LIFT.", "STAND ON BANK TO GO HOME, DOWN TO GO DEEPER."]
+## The HOST PLAYTEST picker's line under its title (PT6: both host keys).
+const PLAYTEST_SUBTITLE := "SOLO SANDBOX   /   IN GAME: F6 JUMP OR RESTART, F8 SETTINGS"
 const READY_LINE := "ENTER OR CLICK: I'M READY"
 const UNREADY_LINE := "READY. ENTER OR CLICK: NOT YET"
 ## The card's action column wraps at this many characters.
@@ -500,7 +502,7 @@ func _draw() -> void:
 			var spacing := 19.0 * px
 			var y := (size.y - playtest_choices.size() * spacing) * 0.5 + 10 * px
 			_centred("HOST PLAYTEST", y - 30 * px, px * 1.5, AMBER)
-			_centred("SOLO SANDBOX   /   F6 IN GAME TO JUMP OR RESTART", y - 15 * px, px, DIM)
+			_centred(PLAYTEST_SUBTITLE, y - 15 * px, px, DIM)
 			for choice in playtest_choices:
 				_button(str(choice["id"]), str(choice["label"]), Vector2(size.x * 0.5, y), px, 142)
 				y += spacing

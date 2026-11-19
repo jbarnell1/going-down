@@ -25,7 +25,9 @@
 # Playroom the view out kept (T15m: the ball pit's camera down at the balls, a few at the bottom edge; the
 # others the room through the gap and its frame), elsewhere the dark inside; the gap's frame (peeking, W); a rising toy-piano trill and picture noise as their own
 # sight or gap total rises; the health bar once the first count has ended, with its rates printed; the
-# instrument warning (ticking in a hide within 5 m of it is a reason: LOWER IT); winding down; found (the
+# instrument warning (ticking in a hide within 5 m of it is a reason: LOWER IT); with the Minder's hunt (PT1,
+# hunt_of) the bar shows from the first search with HUNT_HEALTH_RATES, the anger rates are the hunt's, and
+# there is no instrument warning (it never acts on one); winding down; found (the
 # camera is turned to the Minder and, as it bends for the catch, its mask fills the screen); taken (the
 # party table, in a paper hat, watching); down (YOU WENT DOWN, main.gd). Other players at the table wear
 # paper hats too (drawn here, over their figures).
@@ -77,19 +79,47 @@ const KIND_NAMES := {"pit": "BALL PIT", "slide": "TUBE SLIDE", "den": "CRAWL DEN
 	"chest": "TOY CHEST", "cubby": "COAT CUBBY", "bed": "UNDER THE BED", "cabinet": "IN THE CABINET", "desk": "UNDER THE DESK",
 	"shed": "IN THE SHED", "bench": "UNDER THE BENCH", "under": "UNDER THE BANDSTAND", "log": "IN THE HOLLOW LOG"}
 const HEALTH_RATES := "WALK -3/S  SPRINT -8/S  STILL OR CREEP +1/S"
+## PT1 (the Minder's hunt, sim/seek.gd): walking and sprinting cost health only while it searches.
+const HUNT_HEALTH_RATES := "WALK -3/S  SPRINT -8/S ONLY WHILE IT SEARCHES  STILL OR CREEP +1/S"
 ## T15m: what fills the anger bar (sim/seek.gd ANGER_RATES and ANGER_LUMPS), printed under it.
 const ANGER_RATES := "SPRINT 2 S OR 3 NOISES FILL IT"
 ## Live settings: the run's tuning as this client has it (the game sets it every frame; null for none), so the
 ## printed rates follow the host's minder.anger_sprint and minder.anger_noise.
 var tuning: Settings.Values = null
 
-## The anger bar's printed rates: ANGER_RATES, or the same words with the host's numbers.
-static func anger_rates_text(t: Settings.Values) -> String:
-	if t == null or not (t.has(&"minder.anger_sprint") or t.has(&"minder.anger_noise")):
+## The anger bar's printed rates: ANGER_RATES, or the same words with the host's numbers. `hunt` (PT1): the
+## numbers in force are the host's or else Seek.HUNT_ANGER_SPRINT and Seek.HUNT_ANGER_NOISE.
+static func anger_rates_text(t: Settings.Values, hunt: bool = false) -> String:
+	if not hunt and (t == null or not (t.has(&"minder.anger_sprint") or t.has(&"minder.anger_noise"))):
 		return ANGER_RATES
-	var secs := Settings.f(t, &"minder.anger_sprint", 1.0 / float(Seek.ANGER_RATES[&"sprint"]))
-	var noises := ceili(100.0 / Settings.f(t, &"minder.anger_noise", 100.0 * float(Seek.ANGER_LUMPS[&"emote"])) - 1e-9)
+	var sprint0 := Seek.HUNT_ANGER_SPRINT if hunt else 1.0 / float(Seek.ANGER_RATES[&"sprint"])
+	var noise0 := Seek.HUNT_ANGER_NOISE if hunt else 100.0 * float(Seek.ANGER_LUMPS[&"emote"])
+	var secs := Settings.f(t, &"minder.anger_sprint", sprint0)
+	var noises := ceili(100.0 / Settings.f(t, &"minder.anger_noise", noise0) - 1e-9)
 	return "SPRINT %s S OR %d NOISE%s FILL IT" % [("%.1f" % secs).trim_suffix(".0"), noises, "" if noises == 1 else "S"]
+
+## PT1: whether the run has the Minder's hunt. The rooms turn it on exactly with the tuned Playroom
+## (server/room.gd, net/local_room.gd), whose seek block carries "anger".
+static func hunt_of(seek: Dictionary) -> bool:
+	return seek.has("anger")
+
+## The health bar's printed rates.
+static func health_rates_text(hunt: bool) -> String:
+	return HUNT_HEALTH_RATES if hunt else HEALTH_RATES
+
+## Whether the health bar shows: once the first count has ended; with the hunt also from the first search on
+## (health drains there). `phase`: this screen's count phase ("hide", "seek", "over" or "").
+static func shows_health(seek: Dictionary, phase: String, hunt: bool) -> bool:
+	if int(seek["ended"]) >= 1:
+		return true
+	return hunt and bool(seek["counting"]) and phase == "seek"
+
+## The line for a raised instrument in a Playroom hide during a count, or "" (none: the other prompts stand).
+## With the hunt the Minder never acts on an instrument, so nothing is said.
+static func ticking_note(raised: bool, counting: bool, near: bool, hunt: bool) -> String:
+	if hunt or not raised or not counting:
+		return ""
+	return "IT HEARS THE TICKING IN HERE. LOWER IT. (E)" if near else "TICKING IN A HIDE WITHIN 5 M OF IT MAKES IT LOOK IN"
 
 static var test_break := ""
 
@@ -394,7 +424,8 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 	hud.count_by = started_by if count_phase == "hide" else ""
 	# T15m: the anger bar, the host's own number (the snapshot's seek block), the same on every screen.
 	hud.anger = clampf(float(seek["anger"]), 0.0, 1.0) if seek.has("anger") else -1.0
-	hud.anger_rates = anger_rates_text(tuning) if seek.has("anger") else ""
+	var hunt := hunt_of(seek)
+	hud.anger_rates = anger_rates_text(tuning, hunt) if seek.has("anger") else ""
 	# --- this player.
 	var look: Variant = null
 	var note := ""
@@ -425,10 +456,9 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 			note = "F  GET OUT    HOLD W  LEAN TO THE GAP" if ov_mode == "sat" else "LET GO OF W TO SIT BACK"
 			var inst: Variant = s.get("inst")
 			var raised := inst is Dictionary and bool((inst as Dictionary)["raised"])
-			if raised and bool(seek["counting"]) and pose is Dictionary and float(o.get("distance", 99.0)) <= LOWER_RANGE:
-				note = "IT HEARS THE TICKING IN HERE. LOWER IT. (E)"
-			elif raised and bool(seek["counting"]):
-				note = "TICKING IN A HIDE WITHIN 5 M OF IT MAKES IT LOOK IN"
+			var tick_note := ticking_note(raised, bool(seek["counting"]), pose is Dictionary and float(o.get("distance", 99.0)) <= LOWER_RANGE, hunt)
+			if tick_note != "":
+				note = tick_note
 		elif phase == "entering":
 			note = "GETTING IN..."
 		elif phase == "leaving":
@@ -455,8 +485,8 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 	if status != "found":
 		catch_k = move_toward(catch_k, 0.0, dt * 4.0)
 	hud.seek_note = note
-	hud.health = float(row["health"]) if row is Dictionary and int(seek["ended"]) >= 1 and status == "ok" else -1.0
-	hud.health_rates = HEALTH_RATES
+	hud.health = float(row["health"]) if row is Dictionary and shows_health(seek, count_phase, hunt) and status == "ok" else -1.0
+	hud.health_rates = health_rates_text(hunt)
 	# The overlay: the dark inside, the gap's frame, the catch, the hat.
 	overlay.mode = ov_mode
 	overlay.kind = ov_kind

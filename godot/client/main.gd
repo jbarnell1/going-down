@@ -806,12 +806,50 @@ func _on_screen_shown(which: String) -> void:
 	if which != "" and mode != "game":
 		mode = which
 
+## The host's tools (PT6): what F6 and F8 do, said once to the host as a game starts and on the controls card.
+const HOST_KEYS_ALONE := "F6 JUMP TO A FLOOR   F8 SETTINGS"
+const HOST_KEYS_ROOM := "YOU ARE THE HOST. F8 CHANGES SETTINGS"
+const F6_IN_ROOM := "THE FLOOR PICKER IS ON THE TITLE: HOST PLAYTEST"
+const HOST_KEYS_MS := 6000
+
+## A game played alone on this machine (Play Alone, with or without bots, or the sandbox), in a run.
+func _solo_game() -> bool:
+	return link != null and link.local and mode == "game"
+
+## The host's line as a game starts: alone, F6 and F8; the host of a shared room, F8; anyone else, nothing.
+func _host_keys_line() -> String:
+	if link == null or not bool(link.rc.is_host()):
+		return ""
+	return HOST_KEYS_ALONE if link.local and start.playtest_available else HOST_KEYS_ROOM
+
+func _host_keys_notice() -> void:
+	var line := _host_keys_line()
+	if not line.is_empty():
+		hud.note = line
+		_note_until = Time.get_ticks_msec() + HOST_KEYS_MS
+
+## The controls card's F6 and F8 rows follow where they work (client/hud.gd menu_rows).
+func _host_tools_hud() -> void:
+	hud.f6_row = start.playtest_available and _solo_game()
+	hud.f8_row = "" if link == null else ("host" if bool(link.rc.is_host()) else "guest")
+
+## F6: alone, the floor picker (a solo game becomes the sandbox when a floor is chosen); in a shared room it
+## never jumps (no floor jump exists on the server), it says where the picker is.
+func _f6_pressed() -> void:
+	if link != null and not link.local:
+		hud.note = F6_IN_ROOM
+		_note_until = Time.get_ticks_msec() + 4000
+		return
+	_open_playtest()
+
 func _open_playtest() -> void:
-	if not start.playtest_available or (mode != "title" and not _playtest_active):
+	var from_game := _playtest_active or _solo_game()
+	if not start.playtest_available or (mode != "title" and not from_game):
 		return
 	start.playtest_choices.clear()
-	if _playtest_active:
+	if from_game:
 		start.playtest_choices.append({"id": "resume", "label": "RESUME"})
+	if _playtest_active:
 		start.playtest_choices.append({"id": "restart", "label": "RESTART SELECTED AREA"})
 	start.playtest_choices.append({"id": "orientation", "label": "CONTINUANCE PRACTICE"})
 	for destination in LocalRoom.playtest_destinations(seed, Session.deck):
@@ -875,9 +913,11 @@ func _select_playtest(id: String) -> void:
 	lr.open_local(seed, player_name, entity_on, face)
 	if not practice:
 		_configure_campaign_trades(lr)
+	# The host's changed settings go with the jump (in memory: the sandbox saves none).
+	var carried: Dictionary = (link.rc as LocalRoom).desk.asked if link != null and link.rc is LocalRoom else {}
 	if practice:
-		lr.start_orientation()
-	elif not lr.start_playtest(depth):
+		lr.start_orientation(carried)
+	elif not lr.start_playtest(depth, carried):
 		start.error = "THAT FLOOR IS UNAVAILABLE"
 		return
 	if not _playtest_active:
@@ -894,8 +934,9 @@ func _select_playtest(id: String) -> void:
 	_playtest_orientation = practice
 	link = PlayLink.new(lr, true)
 	_enter_game()
-	hud.note = "CONTINUANCE PRACTICE" if practice else "F6  HOST PLAYTEST"
-	_note_until = Time.get_ticks_msec() + 4000
+	if practice:
+		hud.note = "CONTINUANCE PRACTICE"
+		_note_until = Time.get_ticks_msec() + 4000
 
 func _configure_campaign_trades(lr: LocalRoom) -> void:
 	var full_deck := Session.deck == Places.FULL
@@ -1066,6 +1107,7 @@ func _enter_game() -> void:
 	# The browser needs a click for that: CLICK TO LOOK shows instead. Never under automation.
 	if not automated and not OS.has_feature("web"):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_host_keys_notice()
 
 ## Plain words for why the connection closed.
 func _close_words(code: int) -> String:
@@ -1262,7 +1304,7 @@ func _input(event: InputEvent) -> void:
 		if event is InputEventKey:
 			var key := event as InputEventKey
 			if key.pressed and not key.echo and (key.physical_keycode == KEY_ESCAPE or key.physical_keycode == KEY_F6):
-				if _playtest_active:
+				if _playtest_active or _solo_game():
 					_resume_playtest()
 				else:
 					_back_to_title()
@@ -1272,10 +1314,10 @@ func _input(event: InputEvent) -> void:
 		return
 	if _settings_input(event):
 		return
-	if _playtest_active and event is InputEventKey:
+	if (_playtest_active or mode == "game") and event is InputEventKey:
 		var key := event as InputEventKey
 		if key.pressed and not key.echo and key.physical_keycode == KEY_F6:
-			_open_playtest()
+			_f6_pressed()
 			get_viewport().set_input_as_handled()
 			return
 	if mode != "game":
@@ -1661,6 +1703,7 @@ func _process(delta: float) -> void:
 	if Time.get_ticks_msec() > _note_until:
 		hud.note = ""
 	settings_panel.rc = link.rc if link != null else null
+	_host_tools_hud()
 	hide_view.tuning = link.client().tuning if link != null and link.client() != null else null
 	if link == null:
 		hud.menu_on = menu_overlay

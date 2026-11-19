@@ -4,7 +4,7 @@
 // `auto=1`, a test channel each) that join through the start screen's own Join. Bob's link has 0.3 s of delay
 // each way. From BOTH screens:
 //   - on arrival the anger bar shows, empty;
-//   - Bob sprints for a second: no count, the bar about half full, and each screen's bar is the host's number
+//   - Bob sprints for half a second: no count, the bar about half full, and each screen's bar is the host's number
 //     for its snapshot (Ann's and Bob's copies of the same tick agree);
 //   - Bob sprints on: the count starts when it is full, with 30 s to hide on both screens (the same t0);
 //   - both hide in the ball pit: sat back, the view out kept (the camera down at the balls, a few balls at
@@ -147,10 +147,10 @@ try {
   // ---- 1. On the Playroom: the anger bar, empty, on both.
   a = await until(A.state, (s) => s.hud.anger >= 0, 5000);
   b = await until(B.state, (s) => s.hud.anger >= 0, 5000);
-  check('the run starts on the tuned Playroom: the anger bar shows, empty, on both screens', a.place === 'playroom' && b.place === 'playroom' && a.hud.anger === 0 && b.hud.anger === 0 && /SPRINT 2 S/.test(a.hud.angerRates),
+  check('the run starts on the tuned Playroom: the anger bar shows, empty, on both screens', a.place === 'playroom' && b.place === 'playroom' && a.hud.anger === 0 && b.hud.anger === 0 && /SPRINT 1 S/.test(a.hud.angerRates),
     `A ${a.place} anger ${a.hud.anger} "${a.hud.angerRates}", B ${b.place} anger ${b.hud.anger}`);
 
-  // ---- 2. Out of the car, creeping (no angrier); in the lobby (no squeaky tiles) Bob sprints for a second:
+  // ---- 2. Out of the car, creeping (no angrier); in the lobby (no squeaky tiles) Bob sprints for half a second:
   // no count, the bar part full, the host's number.
   for (const c of [A, B]) await c.cmd('move 1 0 0 1');
   await sleep(1800);
@@ -159,15 +159,15 @@ try {
   a = await A.state();
   check('creeping out of the car made it no angrier', a.seek.n === 0 && a.seek.anger === 0, `count ${a.seek.n}, anger ${a.seek.anger}`);
   await B.cmd('move 0 1 1 0');
-  await sleep(500);
+  await sleep(250);
   await B.cmd('move 0 -1 1 0');
-  await sleep(500);
+  await sleep(250);
   await B.cmd('stopmove');
   await sleep(700);
   a = await A.state();
   b = await B.state();
   const common = (a.seekHist ?? []).map((h) => h[0]).filter((t) => angerAt(b, t) !== undefined && t > 0).slice(-1)[0];
-  check('a second of sprint: no count, the bar part full, each screen the host\'s number, the same tick the same on both',
+  check('half a second of sprint (a whole second fills it since PT1): no count, the bar part full, each screen the host\'s number, the same tick the same on both',
     a.seek.n === 0 && a.hud.anger > 0.2 && a.hud.anger < 0.8 && Math.abs(a.hud.anger - a.seek.anger) < 1e-9 && Math.abs(b.hud.anger - b.seek.anger) < 1e-9
       && common !== undefined && angerAt(a, common) === angerAt(b, common),
     `A bar ${r3(a.hud.anger)} (snapshot ${r3(a.seek.anger)}), B bar ${r3(b.hud.anger)}; tick ${r3(common)}: A ${r3(angerAt(a, common))}, B ${r3(angerAt(b, common))}`);

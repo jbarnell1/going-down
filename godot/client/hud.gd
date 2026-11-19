@@ -51,9 +51,15 @@ const MENU_ROWS: Array[Array] = [
 	["T", "TAPE LOOK ON / OFF"],
 	["HOLD R", "EMOTE WHEEL: AIM, LET GO"],
 	["TAP R", "CLOSE THE WHEEL"],
-	["F8", "HOST SETTINGS"],
 	["ESC", "THIS MENU"],
 ]
+## The host's tools on the card (PT6), only where each works (client/main.gd _host_tools_hud): F6 in a game played
+## alone; F8 in any game, live for the host ("host"), read-only for everyone else ("guest"), "" for none.
+const F6_ROW: Array = ["F6", "JUMP TO A FLOOR"]
+const F8_HOST_ROW: Array = ["F8", "HOST SETTINGS"]
+const F8_GUEST_ROW: Array = ["F8", "SEE THE HOST'S SETTINGS"]
+var f6_row := false
+var f8_row := ""
 ## The menu's setting row: the announcer's hints (H; client/hints.gd, kept per player).
 var hints_on := true
 ## The line under the menu (the start screen says how to go back instead).
@@ -491,6 +497,11 @@ func _draw_wheel(px: float) -> void:
 ## The menu's rows: the controls, then the settings.
 func menu_rows() -> Array[Array]:
 	var rows: Array[Array] = MENU_ROWS.duplicate()
+	var at := rows.size() - 1   # before ESC
+	if f8_row != "":
+		rows.insert(at, F8_HOST_ROW if f8_row == "host" else F8_GUEST_ROW)
+	if f6_row:
+		rows.insert(at, F6_ROW)
 	rows.append(["H", "HINTS: ON" if hints_on else "HINTS: OFF"])
 	rows.append(["B", "BRIGHTNESS"])
 	return rows
