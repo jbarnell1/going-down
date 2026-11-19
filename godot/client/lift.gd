@@ -79,6 +79,12 @@ var _vote := ""
 var _light := 1.0
 ## The monitor: its picture, texture, the faces it shows (FaceCodec text, "" = the default face) and
 ## where each sits in the picture.
+const ReelView = preload("res://client/night_reel_view.gd")
+var _monitor: MeshInstance3D
+var _face_material: Material
+var _reel_material: Material
+var _reel_viewport: SubViewport
+var _reel_view: ReelView
 var monitor_faces: Array[String] = []
 var _mon_img: Image
 var _mon_tex: ImageTexture
@@ -193,6 +199,8 @@ func build(car: Dictionary, left_wall := false) -> void:
 	mon.material_override = Level.glow_material(Color.WHITE, 0.95, _mon_tex)
 	mon.position = Vector3(0, MON_Y, -depth + 0.032)
 	add_child(mon)
+	_monitor = mon
+	_face_material = mon.material_override
 	var none: Array[String] = []
 	set_faces(none)
 	# The day monitor, a strip under the faces (FD3).
@@ -464,6 +472,26 @@ func set_bank_locked(on: bool) -> void:
 ## Tests: the middle of the day monitor in the world.
 func day_point() -> Vector3:
 	return to_global(Vector3(0, DAY_Y, -depth + 0.032))
+
+## Show the host's reel while riding up. Keep the existing face texture ready underneath.
+func show_reel(reel: Variant, host_now: float, player_id: String, pending: Variant) -> void:
+	var active: bool = reel is Dictionary and not bool(reel.get("skipped", false))
+	if not active:
+		if _reel_viewport != null:
+			_reel_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+			_monitor.material_override = _face_material
+		return
+	if _reel_viewport == null:
+		_reel_viewport = SubViewport.new()
+		_reel_viewport.size = ReelView.SIZE
+		_reel_viewport.disable_3d = true
+		add_child(_reel_viewport)
+		_reel_view = ReelView.new()
+		_reel_viewport.add_child(_reel_view)
+		_reel_material = Level.glow_material(Color.WHITE, 0.95, _reel_viewport.get_texture())
+	_reel_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	_monitor.material_override = _reel_material
+	_reel_view.present(reel, host_now, player_id, pending)
 
 ## The monitor shows these faces (FaceCodec text each, "" for a crewmate who drew none) side by side.
 func set_faces(codes: Array[String]) -> void:

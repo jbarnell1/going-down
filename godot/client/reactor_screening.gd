@@ -7,6 +7,7 @@ var video := VideoStreamPlayer.new()
 var title := Label.new()
 var status := Label.new()
 var button := Button.new()
+var handing_off := false
 var ticket := 0
 var film: VideoStream
 var archive := {}
@@ -40,6 +41,15 @@ func _ready() -> void:
 		film = load(SOURCE) as VideoStream
 
 func show_archive(value: Dictionary, player_id: String) -> void:
+	# The legacy optional station scene owns the room until the real host places the crew home.
+	var source := get_tree().current_scene if is_inside_tree() else null
+	if source != null and source.scene_file_path == "res://reactor_campaign.tscn":
+		var room: Variant = source.get("game")
+		if room != null and room.client != null and room.client.latest != null and room.client.latest.depth == 0:
+			if not handing_off:
+				handing_off = true
+				_open_prison.call_deferred(source, room)
+			return
 	show()
 	archive = value
 	var next := int(value.playing.get(player_id,0))
@@ -61,6 +71,18 @@ func show_archive(value: Dictionary, player_id: String) -> void:
 		status.text = "Recovered cassette loaded." if not value.discovered else "Crew 23 recorded in the archive."
 	if ticket!=0: status.text = "Playing recovered cassette."
 	if film==null and value.recovered: status.text = "Install the matching ReactorCampaign.pck to play the recovered film."
+
+func _open_prison(source: Node, room: Variant) -> void:
+	var tree := get_tree()
+	var main := (load("res://main.tscn") as PackedScene).instantiate()
+	main.set("ward_room", room)
+	main.set("reactor_prison", true)
+	source.set("game", null)
+	source.set_physics_process(false)
+	tree.root.remove_child(source)
+	tree.root.add_child(main)
+	tree.current_scene = main
+	source.queue_free()
 
 func press() -> void:
 	if not visible or button.disabled: return

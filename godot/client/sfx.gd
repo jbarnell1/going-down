@@ -100,6 +100,14 @@ const RECORDED := {
 	"cell_door": ["effect", "prison/cell_door"],
 	"teller_window": ["effect", "prison/teller_window"],
 	"teller_ding": ["ui", "prison/teller_ding"],
+	# Shop transactions and accepted item uses.
+	"shop_bought": ["ui", "shop/bought"],
+	"shop_cabinet": ["item", "shop/cabinet"],
+	"shop_glow": ["item", "shop/glow_stick"],
+	"shop_flash": ["item", "shop/flashbulb"],
+	"shop_juice": ["item", "shop/speed_juice"],
+	"shop_salts": ["item", "shop/smelling_salts"],
+	"shop_toy_wind": ["item", "shop/toy_wind"],
 	# Searching and the inventory.
 	"search_drawer": ["effect", "search/drawer_1", "search/drawer_2"],
 	"search_locker": ["effect", "search/locker"],
@@ -297,7 +305,10 @@ var _trill_n := 0
 ## Tests: the bell strokes played ([ms, seconds left]).
 var bells: Array = []
 
+var _shop_toy_loop: AudioStream
+
 func setup(world_parent: Node3D) -> void:
+	_shop_toy_loop = _rec("shop/toy_run", true)
 	_rng.seed = 7
 	# The Master limiter holds sample peaks; true peaks between samples run up to about 0.8 dB over them
 	# (mix_check measured -0.7 dBTP once with the layout's -1.0 ceiling), so it holds MASTER_CEILING.
@@ -409,6 +420,15 @@ func setup(world_parent: Node3D) -> void:
 		sp.max_db = 0.0
 		world_parent.add_child(sp)
 		_steps.append(sp)
+
+## One host-timed positional loop per toy. Its scene node owns the sound.
+func shop_toy_audio(toy: Node3D, active: bool) -> void:
+	var player := toy.get_node_or_null("Rattle") as AudioStreamPlayer3D
+	if active and player == null and _shop_toy_loop != null:
+		player = _player3d(toy, _shop_toy_loop, "Effects", 3.0, 23.0)
+		player.name = "Rattle"
+	if player != null:
+		_loop(player, "fx", active, BASE_DB)
 
 func _rec(path: String, loop: bool) -> AudioStream:
 	var p := DIR + path + ".ogg"

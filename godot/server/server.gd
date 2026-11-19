@@ -23,6 +23,8 @@
 # GD_JOIN_SECRET_FILE (keep it outside the repository). Without one the server refuses to start.
 extends Node
 
+const SaveSlip = preload("res://net/save_slip.gd")
+
 const WsServer = preload("res://net/ws_server.gd")
 const Room = preload("res://server/room.gd")
 const Session = preload("res://net/session.gd")
@@ -96,6 +98,9 @@ func _ready() -> void:
 	# The game's deck, as every client's (client/main.gd); the room gives it to each run.
 	Session.deck = Places.FULL
 	_room = Room.new(_ws, say)
+	var save := SaveSlip.key_from_env()
+	if save.ok:
+		_room.enable_stamped_profiles(save.key)
 	_room.fixed_seed = args.get("seed", "")
 	_room.ward_review = bind == "127.0.0.1" and args.get("ward_review", "0") == "1"
 	_room.reactor_review = not _room.ward_review and bind == "127.0.0.1" and args.get("reactor_review","0")=="1"

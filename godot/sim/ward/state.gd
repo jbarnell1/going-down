@@ -35,7 +35,7 @@ func _init(seed_value: int) -> void:
 	layout = Layout.generate(seed_value)
 	for site: Dictionary in layout.houses:
 		houses.append(House.new(site, seed_value))
-	footing = Footing.new(layout, lift_door())
+	footing = Footing.new(layout, lift_door(), houses)
 	for edge: Dictionary in layout.bridges:
 		if edge.kind != "winch":
 			continue
@@ -238,7 +238,7 @@ func walk(from: Vector3, motion: Vector2) -> Vector3:
 
 func _walk_piece(from: Vector3, motion: Vector2) -> Vector3:
 	var to := Vector2(from.x, from.z) + motion
-	var height := footing.height_at(to, bridge_lowered)
+	var height := footing.walking_height(to, from.y, bridge_lowered)
 	if is_finite(height):
 		var candidate := Vector3(to.x, height, to.y)
 		if walk_clear(from, candidate):

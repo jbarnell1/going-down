@@ -80,6 +80,8 @@
 # The run has the shop and the cabinet (`shop`, on unless a test turns it off: sim/run.gd, sim/shop.gd; S2).
 extends RefCounted
 
+const Profiles = preload("res://net/profiles.gd")
+
 const Run = preload("res://sim/run.gd")
 const Protocol = preload("res://net/protocol.gd")
 const Transport = preload("res://net/transport.gd")
@@ -183,6 +185,8 @@ var findables := true
 var inventory := true
 ## The shop and the cabinet in the next run (the game's; tests may turn it off: sim/run.gd shop, S2).
 var shop := true
+## The nightly tapes on the ride up (T24).
+var nightly_reels := true
 ## Tick cost, for the log: total and worst microseconds, and ticks.
 var tick_us := 0
 var tick_max_us := 0
@@ -197,11 +201,15 @@ var _day_logged := 1
 ## Live settings (LS2): the room's desk (server/server.gd gives it the settings file; none by default).
 var desk: TuningDesk
 var _tune_host := ""
+var profiles: Profiles
 
 func _init(ws: WsServer, log: Callable) -> void:
 	_ws = ws
 	_log = log
 	desk = TuningDesk.new("", log)
+
+func enable_stamped_profiles(key: PackedByteArray) -> void:
+	profiles = Profiles.new(key)
 
 func running() -> bool:
 	return host != null
@@ -288,12 +296,17 @@ func update(now: float) -> void:
 		match String(e["kind"]):
 			"joined":
 				people[e["id"]] = e["name"]
-				_ws.send(e["id"], "m|" + JSON.stringify({"t": "you", "id": e["id"]}))
+				var welcome := {"t": "you", "id": e["id"]}
+				if profiles != null:
+					welcome["profile"] = true
+				_ws.send(e["id"], "m|" + JSON.stringify(welcome))
 				# A new arrival stops the count (it starts again once they are ready too).
 				start_at = -1.0
 				_tune_joined(e["id"])
 				_dirty = true
 			"left":
+				if profiles != null:
+					profiles.leave(e["id"])
 				people.erase(e["id"])
 				ready.erase(e["id"])
 				watching.erase(e["id"])
@@ -337,6 +350,8 @@ func _end_run() -> void:
 	_log.call("run %d over, back to the lobby" % epoch)
 	host.close()
 	host = null
+	if profiles != null:
+		profiles.applied.clear()
 	desk.run_ended()
 	rules = null
 	_transport = null
@@ -358,10 +373,13 @@ func _start(now: float) -> void:
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
 	var q := quota and not HostRules.quota_off_by_arg(false)
 	# The day quota's lock goes with the floor quota (net/host_rules.gd): quota=0 turns both off.
-	rules = HostRules.new(not (ward_review or reactor_review), first_depth, Places.deck_for_start_depth(first_depth), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop)
+	rules = HostRules.new(not (ward_review or reactor_review), first_depth, Places.deck_for_start_depth(first_depth), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop, nightly_reels)
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))
+	if profiles != null:
+		for id in roster:
+			host.state = profiles.apply_for(host.state, id, str(people[id]))
 	if ward_review:
 		host.start_ward_review(seed.hash(), true)
 	elif reactor_review:
@@ -396,6 +414,10 @@ func _on_message(id: String, data: String, now: float) -> void:
 			"rxFilm":
 				if reactor_review and host!=null and p.get("epoch")==epoch and p.get("op") in ["watch","skip","end"] and (p.get("ticket") is float or p.get("ticket") is int):
 					host.reactor_screening(id,p.op,int(p.ticket))
+			"profile":
+				var line: Variant = p.get("line")
+				if profiles != null and people.has(id) and line is String:
+					profiles.join(id, str(people[id]), line)
 			"start":
 				_start_without(id, now)
 			"ready":
@@ -495,9 +517,24 @@ func _tune_update(now: float) -> void:
 
 ## After every tick of the run: the car leaving lets the waiting `floor` values in, lights out the `day` ones.
 func _tune_tick(events: Array) -> void:
+	_checkpoint_profiles(events)
 	if desk.on_events(events) and host != null:
 		host.set_tuning(desk.in_force(), desk.rev)
 		_tune_send_all(desk.message(_tune_host))
+
+func _checkpoint_profiles(events: Array) -> void:
+	if host == null or profiles == null:
+		return
+	var changed := Profiles.changed(events)
+	for id: String in people:
+		if not in_run(id):
+			continue
+		host.state = profiles.apply_for(host.state, id, str(people[id]))
+		if not changed.all and not changed.ids.has(id):
+			continue
+		var line := profiles.checkpoint(host.state, id, str(people[id]), changed.served)
+		if not line.is_empty():
+			_ws.send(id, "m|" + JSON.stringify({"t": "profile", "line": line}))
 
 func _tune_refuse(id: String, setting: String, why: String) -> void:
 	_ws.send(id, "m|" + JSON.stringify({"t": "tuneNo", "id": setting, "why": why}))

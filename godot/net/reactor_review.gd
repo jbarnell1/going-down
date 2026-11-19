@@ -1,5 +1,10 @@
 extends RefCounted
 ## Per-floor adapter for the regular room host. It reads only accepted bodies, use and gait.
+const STATION_POSITION := Vector3(23.0, 1.44, 16.17)
+
+static func at_prison_station(x: float, z: float) -> bool:
+	return Vector2(x,z).distance_to(Vector2(STATION_POSITION.x,STATION_POSITION.z)) <= 1.8
+
 const Archive := preload("res://sim/reactor_archive.gd")
 const State := preload("res://sim/reactor.gd")
 const SPAWN := [Vector3(-3,0,-4),Vector3(1,0,-3),Vector3(6,2,-8),Vector3(6,0,-3)]

@@ -44,6 +44,9 @@
 #    (open_settings); under automation (auto=1) it has none, so no scripted playthrough reads a saved change.
 extends "res://net/room_client.gd"
 
+const Profiles = preload("res://net/profiles.gd")
+const SaveSlip = preload("res://net/save_slip.gd")
+
 const Host = preload("res://net/host.gd")
 const HostRules = preload("res://net/host_rules.gd")
 const Run = preload("res://sim/run.gd")
@@ -53,6 +56,7 @@ const TuningDesk = preload("res://net/tuning_desk.gd")
 
 ## The file playing alone keeps the host's changes in (client/main.gd passes it unless automated).
 const SETTINGS_FILE := "user://settings.json"
+const PROFILE_FILE := "user://saves/solo.gds"
 
 ## The local player's id in every run (events say "playerId": "me").
 const ME := "me"
@@ -95,6 +99,8 @@ var shop: Variant = null
 var host_us := 0
 ## Live settings: this room's desk (no file until open_settings gives it one).
 var desk: TuningDesk = TuningDesk.new()
+var solo_profile_path := ""
+var _solo_profile := {}
 var _vt := 0.0
 var _last_real := -1.0
 var _host_pipe: Transport.Pipe = null
@@ -226,6 +232,8 @@ func start_playtest(depth: int) -> bool:
 			_playtest_depth = depth
 			days = true
 			open_settings("")
+			solo_profile_path = ""
+			_solo_profile.clear()
 			my_ready = true
 			start_run()
 			return true
@@ -254,13 +262,18 @@ func start_run() -> void:
 	var q := quota_on()
 	var depth := HostRules.start_depth_by_arg() if _playtest_depth < 0 else maxi(1, _playtest_depth)
 	var deck := Places.deck_for_start_depth(depth) if Session.deck == Places.FULL else Session.deck
-	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL, shop_on())
+	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL, shop_on(), Session.deck == Places.FULL)
 	# Method callables hold no reference to this object, so the pipes do not keep it alive.
 	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
 	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))
 	var roster: Array[String] = [ME]
 	var prepare := Callable(self, "_prepare_playtest_prison") if _playtest_depth == 0 else Callable(rules, "prepare")
 	host = Host.new(_host_pipe, run_seed, roster, _vt, prepare, Callable(rules, "step"), roster)
+	if not solo_profile_path.is_empty():
+		if _solo_profile.is_empty():
+			var read := SaveSlip.read_local(ProfileStore.read(solo_profile_path))
+			_solo_profile = read.fields if read.ok else SaveSlip.fresh(SaveSlip.new_player_number())
+		host.state = Profiles.restore(host.state, ME, _solo_profile)
 	# A trusted player gets no placement from the host at the start; send the start spot as one, as the
 	# server's room does for its players, so the game takes its body from the same place either way.
 	for p in host.state.players:
@@ -363,6 +376,12 @@ func _tune_apply(note: Dictionary) -> void:
 		host.set_tuning(desk.in_force(), desk.rev, note)
 
 func _tune_tick(events: Array) -> void:
+	if host != null and not solo_profile_path.is_empty():
+		var changed := Profiles.changed(events)
+		if changed.all or changed.ids.has(ME):
+			var name_ := _name if SaveSlip._good_name(_name) else "player"
+			_solo_profile = Profiles.collect(host.state, ME, _solo_profile, name_, changed.served)
+			ProfileStore.store(solo_profile_path, SaveSlip.make(_solo_profile))
 	if desk.on_events(events) and host != null:
 		host.set_tuning(desk.in_force(), desk.rev)
 		_take_tune(desk.message(ME))

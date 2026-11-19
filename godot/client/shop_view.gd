@@ -6,8 +6,7 @@
 #     row; ENTER, SPACE or a click on BUY asks the host to buy it. A row you cannot afford is dim. F or ESC closes it.
 #     The host's refusal is the inventory's one line ("NOT ENOUGH CREDITS.", "YOUR HANDS ARE FULL.").
 #   - The items in the world: a glow stick lying lit (a green light on every screen until the host's time runs out), a
-#     wind-up toy (it shakes while it rattles; the rattle's sound is the owner's to make: SOUND_TOY is the hook, silent
-#     until there is a recording), the flash (your own screen white for Shop.FLASH_WHITE_SECONDS, the dark ahead lit
+#     wind-up toy (it shakes and rattles on host time), the flash (your own screen white for Shop.FLASH_WHITE_SECONDS, the dark ahead lit
 #     for Shop.FLASH_SECONDS), and speed juice's seconds left under the squares.
 extends Control
 
@@ -20,10 +19,8 @@ const PALE := Color("#f4f4ec")
 const DIM := Color(0.62, 0.64, 0.6, 0.8)
 const PANEL := Color(0.03, 0.035, 0.03, 0.9)
 const GLOW := Color(0.45, 1.0, 0.35)
-## The sound hooks for the owner's recordings to come (docs/ASSETS-TO-GET.md). Nothing plays until sfx.gd has them.
-const SOUND_TOY := "toy_rattle"
-const SOUND_GLOW := "glow_snap"
-const SOUND_FLASH := "flashbulb"
+const USE_CUES := {"glow": "shop_glow", "flash": "shop_flash", "speed": "shop_juice",
+	"salts": "shop_salts", "toy": "shop_toy_wind"}
 const KEYS := "1-6 PICK   ENTER BUY   F CLOSE"
 
 var open := false
@@ -105,11 +102,17 @@ func click(pos: Vector2) -> Array:
 			return ["pick", null]
 	return []
 
-## The host's events this frame: my flash.
-func on_events(events: Array, my_id: String, now: int) -> void:
+## The host's events this frame. Refused, remote and unrecorded actions are silent here.
+func on_events(events: Array, my_id: String, now: int, audio: Object = null) -> void:
 	for e: Dictionary in events:
-		if str(e.get("type", "")) == "itemUsed" and str(e.get("playerId", "")) == my_id and str(e.get("item", "")) == "flash":
+		if str(e.get("type", "")) != "itemUsed" or str(e.get("playerId", "")) != my_id:
+			continue
+		var item := str(e.get("item", ""))
+		if item == "flash":
 			flash_at = now
+		var cue := str(USE_CUES.get(item, ""))
+		if audio != null and not cue.is_empty():
+			audio.call("play", cue)
 
 ## The flash's white on my screen now (0 to 1).
 func white(now: int) -> float:
@@ -119,7 +122,7 @@ func white(now: int) -> float:
 	return 0.0 if a >= 1.0 else 1.0 - a * a
 
 ## The items in the world: glow sticks and toys under `root`, the flash's light on `cam`. `host_now` is the host clock.
-func show_world(root: Node3D, cam: Camera3D, shop: Variant, host_now: float, now: int) -> void:
+func show_world(root: Node3D, cam: Camera3D, shop: Variant, host_now: float, now: int, audio: Object = null) -> void:
 	var keep_g := {}
 	var keep_t := {}
 	if root != null and is_instance_valid(root) and shop is Dictionary:
@@ -139,6 +142,8 @@ func show_world(root: Node3D, cam: Camera3D, shop: Variant, host_now: float, now
 				root.add_child(_toys[id])
 			var rattling := host_now >= float(g["start"]) and host_now < float(g["end"])
 			(_toys[id] as Node3D).rotation.y = float(id) * 1.1 + (sin(now * 0.06) * 0.25 if rattling else 0.0)
+			if audio != null:
+				audio.call("shop_toy_audio", _toys[id], rattling)
 	for id: int in _glows.keys():
 		if not keep_g.has(id):
 			if is_instance_valid(_glows[id]):

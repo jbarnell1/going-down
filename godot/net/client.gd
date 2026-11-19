@@ -132,6 +132,7 @@ class LocalFrame:
 	var v_fov_deg := 70.0
 	var raised := false
 	var hold_doors := false
+	var skip_reel_at: Variant
 	## The call button was pressed this frame.
 	var call := false
 	## The pick-up key was pressed this frame.
@@ -1130,6 +1131,8 @@ func _send(now: float, cam: Pose.Camera, local: LocalFrame, rt: float) -> void:
 	}
 	if local.use:
 		m["use"] = true
+	if local.skip_reel_at != null:
+		m["skipReelAt"] = local.skip_reel_at
 	if local.peek:
 		m["peek"] = true
 	if local.search:

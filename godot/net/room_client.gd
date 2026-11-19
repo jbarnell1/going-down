@@ -3,6 +3,8 @@
 # in the browser build (WebSocketPeer is both). See net/README.md for how a game uses it.
 extends RefCounted
 
+const ProfileStore = preload("res://net/profile_store.gd")
+
 const Client = preload("res://net/client.gd")
 const Transport = preload("res://net/transport.gd")
 const Session = preload("res://net/session.gd")
@@ -56,6 +58,8 @@ var tune_refusals: Array[Dictionary] = []
 var _ws := WebSocketPeer.new()
 var _secret: String
 var _name: String
+var profile_directory := ProfileStore.DEFAULT_DIR
+var _profile_path := ""
 ## The player's drawn face (FaceCodec text) sent in every run's join, or "". It goes only to the host,
 ## which passes it to the other players in the run.
 var _face := ""
@@ -72,6 +76,7 @@ var _now := 0.0
 func connect_to(url: String, secret: String, name: String, face: String = "") -> Error:
 	_secret = secret
 	_name = name
+	_profile_path = ProfileStore.remote_path(profile_directory, url)
 	_face = face
 	_ws.inbound_buffer_size = 1 << 20
 	_ws.outbound_buffer_size = 1 << 16
@@ -236,7 +241,14 @@ func _on_text(text: String, now: float) -> void:
 			"you":
 				my_id = String(p["id"])
 				status = "lobby"
+				if p.get("profile") == true:
+					var line := ProfileStore.read(_profile_path)
+					_queue("m|" + JSON.stringify({"t": "profile", "line": line}))
 				_send_lobby_face()
+			"profile":
+				var line: Variant = p.get("line")
+				if line is String and line.begins_with("GDS1|"):
+					ProfileStore.store(_profile_path, line)
 			"tune":
 				_take_tune(p)
 			"tuneNo":

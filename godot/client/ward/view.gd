@@ -320,7 +320,16 @@ func _dress_house(root: Node3D, site: Dictionary, fixture: House) -> void:
 				Vector3(width, House.HEIGHT, 0.15), "brick")
 			_box(root, Vector3(side * width * 0.5, base + 1.27, center.y),
 				Vector3(0.04, 0.94, 1.1), "light")
-		_box(root, Vector3(0, base - 0.015, center.y), Vector3(width + 0.26, 0.14, depth + 0.27), "wood")
+	for storey: House.Storey in fixture.storeys:
+		for slab: AABB in storey.slab:
+			_box(root, slab.get_center(), slab.size, "wood", true)
+		for jamb: AABB in storey.partitions:
+			_box(root, jamb.get_center(), jamb.size, "plaster", true)
+		if storey.incoming != null:
+			_dress_stairs(root, storey.incoming)
+		if storey.height > 0 and storey.height < House.HEIGHT * floors:
+			_lamp(root, Vector3(-width * 0.30, storey.height + 2.37, depth * 0.28))
+			_lamp(root, Vector3(width * 0.30, storey.height + 2.37, depth * 0.75))
 	var roof_y := House.HEIGHT * floors
 	_box(root, Vector3(0, roof_y, center.y), Vector3(width + 0.4, 0.18, depth + 0.48), "iron")
 	for side: float in [-1.0, 1.0]:
@@ -349,6 +358,21 @@ func _dress_house(root: Node3D, site: Dictionary, fixture: House) -> void:
 		cup.material_override = colors.plaster if item % 3 == 0 else colors.iron
 		cup.position = Vector3(cabinet_x - 0.40 + float(item) * 0.18, shelf_y + 0.04 + shape.height * 0.5, rear)
 		root.add_child(cup)
+
+func _dress_stairs(root: Node3D, stair: House.Stair) -> void:
+	const TREADS := 18
+	var run_length := absf(stair.from.x - stair.to.x)
+	for tread in TREADS:
+		var where := stair.from.lerp(stair.to, (float(tread) + 0.5) / TREADS)
+		_box(root, where - Vector3.UP * 0.065, Vector3(run_length / TREADS + 0.008, 0.13, House.STAIR_WIDTH), "wood")
+	for side: float in [-1.0, 1.0]:
+		var offset := Vector3(0, 0.82, side * House.STAIR_WIDTH * 0.49)
+		# Keep both ends open where the walking model lets the crew turn onto a landing.
+		_beam(root, stair.from.lerp(stair.to, 1.0 / 6.0) + offset,
+			stair.from.lerp(stair.to, 5.0 / 6.0) + offset, 0.055, 0.065, "wood")
+		for post in range(3, TREADS, 3):
+			var at := stair.from.lerp(stair.to, float(post) / TREADS) + Vector3(0, 0.41, offset.z)
+			_box(root, at, Vector3(0.052, 0.82, 0.052), "iron")
 
 func _path_point(raw: Array) -> Vector3:
 	return Footing.path_point(raw)

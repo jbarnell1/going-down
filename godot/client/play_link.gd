@@ -316,6 +316,9 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	lf.call = playing and inp.get("call") == true
 	lf.pick_up = playing and inp.get("pickUp") == true
 	lf.use = use
+	var reel: Variant = (day as Dictionary).get("reel") if day is Dictionary else null
+	if reel != null and inp.get("skipReelAt") == reel["started"] and not reel["skipped"]:
+		lf.skip_reel_at = reel["started"]
 	lf.stamina = tank if body != null else null
 	# The Playroom: F for a hide (into the one in reach, or out of the one you are in), quick and loud
 	# with sprint held; W held inside is a peek. The body waits for the host's answer before it moves.

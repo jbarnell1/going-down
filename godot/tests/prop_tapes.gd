@@ -18,6 +18,8 @@
 #     anywhere else on the tape.
 extends RefCounted
 
+const Move = preload("res://sim/move.gd")
+const Protocol = preload("res://net/protocol.gd")
 const T = preload("res://tests/t.gd")
 const OrientationTape = preload("res://client/orientation_tape.gd")
 const TapeSymbols = preload("res://client/tape_symbols.gd")
@@ -198,3 +200,34 @@ func test_shot_16_flickers(t: T) -> void:
 			run = 0
 	t.eq(str(runs), str([2, 2]), "tape frames the body is a diamond, run by run")
 	tape.free()
+
+func test_nightly_vote_timestamp_preserves_shop_input(t: T) -> void:
+	var input := {"type": "input", "seq": 1, "ct": 0.0, "body": Move.Body.make(0, 0, 0, 0), "eye": 1.65, "yaw": 0.0,
+		"pitch": 0.0, "hFovDeg": 90.0, "vFovDeg": 70.0, "raised": false, "holdDoors": false,
+		"gait": "walk", "seeing": false, "calls": 0, "pickUps": 0, "ackEvent": 0, "ackHt": 0.0,
+		"renderTime": 0.0, "placeAck": 0, "seen": [], "invSel": 2, "invs": 1, "invOp": "buy", "invArg": 3}
+	var plain: Array = JSON.parse_string(Protocol.encode(input))
+	t.eq(plain.size(), 27, "no skip vote leaves the shop wire form unchanged")
+	input["skipReelAt"] = 15.125
+	var wire: Array = JSON.parse_string(Protocol.encode(input))
+	t.eq(wire.slice(0, 27), plain, "skip vote is after all inventory fields")
+	var decoded: Variant = Protocol.decode(Protocol.encode(input))
+	if t.check(decoded is Dictionary, "shop and vote together decode"):
+		t.eq(decoded.get("skipReelAt"), 15.125, "timestamp survives")
+		t.eq([decoded["invOp"], decoded["invArg"]], ["buy", 3], "same shop operation and argument")
+	wire[27] = "15.125"
+	t.eq(Protocol.decode(JSON.stringify(wire)), null, "a timestamp must be numeric")
+
+func test_remission_notice_follows_the_first_positive_personal_bank_share(t: T) -> void:
+	var game := preload("res://client/main.gd").new()
+	t.check(not game._remission_for(null, "p1"), "no day loop has no notice")
+	t.check(not game._remission_for({"index": 1, "result": null}, "p1"), "no notice before a report")
+	t.check(not game._remission_for({"index": 1, "result": {"wiped": true, "shares": {"p1": 4}}}, "p1"), "no notice after a wipe")
+	var report := {"index": 2, "result": {"shares": {"p1": 0, "p2": 19}}}
+	t.check(not game._remission_for(report, "p1"), "another crew member's pay cannot unlock it")
+	report["result"]["shares"]["p1"] = 13
+	t.check(game._remission_for(report, "p1"), "the first positive share shows the authored notice")
+	t.check(game._remission_for(report, "p1"), "the first paid report stays readable")
+	report["index"] = 3
+	t.check(not game._remission_for(report, "p1"), "later paid reports do not repeat the notice")
+	game.free()

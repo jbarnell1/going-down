@@ -83,6 +83,7 @@ const DayView = preload("res://client/day_view.gd")
 # Findables on screen (FD10): client/search_view.gd (the prompt, the bar, what is open) and client/note_reader.gd.
 const SearchView = preload("res://client/search_view.gd")
 const NoteReaderScript = preload("res://client/note_reader.gd")
+const REMISSION_NOTE_ID := "J2"
 const FindablesRules = preload("res://sim/findables.gd")
 # The four-slot inventory on screen (S1): client/inventory_view.gd.
 const InventoryViewScript = preload("res://client/inventory_view.gd")
@@ -129,6 +130,8 @@ const CONNECT_TIMEOUT := 10.0
 const WELCOME_HOLD := 2.0
 
 var link: PlayLink = null
+var reactor_entry_pending := false
+var reactor_prison := false
 var ward_room: Variant = null
 var _ward_prison_pending := false
 var sub: SubViewport
@@ -255,6 +258,7 @@ var pending_pick := false
 ## F pressed for a hide (the Playroom); tests: W held in a hide (peek), or null for the keyboard.
 var pending_hide := false
 var pending_hide_fast := false
+var _reel_skip_at: Variant
 ## Whether S was held in a desk last frame (a new press of S crawls out).
 var _desk_back := false
 var t_peek: Variant = null
@@ -319,6 +323,8 @@ var _stats_bytes := [0, 0]
 var _no_resident := false
 var _day_note_until := -1
 var _board: Array[String] = []
+var _remission_index := -1
+var _remission_readable := false
 var _lights_out := false
 
 ## A Windows review child mounts only the fixed sibling pack and skips all game setup and networking.
@@ -338,6 +344,29 @@ func _owner_review_requested() -> bool:
 			_start_owner_review.call_deferred(id)
 			return true
 	return false
+
+func _enter_joined_reactor(room: Variant) -> void:
+	var review: Dictionary = PLAYTEST_REVIEWS.reactor
+	var pack := _review_pack_path(review)
+	if not FileAccess.file_exists(pack) or not ProjectSettings.load_resource_pack(pack, false) or not ResourceLoader.exists(review.scene):
+		room.leave()
+		link = null
+		reactor_entry_pending = false
+		_show_start("join")
+		start.error = "Install ReactorCampaign.pck beside the game to join this floor."
+		return
+	var station := (load(review.scene) as PackedScene).instantiate()
+	var tree := get_tree()
+	tree.root.add_child(station)
+	# The original sidecar also runs standalone. Transfer the already joined campaign connection.
+	if station.game != null:
+		station.game.leave()
+	station.game = room
+	station.remote_url = "joined"
+	station.view_id = str(room.client.id)
+	link = null
+	tree.current_scene = station
+	queue_free()
 
 func _review_pack_path(review: Dictionary) -> String:
 	return OS.get_executable_path().get_base_dir().path_join(str(review["pack"]))
@@ -430,8 +459,18 @@ func _ready() -> void:
 		link = PlayLink.new(ward_room, ward_room is LocalRoom)
 		link.continue_joined_run()
 		_ever_connected = true
-		_ward_prison_pending = true
+		_ward_prison_pending = not reactor_prison
 		ward_room = null
+		if reactor_prison:
+			# The station scene may already have acknowledged the host placement before handing us the room.
+			var client := link.client()
+			for row: Dictionary in client.latest.players:
+				if row.id == client.id:
+					link.body = row.body
+					break
+			var station := preload("res://client/reactor_station.gd").new()
+			station.name = "ReactorStation"
+			add_child(station)
 		_enter_game()
 		return
 	if not join_arg.is_empty():
@@ -807,6 +846,8 @@ func _play_alone() -> void:
 	lr.days = true
 	# Live settings: alone, the player's own changes are kept in user://settings.json (none under automation).
 	lr.open_settings("" if automated else LocalRoom.SETTINGS_FILE)
+	if not automated:
+		lr.solo_profile_path = LocalRoom.PROFILE_FILE
 	link = PlayLink.new(lr, true)
 	start.error = ""
 	_tape_decided = false
@@ -819,6 +860,8 @@ func _play_alone() -> void:
 func _join(address: String, player_name: String, passphrase: String) -> void:
 	var url := ws_url(address)
 	var rc := RoomClient.new()
+	if automated:
+		rc.profile_directory = ""
 	var err := rc.connect_to(url, passphrase, player_name, start.face_code)
 	if err != OK:
 		start.error = "THAT ADDRESS DOES NOT LOOK RIGHT: " + url.to_upper()
@@ -936,6 +979,9 @@ func _enter_game() -> void:
 	menu_overlay = false
 	hud.osd_on = true
 	snap = {}
+	_reel_skip_at = null
+	_remission_index = -1
+	_remission_readable = false
 	_client_seen = null
 	_esc_menu = false
 	_entry = {"enteredUnix": Time.get_unix_time_from_system() * 1000.0, "enteredAt": _now(), "menuEarly": false, "voiceEarly": false}
@@ -971,6 +1017,8 @@ func _clear_world() -> void:
 	orderly.call(&"reset")
 	others.clear()
 	snap = {}
+	_reel_skip_at = null
+	_remission_readable = false
 	sfx.ride(false)
 	sfx.set_hum(0.0)
 	sfx.update(0.0, {}, null, 0.0, 0.0, 0.0, false, 0.0, Vector3.ZERO)
@@ -1028,7 +1076,7 @@ func _build_floor(plan: Dictionary) -> void:
 	level.shadows = quality == "full"
 	level.props_on = props_on
 	world.add_child(level)
-	level.build(plan, str(snap.get("seed", seed)))
+	level.build(plan, str(snap.get("seed", seed)), link.plan, link.hides)
 	sfx.set_floor(plan, str(snap.get("seed", seed)))
 	# A place's own fog and footsteps (the Arboretum's: client/arboretum_view.gd).
 	env.fog_light_color = level.get_meta(&"fog_color", Color(0.05, 0.06, 0.06))
@@ -1171,6 +1219,12 @@ func _input(event: InputEvent) -> void:
 			return
 		# Findables (FD10): the reader takes F (put it down), N in the Esc menu (the notes read), 1 to 9 in the list.
 		if k.physical_keycode != KEY_ESCAPE and note_reader.key(k):
+			return
+		if k.physical_keycode in [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER] and _vote_reel():
+			get_viewport().set_input_as_handled()
+			return
+		if k.physical_keycode == KEY_F and _remission_readable:
+			note_reader.open(REMISSION_NOTE_ID)
 			return
 		if k.physical_keycode == KEY_F and search_view.read_id != "":
 			note_reader.open(search_view.read_id)
@@ -1344,6 +1398,8 @@ func _open_card(which: String) -> bool:
 	if mode != "game" or snap.get("shop") == null:
 		return false
 	if which == "cabinet":
+		if not cab_view.is_open():
+			sfx.play("shop_cabinet")
 		cab_view.show_card()
 	elif which == "shop":
 		shop_view.show_card()
@@ -1461,6 +1517,13 @@ func _process(delta: float) -> void:
 	if link == null:
 		return
 	var rc := link.rc
+	if not link.local and not reactor_prison and rc.client != null and rc.client.latest != null:
+		var incoming: Variant = rc.client.latest.get("reactor")
+		if incoming != null and rc.client.latest.depth > 0 and not incoming.lift:
+			if not reactor_entry_pending:
+				reactor_entry_pending = true
+				_enter_joined_reactor.call_deferred(rc)
+			return
 	if rc.status == "closed":
 		var words := "" if _leaving else _close_words(rc.close_code)
 		print("connection closed (code %d)" % rc.close_code)
@@ -1504,6 +1567,21 @@ func _process(delta: float) -> void:
 	var ms := link.last_ms
 	rules_ms_sum += ms
 	rules_ms_max = maxf(rules_ms_max, ms)
+
+## The vote request names its ride and persists until the host sees it.
+func _active_reel(s: Dictionary) -> Variant:
+	var day: Variant = s.get("day")
+	if not bool(s.get("goingUp", false)) or not day is Dictionary:
+		return null
+	var reel: Variant = day.get("reel")
+	return reel if reel is Dictionary and not bool(reel.get("skipped", false)) else null
+
+func _vote_reel() -> bool:
+	var reel: Variant = _active_reel(snap)
+	if reel == null or _esc_menu or wheel_open:
+		return false
+	_reel_skip_at = reel["started"]
+	return true
 
 ## The player's intents this frame (keyboard and mouse, or the test's overrides).
 func _game_input(dt: float) -> Dictionary:
@@ -1575,7 +1653,7 @@ func _game_input(dt: float) -> Dictionary:
 		"hide": hide, "hideFast": hide_fast, "peek": peek,
 		# Findables (FD10): F held for the search client/search_view.gd offered on the last frame.
 		"search": search_view.want_search and not hide and not call, "searchFast": search_view.want_fast,
-		"invSel": inv_sel, "invOp": inv_op, "invArg": inv_arg}
+		"invSel": inv_sel, "invOp": inv_op, "invArg": inv_arg, "skipReelAt": _reel_skip_at}
 
 func _game_frame(s: Dictionary, dt: float) -> void:
 	var now := Time.get_ticks_msec()
@@ -1684,6 +1762,10 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	lift.set_hold_lit(bool(s["held"]))
 	lift.set_light(1.0 if not dark else 0.1)
 	lift.set_faces(link.crew_faces())
+	var reel: Variant = _active_reel(s)
+	if reel == null or _reel_skip_at != reel["started"]:
+		_reel_skip_at = null
+	lift.show_reel(reel, float(s.get("hostNow", 0.0)), link.my_id(), _reel_skip_at)
 	lift.update(dt)
 	if level.has_meta(&"prison"):
 		# The face kiosk's screen shows this player's own face.
@@ -1749,6 +1831,13 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	var tapes: Dictionary = s["tapes"]
 	hud.set_tapes(int(tapes["count"]), float(tapes["value"]))
 	hud.subtitle = announcer.shown()
+	if reel != null and bool(s.get("playing", true)):
+		# The picture stays in the car. The subtitle remains legible through the camcorder
+		# at any seat, and eligible crew outside the car still get a vote prompt.
+		var view := lift._reel_view
+		hud.subtitle = view.status_text
+		if bool(me.get("aboard", false)) and view.caption() != "":
+			hud.subtitle = view.caption() + "\n" + hud.subtitle
 	hud.center_note = error_text if error_text != "" else ("WATCHING: YOU JOIN AT THE NEXT STOP" if not bool(s.get("playing", true)) else "")
 	hud.wheel_on = wheel_open
 	hud.wheel_labels = EMOTE_LABELS
@@ -1762,6 +1851,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		_entry["menuEarly"] = true
 	var prompt := ""
 	var station := _station()
+	_update_remission_notice(s)
 	var bed: Variant = s.get("bed")
 	var home := s.get("day") != null and int(s["depth"]) == 0 and bed is Dictionary
 	hud.prompt_fill = -1.0
@@ -1780,13 +1870,13 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	if cab_view.is_open() and (not at_cab or me_down or ended or _lights_out):
 		cab_view.close()
 	shop_view.update(s.get("shop"), link.my_id(), lc0.tuning if lc0 != null else null, float(s.get("hostNow", 0.0)))
-	shop_view.on_events(s.get("events", []), link.my_id(), now)
-	shop_view.show_world(spots_root, cam, s.get("shop"), float(s.get("hostNow", 0.0)), now)
+	shop_view.on_events(s.get("events", []), link.my_id(), now, sfx)
+	shop_view.show_world(spots_root, cam, s.get("shop"), float(s.get("hostNow", 0.0)), now, sfx)
 	if shop_view.is_open() and (station != "shop" or me_down or ended or _lights_out):
 		shop_view.close()
 	for e: Dictionary in s.get("events", []):
 		if str(e.get("type", "")) == "bought" and str(e.get("playerId", "")) == link.my_id():
-			sfx.play("teller_ding")
+			sfx.play("shop_bought" if sfx.recorded.has("shop_bought") else "teller_ding")
 	if level.has_meta(&"prison"):
 		level.get_meta(&"prison").call("set_shop_open", s.get("shop") != null)
 	var wake_left := _wake_left(s)
@@ -1804,6 +1894,8 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		elif home and wake_left < 0.0 and bool((bed as Dictionary)["atBunk"]):
 			prompt = "HOLD F TO SLEEP"
 			hud.prompt_fill = float((bed as Dictionary)["hold"])
+		elif _remission_readable:
+			prompt = "F  READ REMISSION NOTICE"
 		elif station != "":
 			var here := Vector2i(floori(float(me["x"]) / Prison.CELL_SIZE), floori(float(me["z"]) / Prison.CELL_SIZE))
 			# The shop (S2): windows 1 and 2 are open with the shop on, shut in the morning; the skill tree stays shut.
@@ -1814,7 +1906,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		elif phase == "night":
 			pass   # home for the night: the car cannot be called
 		elif bool(me.get("canCall", false)):
-			prompt = "F  ÃƒÂ¢Ã¢â‚¬â€œÃ‚Â¼ CALL"
+			prompt = "F  â–¼ CALL"
 		elif bool(me.get("nearHold", false)):
 			prompt = "F  <|> HOLD"
 		elif _tape_in_reach(me):
@@ -1855,7 +1947,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 ## under the prompt while the call button is in reach or a refused press flashes.
 func _show_quota(now: int) -> void:
 	var c := link.client()
-	hud.quota_line = quota_view.update(c.quota() if c != null else null, lift, hud.prompt == "F  ÃƒÂ¢Ã¢â‚¬â€œÃ‚Â¼ CALL", now)
+	hud.quota_line = quota_view.update(c.quota() if c != null else null, lift, hud.prompt == "F  â–¼ CALL", now)
 	hud.quota_tone = quota_view.tone
 	# The car waits (FD4): standing open on arrival for whoever is still aboard, the panel says who.
 	car_waiting = car_waiting_text(c.latest if c != null else null, link.names(), now)
@@ -2076,7 +2168,7 @@ func _name_tags(s: Dictionary, dark: bool) -> void:
 		var shown := not dark and a > 0.0 and not cam.is_position_behind(head) and d > 0.4 and str(o["status"]) != "out"
 		if shown:
 			shown = link.can_see_point(vb, Vector3(head.x, float(o["y"]) + eye_h - 0.05, head.z), int(o["level"]), open)
-		var p := cam.unproject_position(head) * k
+		var p := cam.unproject_position(head) * k if shown else Vector2.ZERO
 		# Whole tags only: one cut by the edge of the picture reads as a glitch.
 		var tag_size := 1.5   # half as big again as the HUD's text: it is only ever seen up close
 		var hp := maxf(2.0, floorf(win.y / 320.0)) * tag_size   # the tag's pixel (hud.gd _scale, _draw_tags)
@@ -2309,6 +2401,31 @@ func _is_lights_out(s: Dictionary) -> bool:
 	var lo: Variant = (dv as Dictionary)["lightsOutAt"]
 	return lo != null and float(s["hostNow"]) >= float(lo)
 
+## The first settled report that paid this player offers the existing remission notice.
+func _remission_for(day: Variant, player_id: String) -> bool:
+	if not day is Dictionary:
+		return false
+	var index := int(day.get("index", -1))
+	var result: Variant = day.get("result")
+	if index < 1 or not result is Dictionary or bool(result.get("wiped", false)):
+		return false
+	var shares: Dictionary = result.get("shares", {})
+	if int(shares.get(player_id, 0)) < 1:
+		return false
+	if _remission_index < 0:
+		_remission_index = index
+	return _remission_index == index
+
+func _update_remission_notice(s: Dictionary) -> void:
+	_remission_readable = false
+	if not level.has_meta(&"prison"):
+		return
+	var prison_view: PrisonView = level.get_meta(&"prison")
+	var visible_here: bool = bool(s.get("playing", true)) and not _lights_out and _remission_for(s.get("day"), link.my_id())
+	prison_view.show_remission_notice(visible_here)
+	var me: Dictionary = s["me"]
+	_remission_readable = visible_here and str(me.get("status", "")) == "ok" and prison_view.remission_in_reach(cam.global_position, -cam.global_basis.z)
+
 ## The day loop on screen (a run with days; prison.md sections 3 and 6): the ride up's headline; at home
 ## the bed count, the lights-out countdown and lights out, the day board by the lift and the report board
 ## in the bank room (read crisp on the screen while standing in the bank room); the morning's note. Every
@@ -2355,7 +2472,8 @@ func _show_day(s: Dictionary, now: int) -> void:
 	var me: Dictionary = s["me"]
 	var cell := Vector2i(floori(float(me["x"]) / Prison.CELL_SIZE), floori(float(me["z"]) / Prison.CELL_SIZE))
 	# Anywhere in the bank room but right in front of the board itself (there the board is read on the wall).
-	if int(me["level"]) == 0 and Prison.BANK_ROOM.has_point(cell) and cell != Prison.REPORT_BOARD and not _lights_out:
+	if int(me["level"]) == 0 and Prison.BANK_ROOM.has_point(cell) and cell != Prison.REPORT_BOARD and not _lights_out \
+			and not _remission_readable and note_reader.open_id != REMISSION_NOTE_ID:
 		hud.board_lines = _board
 
 ## The ride up's headline from the settled day (the host's facts).
@@ -2691,6 +2809,38 @@ func _command(c: String) -> String:
 			if link == null:
 				return JSON.stringify({"error": "no run"})
 			return JSON.stringify(link.debug_info())
+		"cassette":
+			var station := get_node_or_null("ReactorStation")
+			if station == null: return "null"
+			if p.size() > 1 and p[1] == "use":
+				var key := InputEventKey.new()
+				key.physical_keycode = KEY_E
+				key.pressed = true
+				get_viewport().push_input(key)
+			return JSON.stringify({"near":station.nearby,"open":station.open,"ticket":station.screen.ticket,
+				"archive":station.archive,"playing":station.screen.video.is_playing(),"id":link.my_id()})
+		"remission":
+			if p.size() > 1 and p[1] == "read":
+				var key := InputEventKey.new()
+				key.physical_keycode = KEY_F
+				key.pressed = true
+				_input(key)
+			return JSON.stringify({"available": _remission_readable, "reader": note_reader.describe()})
+		"reel":
+			if p.size() > 1 and p[1] == "vote":
+				var key := InputEventKey.new()
+				key.physical_keycode = KEY_SPACE
+				key.pressed = true
+				_input(key)
+			var client := link.client() if link != null else null
+			var latest: Variant = client.latest if client != null else null
+			var day: Variant = latest.get("day") if latest is Dictionary else null
+			var reel: Variant = day.get("reel") if day is Dictionary else null
+			var view: Variant = lift._reel_view if lift != null else null
+			var playing: bool = lift != null and lift._reel_material != null and lift._monitor.material_override == lift._reel_material
+			return JSON.stringify({"reel": reel, "playing": playing,
+				"pending": _reel_skip_at, "elapsed": view.elapsed if playing else -1.0,
+				"shot": view.shot if playing else -1, "status": view.status_text if playing else ""})
 		"shot":
 			# The whole window as drawn (tape, display, subtitles), to a PNG path.
 			var img := get_viewport().get_texture().get_image()

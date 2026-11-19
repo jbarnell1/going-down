@@ -101,7 +101,7 @@ static var _catalogue_cache := {}
 
 ## Dresses `level` (built up to its room index by Level.build) as the Annex. Returns the view, also kept
 ## as the level's "annex" meta for tests and the demo.
-static func dress(level: Level) -> RefCounted:
+static func dress(level: Level, source_plan: FloorLib.FloorPlan = null, source_hides: Array[Playroom.Hide] = []) -> RefCounted:
 	var v := new()
 	v.lv = level
 	v.W = level.W
@@ -119,9 +119,13 @@ static func dress(level: Level) -> RefCounted:
 		v.shapes[int(r.id)] = shape_of(level, r)
 	v._panels_and_lights()
 	v._signs()
-	v.hides = Hides.hides_for(AnnexPlan.generate_annex(str(level.plan.seed), int(level.plan.depth)), str(level.plan.seed))
+	if source_plan == null:
+		source_plan = AnnexPlan.generate_annex(str(level.plan.seed), int(level.plan.depth))
+	if source_hides.is_empty():
+		source_hides = Hides.hides_for(source_plan, str(level.plan.seed))
+	v.hides = source_hides
 	# The furniture is the rules' (sim/furniture.gd): drawn whatever props_on says, since it blocks you.
-	v._furniture()
+	v._furniture(source_plan)
 	if level.props_on:
 		v._pictures()
 	v._commit()
@@ -1137,10 +1141,9 @@ static func _outward(l: Layout, m: Vector2) -> Vector2:
 ## The rules' furniture (sim/furniture.gd): each piece drawn from the list. The hides in the Annex's colours
 ## (the meeting table at its full 4.4 m), the plain pieces from the catalogue, each centred on its footprint and
 ## turned to its facing.
-func _furniture() -> void:
+func _furniture(floor_plan: FloorLib.FloorPlan) -> void:
 	var cat := catalogue()
-	var fp := AnnexPlan.generate_annex(str(lv.plan.seed), int(lv.plan.depth))
-	var list := Furniture.pieces_for(fp, str(lv.plan.seed), int(lv.plan.depth), bool(lv.plan.get("furnitureLayout", false)))
+	var list := Furniture.pieces_for(floor_plan, str(lv.plan.seed), int(lv.plan.depth), bool(lv.plan.get("furnitureLayout", false)))
 	lv.pieces = list
 	for pc: Furniture.Piece in list:
 		var xf: Transform3D

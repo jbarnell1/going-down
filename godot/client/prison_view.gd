@@ -56,6 +56,7 @@ var lv: Level
 var day_board: MeshInstance3D
 var day_board_image: Image
 var day_board_texture: ImageTexture
+var remission_notice: MeshInstance3D
 var report_board: MeshInstance3D
 var report_board_image: Image
 var report_board_texture: ImageTexture
@@ -688,6 +689,9 @@ func _bank_room(r: Dictionary) -> void:
 	report_board_image = b[1]
 	report_board_texture = b[2]
 	_plate("ReportBoardTitle", "REPORT", Vector3(x1 - 0.012, 2.27, rb.z), Vector3(-1, 0, 0), 0.14, BRASS, Color(0.12, 0.08, 0.03), 0.15)
+	remission_notice = _plate("RemissionNotice", "REMISSION TABLE", Vector3(x1 - 0.017, 1.65, rb.z + 1.77),
+		Vector3(-1, 0, 0), 0.16, Color("#c4b994"), Color("#292316"), 0.15)
+	remission_notice.hide()
 	_strip_light(x0, x1, gz)
 
 # The bank room's white strip light across the room in front of the counter, and the light it throws.
@@ -709,6 +713,17 @@ func _strip_light(x0: float, x1: float, gz: float) -> void:
 	fill.omni_range = 6.5
 	lv.add_child(fill)
 	bank_lights.append(fill)
+
+## The notice shares the bank room with the report, one wall section toward the shop.
+func show_remission_notice(on: bool) -> void:
+	if remission_notice != null:
+		remission_notice.visible = on
+
+func remission_in_reach(eye: Vector3, look: Vector3) -> bool:
+	if remission_notice == null or not remission_notice.visible:
+		return false
+	var offset := remission_notice.global_position - eye
+	return offset.length() <= 1.7 and look.dot(offset.normalized()) >= 0.72
 
 # --- the boards and the night (the day loop on screen) -------------------------------------------
 

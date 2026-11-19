@@ -221,3 +221,28 @@ func test_ordinary_client_receives_cassette_and_missing_film_is_optional(t:T) ->
 		t.check(not screen.button.disabled,"matching private media enables playback")
 	screen.free()
 	room.leave()
+
+func test_only_reactor_extraction_opens_physical_prison_archive(t: T) -> void:
+	var room := GameLocal.new()
+	room.open_local("physical-prison", "Tester", false)
+	room.start_playtest(1)
+	for i in 8: room.poll(i * 0.05)
+	t.check(room.host.state.depth == 1 and not room.host.world().has("reactor"), "ordinary room stays on its own floor")
+	t.check(not room.host.reactor_screening(GameLocal.ME, "watch", 0), "ordinary room has no reactor playback")
+	room.start_reactor_review(23)
+	for i in 8: room.poll(1.0 + i * 0.05)
+	var host := room.host
+	var review := host._reactor_review
+	review.rules.power = State.Power.RESTORED
+	review.rules.extracted = true
+	review.rules.returned = true
+	for i in 8: room.poll(2.0 + i * 0.05)
+	t.check(host.state.depth == 0 and host.state.plan.place == &"prison", "the same room placed its crew into the real prison")
+	t.check(host.world().reactor.archive.recovered, "carried cassette enters the prison with the crew")
+	var peer: Variant = host._players[GameLocal.ME]
+	peer.body = Move.Body.make(8, 17, 0, 0)
+	t.check(not host.reactor_screening(GameLocal.ME, "watch", 0), "a distant client cannot start the player")
+	var station := preload("res://net/reactor_review.gd").STATION_POSITION
+	peer.body = Move.Body.make(station.x, station.z + 0.8, 0, 0)
+	t.check(host.reactor_screening(GameLocal.ME, "watch", 0), "the real prison player is usable within reach")
+	room.leave()

@@ -122,7 +122,7 @@ static func _shader(path: String) -> Shader:
 		_shared[path] = load(path)
 	return _shared[path]
 
-func build(p: Dictionary, seed_text: String) -> void:
+func build(p: Dictionary, seed_text: String, source_plan: FloorLib.FloorPlan = null, source_hides: Array[PlayroomLib.Hide] = []) -> void:
 	plan = p
 	W = int(p.width)
 	H = int(p.height)
@@ -145,7 +145,7 @@ func build(p: Dictionary, seed_text: String) -> void:
 		PRISON_VIEW.new().dress(self)
 		return
 	if str(p.get("place", "clinic")) == "annex":
-		preload("res://client/annex_view.gd").dress(self)
+		preload("res://client/annex_view.gd").dress(self, source_plan, source_hides)
 		return
 	if str(p.get("place", "clinic")) == "playroom":  # the Playroom's look (client/playroom_view.gd)
 		preload("res://client/playroom_view.gd").dress(self)

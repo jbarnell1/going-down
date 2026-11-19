@@ -107,9 +107,9 @@ The owner generated these with ElevenLabs Sound Effects on 2026-11-18. The asset
 - search/handoff.ogg (S8, a_small_object_passe_#2-1795029522052.wav). A confirmed hand-over, local to the giver and the recipient.
 - search/drink.ogg (S9, quick_gulps_from_a_s_#1-1795029574767.wav). Ready for the finder carton consumed with the nerve mechanic.
 
-Shop, cabinet and skills cues awaiting their gameplay hooks:
+Shop and cabinet cues. Skill purchase, badge trade and low nerve await their gameplay hooks:
 
-- shop/cabinet.ogg (P1, a_small_metal_cabine_#3-1795029598870.wav). Cabinet open and close are in one take. Use once for the interaction.
+- shop/cabinet.ogg (P1, a_small_metal_cabine_#3-1795029598870.wav). Cabinet open and close are in one take. Played once when opening the cabinet card.
 - shop/bought.ogg (P2, an_old_mechanical_ca_#3-1795029623144.wav). Accepted shop purchase.
 - shop/stamp_1.ogg (P3, a_rubber_stamp_thump_#1-1795029685682.wav). Skill purchase stamped. Alternate the two takes.
 - shop/stamp_2.ogg (P3, a_rubber_stamp_thump_#4-1795029685684.wav). Second take.

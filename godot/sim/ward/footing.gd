@@ -1,6 +1,7 @@
 # Shared continuous footing for the Ward. Horizontal coordinates match the rendered decks in metres.
 extends RefCounted
 
+const House = preload("res://sim/ward/house.gd")
 const Layout = preload("res://sim/ward/layout.gd")
 const DECK_WIDTH := 1.40
 const JOINT_WIDTH := 1.44
@@ -13,8 +14,10 @@ const MAX_STEP_UP := 0.22
 var layout: Dictionary
 var lift_door: Vector3
 var spans: Array[Dictionary] = []
+var houses: Array[House]
 
-func _init(floor_layout: Dictionary, door: Vector3) -> void:
+func _init(floor_layout: Dictionary, door: Vector3, fixtures: Array[House]) -> void:
+	houses = fixtures
 	layout = floor_layout
 	lift_door = door
 	for edge: Dictionary in layout.bridges:
@@ -58,15 +61,37 @@ func height_at(at: Vector2, shortcut_lowered: bool) -> float:
 				best = maxf(best, q.y - 0.005)
 	return best if best != -INF else INF
 
+## Pick the continuous surface nearest the player's existing level. At the lower end
+## of a stair prefer a tiny rise over the ground beneath, but never snap to a distant tier.
+func walking_height(at: Vector2, reference_y: float, shortcut_lowered: bool) -> float:
+	var best := height_at(at, shortcut_lowered)
+	for house in houses:
+		var origin := house.to_world(Vector3.ZERO)
+		var local := house.to_local(Vector3(at.x, reference_y, at.y))
+		if not house.floor_bounds.has_point(Vector2(local.x, local.z)):
+			continue
+		var candidates := house.locally_supported(local)
+		for support: float in candidates:
+			var height := origin.y + support
+			var change := absf(height - reference_y)
+			if change > MAX_STEP_UP:
+				continue
+			if height > best and best < reference_y + 0.001:
+				best = height
+			elif not is_finite(best) or change < absf(best - reference_y):
+				best = height
+		return best
+	return best
+
 func route_supported(from: Vector3, to: Vector3, shortcut_lowered: bool) -> bool:
 	var begin := Vector2(from.x, from.z)
 	var end := Vector2(to.x, to.z)
 	var steps := maxi(1, ceili(begin.distance_to(end) / WALK_STEP))
-	var previous := height_at(begin, shortcut_lowered)
+	var previous := walking_height(begin, from.y, shortcut_lowered)
 	if not is_finite(previous) or absf(previous - from.y) > HEIGHT_TOLERANCE:
 		return false
 	for i in range(1, steps + 1):
-		var next := height_at(begin.lerp(end, float(i) / steps), shortcut_lowered)
+		var next := walking_height(begin.lerp(end, float(i) / steps), previous, shortcut_lowered)
 		if not is_finite(next) or absf(next - previous) > MAX_STEP_UP:
 			return false
 		previous = next

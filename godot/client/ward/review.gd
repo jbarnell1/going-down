@@ -17,6 +17,7 @@ var status := Label.new()
 var automate := false
 var test_role := ""
 var test_leg := 0
+var stair_route: Array[Vector3] = []
 var test_edge := false
 var test_at_edge := false
 var last_caught := false
@@ -55,6 +56,14 @@ func _ready() -> void:
 		solo.open_local("ward-ground-review",who,false)
 		solo.start_playtest(1)
 		solo.host.start_ward_review(8143,true)
+		if test_role == "stairs":
+			var house: House = solo.host._ward_review.houses[1]
+			var stair: House.Stair = house.stairs[0]
+			var foot := house.to_world(stair.from)
+			var top := house.to_world(stair.to)
+			var landing := house.to_world(stair.to + Vector3(0, 0, -0.69))
+			stair_route.assign([top, landing, top, foot])
+			solo.host._place(LocalRoom.ME, Move.Body.make(foot.x, foot.z, 0, foot.y), solo.host.state.depth, solo.host.state)
 		room = solo
 		return
 	room = RoomClient.new()
@@ -166,6 +175,25 @@ func _physics_process(delta: float) -> void:
 	var vector := view.player.basis * Vector3(input.x, 0, input.y).normalized()
 	if test_role in ["probe", "boarder"]:
 		vector = _test_walk()
+	if not stair_route.is_empty():
+		var destination := stair_route[test_leg]
+		var offset := destination - view.player.position
+		var horizontal := Vector3(offset.x, 0, offset.z)
+		vector = horizontal.normalized()
+		if offset.length() < 0.045:
+			var accepted := false
+			for row: Dictionary in room.client.latest.players:
+				if row.id == LocalRoom.ME:
+					var body: Move.Body = row.body
+					accepted = Vector3(body.x, body.y, body.z).distance_to(destination) < 0.065
+			if accepted:
+				print("WARD STAIR CHECKPOINT %d height %.3f" % [test_leg, view.player.position.y])
+				test_leg += 1
+				if test_leg == stair_route.size():
+					stair_route.clear()
+					print("WARD UPPER LANDING AND RETURN PASSED")
+					get_tree().quit()
+			return
 	view._move(vector * speed, delta)
 
 func _raised() -> bool:

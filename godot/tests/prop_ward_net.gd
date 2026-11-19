@@ -317,3 +317,114 @@ func test_raising_the_bridge_cannot_remove_footing_under_the_crew(t: T) -> void:
 	open.erase("walker")
 	ward.step(3.0, 0.05, 30.0, open)
 	t.check(not ward.bridge_lowered, "the shortcut can retract once clear")
+
+func _ward_walk_target(ward: Ward, start: Vector3, target: Vector3) -> Vector3:
+	var distance := Vector2(target.x - start.x, target.z - start.z)
+	return ward.walk(start, distance)
+
+func test_every_tall_home_connects_all_storeys_both_directions(t: T) -> void:
+	for seed: int in [0, 26, 8143, 31827, 4059166054]:
+		var ward := Ward.new(seed)
+		var loaded: int = 0
+		for house: House in ward.houses:
+			for stair: House.Stair in house.stairs:
+				var side := -1.0 if stair.from.z > house.floor_bounds.get_center().y else 1.0
+				var first := house.to_world(stair.from)
+				var top := house.to_world(stair.to)
+				var landing := house.to_world(stair.to + Vector3(0, 0, side * 0.69))
+				var up := _ward_walk_target(ward, first, top)
+				t.check(up.distance_to(top) < 0.04, "seed %d stair reaches %.2f m, got %.2f m" % [seed, top.y, up.y])
+				var off := _ward_walk_target(ward, up, landing)
+				t.check(off.distance_to(landing) < 0.04, "step off onto the real landing")
+				var back := _ward_walk_target(ward, off, top)
+				var down := _ward_walk_target(ward, back, first)
+				t.check(down.distance_to(first) < 0.04, "descend the same traversable stair")
+				loaded += 1
+			if house.stairs.size() > 1:
+				var lower := house.stairs[0]
+				var upper := house.stairs[1]
+				var center := house.floor_bounds.get_center().y
+				var level := House.HEIGHT
+				var path: Array[Vector3] = [lower.to,
+					Vector3(lower.to.x, level, lower.to.z - 0.69),
+					Vector3(0.0, level, lower.to.z - 0.69),
+					Vector3(0.0, level, center - 0.23),
+					Vector3(0.0, level, upper.from.z + 0.69),
+					Vector3(upper.from.x, level, upper.from.z + 0.69), upper.from, upper.to]
+				var previous := house.to_world(path[0])
+				for target in path:
+					var destination := house.to_world(target)
+					previous = _ward_walk_target(ward, previous, destination)
+					t.check(previous.distance_to(destination) < 0.04, "the middle storey's room connects both stair flights")
+				path.reverse()
+				for target in path:
+					var destination := house.to_world(target)
+					previous = _ward_walk_target(ward, previous, destination)
+					t.check(previous.distance_to(destination) < 0.04, "the same route returns from the highest flat")
+		t.check(loaded >= 6, "all taller houses and flats supply their stair flights")
+
+func test_real_host_and_second_client_share_the_stair_elevation(t: T) -> void:
+	var ex := Exercise.new(true)
+	var ward := ex.host._ward_review
+	var house: House = ward.houses[1]
+	if not t.check(not house.stairs.is_empty(), "test fixture is a taller house"):
+		return
+	var stair: House.Stair = house.stairs[0]
+	var first := house.to_world(stair.from)
+	var top := house.to_world(stair.to)
+	ex.bodies[0] = first
+	ex.tick_for(0.8)
+	ex.host._trusted.erase("one")
+	for destination: Vector3 in [top, first]:
+		for substep in 240:
+			var at := ex.bodies[0]
+			var direction := Vector2(destination.x - at.x, destination.z - at.z)
+			if direction.length() < 0.02:
+				break
+			ex.bodies[0] = ward.walk(at, direction.limit_length(0.12))
+			ex.tick_for(0.05)
+		ex.tick_for(0.6)
+		var player: Host.HostPlayer = ex.host._players["one"]
+		t.check(absf(player.body.y - destination.y) < 0.045, "authoritative untrusted walk reaches the level")
+		var seen := false
+		for row: Dictionary in ex.clients[1].latest.players:
+			if row.id == "one":
+				var body: Move.Body = row.body
+				seen = absf(body.y - destination.y) < 0.045
+		t.check(seen, "the other client sees the same storey height")
+
+func test_upper_slab_and_door_keep_the_physical_palm_clear(t: T) -> void:
+	var ward := Ward.new(8143)
+	var house: House = ward.houses[1]
+	var arm := house.make_arm()
+	var y := House.HEIGHT
+	var line_from := Vector3(0.0, y - 0.5, 0.51)
+	var line_to := Vector3(0.0, y + 0.5, 0.51)
+	t.check(not arm.segment_clear(line_from, line_to), "arm cannot cross a real upstairs slab")
+	var stair := house.stairs[0]
+	var center := stair.from.lerp(stair.to, 0.50)
+	t.check(arm.segment_clear(Vector3(center.x, y - 0.5, center.z), Vector3(center.x, y + 0.5, center.z)), "stair opening removes the slab only over the shaft")
+	var from := Vector3(0.0, 1.25, -0.52)
+	var to := Vector3(0.0, 1.25, 0.55)
+	arm.step(0.0, {}, true)
+	t.check(arm.segment_clear(from, to), "open front door admits the finite-radius palm")
+	arm.step(0.0, {}, false)
+	t.check(not arm.segment_clear(from, to), "closed front door blocks the same palm route")
+
+func test_ward_search_cannot_touch_a_player_through_the_upstairs_floor(t: T) -> void:
+	var ward := Ward.new(8143)
+	var house: House = ward.houses[1]
+	var rear: Vector3 = house.areas[&"rear"]
+	var below := house.to_world(rear - Vector3.UP * 1.25)
+	var above := below + Vector3.UP * House.HEIGHT
+	ward.leave(0.0)
+	ward._hear(1, &"rear", 0.0, [])
+	var contacts: Array[String] = []
+	for frame in 250:
+		for event: Dictionary in ward.step(float(frame + 1) * 0.05, 0.05, 30.0, {
+			"lower": {"position": below}, "upper": {"position": above},
+		}):
+			if event.kind == &"contact":
+				contacts.append(str(event.id))
+	t.check(contacts.has("lower"), "the actual searching palm reaches the downstairs target")
+	t.check(not contacts.has("upper"), "the upper target over the same point is safe")

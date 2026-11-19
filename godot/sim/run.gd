@@ -457,6 +457,7 @@ const LURE_ID := "#call"
 ## The day (only with days on). Seconds the ride up to the prison takes (prison.md section 3: "about
 ## eight seconds").
 const RIDE_UP_TIME := 8.0
+const NightReels = preload("res://sim/night_reels.gd")
 ## Seconds F must be held on a bunk to lie down (prison.md section 6: "Hold F on any bunk").
 const BED_HOLD := 1.0
 ## The floor quota (North Star C9; see the header): what the crew must record on a floor before the call
@@ -976,6 +977,12 @@ class RunState:
 	var wallets: Dictionary = {}
 	## The car is riding up to the prison (phase riding).
 	var going_up: bool = false
+	var nightly_reels := false
+	var reel_day := 0
+	var reel_started := 0.0
+	var reel_crew := 0
+	var reel_votes: Array[String] = []
+	var reel_skipped := false
 	## The bedtime count in the prison (null on the floors).
 	var bed: Day.BedState = null
 	## Seconds each player has held F on a bunk (-1: waiting for them to let go first), and whether F
@@ -1131,6 +1138,12 @@ class RunState:
 		s.day_result = day_result
 		s.wallets = wallets
 		s.going_up = going_up
+		s.nightly_reels = nightly_reels
+		s.reel_day = reel_day
+		s.reel_started = reel_started
+		s.reel_crew = reel_crew
+		s.reel_votes = reel_votes
+		s.reel_skipped = reel_skipped
 		s.bed = bed
 		s.bed_hold = bed_hold
 		s.use_prev = use_prev
@@ -3481,6 +3494,28 @@ static func _holds_tapes(crew: Instr.CrewState) -> bool:
 			return true
 	return false
 
+static func with_nightly_reels(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.nightly_reels = true
+	return s
+
+## The host supplies the connected crew and the votes reported by their latest input.
+## Keep a vote until that player leaves this ride. An empty crew cannot skip.
+static func with_reel_votes(s: RunState, crew: Array[String], pressed: Array[String]) -> RunState:
+	if s.reel_day == 0 or s.reel_skipped:
+		return s
+	var votes: Array[String] = []
+	for id in crew:
+		if s.reel_votes.has(id) or pressed.has(id):
+			votes.append(id)
+	var next := s.copy()
+	next.reel_crew = crew.size()
+	next.reel_votes = votes
+	if votes.size() * 2 > crew.size():
+		next.reel_skipped = true
+		next.timer = minf(s.timer, maxf(0.0, s.reel_started + RIDE_UP_TIME - s.t))
+	return next
+
 ## The car leaves for the prison with `aboard`: everyone else stays behind (they wake on their bunks).
 ## `fresh`: everyone gets a fresh tape now (a bank: what was aboard is banked, the rest is lost).
 static func _ride_up(s: RunState, players: Array[RunPlayer], aboard: Array[String], fresh: bool) -> void:
@@ -3496,6 +3531,13 @@ static func _ride_up(s: RunState, players: Array[RunPlayer], aboard: Array[Strin
 	s.phase = &"riding"
 	s.going_up = true
 	s.timer = RIDE_UP_TIME
+	if s.nightly_reels and NightReels.duration(s.day_state.day) > 0.0:
+		s.reel_day = s.day_state.day
+		s.reel_started = s.t
+		s.reel_crew = players.size()
+		s.reel_votes = []
+		s.reel_skipped = false
+		s.timer = maxf(RIDE_UP_TIME, NightReels.duration(s.reel_day))
 	s.blink = null
 	s.lure = false
 	s.call = null
@@ -3558,6 +3600,7 @@ static func _arrive_home(s: RunState, players: Array[RunPlayer], t: float, event
 	nc.members = members
 	s.crew = nc
 	s.going_up = false
+	s.reel_day = 0
 	s.phase = &"arriving"
 	s.timer = ARRIVE_DOOR_DELAY
 	if not s.left_out.is_empty():

@@ -123,12 +123,14 @@ var furniture_layout: bool
 var resident_navigation: bool
 ## The shop and the cabinet (off unless asked; sim/run.gd shop, S2).
 var shop: bool
+var nightly_reels: bool
 
 func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false,
 		watchers_: bool = false, relocation_: bool = false, long_dark_: bool = false, paced_: bool = false, car_waits_: bool = false,
 		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false, furniture_: bool = false, findables_: bool = false,
 		inventory_: bool = false, furniture_layout_: bool = false, resident_navigation_: bool = false,
-		shop_: bool = false) -> void:
+		shop_: bool = false, nightly_reels_: bool = false) -> void:
+	nightly_reels = nightly_reels_
 	shop = shop_
 	inventory = inventory_
 	findables = findables_
@@ -250,6 +252,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_resident_navigation(s)
 	if shop and s.inventory and not s.shop:
 		s = Run.with_shop(s)
+	if nightly_reels and s.days:
+		s = Run.with_nightly_reels(s)
 	return _capped(s)
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web

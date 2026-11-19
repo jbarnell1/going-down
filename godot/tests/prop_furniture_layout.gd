@@ -203,7 +203,12 @@ static func _check_shared_geometry(t: T, state: Run.RunState, link: PlayLink, pl
 	var restored := Furniture.pieces_for(plan, "", -1, true)
 	var expected := restored if enabled else baseline
 	var level: Node3D = LevelScript.new()
-	level.call("build", plan_dict, plan.seed)
+	if enabled:
+		level.call("build", plan_dict, plan.seed, link.plan, link.hides)
+		if plan.place == Places.ANNEX:
+			t.check(is_same(level.get_meta("annex").hides, link.hides), "the view uses the same resolved hides as the room client")
+	else:
+		level.call("build", plan_dict, plan.seed)
 	t.eq(Furniture.plain(level.get("pieces")), Furniture.plain(expected), "the client draws the host's precise furniture layout")
 	var drawn: Dictionary = {}
 	for row: Dictionary in level.get("furniture_drawn"):

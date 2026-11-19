@@ -174,8 +174,21 @@ static func open(sealed: String, key: PackedByteArray) -> Dictionary:
 	var text := sealed.substr(0, sealed.length() - STAMP_HEX - 1)
 	if not _same_bytes(_hex_to_bytes(given_hex), _hmac(text, key)):
 		return _no("stamp")
-	# Stamped by this server's key. Still parsed as if hostile: a key leak, an old server with other
-	# upgrade ids, or a bug must not put a bad value into the game.
+	return read_local(text)
+
+## Parse the canonical body for a trusted solo room. Network rooms must call open(),
+## which verifies the stamp before it reaches the same field checks.
+static func read_local(text: String) -> Dictionary:
+	if text.length() > MAX_SEALED or text.to_utf8_buffer().size() > MAX_SEALED:
+		return _no("too_big")
+	for i in text.length():
+		if not _allowed(text.unicode_at(i)):
+			return _no("chars")
+	var parts := text.split("|", true)
+	if parts.size() != FIELDS.size() + 1 and parts.size() != FIELDS.size() + 2:
+		return _no("shape")
+	if parts[0] != VERSION:
+		return _no("version")
 	if not _is_lower_hex(parts[1], PLAYER_HEX):
 		return _no("player")
 	var name_hex: String = parts[2]
@@ -207,7 +220,7 @@ static func open(sealed: String, key: PackedByteArray) -> Dictionary:
 				return _no("records")
 			records[kv[0]] = v
 	var fields := {"player": parts[1], "name": name, "credits": credits, "nodes": nodes, "days": days, "records": records}
-	if parts.size() == FIELDS.size() + 3:
+	if parts.size() == FIELDS.size() + 2:
 		if Shop.cabinet_from_text(parts[7]).is_empty():
 			return _no("cabinet")
 		fields["cabinet"] = parts[7]

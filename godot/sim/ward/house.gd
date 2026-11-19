@@ -5,9 +5,27 @@ const HEIGHT := 3.05
 const ARM_HEIGHT := 1.25
 const WALL_THICKNESS := 0.14
 const OPENING_HEIGHT := 2.19
+const STAIR_WIDTH := 1.0
+const LANDING_EDGE := 0.34
+const SLAB_THICKNESS := 0.14
+
+class Stair:
+	var from: Vector3
+	var to: Vector3
+	var shaft: Rect2
+
+class Storey:
+	var height: float
+	var slab: Array[AABB] = []
+	var partitions: Array[AABB] = []
+	var incoming: Stair
+	var outgoing: Stair
 
 var floor_bounds: Rect2
 var walls: Array[AABB] = []
+var storeys: Array[Storey] = []
+var stairs: Array[Stair] = []
+var upper_envelope: Array[AABB] = []
 var door: AABB
 var shoulder := Vector3(0.0, ARM_HEIGHT, -0.6)
 var areas: Dictionary = {}
@@ -43,7 +61,7 @@ func _init(house: Dictionary, ward_seed: int) -> void:
 	walls.append(AABB(Vector3(half, 0.0, 0.0), Vector3(wall, HEIGHT, depth)))
 	walls.append(AABB(Vector3(-half - wall, 0.0, depth), Vector3(width + wall * 2.0, HEIGHT, wall)))
 	walls.append(AABB(Vector3(-half, -wall, 0.0), Vector3(width, wall, depth)))
-	walls.append(AABB(Vector3(-half, HEIGHT - wall, 0.0), Vector3(width, wall, depth)))
+	_build_storeys(int(house.floors), width, depth)
 
 	# Each floor has offset room doors. Their orientation and precise offsets
 	# depend on the floor seed, while both turns remain possible in every home.
@@ -58,6 +76,70 @@ func _init(house: Dictionary, ward_seed: int) -> void:
 	areas[&"entry"] = Vector3(-side * 0.65, 1.12, 0.55)
 	areas[&"middle"] = Vector3(side * 0.55, 1.39, (first_z + second_z) * 0.5)
 	areas[&"rear"] = Vector3(second_x, 1.19, minf(depth - 0.40, 4.77))
+
+func _build_storeys(count: int, width: float, depth: float) -> void:
+	var half := width * 0.5
+	for index in count:
+		var floor := Storey.new()
+		floor.height = float(index) * HEIGHT
+		storeys.append(floor)
+		if index == 0:
+			continue
+		var stair := Stair.new()
+		var sign_dir := 1.0 if index % 2 == 1 else -1.0
+		var lane := depth - 0.61 if index % 2 == 1 else 0.61
+		var edge := half - LANDING_EDGE
+		stair.from = Vector3(-edge * sign_dir, float(index - 1) * HEIGHT, lane)
+		stair.to = Vector3(edge * sign_dir, float(index) * HEIGHT, lane)
+		stair.shaft = Rect2(-edge - 0.03, lane - STAIR_WIDTH * 0.53, edge * 2.0 + 0.06, STAIR_WIDTH * 1.06)
+		stairs.append(stair)
+		floor.incoming = stair
+		storeys[index - 1].outgoing = stair
+		floor.slab = _slab_around(stair.shaft, floor.height)
+		# Full side and end walls at each upper level. The centre jamb has a real walking opening.
+		upper_envelope.append(AABB(Vector3(-half - WALL_THICKNESS, floor.height, 0.0), Vector3(WALL_THICKNESS, HEIGHT, depth)))
+		upper_envelope.append(AABB(Vector3(half, floor.height, 0.0), Vector3(WALL_THICKNESS, HEIGHT, depth)))
+		for end: float in [0.0, depth]:
+			upper_envelope.append(AABB(Vector3(-half, floor.height, end - WALL_THICKNESS * 0.5), Vector3(width, HEIGHT, WALL_THICKNESS)))
+		var jamb := depth * 0.5 - WALL_THICKNESS * 0.5
+		floor.partitions.append(AABB(Vector3(-half, floor.height, jamb), Vector3(half - 0.59, HEIGHT, WALL_THICKNESS)))
+		floor.partitions.append(AABB(Vector3(0.59, floor.height, jamb), Vector3(half - 0.59, HEIGHT, WALL_THICKNESS)))
+		floor.partitions.append(AABB(Vector3(-0.59, floor.height + OPENING_HEIGHT, jamb), Vector3(1.18, HEIGHT - OPENING_HEIGHT, WALL_THICKNESS)))
+	# One roof slab. Intermediate ceilings share the exact opening visible in the client.
+	var roof_at := float(count) * HEIGHT
+	storeys.append(Storey.new())
+	storeys[-1].height = roof_at
+	storeys[-1].slab.append(AABB(Vector3(-half, roof_at - SLAB_THICKNESS, 0), Vector3(width, SLAB_THICKNESS, depth)))
+
+func _slab_around(hole: Rect2, elevation: float) -> Array[AABB]:
+	var out: Array[AABB] = []
+	var strips: Array[Rect2] = [
+		Rect2(floor_bounds.position, Vector2(floor_bounds.size.x, hole.position.y - floor_bounds.position.y)),
+		Rect2(Vector2(floor_bounds.position.x, hole.end.y), Vector2(floor_bounds.size.x, floor_bounds.end.y - hole.end.y)),
+		Rect2(Vector2(floor_bounds.position.x, hole.position.y), Vector2(hole.position.x - floor_bounds.position.x, hole.size.y)),
+		Rect2(hole.end - Vector2(0.0, hole.size.y), Vector2(floor_bounds.end.x - hole.end.x, hole.size.y)),
+	]
+	for strip in strips:
+		out.append(AABB(Vector3(strip.position.x, elevation - SLAB_THICKNESS, strip.position.y),
+			Vector3(strip.size.x, SLAB_THICKNESS, strip.size.y)))
+	return out
+
+## All surfaces near this height, so a floor above never teleports a walker underneath it.
+func locally_supported(local: Vector3) -> Array[float]:
+	var out: Array[float] = []
+	var flat := Vector2(local.x, local.z)
+	if not floor_bounds.has_point(flat):
+		return out
+	for index in storeys.size() - 1:
+		var floor := storeys[index]
+		if floor.incoming == null or not floor.incoming.shaft.has_point(flat):
+			out.append(floor.height)
+		if floor.outgoing != null:
+			var stair := floor.outgoing
+			if stair.shaft.has_point(flat):
+				var t := clampf(inverse_lerp(stair.from.x, stair.to.x, local.x), 0.0, 1.0)
+				out.append(lerpf(stair.from.y, stair.to.y, t))
+	return out
 
 func _partition(z: float, half_width: float, opening_x: float, opening_width: float) -> void:
 	var face_z := z - WALL_THICKNESS * 0.5
@@ -79,6 +161,7 @@ func _partition(z: float, half_width: float, opening_x: float, opening_width: fl
 
 func make_arm(extra_walls: Array[AABB] = []) -> ArmSearch:
 	var blockers := walls.duplicate()
+	blockers.append_array(storeys[1].slab)
 	blockers.append_array(extra_walls)
 	return ArmSearch.new(shoulder, door, blockers, _guides, areas, _seed)
 
@@ -117,4 +200,11 @@ func walk_clear(from: Vector3, to: Vector3, door_open: bool, parlour: bool) -> b
 				return false
 		elif ArmSearch._hits_box(a, b, wall, RADIUS):
 			return false
+	for wall in upper_envelope:
+		if ArmSearch._hits_box(a, b, wall, RADIUS):
+			return false
+	for floor in storeys:
+		for wall in floor.partitions:
+			if ArmSearch._hits_box(a, b, wall, RADIUS):
+				return false
 	return true

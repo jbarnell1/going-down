@@ -807,6 +807,18 @@ func _step(now: float) -> void:
 		s = s.copy()
 		s.names = names
 
+	# The vote also belongs to crew members whose view is out of the car after a wipe.
+	if s.reel_day > 0 and not s.reel_skipped:
+		var reel_crew: Array[String] = []
+		var reel_pressed: Array[String] = []
+		for rp in s.players:
+			var voter: HostPlayer = _players.get(rp.id)
+			if voter != null and voter.in_run and voter.connected and not voter.left:
+				reel_crew.append(rp.id)
+				if voter.input != null and voter.input.get("skipReelAt") == Protocol.q3(s.reel_started):
+					reel_pressed.append(rp.id)
+		s = Run.with_reel_votes(s, reel_crew, reel_pressed)
+
 	# 4. Inputs.
 	var inputs: Array[Run.PlayerInput] = []
 	for rp in s.players:
@@ -888,6 +900,12 @@ func _step(now: float) -> void:
 	_tune_events = []
 	events.append_array(r.events)
 	_step_reactor_review(st, inputs)
+	if _reactor_review != null and _reactor_review.rules.returned and st.depth != 0 and st.day_state != null:
+		var home_events: Array[Dictionary] = []
+		Run._arrive_home(st, st.players, st.t, home_events)
+		_reactor_plan = st.plan
+		r.events.append_array(home_events)
+		events.append_array(home_events)
 
 	# 6. After: placements, the gone, joiners.
 	for e in r.events:
@@ -1467,6 +1485,9 @@ static func day_block(s: Run.RunState) -> Dictionary:
 	var out := {"index": s.day_index, "day": s.day_state.day, "quota": Day.day_quota(s.day_state, Run.DAY_FLOOR_QUOTA), "streak": s.day_state.streak,
 		"misses": s.day_state.misses, "inBed": in_bed, "countFrom": count_from, "lightsOutAt": lights,
 		"result": Protocol.plain(s.day_result) if s.day_result != null else null, "crew": crew}
+	if s.reel_day > 0:
+		out["reel"] = {"day": s.reel_day, "started": s.reel_started, "crew": s.reel_crew,
+			"votes": s.reel_votes.duplicate(), "skipped": s.reel_skipped}
 	if s.day_lock:
 		# The day quota's lock (FD2): the host's numbers for the HUD line and the lift monitor.
 		var pv: Day.Preview = Run.day_preview(s)
@@ -1545,6 +1566,9 @@ func _step_reactor_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> vo
 		if hp!=null and hp.connected:
 			connected[rp.id] = true
 	_reactor_review.leave_missing(connected)
+	if s.depth == 0 and _reactor_review.rules.returned:
+		_reactor_review.rules.awake_seconds += TICK
+		return
 	for input in inputs:
 		if connected.has(input.id):
 			_reactor_review.player(input.id,Vector3(input.body.x,input.body.y,input.body.z),input.use,input.gait,TICK)
@@ -1552,4 +1576,8 @@ func _step_reactor_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> vo
 
 func reactor_screening(peer: String, operation: String, ticket: int) -> bool:
 	if _reactor_review==null or not _players.has(peer) or not _players[peer].connected: return false
+	if state.depth != 0: return false
+	if operation == "watch":
+		var body: Move.Body = _players[peer].body
+		if not ReactorReview.at_prison_station(body.x, body.z): return false
 	return _reactor_review.screening(peer,operation,ticket)

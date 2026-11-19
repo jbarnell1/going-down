@@ -240,6 +240,8 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    a slot as in the inv block;
 ##  - events "stashed" / "fetched" {playerId, item, count, slot}, "wokeUp" {bodies, leaveAt}, and the refusals as
 ##    "invRefused" {why: cabFull, poor, window, closed, nobody, annexOnly, unusable} besides the inventory's.
+## Nightly reels (T24). With a reel in progress, the day block can end in [day, started, crew, votes, skipped].
+## An input with a skip vote extends its 27-element form by a host-clock timestamp (the reel's start).
 const INV_OPS: Array[String] = ["", "drop", "take", "give", "stash", "fetch", "buy", "use"]
 
 ## Telemetry (client/telemetry.gd -> server/night_log.gd). New in the Godot game: [1, "T", kind, body] for kind
@@ -784,13 +786,16 @@ static func enc_day(d: Dictionary) -> Array:
 	if d.has("earned"):
 		# The day quota's lock (see the header): only with the lock on.
 		out.append_array([d["earned"], 1 if bool(d["locked"]) else 0, d["aboard"], d["each"], d["stakes"]])
+	if d.has("reel"):
+		var r: Dictionary = d["reel"]
+		out.append([r["day"], q3(r["started"]), r["crew"], r["votes"], 1 if r["skipped"] else 0])
 	return out
 
 static func dec_day(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 10, 15)
+	var a := _a(c, w, 10, 16)
 	if c.bad:
 		return {}
-	if a.size() != 10 and a.size() != 15:
+	if not a.size() in [10, 11, 15, 16]:
 		c.bad = true
 		return {}
 	var in_bed: Array = []
@@ -802,12 +807,21 @@ static func dec_day(c: _V, w: Variant) -> Dictionary:
 	var out := {"index": _i(c, a[0], 1, MAX_COUNT), "day": _i(c, a[1], 1, MAX_COUNT), "quota": _i(c, a[2], 0, MAX_COUNT), "streak": _i(c, a[3], 0, MAX_COUNT),
 		"misses": _i(c, a[4], 0, MAX_COUNT), "inBed": in_bed, "countFrom": _opt_num(c, a[6]), "lightsOutAt": _opt_num(c, a[7]), "result": result,
 		"crew": _i(c, a[9], 0, 64)}
-	if a.size() == 15:
+	if a.size() >= 15:
 		out["earned"] = _i(c, a[10], 0, MAX_COUNT)
 		out["locked"] = _i(c, a[11], 0, 1) == 1
 		out["aboard"] = _i(c, a[12], 0, MAX_COUNT)
 		out["each"] = _i(c, a[13], 0, MAX_COUNT)
 		out["stakes"] = _s(c, a[14], 400)
+	if a.size() == 11 or a.size() == 16:
+		var r := _a(c, a[-1], 5, 5)
+		if c.bad:
+			return {}
+		var votes: Array[String] = []
+		for id: Variant in _a(c, r[3], 0, 64):
+			votes.append(_s(c, id))
+		out["reel"] = {"day": _i(c, r[0], 1, 3), "started": _f(c, r[1]), "crew": _i(c, r[2], 0, 64),
+			"votes": votes, "skipped": _i(c, r[4], 0, 1) == 1}
 	return out
 
 ## The JSON text of a world snapshot (computed once per tick, shared by every client's snapshot).
@@ -861,7 +875,8 @@ static func encode(m: Dictionary) -> String:
 			var marks := int(m.get("marks", 0))
 			var peels := int(m.get("peels", 0))
 			# The inventory (see the header): its four after the Annex's, which are then sent even when unused.
-			var inv := m.get("invSel") != null or int(m.get("invs", 0)) > 0
+			var skip_at: Variant = m.get("skipReelAt")
+			var inv := m.get("invSel") != null or int(m.get("invs", 0)) > 0 or skip_at != null
 			if int(m.get("hides", 0)) > 0 or marks > 0 or peels > 0 or inv:
 				inp.append(int(m.get("hides", 0)))
 				inp.append(int(m.get("fastHides", 0)))
@@ -875,6 +890,8 @@ static func encode(m: Dictionary) -> String:
 				inp.append(int(m.get("invs", 0)))
 				inp.append(INV_OPS.find(op))
 				inp.append(str(m["invArg"]) if op == "give" else (int(m["invArg"]) if op in ["take", "stash", "fetch", "buy"] else 0))
+			if skip_at != null:
+				inp.append(q3(float(skip_at)))
 			return JsJson.stringify(inp)
 		"join":
 			var j: Array = [PROTOCOL_VERSION, "J", m["name"], m["ct"]]
@@ -1140,7 +1157,7 @@ static func decode(text: String) -> Variant:
 						st.tank = _f(c, sa[2], 1.0, 60.0)
 					out["stamina"] = st
 		"I":
-			if a.size() != 18 and a.size() != 20 and a.size() != 23 and a.size() != 27:
+			if a.size() != 18 and a.size() != 20 and a.size() != 23 and a.size() != 27 and a.size() != 28:
 				return null
 			var f := _i(c, a[10], 0, 511)
 			var gait := (f >> 3) & 3
@@ -1174,7 +1191,9 @@ static func decode(text: String) -> Variant:
 				out["marks"] = _i(c, a[20], 0, MAX_COUNT)
 				out["peels"] = _i(c, a[21], 0, MAX_COUNT)
 				out["peelId"] = _i(c, a[22], -1, MAX_COUNT)
-			if a.size() == 27:
+			if a.size() == 28:
+				out["skipReelAt"] = _f(c, a[27])
+			if a.size() >= 27:
 				# The inventory (see the header).
 				out["invSel"] = _i(c, a[23], -1, Inventory.SLOTS - 1)
 				out["invs"] = _i(c, a[24], 0, MAX_COUNT)

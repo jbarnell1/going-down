@@ -1,6 +1,7 @@
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
+const ShopView = preload("res://client/shop_view.gd")
 const InventoryView = preload("res://client/inventory_view.gd")
 const SearchView = preload("res://client/search_view.gd")
 const PropSearch = preload("res://tests/prop_search.gd")
@@ -61,4 +62,22 @@ func test_inventory_sounds_follow_confirmed_actions(t: T) -> void:
 	t.eq(giver.cues, [["item_pickup"], ["item_handoff"]] + drops, "the taker and giver each hear their action once")
 	t.eq(receiver.cues, [["item_handoff"]] + drops, "the recipient hears the hand-over once")
 	t.eq(bystander.cues, drops, "nearby crew hear drops in place, once per spill")
+	view.free()
+
+func test_shop_item_sounds_follow_only_accepted_local_uses(t: T) -> void:
+	var view := ShopView.new()
+	var heard := Heard.new()
+	view.on_events([
+		{"type": "invRefused", "playerId": "me", "item": "salts"},
+		{"type": "itemUsed", "playerId": "other", "item": "flash"},
+		{"type": "itemUsed", "playerId": "me", "item": "flash"},
+		{"type": "itemUsed", "playerId": "me", "item": "speed"},
+		{"type": "itemUsed", "playerId": "me", "item": "glow"},
+		{"type": "itemUsed", "playerId": "me", "item": "salts"},
+		{"type": "itemUsed", "playerId": "me", "item": "toy"},
+		{"type": "itemUsed", "playerId": "me", "item": "marker"},
+	], "me", 273, heard)
+	t.eq(heard.cues, [["shop_flash"], ["shop_juice"], ["shop_glow"], ["shop_salts"], ["shop_toy_wind"]],
+		"only confirmed own recorded uses sound")
+	t.eq(view.flash_at, 273, "the flash effect still follows the accepted event")
 	view.free()
