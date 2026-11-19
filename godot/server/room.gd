@@ -192,6 +192,10 @@ var reactor_archive_path := ""
 ## The late floors in the next run (FL1, net/host_rules.gd late_floors: the Hanging Ward at floor 6, the Reactor at 7;
 ## the game's; `late_floors=0` or tests turn it off). Never in a review or practice room.
 var late_floors := true
+## Cycles in the next run (FL2, net/host_rules.gd cycles: the Ward's lift rides down to the Reactor, the Reactor's
+## return settles the day, and once it is done the days start at floor 8). Only with the late floors; the game's;
+## `cycles=0` or tests turn it off.
+var cycles := true
 ## Where a normal room keeps each run's recovered Reactor tape (server/server.gd sets the game's user data folder;
 ## "" keeps it in memory, as tests do). One folder per run seed (late_archive_path).
 var late_archive_root := ""
@@ -231,6 +235,7 @@ func configure_campaign_trades(args: Dictionary) -> void:
 	throwing_arm = args.get("throwing_arm", "1") == "1"
 	nerve_passive = args.get("nerve_passive", "0") == "1"
 	late_floors = args.get("late_floors", "1") == "1"
+	cycles = args.get("cycles", "1") == "1"
 	quick_fingers = args.get("quick_fingers", "1") == "1"
 
 func _init(ws: WsServer, log: Callable) -> void:
@@ -277,6 +282,9 @@ func _lobby_text(now: float) -> String:
 		"garden": host != null and host.state.deck.has(Places.ARBORETUM)}
 	if host != null and host.state.garden_search:
 		lobby["gardenDense"] = true
+	# Cycles (FL2): the run's deck repeats its floors in sevens; the client draws its floors with the same deck.
+	if host != null and rules != null and Places.cycles_in(rules.deck):
+		lobby["cycles"] = true
 	if orientation_review:
 		lobby["orientation"] = true
 	if host != null and host.state.orientation_resume != null:
@@ -435,7 +443,7 @@ func _start(now: float) -> void:
 	rules = HostRules.new(not (ward_review or reactor_review), first_depth, Places.deck_for_start_depth(first_depth, HostRules.garden_admission_by_arg()), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop, nightly_reels, true, true, deep_pockets and not (ward_review or reactor_review), second_wind, soft_shoes, HostRules.flare_on_by_arg() and not (ward_review or reactor_review), HostRules.lamp_on_by_arg() and not (ward_review or reactor_review), badge_search and not (ward_review or reactor_review), quick_fingers and not (ward_review or reactor_review), long_burn and not (ward_review or reactor_review), field_dressing and not (ward_review or reactor_review), HostRules.doorway_shadow_on_by_arg() and not (ward_review or reactor_review or orientation_review), steady_gaze and not (ward_review or reactor_review or orientation_review), throwing_arm and not (ward_review or reactor_review or orientation_review),
 		nerve_passive and not (ward_review or reactor_review or orientation_review),
 		HostRules.annex_drag_on_by_arg() and not (ward_review or reactor_review or orientation_review),
-		playroom_tuned, late_floors and not (ward_review or reactor_review or orientation_review), playroom_tuned, true, not (ward_review or reactor_review or orientation_review))
+		playroom_tuned, late_floors and not (ward_review or reactor_review or orientation_review), playroom_tuned, true, not (ward_review or reactor_review or orientation_review), cycles and late_floors and not (ward_review or reactor_review or orientation_review))
 	if orientation_review:
 		rules.enable_orientation()
 	elif orientation_campaign:

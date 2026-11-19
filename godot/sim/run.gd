@@ -122,6 +122,18 @@
 #  - day_preview() is Day.bank_preview for the run now: the lift monitor's three rows (aboard is the tapes
 #    held by those on their feet in the car).
 #
+# Cycles (FL2; docs/floors/difficulty.md section 1), on only when the run's deck carries Places.CYCLES (net/host_rules.gd
+# cycles; tests and every stored result leave it off, and then nothing below happens):
+#  - The Hanging Ward's lift goes down (step_ward): with anyone aboard, its departure is a ride down (_ride_down, as a
+#    DOWN win: tapes stay with their holders, those not aboard lose theirs and are left out for the day), so the next
+#    floor is the Reactor. With nobody aboard it is the wipe it always was.
+#  - The Reactor's lift going up settles the day (bank_reactor): what the crew carries is banked and the day judged by
+#    Day.end_day exactly as a BANK is (the lock's earned with the lock on), then the host takes the crew home.
+#    cycles_done rises to the cycle of that floor (1 after floor 7, 2 after 14), unless the day was the game over.
+#  - Every morning starts at Places.cycle_start(cycles_done): floor 1 until the Reactor is done, then 8, 15, ...
+#    A game over (the third missed day) sets cycles_done back to 0 with the day number.
+#  - Floors past 7 repeat the places of cycle one (sim/places.gd local_depth); everything else reads the real depth.
+#
 # The Annex (docs/floors/annex.md sections 2 and 4; loop/NIGHT-PLAN.md A6, T16h). On a floor whose place is
 # the Annex the run holds `annex` (an AnnexFloor: the crew's marks and the Temp's sticky notes), made when
 # the crew reaches the floor and dropped on the next; on any other floor it is null and nothing below
@@ -1180,12 +1192,18 @@ class RunState:
 	var entity_id2 := ""
 	var flare_stun2_until := -1.0
 
+	## Cycles (FL2, see the header; on when the deck carries Places.CYCLES): how many cycles of seven floors this
+	## campaign has finished (the crew came back up from the Reactor of floor 7, 14, ...). Every morning starts at
+	## Places.cycle_start of it. Kept for the whole run, as the day number is; never read without the marker.
+	var cycles_done := 0
+
 	func copy() -> RunState:
 		var s := RunState.new()
 		s.second_orderly = second_orderly
 		s.orderly2 = orderly2
 		s.entity_id2 = entity_id2
 		s.flare_stun2_until = flare_stun2_until
+		s.cycles_done = cycles_done
 		s.tuning = tuning
 		s.garden = garden
 		s.lonely = lonely
@@ -3897,53 +3915,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		var aboard_ids := {}
 		for p in _active_aboard(players, input_of):
 			aboard_ids[p.id] = true
-		# Everyone not aboard is lost for this floor, with what they hold; so is everything on the floor.
-		var next_tape := s.crew.next_tape
-		var members: Array[Instr.CrewMember] = []
-		for m in s.crew.members:
-			if aboard_ids.has(m.id):
-				members.append(m)
-				continue
-			var lost := _held_tapes(m)
-			var lost_ids: Array = []
-			for tp in lost:
-				lost_ids.append(tp.id)
-			events.append({"type": "leftBehind", "t": t, "playerId": m.id, "lostTapes": lost_ids, "lostValue": TapeLib.tape_value(lost)})
-			var nm := m.copy()
-			nm.tape = TapeLib.empty_tape("tape-%d" % next_tape, m.id)
-			next_tape += 1
-			nm.carrying = []
-			nm.instrument = m.instrument.copy()
-			nm.instrument.current = null
-			nm.instrument.raised = false
-			members.append(nm)
-		if not s.crew.floor.is_empty():
-			var lost: Array[TapeLib.Tape] = []
-			var lost_ids: Array = []
-			for f in s.crew.floor:
-				lost.append(f.tape)
-				lost_ids.append(f.tape.id)
-			events.append({"type": "floorTapesLost", "t": t, "tapes": lost_ids, "lostValue": TapeLib.tape_value(lost)})
-		var nc := s.crew.copy()
-		nc.members = members
-		nc.floor = []
-		nc.next_tape = next_tape
-		s.crew = nc
-		_leave_downs(s, players, t, events)
-		_leave_out(s, players, aboard_ids)
-		for i in players.size():
-			var p := players[i]
-			if aboard_ids.has(p.id):
-				continue
-			var np := p.copy()
-			np.status = p.status if (p.status == &"caught" or p.status == &"out") else &"leftBehind"
-			np.side = null
-			players[i] = np
-		s.phase = &"riding"
-		s.timer = Settings.f(s.tuning, &"lift.ride", RIDE_TIME)
-		s.blink = null
-		s.lure = false
-		events.append({"type": "carLeft", "t": t, "reason": "ride"})
+		_ride_down(s, players, aboard_ids, t, events)
 
 	# ---- Findables (FD9, see the header): searches, before the resident.
 	if s.findables:
@@ -4194,6 +4166,109 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 # ---------------------------------------------------------------------------------------------
 # The day loop (days on only; see the header).
 
+## The car leaves for the floor below with `aboard_ids` ({id: true}): a DOWN win at the bell (step_run), or with
+## cycles the Hanging Ward's lift (step_ward). Everyone not aboard is lost for this floor, with what they hold; so
+## is everything on the floor. The riding phase's end (step_run) is the arrival on the next floor.
+static func _ride_down(s: RunState, players: Array[RunPlayer], aboard_ids: Dictionary, t: float, events: Array[Dictionary]) -> void:
+	var next_tape := s.crew.next_tape
+	var members: Array[Instr.CrewMember] = []
+	for m in s.crew.members:
+		if aboard_ids.has(m.id):
+			members.append(m)
+			continue
+		var lost := _held_tapes(m)
+		var lost_ids: Array = []
+		for tp in lost:
+			lost_ids.append(tp.id)
+		events.append({"type": "leftBehind", "t": t, "playerId": m.id, "lostTapes": lost_ids, "lostValue": TapeLib.tape_value(lost)})
+		var nm := m.copy()
+		nm.tape = TapeLib.empty_tape("tape-%d" % next_tape, m.id)
+		next_tape += 1
+		nm.carrying = []
+		nm.instrument = m.instrument.copy()
+		nm.instrument.current = null
+		nm.instrument.raised = false
+		members.append(nm)
+	if not s.crew.floor.is_empty():
+		var lost: Array[TapeLib.Tape] = []
+		var lost_ids: Array = []
+		for f in s.crew.floor:
+			lost.append(f.tape)
+			lost_ids.append(f.tape.id)
+		events.append({"type": "floorTapesLost", "t": t, "tapes": lost_ids, "lostValue": TapeLib.tape_value(lost)})
+	var nc := s.crew.copy()
+	nc.members = members
+	nc.floor = []
+	nc.next_tape = next_tape
+	s.crew = nc
+	_leave_downs(s, players, t, events)
+	_leave_out(s, players, aboard_ids)
+	for i in players.size():
+		var p := players[i]
+		if aboard_ids.has(p.id):
+			continue
+		var np := p.copy()
+		np.status = p.status if (p.status == &"caught" or p.status == &"out") else &"leftBehind"
+		np.side = null
+		players[i] = np
+	s.phase = &"riding"
+	s.timer = Settings.f(s.tuning, &"lift.ride", RIDE_TIME)
+	s.blink = null
+	s.lure = false
+	events.append({"type": "carLeft", "t": t, "reason": "ride"})
+
+## Whether the run repeats its floors in cycles (FL2, see the header): the deck carries Places.CYCLES.
+static func cycles_on(s: RunState) -> bool:
+	return Places.cycles_in(s.deck)
+
+## The cycle the crew is in (the snapshot's "cycle"): the floor's on a floor, the next descent's in the prison.
+static func cycle_now(s: RunState) -> int:
+	return Places.cycle_of(s.depth) if s.depth >= 1 else s.cycles_done + 1
+
+## Cycles (FL2, see the header): the Reactor's lift has gone up with the crew. What is carried is banked and the
+## day settled exactly as a BANK settles it (Day.end_day; with the lock, on today's earned), and the cycle counts
+## as finished unless that settlement was the game over. Everyone in the run on their feet is aboard (the Reactor
+## keeps its own conditions; whoever the car left out today has no share, as at any BANK). The caller takes the
+## crew home (_arrive_home) on the same tick, as the Reactor's return always did: no ride, no nightly reel.
+static func bank_reactor(s: RunState, t: float, events: Array[Dictionary]) -> void:
+	var players: Array[RunPlayer] = s.players.duplicate()
+	var aboard_ids: Array[String] = []
+	for p in players:
+		if p.status == &"ok" and not s.left_out.has(p.id):
+			aboard_ids.append(p.id)
+	var crew := s.crew
+	for p in players:
+		crew = Instr.set_raised(crew, p.id, false)
+	# Readings still open close as the doors shut, as at the bell's BANK (_bank).
+	var crew_players: Array[Instr.CrewPlayer] = []
+	for p in players:
+		crew_players.append(Instr.CrewPlayer.make(p.id, p.body, aboard_ids.has(p.id)))
+	var flush_state := s.copy()
+	flush_state.crew = crew
+	var no_entities: Array[Instr.EntityTick] = []
+	for _k in 20:
+		var out := _crew_tick(flush_state, crew_players, no_entities, 0.1)
+		flush_state.crew = out.crew
+		for e in out.events:
+			events.append(_with_t(e, t))
+			if s.day_lock and e["type"] == "readingClosed":
+				s.day_earned += float(e["value"])
+	s.crew = flush_state.crew
+	var dep := Instr.leave_floor(s.crew, aboard_ids)
+	s.players = players
+	var summary := _summarize(s, dep.carried, false)
+	s.summary = summary
+	s.blink = null
+	events.append({"type": "banked", "t": t, "summary": summary})
+	if s.days:
+		_settle_day(s, t, floori(summary.total), events, false)
+	_leave_downs(s, players, t, events)
+	s.players = players
+	s.crew = _fresh_crew(s.crew)
+	var over := s.day_result is Dictionary and str((s.day_result as Dictionary).get("kind", "")) == "game_over"
+	if not over:
+		s.cycles_done = maxi(s.cycles_done, Places.cycle_of(s.depth))
+
 ## Ward review uses the same instrument, departure, wallet and day records.
 static func step_ward(prev: RunState, inputs: Array[PlayerInput], crew_rows: Dictionary, limb: PackedVector3Array,
 		phase: StringName, bell_left: float, aboard: Array[String], dt: float, cues: Array[Dictionary]) -> RunStep:
@@ -4257,6 +4332,16 @@ static func step_ward(prev: RunState, inputs: Array[PlayerInput], crew_rows: Dic
 		else:
 			var slot := aboard.find(p.id)
 			p.body = car_body(s.car, 1.05 + float(slot / 2) * 0.61, -0.46 if slot % 2 == 0 else 0.46)
+	if cycles_on(s) and not aboard.is_empty():
+		# Cycles (see the header): the Ward's lift goes down to the Reactor. Nothing is banked here; what the crew
+		# recorded rides down on their tapes, and whoever is not aboard stays left out for the day, as before.
+		s.car_waits = car_waited
+		var aboard_set := {}
+		for id in aboard:
+			aboard_set[id] = true
+		_ride_down(s, players, aboard_set, s.t, out.events)
+		s.players = players
+		return out
 	_bank(s, players, aboard, s.t, out.events, aboard.is_empty(), true)
 	s.car_waits = car_waited
 	return out
@@ -4603,6 +4688,10 @@ static func _step_bed(s: RunState, players: Array[RunPlayer], input_of: Dictiona
 ## The next morning: a new day, started as day 1 was (create_run), on the next day's seed.
 static func _morning(s: RunState, players: Array[RunPlayer], t: float, events: Array[Dictionary]) -> void:
 	var crew_size := s.bed.crew.size() if s.bed != null else players.size()
+	# Cycles (see the header): a game over takes the campaign back to floor 1 with the day number.
+	if cycles_on(s) and s.day_result is Dictionary and str((s.day_result as Dictionary).get("kind", "")) == "game_over":
+		s.cycles_done = 0
+	var first := Places.cycle_start(s.cycles_done) if cycles_on(s) else 1
 	s.day_index += 1
 	s.seed = day_seed(s.base_seed, s.day_index)
 	s.day_state = Day.morning(s.day_next if s.day_next != null else s.day_state, crew_size)
@@ -4621,7 +4710,7 @@ static func _morning(s: RunState, players: Array[RunPlayer], t: float, events: A
 		s.bags = {}
 		s.pickups = []
 		s.pickups_plan = null
-	var f := _floor_for(s.seed, 1, s.deck)
+	var f := _floor_for(s.seed, first, s.deck)
 	var bodies := {}
 	for i in players.size():
 		var p := players[i]
@@ -4632,7 +4721,7 @@ static func _morning(s: RunState, players: Array[RunPlayer], t: float, events: A
 		np.side = null
 		players[i] = np
 		bodies[p.id] = np.body
-	s.depth = 1
+	s.depth = first
 	s.plan = f.plan
 	s.car = f.car
 	s.orderly = _settled_resident(s, f.orderly)
@@ -4662,7 +4751,7 @@ static func _morning(s: RunState, players: Array[RunPlayer], t: float, events: A
 		s.left_out = {}
 	_new_quota_floor(s, players)
 	_new_down_floor(s)
-	events.append({"type": "newDay", "t": t, "day": s.day_state.day, "dayIndex": s.day_index, "depth": 1, "bodies": bodies})
+	events.append({"type": "newDay", "t": t, "day": s.day_state.day, "dayIndex": s.day_index, "depth": first, "bodies": bodies})
 
 static func _inp(p: RunPlayer, input_of: Dictionary) -> PlayerInput:
 	var given: PlayerInput = input_of.get(p.id)

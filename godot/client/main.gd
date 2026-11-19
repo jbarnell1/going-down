@@ -939,7 +939,8 @@ func _open_playtest() -> void:
 	if not OS.has_feature("editor"):
 		for id: String in PLAYTEST_REVIEWS:
 			var review: Dictionary = PLAYTEST_REVIEWS[id]
-			if id in ["reactor","ward_ground"] or FileAccess.file_exists(_review_pack_path(review)):
+			# The Ward and the Reactor are FLOOR 6 and FLOOR 7 above; their old stand-alone buttons were the same rooms twice.
+			if id not in ["reactor","ward_ground"] and FileAccess.file_exists(_review_pack_path(review)):
 				start.playtest_choices.append({"id": id, "label": review["label"]})
 	var exit_label := "END SANDBOX" if _playtest_active else "BACK TO TITLE"
 	start.playtest_choices.append({"id": "title", "label": exit_label})

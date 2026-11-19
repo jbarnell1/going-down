@@ -107,9 +107,14 @@ static func names_of(people: Array) -> Dictionary:
 static func media_ready() -> bool:
 	return ResourceLoader.exists(View.RIGGER_PATH) and ResourceLoader.exists(View.HAND_PATH) and ResourceLoader.exists(View.WARNING_PATH)
 
-## The Ward's day is over for this screen: the crew is home and the host has dropped the Ward's block.
+## The Ward is over for this screen: the host has dropped the Ward's block, with the crew home, or (cycles, FL2: the
+## Ward's lift rides down) on the Reactor's floor below. The main game takes the room back and, on the Reactor's
+## floor, hands it on to the Reactor's scene (client/main.gd floor_handover).
 static func handback_due(latest: Variant) -> bool:
-	return latest is Dictionary and int(latest.get("depth", -1)) == 0 and latest.get("ward") == null
+	if not latest is Dictionary or latest.get("ward") != null:
+		return false
+	var depth := int(latest.get("depth", -1))
+	return depth == 0 or (depth > 0 and latest.get("reactor") is Dictionary)
 
 func _process(_delta: float) -> void:
 	if room == null:

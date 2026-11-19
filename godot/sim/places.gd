@@ -11,6 +11,14 @@
 #   generate(seed, depth, deck)  THE way a plan is made: the generator of place_at's place.
 #   resident(place)              who lives there: name, whether Stillness rules it, its instrument trait.
 #
+# Cycles (FL2; docs/floors/difficulty.md section 1, the owner's words of 19 Nov): a deck may carry the marker
+# CYCLES (with_cycles; never a place, never drawn). With it, floors repeat in cycles of CYCLE_FLOORS: the place
+# of floor d >= 8 is the place of floor local_depth(d) = 1 + (d - 1) % 7 (so 8 and 9 are Clinics, 10 the Annex,
+# 13 and 14 the floors under the Hanging Ward and the Reactor), while the plan is still generated with the real
+# depth (floor 8 is a different Clinic from floor 1). Without the marker every function here returns exactly what
+# it returned before, at every depth. The marker rides in the run's deck, so the host, every client (Session
+# plan_for) and every reader of place_at agree without a second switch.
+#
 # The Playroom's Minder is stepped by sim/seek.gd from sim/run.gd (T15d): its wander, the count, the
 # search. Its instrument trait is "hearing" (instrument.gd records it only while it searches).
 #
@@ -51,6 +59,37 @@ static func deck_for_start_depth(depth: int, garden_admitted: bool = false) -> A
 	return FULL if garden_admitted or depth == FIXED.find(ARBORETUM) else BEFORE_ARBORETUM
 
 const FIXED: Array[StringName] = [&"prison", &"clinic", &"clinic", &"annex", &"playroom", &"arboretum"]
+
+## Cycles (FL2, see the header): the deck marker, and how many floors one cycle has.
+const CYCLES := &"cycles"
+const CYCLE_FLOORS := 7
+
+## The deck with the cycles marker (once, at the end; the places keep their order).
+static func with_cycles(deck: Array) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for p: Variant in deck:
+		out.append(StringName(p))
+	if not out.has(CYCLES):
+		out.append(CYCLES)
+	return out
+
+## Whether the deck repeats its floors in cycles.
+static func cycles_in(deck: Array) -> bool:
+	return deck.has(CYCLES)
+
+## The cycle a floor belongs to: 1 for floors 1 to 7, 2 for 8 to 14, ... (the prison and below: 1).
+static func cycle_of(depth: int) -> int:
+	return 1 + (maxi(depth, 1) - 1) / CYCLE_FLOORS
+
+## The floor of cycle one that floor `depth` repeats: 1 + (depth - 1) % 7 with the marker, else depth itself.
+static func local_depth(depth: int, deck: Array) -> int:
+	if depth >= 1 and cycles_in(deck):
+		return 1 + (depth - 1) % CYCLE_FLOORS
+	return depth
+
+## The first floor of the cycle after `cycles_done` finished ones: 1, 8, 15, ...
+static func cycle_start(cycles_done: int) -> int:
+	return 1 + CYCLE_FLOORS * maxi(0, cycles_done)
 
 ## The Minder's stroll outside a count (seek.gd WANDER_SPEED).
 const WANDER_SPEED := 1.2
@@ -111,18 +150,21 @@ static func _deck_or_clinic(deck: Array) -> Array[StringName]:
 	var out: Array[StringName] = []
 	for p: Variant in deck:
 		var sp := StringName(p)
-		if sp != PRISON and not out.has(sp):
+		if sp != PRISON and sp != CYCLES and not out.has(sp):
 			out.append(sp)
 	if out.is_empty():
 		out.append(CLINIC)
 	return out
 
-## The place of floor `depth` for this seed and deck (FULL when not given).
+## The place of floor `depth` for this seed and deck (FULL when not given). With the cycles marker, a floor
+## past the first cycle is the place of the floor it repeats (local_depth; see the header).
 static func place_at(seed: String, depth: int, deck: Array = FULL) -> StringName:
 	if deck == ORIENTATION_ONLY:
 		return Orientation.PLACE
 	if depth <= 0:
 		return PRISON
+	if depth > CYCLE_FLOORS and cycles_in(deck):
+		return place_at(seed, local_depth(depth, deck), deck)
 	var d := _deck_or_clinic(deck)
 	var prev := PRISON
 	var here := CLINIC

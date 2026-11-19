@@ -263,6 +263,11 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    Absent on the prison, Practice, during a ride, and beside a "ward" or "reactor" block;
 ##  - the event "tenantArrived" {depth, quotaMet} at the host time the clock reached zero, once a floor: a door
 ##    slams and the announcer says the time is up (client/main.gd, client/announcer.gd).
+## Cycles (FL2; sim/places.gd, sim/run.gd "Cycles"). Only in a run with them, and only from cycle 2 on, so cycle 1 and a
+## run without them send exactly what they did before:
+##  - the world's floor extensions (its last element, the dictionary after the shop block) gain "cycle": the cycle
+##    number, a whole number from 2 (1 + (depth - 1) / 7 on a floor; in the prison, the next descent's). Decoded as
+##    "cycle" (an int); absent means cycle 1.
 ## Nightly reels (T24). With a reel in progress, the day block can end in [day, started, crew, votes, skipped].
 ## An input with a skip vote extends its 27-element form by a host-clock timestamp (the reel's start).
 const INV_OPS: Array[String] = ["", "drop", "take", "give", "stash", "fetch", "buy", "use", "throw", "skill", "lamp"]
@@ -487,12 +492,14 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < WORLD_SHOP_INDEX:
 			out.append(null)
 		out.append(enc_shop(w["shop"]))
-	if w.get("orderly2") != null or w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null or w.get("nerve") != null or w.get("tenant") != null:
+	if w.get("orderly2") != null or w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null or w.get("nerve") != null or w.get("tenant") != null or w.get("cycle") != null:
 		var extensions := {}
 		if w.get("orderly2") != null:
 			extensions["o2"] = [_enc_orderly(w["orderly2"]), int(w.get("reloc2", 0)), enc_watch(w["watch2"]) if w.get("watch2") != null else 0]
 		if w.get("tenant") != null:
 			extensions["tenant"] = [q3(w["tenant"]["at"]), q3(w["tenant"]["len"])]
+		if w.get("cycle") != null:
+			extensions["cycle"] = int(w["cycle"])
 		if w.get("nerve") != null:
 			var nerve: Array = w["nerve"].duplicate()
 			nerve[0] = q3(nerve[0])
@@ -1210,6 +1217,8 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 				out["watch2"] = dec_watch(c, o2[2])
 			if c.bad:
 				return {}
+		if extensions.has("cycle"):
+			out["cycle"] = _i(c, extensions["cycle"], 2, 100000)
 		if extensions.has("nerve"):
 			var nerve := _a(c, extensions["nerve"], 5, 7)
 			if c.bad or nerve.size() == 6:

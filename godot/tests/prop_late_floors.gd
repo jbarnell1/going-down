@@ -93,15 +93,14 @@ func test_the_flag_is_the_last_parameter_and_off_by_default(t: T) -> void:
 			init = m
 	var args: Array = init.get("args", [])
 	t.check(args.size() >= 3, "HostRules._init has its parameters")
-	# Later pieces (the party table, the Tenant clock, a second Orderly, cycles) added their flags after this one, so
-	# the promise is the agreed order, not that it is the very last: annex_drag_, minder_hunt_, late_floors_.
-	var names: Array = args.map(func(a: Dictionary) -> String: return str(a["name"]))
+	var names: Array[String] = []
+	for a: Dictionary in args:
+		names.append(str(a["name"]))
 	var at := names.find("late_floors_")
-	t.check(at >= 2, "late_floors_ is a parameter")
-	t.eq(str(names[at - 1]), "minder_hunt_", "minder_hunt_ comes just before it")
-	t.eq(str(names[at - 2]), "annex_drag_", "after annex_drag_")
-	for later in range(at + 1, args.size()):
-		t.check(int(args[later].get("default_args", 1)) >= 0 and str(names[later]).ends_with("_"), "only flags follow it")
+	# FL2 added the agreed four after it (party_table_, tenant_timer_, second_orderly_, cycles_: tests/prop_cycles.gd).
+	t.eq(names.slice(at), ["late_floors_", "party_table_", "tenant_timer_", "second_orderly_", "cycles_"] as Array[String], "late_floors_ is followed only by the four agreed flags")
+	t.eq(names[at - 1], "minder_hunt_", "minder_hunt_ comes just before it")
+	t.eq(names[at - 2], "annex_drag_", "after annex_drag_")
 	var plain := HostRules.new(true, 1, Places.FULL, true)
 	t.check(not plain.late_floors and not plain.minder_hunt, "both are off by default")
 	t.eq(HostRules.WARD_DEPTH, 6, "the Ward is floor 6")

@@ -244,7 +244,10 @@ func late_floors_on() -> bool:
 var late_archive_root := "user://reactor-campaigns"
 
 ## The fixed floors and any additional places available in the seeded deck; with the game's deck, the late floors
-## too (place &"ward" at HostRules.WARD_DEPTH, &"reactor" at HostRules.REACTOR_DEPTH: overlays on that depth's plan).
+## too (place &"ward" at HostRules.WARD_DEPTH, &"reactor" at HostRules.REACTOR_DEPTH: overlays on that depth's plan),
+## and the start of cycle 2 (FL2: CYCLE_TWO, floor 8, the Clinic again; floors 9 to 14 are not listed).
+const CYCLE_TWO := {"depth": 8, "place": &"clinic"}
+
 static func playtest_destinations(seed_: String, deck: Array[StringName]) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var seen: Array[StringName] = []
@@ -258,6 +261,7 @@ static func playtest_destinations(seed_: String, deck: Array[StringName]) -> Arr
 	if deck == Places.FULL:
 		out.append({"depth": HostRules.WARD_DEPTH, "place": &"ward"})
 		out.append({"depth": HostRules.REACTOR_DEPTH, "place": &"reactor"})
+		out.append(CYCLE_TWO.duplicate())
 	return out
 
 ## Start a fresh sandbox run at a destination on this machine. Reopening the same floor uses the same seed.
@@ -329,7 +333,7 @@ func start_run() -> void:
 	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL, shop_on(), Session.deck == Places.FULL, true, true, induction, nerve, ear, HostRules.flare_on_by_arg(), HostRules.lamp_on_by_arg(), badge_search, quick_fingers, long_burn, field_dressing, HostRules.doorway_shadow_on_by_arg() and Session.deck == Places.FULL and not _orientation_playtest, steady_gaze, throwing_arm,
 		HostRules.nerve_passive_on_by_arg() and not _orientation_playtest,
 		HostRules.annex_drag_on_by_arg() and not _orientation_playtest,
-		playroom_tuned_on(), late_floors_on() and not _orientation_playtest, playroom_tuned_on(), Session.deck == Places.FULL, Session.deck == Places.FULL)
+		playroom_tuned_on(), late_floors_on() and not _orientation_playtest, playroom_tuned_on(), Session.deck == Places.FULL, Session.deck == Places.FULL, late_floors_on() and not _orientation_playtest)
 	if _orientation_playtest:
 		rules.enable_orientation()
 	elif orientation_campaign and _playtest_depth < 0:

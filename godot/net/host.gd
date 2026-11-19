@@ -975,6 +975,9 @@ func _step(now: float) -> void:
 	_step_reactor_review(st, inputs)
 	if _reactor_review != null and _reactor_review.rules.returned and st.depth != 0 and st.day_state != null:
 		var home_events: Array[Dictionary] = []
+		if _reactor_late and Run.cycles_on(st):
+			# Cycles (FL2, sim/run.gd "Cycles"): the ride home from the Reactor is a BANK; the day is settled first.
+			Run.bank_reactor(st, st.t, home_events)
 		Run._arrive_home(st, st.players, st.t, home_events)
 		_reactor_plan = st.plan
 		r.events.append_array(home_events)
@@ -1584,6 +1587,9 @@ func world(full: bool = false) -> Dictionary:
 	var tenant: Variant = tenant_block()
 	if tenant != null and not out.has("ward") and not out.has("reactor"):
 		out["tenant"] = tenant
+	# Cycles (FL2; Protocol "cycle"): the cycle of this floor, or of the next descent in the prison; absent in cycle 1.
+	if Run.cycles_on(s) and Run.cycle_now(s) >= 2:
+		out["cycle"] = Run.cycle_now(s)
 	return out
 
 ## The Tenant clock's block from the rules stepping this run (net/host_rules.gd tenant_block), or null: the plain
@@ -1844,6 +1850,9 @@ func start_reactor_review(review_seed: int, place_crew := false, archive_path :=
 	_reactor_plan = state.plan
 	for i in state.players.size():
 		var rp := state.players[i]
+		# Cycles (FL2): whoever the Ward's lift left behind arrives out of the run; the Reactor does not seat them.
+		if Run.cycles_on(state) and rp.status != &"ok":
+			continue
 		var at := Vector3((i%3-1)*.55,0,9.3)
 		_reactor_review.player(rp.id,at,false,&"walk",0)
 		if place_crew:
@@ -1861,10 +1870,12 @@ func _start_late_floor() -> void:
 	var s := state
 	if s == null or s.plan == null or s.plan == _late_plan or s.phase == &"ended":
 		return
-	if s.depth == HostRules.WARD_DEPTH and _ward_review == null:
+	# Cycles (FL2): the floor of cycle one this floor repeats (13 is a Ward, 14 a Reactor); without them, the depth.
+	var local := Places.local_depth(s.depth, s.deck)
+	if local == HostRules.WARD_DEPTH and _ward_review == null:
 		_late_plan = s.plan
 		start_ward_review(late_seed(s), true)
-	elif s.depth == HostRules.REACTOR_DEPTH and _reactor_review == null:
+	elif local == HostRules.REACTOR_DEPTH and _reactor_review == null:
 		_late_plan = s.plan
 		start_reactor_review(late_seed(s), true, late_archive_path)
 		_reactor_late = true

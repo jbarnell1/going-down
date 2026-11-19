@@ -90,6 +90,11 @@
 #    _tenant_arrived is the one place a consequence goes later. The clock lives here, not in the run's state, so
 #    with the flag off the run is exactly what it was; net/host.gd sends it as the world's "tenant" block.
 #    `late_floors` and `party_table` are other pieces' flags, kept in plain fields and not read here.
+#  - Cycles (FL2, `cycles`, the last parameter; docs/floors/difficulty.md section 1): off unless asked, and only with
+#    the late floors; the game's rooms ask for it with them. The deck then carries Places.CYCLES, so floors repeat in
+#    sevens (sim/places.gd), the Ward's lift rides down to the Reactor, the Reactor's return settles the day, and
+#    each morning starts at the cycle the campaign has reached (sim/run.gd "Cycles"). A run made to start past
+#    floor 7 (the floor picker's floor 8) counts the cycles before it as done.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -175,6 +180,8 @@ var late_floors: bool
 var party_table: bool
 ## A second Orderly on deeper Clinic floors (off unless asked; sim/run.gd second_orderly, T9b).
 var second_orderly: bool
+## Cycles (FL2, see the header). On only together with the late floors.
+var cycles: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -200,12 +207,13 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		shop_: bool = false, nightly_reels_: bool = false, garden_cones_: bool = false, garden_search_: bool = false,
 		deep_pockets_: bool = false, second_wind_: bool = false, soft_shoes_: bool = false, flare_: bool = false, lamp_: bool = false, badge_search_: bool = false, quick_fingers_: bool = false, long_burn_: bool = false, field_dressing_: bool = false, doorway_shadow_: bool = false, steady_gaze_: bool = false, throwing_arm_: bool = false,
 		nerve_passive_: bool = false, annex_drag_: bool = false, minder_hunt_: bool = false, late_floors_: bool = false,
-		party_table_: bool = false, tenant_timer_: bool = false, second_orderly_: bool = false) -> void:
+		party_table_: bool = false, tenant_timer_: bool = false, second_orderly_: bool = false, cycles_: bool = false) -> void:
 	tenant_timer = tenant_timer_
 	minder_hunt = minder_hunt_
 	late_floors = late_floors_
 	party_table = party_table_
 	second_orderly = second_orderly_
+	cycles = cycles_ and late_floors_
 	garden_cones = garden_cones_
 	garden_search = garden_search_
 	deep_pockets = deep_pockets_
@@ -235,7 +243,7 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 	day_lock = day_lock_
 	_entity_on = entity_on
 	_depth = depth
-	deck = Run.deck_of(deck_)
+	deck = Places.with_cycles(Run.deck_of(deck_)) if cycles else Run.deck_of(deck_)
 	days = days_
 	quota = quota_
 	_quota_cap = quota_cap_by_arg() if quota_ else 0
@@ -399,6 +407,10 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 	# A second Orderly (T9b): last, so its start settles with every other rule already on. Never with the resident off.
 	if second_orderly and _entity_on and not s.second_orderly:
 		s = Run.with_second_orderly(s)
+	if cycles and _depth > Places.CYCLE_FLOORS:
+		# A run started past the first cycle (the floor picker's floor 8): the cycles above it count as done.
+		s = s.copy()
+		s.cycles_done = Places.cycle_of(_depth) - 1
 	s = _capped(s)
 	return Run.with_orientation(s, true) if orientation_prelude else s
 

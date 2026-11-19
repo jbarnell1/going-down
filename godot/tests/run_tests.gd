@@ -35,6 +35,8 @@ const FILES: Array[String] = [
 	"prop_late_floors",
 	"test_floor_entry",
 	"prop_second_orderly",
+	"prop_cycles",
+	"test_cycle_entry",
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).
