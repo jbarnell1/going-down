@@ -446,8 +446,12 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < WORLD_SHOP_INDEX:
 			out.append(null)
 		out.append(enc_shop(w["shop"]))
-	if w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null:
+	if w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null or w.get("nerve") != null:
 		var extensions := {}
+		if w.get("nerve") != null:
+			var nerve: Array = w["nerve"].duplicate()
+			nerve[0] = q3(nerve[0])
+			extensions["nerve"] = nerve
 		if w.get("lamps") != null:
 			var lamps := []
 			for l: Dictionary in w["lamps"]:
@@ -1129,6 +1133,17 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 			c.bad = true
 			return {}
 		var extensions: Dictionary = a[WORLD_FLOOR_EXTENSIONS_INDEX]
+		if extensions.has("nerve"):
+			var nerve := _a(c, extensions["nerve"], 5, 7)
+			if c.bad or nerve.size() == 6:
+				c.bad = true
+				return {}
+			out["nerve"] = [_f(c, nerve[0], 0.0, Run.Nerve.FULL),
+				_f(c, nerve[1], -Run.Nerve.FULL, 0.0), _f(c, nerve[2], -Run.Nerve.FULL, 0.0),
+				_f(c, nerve[3], -Run.Nerve.FULL, 0.0), _f(c, nerve[4], 0.0, Run.Nerve.FULL)]
+			if nerve.size() == 7:
+				out["nerve"].append(_f(c, nerve[5], -Run.Nerve.FULL, 0.0))
+				out["nerve"].append(float(_i(c, nerve[6], 0, 1)))
 		if extensions.has("lamps"):
 			var lamps: Array[Dictionary] = []
 			var ids := {}

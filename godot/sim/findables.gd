@@ -519,6 +519,7 @@ class SearchInput:
 	var held := false
 	var fast := false
 	var speed := 1.0
+	var careful_seconds := SEARCH_SLOW
 	var silent := false
 	## On their feet, active, out of the car and out of any hide, not sprinting.
 	var able := false
@@ -630,7 +631,7 @@ static func step(prev: FindFloor, inputs: Array[SearchInput], t: float) -> Searc
 		ns.piece = p.id
 		ns.fast = inp.fast
 		ns.from = t
-		ns.done = t + (SEARCH_FAST if inp.fast else SEARCH_SLOW) / inp.speed
+		ns.done = t + (SEARCH_FAST if inp.fast else inp.careful_seconds) / inp.speed
 		ns.silent = inp.silent
 		ns.spot = inp.body
 		f.searches[inp.id] = ns

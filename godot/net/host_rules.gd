@@ -137,6 +137,7 @@ var long_burn: bool
 var field_dressing: bool
 var steady_gaze: bool
 var throwing_arm: bool
+var nerve_passive: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -146,7 +147,8 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false, furniture_: bool = false, findables_: bool = false,
 		inventory_: bool = false, furniture_layout_: bool = false, resident_navigation_: bool = false,
 		shop_: bool = false, nightly_reels_: bool = false, garden_cones_: bool = false, garden_search_: bool = false,
-		deep_pockets_: bool = false, second_wind_: bool = false, soft_shoes_: bool = false, flare_: bool = false, lamp_: bool = false, badge_search_: bool = false, quick_fingers_: bool = false, long_burn_: bool = false, field_dressing_: bool = false, doorway_shadow_: bool = false, steady_gaze_: bool = false, throwing_arm_: bool = false) -> void:
+		deep_pockets_: bool = false, second_wind_: bool = false, soft_shoes_: bool = false, flare_: bool = false, lamp_: bool = false, badge_search_: bool = false, quick_fingers_: bool = false, long_burn_: bool = false, field_dressing_: bool = false, doorway_shadow_: bool = false, steady_gaze_: bool = false, throwing_arm_: bool = false,
+		nerve_passive_: bool = false) -> void:
 	garden_cones = garden_cones_
 	garden_search = garden_search_
 	deep_pockets = deep_pockets_
@@ -161,6 +163,7 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 	doorway_shadow = doorway_shadow_
 	steady_gaze = steady_gaze_
 	throwing_arm = throwing_arm_
+	nerve_passive = nerve_passive_
 	nightly_reels = nightly_reels_
 	shop = shop_
 	inventory = inventory_
@@ -316,6 +319,9 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_steady_gaze(s)
 	if throwing_arm:
 		s = Run.with_throwing_arm(s)
+	if nerve_passive and not s.nerve_passive:
+		s = s.copy()
+		s.nerve_passive = true
 	if field_dressing:
 		s = Run.with_field_dressing(s)
 	if quick_fingers:
@@ -340,6 +346,9 @@ static func flare_on_by_arg() -> bool:
 
 static func lamp_on_by_arg() -> bool:
 	return OS.get_cmdline_user_args().has("lamp=1")
+
+static func nerve_passive_on_by_arg() -> bool:
+	return OS.get_cmdline_user_args().has("nerve_passive=1")
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web
 ## page's ?quota=N), honoured only together with `auto=1`: every floor's quota is at most N credits, so a
@@ -475,6 +484,7 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 		st.floor_by = r.state.floor_by
 		st.floor_needed = r.state.floor_needed
 		st.quota_met = r.state.quota_met
+		st.nerve_readings = r.state.nerve_readings
 		# The day's earned likewise (FD2), and whether "dayMet" was said.
 		st.day_earned = r.state.day_earned
 		st.day_met = r.state.day_met

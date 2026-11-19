@@ -1986,7 +1986,12 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		machine = (1.0 - float(cd["floorsAway"]) / maxf(1.0, float(cd["floors"]))) * (0.5 if bool(cd["falseStop"]) else 1.0) + 0.05
 	var car: Dictionary = link.plan_dict["car"]
 	var trolley_at: Variant = (orderly as OrderlyView).trolley_squeak_at() if orderly is OrderlyView else null
-	sfx.update(dt, o["squeak"] if _resident_kind in ["orderly", "orientation"] and not _no_resident else {}, o.get("pose"), tick_hz, loud, float(me["exertion"]) if not still else 0.0, bool(me["winded"]), machine,
+	var lc := link.client()
+	var nerve: Variant = lc.latest.get("nerve") if lc != null and lc.latest is Dictionary else null
+	hud.nerve = nerve if nerve is Array else []
+	var shaken: bool = hud.nerve_shaken() and not still and me["status"] == "ok"
+	var exertion := float(me["exertion"]) if not still else 0.0
+	sfx.update(dt, o["squeak"] if _resident_kind in ["orderly", "orientation"] and not _no_resident else {}, o.get("pose"), tick_hz, loud, 1.0 if shaken else exertion, bool(me["winded"]), machine,
 		Vector3(float(car["doorX"]), float(car["floorY"]) + 1.5, float(car["doorZ"])), float(o.get("speed", 0.0)), trolley_at)
 	if not _entry.has("carUnix"):
 		_entry["carUnix"] = Time.get_unix_time_from_system() * 1000.0
@@ -2009,7 +2014,8 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	var noise := _noise_on()
 	var black := caught_at >= 0 and now - caught_at < BLACK_MS
 	tape_mat.set_shader_parameter("darkness", 1.0 if dark else 0.0)
-	tape_mat.set_shader_parameter("tired", 0.85 * pow(float(me["exertion"]), 1.4) if not still else 0.0)
+	tape_mat.set_shader_parameter("tired", 0.85 * pow(exertion, 1.4))
+	tape_mat.set_shader_parameter("shaken", 1.0 if shaken else 0.0)
 	tape_mat.set_shader_parameter("snow", 1.0 if (noise and not black) else 0.0)
 	tape_mat.set_shader_parameter("glitch", 1.0 if noise else 0.0)
 	hud.black = black
@@ -2017,7 +2023,6 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	hud.went_down = caught_at >= 0 and now - caught_at >= BLACK_MS + NOISE_MS and now - caught_at < BLACK_MS + NOISE_MS + LINE_MS and ending.is_empty() and s.get("downs") == null
 	var tapes: Dictionary = s["tapes"]
 	hud.set_tapes(int(tapes["count"]), float(tapes["value"]))
-	var lc := link.client()
 	hud.subtitle = announcer.shown(lc.quota() if lc != null else null)
 	if reel != null and bool(s.get("playing", true)):
 		# The picture stays in the car. The subtitle remains legible through the camcorder
@@ -3113,6 +3118,10 @@ func _command(c: String) -> String:
 			if link == null:
 				return JSON.stringify({"error": "no run"})
 			return JSON.stringify(link.debug_info())
+		"nerve":
+			return JSON.stringify({"meter": hud.nerve, "lines": hud.nerve_lines(), "shaken": hud.nerve_shaken(),
+				"grain": tape_mat.get_shader_parameter("shaken") if tape_mat != null else 0.0,
+				"breathing": sfx.breath.playing if sfx.breath != null else false})
 		"cassette":
 			var station := get_node_or_null("ReactorStation")
 			if station == null: return "null"

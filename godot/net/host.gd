@@ -577,7 +577,7 @@ func _join(peer: String, face: String = "", name: String = "") -> void:
 	if name != "":
 		p.name = name
 	var ev_from := p.ack_event + 1
-	_transport.send(peer, Protocol.encode({"type": "welcome", "you": p.id, "seed": seed, "playing": p.in_run, "evFrom": ev_from, "world": world(true)}))
+	_transport.send(peer, Protocol.encode({"type": "welcome", "you": p.id, "seed": seed, "playing": p.in_run, "evFrom": ev_from, "world": _world_for(world(true), p)}))
 	_share_faces(p, face)
 
 ## Faces, after a (repeated) welcome: the joiner gets every other player's face (so a late joiner has
@@ -1424,6 +1424,14 @@ func world(full: bool = false) -> Dictionary:
 		out["reactor"] = _reactor_review.snapshot()
 	return out
 
+## Nerve is an owner's private floor reading. The shared world never carries the crew's values.
+func _world_for(shared: Dictionary, peer: HostPlayer) -> Dictionary:
+	if not peer.in_run or not Run.shows_nerve(state):
+		return shared
+	var own := shared.duplicate()
+	own["nerve"] = Run.Nerve.view(Run.nerve_of(state, peer.id))
+	return own
+
 ## The shop and the cabinet (S2; Protocol.enc_shop): every player's credits and cabinet in the run's order, the glow
 ## sticks and toys on this floor, the juice and flash timers (host times, -1 for none), the morning's wake (or -1).
 static func shop_block(s: Run.RunState) -> Dictionary:
@@ -1630,7 +1638,8 @@ func _send_snapshots(ht: float) -> void:
 		var place: Variant = p.place if (p.place != null and int(p.place["seq"]) > p.place_ack) else null
 		var head := {"st": ht, "ackIn": p.last_seq, "echo": [p.echo[0], ht - float(p.echo[1])] if p.echo != null else null,
 			"ackSeen": p.ack_seen, "evFrom": p.ack_event + 1, "place": place, "stamina": p.stamina if p.in_run else null}
-		var data := Protocol.snapshot_text(head, evs, text)
+		var own := _world_for(w, p)
+		var data := Protocol.snapshot_text(head, evs, Protocol.world_json(own) if own.has("nerve") else text)
 		_transport.send(p.peer, data)
 		stats.snapshots += 1
 		stats.snapshot_bytes += data.length()

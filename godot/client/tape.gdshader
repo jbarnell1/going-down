@@ -9,6 +9,7 @@ uniform vec2 src_size = vec2(480.0, 270.0);
 uniform float strength = 1.0;
 uniform float darkness = 0.0;
 uniform float tired = 0.0;
+uniform float shaken = 0.0;
 uniform float glitch = 0.0;
 uniform float snow = 0.0;
 // The player's brightness (client/brightness.gd): black level and gamma, the very last step.
@@ -50,7 +51,7 @@ void fragment() {
 	float blot = (hash(vec2(floor(uv.x * 40.0), line + tf)) - 0.5) * 0.05;
 	vec3 col = to_rgb(vec3(Y, ch.y * 0.62 + blot * strength, ch.z * 0.55 - blot * strength));
 	// Grain: heavier in the dark.
-	col += (hash(uv * src_size + fract(TIME) * 91.0) - 0.5) * (0.07 + 0.09 * darkness) * strength;
+	col += (hash(uv * src_size + fract(TIME) * 91.0) - 0.5) * (0.07 + 0.09 * (darkness + shaken)) * strength;
 	// Scanlines on the source lines.
 	float sl = 0.5 + 0.5 * cos(uv.y * src_size.y * 6.2831853);
 	col *= 1.0 - 0.14 * sl * strength;

@@ -7,6 +7,7 @@ extends Control
 
 const JUMP_MS := 900
 const JUMP_BLINK_MS := 150
+const Nerve = preload("res://sim/nerve.gd")
 ## Two-watcher Stillness (docs/floors/traits-and-hiding.md section 1, "What the screen shows"; T19a): the eye
 ## marks at the bottom of the picture. The owner has not yet said whether to show them: false hides them
 ## everywhere, and nothing else changes.
@@ -81,6 +82,8 @@ var count_by := ""
 var seek_note := ""
 var health := -1.0
 var health_rates := ""
+## The viewer's host reading and four passive rates. Empty when the preview is off.
+var nerve: Array = []
 ## The tuned Playroom (T15m): how angry the Minder is, 0..1 (below 0 not shown), the host's own number;
 ## what fills it, printed under it.
 var anger := -1.0
@@ -204,6 +207,8 @@ func _draw() -> void:
 		PixelFont.draw_shadowed(self, seek_note, sp, px, Color("#f4f4ec"))
 	if health >= 0.0 and not black:
 		_draw_health(px)
+	if not nerve.is_empty() and not black and not out_on and down_head.is_empty():
+		_draw_nerve(px)
 	if anger >= 0.0 and not black:
 		_draw_anger(px)
 	if down_head != "" and not black:
@@ -368,6 +373,40 @@ func _draw_health(px: float) -> void:
 	draw_rect(Rect2(bar.position, Vector2(bar_w * clampf(health / 100.0, 0.0, 1.0), bar.size.y)), Color("#ff7a6a") if low else Color("#9fe0a0"))
 	if health_rates != "":
 		PixelFont.draw_shadowed(self, health_rates, Vector2(margin.x, y + 17 * px), px, Color("#d8ddd9"))
+
+func nerve_lines() -> PackedStringArray:
+	if nerve.is_empty():
+		return []
+	var rates: Array[String] = []
+	for i in range(1, mini(nerve.size(), 6)):
+		rates.append(String.num(nerve[i], 2).trim_suffix(".0"))
+	var low := nerve_shaken()
+	var shown := ceili(float(nerve[0]))
+	if low:
+		shown = mini(shown, int(Nerve.SHAKEN_BELOW) - 1)
+	var lines := PackedStringArray(["NERVE %d/100%s" % [shown, "  SHAKEN" if low else ""],
+		"DARK %s/S  RESIDENT %s/S" % [rates[0], rates[1]],
+		"APART %s/S  WITH CREW +%s/S" % [rates[2], rates[3]]])
+	if rates.size() > 4:
+		lines.append("SEE A CATCH %s" % rates[4])
+	return lines
+
+func nerve_shaken() -> bool:
+	return nerve.size() == 7 and nerve[6] == 1.0
+
+func _draw_nerve(px: float) -> void:
+	var lines := nerve_lines()
+	var x := maxf(size.x * 0.06, 16.0)
+	var extra := (lines.size() - 3) * 9.0
+	var y := size.y - maxf(size.y * 0.06, 12.0) - ((79.0 if health >= 0.0 else 50.0) + extra) * px
+	var width := maxi(PixelFont.width(lines[1]), PixelFont.width(lines[2])) * px
+	draw_rect(Rect2(Vector2(x - 3 * px, y - 2 * px), Vector2(width + 6 * px, (35 + extra) * px)), Color(0, 0, 0, 0.52))
+	PixelFont.draw_shadowed(self, lines[0], Vector2(x, y), px, Color("#f4f4ec"))
+	var bar := Rect2(Vector2(x, y + 9 * px), Vector2(80 * px, 3 * px))
+	draw_rect(bar, Color("#59584d"))
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * float(nerve[0]) / 100.0, bar.size.y)), Color("#ffd27a"))
+	for i in range(1, lines.size()):
+		PixelFont.draw_shadowed(self, lines[i], Vector2(x, y + (6 + i * 9) * px), px, Color("#d8ddd9"))
 
 ## The anger bar (T15m), top left (clear of the count's lines in the middle and the tape's PLAY): ANGER and the number out of 100, the bar (amber, red and pulsing once nearly full or while it
 ## counts), and what fills it under it.

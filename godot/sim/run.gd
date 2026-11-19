@@ -357,6 +357,7 @@ const Relocate = preload("res://sim/relocate.gd")
 const Stamina = preload("res://sim/stamina.gd")
 const Lonely = preload("res://sim/lonely.gd")
 const Settings = preload("res://sim/settings.gd")
+const Nerve = preload("res://sim/nerve.gd")
 const Furniture = preload("res://sim/furniture.gd")
 const Noises = preload("res://sim/noise.gd")
 const Hearing = preload("res://sim/hearing.gd")
@@ -1106,6 +1107,9 @@ class RunState:
 	var field_dressing := false
 	var steady_gaze := false
 	var throwing_arm := false
+	var nerve_passive := false
+	## Per-owner floor readings. A missing owner on an enabled floor starts full.
+	var nerve_readings: Dictionary = {}
 	var flare := false
 	var flare_plan: Floor.FloorPlan = null
 	var flare_issued := {}
@@ -1161,6 +1165,8 @@ class RunState:
 		s.field_dressing = field_dressing
 		s.steady_gaze = steady_gaze
 		s.throwing_arm = throwing_arm
+		s.nerve_passive = nerve_passive
+		s.nerve_readings = nerve_readings
 		s.flare = flare
 		s.flare_plan = flare_plan
 		s.flare_issued = flare_issued
@@ -1784,6 +1790,8 @@ static func sprint_seconds(s: RunState, id: String = "") -> float:
 	var today := Stamina.PACED_SPRINT_SECONDS if s != null and s.paced else Stamina.SPRINT_SECONDS
 	# The host resizes the tank to the active setting, plus the player's earned Medic seniority.
 	var base := Settings.f(s.tuning, &"stamina.tank", today) if s != null else today
+	if s != null and not id.is_empty() and shaken(s, id):
+		base = Nerve.SHAKEN_SPRINT
 	if s != null and s.field_dressing and not id.is_empty():
 		var wallet: Upgrades.UpgradeState = s.wallets.get(id)
 		if wallet != null:
@@ -3116,6 +3124,85 @@ static func _new_down_floor(s: RunState) -> void:
 	if not s.spots.is_empty():
 		s.spots = []
 
+static func shows_nerve(s: RunState) -> bool:
+	return s.nerve_passive and s.depth > 0 and not s.orientation and s.phase != &"ended"
+
+static func nerve_of(s: RunState, id: String) -> float:
+	return float(s.nerve_readings.get(id, Nerve.FULL)) if shows_nerve(s) else 0.0
+
+static func shaken(s: RunState, id: String) -> bool:
+	return shows_nerve(s) and Nerve.shaken(nerve_of(s, id))
+
+static func _nerve_near(a: Move.Body, b: Move.Body) -> bool:
+	return b != null and M.hypot3(a.x - b.x, a.y - b.y, a.z - b.z) <= Nerve.NEAR_METRES
+
+static func _catch_in_view(s: RunState, watcher: RunPlayer, i: PlayerInput, victim: RunPlayer) -> bool:
+	const SightModel = preload("res://sim/sight.gd")
+	if flare_blinded(s, watcher.id, s.t) or (watcher.aboard and not doors_open(s)):
+		return false
+	if s.seek != null:
+		var seat := Seek.player_of(s.seek, watcher.id)
+		if seat != null and seat.phase == &"inside" and not seat.peeking:
+			return false
+		var found := Seek.player_of(s.seek, victim.id)
+		if found != null and found.phase == &"inside":
+			return false
+	# A current input's `blind` flag is also used to stop rewinding a confirmed catch. It says nothing
+	# about a bystander's actual picture after the catch. Use the floor's lights and the accepted camera.
+	var view := _hidden_view(s, i, false)
+	if view != null and view.blind:
+		return false
+	if view == null:
+		view = _threshold_view(s.car, i) if watcher.aboard else _view_of(i, true, false)
+	var radius := Furniture.PLAYER_R / 100.0
+	if blinking(s) and not (s.shop and Shop.flashing(s.shop_state, watcher.id, s.t)):
+		if not bool(lamp_of(s, watcher.id).get("on", false)):
+			return false
+		var beam := Lamp.beam(s.tuning, watcher.body, view.eye, view.yaw, view.pitch)
+		if not Seek.lights(s.plan, beam, victim.body, i.eye, radius):
+			return false
+	return SightModel.can_see(s.plan, view, victim.body, 0.0, SightModel.SIGHT_FAR, i.eye, radius)
+
+static func _step_nerve(prev: RunState, s: RunState, input_of: Dictionary, dt: float, events: Array[Dictionary] = []) -> void:
+	if not shows_nerve(s) or prev.plan != s.plan or s.phase in [&"arriving", &"riding"]:
+		s.nerve_readings = {}
+		return
+	var resident: Move.Body
+	if not s.seek_off:
+		if s.seek != null:
+			resident = s.seek.minder.body
+		elif s.garden != null:
+			resident = s.garden.keeper.body
+		elif s.orderly != null:
+			resident = s.orderly.body
+	var apart := {}
+	if resident != null and resident_of(s).trait_name == &"lonely":
+		apart = Lonely.lonely_ids(s.plan, lonely_people(s, s.players, input_of))
+	var dark := blinking(s)
+	var catches := {}
+	for e in events:
+		if e["type"] in ["caught", "found"] and is_equal_approx(float(e["t"]), s.t):
+			catches[str(e["playerId"])] = true
+	var readings := {}
+	for i in s.players.size():
+		var p := s.players[i]
+		var value := nerve_of(prev, p.id)
+		if _is_active(p, input_of):
+			var with_crew := false
+			var input: PlayerInput = input_of[p.id]
+			if p.body.same(prev.players[i].body) and input.gait != &"creep" and not _in_hide(s, p.id):
+				for q in s.players:
+					if q.id != p.id and (_is_active(q, input_of) or q.status == &"down") and _nerve_near(p.body, q.body):
+						with_crew = true
+						break
+			value = Nerve.step(value, dt, dark, _nerve_near(p.body, resident), apart.has(p.id), with_crew)
+			if not catches.is_empty():
+				for victim in s.players:
+					if victim.id != p.id and catches.has(victim.id) and _catch_in_view(s, p, input, victim):
+						value = maxf(0.0, value - Nerve.WITNESSED_CATCH)
+		readings[p.id] = value
+	s.nerve_readings = readings
+
 static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) -> RunStep:
 	var res := RunStep.new()
 	if prev.phase == &"ended":
@@ -3754,6 +3841,8 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			_ride_up(s, players, nobody, false)
 		else:
 			s.phase = &"ended"
+	if s.nerve_passive:
+		_step_nerve(prev, s, input_of, dt, events)
 	return res
 
 # ---------------------------------------------------------------------------------------------
@@ -4396,6 +4485,8 @@ static func _step_findables(s: RunState, players: Array[RunPlayer], input_of: Di
 		var able := i != null and p.status == &"ok" and _is_active(p, input_of) and not p.aboard and not _in_hide(s, p.id) \
 			and i.gait != &"sprint" and not i.hide_use
 		var search := Findables.SearchInput.make(p.id, p.body, i.yaw if i != null else 0.0, i != null and i.search, i != null and i.search_fast, able)
+		if search.held and shaken(s, p.id):
+			search.careful_seconds = Nerve.SHAKEN_SEARCH
 		if s.quick_fingers and search.held:
 			var wallet: Upgrades.UpgradeState = s.wallets.get(p.id)
 			if wallet != null:
