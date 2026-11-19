@@ -48,7 +48,6 @@ const STAPLES: Array[String] = ["res://assets/sfx/annex/staple_1.ogg", "res://as
 	"res://assets/sfx/annex/staple_3.ogg", "res://assets/sfx/annex/staple_4.ogg"]
 const STEPS_FILE := "res://assets/sfx/annex/temp_steps.ogg"
 const STEPS_RANGE := 8.0
-const HAND_HEIGHT := 1.0        # where the click comes from
 const WALK_CYCLE := 0.95        # metres travelled in one original slow cycle
 const CHASE_CYCLE := 3.06       # metres travelled in one original fast cycle
 const CHASE_START := 2.2       # m/s, between the creep and the solo chase
@@ -91,6 +90,7 @@ var _skel: Skeleton3D
 var _ap: AnimationPlayer
 var _bones := {}
 var _attachments: Array[BoneAttachment3D] = []
+var _stapler: Node3D
 var _body_mats: Array[ShaderMaterial] = []
 var _paper_mat: ShaderMaterial
 var _gait_phase := 0.0
@@ -254,25 +254,27 @@ func show_pose(pose: Variant, show: bool) -> void:
 		_gait_phase = fposmod(_gait_phase + step / (CHASE_CYCLE if _fast else WALK_CYCLE), 1.0)
 	# The clicks: per 1.2 m walked; standing, each 4 s of its own clock (stopped while held).
 	var k := floori(_dist / CLICK_STEP)
-	if k > _walk_k:
-		_click("walk", p)
+	var click_reason := "walk" if k > _walk_k else ""
 	_walk_k = k
 	if anim == "idle" and step == 0.0:
 		if not held:
 			var sk := floori(t / STAND_CLICK)
 			if _stand_k >= 0 and sk > _stand_k:
-				_click("stand", p)
+				click_reason = "stand"
 			_stand_k = sk
 	else:
 		_stand_k = -1
+	# A click must follow the posed hand even when the listener cannot see the Temp.
+	if show or click_reason != "":
+		position = p
+		rotation = Vector3(0, float(pd["yaw"]) + PI, 0)
+		_pose_figure(anim, t, _dist)
+	if click_reason != "":
+		_click(click_reason, _stapler.global_position)
 	_shuffle(p, step)
 	visible = show
-	if not show:
-		return
-	drawn = pd
-	position = p
-	rotation = Vector3(0, float(pd["yaw"]) + PI, 0)
-	_pose_figure(anim, t, _dist)
+	if show:
+		drawn = pd
 
 static func _same(a: Dictionary, b: Dictionary) -> bool:
 	for k: String in ["x", "y", "z", "level", "yaw", "anim", "animTime"]:
@@ -379,6 +381,7 @@ func _build_model() -> void:
 				_bones[short] = idx
 	for child: Node in _model.find_children("*", "BoneAttachment3D", true, false):
 		_attachments.append(child as BoneAttachment3D)
+	_stapler = _model.find_child("temp_stapler", true, false) as Node3D
 	for mesh: MeshInstance3D in _model.find_children("*", "MeshInstance3D", true, false):
 		for i in mesh.mesh.get_surface_count():
 			var source := mesh.get_active_material(i) as BaseMaterial3D
@@ -414,8 +417,7 @@ func standing_height() -> float:
 	return (axes * (_pose_bone("Head") * tip)).y
 # --- the click ----------------------------------------------------------------------------------
 
-func _click(why: String, feet: Vector3) -> void:
-	var at := feet + Vector3(0, HAND_HEIGHT, 0)
+func _click(why: String, at: Vector3) -> void:
 	var gain := 1.0
 	var muffled := false
 	var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null

@@ -1840,6 +1840,9 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		_ward_prison_pending = false
 		print("WARD REVIEW PRISON id=%s rendered=true" % link.my_id())
 	announcer.place = str(link.plan_dict.get("place", ""))
+	var quota_client := link.client()
+	announcer.playroom_call_ready = announcer.place == "playroom" and str(s.get("phase", "")) == "away" \
+		and quota_client != null and QuotaView.floor_met(quota_client.quota())
 	announcer.days_on = s.get("day") != null
 	announcer.day_lock_on = DayView.lock_of(s.get("day")) != null
 	announcer.my_id = link.my_id()
@@ -2106,7 +2109,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		elif phase == "night":
 			pass   # home for the night: the car cannot be called
 		elif bool(me.get("canCall", false)):
-			prompt = "F  â–¼ CALL"
+			prompt = "F  Ã¢â€“Â¼ CALL"
 		elif not annex_note_focus.is_empty():
 			prompt = AnnexNotesView.PROMPT
 		elif practice and phase == "boarding":
@@ -2171,7 +2174,7 @@ func _show_quota(s: Dictionary, now: int) -> void:
 	var q: Variant = c.quota() if c != null else null
 	hud.floor_quota_line = QuotaView.floor_hud_text(q, int(s.get("depth", 0)), str(s.get("phase", "")))
 	hud.floor_quota_met = QuotaView.floor_met(q)
-	hud.quota_line = quota_view.update(q, lift, hud.prompt == "F  â–¼ CALL", now)
+	hud.quota_line = quota_view.update(q, lift, hud.prompt == "F  Ã¢â€“Â¼ CALL", now)
 	hud.quota_tone = quota_view.tone
 	# The car waits (FD4): standing open on arrival for whoever is still aboard, the panel says who.
 	car_waiting = car_waiting_text(c.latest if c != null else null, link.names(), now)

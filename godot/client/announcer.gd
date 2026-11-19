@@ -43,6 +43,9 @@ const EXPIRE_MS := 4000
 const EXPIRE_LONG_MS := 9000
 const EXPIRE_BOARD_MS := 12000
 const GAP_MS := 450
+# These announcements describe a momentary elevator or call state. Do not carry them past the search cue.
+# Quota is retained separately when the latest floor still allows the crew to call.
+const SEARCH_TRANSIENT := ["quota", "called", "arrived", "left", "doors", "bell", "lights", "board"]
 ## The floor quota met, when no "quota" line is recorded.
 const QUOTA_CAPTION := "Quota met! The car may now be called."
 const FLOOR_STILL_NEEDED := " FLOOR QUOTA STILL NEEDED TO CALL."
@@ -73,6 +76,12 @@ var caption_until := 0
 var count_player: AudioStreamPlayer
 var number_player: AudioStreamPlayer
 var said_count: Array = []
+var _search_caption_until := 0
+var _search_caption := ""
+var _search_followups: Array[Callable] = []
+var _search_quota := {}
+## The latest Playroom floor quota is met and the car can still be called.
+var playroom_call_ready := false
 
 ## The hints' gate (client/hints.gd) and what it needs from the game: this screen's player id, the place
 ## of the floor ("clinic", "annex", "playroom", "prison"), whether the run has days, and the Playroom
@@ -321,6 +330,10 @@ func _arrival(depth: int, first_depth: int, now: int) -> void:
 		later("hint_marks", 75000, "marks")
 
 func _new_floor() -> void:
+	_clear_search_handoff()
+	if bool(current.get("after_search", false)):
+		_cut()
+	queue = queue.filter(func(q: Dictionary) -> bool: return not bool(q.get("after_search", false)))
 	hints.new_floor()
 	_marks_floor = 0
 	_later = _later.filter(func(l: Dictionary) -> bool: return str(l.get("unless", "")) == "keep")
@@ -366,8 +379,48 @@ func say_grab(ms: int) -> String:
 	say_count("grab", str(lines[id].plain), ms, -1, 0, id)
 	return id
 
+func _search_protected(now: int) -> bool:
+	return place == "playroom" and _search_caption_until > 0 and (now < _search_caption_until or _busy("count"))
+
+func _keep_quota_for_search(q: Dictionary) -> void:
+	if q.get("moment") == "quota" and not bool(q.get("after_search", false)):
+		_search_quota = q.duplicate()
+
+func _hold_search_company() -> void:
+	for q: Dictionary in queue:
+		_keep_quota_for_search(q)
+	queue = queue.filter(func(q: Dictionary) -> bool: return not SEARCH_TRANSIENT.has(q.moment))
+
+func _clear_search_handoff() -> void:
+	if _search_caption_until > 0:
+		if not fake and count_player != null:
+			count_player.stop()
+		_fake_until["count"] = 0
+		caption_until = 0
+	_search_caption_until = 0
+	_search_caption = ""
+	_search_followups.clear()
+	_search_quota = {}
+
+func _playroom_quota_current() -> bool:
+	return place == "playroom" and playroom_call_ready and count_ctx.get("phase") == "seek"
+
 func say_count(line: String, text: String, ms: int, number := -1, length := 0, line_id := "") -> void:
 	var now := _ms()
+	if _search_protected(now):
+		# The last number must never talk over the next phase. Catch speech waits; its sting is immediate.
+		if line not in ["number", "search"]:
+			_search_followups.append(say_count.bind(line, text, ms, number, length, line_id))
+		return
+	if line == "search" and place == "playroom":
+		_search_caption_until = now + ms
+		_search_caption = text
+		_keep_quota_for_search(current)
+		_cut()
+		_hold_search_company()
+		if not fake and number_player != null:
+			number_player.stop()
+		_fake_until["number"] = 0
 	caption = text
 	caption_until = now + ms
 	var id := line_id
@@ -409,6 +462,8 @@ func say_count(line: String, text: String, ms: int, number := -1, length := 0, l
 
 ## The subtitle to show: the announcer's own line, else the count's caption while it lasts.
 func shown(floor_quota: Variant = null) -> String:
+	if _search_protected(_ms()):
+		return _search_caption if _ms() < _search_caption_until else ""
 	if subtitle != "":
 		return subtitle.trim_suffix(FLOOR_STILL_NEEDED) if FloorQuota.floor_met(floor_quota) else subtitle
 	return caption if _ms() < caption_until else ""
@@ -541,7 +596,28 @@ func update() -> void:
 	for q: Dictionary in expired:
 		if bool(q.get("hint", false)):
 			_log({"what": "expired", "id": q.id, "moment": q.moment, "at": now})
-	queue = queue.filter(func(q: Dictionary) -> bool: return q.expires > now)
+	var quota_current := _playroom_quota_current()
+	if bool(current.get("after_search", false)) and not quota_current:
+		_cut()
+	queue = queue.filter(func(q: Dictionary) -> bool: return q.expires > now and (quota_current or not bool(q.get("after_search", false))))
+	if place != "playroom" and (_search_caption_until > 0 or not _search_followups.is_empty()):
+		_clear_search_handoff()
+	if _search_protected(now):
+		_hold_search_company()
+		return
+	if _search_caption_until > 0:
+		_search_caption_until = 0
+		_search_caption = ""
+		if quota_current and int(_search_quota.get("expires", 0)) > now:
+			_search_quota["after_search"] = true
+			queue.append(_search_quota)
+			queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.priority > b.priority)
+		_search_quota = {}
+	if not _search_followups.is_empty():
+		if not _busy("count"):
+			var followup: Callable = _search_followups.pop_front()
+			followup.call()
+		return
 	if not current.is_empty() or now < _gap_until or queue.is_empty():
 		return
 	# The first line in priority order that may start now: a hint only when nothing else is playing and
@@ -550,6 +626,8 @@ func update() -> void:
 	var pick := -1
 	for i in queue.size():
 		var q: Dictionary = queue[i]
+		if bool(q.get("after_search", false)) and busy:
+			continue
 		if bool(q.get("hint", false)) and hints.may_start(str(q.moment), now, place, busy, count_ctx) != "":
 			continue
 		pick = i

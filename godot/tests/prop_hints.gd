@@ -59,6 +59,7 @@ class Night:
 	var log_seen := 0
 	var said_seen := 0
 	var count_lines: Array = []   # [from, to] of every count line and number "playing"
+	var last_count_start := {}
 	var bad := {}
 	var counted := {"started": 0, "expired": 0, "cut": 0, "replaces": 0, "playroom_counts": 0, "grabs": 0}
 	var last_grab := ""
@@ -104,26 +105,32 @@ class Night:
 		if id != "" and id == last_grab:
 			fail("grab", "at %d: %s twice running" % [now, id])
 		last_grab = id
-		if id != "":
-			for c: Array in count_lines:
-				if c[2] == "count" and int(c[1]) > now:
-					c[1] = now
-			count_lines.append([now, now + a._length_ms(id, 2200), "count"])
 		_check_logs()
 
 	func say(line: String, text: String, ms: int, number := -1, length := 0) -> void:
 		a.say_count(line, text, ms, number, length)
-		var said: Dictionary = a.said_count[-1]
-		if str(said["id"]) != "":
-			# Each player plays one line: a new one stops the one before on the same player.
-			var slot := "number" if line == "number" else "count"
-			for c: Array in count_lines:
-				if c[2] == slot and int(c[1]) > now:
-					c[1] = now
-			count_lines.append([now, now + a._length_ms(str(said["id"]), ms), slot])
 		_check_logs()
 
+	# Requests can be deferred at the search transition. The actual start is reported separately.
+	func _track_count_start() -> void:
+		if a.said_count.is_empty():
+			return
+		var started: Dictionary = a.said_count[-1]
+		if is_same(started, last_count_start):
+			return
+		last_count_start = started
+		if str(started["id"]) == "":
+			return
+		var at := int(started["at"])
+		var slot := "number" if started["line"] == "number" else "count"
+		for c: Array in count_lines:
+			var search_ends_numbers: bool = started["line"] == "search" and place == "playroom" and c[2] == "number"
+			if (c[2] == slot or search_ends_numbers) and int(c[1]) > at:
+				c[1] = at
+		count_lines.append([at, at + a._length_ms(str(started["id"]), 2000), slot])
+
 	func _check_logs() -> void:
+		_track_count_start()
 		var hl: Array = a.hint_log
 		for e: Dictionary in hl:
 			var m := str(e["moment"])
@@ -511,4 +518,89 @@ func test_place_lines(t: T) -> void:
 	for i in 40:
 		seen[a._deal("doors")] = true
 	t.check(seen.has("doors_1"), "doors_1 still dealt on the Clinic")
+	a.free()
+
+
+func test_playroom_search_preserves_the_timed_voice_and_caption(t: T) -> void:
+	var a := _make("search voice")
+	a.place = "playroom"
+	a.count_ctx = {"phase":"hide", "left":1.0, "len":30, "last":false}
+	a.request("quota", 9000, "FLOOR RECORDED 1200 OF 1200. CALL READY.", "quota_1")
+	a.update()
+	a.playroom_call_ready = true
+	a.say_count("number", "1.", 850, 1, 30)
+	a.clock_ms = 400
+	a.say_count("search", "COMING, READY OR NOT!", 2000)
+	a.count_ctx.phase = "seek"
+	t.check(a._busy("count") and not a._busy("main") and not a._busy("number"), "only the search line speaks at the handoff")
+	t.eq(a.shown(), "COMING, READY OR NOT!", "the caption follows the protected search cue")
+	a.request("called")
+	a.say_count("search", "DUPLICATE", 2000)
+	a.say_count("number", "STALE NUMBER", 850, 1, 30)
+	t.eq(a.shown(), "COMING, READY OR NOT!", "duplicate search and stale number do not replace the caption")
+	t.eq(a.said_count.size(), 2, "search presents once")
+	a.clock_ms = 2100
+	a.update()
+	t.check(not a._busy("main"), "company stays silent through the cue caption")
+	a.clock_ms = 2450
+	a.update()
+	t.eq(str(a.current.get("id", "")), "quota_1", "the still-actionable quota announcement returns once")
+	t.check(a.shown().contains("FLOOR RECORDED 1200 OF 1200. CALL READY."), "the deferred quota keeps its matching caption")
+	a.playroom_call_ready = false
+	a.clock_ms = 2510
+	a.update()
+	t.check(not a._busy("main"), "a call makes the deferred quota immediately stop")
+	a.clock_ms = 5500
+	a.update()
+	t.check(a.history.filter(func(h: Dictionary) -> bool: return h.moment == "quota").size() == 2, "the original plus exactly one valid replay")
+	t.check(a.history.all(func(h: Dictionary) -> bool: return h.moment != "called"), "a transient called line is not replayed after the handoff")
+	a.free()
+
+
+func test_playroom_search_drops_stale_quota_and_keeps_catch_cue(t: T) -> void:
+	for stale: String in ["called", "next phase", "next floor", "expired"]:
+		var a := _make("search stale " + stale)
+		a.place = "playroom"
+		a.playroom_call_ready = true
+		a.count_ctx = {"phase":"seek", "left":30.0, "len":30, "last":false}
+		a.say_count("search", "COMING, READY OR NOT!", 2000)
+		a.request("quota", 1000 if stale == "expired" else 9000, "", "quota_1")
+		a.clock_ms = 900
+		a.say_count("found", "FOUND YOU, ANN!", 2000)
+		a.update()
+		t.eq(a.shown(), "COMING, READY OR NOT!", "%s cannot replace the search cue with a catch caption" % stale)
+		match stale:
+			"called": a.playroom_call_ready = false
+			"next phase": a.count_ctx.phase = "over"
+			"next floor":
+				a.on_events([{"type":"rodeDown"}])
+				a.place = "clinic"
+		a.clock_ms = 2100
+		a.update()
+		if stale != "next floor":
+			t.eq(a.shown(), "FOUND YOU, ANN!", "%s does not suppress the deferred catch line" % stale)
+		else:
+			t.check(not a._busy("count"), "changing floors drops unplayed Playroom followups")
+		a.clock_ms = 4800
+		a.update()
+		t.check(a.history.all(func(h: Dictionary) -> bool: return h.moment != "quota"), "%s cannot replay a stale quota prompt" % stale)
+		a.place = "playroom"
+		a.clock_ms = 7000
+		a.say_count("search", "NEXT SEARCH", 2000)
+		t.eq(a.shown(), "NEXT SEARCH", "a later count can reserve a new window")
+		a.free()
+
+
+func test_playroom_search_control_keeps_other_voice_paths(t: T) -> void:
+	var a := _make("search off floor")
+	a.place = "clinic"
+	a.request("blackout")
+	a.update()
+	a.say_count("search", "TEST COUNT", 2000)
+	t.check(not a.current.is_empty() and a._busy("main"), "the Playroom gate does not cut other floors' lines")
+	a.free()
+	a = _make("playroom catch outside handoff")
+	a.place = "playroom"
+	a.say_count("found", "FOUND YOU, ANN!", 2000)
+	t.check(a._busy("count") and a.shown() == "FOUND YOU, ANN!", "catch speech outside the search handoff is immediate")
 	a.free()

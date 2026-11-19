@@ -72,3 +72,41 @@ func test_held_frame_freezes_skin_and_props(t: T) -> void:
 	t.check(v.drawn_signature() != watched, "new motion releases the held pose")
 	t.check(prop.global_position.y < height - 0.25, "the arm drops after the watch ends")
 	v.free()
+
+
+func test_stapler_sound_is_at_the_held_prop_on_each_click(t: T) -> void:
+	var v := _view()
+	var camera := Camera3D.new()
+	v.get_viewport().add_child(camera)
+	camera.position = Vector3(0.0, 1.65, 2.6)
+	camera.make_current()
+	var stapler := v.find_child("temp_stapler", true, false) as Node3D
+	v.show_pose(_pose(0.0, "idle", 3.95), true)
+	v.show_pose(_pose(0.0, "idle", 4.08), true)
+	if not t.eq(v.clicks.size(), 1, "one click on the authored idle beat"):
+		camera.free()
+		v.free()
+		return
+	var first: Vector3 = v.clicks[0]["at"]
+	t.check(first.is_equal_approx(stapler.global_position), "the idle clip moves the actual held source")
+	t.check(v._player.global_position.is_equal_approx(first), "the recorded idle stream emits at the measured prop")
+	t.check(v._player.stream.resource_path in View.STAPLES, "the idle cue uses the original recordings")
+	var gain := pow(1.0 - camera.global_position.distance_to(first) / View.HEAR_RANGE, 2.0)
+	t.check(is_equal_approx(v.clicks[0]["gain"], gain), "the same distance attenuation uses the heard point")
+	v.show_pose(_pose(0.0, "idle", 4.08), true)
+	t.eq(v.clicks.size(), 1, "a still frame cannot repeat the click")
+
+	# The Temp advances out of view. Crossing the next 1.2 m beat samples its new fast pose for audio.
+	v.show_pose(_pose(0.45, "walk", 4.18), false)
+	v.show_pose(_pose(0.85, "walk", 4.28), false)
+	var arrival := _pose(1.28, "walk", 4.38)
+	arrival.yaw = PI * 0.5
+	v.show_pose(arrival, false)
+	if t.eq(v.clicks.size(), 2, "one walking click at the travelled-distance beat"):
+		var next: Vector3 = v.clicks[1]["at"]
+		t.check(not v.visible and next.is_equal_approx(stapler.global_position), "the hidden chase also positions the sound at its posed prop")
+		t.check(v._player.global_position.is_equal_approx(next) and next.distance_to(first) > 0.75, "the later click uses its new world location")
+		t.check(v._player.stream.resource_path in View.STAPLES, "the walk cue preserves the recorded takes")
+		t.eq(v.clicks[0]["at"], first, "later motion does not move the earlier logged origin")
+	camera.free()
+	v.free()
