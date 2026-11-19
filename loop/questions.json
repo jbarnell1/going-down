@@ -1942,6 +1942,27 @@
       "default": [
         "bunk"
       ]
+    },
+    {
+      "id": "garden-hearing-edge",
+      "title": "Which hearing behavior do you prefer for the garden playtest?",
+      "context": "See the short player example on Progress under T26, then choose the behavior you would expect.",
+      "type": "single",
+      "options": [
+        {
+          "id": "follow",
+          "label": "Keep following the uninterrupted sprint",
+          "note": "A continuous sound stays audible until it stops."
+        },
+        {
+          "id": "range",
+          "label": "Check hearing range on each new footstep",
+          "note": "Each step must be audible from the current position."
+        }
+      ],
+      "default": [
+        "follow"
+      ]
     }
   ]
 }
