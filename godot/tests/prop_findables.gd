@@ -401,7 +401,7 @@ static func _words(text: String) -> Array[String]:
 func test_poems_and_pages_say_nothing_plain(t: T) -> void:
 	var d := Findables.data()
 	var poems: Array = d.get("poems", [])
-	t.eq(poems.size(), 9, "poems in the data")
+	t.eq(poems.size(), 12, "poems in the data")
 	var by_trait := {}
 	for p: Dictionary in poems:
 		var id := str(p["id"])

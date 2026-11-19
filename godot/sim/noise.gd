@@ -23,7 +23,7 @@
 #   crawls while down                                                CRAWL        2 m
 #   gets into or out of a hide (opens something to search it)        HIDE         4 m
 #   drops a tape, is healed back up                                  DROP         6 m
-#   a thrown pinecone lands (AR5: not thrown by anything yet)        CONE         12 m, where it lands
+#   a thrown pinecone lands (AR5)        CONE         12 m, where it lands
 #   a sound emote (whistle, clap, shout)                             EMOTE        18 m
 # Choices made where the design is silent:
 #  - "moves" means the body covered more than MOVING metres a second this tick: a player pressing into a trunk
@@ -39,6 +39,7 @@ extends RefCounted
 
 const Floor = preload("res://sim/floor.gd")
 const Move = preload("res://sim/move.gd")
+const Settings = preload("res://sim/settings.gd")
 const M = preload("res://sim/jsmath.gd")
 
 ## Surfaces (Ground.cells). NONE: not ground (thicket, the void, a floor with no Ground).
@@ -60,6 +61,8 @@ const CRAWL := 2.0
 const HIDE := 4.0
 const DROP := 6.0
 const CONE := 12.0
+const SEARCH_OPEN := 4.0
+const SEARCH_RUSH := 8.0
 const EMOTE := 18.0
 ## A body is moving when it covers more than this, metres a second.
 const MOVING := 0.2
@@ -157,6 +160,7 @@ class Act extends RefCounted:
 	var hide: int = -1
 	## Healed back onto their feet this tick.
 	var healed: bool = false
+	var search_radius := 0.0
 
 	static func make(id_: String, body_: Move.Body, from_: Move.Body, gait_: StringName) -> Act:
 		var a := Act.new()
@@ -216,6 +220,10 @@ static func of(ground: Ground, a: Act, dt: float, cracked: Dictionary) -> Sound:
 		r = DROP
 		kind = &"heal"
 		hide = -1
+	if not a.down and a.search_radius > r:
+		r = a.search_radius
+		kind = &"search"
+		hide = -1
 	if a.emote and EMOTE > r:
 		r = EMOTE
 		kind = &"emote"
@@ -226,13 +234,17 @@ static func of(ground: Ground, a: Act, dt: float, cracked: Dictionary) -> Sound:
 	out.hide = hide
 	return out
 
+## Careful storage opens at the end of the search. Rushing makes its noise when the search starts.
+static func search_radius(fast: bool, tuning: Settings.Values = null) -> float:
+	return Settings.f(tuning, &"noise.search_rush", SEARCH_RUSH) if fast else Settings.f(tuning, &"noise.search_open", SEARCH_OPEN)
+
 ## A tape hitting the floor at `at`, dropped by `by`.
 static func drop(by: String, at: Move.Body) -> Sound:
 	return Sound.make(by, at.x, at.z, at.level, DROP, &"drop")
 
-## A pinecone landing (AR5 throws them).
-static func cone(x: float, z: float, level: int) -> Sound:
-	return Sound.make("", x, z, level, CONE, &"cone")
+## A pinecone impact is a noise at the landing, without a player as its source.
+static func cone(x: float, z: float, level: int, tuning: Settings.Values = null) -> Sound:
+	return Sound.make("", x, z, level, Settings.f(tuning, &"noise.cone", CONE), &"cone")
 
 ## Whether a listener at (x, z) on `level` hears `n`.
 static func heard_at(n: Sound, x: float, z: float, level: int) -> bool:

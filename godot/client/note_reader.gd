@@ -90,6 +90,9 @@ static func _author(id: String) -> String:
 			return str(e.get("author", "")).to_upper()
 	return ""
 
+static func attribution_rows(id: String) -> PackedStringArray:
+	return PixelFont.wrap(_author(id), PAGE_COLS)
+
 func _process(_d: float) -> void:
 	queue_redraw()
 
@@ -138,13 +141,13 @@ func _draw_carton(px: float) -> void:
 func _draw_card(px: float) -> void:
 	var lines := lines_of(open_id)
 	var poem := Findables.is_poem(open_id)
-	var author := "" if poem else _author(open_id)
-	var cols := 0
+	var attribution := PackedStringArray() if poem else attribution_rows(open_id)
+	var cols := 0 if poem else PAGE_COLS
 	for l in lines:
 		cols = maxi(cols, l.length())
 	var lp := px
 	var w := (cols * 6 + 16) * lp
-	var h := (lines.size() * 11 + 26 + (12 if author != "" else 0)) * lp
+	var h := (lines.size() * 11 + 26 + attribution.size() * 11) * lp
 	var at := Vector2(floorf((size.x - w) * 0.5), floorf((size.y - h) * 0.42))
 	draw_rect(Rect2(at + Vector2(3, 4) * px, Vector2(w, h)), Color(0, 0, 0, 0.5))
 	draw_rect(Rect2(at, Vector2(w, h)), PAPER if poem else PAPER_PAGE)
@@ -160,10 +163,9 @@ func _draw_card(px: float) -> void:
 	for i in lines.size():
 		PixelFont.draw(self, lines[i], at + Vector2(8, 10 + i * 11) * lp, lp, INK)
 	var y := (10 + lines.size() * 11 + 4) * lp
-	if author != "":
-		var a := author.left(cols)
-		PixelFont.draw(self, a, at + Vector2(8 * lp, y), lp, Color(0.45, 0.4, 0.36))
-		y += 12 * lp
+	for line in attribution:
+		PixelFont.draw(self, line, at + Vector2(8 * lp, y), lp, Color(0.45, 0.4, 0.36))
+		y += 11 * lp
 	var foot := "F OR MOVE TO PUT IT DOWN"
 	PixelFont.draw_shadowed(self, foot, Vector2(floorf((size.x - PixelFont.width(foot) * px) * 0.5), at.y + h + 8 * px), px, Color("#f4f4ec"))
 
@@ -187,5 +189,5 @@ func _draw_list(px: float) -> void:
 		PixelFont.draw_shadowed(self, rows[i], at + Vector2(8, 8 + i * 12) * px, px, Color("#ffd27a") if i == 0 else Color("#f4f4ec"))
 
 func describe() -> Dictionary:
-	return {"open": open_id, "lines": Array(lines_of(open_id)) if open_id != "" else [], "read": read.duplicate(), "list": list_on,
+	return {"open": open_id, "lines": Array(lines_of(open_id)) if open_id != "" else [], "attribution": Array(attribution_rows(open_id)), "read": read.duplicate(), "list": list_on,
 		"prompt2": prompt2 if prompt_on else "", "result": result, "juice": juice}

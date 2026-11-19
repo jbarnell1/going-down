@@ -131,7 +131,7 @@ const ROWS: Array = [
 	[&"minder.anger_noise", &"minder", "ONE NOISE ADDS TO ITS ANGER", "a ball pit, a flap, a dropped tape or an emote", "in 100", 34.0, 5.0, 100.0, 1.0, &"now", &"LS4", W],
 	[&"minder.anger_cool", &"minder", "ITS ANGER COOLS FROM FULL IN", "seconds of quiet that empty a full anger bar", "s", 50.0, 10.0, 300.0, 5.0, &"now", &"LS4", F],
 	# The Groundskeeper (the Arboretum; sim/hearing.gd, sim/noise.gd, sim/run.gd KEEPER_HEALS). AR1 wires its
-	# speeds, its reach, the lean and the heals; the rest (piece AR) are listed for the panel and read by nothing yet.
+	# speeds, its reach, the lean and the heals. AR5 wires the cone radius. The remaining rows are for review.
 	[&"groundskeeper.speed", &"groundskeeper", "COMING SPEED", "how fast it comes to a noise", "m/s", 6.0, 4.2, 9.0, 0.1, &"now", &"AR1", F],
 	[&"groundskeeper.dark_speed", &"groundskeeper", "SPEED IN THE BLACKOUT", "the same, while the lights are out before the car", "m/s", 6.5, 4.2, 9.0, 0.1, &"now", &"AR1", F],
 	[&"groundskeeper.reach", &"groundskeeper", "REACH", "it takes whoever is this near when a lean ends or a noise is made", "m", 2.0, 1.0, 3.0, 0.1, &"now", &"AR1", F],
@@ -151,7 +151,9 @@ const ROWS: Array = [
 	[&"noise.crawl", &"groundskeeper", "HEARS A CRAWL WITHIN", "a downed player crawling", "m", 2.0, 0.0, 5.0, 0.5, &"now", &"AR", F],
 	[&"noise.hide", &"groundskeeper", "HEARS A HIDE WITHIN", "getting into or out of a hide, opening something", "m", 4.0, 2.0, 8.0, 0.5, &"now", &"AR", F],
 	[&"noise.drop", &"groundskeeper", "HEARS A DROP OR A HEAL WITHIN", "a tape hitting the floor, a player getting back up", "m", 6.0, 3.0, 12.0, 0.5, &"now", &"AR", F],
-	[&"noise.cone", &"groundskeeper", "HEARS A PINECONE WITHIN", "where a thrown cone lands", "m", 12.0, 6.0, 20.0, 1.0, &"now", &"AR", F],
+	[&"noise.cone", &"groundskeeper", "HEARS A PINECONE WITHIN", "where a thrown cone lands", "m", 12.0, 6.0, 20.0, 1.0, &"now", &"AR5", F],
+	[&"noise.search_open", &"groundskeeper", "HEARS A CAREFUL SEARCH WITHIN", "the storage opening at the end of a careful search", "m", 4.0, 2.0, 6.0, 1.0, &"now", &"AR", F],
+	[&"noise.search_rush", &"groundskeeper", "HEARS A RUSHED SEARCH WITHIN", "rummaging in storage at the start of a rushed search", "m", 8.0, 6.0, 12.0, 1.0, &"now", &"AR", F],
 	[&"noise.emote", &"groundskeeper", "HEARS A WHISTLE WITHIN", "a sound emote: a whistle, a clap, a shout", "m", 18.0, 10.0, 30.0, 1.0, &"now", &"AR", F],
 	# The lift and the dark. "Time for the elevator to return" is the first three rows.
 	[&"lift.floors_min", &"lift", "CAR STARTS, FEWEST FLOORS AWAY", "the shortest the indicator can start from", "floors", 6.0, 2.0, 19.0, 1.0, &"next", &"LS1", W],
@@ -217,9 +219,10 @@ const ROWS: Array = [
 ]
 
 ## The pieces whose rows the rules read today (`wired`). LS4, LS5 and LS6 add theirs as they wire them.
-const WIRED_PIECES: Array[StringName] = [&"LS1"]
+const WIRED_PIECES: Array[StringName] = [&"LS1", &"AR5"]
 ## Rows of later pieces the rules already read (wired one group at a time, each with its proof).
 const WIRED_IDS: Array[StringName] = [
+	&"noise.search_open", &"noise.search_rush",
 	&"orderly.catch_dance",
 	# LS4: the lift and the dark.
 	&"lift.false_stop", &"lift.board", &"lift.hold", &"lift.ride",

@@ -22,6 +22,7 @@ const Noises = preload("res://sim/noise.gd")
 const Floor = preload("res://sim/floor.gd")
 const Furniture = preload("res://sim/furniture.gd")
 const Hides = preload("res://sim/hides.gd")
+const InventoryView = preload("res://client/inventory_view.gd")
 const GardenSound = preload("res://client/garden_sound.gd")
 const Ferns = preload("res://client/arboretum_ferns.gd")
 const BARK_MAP = preload("res://assets/arboretum/willow_bark.png")
@@ -92,14 +93,14 @@ var _hush := 1.0
 static var _tex := {}
 
 ## Dresses `level` as the Arboretum. Returns the view, kept as the level's "arboretum" meta and its child.
-static func dress(level: Level) -> Node3D:
+static func dress(level: Level, rules_plan: Floor.FloorPlan = null) -> Node3D:
 	var v: Node3D = new()
 	v.name = "ArboretumView"
 	v.process_priority = 1000
-	v.call(&"_dress", level)
+	v.call(&"_dress", level, rules_plan)
 	return v
 
-func _dress(level: Level) -> void:
+func _dress(level: Level, rules_plan: Floor.FloorPlan) -> void:
 	lv = level
 	level.set_meta(&"arboretum", self)
 	level.set_meta(&"near_light", NEAR_LIGHT)
@@ -110,7 +111,8 @@ func _dress(level: Level) -> void:
 	level.shadows = false
 	level.ambient_lit = AMBIENT_LIT
 	level.ambient_dark = AMBIENT_DARK
-	fp = Arboretum.generate_arboretum(str(level.plan.seed), int(level.plan.depth))
+	# The game already has the rules plan. Standalone callers with a plan dump can still build the view.
+	fp = rules_plan if rules_plan != null else Arboretum.generate_arboretum(str(level.plan.seed), int(level.plan.depth))
 	g = Arboretum.garden_of(fp)
 	_rng.seed = hash("arboretum-view:%s:%d" % [fp.seed, fp.depth])
 	_ground()
@@ -654,6 +656,12 @@ func _tree(at: Vector3, x: int, z: int, r: float, dead: bool) -> void:
 			var across := Vector3(-spread.z, 0.30, spread.x)
 			var lc := Color(0.095, 0.15, 0.07) * (0.82 + 0.45 * _hash01(x, z, 7))
 			_leaf_card(end + Vector3.UP * 0.13, spread * 1.08 + Vector3.UP * (0.45 - 0.63 * r), across * 0.66, lc)
+	if not dead and Arboretum.is_conifer(x, z):
+		for tier in 3:
+			var y := tall * (0.39 + 0.16 * tier)
+			var width := 1.36 - 0.24 * tier
+			_taper("thicket", PackedVector3Array([at + Vector3.UP * y, at + Vector3.UP * (y + tall * 0.27)]),
+				PackedFloat32Array([width, 0.03]), Vector3.UP, a, Color(0.07, 0.13, 0.076), 6)
 	if not dead:
 		_leaf_card(fork.lerp(tip, 0.45), along * 1.52 + Vector3.UP * 0.24,
 			Vector3(-along.z, -0.30, along.x) * 1.13, Color(0.075, 0.12, 0.068))
@@ -964,7 +972,28 @@ func step_at(pos: Vector3, gain_db: float) -> bool:
 
 ## A twig cracked at (x, z) (the host's "twigCrack" event): everyone hears it.
 func crack(x: float, z: float) -> void:
-	var recording := _garden_audio.next("twig")
+	_ground_hit("twig", x, z)
+
+func cone_landed(x: float, z: float) -> void:
+	_ground_hit("pinecone_gravel" if surface_at(x, z) == "gravel" else "pinecone_leaves", x, z)
+
+func cone_thrown(event: Dictionary) -> void:
+	var from: Dictionary = event["from"]
+	var at: Dictionary = event["at"]
+	var start := Vector3(float(from["x"]), float(from["y"]) + 1.2, float(from["z"]))
+	var end := Vector3(float(at["x"]), float(at["y"]) + 0.07, float(at["z"]))
+	var cone := InventoryView.cone_mesh()
+	cone.position = start
+	add_child(cone)
+	var flight := create_tween()
+	flight.tween_method(func(alpha: float) -> void:
+		cone.position = start.lerp(end, alpha) + Vector3.UP * (sin(PI * alpha) * minf(1.2, start.distance_to(end) * 0.15))
+		cone.rotation.x = TAU * alpha
+	, 0.0, 1.0, float(event["flight"]))
+	flight.tween_callback(cone.queue_free)
+
+func _ground_hit(cue: String, x: float, z: float) -> void:
+	var recording := _garden_audio.next(cue)
 	if recording == null:
 		return
 	var sp := _steps[_step_next]

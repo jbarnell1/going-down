@@ -11,7 +11,7 @@ func test_recorded_resources_and_loops(t: T) -> void:
 		var stream := sounds.next(cue)
 		if t.check(stream != null, "%s recording imported" % cue):
 			t.check(stream.loop, "%s loops in the imported asset" % cue)
-	for cue: String in ["step_moss", "step_leaves", "step_gravel", "step_creep", "twig", "badge", "sniff", "shears", "snatch"]:
+	for cue: String in ["step_moss", "step_leaves", "step_gravel", "step_creep", "twig", "pinecone_leaves", "pinecone_gravel", "badge", "sniff", "shears", "snatch"]:
 		var stream := sounds.next(cue)
 		if t.check(stream != null, "%s recording imported" % cue):
 			t.check(not stream.loop, "%s plays just once" % cue)

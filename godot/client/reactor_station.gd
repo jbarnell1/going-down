@@ -45,7 +45,7 @@ func _process(_dt: float) -> void:
 	if not nearby and open:
 		close_screen()
 	hint.visible = not open and not game._esc_menu
-	hint.text = "E  USE CASSETTE PLAYER" if nearby else ("Recovered cassette  /  Player in east cell block" if archive.recovered else "")
+	hint.text = "E  USE PRISON CASSETTE DECK" if nearby else ("Recovered cassette  /  Tape deck in east cell block" if archive.recovered else "")
 	if open:
 		screen.show_archive(archive, game.link.my_id())
 
@@ -65,6 +65,7 @@ func _input(event: InputEvent) -> void:
 
 func close_screen() -> void:
 	if screen.ticket != 0:
+		screen.stopped_early = not screen.reported_end
 		game.link.rc.reactor_screening("skip",screen.ticket)
 	screen.video.stop()
 	screen.ticket = 0
@@ -80,7 +81,7 @@ func _mount() -> void:
 	_box(Vector3(0,-0.14,0.15),Vector3(0.59,0.38,0.02),Color("#9eae8e"))
 	_box(Vector3(0,-0.43,0.16),Vector3(0.30,0.045,0.02),Color("#15181b"))
 	var label := Label3D.new()
-	label.text = "CASSETTE PLAYER"
+	label.text = "PRISON CASSETTE DECK"
 	label.pixel_size = 0.0014
 	label.position = Vector3(0,0.23,0.16)
 	station.add_child(label)

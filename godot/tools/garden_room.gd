@@ -35,7 +35,7 @@ func _start(now: float) -> void:
 	var seed := fixed_seed
 	if seed.is_empty():
 		seed = Crypto.new().generate_random_bytes(6).hex_encode()
-	rules = HostRules.new(true, first_depth, Places.FULL, days, false, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, false, furniture, findables, inventory)
+	rules = HostRules.new(true, first_depth, Places.FULL, days, false, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, false, furniture, findables, inventory, false, false, false, false, true, true)
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(self, "_prepare"), Callable(rules, "step"))

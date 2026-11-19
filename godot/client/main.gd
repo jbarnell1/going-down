@@ -1193,6 +1193,9 @@ func _input(event: InputEvent) -> void:
 		elif mb.pressed and not wheel_open and mb.button_index == MOUSE_BUTTON_LEFT and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 			# The shop's items (S2): the left mouse button uses the one in your hand (it does nothing else in play).
 			inv_key("use")
+		elif mb.pressed and not wheel_open and not hud.menu_on and mb.button_index == MOUSE_BUTTON_MIDDLE:
+			if inv_key("throw"):
+				get_viewport().set_input_as_handled()
 		elif mb.pressed and not wheel_open and (mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN):
 			# The four-slot inventory (S1): the wheel steps through the squares.
 			inv_key("down" if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN else "up")
@@ -1277,6 +1280,12 @@ func inv_key(key: String) -> bool:
 			pending_inv_step -= 1
 		"down":
 			pending_inv_step += 1
+		"throw":
+			var active := pending_inv_sel if pending_inv_sel >= 0 else inv_view.sel
+			if active >= inv_view.slots.size() or str(inv_view.slots[active][0]) != "pinecone":
+				return false
+			pending_inv_op = "throw"
+			pending_inv_arg = 0
 		"g":
 			pending_inv_op = "drop"
 			pending_inv_arg = 0
@@ -2020,7 +2029,7 @@ func _update_search(s: Dictionary, me: Dictionary, home: bool, station: String, 
 
 ## This frame's search events: your result line and note (into the reader), the noise of a rushed search.
 func _show_finds_events(s: Dictionary, now: int) -> void:
-	search_view.use_plan(link.plan)
+	search_view.use_plan(link.plan, link.plan != null and link.plan.place == Places.ARBORETUM and s.get("find") is Dictionary)
 	var nid := search_view.on_events(s.get("events", []), link.my_id(), sfx, now)
 	if nid != "":
 		note_reader.open(nid)
@@ -2047,7 +2056,7 @@ func _ride_rows(s: Dictionary, rows: PackedStringArray) -> PackedStringArray:
 	if c == null or c.seed == null or not c.latest is Dictionary:
 		return rows
 	var next := int(s["depth"]) + 1
-	var plan := Session.plan_for(str(c.seed), next, c.floor_deck)
+	var plan := Session.plan_for(str(c.seed), next, c.floor_deck, c.garden_dense)
 	if not FindablesRules.place_on(plan.place):
 		return rows
 	var crew := 0
@@ -2254,6 +2263,13 @@ func _present(events: Array, now: int) -> void:
 					left_at = now
 			"called":
 				sfx.play("chime")
+			"coneThrown", "coneLanded":
+				if level != null and level.has_meta(&"arboretum"):
+					var garden: Node3D = level.get_meta(&"arboretum")
+					if ty == "coneThrown":
+						garden.call(&"cone_thrown", e)
+					else:
+						garden.call(&"cone_landed", float(e["x"]), float(e["z"]))
 			"twigCrack":
 				# The Arboretum: a twig fall cracked under someone (sim/noise.gd); everyone hears where.
 				if level != null and level.has_meta(&"arboretum"):

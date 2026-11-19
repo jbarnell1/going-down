@@ -243,6 +243,7 @@ var host_stamina: Stamina.Stamina = null
 var draw_in_dark := false
 ## The room supplies the deck for this run. Direct rules tests use the session default.
 var floor_deck: Array[StringName] = []
+var garden_dense := false
 ## Live settings (docs/floors/live-settings.md LS2): the revision the host has in force (0: never tuned), and its
 ## list ({id: number}) as a tuning for this client's own predicted numbers (Settings.f; null for none). The
 ## snapshots carry the revision always and the list now and then (Protocol "tune"): a lost one heals within a second.
@@ -836,7 +837,7 @@ func frame(now: float, local: LocalFrame) -> Frame:
 			_pin = null
 		var pinned := _pin != null
 		var cand: Dictionary = _pin["pose"] if pinned else (Pose.quant_pose(b["orderly"]) if _moved_on(a, b) else Pose.lerp_pose(a["orderly"], b["orderly"], alpha))
-		var plan := Session.plan_for(seed, a_depth, floor_deck)
+		var plan := Session.plan_for(seed, a_depth, floor_deck, garden_dense)
 		var open := Session.doors_open_in(a["phase"]) or Session.doors_open_in(b["phase"]) or (latest != null and Session.doors_open_in(latest["phase"]))
 		var same := _drawn != null and _drawn_depth == a_depth
 		if not _still(plan.place, a, b):

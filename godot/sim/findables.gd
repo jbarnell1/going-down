@@ -58,6 +58,7 @@ const Floor = preload("res://sim/floor.gd")
 const Move = preload("res://sim/move.gd")
 const Places = preload("res://sim/places.gd")
 const Hides = preload("res://sim/hides.gd")
+const GardenSites = preload("res://sim/garden_sites.gd")
 const Furniture = preload("res://sim/furniture.gd")
 const Entity = preload("res://sim/entity.gd")
 const Lonely = preload("res://sim/lonely.gd")
@@ -112,6 +113,10 @@ const SEARCHABLE := {
 }
 ## The prompt for each searchable kind (section 3's tables, as the pixel font prints them).
 const PROMPTS := {
+	&"garden_bin": "F  LIFT BIN LID",
+	&"garden_chest": "F  OPEN TOOL CHEST",
+	&"garden_drawer": "F  OPEN GREENHOUSE DRAWER",
+	&"garden_bench": "F  OPEN BENCH DRAWER",
 	&"gurney": "F  CHECK GURNEY",
 	&"drawers_low": "F  OPEN DRAWER",
 	&"side_table": "F  CHECK LOCKER",
@@ -129,6 +134,7 @@ const POEMS := {
 	&"stillness": ["stillness-1", "stillness-2", "stillness-3"],
 	&"lonely": ["lonely-1", "lonely-2", "lonely-3"],
 	&"hearing": ["hearing-1", "hearing-2", "hearing-3"],
+	&"listening": ["garden-1", "garden-2", "garden-3"],
 }
 ## The lore pages dealt from drawers (story.md 4a, those marked for Friday): [id, place, tier, kind found in].
 ## The prison's (J1, J2) are on its walls, never in a drawer; the rest of the table is LATER (in the data, not
@@ -150,8 +156,8 @@ static var test_break := ""
 # Which pieces.
 
 ## Whether the place has findables at all.
-static func place_on(place: StringName) -> bool:
-	return place == &"clinic" or place == &"annex" or (PLAYROOM_ON and place == &"playroom")
+static func place_on(place: StringName, garden_search: bool = false) -> bool:
+	return place == &"clinic" or place == &"annex" or (PLAYROOM_ON and place == &"playroom") or (garden_search and place == &"arboretum")
 
 ## Sets `searchable` on the pieces of `pieces` (sim/furniture.gd's list for this plan) that can be searched.
 ## `hides`: the floor's hides (Hides.hides_for), or null to make them.
@@ -206,15 +212,18 @@ static func _steps(plan: Floor.FloorPlan, dist: PackedInt32Array, p: Furniture.P
 
 ## The floor's searchable pieces, in id order. `floor_seed` "" means plan.seed; `depth` -1 means plan.depth.
 ## Kept for the last 16 plans (a plan is never edited once made).
-static func spots_for(plan: Floor.FloorPlan, floor_seed: String = "", depth: int = -1) -> Array[Furniture.Piece]:
-	var key := "%s/%d" % [floor_seed if floor_seed != "" else plan.seed, depth if depth >= 0 else plan.depth]
+static func spots_for(plan: Floor.FloorPlan, floor_seed: String = "", depth: int = -1, garden_search: bool = false) -> Array[Furniture.Piece]:
+	var key := "%s/%d/%d" % [floor_seed if floor_seed != "" else plan.seed, depth if depth >= 0 else plan.depth, int(garden_search)]
 	var kept: Variant = _spots.get(plan)
 	if kept != null and kept[0] == key:
 		return kept[1]
 	var out: Array[Furniture.Piece] = []
-	for p in Furniture.pieces_for(plan, floor_seed, depth):
-		if p.searchable:
-			out.append(p)
+	if plan.place == &"arboretum" and garden_search:
+		out = GardenSites.pieces(plan)
+	else:
+		for p in Furniture.pieces_for(plan, floor_seed, depth):
+			if p.searchable:
+				out.append(p)
 	if not _spots.has(plan):
 		_spot_order.append(plan)
 		if _spot_order.size() > 16:
@@ -267,13 +276,13 @@ class Fill:
 
 ## The fill of a floor (see the header). `base`: the floor's quota as set on arrival; `trait_name`: trait_for's;
 ## `day`: the day number (the pages' tier); `lore_used`: page ids already dealt tonight.
-static func fill_for(plan: Floor.FloorPlan, floor_seed: String, depth: int, base: int, trait_name: StringName, day: int = 1, lore_used: Array = []) -> Fill:
+static func fill_for(plan: Floor.FloorPlan, floor_seed: String, depth: int, base: int, trait_name: StringName, day: int = 1, lore_used: Array = [], garden_search: bool = false) -> Fill:
 	var f := Fill.new()
 	f.place = plan.place
 	f.trait_name = trait_name
 	f.base = base
 	f.unit = maxi(1, base / 100)
-	var spots := spots_for(plan, floor_seed, depth)
+	var spots := spots_for(plan, floor_seed, depth, garden_search)
 	var n := spots.size()
 	if n == 0:
 		return f
@@ -478,14 +487,14 @@ class FindFloor:
 		f.wait_release = wait_release.duplicate()
 		return f
 
-static func start_floor(plan: Floor.FloorPlan, floor_seed: String, depth: int, base: int, trait_name: StringName, day: int, lore_used: Array) -> FindFloor:
+static func start_floor(plan: Floor.FloorPlan, floor_seed: String, depth: int, base: int, trait_name: StringName, day: int, lore_used: Array, garden_search: bool = false) -> FindFloor:
 	var f := FindFloor.new()
 	f.plan = plan
 	f.depth = depth
-	f.pieces = spots_for(plan, floor_seed, depth)
+	f.pieces = spots_for(plan, floor_seed, depth, garden_search)
 	for p in f.pieces:
 		f.by_id[p.id] = p
-	f.fill = fill_for(plan, floor_seed, depth, base, trait_name, day, lore_used)
+	f.fill = fill_for(plan, floor_seed, depth, base, trait_name, day, lore_used, garden_search)
 	return f
 
 class SearchInput:
@@ -527,7 +536,8 @@ static func piece_in_reach(f: FindFloor, body: Move.Body, yaw: float) -> Furnitu
 	if cx < 0 or cy < 0 or cx >= plan.width or cy >= plan.height:
 		return null
 	var room := Floor.room_id_at(plan, body.level, cx, cy)
-	if room < 0:
+	var outdoors := plan.place == &"arboretum"
+	if room < 0 and not outdoors:
 		return null
 	var bx := roundi(body.x * 100.0)
 	var bz := roundi(body.z * 100.0)
@@ -538,6 +548,8 @@ static func piece_in_reach(f: FindFloor, body: Move.Body, yaw: float) -> Furnitu
 	var best_g := 0
 	for p in f.pieces:
 		if p.level != body.level or p.room != room or f.opened.has(p.id):
+			continue
+		if outdoors and (p.x / CM != cx or p.y / CM != cy):
 			continue
 		var g := Furniture.gap2(Rect2i(bx, bz, 0, 0), p.foot)
 		if g > REACH * REACH:

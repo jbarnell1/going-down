@@ -231,3 +231,18 @@ func test_remission_notice_follows_the_first_positive_personal_bank_share(t: T) 
 	report["index"] = 3
 	t.check(not game._remission_for(report, "p1"), "later paid reports do not repeat the notice")
 	game.free()
+
+func test_payday_notice_and_shop_preview_preserve_their_distinct_facts(t: T) -> void:
+	const Reader = preload("res://client/note_reader.gd")
+	const ShopCard = preload("res://client/shop_view.gd")
+	var author := Reader.attribution_rows("J2")
+	t.eq(" ".join(author), "CONTINUANCE, THE PUBLIC NOTICE IN THE BANK ROOM", "whole authored attribution")
+	t.check(author.size() > 1 and Array(author).all(func(row: String) -> bool: return row.length() <= Reader.PAGE_COLS), "footer wraps to card width")
+	var card := ShopCard.new()
+	card.credits = 2000
+	t.eq(card.balance_label(), "SPENDABLE CREDITS 2000", "wallet label")
+	t.eq(card.after_buy_label(60), "AFTER BUY 1940", "preview uses wallet less advertised price")
+	t.eq(card.after_buy_label(2001), "", "no preview for an unaffordable price")
+	card.shut = true
+	t.eq(card.after_buy_label(60), "", "no preview when shut")
+	card.free()

@@ -135,7 +135,7 @@ static func place_at(seed: String, depth: int, deck: Array = FULL) -> StringName
 	return here
 
 ## THE one way the host and every client make the plan of a floor.
-static func generate(seed: String, depth: int, deck: Array = FULL) -> Floor.FloorPlan:
+static func generate(seed: String, depth: int, deck: Array = FULL, garden_dense: bool = false) -> Floor.FloorPlan:
 	match place_at(seed, depth, deck):
 		PRISON:
 			return Prison.prison_plan()
@@ -144,7 +144,7 @@ static func generate(seed: String, depth: int, deck: Array = FULL) -> Floor.Floo
 		PLAYROOM:
 			return Playroom.generate_playroom(seed, depth)
 		ARBORETUM:
-			return Arboretum.generate_arboretum(seed, depth)
+			return Arboretum.generate_arboretum(seed, depth, garden_dense)
 	return Clinic.generate_clinic(seed, depth)
 
 ## The resident a floor starts with, at plan.entity_start in its own body. THE one place a floor's

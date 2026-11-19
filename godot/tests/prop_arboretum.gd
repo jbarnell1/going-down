@@ -856,11 +856,12 @@ func test_the_view_draws_the_hosts_garden(t: T) -> void:
 		var plan := floor_of(i * 3)
 		var g := Arboretum.garden_of(plan)
 		var level: Node3D = LevelScript.new()
-		level.call(&"build", PlanDump.dump(plan, Run.car_geometry(plan)), plan.seed)
+		level.call(&"build", PlanDump.dump(plan, Run.car_geometry(plan)), plan.seed, plan)
 		var view: Object = level.get_meta(&"arboretum") if level.has_meta(&"arboretum") else null
 		if not t.check(view != null, "%s: the level was not dressed as the Arboretum" % key_of(i * 3)):
 			level.free()
 			continue
+		t.check(view.get("fp") == plan, "the view reuses the client rules plan instead of generating again")
 		var wrong := 0
 		for c in W * H:
 			var got: String = view.call(&"surface_at", (c % W + 0.5) * 2.0, (c / W + 0.5) * 2.0)
@@ -985,3 +986,39 @@ func _check_garden_meshes(t: T, g: Arboretum.Garden, view: Node3D, tag: String) 
 		view.call(&"_apply", 0.0)
 		t.eq(float(lantern.get_shader_parameter(&"energy")), 0.0, "%s: park lanterns go dark in blackout" % tag)
 	t.note("%s: %d batched meshes, %d triangles" % [tag, batched, triangles])
+
+func test_dense_thicket_keeps_two_routes_and_the_landing(t: T) -> void:
+	var n := 24 if t.quick else 100
+	var least := 1.0
+	var most := 0.0
+	var area := float((Arboretum.X1 - Arboretum.X0 + 1) * (Arboretum.Y1 - Arboretum.Y0 + 1))
+	for i in n:
+		var seed := "density-%d" % i
+		var depth := 5 + i % 4
+		var plan := Arboretum.generate_arboretum(seed, depth, true)
+		if not t.check(plan != null, "%s generated" % seed):
+			continue
+		var g := Arboretum.garden_of(plan)
+		var share := g.thicket.count(1) / area
+		least = minf(least, share)
+		most = maxf(most, share)
+		t.check(share >= 0.33 and share <= 0.35, "%s retains about 35 percent thicket, got %.2f%%" % [seed, share * 100])
+		var open := ground_of(plan)
+		var c := cuts(open)
+		t.check(c[0] == 0 and c[1] == 1 and c[2] >= 2, "%s keeps two paths: %s" % [seed, c])
+		t.check(g.cells[g.door_out] == Noises.GRAVEL and Floor.can_step_xy(plan, 0, g.door_in % W, g.door_in / W, 0, g.door_out % W, g.door_out / W),
+			"%s keeps the familiar gravel apron and clear door" % seed)
+		for row in H:
+			for col in W:
+				var at := row * W + col
+				if g.thicket[at] == 0:
+					continue
+				for stride: int in [1, W]:
+					var line := 1
+					while at + line * stride < W * H and g.thicket[at + line * stride] > 0:
+						line += 1
+					t.check(line <= 5, "%s preserves short thicket clumps" % seed)
+		if i == 0:
+			var again := Arboretum.generate_arboretum(seed, depth, true)
+			t.eq(Arboretum.floor_hash(plan), Arboretum.floor_hash(again), "the denser map remains deterministic")
+	t.note("%d floors, thicket %.2f to %.2f percent" % [n, least * 100, most * 100])

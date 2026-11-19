@@ -224,15 +224,15 @@ static func _in_garden(x: int, y: int) -> bool:
 	return x >= X0 and x <= X1 and y >= Y0 and y <= Y1
 
 ## THE Arboretum of a seed and a depth.
-static func generate_arboretum(seed: String, depth: int) -> Floor.FloorPlan:
+static func generate_arboretum(seed: String, depth: int, dense: bool = false) -> Floor.FloorPlan:
 	for attempt in TRIES:
-		var b := _try(seed, depth, attempt)
+		var b := _try(seed, depth, attempt, dense)
 		if b != null:
 			return _plan(seed, depth, b)
 	push_error("arboretum %s/%d: no try kept every rule" % [seed, depth])
 	return null
 
-static func _try(seed: String, depth: int, attempt: int) -> Build:
+static func _try(seed: String, depth: int, attempt: int, dense: bool = false) -> Build:
 	var b := Build.new()
 	b.rng = Rng.make_rng("arboretum:%s:%d:%d" % [seed, depth, attempt])
 	b.g = Garden.new()
@@ -271,6 +271,8 @@ static func _try(seed: String, depth: int, attempt: int) -> Build:
 	if not _lengths_hold(b):
 		return _fail("lengths")
 	_grow_thicket(b)
+	if dense:
+		_fill_thicket_gaps(b, Rng.make_rng("thicket-fill:%s:%d:%d" % [seed, depth, attempt]))
 	_surfaces(b)
 	if not _dead_trees(b):
 		return _fail("dead trees")
@@ -1036,6 +1038,128 @@ static func _grow_thicket(b: Build) -> void:
 				g.thicket[c] = 1
 			have += cells.size()
 
+
+## Fill some gaps left by the original one-cell clump border. Each accepted batch leaves the
+## walkable garden biconnected. Keep the approach, landmarks, gravel and moss exactly as laid.
+static func _fill_thicket_gaps(b: Build, rng: Rng) -> void:
+	var open := PackedByteArray()
+	open.resize(W * H)
+	var candidates := PackedInt32Array()
+	var have := 0
+	var want := int(THICKET_SHARE * (X1 - X0 + 1) * (Y1 - Y0 + 1))
+	for c in W * H:
+		if b.g.thicket[c] == 1:
+			have += 1
+		elif b.blocked[c] == 0:
+			open[c] = 1
+			if b.walk[c] == 0 and b.moss[c] == 0 and b.zone_id[c] < 0:
+				candidates.append(c)
+	for n in range(candidates.size() - 1, 0, -1):
+		var j := rng.int_in(0, n)
+		var old := candidates[n]
+		candidates[n] = candidates[j]
+		candidates[j] = old
+	var at := 0
+	while have < want and at < candidates.size():
+		var end := mini(at + 32, candidates.size())
+		have += _fill_thicket_batch(open, b.g.thicket, candidates, at, end, want - have)
+		at = end
+
+const CARDINAL_OFFSETS: Array[int] = [1, -1, W, -W]
+
+## Cells outside the garden are a permanent zero border. An accepted extra cell may touch a
+## clump, but may not make a row or column of thicket longer than five or leave a dead end.
+static func _can_fill_thicket(open: PackedByteArray, thicket: PackedByteArray, c: int) -> bool:
+	for d: int in [1, W]:
+		var length := 1
+		for step: int in [d, -d]:
+			var j := c + step
+			while thicket[j] == 1:
+				length += 1
+				j += step
+		if length > 5:
+			return false
+	for d in CARDINAL_OFFSETS:
+		var j := c + d
+		if open[j] == 0:
+			continue
+		var degree := 0
+		for side in CARDINAL_OFFSETS:
+			degree += open[j + side]
+		if degree <= 2:
+			return false
+	return true
+
+## Try several candidates for one graph walk. Subdivide a rejected batch, keeping good changes.
+static func _fill_thicket_batch(open: PackedByteArray, thicket: PackedByteArray, order: PackedInt32Array,
+		begin: int, end: int, left: int) -> int:
+	if left <= 0:
+		return 0
+	var added := PackedInt32Array()
+	for i in range(begin, end):
+		var c := order[i]
+		if not _can_fill_thicket(open, thicket, c):
+			continue
+		open[c] = 0
+		thicket[c] = 1
+		added.append(c)
+		if added.size() == left:
+			break
+	if added.is_empty() or _two_routes(open):
+		return added.size()
+	for c in added:
+		open[c] = 1
+		thicket[c] = 0
+	if end - begin <= 1:
+		return 0
+	var mid := (begin + end) / 2
+	var first := _fill_thicket_batch(open, thicket, order, begin, mid, left)
+	return first + _fill_thicket_batch(open, thicket, order, mid, end, left - first)
+
+## A DFS low-link test. No articulation and one component gives two internally disjoint paths
+## between any pair of open cells. The permanent border makes the four neighbour offsets safe.
+static func _two_routes(open: PackedByteArray) -> bool:
+	var root := open.find(1)
+	if root < 0:
+		return false
+	var found := PackedInt32Array()
+	var low := PackedInt32Array()
+	var next := PackedByteArray()
+	found.resize(open.size())
+	low.resize(open.size())
+	next.resize(open.size())
+	var stack := PackedInt32Array([root])
+	var children := 0
+	var visited := 1
+	found[root] = visited
+	low[root] = visited
+	while not stack.is_empty():
+		var v := stack[-1]
+		if next[v] < CARDINAL_OFFSETS.size():
+			var u := v + CARDINAL_OFFSETS[next[v]]
+			next[v] += 1
+			if open[u] == 0 or (stack.size() > 1 and u == stack[-2]):
+				continue
+			if found[u] == 0:
+				if v == root:
+					children += 1
+					if children > 1:
+						return false
+				visited += 1
+				found[u] = visited
+				low[u] = visited
+				stack.append(u)
+			else:
+				low[v] = mini(low[v], found[u])
+		else:
+			stack.resize(stack.size() - 1)
+			if not stack.is_empty():
+				var parent := stack[-1]
+				if parent != root and low[v] >= found[parent]:
+					return false
+				low[parent] = mini(low[parent], low[v])
+	return visited == open.count(1)
+
 # ---- Surfaces.
 
 static func _surfaces(b: Build) -> void:
@@ -1286,6 +1410,10 @@ static func hides(plan: Floor.FloorPlan) -> Array[Playroom.Hide]:
 
 ## [kind, x cm, y cm, facing] for every prop, in order: each landmark's piece and lamp post, the dead trees, then
 ## the trunks cell by cell. A pure function of the plan.
+## Shared by the floor view and the seeded cone placements.
+static func is_conifer(x: int, z: int) -> bool:
+	return posmod((x / 7) * 13 + (z / 11) * 19, 7) == 0
+
 static func props(plan: Floor.FloorPlan) -> Array:
 	var out: Array = []
 	var g := garden_of(plan)

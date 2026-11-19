@@ -362,6 +362,7 @@ const Hearing = preload("res://sim/hearing.gd")
 const Findables = preload("res://sim/findables.gd")
 const Inventory = preload("res://sim/inventory.gd")
 const Shop = preload("res://sim/shop.gd")
+const GardenCones = preload("res://sim/garden_cones.gd")
 
 # ---------------------------------------------------------------------------------------------
 # Tuning.
@@ -893,6 +894,8 @@ class GardenFloor:
 	## the floor then.
 	var healed: Array[String] = []
 	var drops: Array[Noises.Sound] = []
+	## Accepted throws waiting to land, [{at: Move.Body, lands: float}].
+	var cones_in_flight: Array[Dictionary] = []
 
 	func copy() -> GardenFloor:
 		var g := GardenFloor.new()
@@ -901,6 +904,7 @@ class GardenFloor:
 		g.heals = heals.duplicate()
 		g.healed = healed.duplicate()
 		g.drops = drops.duplicate()
+		g.cones_in_flight = cones_in_flight.duplicate()
 		return g
 
 ## A downed player (see the header). Replaced, never edited, once in a RunState.
@@ -1065,6 +1069,8 @@ class RunState:
 	var items: Dictionary = {}
 	## The four-slot inventory (S1, with_inventory; sim/inventory.gd). Off: nothing below is ever made or read.
 	var inventory: bool = false
+	var garden_cones: bool = false
+	var garden_search: bool = false
 	## Each player's slots {id: Inventory.Bag}; the floor's pickups (Inventory.Pickup) and the plan they lie on;
 	## the next pickup's id. Replaced, never edited.
 	var bags: Dictionary = {}
@@ -1100,6 +1106,8 @@ class RunState:
 		s.lore_used = lore_used
 		s.items = items
 		s.inventory = inventory
+		s.garden_cones = garden_cones
+		s.garden_search = garden_search
 		s.bags = bags
 		s.pickups = pickups
 		s.pickups_plan = pickups_plan
@@ -1243,9 +1251,9 @@ class _FloorFor:
 	var orderly: Entity.OrderlyState
 	var entity_id: String
 
-static func _floor_for(seed: String, depth: int, deck: Array[StringName]) -> _FloorFor:
+static func _floor_for(seed: String, depth: int, deck: Array[StringName], garden_dense: bool = false) -> _FloorFor:
 	var f := _FloorFor.new()
-	f.plan = Places.generate(seed, depth, deck)
+	f.plan = Places.generate(seed, depth, deck, garden_dense)
 	f.car = car_geometry(f.plan)
 	f.orderly = Places.create_resident(f.plan)
 	f.entity_id = Places.entity_id(f.plan.place, depth)
@@ -1474,6 +1482,18 @@ static func with_inventory(s0: RunState) -> RunState:
 	s.pickups = []
 	s.pickups_plan = null
 	s.pickup_seq = 0
+	return s
+
+## Enable searching the Arboretum's outdoor storage sites.
+static func with_garden_search(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.garden_search = true
+	return s
+
+## Enable the Arboretum cone decoy for an inventory run.
+static func with_garden_cones(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.garden_cones = true
 	return s
 
 ## The floor's solid pieces for players in this run (Furniture.solids_of), or null when furniture is off.
@@ -2047,6 +2067,14 @@ static func _step_garden(s: RunState, players: Array[RunPlayer], input_of: Dicti
 		if ty == "hideStart" or ty == "hideLeave":
 			hide_noise[str(events[i]["playerId"])] = int(events[i]["hide"])
 		i += 1
+	var search_noise := {}
+	if s.garden_search:
+		for e in events:
+			var kind := str(e["type"])
+			if kind == "searchStart" and bool(e["fast"]):
+				search_noise[str(e["playerId"])] = Noises.search_radius(true, s.tuning)
+			elif kind == "searchDone" and not bool(e["fast"]):
+				search_noise[str(e["playerId"])] = Noises.search_radius(false, s.tuning)
 	var people: Array[Hearing.Person] = []
 	for p in players:
 		var down := p.status == &"down" and s.down.has(p.id)
@@ -2059,12 +2087,29 @@ static func _step_garden(s: RunState, players: Array[RunPlayer], input_of: Dicti
 		hp.emote = inp.emote_sound and not down
 		hp.healed = g.healed.has(p.id)
 		hp.hide_noise = int(hide_noise.get(p.id, -1))
+		hp.search_radius = float(search_noise.get(p.id, 0.0))
 		if s.hiding != null and not down:
 			var h := Hiding.player_of(s.hiding, p.id)
 			if h != null and h.phase == &"inside":
 				hp.hide = h.hide
 		people.append(hp)
 	var heard_things := g.drops
+	if s.shop and s.garden_cones:
+		var stock: Shop.ShopState = s.shop_state
+		if stock.plan == s.plan:
+			for toy: Dictionary in stock.toys:
+				var starts := float(toy["start"])
+				if starts > t_prev + EPS and starts <= t + EPS:
+					var spot: Move.Body = toy["at"]
+					heard_things.append(Noises.Sound.make("", spot.x, spot.z, spot.level, Shop.TOY_RADIUS, &"toy"))
+	for index in range(g.cones_in_flight.size() - 1, -1, -1):
+		var flight := g.cones_in_flight[index]
+		if t < float(flight["lands"]):
+			continue
+		var at: Move.Body = flight["at"]
+		heard_things.append(Noises.cone(at.x, at.z, at.level, s.tuning))
+		events.append({"type": "coneLanded", "t": t, "x": at.x, "z": at.z})
+		g.cones_in_flight.remove_at(index)
 	g.healed = []
 	g.drops = []
 	var base := g.keeper.copy()
@@ -3244,7 +3289,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	# ---- Arriving on the next floor.
 	elif s.phase == &"riding" and s.timer <= EPS:
 		var depth := s.depth + 1
-		var f := _floor_for(s.seed, depth, s.deck)
+		var f := _floor_for(s.seed, depth, s.deck, s.garden_search)
 		var bodies := {}
 		var outside := 0
 		for i in players.size():
@@ -3867,7 +3912,7 @@ static func _active_aboard(players: Array[RunPlayer], input_of: Dictionary) -> A
 
 ## Whether this floor has findables in this run.
 static func finds_here(s: RunState) -> bool:
-	return s.findables and not at_home(s) and s.plan != null and Findables.place_on(s.plan.place)
+	return s.findables and not at_home(s) and s.plan != null and Findables.place_on(s.plan.place, s.garden_search)
 
 ## Whether a player is searching now.
 static func searching(s: RunState, id: String) -> bool:
@@ -3893,7 +3938,7 @@ static func _step_findables(s: RunState, players: Array[RunPlayer], input_of: Di
 		return
 	if s.find == null:
 		var day := s.day_state.day if s.days and s.day_state != null else 1
-		var ff := Findables.start_floor(s.plan, s.plan.seed, s.depth, find_base(s, players), Findables.trait_for(s.plan.place, s.lonely), day, s.lore_used)
+		var ff := Findables.start_floor(s.plan, s.plan.seed, s.depth, find_base(s, players), Findables.trait_for(s.plan.place, s.lonely), day, s.lore_used, s.garden_search)
 		s.find = ff
 		if ff.fill.page != "":
 			var used := s.lore_used.duplicate()
@@ -4007,6 +4052,10 @@ static func _step_inventory(s: RunState, players: Array[RunPlayer], input_of: Di
 		# A new floor (or home): what lay on the last one is gone with it.
 		s.pickups = []
 		s.pickups_plan = s.plan
+		if s.garden_cones:
+			for cone in GardenCones.placements(s.plan):
+				s.pickup_seq += 1
+				s.pickups.append(Inventory.Pickup.make(s.pickup_seq, GardenCones.ITEM, 1, cone))
 	var bags := s.bags
 	var pickups := s.pickups
 	var seq := s.pickup_seq
@@ -4044,7 +4093,7 @@ static func _step_inventory(s: RunState, players: Array[RunPlayer], input_of: Di
 		if i.inv_select >= 0 and i.inv_select < Inventory.SLOTS and i.inv_select != b.sel:
 			b = Inventory.select(b, i.inv_select)
 			bags[p.id] = b
-		if i.inv_op == &"":
+		if i.inv_op == &"" or (i.inv_op == &"throw" and not s.garden_cones):
 			continue
 		var refuse := func(why: String) -> void:
 			events.append({"type": "invRefused", "t": t, "playerId": p.id, "op": String(i.inv_op), "why": why})
@@ -4085,6 +4134,18 @@ static func _step_inventory(s: RunState, players: Array[RunPlayer], input_of: Di
 				else:
 					pickups.remove_at(at)
 				events.append({"type": "itemTaken", "t": t, "playerId": p.id, "pickup": pk.id, "item": pk.item, "count": r.added, "left": r.left})
+			&"throw":
+				if s.garden == null or in_car(s.car, p.body) or b.item(k) != GardenCones.ITEM or b.count(k) < 1:
+					refuse.call("throw")
+					continue
+				var at := GardenCones.landing(s.plan, solids_in(s), p.body, i.yaw, i.pitch)
+				var g := s.garden.copy()
+				var distance := M.hypot2(at.x - p.body.x, at.z - p.body.z)
+				var duration := maxf(0.12, distance / GardenCones.SPEED)
+				g.cones_in_flight.append({"at": at, "lands": t + duration})
+				s.garden = g
+				bags[p.id] = Inventory.remove_one(b, k)
+				events.append({"type": "coneThrown", "t": t, "from": p.body, "at": at, "flight": duration})
 			&"give":
 				if b.count(k) <= 0:
 					refuse.call("empty")

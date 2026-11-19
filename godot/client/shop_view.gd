@@ -21,6 +21,7 @@ const PANEL := Color(0.03, 0.035, 0.03, 0.9)
 const GLOW := Color(0.45, 1.0, 0.35)
 const USE_CUES := {"glow": "shop_glow", "flash": "shop_flash", "speed": "shop_juice",
 	"salts": "shop_salts", "toy": "shop_toy_wind"}
+const CARD_WIDTH := 284.0
 const KEYS := "1-6 PICK   ENTER BUY   F CLOSE"
 
 var open := false
@@ -236,6 +237,14 @@ func _process(_d: float) -> void:
 		size = want
 	queue_redraw()
 
+func balance_label() -> String:
+	return "SPENDABLE CREDITS %d" % credits
+
+func after_buy_label(price: int) -> String:
+	if shut or price > credits:
+		return ""
+	return "AFTER BUY %d" % (credits - price)
+
 func _draw() -> void:
 	var now := Time.get_ticks_msec()
 	var px := maxf(2.0, floor(size.y / 320.0))
@@ -250,17 +259,19 @@ func _draw() -> void:
 	_buy_rect = Rect2()
 	if not open:
 		return
-	var w := 230.0 * px
+	px = minf(px, minf(size.x / (CARD_WIDTH + 12.0), size.y / 150.0))
+	var w := CARD_WIDTH * px
 	var row_h := 10.0 * px
-	var h := 34.0 * px + Shop.ITEMS.size() * row_h + 30.0 * px
+	var h := 34.0 * px + Shop.ITEMS.size() * row_h + 46.0 * px
 	var p0 := Vector2(floorf((size.x - w) * 0.5), floorf((size.y - h) * 0.4))
 	draw_rect(Rect2(p0, Vector2(w, h)), PANEL)
 	draw_rect(Rect2(p0, Vector2(w, h)), AMBER, false, px)
 	PixelFont.draw_shadowed(self, "THE SHOP", p0 + Vector2(6, 5) * px, px, AMBER)
-	var bal := "YOUR CREDITS %d" % credits
+	var bal := balance_label()
 	PixelFont.draw_shadowed(self, bal, Vector2(p0.x + w - PixelFont.width(bal) * px - 6.0 * px, p0.y + 5.0 * px), px, PALE)
-	PixelFont.draw(self, "ONE GOES IN YOUR HANDS. KEEP IT IN YOUR CABINET OVERNIGHT.", p0 + Vector2(6, 15) * px, px, DIM)
-	var y := p0.y + 26.0 * px
+	PixelFont.draw(self, "ONE GOES IN YOUR HANDS.", p0 + Vector2(6, 15) * px, px, DIM)
+	PixelFont.draw(self, "KEEP IT IN YOUR CABINET OVERNIGHT.", p0 + Vector2(6, 24) * px, px, DIM)
+	var y := p0.y + 35.0 * px
 	for k in Shop.ITEMS.size():
 		var item: String = Shop.ITEMS[k]
 		var r := Rect2(Vector2(p0.x + 3.0 * px, y - 2.0 * px), Vector2(w - 6.0 * px, row_h))
@@ -274,8 +285,8 @@ func _draw() -> void:
 		PixelFont.draw(self, "%d" % (k + 1), Vector2(p0.x + 6.0 * px, y), px, DIM)
 		PixelFont.draw(self, Inventory.long_name(item), Vector2(p0.x + 16.0 * px, y), px, ink)
 		var pt := "%d" % price
-		PixelFont.draw(self, pt, Vector2(p0.x + 98.0 * px - PixelFont.width(pt) * px, y), px, ink)
-		PixelFont.draw(self, str(Inventory.item_row(item).get("shop", "")), Vector2(p0.x + 104.0 * px, y), maxf(1.0, px * 0.5), DIM if not can else PALE)
+		PixelFont.draw(self, pt, Vector2(p0.x + 134.0 * px - PixelFont.width(pt) * px, y), px, ink)
+		PixelFont.draw(self, str(Inventory.item_row(item).get("shop", "")), Vector2(p0.x + 141.0 * px, y), px * 0.5, DIM if not can else PALE)
 		y += row_h
 	var picked: String = Shop.ITEMS[sel]
 	var bp: int = prices[sel] if sel < prices.size() else 0
@@ -286,10 +297,15 @@ func _draw() -> void:
 	draw_rect(_buy_rect, Color(0.55, 0.4, 0.1, 0.85) if ok else Color(0.2, 0.2, 0.2, 0.7))
 	draw_rect(_buy_rect, AMBER if ok else DIM, false, px)
 	PixelFont.draw_shadowed(self, label, _buy_rect.position + Vector2(6, 2) * px, px, PALE if ok else DIM)
-	PixelFont.draw(self, KEYS, Vector2(p0.x + w - PixelFont.width(KEYS) * px - 6.0 * px, y + 5.0 * px), px, DIM)
+	PixelFont.draw(self, KEYS, Vector2(p0.x + w - PixelFont.width(KEYS) * px - 6.0 * px, y + 32.0 * px), px, DIM)
+
+	var after := after_buy_label(bp)
+	if after != "":
+		PixelFont.draw(self, after, Vector2(p0.x + 6.0 * px, y + 18.0 * px), px, PALE)
 
 ## Tests: what this card and the world show.
 func describe() -> Dictionary:
-	return {"open": open, "sel": sel, "credits": credits, "prices": prices.duplicate(), "shut": shut, "glowsDrawn": _glows.size(),
+	return {"open": open, "sel": sel, "credits": credits, "prices": prices.duplicate(), "shut": shut,
+		"balanceLabel": balance_label(), "afterBuyLabel": after_buy_label(prices[sel] if sel < prices.size() else Shop.base_price(Shop.ITEMS[sel])), "glowsDrawn": _glows.size(),
 		"toysDrawn": _toys.size(), "white": white(Time.get_ticks_msec()), "flashLit": _flash_light != null and is_instance_valid(_flash_light) and _flash_light.visible,
 		"juiceLeft": juice_left}

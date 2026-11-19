@@ -246,3 +246,20 @@ func test_only_reactor_extraction_opens_physical_prison_archive(t: T) -> void:
 	peer.body = Move.Body.make(station.x, station.z + 0.8, 0, 0)
 	t.check(host.reactor_screening(GameLocal.ME, "watch", 0), "the real prison player is usable within reach")
 	room.leave()
+
+func test_prison_deck_copy_distinguishes_storage_from_full_crew_playback(t: T) -> void:
+	var screen := preload("res://client/reactor_screening.gd").new()
+	var tree := Engine.get_main_loop() as SceneTree
+	tree.root.add_child(screen)
+	# This checks the controls; the archived film is supplied by the private package.
+	screen.film = VideoStreamTheora.new()
+	var stored := {"recovered": true, "discovered": false, "playing": {}}
+	screen.show_archive(stored, "me")
+	t.eq(screen.title.text, "PRISON CASSETTE DECK", "identify the device before the witness refers to the players")
+	t.eq(screen.status.text, "Cassette stored. Play it now or leave it here.", "storage allows a choice without revealing the warning")
+	screen.ticket = 7
+	screen.show_archive(stored, "me")
+	t.eq(screen.status.text, "Cassette rewound. No full viewing recorded.", "stopping before the end leaves the copy and no crew viewing")
+	screen.show_archive({"recovered": true, "discovered": true, "playing": {}}, "another peer")
+	t.eq(screen.status.text, "Full playback logged for your crew. Cassette ready to replay.", "a completed screening belongs to the crew, including a peer who did not watch")
+	screen.free()

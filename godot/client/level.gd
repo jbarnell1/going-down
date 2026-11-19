@@ -151,7 +151,7 @@ func build(p: Dictionary, seed_text: String, source_plan: FloorLib.FloorPlan = n
 		preload("res://client/playroom_view.gd").dress(self)
 		return
 	if str(p.get("place", "clinic")) == "arboretum":  # the Arboretum's look (client/arboretum_view.gd)
-		preload("res://client/arboretum_view.gd").dress(self)
+		preload("res://client/arboretum_view.gd").dress(self, source_plan)
 		return
 	_make_materials()
 	_build_floors_and_ceilings()

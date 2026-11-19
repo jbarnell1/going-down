@@ -8,6 +8,7 @@
     {"id": "flash", "short": "FLASH", "name": "A FLASHBULB", "usable": true, "shop": "ONE SECOND OF LIGHT THAT COUNTS AS LOOKING"},
     {"id": "speed", "short": "SPEED", "name": "SPEED JUICE", "usable": true, "shop": "8 SECONDS OF FREE SPRINT, THEN WINDED"},
     {"id": "toy", "short": "TOY", "name": "A WIND-UP TOY", "usable": true, "shop": "SET IT DOWN: IT RATTLES IN 3 SECONDS, FOR 6"},
-    {"id": "salts", "short": "SALTS", "name": "SMELLING SALTS", "usable": true, "shop": "A DOWNED CREWMATE UP AT ONCE"}
+    {"id": "salts", "short": "SALTS", "name": "SMELLING SALTS", "usable": true, "shop": "A DOWNED CREWMATE UP AT ONCE"},
+    {"id": "pinecone", "short": "CONE", "name": "A PINECONE", "usable": true}
   ]
 }

@@ -56,6 +56,8 @@ var mine := -1
 var last_done := {}
 
 var _plan: Floor.FloorPlan = null
+var _garden_sites := false
+var _storage_nodes := {}
 var _ff: Findables.FindFloor = null
 ## The world: what is drawn open ({piece id: node}), under `_root`.
 var _open_nodes := {}
@@ -83,6 +85,8 @@ func reset() -> void:
 	_plan = null
 	_ff = null
 	_open_nodes = {}
+	_storage_nodes = {}
+	_garden_sites = false
 	_root = null
 	sheet = ""
 	_sheet_node = null
@@ -102,18 +106,19 @@ static func _search_row(block: Variant, id: String) -> Variant:
 	return null
 
 ## The pieces of this plan (Findables.spots_for), as a FindFloor the reach rule can read.
-func use_plan(plan: Floor.FloorPlan) -> void:
-	if plan == _plan:
+func use_plan(plan: Floor.FloorPlan, garden_sites: bool = false) -> void:
+	if plan == _plan and garden_sites == _garden_sites:
 		return
 	_plan = plan
+	_garden_sites = garden_sites
 	_ff = null
 	_predicted = {}
-	if plan == null or not Findables.place_on(plan.place):
+	if plan == null or not Findables.place_on(plan.place, garden_sites):
 		return
 	_ff = Findables.FindFloor.new()
 	_ff.plan = plan
 	_ff.depth = plan.depth
-	_ff.pieces = Findables.spots_for(plan)
+	_ff.pieces = Findables.spots_for(plan, "", -1, garden_sites)
 	for p in _ff.pieces:
 		_ff.by_id[p.id] = p
 
@@ -196,6 +201,10 @@ func on_events(events: Array, my: String, sfx: Object, now: int) -> String:
 	var open := ""
 	for e: Dictionary in events:
 		var ty := str(e.get("type", ""))
+		if ty == "searchDone" and _garden_sites and sfx != null and not bool(e.get("fast", false)):
+			var kind := str(e.get("kind", ""))
+			var cue := "search_locker" if kind == "garden_bin" or kind == "garden_chest" else "search_drawer"
+			sfx.call("play_at", cue, piece_point(int(e["piece"])))
 		if ty == "searchNoise" and sfx != null and _ff != null and _ff.by_id.has(int(e["piece"])):
 			sfx.call("play_at", "search_rifle", piece_point(int(e["piece"])))
 		elif ty == "searchDone" and str(e.get("playerId", "")) == my:
@@ -256,9 +265,18 @@ func show_opened(root: Node3D, block: Variant) -> void:
 	if root != _root:
 		_root = root
 		_open_nodes = {}
+		_storage_nodes = {}
 	if root == null or _ff == null:
 		return
 	var want := _opened(block)
+	if _garden_sites:
+		for p in _ff.pieces:
+			if not _storage_nodes.has(p.id):
+				var n := _garden_storage(p)
+				root.add_child(n)
+				_storage_nodes[p.id] = n
+			var shell: Node3D = _storage_nodes[p.id]
+			shell.get_node("Shut").visible = not want.has(p.id)
 	for id: int in _predicted:
 		if not want.has(id):
 			want[id] = {"piece": id, "note": ""}
@@ -295,6 +313,40 @@ static func _box(size: Vector3, pos: Vector3, mat: Material, rot := 0.0) -> Mesh
 	mi.rotation = Vector3(0.0, rot, 0.0)
 	return mi
 
+## A low storage piece in the clearing while it is still closed.
+static func _garden_storage(p: Furniture.Piece) -> Node3D:
+	var n := Node3D.new()
+	n.name = "Storage%d" % p.id
+	var fv := Furniture.dir_vec(p.facing)
+	n.position = Vector3(p.x / 100.0, 0.0, p.y / 100.0)
+	n.rotation.y = atan2(float(fv.x), float(fv.y))
+	var w := p.w / 100.0
+	var d := p.d / 100.0
+	var top := _garden_top(p.kind)
+	var wood := _mat(Color(0.27, 0.16, 0.086))
+	var iron := _mat(Color(0.17, 0.18, 0.14))
+	var copper := _mat(Color(0.39, 0.22, 0.10))
+	var shut := Node3D.new()
+	shut.name = "Shut"
+	n.add_child(shut)
+	if _garden_drawer(p.kind):
+		var leg := top - 0.20
+		for side: float in [-1.0, 1.0]:
+			n.add_child(_box(Vector3(0.065, leg, d * 0.86), Vector3(side * w * 0.40, leg * 0.5, 0.0), wood))
+		n.add_child(_box(Vector3(w + 0.035, 0.055, d + 0.03), Vector3(0.0, top + 0.026, 0.0), wood))
+		shut.add_child(_box(Vector3(w, 0.17, d), Vector3(0.0, top - 0.085, -0.01), wood))
+		shut.add_child(_box(Vector3(w * 0.29, 0.024, 0.035), Vector3(0.0, top - 0.061, d * 0.5 + 0.011), copper))
+	else:
+		n.add_child(_box(Vector3(w, top, d), Vector3(0.0, top * 0.5, 0.0), iron if p.kind == &"garden_bin" else wood))
+		shut.add_child(_box(Vector3(w + 0.035, 0.055, d + 0.03), Vector3(0.0, top + 0.026, 0.0), copper))
+	return n
+
+static func _garden_drawer(kind: StringName) -> bool:
+	return kind == &"garden_bench" or kind == &"garden_drawer"
+
+static func _garden_top(kind: StringName) -> float:
+	return 0.37 if kind == &"garden_chest" else (0.58 if kind == &"garden_bin" else 0.72)
+
 ## One opened piece: built in the piece's own frame (x across its front, z out of its front).
 static func _open_node(p: Furniture.Piece, note: bool) -> Node3D:
 	var n := Node3D.new()
@@ -308,6 +360,13 @@ static func _open_node(p: Furniture.Piece, note: bool) -> Node3D:
 	var inside := _mat(Color(0.05, 0.05, 0.05))
 	var top := 0.9
 	match p.kind:
+		&"garden_chest", &"garden_bin":
+			top = _garden_top(p.kind)
+			var bottom := _box(Vector3(w * 0.89, 0.022, d * 0.86), Vector3(0.0, top + 0.012, 0.0), inside)
+			n.add_child(bottom)
+			var lid := _box(Vector3(w + 0.035, 0.055, d + 0.03), Vector3(0.0, top + d * 0.42, -d * 0.44), _mat(Color(0.39, 0.22, 0.10)))
+			lid.rotation.x = -1.1
+			n.add_child(lid)
 		&"copier":
 			# The lid up, hinged at the back.
 			var lid := _box(Vector3(w * 0.7, 0.03, d * 0.6), Vector3(0.0, 1.25, -d * 0.2), dark)
@@ -328,7 +387,7 @@ static func _open_node(p: Furniture.Piece, note: bool) -> Node3D:
 		_:
 			# A drawer pulled out of its front.
 			var dh := 0.16
-			var dy := 0.55 if p.tall else 0.45
+			var dy := _garden_top(p.kind) - 0.085 if _garden_drawer(p.kind) else (0.55 if p.tall else 0.45)
 			n.add_child(_box(Vector3(w * 0.8, dh, 0.32), Vector3(0.0, dy, d * 0.5 + 0.14), dark))
 			n.add_child(_box(Vector3(w * 0.7, 0.02, 0.26), Vector3(0.0, dy + dh * 0.5 - 0.005, d * 0.5 + 0.14), inside))
 			top = dy + dh * 0.5 + 0.01
@@ -354,7 +413,7 @@ func show_sheet(lift: Node3D, block: Variant, seed: String, at: Vector3) -> void
 	if key == _sheet_key and _sheet_node != null and is_instance_valid(_sheet_node):
 		return
 	_sheet_key = key
-	sheet = sheet_for(_ff.plan, seed, base)
+	sheet = sheet_for(_ff.plan, seed, base, _garden_sites)
 	if _sheet_node != null and is_instance_valid(_sheet_node):
 		_sheet_node.queue_free()
 	_sheet_node = sheet_node(sheet)
@@ -362,11 +421,11 @@ func show_sheet(lift: Node3D, block: Variant, seed: String, at: Vector3) -> void
 	lift.add_child(_sheet_node)
 
 ## The sheet's text for a floor (Findables.sheet_text of its fill; the counts never read the trait).
-static func sheet_for(plan: Floor.FloorPlan, seed: String, base: int) -> String:
-	var key := "%s/%d/%d/%d" % [seed, plan.depth, base, plan.get_instance_id()]
+static func sheet_for(plan: Floor.FloorPlan, seed: String, base: int, garden_sites: bool = false) -> String:
+	var key := "%s/%d/%d/%d/%d" % [seed, plan.depth, base, plan.get_instance_id(), int(garden_sites)]
 	if key != _sheet_cache_key:
 		_sheet_cache_key = key
-		_sheet_cache = Findables.sheet_text(Findables.fill_for(plan, seed, plan.depth, base, &"stillness"))
+		_sheet_cache = Findables.sheet_text(Findables.fill_for(plan, seed, plan.depth, base, &"listening" if garden_sites else &"stillness", 1, [], garden_sites))
 	return _sheet_cache
 
 static var _sheet_cache_key := ""

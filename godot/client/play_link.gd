@@ -187,7 +187,7 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	var furniture_code: Variant = latest.get("solid")
 	var solid: bool = furniture_code != null
 	var furniture_layout: bool = furniture_code == Protocol.SOLID_RESTORED
-	_use_floor(str(c.seed), c.local_depth, furniture_layout, c.floor_deck)
+	_use_floor(str(c.seed), c.local_depth, furniture_layout, c.floor_deck, c.garden_dense)
 	var me_row: Variant = _row(latest, str(c.id))
 	var status := str(me_row["status"]) if me_row != null else "ok"
 	var dt := clampf(float(inp.get("dt", 0.0)), 0.0, 0.1)
@@ -349,7 +349,7 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 		body = f.placed
 		placed = _body_plain(body)
 		var moved_on := c.local_depth != depth_before or c.day_index != day_before
-		_use_floor(str(c.seed), c.local_depth, c.latest.get("solid") == Protocol.SOLID_RESTORED, c.floor_deck)
+		_use_floor(str(c.seed), c.local_depth, c.latest.get("solid") == Protocol.SOLID_RESTORED, c.floor_deck, c.garden_dense)
 		if _face_on_place or (moved_on and Run.in_car(car, body)):
 			# A new floor, a new day or home: in the car, face out of its doors.
 			_face_on_place = false
@@ -452,8 +452,8 @@ func _new_run(c: Client) -> void:
 	_hide_wait_phase = ""
 	_auto_gait = &"walk"
 
-func _use_floor(seed: String, depth: int, furniture_layout: bool, floor_deck: Array[StringName]) -> void:
-	var p := Session.plan_for(seed, depth, floor_deck)
+func _use_floor(seed: String, depth: int, furniture_layout: bool, floor_deck: Array[StringName], garden_dense: bool) -> void:
+	var p := Session.plan_for(seed, depth, floor_deck, garden_dense)
 	if p == plan and depth == plan_depth and plan_dict.get("furnitureLayout", false) == furniture_layout:
 		return
 	plan = p

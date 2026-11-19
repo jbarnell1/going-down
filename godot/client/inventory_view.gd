@@ -6,7 +6,7 @@
 #   - What F does here (main.gd asks prompt(); heal, the bunk, the lift, a dropped tape and a hide come first): at a
 #     pickup "F  PICK UP JUICE"; facing a crewmate within the hand reach while holding something "F  GIVE JUICE TO BO".
 #   - One line for 2.5 s when the host refuses something ("YOUR HANDS ARE FULL.") or a crewmate hands you something.
-#   - The floor's pickups, drawn where they lie: a small carton or a badge on the floor.
+#   - The floor's pickups (cartons, badges and pinecones), drawn where they lie.
 extends Control
 
 const Inventory = preload("res://sim/inventory.gd")
@@ -25,6 +25,7 @@ const REFUSED := {
 	"empty": "NOTHING IN YOUR HAND.",
 	"gone": "IT IS NOT THERE ANY MORE.",
 	"busy": "NOT NOW.",
+	"throw": "YOU CAN'T THROW A CONE HERE.",
 	# The shop and the cabinet (S2, sim/run.gd _step_shop).
 	"cabFull": "THE CABINET IS FULL.",
 	"poor": "NOT ENOUGH CREDITS.",
@@ -172,6 +173,22 @@ func say(text: String, now: int) -> void:
 func message_now(now: int) -> String:
 	return message if now < message_until else ""
 
+static func cone_mesh() -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var shape := CylinderMesh.new()
+	shape.top_radius = 0.029
+	shape.bottom_radius = 0.055
+	shape.height = 0.135
+	shape.radial_segments = 6
+	mi.mesh = shape
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.42, 0.22, 0.10)
+	mat.emission_enabled = true
+	mat.emission = Color(0.16, 0.078, 0.025)
+	mat.emission_energy_multiplier = 0.28
+	mi.material_override = mat
+	return mi
+
 ## The floor's pickups as small things lying where they were dropped.
 func show_pickups(root: Node3D) -> void:
 	if root == null or not is_instance_valid(root):
@@ -186,14 +203,17 @@ func show_pickups(root: Node3D) -> void:
 				continue
 			var at: Variant = p["at"]
 			var pos := Vector3(at.x, at.y, at.z) if at is Object else Vector3(float(at["x"]), float(at["y"]), float(at["z"]))
-			var mi := MeshInstance3D.new()
-			var mat := StandardMaterial3D.new()
-			if str(p["item"]) == "juice":
+			var item := str(p["item"])
+			var mi := cone_mesh() if item == "pinecone" else MeshInstance3D.new()
+			var mat := mi.material_override as StandardMaterial3D if item == "pinecone" else StandardMaterial3D.new()
+			if item == "juice":
 				var bm := BoxMesh.new()
 				bm.size = Vector3(0.07, 0.12, 0.05)
 				mi.mesh = bm
 				mat.albedo_color = Color(0.86, 0.62, 0.2)
 				pos.y += 0.06
+			elif item == "pinecone":
+				pos.y += 0.068
 			else:
 				var cm := CylinderMesh.new()
 				cm.top_radius = 0.04
@@ -269,6 +289,8 @@ func _draw() -> void:
 	if hand >= 0 and hand < list.size() and int(list[hand][1]) > 0:
 		held = "IN HAND: " + Inventory.long_name(str(list[hand][0]))
 	if held != "":
+		if str(list[hand][0]) == "pinecone":
+			held += "  [MIDDLE MOUSE: THROW]"
 		PixelFont.draw_shadowed(self, held, Vector2(x0 + total + 6.0 * px, floorf(y0 + box * 0.5 - 3.0 * px)), px, PALE)
 	var line_y := y0 - 16.0 * px
 	var msg := message_now(Time.get_ticks_msec())

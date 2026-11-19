@@ -59,12 +59,12 @@ static var deck: Array[StringName] = Places.CLINIC_ONLY
 
 ## The floor plan of a depth (every machine builds the same one from the seed and the deck, through
 ## Places.generate, as the host's run does). Keeps the last 16.
-static func plan_for(seed: String, depth: int, run_deck: Array[StringName] = []) -> Floor.FloorPlan:
+static func plan_for(seed: String, depth: int, run_deck: Array[StringName] = [], garden_dense: bool = false) -> Floor.FloorPlan:
 	var floor_deck := deck if run_deck.is_empty() else run_deck
-	var key := "%s/%d/%s" % [seed, depth, ",".join(PackedStringArray(floor_deck))]
+	var key := "%s/%d/%s/%d" % [seed, depth, ",".join(PackedStringArray(floor_deck)), int(garden_dense)]
 	if _plans.has(key):
 		return _plans[key]
-	var p := Places.generate(seed, depth, floor_deck)
+	var p := Places.generate(seed, depth, floor_deck, garden_dense)
 	_plans[key] = p
 	_plan_order.append(key)
 	if _plan_order.size() > 16:

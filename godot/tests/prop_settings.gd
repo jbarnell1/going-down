@@ -69,6 +69,9 @@ const KEEPER_SIX: Array[StringName] = [&"groundskeeper.speed", &"groundskeeper.d
 
 ## Every wired id's proof: the test in this file that measures the thing it changes.
 const PROOFS := {
+	&"noise.cone": "test_cone_hearing_radius",
+	&"noise.search_open": "test_garden_search_hearing_radius",
+	&"noise.search_rush": "test_garden_search_hearing_radius",
 	&"groundskeeper.speed": "test_groundskeeper_six",
 	&"groundskeeper.dark_speed": "test_groundskeeper_six",
 	&"groundskeeper.reach": "test_groundskeeper_six",
@@ -124,7 +127,7 @@ const PROOFS := {
 }
 
 ## The rows of later pieces wired so far (sim/settings.gd WIRED_IDS), in the registry's order.
-const MORE: Array[StringName] = [&"orderly.catch_dance", &"minder.stroll", &"minder.hide_time", &"minder.hide_more", &"minder.last_hide", &"minder.search",
+const MORE: Array[StringName] = [&"orderly.catch_dance", &"noise.cone", &"noise.search_open", &"noise.search_rush", &"minder.stroll", &"minder.hide_time", &"minder.hide_more", &"minder.last_hide", &"minder.search",
 	&"minder.anger_sprint", &"minder.anger_noise", &"minder.anger_cool",
 	&"lift.false_stop", &"lift.board", &"lift.hold", &"lift.ride", &"dark.min", &"dark.max", &"dark.first_min", &"dark.first_max", &"dark.warning",
 	&"stamina.tank", &"heal.time", &"heal.quiet", &"heal.health", &"inv.stack", &"inv.hand_reach", &"cabinet.slots",
@@ -183,6 +186,8 @@ static func game_values() -> Dictionary:
 		&"noise.hide": Noises.HIDE,
 		&"noise.drop": Noises.DROP,
 		&"noise.cone": Noises.CONE,
+		&"noise.search_open": Noises.SEARCH_OPEN,
+		&"noise.search_rush": Noises.SEARCH_RUSH,
 		&"noise.emote": Noises.EMOTE,
 		&"lift.floors_min": float(Run.CALL_FLOORS_MIN),
 		&"lift.floors_max": float(Run.CALL_FLOORS_MAX),
@@ -255,7 +260,7 @@ func test_catch_dance_setting(t: T) -> void:
 func test_registry_rows(t: T) -> void:
 	var game := game_values()
 	var rows := Settings.list()
-	t.eq(rows.size(), 98, "rows in the registry")
+	t.eq(rows.size(), 100, "rows in the registry")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -303,7 +308,7 @@ func test_registry_rows(t: T) -> void:
 		if TEN.has(s.id) or MORE.has(s.id) or KEEPER_SIX.has(s.id):
 			want.append(s.id)
 	t.check(wired == want and want.size() == TEN.size() + MORE.size() + KEEPER_SIX.size(), "the wired rows are exactly those of LS1 and the groups wired since, in order: %s" % str(wired))
-	t.eq(by_group.get(&"residents", 0), 48, "residents")
+	t.eq(by_group.get(&"residents", 0), 50, "residents")
 	t.eq(by_group.get(&"lift", 0), 12, "the lift and the dark")
 	t.eq(by_group.get(&"players", 0), 23, "players")
 	t.eq(by_group.get(&"earning", 0), 8, "earning")
@@ -1549,3 +1554,22 @@ func test_every_wired_setting_has_a_proof(t: T) -> void:
 		t.check(PROOFS.has(s.id) and has_method(String(PROOFS.get(s.id, ""))), "%s is wired and has no proof in tests/prop_settings.gd" % s.id)
 	for id: StringName in PROOFS:
 		t.check(wired.has(id), "%s has a proof but is not wired" % id)
+
+## AR5: the tuning applies at the actual landing point.
+func test_cone_hearing_radius(t: T) -> void:
+	var tuned := Settings.Values.new()
+	tuned.values[&"noise.cone"] = 8.0
+	var normal := Noises.cone(13.0, 15.0, 0)
+	var quiet := Noises.cone(13.0, 15.0, 0, tuned)
+	t.check(Noises.heard_at(normal, 23.0, 15.0, 0), "default cone reaches 10 m")
+	t.check(not Noises.heard_at(quiet, 23.0, 15.0, 0), "tuned cone cannot be heard at 10 m")
+	t.check(Noises.heard_at(quiet, 21.0, 15.0, 0), "8 m is still audible")
+
+func test_garden_search_hearing_radius(t: T) -> void:
+	var tuned := Settings.Values.new()
+	tuned.values[&"noise.search_open"] = 3.0
+	tuned.values[&"noise.search_rush"] = 11.0
+	t.eq(Noises.search_radius(false), 4.0, "opening storage carries 4 m")
+	t.eq(Noises.search_radius(true), 8.0, "rummaging carries 8 m")
+	t.eq(Noises.search_radius(false, tuned), 3.0, "quiet opening uses its own live setting")
+	t.eq(Noises.search_radius(true, tuned), 11.0, "rummaging uses its own live setting")

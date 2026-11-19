@@ -123,13 +123,17 @@ var furniture_layout: bool
 var resident_navigation: bool
 ## The shop and the cabinet (off unless asked; sim/run.gd shop, S2).
 var shop: bool
+var garden_cones: bool
+var garden_search: bool
 var nightly_reels: bool
 
 func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false,
 		watchers_: bool = false, relocation_: bool = false, long_dark_: bool = false, paced_: bool = false, car_waits_: bool = false,
 		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false, furniture_: bool = false, findables_: bool = false,
 		inventory_: bool = false, furniture_layout_: bool = false, resident_navigation_: bool = false,
-		shop_: bool = false, nightly_reels_: bool = false) -> void:
+		shop_: bool = false, nightly_reels_: bool = false, garden_cones_: bool = false, garden_search_: bool = false) -> void:
+	garden_cones = garden_cones_
+	garden_search = garden_search_
 	nightly_reels = nightly_reels_
 	shop = shop_
 	inventory = inventory_
@@ -184,7 +188,7 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 	if days and not s.days:
 		s = Run.with_days(s)
 	if _depth > 1:
-		var plan := Places.generate(s.seed, _depth, deck)
+		var plan := Places.generate(s.seed, _depth, deck, garden_search and (findables or s.findables))
 		s = s.copy()
 		s.depth = _depth
 		s.plan = plan
@@ -252,6 +256,10 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_resident_navigation(s)
 	if shop and s.inventory and not s.shop:
 		s = Run.with_shop(s)
+	if garden_cones and deck.has(Places.ARBORETUM) and s.inventory and not s.garden_cones:
+		s = Run.with_garden_cones(s)
+	if garden_search and deck.has(Places.ARBORETUM) and s.findables and not s.garden_search:
+		s = Run.with_garden_search(s)
 	if nightly_reels and s.days:
 		s = Run.with_nightly_reels(s)
 	return _capped(s)
@@ -408,6 +416,8 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 		# The shop (S2): the cabinets, what was lit, and what was bought, of the real tick.
 		if st.shop:
 			st.shop_state = r.state.shop_state
+		if r.state.garden_cones or r.state.garden_search:
+			st.garden = r.state.garden
 			st.wallets = r.state.wallets
 		st.players = players
 		st.summary = null

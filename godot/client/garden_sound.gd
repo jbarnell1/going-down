@@ -5,7 +5,7 @@ const DIRECTORY := "res://assets/sfx/arboretum/"
 const BED_CUES := ["wind", "crickets", "sprinkler", "quiet"]
 const TAKE_LIMITS := {
 	"wind": 0, "crickets": 0, "sprinkler": 0, "quiet": 0,
-	"step_leaves": 4, "step_moss": 3, "step_gravel": 4, "step_creep": 4, "twig": 3,
+	"step_leaves": 4, "step_moss": 3, "step_gravel": 4, "step_creep": 4, "twig": 3, "pinecone_leaves": 2, "pinecone_gravel": 2,
 	"badge": 6, "badges_swing": 0, "breath": 0, "sniff": 1, "shears": 1, "snatch": 2,
 }
 

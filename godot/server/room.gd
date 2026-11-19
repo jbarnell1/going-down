@@ -231,9 +231,12 @@ func _lobby_text(now: float) -> String:
 	var without := -1.0
 	if host_id != "" and ready.has(host_id) and host == null:
 		without = float(ready[host_id]) + WITHOUT_AFTER
-	return "m|" + JSON.stringify({"t": "lobby", "epoch": epoch, "running": running(), "people": list, "host": host_id,
+	var lobby := {"t": "lobby", "epoch": epoch, "running": running(), "people": list, "host": host_id,
 		"startAt": start_at, "withoutAt": without, "now": now, "depth": host.state.depth if host != null else -1,
-		"garden": host != null and host.state.deck.has(Places.ARBORETUM)})
+		"garden": host != null and host.state.deck.has(Places.ARBORETUM)}
+	if host != null and host.state.garden_search:
+		lobby["gardenDense"] = true
+	return "m|" + JSON.stringify(lobby)
 
 ## The players a run starting now takes: the ready ones, in arrival order.
 func _start_roster() -> Array[String]:
@@ -373,7 +376,7 @@ func _start(now: float) -> void:
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
 	var q := quota and not HostRules.quota_off_by_arg(false)
 	# The day quota's lock goes with the floor quota (net/host_rules.gd): quota=0 turns both off.
-	rules = HostRules.new(not (ward_review or reactor_review), first_depth, Places.deck_for_start_depth(first_depth), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop, nightly_reels)
+	rules = HostRules.new(not (ward_review or reactor_review), first_depth, Places.deck_for_start_depth(first_depth), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop, nightly_reels, true, true)
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))

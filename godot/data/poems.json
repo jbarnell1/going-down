@@ -63,7 +63,22 @@
       "AFTERWARDS THE FLOOR IS TIRED OF YOU.",
       "CREEP, AND IT FORGIVES.",
       "WALK, AND IT TAKES A LITTLE BACK",
-      "WITH EVERY STEP."]}
+      "WITH EVERY STEP."]},
+    {"id": "garden-1", "trait": "listening", "pins": {}, "lines": [
+      "I KEPT TO THE MOSS.",
+      "I SENT A CONE INTO THE GRAVEL.",
+      "THE CLINKING WENT THAT WAY.",
+      "THEN THE NEEDLE BEGAN TO WRITE."]},
+    {"id": "garden-2", "trait": "listening", "pins": {}, "lines": [
+      "THE CHIRPING STOPPED FIRST.",
+      "I WAITED WHERE THE PATH WAS SOFT.",
+      "THE CLINKING CAME AFTER.",
+      "THE NEEDLE WROTE ONLY THEN."]},
+    {"id": "garden-3", "trait": "listening", "pins": {}, "lines": [
+      "TOO FAR AND THE REEL BARELY TURNED.",
+      "TOO NEAR AND THE LAST REEL WAS LOST.",
+      "I LEFT A LITTLE ROOM BETWEEN US.",
+      "THAT REEL PAID FOR ALL THE OTHERS."]}
   ],
   "pages": [
     {"id": "C1", "friday": true, "place": "clinic", "tier": 1, "author": "Crew 31, seat 2, in biro on a patient chart", "where": "side_table",

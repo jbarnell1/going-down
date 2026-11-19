@@ -117,6 +117,7 @@ class Person extends RefCounted:
 	## A sound emote this tick; the hide they got into or out of this tick (-1); healed up this tick.
 	var emote: bool = false
 	var hide_noise: int = -1
+	var search_radius := 0.0
 	var healed: bool = false
 
 	static func make(id_: String, body_: Move.Body, gait_: StringName = &"walk") -> Person:
@@ -277,6 +278,7 @@ static func step(plan: Floor.FloorPlan, ground: Noises.Ground, prev: Keeper, peo
 		a.emote = p.emote
 		a.hide = p.hide_noise
 		a.healed = p.healed
+		a.search_radius = p.search_radius
 		var n := Noises.of(ground, a, dt, cracked)
 		if n != null:
 			n.t = t

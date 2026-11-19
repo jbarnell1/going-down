@@ -12,6 +12,7 @@ var ticket := 0
 var film: VideoStream
 var archive := {}
 var reported_end := false
+var stopped_early := false
 var next_acknowledgement_ms := 0
 
 func _ready() -> void:
@@ -27,7 +28,7 @@ func _ready() -> void:
 	panel.offset_top = 24
 	panel.offset_right = -48
 	panel.offset_bottom = -24
-	title.text = "CELL BLOCK  /  PLAYBACK STATION"
+	title.text = "PRISON CASSETTE DECK"
 	title.add_theme_font_size_override("font_size",24)
 	panel.add_child(title)
 	panel.add_child(video)
@@ -54,6 +55,7 @@ func show_archive(value: Dictionary, player_id: String) -> void:
 	archive = value
 	var next := int(value.playing.get(player_id,0))
 	if ticket!=next:
+		stopped_early = ticket != 0 and next == 0 and not reported_end
 		video.stop()
 		ticket = next
 		reported_end = false
@@ -65,10 +67,15 @@ func show_archive(value: Dictionary, player_id: String) -> void:
 		next_acknowledgement_ms = Time.get_ticks_msec() + 350
 		request.emit("end",ticket)
 	button.disabled = not value.recovered or film==null
-	button.text = "Skip playback  [E]" if ticket!=0 else ("Replay tape  [E]" if value.discovered else "Play tape  [E]")
+	button.text = "Skip and rewind  [E]" if ticket!=0 else ("Replay tape  [E]" if value.discovered else "Play tape  [E]")
 	status.text = "Cassette left below. It can be recovered on a later visit."
 	if value.recovered:
-		status.text = "Recovered cassette loaded." if not value.discovered else "Crew 23 recorded in the archive."
+		if value.discovered:
+			status.text = "Full playback logged for your crew. Cassette ready to replay."
+		elif stopped_early:
+			status.text = "Cassette rewound. No full viewing recorded."
+		else:
+			status.text = "Cassette stored. Play it now or leave it here."
 	if ticket!=0: status.text = "Playing recovered cassette."
 	if film==null and value.recovered: status.text = "Install the matching ReactorCampaign.pck to play the recovered film."
 
