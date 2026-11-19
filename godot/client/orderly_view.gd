@@ -110,6 +110,24 @@ func set_watched(at: Variant) -> void:
 
 ## Optional catch_active distinguishes an active catch from a held bend after release.
 func show_pose(pose: Variant, show: bool) -> void:
+	_show_pose(pose, show)
+	_pin_lengths()
+
+## Below the hips a bone only turns: its offset from its parent and its scale are the model's own. Hand
+## aiming writes global poses through the scaled Mixamo parents, and while the figure stood still the same
+## frame was posed again and again, so the error compounded and the arm and fingers grew as you watched
+## (the owner's playtest, 19 Nov). The hips keep their pose: the clips move them and the feet are planted on them.
+func _pin_lengths() -> void:
+	if skel == null:
+		return
+	for i in skel.get_bone_count():
+		if skel.get_bone_parent(i) < 0 or skel.get_bone_name(i) == "hips":
+			continue
+		var rest := skel.get_bone_rest(i)
+		skel.set_bone_pose_position(i, rest.origin)
+		skel.set_bone_pose_scale(i, rest.basis.get_scale())
+
+func _show_pose(pose: Variant, show: bool) -> void:
 	if pose == null:
 		_clear_bend()
 		visible = false
@@ -322,6 +340,10 @@ func _rotate_bone(bone: String, axis: Vector3, angle: float) -> void:
 	var pose := skel.get_bone_global_pose(index)
 	pose.basis = Basis(axis, angle) * pose.basis
 	skel.set_bone_global_pose(index, pose)
+	# Writing a global pose through the scaled Mixamo parents leaves a little scale in the local pose,
+	# and the clips do not key scale, so it compounded every frame: the arm and fingers grew without
+	# end (the owner's playtest, 19 Nov). Only a rotation is meant here; keep the bone's rest scale.
+	skel.set_bone_pose_scale(index, skel.get_bone_rest(index).basis.get_scale())
 
 ## Brace the hands to either side of the prone face. Solve the two bones using
 ## their lengths in the approved reach, blending from that reach as the knees fold.

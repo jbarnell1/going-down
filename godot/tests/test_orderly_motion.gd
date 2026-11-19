@@ -294,3 +294,86 @@ func test_prison_empty_furniture_can_be_passed_to_the_trolley(t: T) -> void:
 	var empty: Array[Furniture.Piece] = []
 	t.check(level.pieces.is_same_typed(empty), "a floor with no props supplies a typed empty piece list")
 	level.free()
+
+func _segments(view: View, side: String) -> Vector2:
+	var a := _bone(view, "upperarm" + side).origin
+	var b := _bone(view, "forearm" + side).origin
+	var c := _bone(view, "hand" + side).origin
+	return Vector2(a.distance_to(b), b.distance_to(c))
+
+## The owner's playtest, 19 Nov: the fingers "just keep growing". Holding the trolley rewrites the arm
+## bones every frame; the arm and fingers must stay their own length however long it walks.
+func test_the_arms_and_fingers_keep_their_length_over_many_frames(t: T) -> void:
+	var view := _view()
+	view.show_pose(_pose("walk", 0.0), true)
+	var start := {}
+	for side: String in [".L", ".R"]:
+		start[side] = _segments(view, side)
+	var finger := -1
+	for i in view.skel.get_bone_count():
+		if view.skel.get_bone_name(i).to_lower().contains("index") or view.skel.get_bone_name(i).to_lower().contains("finger"):
+			finger = i
+			break
+	var finger_scale := view.skel.get_bone_global_pose(finger).basis.get_scale().length() if finger >= 0 else 0.0
+	for f in 600:
+		view.show_pose(_pose("walk" if f % 200 < 150 else "idle", f * 0.016, false, f * 0.02), true)
+	for side: String in [".L", ".R"]:
+		var now := _segments(view, side)
+		var was: Vector2 = start[side]
+		t.check(absf(now.x - was.x) < 0.01 and absf(now.y - was.y) < 0.01, "the %s arm keeps its length (%s then %s)" % [side, was, now])
+	if finger >= 0:
+		var grown := view.skel.get_bone_global_pose(finger).basis.get_scale().length()
+		t.check(grown <= finger_scale * 1.05 + 0.001, "the fingers keep their size (%.4f then %.4f)" % [finger_scale, grown])
+	for i in view.skel.get_bone_count():
+		var s := view.skel.get_bone_pose_scale(i)
+		if not s.is_equal_approx(view.skel.get_bone_rest(i).basis.get_scale()):
+			t.check(false, "bone %s keeps its rest scale (now %s)" % [view.skel.get_bone_name(i), s])
+			break
+	view.free()
+
+## The owner's playtest, 19 Nov: the Orderly's breathing was heard from way too far away. The throat
+## rattle (the farthest of its breathing sounds) is now silent beyond 10 m; the slow breath beyond 8 m.
+func test_the_orderly_breathing_is_not_heard_from_far_away(t: T) -> void:
+	for d: float in [10.5, 14.0, 20.0, 26.0]:
+		t.eq(Sfx.breath_db(d, false, "rattle"), -80.0, "the rattle is silent at %.1f m" % d)
+		t.eq(Sfx.breath_db(d, false), -80.0, "the slow breath is silent at %.1f m" % d)
+	t.check(Sfx.breath_db(4.0, false, "rattle") > -80.0, "the rattle is still heard close by")
+
+## The owner's playtest, 19 Nov: the Orderly was heard through the floor above. Its breath and rattle
+## belong to its own storey: standing, creeping or under it, an ear on another storey is a different one.
+func test_the_orderly_is_not_heard_through_a_floor(t: T) -> void:
+	for level in 3:
+		var feet := level * Sfx.LH
+		t.eq(Sfx.storey_of_feet(feet), level, "feet on storey %d" % level)
+		for eye: float in [1.0, 1.6, 1.75]:
+			t.eq(Sfx.storey_of_eye(feet + eye), level, "an eye %.2f m up on storey %d is on it" % [eye, level])
+	t.check(Sfx.storey_of_eye(Sfx.LH + 1.6) != Sfx.storey_of_feet(0.0), "the floor above is another storey")
+	t.check(Sfx.storey_of_eye(1.6) != Sfx.storey_of_feet(Sfx.LH), "the floor below is another storey")
+
+## The owner's playtest, 19 Nov: standing perfectly still, its arm and fingers grew as he watched. Every
+## pose, and the same held frame posed again and again, keeps every bone below the hips its own length.
+func test_no_bone_stretches_in_any_pose_or_while_held_still(t: T) -> void:
+	var view := _view()
+	var sk := view.skel
+	var worst := 1.0
+	var at := ""
+	var frames: Array = []
+	for a: String in ["walk", "idle", "reach", "bend", "duck"]:
+		for k in 40:
+			frames.append(_pose(a, k * 0.03, a == "bend", k * 0.05))
+	for k in 400:
+		frames.append(_pose("idle", 0.5))   # held: the very same frame, posed again every frame
+	for pose: Dictionary in frames:
+		view.show_pose(pose, true)
+		sk.force_update_all_bone_transforms()
+		for i in sk.get_bone_count():
+			var p := sk.get_bone_parent(i)
+			if p < 0 or sk.get_bone_name(i) == "hips":
+				continue
+			var r := sk.get_bone_global_rest(i).origin.distance_to(sk.get_bone_global_rest(p).origin)
+			var ratio := sk.get_bone_global_pose(i).origin.distance_to(sk.get_bone_global_pose(p).origin) / maxf(r, 0.0001)
+			if absf(ratio - 1.0) > absf(worst - 1.0):
+				worst = ratio
+				at = "%s in %s" % [sk.get_bone_name(i), pose.anim]
+	t.check(absf(worst - 1.0) < 0.02, "every bone keeps its length (worst %.3f, %s)" % [worst, at])
+	view.free()

@@ -66,7 +66,8 @@ func _build() -> void:
 	for k in 4:
 		var c := _audio_player(&"Entity", 5.0, 34.0, Sfx.BASE_DB + 6.0)
 		_clinks.append(c)
-	_breath = _audio_player(&"Entity", 1.6, 5.5, Sfx.BASE_DB + 3.0)
+	# Heard half as far again (was 1.6 m full, 5.5 m cut-off): the owner's playtest, 19 Nov.
+	_breath = _audio_player(&"Entity", 2.4, 8.25, Sfx.BASE_DB + 3.0)
 	_breath.stream = _garden_audio.next("breath")
 	_swing_snd = _audio_player(&"Entity", 3.0, 12.0, -60.0)
 	_swing_snd.stream = _garden_audio.next("badges_swing")

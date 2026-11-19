@@ -165,7 +165,7 @@ const SCARE_FAR := 90.0
 const BREATH_NEAR := 2.0         # full level within this
 const BREATH_FAR := 8.0         # heard from here (the onset)
 const BREATH_FAR_DB := -22.0     # at the onset; a slow build in dB from there to BREATH_NEAR
-const RATTLE_FAR := 26.0         # the rattle is tried within this (was 14 m) and follows the breath curve
+const RATTLE_FAR := 10.0         # the rattle is tried within this (14 m, then 26 m; the owner's playtest on 19 Nov heard it from far too far) and follows the breath curve
 const BREATH_UNDER_TROLLEY_DB := -9.0   # while the trolley sounds, close in (see breath_db)
 const SILENT_DB := -79.0
 ## Tests (mix_check_floors.gd break=far): the curves before the change.
@@ -202,6 +202,18 @@ static func breath_db(d: float, trolley: bool, curve := "breath") -> float:
 ## Far sounds lose their top: a low-pass from open at 8 m to 2.5 kHz at 60 m and beyond.
 static func _far_cutoff(d: float) -> float:
 	return lerpf(20500.0, 2500.0, clampf((d - 8.0) / 52.0, 0.0, 1.0))
+
+## The storey a height is on: feet at `feet_y`, or a camera at `eye_y` (eye about 1.6 m up, lower when creeping).
+static func storey_of_feet(feet_y: float) -> int:
+	return floori((feet_y + 0.4) / LH)
+static func storey_of_eye(eye_y: float) -> int:
+	return floori((eye_y - 0.8) / LH)
+
+## True when the camera is on another storey than feet at `feet_y`. The Orderly's breath and rattle stop at
+## floors and ceilings (the owner's playtest, 19 Nov: heard through the floor above).
+func _other_storey(feet_y: float) -> bool:
+	var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
+	return cam != null and storey_of_eye(cam.global_position.y) != storey_of_feet(feet_y)
 
 func _ear_distance(pos: Vector3) -> float:
 	var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
@@ -916,7 +928,8 @@ func _orderly(delta: float, o: Dictionary) -> void:
 	var held := _held(o)
 	# A Stillness entity that is seen makes no sound at all: it breathes only while nobody looks.
 	var bdb := SILENT_DB - 1.0
-	if at != null:
+	var through_floor := at != null and _other_storey((at as Vector3).y - 2.2)
+	if at != null and not through_floor:
 		orderly_breath.global_position = at
 		var bd := _ear_distance(at)
 		# Under the trolley (it is coming) the breath steps back close in, so the two together stay under
@@ -956,7 +969,7 @@ func _orderly(delta: float, o: Dictionary) -> void:
 	elif _shriek_pending_until > 0 and Time.get_ticks_msec() > _shriek_pending_until:
 		_shriek_pending_until = -1
 	# The rattle in its throat, now and then, only near it and only unseen.
-	if not held and near < (14.0 if old_falloff else RATTLE_FAR):
+	if not held and not through_floor and near < (14.0 if old_falloff else RATTLE_FAR):
 		_rattle_in -= delta
 		if _rattle_in <= 0.0:
 			play_at("rattle", at)

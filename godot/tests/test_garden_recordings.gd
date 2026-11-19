@@ -54,6 +54,8 @@ func test_keeper_recordings_use_their_effect_buses(t: T) -> void:
 	keeper._build()
 	t.eq(keeper._clinks[0].bus, &"Entity", "moving badges use Entity")
 	t.eq(_name(keeper._breath.stream), "breath", "near breath loads the owner's take")
+	# The owner's playtest, 19 Nov: heard half as far again (was 1.6 m full level, 5.5 m cut-off).
+	t.check(keeper._breath.max_distance >= 8.2 and keeper._breath.unit_size >= 2.4, "its breath carries 1.5 times as far (%.2f m, full within %.2f m)" % [keeper._breath.max_distance, keeper._breath.unit_size])
 	t.eq(_name(keeper._swing_snd.stream), "badges_swing", "lean uses the keeper's badges")
 	t.eq(keeper._sniff.bus, &"Entity", "the lean sniff uses Entity")
 	t.eq(keeper._snatch.bus, &"Scare", "the catch uses Scare")
