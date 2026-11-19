@@ -23,6 +23,7 @@ const Floor = preload("res://sim/floor.gd")
 const Furniture = preload("res://sim/furniture.gd")
 const Hides = preload("res://sim/hides.gd")
 const InventoryView = preload("res://client/inventory_view.gd")
+const KeeperView = preload("res://client/groundskeeper_view.gd")
 const GardenSound = preload("res://client/garden_sound.gd")
 const Ferns = preload("res://client/arboretum_ferns.gd")
 const BARK_MAP = preload("res://assets/arboretum/willow_bark.png")
@@ -70,7 +71,7 @@ var lv: Level
 var fp: Floor.FloorPlan
 var g: Arboretum.Garden
 ## The Groundskeeper's view, once the game has made it (client/groundskeeper_view.gd set_floor).
-var keeper: Node3D = null
+var keeper: KeeperView = null
 ## What was drawn, for checks: counts by kind.
 var drawn := {}
 
@@ -1029,9 +1030,11 @@ func _listen(delta: float) -> void:
 	_last_cam = p
 	# The ring of silence.
 	var want := 1.0
-	if keeper != null and is_instance_valid(keeper) and keeper.visible:
+	if keeper != null and is_instance_valid(keeper) and keeper.has_acoustic_pose():
 		want = smoothstep(HUSH_NEAR, HUSH_FAR, Vector2(p.x - keeper.global_position.x, p.z - keeper.global_position.z).length())
 	_hush = move_toward(_hush, want, delta * 0.9)
+	if keeper != null and is_instance_valid(keeper):
+		keeper.heard_hush(_hush, delta)
 	for cue: String in _amb:
 		var bed: AudioStreamPlayer = _amb[cue]
 		var share := 1.0 - _hush if cue == "quiet" else _hush

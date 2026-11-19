@@ -48,6 +48,7 @@ const Lonely = preload("res://sim/lonely.gd")
 const Hearing = preload("res://sim/hearing.gd")
 const Noises = preload("res://sim/noise.gd")
 const PropHearing = preload("res://tests/prop_hearing.gd")
+const Findables = preload("res://sim/findables.gd")
 const Inventory = preload("res://sim/inventory.gd")
 const PropInventory = preload("res://tests/prop_inventory.gd")
 const Shop = preload("res://sim/shop.gd")
@@ -69,6 +70,20 @@ const KEEPER_SIX: Array[StringName] = [&"groundskeeper.speed", &"groundskeeper.d
 
 ## Every wired id's proof: the test in this file that measures the thing it changes.
 const PROOFS := {
+	&"groundskeeper.tilt": "test_garden_state_clock_settings",
+	&"groundskeeper.beat": "test_garden_state_clock_settings",
+	&"groundskeeper.sweep": "test_garden_state_clock_settings",
+	&"groundskeeper.turn": "test_garden_state_clock_settings",
+	&"noise.creep_loud": "test_garden_noise_table_settings",
+	&"noise.walk_moss": "test_garden_noise_table_settings",
+	&"noise.walk_litter": "test_garden_noise_table_settings",
+	&"noise.walk_gravel": "test_garden_noise_table_settings",
+	&"noise.twig": "test_garden_noise_table_settings",
+	&"noise.sprint": "test_garden_noise_table_settings",
+	&"noise.crawl": "test_garden_noise_table_settings",
+	&"noise.hide": "test_garden_noise_table_settings",
+	&"noise.drop": "test_garden_noise_table_settings",
+	&"noise.emote": "test_garden_noise_table_settings",
 	&"noise.cone": "test_cone_hearing_radius",
 	&"noise.search_open": "test_garden_search_hearing_radius",
 	&"noise.search_rush": "test_garden_search_hearing_radius",
@@ -124,14 +139,20 @@ const PROOFS := {
 	&"shop.price.toy": "test_shop_prices",
 	&"shop.price.salts": "test_shop_prices",
 	&"shop.glow": "test_glow_seconds",
+	&"badge.chance": "test_badge_search_odds",
+	&"badge.depth_chance": "test_badge_search_odds",
 }
 
 ## The rows of later pieces wired so far (sim/settings.gd WIRED_IDS), in the registry's order.
-const MORE: Array[StringName] = [&"orderly.catch_dance", &"noise.cone", &"noise.search_open", &"noise.search_rush", &"minder.stroll", &"minder.hide_time", &"minder.hide_more", &"minder.last_hide", &"minder.search",
+const MORE: Array[StringName] = [
+	&"groundskeeper.tilt", &"groundskeeper.beat", &"groundskeeper.sweep", &"groundskeeper.turn",
+	&"noise.creep_loud", &"noise.walk_moss", &"noise.walk_litter", &"noise.walk_gravel", &"noise.twig",
+	&"noise.sprint", &"noise.crawl", &"noise.hide", &"noise.drop", &"noise.emote",
+	&"orderly.catch_dance", &"noise.cone", &"noise.search_open", &"noise.search_rush", &"minder.stroll", &"minder.hide_time", &"minder.hide_more", &"minder.last_hide", &"minder.search",
 	&"minder.anger_sprint", &"minder.anger_noise", &"minder.anger_cool",
 	&"lift.false_stop", &"lift.board", &"lift.hold", &"lift.ride", &"dark.min", &"dark.max", &"dark.first_min", &"dark.first_max", &"dark.warning",
 	&"stamina.tank", &"heal.time", &"heal.quiet", &"heal.health", &"inv.stack", &"inv.hand_reach", &"cabinet.slots",
-	&"shop.price.marker", &"shop.price.glow", &"shop.price.flash", &"shop.price.speed", &"shop.price.toy", &"shop.price.salts", &"shop.glow"]
+	&"shop.price.marker", &"shop.price.glow", &"shop.price.flash", &"shop.price.speed", &"shop.price.toy", &"shop.price.salts", &"shop.glow", &"badge.chance", &"badge.depth_chance"]
 
 ## The game's value of every setting: the constant the game uses, with the rooms' switches on (paced, the long
 ## dark, the car waits: net/host_rules.gd). This table, not the registry, is the test's oracle.
@@ -186,6 +207,9 @@ static func game_values() -> Dictionary:
 		&"noise.hide": Noises.HIDE,
 		&"noise.drop": Noises.DROP,
 		&"noise.cone": Noises.CONE,
+		&"flare.throw": 4.0, &"flare.reach": 6.0, &"flare.stun": 1.5,
+		&"flare.blind": 1.0, &"flare.noise": 24.0,
+		&"lamp.seconds": 60.0, &"lamp.range": 12.0,
 		&"noise.search_open": Noises.SEARCH_OPEN,
 		&"noise.search_rush": Noises.SEARCH_RUSH,
 		&"noise.emote": Noises.EMOTE,
@@ -228,6 +252,8 @@ static func game_values() -> Dictionary:
 		&"shop.price.toy": float(Shop.base_price("toy")),
 		&"shop.price.salts": float(Shop.base_price("salts")),
 		&"shop.glow": Shop.GLOW_SECONDS,
+		&"badge.chance": float(Findables.BADGE_FIRST_CHANCE),
+		&"badge.depth_chance": float(Findables.BADGE_DEPTH_CHANCE),
 		&"quota.each": float(Run.QUOTA_PER_PLAYER),
 		&"quota.step": Run.QUOTA_DEPTH_STEP,
 		&"pay.step": Run.DEPTH_PAY_STEP,
@@ -260,7 +286,7 @@ func test_catch_dance_setting(t: T) -> void:
 func test_registry_rows(t: T) -> void:
 	var game := game_values()
 	var rows := Settings.list()
-	t.eq(rows.size(), 100, "rows in the registry")
+	t.eq(rows.size(), 109, "rows in the registry")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -310,8 +336,8 @@ func test_registry_rows(t: T) -> void:
 	t.check(wired == want and want.size() == TEN.size() + MORE.size() + KEEPER_SIX.size(), "the wired rows are exactly those of LS1 and the groups wired since, in order: %s" % str(wired))
 	t.eq(by_group.get(&"residents", 0), 50, "residents")
 	t.eq(by_group.get(&"lift", 0), 12, "the lift and the dark")
-	t.eq(by_group.get(&"players", 0), 23, "players")
-	t.eq(by_group.get(&"earning", 0), 8, "earning")
+	t.eq(by_group.get(&"players", 0), 30, "players")
+	t.eq(by_group.get(&"earning", 0), 10, "earning")
 	t.eq(by_group.get(&"hiding", 0), 3, "hiding")
 	t.eq(by_group.get(&"speeds", 0), 4, "player speeds, the last group")
 	t.eq(group_order[group_order.size() - 1], &"speeds", "player speeds come last")
@@ -1378,6 +1404,20 @@ func test_cabinet_slots(t: T) -> void:
 
 ## S2, the prices: each item's price at least, today's and most, bought at window 1 with exactly that many credits
 ## (bought, nothing left) and with one fewer (refused, poor).
+func test_badge_search_odds(t: T) -> void:
+	var ids: Array[String] = ["crew"]
+	var s := Run.with_inventory(Run.with_findables(Run.create_run("badge-settings", ids)))
+	t.eq(Run.badge_search_chance(Run.with_tuning(s, {&"badge.chance": 100.0})), 0.0, "settings alone do not opt in")
+	s = Run.with_badge_search(s)
+	s.depth = 1
+	t.eq(Run.badge_search_chance(s), 0.75, "first floor's default")
+	t.eq(Run.badge_search_chance(Run.with_tuning(s, {&"badge.chance": 20.0, &"badge.depth_chance": 50.0})), 0.2, "the first floor uses only its starting chance")
+	s.depth = 3
+	t.eq(Run.badge_search_chance(s), 0.91, "deeper floors get the default increase")
+	t.eq(Run.badge_search_chance(Run.with_tuning(s, {&"badge.chance": 20.0, &"badge.depth_chance": 15.0})), 0.5, "the tuned increase applies twice by floor 3")
+	t.eq(Run.badge_search_chance(Run.with_tuning(s, {&"badge.chance": 0.0, &"badge.depth_chance": 0.0})), 0.0, "both controls at zero turn off the finds")
+	t.eq(Run.badge_search_chance(Run.with_tuning(s, {&"badge.chance": 90.0, &"badge.depth_chance": 20.0})), 1.0, "higher chances cap at certainty")
+
 func test_shop_prices(t: T) -> void:
 	var ids: Array[String] = ["p0"]
 	var s0 := PropCabinet.home_run("ls-price", ids)
@@ -1573,3 +1613,77 @@ func test_garden_search_hearing_radius(t: T) -> void:
 	t.eq(Noises.search_radius(true), 8.0, "rummaging carries 8 m")
 	t.eq(Noises.search_radius(false, tuned), 3.0, "quiet opening uses its own live setting")
 	t.eq(Noises.search_radius(true, tuned), 11.0, "rummaging uses its own live setting")
+
+func test_garden_noise_table_settings(t: T) -> void:
+	var tuned := Settings.Values.new()
+	tuned.values = {&"noise.creep_loud": 1.5, &"noise.walk_moss": 2.0, &"noise.walk_litter": 6.0,
+		&"noise.walk_gravel": 7.0, &"noise.sprint": 19.0, &"noise.twig": 16.0, &"noise.crawl": 3.0,
+		&"noise.hide": 8.0, &"noise.drop": 9.0, &"noise.emote": 20.0}
+	t.eq(Noises.gait_radius(&"creep", Noises.LITTER, tuned), 1.5, "litter creep radius")
+	t.eq(Noises.gait_radius(&"creep", Noises.MOSS, tuned), 0.0, "moss creep remains silent")
+	t.eq(Noises.gait_radius(&"walk", Noises.MOSS, tuned), 2.0, "moss walk radius")
+	t.eq(Noises.gait_radius(&"walk", Noises.LITTER, tuned), 6.0, "litter walk radius")
+	t.eq(Noises.gait_radius(&"walk", Noises.GRAVEL, tuned), 7.0, "gravel walk radius")
+	t.eq(Noises.gait_radius(&"sprint", Noises.MOSS, tuned), 19.0, "sprint radius")
+	var ground := Noises.Ground.new()
+	ground.width = 1
+	ground.height = 1
+	ground.cell_size = 2.0
+	ground.cells = PackedByteArray([Noises.TWIG])
+	ground.falls = PackedInt32Array([0])
+	var a := Noises.Act.make("a", Move.Body.make(1.0, 1.0, 0, 0.0), Move.Body.make(0.8, 1.0, 0, 0.0), &"walk")
+	t.eq(Noises.of(ground, a, DT, {}, tuned).r, 16.0, "twig cracking radius")
+	a.down = true
+	t.eq(Noises.of(null, a, DT, {}, tuned).r, 3.0, "downed movement radius")
+	a.down = false
+	a.from = a.body
+	a.hide = 1
+	t.eq(Noises.of(null, a, DT, {}, tuned).r, 8.0, "hide radius")
+	a.hide = -1
+	a.healed = true
+	t.eq(Noises.of(null, a, DT, {}, tuned).r, 9.0, "getting up radius")
+	a.emote = true
+	t.eq(Noises.of(null, a, DT, {}, tuned).r, 20.0, "emote is the single louder noise")
+	t.eq(Noises.drop("a", a.body, tuned).r, 9.0, "a fallen tape shares the getting-up setting")
+
+func test_garden_state_clock_settings(t: T) -> void:
+	var tuning := Settings.Values.new()
+	tuning.values = {&"groundskeeper.turn": 55.0, &"groundskeeper.tilt": 1.7, &"groundskeeper.sweep": 4.0, &"groundskeeper.beat": 1.5}
+	var plan := PropHearing.field()
+	var at := Move.Body.make(40.0, 40.0, 0, 0.0)
+	var never: Array[Hearing.Person] = []
+	var quiet: Array[Noises.Sound] = []
+	var k := Hearing.create(at, 0.0)
+	var r := Hearing.step(plan, plan.ground as Noises.Ground, k, never, quiet, false, DT, tuning)
+	t.check(absf(r.state.yaw - deg_to_rad(55.0) * DT) < 1e-7, "listening yaw uses the live turn rate")
+	var noises: Array[Noises.Sound] = [Noises.cone(at.x, at.z, at.level)]
+	r = Hearing.step(plan, plan.ground as Noises.Ground, k, never, noises, false, DT, tuning)
+	t.eq(r.state.left, 1.7, "the next hearing reaction uses the live delay")
+	k.mode = &"coming"
+	k.target = noises[0]
+	r = Hearing.step(plan, plan.ground as Noises.Ground, k, never, quiet, false, DT, tuning)
+	t.eq(r.state.mode, &"sweep", "an empty target gets a sweep")
+	t.eq(r.state.left, 4.0, "the next sweep uses the live duration")
+	k.mode = &"lean"
+	k.left = DT
+	r = Hearing.step(plan, plan.ground as Noises.Ground, k, never, quiet, false, DT, tuning)
+	t.eq(r.state.mode, &"beat", "a lean ending safely holds one extra beat")
+	t.eq(r.state.left, 1.5, "the next beat uses the live duration")
+
+func test_custom_sprint_radius_is_checked_from_the_current_listener(t: T) -> void:
+	for radius: float in [8.0, 19.0]:
+		var sim := PropHearing.Sim.make(PropHearing.field(), PropHearing.at(24.0, 40.0))
+		var runner := sim.bot("runner", PropHearing.at(24.0 + radius - 0.4, 40.0))
+		sim.tuning = Settings.Values.new()
+		sim.tuning.values = {&"noise.sprint": radius}
+		sim.warm()
+		runner.go(&"sprint", 1.0, 0.0)
+		var step := sim.tick()
+		if not t.check(step.heard.size() == 1, "just inside %.1f m is heard" % radius):
+			continue
+		var last_x := step.heard[0].x
+		step = sim.tick()
+		t.check(step.heard.is_empty() and sim.k.target.x == last_x, "outside %.1f m preserves last heard step" % radius)
+		runner.go(&"sprint", -1.0, 0.0)
+		step = sim.tick()
+		t.check(step.heard.size() == 1 and sim.k.target.t == step.heard[0].t, "first step back within %.1f m is reacquired" % radius)

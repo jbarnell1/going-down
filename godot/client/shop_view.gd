@@ -32,6 +32,7 @@ var prices: Array[int] = []
 var shut := false
 ## The flash on my screen: engine ms it began (-1 for none).
 var flash_at := -1
+var flare_blind := 0.0
 ## Speed juice: seconds left by the host clock (-1 for none).
 var juice_left := -1.0
 var _rows: Array = []
@@ -248,7 +249,7 @@ func after_buy_label(price: int) -> String:
 func _draw() -> void:
 	var now := Time.get_ticks_msec()
 	var px := maxf(2.0, floor(size.y / 320.0))
-	var wh := white(now)
+	var wh := maxf(white(now), flare_blind)
 	if wh > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(1, 1, 1, wh))
 	if juice_left >= 0.0:

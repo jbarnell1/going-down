@@ -215,6 +215,21 @@ func test_a_real_sample_opens_the_lift_and_the_whole_crew_can_bank(t: T) -> void
 	t.check(s.summary != null and s.summary.total >= Orientation.QUOTA, "practice credits came home on real tapes")
 	t.check(not s.days and s.wallets.is_empty() and s.left_out.is_empty(), "practice pays no campaign wallet and leaves nobody behind")
 
+func test_prelude_supplies_course_kit_even_with_ordinary_tools_disabled(t: T) -> void:
+	var ids: Array[String] = ["a"]
+	var rules := HostRules.new(true, 1, Places.FULL, true)
+	var initial := Run.create_run("admission-kit", ids)
+	var clinic := rules.prepare(initial)
+	t.check(clinic.plan.place == Places.CLINIC and not clinic.flare and not clinic.lamp, "explicit off starts unmodified Clinic")
+	rules.enable_orientation_prelude()
+	var course := rules.prepare(initial)
+	t.check(course.plan.place == Orientation.PLACE and course.flare and course.lamp, "the campaign course has both real tools")
+	t.check(course.orientation_resume != null and not course.orientation_resume.flare and not course.orientation_resume.lamp,
+		"neither course tool enables the ordinary rollout")
+	var deeper := HostRules.new(true, 2, Places.FULL, true)
+	deeper.enable_orientation_prelude()
+	t.check(not deeper.prepare(initial).orientation, "an explicitly deeper start is outside induction")
+
 func test_optional_campaign_transfers_the_whole_crew_and_pays_once(t: T) -> void:
 	var ids: Array[String] = ["a", "b"]
 	var rules := HostRules.new(true, 1, Places.BEFORE_ARBORETUM, true, true, true,

@@ -285,25 +285,29 @@ static func _ids(wallets: Dictionary) -> Array[String]:
 	return ids
 
 ## Every upgrade the crew owns, as "player|node" entries, sorted.
-static func crew_pool(wallets: Dictionary) -> Array[String]:
+static func crew_pool(wallets: Dictionary, trade_losses: bool = false) -> Array[String]:
 	var pool: Array[String] = []
 	for id in _ids(wallets):
-		for node_id in _wallet(wallets, id).owned:
+		for node_id in _loss_pool(wallets, id, trade_losses):
 			pool.append("%s%s%s" % [id, SEP, node_id])
 	pool.sort()
 	return pool
 
+static func _loss_pool(wallets: Dictionary, id: String, trade_losses: bool) -> Array[String]:
+	var owned := _wallet(wallets, id).owned
+	return Upgrades.loss_pool(owned) if trade_losses else owned
+
 ## The odds printed before BANK, under LOSS_RULE.
-static func loss_odds(wallets: Dictionary) -> Dictionary:
+static func loss_odds(wallets: Dictionary, trade_losses: bool = false) -> Dictionary:
 	if LOSS_RULE == LossRule.CREW_ONE:
-		var o := Upgrades.odds_before_roll(crew_pool(wallets))
+		var o := Upgrades.odds_before_roll(crew_pool(wallets, trade_losses))
 		return {"count": int(o["count"]), "text": String(o["text"])}
 	# EACH_PLAYER_ONE: every player who owns any loses one of their own, 1 in (their count).
 	var count := 0
 	var parts := PackedStringArray()
 	var players: Array[Dictionary] = []
 	for id in _ids(wallets):
-		var n := _wallet(wallets, id).owned.size()
+		var n := _loss_pool(wallets, id, trade_losses).size()
 		if n > 0:
 			count += 1
 			parts.append("%s 1 in %d" % [id, n])
@@ -312,16 +316,16 @@ static func loss_odds(wallets: Dictionary) -> Dictionary:
 
 ## THE place that decides what a missed day takes. Seeded from the day's seed and day number only,
 ## so every player computes the same result; the order of `wallets` does not matter.
-static func take_by_roll(seed_text: String, day: int, wallets: Dictionary) -> Array[Dictionary]:
+static func take_by_roll(seed_text: String, day: int, wallets: Dictionary, trade_losses: bool = false) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if LOSS_RULE == LossRule.CREW_ONE:
-		var entry := Upgrades.lose_one_by_roll(seed_text, day, crew_pool(wallets))
+		var entry := Upgrades.lose_one_by_roll(seed_text, day, crew_pool(wallets, trade_losses))
 		if entry != "":
 			var cut := entry.rfind(SEP)
 			out.append({"player": entry.substr(0, cut), "node": entry.substr(cut + 1)})
 		return out
 	for id in _ids(wallets):
-		var owned: Array[String] = _wallet(wallets, id).owned
+		var owned := _loss_pool(wallets, id, trade_losses)
 		var node_id := Upgrades.lose_one_by_roll("%s:%s" % [seed_text, id], day, owned)
 		if node_id != "":
 			out.append({"player": id, "node": node_id})
@@ -333,7 +337,7 @@ static func take_by_roll(seed_text: String, day: int, wallets: Dictionary) -> Ar
 static func is_locked(earned: int, quota: int) -> bool:
 	return earned < quota
 
-static func bank_preview(s: DayState, banked: int, earned: int, crew: Array[String], wallets: Dictionary, floor_quota_per_player: int) -> Preview:
+static func bank_preview(s: DayState, banked: int, earned: int, crew: Array[String], wallets: Dictionary, floor_quota_per_player: int, trade_losses: bool = false) -> Preview:
 	var p := Preview.new()
 	p.day = s.day
 	p.quota = day_quota(s, floor_quota_per_player)
@@ -349,7 +353,7 @@ static func bank_preview(s: DayState, banked: int, earned: int, crew: Array[Stri
 	p.at_stake = 0
 	p.odds = ""
 	if not p.game_over:
-		var o := loss_odds(wallets)
+		var o := loss_odds(wallets, trade_losses)
 		p.at_stake = int(o["count"])
 		p.odds = String(o["text"])
 		for k: Dictionary in o.get("players", []):
@@ -393,9 +397,9 @@ static func _stake_text(p: Preview, player_count: int) -> String:
 		return "%s: %s." % [text, p.odds.to_upper()]
 	return text + "."
 
-static func end_day(s: DayState, banked: int, earned: int, crew: Array[String], wallets: Dictionary, floor_quota_per_player: int, seed_text: String, wiped: bool = false) -> DayResult:
+static func end_day(s: DayState, banked: int, earned: int, crew: Array[String], wallets: Dictionary, floor_quota_per_player: int, seed_text: String, wiped: bool = false, trade_losses: bool = false) -> DayResult:
 	# A wipe banks nothing: nothing came back.
-	var pv := bank_preview(s, 0 if wiped else banked, earned, crew, wallets, floor_quota_per_player)
+	var pv := bank_preview(s, 0 if wiped else banked, earned, crew, wallets, floor_quota_per_player, trade_losses)
 	var r := DayResult.new()
 	r.day = s.day
 	r.quota = pv.quota
@@ -440,7 +444,7 @@ static func end_day(s: DayState, banked: int, earned: int, crew: Array[String], 
 		t.streak = 0
 		t.misses += 1
 		# The roll is over what was owned when BANK was pressed: the same pool the preview counted.
-		r.taken = take_by_roll(seed_text, s.day, wallets)
+		r.taken = take_by_roll(seed_text, s.day, wallets, trade_losses)
 		for k: Dictionary in r.taken:
 			var pid: String = k["player"]
 			paid[pid] = Upgrades.apply_loss(_wallet(paid, pid), String(k["node"]))

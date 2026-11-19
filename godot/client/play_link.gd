@@ -312,11 +312,19 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	lf.h_fov_deg = float(inp.get("hfov", 90.0))
 	lf.v_fov_deg = float(inp.get("vfov", 70.0))
 	lf.raised = want_raised
+	if latest.get("flares") is Array:
+		var host_now := c.clock.host_time(rc._now)
+		for burst: Dictionary in latest["flares"]:
+			if burst.blind == c.id and host_now < float(burst.blindUntil):
+				lf.flare_blind = true
+				break
 	lf.hold_doors = playing and inp.get("hold") == true
 	lf.gait = String(gait)
 	lf.call = playing and inp.get("call") == true
 	lf.pick_up = playing and inp.get("pickUp") == true
 	lf.mark = playing and latest.get("annex") != null and inp.get("mark") == true
+	if playing and latest.get("annex") != null:
+		lf.peel = int(inp.get("peel", -1))
 	lf.use = use
 	var reel: Variant = (day as Dictionary).get("reel") if day is Dictionary else null
 	if reel != null and inp.get("skipReelAt") == reel["started"] and not reel["skipped"]:
@@ -421,6 +429,12 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	snap["skills"] = latest.get("skills")
 	snap["wind"] = latest.get("wind")
 	snap["shoes"] = latest.get("shoes")
+	snap["flares"] = latest.get("flares")
+	snap["lamps"] = latest.get("lamps")
+	if latest.has("longBurn"):
+		snap["longBurn"] = latest["longBurn"]
+	if latest.has("porter"):
+		snap["porter"] = latest["porter"]
 	if plan_dict.has("_new"):
 		plan_dict.erase("_new")
 		snap["plan"] = plan_dict

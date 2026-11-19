@@ -177,7 +177,9 @@ func update(s: Dictionary, my: String, yaw: float, f_held: bool, sprint: bool, m
 	if p2 != null:
 		piece = p2.id
 		prompt = Findables.prompt_for(p2.kind)
-		prompt2 = Findables.RUSH_PROMPT
+		var porter: Variant = s.get("porter")
+		var trained := porter is Dictionary and int(porter.get(my, 0)) in [1, 2]
+		prompt2 = "SHIFT+F  RIFLE IT. FAST. SILENT. HALF THE CREDITS." if trained else Findables.RUSH_PROMPT
 		want_search = f_held
 		want_fast = f_held and sprint
 		if test_break == "predict_open" and f_held:
@@ -201,7 +203,7 @@ func on_events(events: Array, my: String, sfx: Object, now: int) -> String:
 	var open := ""
 	for e: Dictionary in events:
 		var ty := str(e.get("type", ""))
-		if ty == "searchDone" and _garden_sites and sfx != null and not bool(e.get("fast", false)):
+		if ty == "searchDone" and not e.get("silent", false) and _garden_sites and sfx != null and not bool(e.get("fast", false)):
 			var kind := str(e.get("kind", ""))
 			var cue := "search_locker" if kind == "garden_bin" or kind == "garden_chest" else "search_drawer"
 			sfx.call("play_at", cue, piece_point(int(e["piece"])))
@@ -222,7 +224,7 @@ func on_events(events: Array, my: String, sfx: Object, now: int) -> String:
 						sfx.call("play", "search_paper")
 					"credits":
 						sfx.call("play", "teller_ding")
-		elif ty == "searchStart" and str(e.get("playerId", "")) == my and sfx != null and not bool(e.get("fast", false)):
+		elif ty == "searchStart" and not e.get("silent", false) and str(e.get("playerId", "")) == my and sfx != null and not bool(e.get("fast", false)):
 			match str(e["kind"]):
 				"drawers_low":
 					sfx.call("play", "search_drawer", -10.0)

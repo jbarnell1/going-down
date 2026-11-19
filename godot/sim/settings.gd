@@ -131,7 +131,7 @@ const ROWS: Array = [
 	[&"minder.anger_noise", &"minder", "ONE NOISE ADDS TO ITS ANGER", "a ball pit, a flap, a dropped tape or an emote", "in 100", 34.0, 5.0, 100.0, 1.0, &"now", &"LS4", W],
 	[&"minder.anger_cool", &"minder", "ITS ANGER COOLS FROM FULL IN", "seconds of quiet that empty a full anger bar", "s", 50.0, 10.0, 300.0, 5.0, &"now", &"LS4", F],
 	# The Groundskeeper (the Arboretum; sim/hearing.gd, sim/noise.gd, sim/run.gd KEEPER_HEALS). AR1 wires its
-	# speeds, its reach, the lean and the heals. AR5 wires the cone radius. The remaining rows are for review.
+	# speeds, reach, timings and heals, along with the radii of the garden sounds.
 	[&"groundskeeper.speed", &"groundskeeper", "COMING SPEED", "how fast it comes to a noise", "m/s", 6.0, 4.2, 9.0, 0.1, &"now", &"AR1", F],
 	[&"groundskeeper.dark_speed", &"groundskeeper", "SPEED IN THE BLACKOUT", "the same, while the lights are out before the car", "m/s", 6.5, 4.2, 9.0, 0.1, &"now", &"AR1", F],
 	[&"groundskeeper.reach", &"groundskeeper", "REACH", "it takes whoever is this near when a lean ends or a noise is made", "m", 2.0, 1.0, 3.0, 0.1, &"now", &"AR1", F],
@@ -188,6 +188,13 @@ const ROWS: Array = [
 	# at lights out, when every bag is empty, so a slot never holds more than the number in force.
 	[&"inv.stack", &"carry", "ONE SLOT HOLDS", "how many of the same item stack in one slot", "items", 1.0, 1.0, 5.0, 1.0, &"day", &"S1", W],
 	[&"inv.hand_reach", &"carry", "HAND OVER WITHIN", "giver's feet to the crewmate's", "m", 1.5, 0.5, 3.0, 0.1, &"floor", &"S1", F],
+	[&"flare.throw", &"carry", "FLARE THROW", "distance to the burst along the player's aim", "m", 4.0, 2.0, 8.0, 0.5, &"now", &"B3", F],
+	[&"flare.reach", &"carry", "FLARE STUN RANGE", "within this distance of the burst with a clear path", "m", 6.0, 2.0, 10.0, 0.5, &"now", &"B3", F],
+	[&"flare.stun", &"carry", "FLARE STUN LASTS", "how long it stops the resident", "s", 1.5, 0.5, 3.0, 0.25, &"now", &"B3", F],
+	[&"flare.blind", &"carry", "FLARE BLIND LASTS", "how long the struck crewmate is blinded", "s", 1.0, 0.5, 2.0, 0.25, &"now", &"B3", F],
+	[&"flare.noise", &"carry", "FLARE NOISE REACH", "the radius of its loud burst", "m", 24.0, 12.0, 30.0, 1.0, &"now", &"B3", F],
+	[&"lamp.seconds", &"carry", "LAMP CHARGE", "seconds of light in a fresh battery", "s", 60.0, 15.0, 180.0, 5.0, &"now", &"B4", F],
+	[&"lamp.range", &"carry", "LAMP BEAM REACH", "range of the portable beam", "m", 12.0, 5.0, 22.0, 1.0, &"now", &"B4", F],
 	# Players: the shop and the cabinet (S2, T28 and T29; sim/shop.gd). Prices are credits from the buyer's own share; the
 	# game's are the design's shares of a made day's pay (Shop.SHARE). The cabinet's size goes into force at lights out.
 	[&"cabinet.slots", &"shop", "CABINET HOLDS", "slots in each cell's cabinet", "slots", 6.0, 4.0, 8.0, 1.0, &"day", &"S2", W],
@@ -207,6 +214,8 @@ const ROWS: Array = [
 	[&"day.first", &"earning", "DAY 1 OWES", "in floor-1 quotas", "quotas", 1.5, 0.5, 4.0, 0.5, &"day", &"LS5", F],
 	[&"day.lights_out", &"earning", "LIGHTS OUT AFTER", "once more than half the crew is in bed", "s", 20.0, 5.0, 60.0, 5.0, &"next", &"LS5", F],
 	[&"marks.pad", &"earning", "ARROWS ON THE PAD", "the Annex's marks, a floor", "arrows", 3.0, 0.0, 9.0, 1.0, &"floor", &"LS5", W],
+	[&"badge.chance", &"earning", "BADGE CHANCE ON FLOOR 1", "an old crew badge hidden in distant searchable furniture", "%", 75.0, 0.0, 100.0, 1.0, &"floor", &"T30", W],
+	[&"badge.depth_chance", &"earning", "BADGE CHANCE, EACH FLOOR DEEPER", "percentage points added per floor, up to certainty", "%", 8.0, 0.0, 25.0, 1.0, &"floor", &"T30", W],
 	# Hiding.
 	[&"hide.in_slow", &"hiding", "GETTING IN, QUIETLY", "seconds to get into a hide quietly", "s", 1.5, 0.5, 4.0, 0.1, &"next", &"LS6", F],
 	[&"hide.in_fast", &"hiding", "GETTING IN, FAST AND LOUD", "seconds to get into a hide fast", "s", 0.5, 0.2, 2.0, 0.1, &"next", &"LS6", F],
@@ -222,6 +231,9 @@ const ROWS: Array = [
 const WIRED_PIECES: Array[StringName] = [&"LS1", &"AR5"]
 ## Rows of later pieces the rules already read (wired one group at a time, each with its proof).
 const WIRED_IDS: Array[StringName] = [
+	&"groundskeeper.tilt", &"groundskeeper.beat", &"groundskeeper.sweep", &"groundskeeper.turn",
+	&"noise.creep_loud", &"noise.walk_moss", &"noise.walk_litter", &"noise.walk_gravel", &"noise.twig",
+	&"noise.sprint", &"noise.crawl", &"noise.hide", &"noise.drop", &"noise.emote",
 	&"noise.search_open", &"noise.search_rush",
 	&"orderly.catch_dance",
 	# LS4: the lift and the dark.
@@ -240,6 +252,7 @@ const WIRED_IDS: Array[StringName] = [
 	# S2: the shop and the cabinet.
 	&"cabinet.slots", &"shop.price.marker", &"shop.price.glow", &"shop.price.flash", &"shop.price.speed", &"shop.price.toy",
 	&"shop.price.salts", &"shop.glow",
+	&"badge.chance", &"badge.depth_chance",
 ]
 
 ## The least wait of a call is its start delay plus the floors: sim/run.gd CALL_START_DELAY_MIN (this file

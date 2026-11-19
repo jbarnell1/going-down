@@ -457,8 +457,14 @@ func test_loaded_support_moves_before_rigger_appears_and_resets(t: T) -> void:
 	view.show_host(snapshot, 5.32, "solo", [])
 	t.check(not span.transform.is_equal_approx(idle) and not view.rigger.visible, "only the line loads before the Rigger appears")
 	t.check(other_span.transform.is_equal_approx(unchanged), "the next house gives no false warning")
+	for joint: Node3D in view.houses[1].ties:
+		t.check(absf(joint.rotation.z)>0.1, "the loaded line pulls its interior take-up on every storey")
+	for joint: Node3D in view.houses[0].ties:
+		t.check(is_zero_approx(joint.rotation.z), "the neighbouring interior stays still")
 	view.show_host(ward.snapshot(), 6.0, "solo", [])
 	t.check(span.transform.is_equal_approx(idle), "support settles at its original anchors")
+	for joint: Node3D in view.houses[1].ties:
+		t.check(is_zero_approx(joint.rotation.z), "the interior take-up settles with its support")
 	view.free()
 
 func test_laundry_window_reaches_around_a_corner_without_opening_other_glass(t: T) -> void:

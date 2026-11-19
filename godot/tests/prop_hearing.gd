@@ -16,10 +16,8 @@
 #   4. The survival table: a whistle at 18 m, a twig crack at 12 m, a walk on litter at 8 m and a walk on moss
 #      at 3 m bring it in 0.8 s + distance / 6 m/s, each within one tick, and a creep on moss gets 4.56, 3.36,
 #      2.56 and 1.56 m from the place by then (the last is inside its reach).
-#   5. Sprinting away never works: a bot that starts sprinting inside its hearing, from any distance and in any
-#      direction, is always taken (200 starts, 20 quick), with an endless tank and with the game's tank on
-#      litter; a friend's louder noise retargets it at once; and under every allowed pair of settings its
-#      coming speed is at least 1.2 times the sprint.
+#   5. An escaping runner can leave earshot during the tilt. A close sustained sprint is caught,
+#      unless a friend draws the keeper off. All allowed pursuit speeds exceed the sprint.
 #   6. The instrument records only on coming and leaning ticks, to holders in range, never while it listens,
 #      tilts or sweeps; the lean pays 1.5 at the lean range rising to 3 at its reach.
 #   7. A louder or a nearer noise retargets it on that tick; a quieter one further off does not; ties resolve
@@ -628,7 +626,7 @@ func _sprint_case(plan: Floor.FloorPlan, i: int, d: float, from: float, a: float
 			a += 1.2 + turn.next() * 2.0
 	return -1.0
 
-func test_sprinting_away_never_works(t: T) -> void:
+func test_close_sustained_sprints_are_caught(t: T) -> void:
 	_apply_break()
 	var n := 20 if t.quick else 200
 	var worst := 0.0
@@ -637,7 +635,7 @@ func test_sprinting_away_never_works(t: T) -> void:
 	for i in n:
 		var rng := Rng.make_rng("sprint:%d" % i)
 		var plan := field("sprint-%d" % (i % 10))
-		var d := 2.2 + rng.next() * (O_SPRINT_R - 2.3)
+		var d := 2.2 + rng.next() * 3.0
 		var from := rng.next() * TAU
 		var a := rng.next() * TAU
 		var got := _sprint_case(plan, i, d, from, a, 0.0, 120.0)
@@ -857,13 +855,13 @@ func test_louder_or_nearer_retargets_and_ties(t: T) -> void:
 	sim.tick()
 	t.check(sim.k.target.by == "d", "a quieter noise nearer to it takes its place")
 	d.go(&"stand")
-	e.go(&"walk", 1.0, 0.0)    # 8 m, as loud as the one it goes to, further off: as loud takes its place
+	e.go(&"walk", 1.0, 0.0)    # 8 m, as loud as the one it goes to, further off: the nearer target stays
 	sim.tick()
-	t.check(sim.k.target.by == "e", "a noise as loud takes its place")
+	t.check(sim.k.target.by == "d", "a farther equally loud friend does not take its place")
 	e.go(&"stand")
 	f.go(&"creep", 0.0, 1.0)   # 2.5 m, 7 m off: not heard
 	sim.tick()
-	t.check(sim.k.target.by == "e", "a creep 7 m off is not heard")
+	t.check(sim.k.target.by == "d", "a creep 7 m off is not heard")
 	# Ties: two whistles at once, the same distance: the lower id, the same in three reruns. Then nearer wins.
 	var firsts: Array = []
 	for rerun in 3:
@@ -892,21 +890,37 @@ func test_louder_or_nearer_retargets_and_ties(t: T) -> void:
 	q3.go(&"sprint", 0.0, 1.0)
 	s3.tick()
 	t.check(s3.k.target.by == "b", "two whistles and a sprint: the louder, then the nearer (%s)" % s3.k.target.by)
-	# A noise that goes on is heard wherever it goes: a sprinter 12 m off who runs straight away is out of its
-	# 14 m by the end of the tilt, and it still has their every step; one who stops is lost where they stopped.
+	# Cross the hearing boundary during tilt, then turn back into range during pursuit.
 	var s4 := Sim.make(plan, at(20.0, 40.0))
-	var runner := s4.bot("a", at(32.0, 40.0))
+	var runner := s4.bot("a", at(33.5, 40.0))
 	s4.warm()
 	runner.go(&"sprint", 1.0, 0.0)
-	for _n in int(2.0 / DT):
+	var last_heard := 0.0
+	var missed := 0
+	for _n in 16:
+		var ear := s4.k.body
+		var step := s4.tick()
+		if flat(ear, runner.body) <= O_SPRINT_R + EPS:
+			last_heard = runner.body.x
+		else:
+			missed += 1
+			t.check(step.heard.is_empty() and s4.k.target.x == last_heard, "an outside step leaves the target at the last heard place")
+	t.check(missed > 0 and s4.k.mode == &"tilt", "the sprinter escapes earshot during the tilt")
+	runner.go(&"stand")
+	var before_pursuit := s4.k.body.x
+	for _n in 4:
 		s4.tick()
-	t.check(flat(runner.body, s4.k.body) > 14.0 and s4.k.target != null and flat(runner.body, at(s4.k.target.x, s4.k.target.z)) < 1e-6,
-		"a sprinter %.1f m off, still sprinting: it goes to where they are now" % flat(runner.body, s4.k.body))
-	runner.go(&"creep", 1.0, 0.0)   # on litter: 2.5 m, quieter than the sprint
-	var stopped := runner.body
-	for _n in int(1.0 / DT):
-		s4.tick()
-	t.check(s4.k.target != null and flat(stopped, at(s4.k.target.x, s4.k.target.z)) < 0.3, "a sprinter who drops to a creep is lost where the sprint stopped")
+	t.check(s4.k.mode == &"coming" and s4.k.body.x > before_pursuit and s4.k.target.x == last_heard,
+		"the keeper walks towards the last audible step while the runner is quiet")
+	runner.go(&"sprint", -1.0, 0.0)
+	var acquired := false
+	for _n in 24:
+		var ear := s4.k.body
+		var step := s4.tick()
+		if flat(ear, runner.body) <= O_SPRINT_R + EPS:
+			acquired = step.heard.size() == 1 and s4.k.target.x == runner.body.x
+			break
+	t.check(acquired, "the first step back within earshot refreshes the target")
 	# Every mode and pose it has is on the wire's lists.
 	for m: String in ["listening", "tilt", "coming", "lean", "beat", "sweep", "strike"]:
 		t.check(Protocol.MODES.has(m), "the wire has no code for its mode %s" % m)

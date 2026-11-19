@@ -70,6 +70,9 @@ var run_seed := ""
 var _playtest_depth := -1
 var _orientation_playtest := false
 var orientation_campaign := false
+var badge_search := false
+var quick_fingers := false
+var long_burn := false
 var runs := 0
 var entity_on := true
 var time_scale := 1.0
@@ -277,11 +280,11 @@ func start_run() -> void:
 	# The day quota's lock goes with the floor quota (net/host_rules.gd turns it on only with days too).
 	var q := quota_on()
 	var depth := HostRules.start_depth_by_arg() if _playtest_depth < 0 else maxi(1, _playtest_depth)
-	var deck := Places.deck_for_start_depth(depth) if Session.deck == Places.FULL else Session.deck
+	var deck := Places.deck_for_start_depth(depth, HostRules.garden_admission_by_arg()) if Session.deck == Places.FULL else Session.deck
 	var induction := Session.deck == Places.FULL if deep_pockets == null else bool(deep_pockets)
 	var nerve := Session.deck == Places.FULL if second_wind == null else bool(second_wind)
 	var ear := Session.deck == Places.FULL if soft_shoes == null else bool(soft_shoes)
-	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL, shop_on(), Session.deck == Places.FULL, true, true, induction, nerve, ear)
+	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL, shop_on(), Session.deck == Places.FULL, true, true, induction, nerve, ear, HostRules.flare_on_by_arg(), HostRules.lamp_on_by_arg(), badge_search, quick_fingers, long_burn)
 	if _orientation_playtest:
 		rules.enable_orientation()
 	elif orientation_campaign and _playtest_depth < 0:

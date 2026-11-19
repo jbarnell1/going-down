@@ -147,7 +147,8 @@ func on_events(events: Array, my_id: String, names: Dictionary, now: int, sfx: O
 		if ty == "invRefused" and who == my_id and e.get("op") != "skill":
 			say(str(REFUSED.get(str(e.get("why", "")), "NOT NOW.")), now)
 		elif ty == "searchFull" and who == my_id:
-			say("YOUR HANDS ARE FULL. IT IS STILL IN THERE.", now)
+			var item := "BADGE" if e.get("item") == "badge" else "IT"
+			say("YOUR HANDS ARE FULL. %s IS STILL IN THERE." % item, now)
 		elif ty == "itemGiven":
 			var recipient := str(e.get("to", ""))
 			if recipient == my_id:

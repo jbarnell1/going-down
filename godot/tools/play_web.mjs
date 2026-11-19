@@ -10,13 +10,13 @@ import { playthrough } from './playthrough.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
-const { chromium } = require(resolve(here, '../../node_modules/playwright'));
+const { chromium } = require('playwright');
 
 const port = Number(process.argv[2] ?? 4440);
 const query = (process.argv.find((a) => a.startsWith('--query=')) ?? '--query=').slice(8);
 const only = (process.argv.find((a) => a.startsWith('--only=')) ?? '--only=').slice(7);
 
-const browser = await chromium.launch({ headless: true, args: ['--use-angle=default', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ channel: process.env.GD_BROWSER_CHANNEL || undefined, headless: true, args: ['--use-angle=default', '--enable-gpu', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const consoleLines = [];
 page.on('console', (m) => consoleLines.push(`${m.type()}: ${m.text()}`));

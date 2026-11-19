@@ -128,6 +128,11 @@ var garden_search: bool
 var deep_pockets: bool
 var second_wind: bool
 var soft_shoes: bool
+var flare: bool
+var lamp: bool
+var badge_search: bool
+var quick_fingers: bool
+var long_burn: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -137,12 +142,17 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false, furniture_: bool = false, findables_: bool = false,
 		inventory_: bool = false, furniture_layout_: bool = false, resident_navigation_: bool = false,
 		shop_: bool = false, nightly_reels_: bool = false, garden_cones_: bool = false, garden_search_: bool = false,
-		deep_pockets_: bool = false, second_wind_: bool = false, soft_shoes_: bool = false) -> void:
+		deep_pockets_: bool = false, second_wind_: bool = false, soft_shoes_: bool = false, flare_: bool = false, lamp_: bool = false, badge_search_: bool = false, quick_fingers_: bool = false, long_burn_: bool = false) -> void:
 	garden_cones = garden_cones_
 	garden_search = garden_search_
 	deep_pockets = deep_pockets_
 	second_wind = second_wind_
 	soft_shoes = soft_shoes_
+	flare = flare_
+	lamp = lamp_
+	badge_search = badge_search_
+	quick_fingers = quick_fingers_
+	long_burn = long_burn_
 	nightly_reels = nightly_reels_
 	shop = shop_
 	inventory = inventory_
@@ -200,7 +210,8 @@ static func parked_orderly(state: Run.RunState) -> Entity.OrderlyState:
 ## The first state of a run (create_run's, adjusted).
 func prepare(s0: Run.RunState) -> Run.RunState:
 	if orientation:
-		return Run.with_orientation(s0)
+		var practice := Run.with_flare(s0) if flare else s0
+		return Run.with_orientation(Run.with_lamp(practice) if lamp else practice)
 	var s := s0
 	if s.deck != deck:
 		s = s.copy()
@@ -286,10 +297,29 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_garden_cones(s)
 	if garden_search and deck.has(Places.ARBORETUM) and s.findables and not s.garden_search:
 		s = Run.with_garden_search(s)
+	if badge_search:
+		s = Run.with_badge_search(s)
+	if long_burn:
+		s = Run.with_long_burn(s)
+	if quick_fingers:
+		s = Run.with_quick_fingers(s)
 	if nightly_reels and s.days:
 		s = Run.with_nightly_reels(s)
+	if flare:
+		s = Run.with_flare(s)
+	if lamp:
+		s = Run.with_lamp(s)
 	s = _capped(s)
 	return Run.with_orientation(s, true) if orientation_prelude else s
+
+static func garden_admission_by_arg() -> bool:
+	return not OS.get_cmdline_user_args().has("garden_admission=0")
+
+static func flare_on_by_arg() -> bool:
+	return OS.get_cmdline_user_args().has("flare=1")
+
+static func lamp_on_by_arg() -> bool:
+	return OS.get_cmdline_user_args().has("lamp=1")
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web
 ## page's ?quota=N), honoured only together with `auto=1`: every floor's quota is at most N credits, so a

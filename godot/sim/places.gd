@@ -46,9 +46,9 @@ const FULL: Array[StringName] = [&"clinic", &"annex", &"playroom", &"arboretum"]
 ## with it, at any depth, is unchanged).
 const BEFORE_ARBORETUM: Array[StringName] = [&"clinic", &"annex", &"playroom"]
 ## The fixed floors, by depth (index 0 is the prison, which is never drawn).
-## The garden is open for an explicit depth-five playtest while its normal-run rules are still under review.
-static func deck_for_start_depth(depth: int) -> Array[StringName]:
-	return FULL if depth == FIXED.find(ARBORETUM) else BEFORE_ARBORETUM
+## A depth-five playtest always includes the garden. Fresh full-deck campaigns admit it unless their host requests the rollback.
+static func deck_for_start_depth(depth: int, garden_admitted: bool = false) -> Array[StringName]:
+	return FULL if garden_admitted or depth == FIXED.find(ARBORETUM) else BEFORE_ARBORETUM
 
 const FIXED: Array[StringName] = [&"prison", &"clinic", &"clinic", &"annex", &"playroom", &"arboretum"]
 

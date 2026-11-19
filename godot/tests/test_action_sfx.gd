@@ -26,6 +26,7 @@ func test_search_sounds_follow_confirmed_actions(t: T) -> void:
 	view.on_events([
 		{"type": "searchStart", "playerId": "p0", "kind": "drawers_low", "fast": false},
 		{"type": "searchStart", "playerId": "p0", "kind": "side_table", "fast": false},
+		{"type": "searchStart", "playerId": "p0", "kind": "drawers_low", "fast": false, "silent": true},
 		{"type": "searchStart", "playerId": "p1", "kind": "drawers_low", "fast": false},
 		{"type": "searchStart", "playerId": "p0", "kind": "drawers_low", "fast": true},
 		{"type": "searchNoise", "playerId": "p0", "piece": id},
@@ -35,7 +36,7 @@ func test_search_sounds_follow_confirmed_actions(t: T) -> void:
 		{"type": "searchDone", "playerId": "p0", "piece": id, "what": "note", "credits": 0, "note": "stillness-1"},
 	], "p0", heard, 0)
 	t.eq(heard.cues, [["search_drawer"], ["search_locker"], ["search_rifle", view.piece_point(id)],
-		["search_carton"], ["search_paper"]], "one positional rifle, extras only for the confirmed searcher")
+		["search_carton"], ["search_paper"]], "one positional rifle, extras only for the confirmed searcher, no opening cue for Quick Fingers")
 
 func test_inventory_sounds_follow_confirmed_actions(t: T) -> void:
 	var view := InventoryView.new()

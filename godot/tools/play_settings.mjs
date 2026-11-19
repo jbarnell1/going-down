@@ -99,7 +99,7 @@ const inGame = (s) => s.phase !== undefined;
 const row = (p, id) => (p.rows ?? []).find((r) => r.id === id);
 
 function startServer() {
-  const s = launch(['--headless', '--path', project, 'res://server/server.tscn', '--', 'server', `port=${port}`, 'bind=127.0.0.1', `seed=${seed}`, 'quota=0', `settings=${file}`],
+  const s = launch(['--headless', '--path', project, 'res://server/server.tscn', '--', 'server', `port=${port}`, 'bind=127.0.0.1', `seed=${seed}`, 'quota=0', 'orientation_campaign=0', `settings=${file}`],
     { env: { GD_JOIN_SECRET: SECRET }, echo: 'server' });
   return s;
 }

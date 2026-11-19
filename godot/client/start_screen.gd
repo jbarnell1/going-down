@@ -625,6 +625,9 @@ func _draw_ready(_screen_px: float) -> void:
 		_text(nm, Vector2(nx, cy + 1 * px), px, AMBER if id == my_id else pale)
 		var st := crew_state(row)
 		_text(st, Vector2(cx + 20 * px, cy + 9 * px), px, AMBER if st == "READY" else DIM)
+		if row.size() > 6 and not str(row[6]).is_empty():
+			_text(str(row[6]).to_upper(), Vector2(cx + 20 * px, cy + 17 * px), px, PALE)
+			cy += 8 * px
 		cy += 21 * px
 	# The host's valve, the tape again, and the way out.
 	var bx := cx + 50 * px

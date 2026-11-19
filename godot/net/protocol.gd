@@ -242,9 +242,9 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    "invRefused" {why: cabFull, poor, window, closed, nobody, annexOnly, unusable} besides the inventory's.
 ## Nightly reels (T24). With a reel in progress, the day block can end in [day, started, crew, votes, skipped].
 ## An input with a skip vote extends its 27-element form by a host-clock timestamp (the reel's start).
-const INV_OPS: Array[String] = ["", "drop", "take", "give", "stash", "fetch", "buy", "use", "throw", "skill"]
+const INV_OPS: Array[String] = ["", "drop", "take", "give", "stash", "fetch", "buy", "use", "throw", "skill", "lamp"]
 # Skill request args: 0 buys Deep Pockets, 1 undoes the pending training, 2 buys
-# Second Wind, 3 asks to use it, and 4 buys Soft Shoes. "skills", "wind", and "shoes" give each trained player
+# Second Wind, 3 asks to use it, 4 buys Soft Shoes and 5 buys Quick Fingers. "skills", "wind", and "shoes" give each trained player
 # 1 (settled), 2 (undoable), or for Second Wind, 3 (already used on this floor).
 
 ## Telemetry (client/telemetry.gd -> server/night_log.gd). New in the Godot game: [1, "T", kind, body] for kind
@@ -446,15 +446,25 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < WORLD_SHOP_INDEX:
 			out.append(null)
 		out.append(enc_shop(w["shop"]))
-	if w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null:
+	if w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null:
 		var extensions := {}
+		if w.get("lamps") != null:
+			var lamps := []
+			for l: Dictionary in w["lamps"]:
+				lamps.append([l.playerId, 1 if l.on else 0, q3(l.charge), q3(l.x), q3(l.y), q3(l.z), q3(l.yaw), q3(l.pitch), q3(l.range)])
+			extensions["lamps"] = lamps
+		if w.get("flares") != null:
+			var bursts := []
+			for b: Dictionary in w["flares"]:
+				bursts.append([b.id, q3(b.x), q3(b.y), q3(b.z), q3(b.until), b.blind, q3(b.blindUntil)])
+			extensions["flares"] = bursts
 		if w.get("orientationStandees") != null:
 			extensions["orientationStandees"] = w["orientationStandees"]
 		if w.get("ward") != null:
 			extensions["ward"] = WardWire.encode(w["ward"])
 		if w.get("reactor") != null:
 			extensions["reactor"] = ReactorWire.encode(w["reactor"])
-		for key: String in ["skills", "wind", "shoes"]:
+		for key: String in ["skills", "wind", "shoes", "porter", "longBurn"]:
 			if w.get(key) != null:
 				var rows := []
 				for id: String in w[key]:
@@ -900,7 +910,7 @@ static func encode(m: Dictionary) -> String:
 				inp.append(int(m.get("invSel", -1)))
 				inp.append(int(m.get("invs", 0)))
 				inp.append(INV_OPS.find(op))
-				inp.append(str(m["invArg"]) if op == "give" else (int(m["invArg"]) if op in ["take", "stash", "fetch", "buy", "skill"] else 0))
+				inp.append(str(m["invArg"]) if op == "give" else (int(m["invArg"]) if op in ["take", "stash", "fetch", "buy", "skill", "lamp"] else 0))
 			if skip_at != null:
 				inp.append(q3(float(skip_at)))
 			return JsJson.stringify(inp)
@@ -1094,6 +1104,30 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 			c.bad = true
 			return {}
 		var extensions: Dictionary = a[WORLD_FLOOR_EXTENSIONS_INDEX]
+		if extensions.has("lamps"):
+			var lamps: Array[Dictionary] = []
+			var ids := {}
+			for entry: Variant in _a(c, extensions["lamps"], 0, 8):
+				var l := _a(c, entry, 9, 9)
+				if c.bad:
+					return {}
+				var id := _s(c, l[0])
+				if id.is_empty() or ids.has(id):
+					c.bad = true
+				ids[id] = true
+				lamps.append({"playerId": id, "on": _i(c, l[1], 0, 1) == 1, "charge": _f(c, l[2], 0.0, 180.0),
+					"x": _f(c, l[3]), "y": _f(c, l[4]), "z": _f(c, l[5]),
+					"yaw": _f(c, l[6]), "pitch": _f(c, l[7]), "range": _f(c, l[8], 5.0, 22.0)})
+			out["lamps"] = lamps
+		if extensions.has("flares"):
+			var bursts: Array[Dictionary] = []
+			for entry: Variant in _a(c, extensions["flares"], 0, 32):
+				var b := _a(c, entry, 7, 7)
+				if c.bad:
+					return {}
+				bursts.append({"id": _i(c, b[0], 1, MAX_COUNT), "x": _f(c, b[1]), "y": _f(c, b[2]),
+					"z": _f(c, b[3]), "until": _f(c, b[4], 0.0), "blind": _s(c, b[5]), "blindUntil": _f(c, b[6], 0.0)})
+			out["flares"] = bursts
 		# Practice pop times, or -1 for a prop the party has not reached. The state survives late entry.
 		if extensions.has("orientationStandees"):
 			var stamps := _a(c, extensions["orientationStandees"], 2, 2)
@@ -1112,7 +1146,7 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 				c.bad = true
 			else:
 				out["ward"] = ward
-		for key: String in ["skills", "wind", "shoes"]:
+		for key: String in ["skills", "wind", "shoes", "porter", "longBurn"]:
 			if not extensions.has(key):
 				continue
 			var skills := _a(c, extensions[key], 0, 8)
@@ -1124,7 +1158,8 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 				var pid := _s(c, row[0])
 				if pid.is_empty() or rows.has(pid):
 					c.bad = true
-				rows[pid] = _i(c, row[1], 0, 3 if key == "wind" else 2)
+				var max_status := 4 if key == "porter" else (3 if key == "wind" else 2)
+				rows[pid] = _i(c, row[1], 0, max_status)
 			out[key] = rows
 	return out
 
@@ -1241,7 +1276,9 @@ static func decode(text: String) -> Variant:
 				elif op == "buy":
 					out["invArg"] = _i(c, a[26], 0, Shop.ITEMS.size() - 1)
 				elif op == "skill":
-					out["invArg"] = _i(c, a[26], 0, 4)
+					out["invArg"] = _i(c, a[26], 0, 6)
+				elif op == "lamp":
+					out["invArg"] = _i(c, a[26], 0, 1)
 				else:
 					out["invArg"] = _i(c, a[26], 0, 0)
 		"J":

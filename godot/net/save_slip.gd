@@ -24,7 +24,7 @@
 #   GDS1|<player>|<name as hex>|<credits>|<nodes, sorted, comma-separated>|<days>|<records, sorted by key, key:value comma-separated>
 #   then, only when the fields have a cabinet: |<cabinet>
 #   after the cabinet, while today's training is undoable: |<training_refund> for
-#   Deep Pockets, or |<training_node>:<training_refund> for another induction.
+#   Deep Pockets, |<training_node>:<training_refund> for another induction, or |quick_fingers:0 for a badge trade.
 # The sealed line is the text, "|", then the stamp: 64 lowercase hex characters of
 # HMAC-SHA256(key, text). Same fields, same key: always the same line.
 #
@@ -98,9 +98,11 @@ static func check(fields: Dictionary) -> String:
 			return "nodes"
 		seen.append(String(n))
 	var training: Variant = fields.get("training_node", "deep_pockets")
-	if with_node and (not undo or training == "deep_pockets" or Upgrades.induction_node(str(training)).is_empty()):
+	var badge_trade := int(Upgrades.trade_node(str(training)).get("badge_cost", 0)) > 0
+	if with_node and (not undo or training == "deep_pockets" or (not badge_trade and Upgrades.induction_node(str(training)).is_empty())):
 		return "training_refund"
-	if undo and (not with_cab or not seen.has(str(training)) or typeof(fields.training_refund) != TYPE_INT or fields.training_refund != Shop.SHARE or int(credits) > MAX_INT - Shop.SHARE):
+	var refund := 0 if badge_trade else Shop.SHARE
+	if undo and (not with_cab or not seen.has(str(training)) or typeof(fields.training_refund) != TYPE_INT or fields.training_refund != refund or int(credits) > MAX_INT - refund):
 		return "training_refund"
 	var days: Variant = fields["days"]
 	if typeof(days) != TYPE_INT or int(days) < 0 or int(days) > MAX_INT:

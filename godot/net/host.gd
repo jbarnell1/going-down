@@ -783,7 +783,7 @@ func _step(now: float) -> void:
 	var seeing := false
 	var two := s.orderly.need >= 2
 	for p: HostPlayer in _players.values():
-		if still and _playing(p) and p.input["seeing"] == true and ht - p.input_at <= Session.SEEING_TIMEOUT and _before_armed(p.input["renderTime"], true):
+		if still and _playing(p) and not Run.flare_blinded(s, p.id, s.t) and p.input["seeing"] == true and ht - p.input_at <= Session.SEEING_TIMEOUT and _before_armed(p.input["renderTime"], true):
 			seeing = true
 			if not two:
 				break
@@ -937,6 +937,8 @@ func _step(now: float) -> void:
 			var jp: HostPlayer = _players.get(str(e["playerId"]))
 			if jp != null and jp.stamina != null:
 				jp.stamina = Stamina.Stamina.make(0.0, true, jp.stamina.tank)
+		elif ty == "flareUsed" and e.stunned:
+			_pending_catch = null
 		elif ty == "caught":
 			_last_catch_tick = tick + 1
 			if _pending_catch != null and _pending_catch["victim"] == e["playerId"]:
@@ -1091,6 +1093,8 @@ func _before_armed(t: float, count: bool) -> bool:
 	return false
 
 func _confirm_catch(s: Run.RunState, ht: float) -> Run.RunState:
+	if Run.flare_stunned(s, s.t):
+		return s
 	var o := s.orderly
 	if o.mode != &"windUp" or o.wind_up_left - TICK > EPS or o.wind_up_target == null or String(o.wind_up_target).is_empty():
 		return s
@@ -1115,12 +1119,14 @@ func _confirm_catch(s: Run.RunState, ht: float) -> Run.RunState:
 
 func _apply_report(s: Run.RunState, player_id: String, r: Dictionary, extra: Array[Dictionary], t: float) -> Run.RunState:
 	var p: HostPlayer = _players.get(player_id)
-	if p == null or not _playing(p):
+	if p == null or not _playing(p) or Run.flare_blinded(s, player_id, s.t):
 		return s
 	stats.reports += 1
 	var ra: int = r["a"]
 	var rb: int = r["b"]
 	var alpha: float = r["alpha"]
+	if s.flare and _states.has(ra) and Run.flare_blinded(_states[ra], player_id, (ra + (rb - ra) * alpha) * TICK):
+		return s
 	# A catch waiting for its victim: a sighting of a moment after the wind-up's end saves nobody.
 	if not _before_armed((ra + (rb - ra) * alpha) * TICK, true):
 		return s
@@ -1356,8 +1362,34 @@ func world(full: bool = false) -> Dictionary:
 			if wallet != null and wallet.owned.has("soft_shoes"):
 				shoes[p.id] = 2 if wallet.last_id == "soft_shoes" else 1
 		out["shoes"] = shoes
+	if s.long_burn:
+		var trained := {}
+		for p: Run.RunPlayer in s.players:
+			var wallet: Upgrades.UpgradeState = s.wallets.get(p.id)
+			if wallet != null and wallet.owned.has("long_burn"):
+				trained[p.id] = 2 if wallet.last_id == "long_burn" else 1
+		out["longBurn"] = trained
+	if s.quick_fingers:
+		var porter := {}
+		for p: Run.RunPlayer in s.players:
+			var wallet: Upgrades.UpgradeState = s.wallets.get(p.id)
+			if wallet == null:
+				wallet = Upgrades.UpgradeState.make()
+			porter[p.id] = Upgrades.trade_offer(wallet, "quick_fingers")
+		out["porter"] = porter
 	if s.orientation and maxf(s.orientation_standees.x, s.orientation_standees.y) >= 0.0:
 		out["orientationStandees"] = [s.orientation_standees.x, s.orientation_standees.y]
+	if s.flare:
+		out["flares"] = s.flare_bursts if s.flare_plan == s.plan else []
+	if s.lamp:
+		var lamps: Array[Dictionary] = []
+		for p: Run.RunPlayer in s.players:
+			var lamp := Run.lamp_of(s, p.id)
+			if not lamp.is_empty():
+				var row := lamp.duplicate()
+				row["playerId"] = p.id
+				lamps.append(row)
+		out["lamps"] = lamps
 	if _ward_review != null:
 		out["ward"] = _ward_review.snapshot(s.t)
 	if _reactor_review != null:

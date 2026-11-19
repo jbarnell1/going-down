@@ -22,16 +22,16 @@ const FILES: Array[String] = [
 	"prop_playroom", "prop_seek", "prop_places", "prop_temp", "prop_day_net", "prop_count_run", "prop_count_net", "prop_quota_net", "prop_marks_net",
 	"prop_downs", "prop_down_view", "prop_watchers", "prop_relocate", "prop_hides", "prop_owner_0833", "prop_lonely", "prop_playroom_tuned",
 	"prop_settings", "prop_settings_net", "prop_hints", "prop_tapes", "prop_telemetry", "prop_day_view", "prop_furniture", "prop_ready", "prop_ready_screen",
-	"prop_orientation",
+	"prop_orientation", "prop_flare", "prop_lamp",
 	"prop_hearing", "prop_arboretum", "prop_garden_cones", "prop_garden_search", "test_garden_recordings", "prop_ward_net",
 	"test_data_check",
 	"prop_brightness",
-	"prop_findables", "prop_search", "prop_search_view", "test_findables_data",
+	"prop_findables", "prop_badge_search", "prop_search", "prop_search_view", "test_findables_data",
 	"prop_inventory", "prop_inventory_net",
 	"test_crew_motion", "test_orderly_motion", "test_temp_animation",
 	"prop_furniture_layout",
 	"prop_resident_navigation", "test_floor_materials", "test_action_sfx", "prop_host_playtest",
-	"prop_cabinet", "prop_shop", "prop_shop_net", "prop_deep_pockets", "prop_second_wind", "prop_soft_shoes", "test_reactor",
+	"prop_cabinet", "prop_shop", "prop_shop_net", "prop_deep_pockets", "prop_second_wind", "prop_soft_shoes", "prop_quick_fingers", "prop_long_burn", "test_reactor",
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).

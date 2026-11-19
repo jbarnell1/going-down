@@ -21,6 +21,14 @@
       "description": "When winded, press sprint again to refill your stamina at once.",
       "drawback": "You gasp loudly. Once a floor."
     },
+    "long_burn": {
+      "id": "long_burn",
+      "name": "Long Burn",
+      "branch": "Lamp",
+      "layer": 1,
+      "price_shares": 1,
+      "description": "Glow Sticks last twice as long. Flashbulbs count as looking for two seconds."
+    },
     "soft_shoes": {
       "id": "soft_shoes",
       "name": "Soft Shoes",
@@ -29,6 +37,40 @@
       "price_shares": 1,
       "description": "Footsteps carry a quarter less far.",
       "drawback": "Not while sprinting."
+    }
+  },
+  "trade": {
+    "steady_gaze": {
+      "id": "steady_gaze",
+      "name": "Steady Gaze",
+      "branch": "Lamp",
+      "trade": "Lamplighter",
+      "layer": 2
+    },
+    "throwing_arm": {
+      "id": "throwing_arm",
+      "name": "Throwing Arm",
+      "branch": "Ear",
+      "trade": "Listener",
+      "layer": 2
+    },
+    "quick_fingers": {
+      "id": "quick_fingers",
+      "name": "Quick Fingers",
+      "branch": "Hands",
+      "trade": "Porter",
+      "layer": 2,
+      "badge_cost": 2,
+      "requires": "deep_pockets",
+      "description": "Search in half the time without noise.",
+      "drawback": "Porter seniority adds 10 percent speed."
+    },
+    "field_dressing": {
+      "id": "field_dressing",
+      "name": "Field Dressing",
+      "branch": "Nerve",
+      "trade": "Medic",
+      "layer": 2
     }
   },
   "nodes": [

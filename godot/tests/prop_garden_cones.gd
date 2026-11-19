@@ -2,6 +2,7 @@ extends RefCounted
 
 const Arboretum = preload("res://sim/arboretum.gd")
 const Cones = preload("res://sim/garden_cones.gd")
+const Session = preload("res://net/session.gd")
 const Floor = preload("res://sim/floor.gd")
 const Furniture = preload("res://sim/furniture.gd")
 const HearingTests = preload("res://tests/prop_hearing.gd")
@@ -120,8 +121,8 @@ func test_wall_stops_a_throw_and_a_disabled_run_cannot_throw(t: T) -> void:
 	t.check(HearingTests.events_of(fake.events, "coneThrown").is_empty(), "fake cone cannot generate a projectile")
 
 func test_shop_uses_its_slot_and_the_garden_hears_its_toy(t: T) -> void:
-	t.eq(Inventory.ITEMS, ["juice", "badge", "marker", "glow", "flash", "speed", "toy", "salts", "pinecone"], "shop item wire indexes are stable")
-	t.eq(Protocol.INV_OPS, ["", "drop", "take", "give", "stash", "fetch", "buy", "use", "throw", "skill"], "shop operation wire indexes are stable")
+	t.eq(Inventory.ITEMS, ["juice", "badge", "marker", "glow", "flash", "speed", "toy", "salts", "pinecone", "flare"], "existing item wire indexes stay stable and flare is 9")
+	t.eq(Protocol.INV_OPS, ["", "drop", "take", "give", "stash", "fetch", "buy", "use", "throw", "skill", "lamp"], "existing operation wire indexes stay stable and lamp is 10")
 	var home := ShopTests.with_credits(CabinetTests.home_run("garden-shop", ["a"] as Array[String]), {"a": 500})
 	var counter: Move.Body = ShopTests.window(home, 1)
 	var bought := CabinetTests.tick(home, {"a": counter}, {"a": ["buy", Shop.ITEMS.find("toy")]})
@@ -155,3 +156,47 @@ func test_ordinary_shop_run_keeps_garden_features_off(t: T) -> void:
 		"asking for garden support cannot change the ordinary deck")
 	var legacy := Places.generate(s.seed, 5, Places.BEFORE_ARBORETUM)
 	t.eq(Floor.hash_plan(s.plan), Floor.hash_plan(legacy), "ordinary seeded geometry remains identical")
+
+func test_ordinary_garden_ride_preserves_host_and_client_plans(t: T) -> void:
+	for i in 8:
+		for admitted: bool in [false, true]:
+			var deck := Places.deck_for_start_depth(1, admitted)
+			var rules := HostRules.new(true, 4, deck)
+			rules.findables = true
+			rules.garden_search = admitted
+			var state := rules.prepare(Run.create_run("route-%d" % i, CREW, deck))
+			t.eq(state.plan.place, Places.PLAYROOM, "the fourth floor remains the Playroom")
+			for depth: int in [5, 6]:
+				state.phase = &"riding"
+				state.timer = DT * 0.5
+				state = rules.step(state, [] as Array[Run.PlayerInput], DT).state
+				var plan := Session.plan_for(state.seed, depth, deck, admitted)
+				t.eq(state.depth, depth, "the lift advances one floor")
+				t.eq(plan.place, state.plan.place, "the client and host agree on the destination")
+				t.eq(Floor.hash_plan(plan), Floor.hash_plan(state.plan), "the client and host have the same layout")
+				if depth == 5:
+					t.eq(state.plan.place == Places.ARBORETUM, admitted, "ordinary gardens require admission")
+				if plan.place == Places.ARBORETUM:
+					t.eq(Arboretum.floor_hash(plan), Arboretum.floor_hash(state.plan), "dense garden surfaces match")
+
+func test_fresh_campaign_uses_the_hosts_garden_admission(t: T) -> void:
+	var previous_deck := Session.deck
+	Session.deck = Places.FULL
+	var rollback := OS.get_cmdline_user_args().has("garden_admission=0")
+	var local := preload("res://net/local_room.gd").new()
+	local.open_local("garden-1", "Solo", true)
+	local.start_run()
+	var door := preload("res://tests/prop_ready.gd").FakeDoor.new()
+	var room := preload("res://server/room.gd").new(door, func(_line: String) -> void: pass)
+	door.room = room
+	room.people["c1"] = "First"
+	room.ready["c1"] = 0.0
+	room.fixed_seed = "garden-1"
+	room._start(0.0)
+	for state: Run.RunState in [local.host.state, room.host.state]:
+		t.eq(state.depth, 1, "fresh campaigns start on the first floor")
+		t.eq(state.deck.has(Places.ARBORETUM), not rollback, "the fresh campaign obeys the host admission setting")
+		t.eq(state.garden_search, not rollback, "the dense garden follows ordinary admission")
+	t.eq(local.client.floor_deck, local.host.state.deck, "Play Alone draws the host's deck")
+	door.room = null
+	Session.deck = previous_deck

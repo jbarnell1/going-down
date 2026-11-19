@@ -73,7 +73,7 @@ static func target_body() -> Entity.BodySettings:
 
 ## Rolls up to a player and honks once until the player makes room again. Contact changes no player state.
 static func step_target(plan: Floor.FloorPlan, prev: Entity.OrderlyState, players: Array[Entity.PlayerView],
-		watchers: Array[Entity.PlayerView], dt: float) -> Entity.StepResult:
+		watchers: Array[Entity.PlayerView], dt: float, stunned := false) -> Entity.StepResult:
 	var out := Entity.StepResult.new()
 	var next := prev.copy()
 	out.state = next
@@ -84,7 +84,7 @@ static func step_target(plan: Floor.FloorPlan, prev: Entity.OrderlyState, player
 	if next.seen:
 		next.last_seen_at = next.t
 	next.held = next.seen or Entity.held_by_grace(prev)
-	next.frozen = next.held
+	next.frozen = next.held or stunned
 
 	var target: Entity.PlayerView = null
 	var distance := INF
@@ -96,7 +96,7 @@ static func step_target(plan: Floor.FloorPlan, prev: Entity.OrderlyState, player
 			distance = away
 	if distance >= REARM_DISTANCE:
 		next.mode = &"hunting"
-	if next.held or target == null or next.mode == &"dormant":
+	if next.frozen or target == null or next.mode == &"dormant":
 		return out
 
 	var offset := Vector2(target.body.x, target.body.z) - at

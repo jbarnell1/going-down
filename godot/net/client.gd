@@ -131,6 +131,7 @@ class LocalFrame:
 	var h_fov_deg := 90.0
 	var v_fov_deg := 70.0
 	var raised := false
+	var flare_blind := false
 	var hold_doors := false
 	var skip_reel_at: Variant
 	## The call button was pressed this frame.
@@ -822,7 +823,7 @@ func frame(now: float, local: LocalFrame) -> Frame:
 		stats.guard_dark_frames += 1
 	var latched_now := _update_latch(show, rt)
 	var taken := _latch != null
-	var blind: bool = dk[0] or taken
+	var blind: bool = dk[0] or taken or local.flare_blind
 
 	# The Orderly.
 	_eyes_frame = [false, 1, 0, ""]

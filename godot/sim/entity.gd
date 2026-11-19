@@ -521,10 +521,10 @@ static func seen_by(plan: Floor.FloorPlan, body: Move.Body, players: Array[Playe
 ## Advances the resident by dt seconds. Never mutates `prev`. (TypeScript HuntOptions: speed, creep.)
 ## `hunt_speed` below 0 means its body's own. `need`: watchers needed to hold it this tick (watch_need of
 ## the up players; 1, the default, is the rule every stored result was made with).
-static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float = -1.0, creep: bool = true, need: int = 1, solids: Move.Solids = null) -> StepResult:
+static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float = -1.0, creep: bool = true, need: int = 1, solids: Move.Solids = null, stunned := false) -> StepResult:
 	var k := kind_of(prev)
-	var res := _step_rules(plan, prev, players, dt, k.hunt_speed if hunt_speed < 0.0 else hunt_speed, creep, k, need, solids)
-	if k.clicks():
+	var res := _step_rules(plan, prev, players, dt, k.hunt_speed if hunt_speed < 0.0 else hunt_speed, creep, k, need, solids, stunned)
+	if k.clicks() and not stunned:
 		_stapler(prev, res, dt, k)
 	return res
 
@@ -548,7 +548,7 @@ static func _stapler(prev: OrderlyState, res: StepResult, dt: float, k: BodySett
 			s.clicks += 1
 			res.events.append({"type": "click", "t": s.t, "why": "wait"})
 
-static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool, k: BodySettings, need: int, solids: Move.Solids) -> StepResult:
+static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool, k: BodySettings, need: int, solids: Move.Solids, stunned: bool) -> StepResult:
 	var t := prev.t + dt
 	var s := prev.copy()
 	s.t = t
@@ -604,11 +604,13 @@ static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 		s.wind_up_target = null
 		s.wind_up_left = 0.0
 
-	s.frozen = held and (s.mode == &"hunting" or s.mode == &"windUp")
+	s.frozen = stunned or (held and (s.mode == &"hunting" or s.mode == &"windUp"))
 	if s.frozen and not prev.frozen:
 		events.append({"type": "froze", "t": t, "playerId": seer.id if seer != null else null})
 	if not s.frozen and prev.frozen and (s.mode == &"hunting" or s.mode == &"windUp"):
 		events.append({"type": "released", "t": t})
+	if stunned:
+		return res
 
 	# Bent over a downed player (the documented exception, see the header): the bend goes on, seen or
 	# not, and nothing else happens. The run decides when it ends.

@@ -4,6 +4,7 @@ extends RefCounted
 const T = preload("res://tests/t.gd")
 const Save = preload("res://net/save_slip.gd")
 const Profiles = preload("res://net/profiles.gd")
+const Day = preload("res://sim/day.gd")
 const Run = preload("res://sim/run.gd")
 const Shop = preload("res://sim/shop.gd")
 const Inventory = preload("res://sim/inventory.gd")
@@ -20,6 +21,25 @@ static func _state(ids: Array[String]) -> Run.RunState:
 static func _cabinet(s: Run.RunState, id: String) -> Array:
 	var shop: Shop.ShopState = s.shop_state
 	return Shop.cabinet_of(shop.cabinets, id)
+
+func test_signed_days_served_follows_the_actual_bank_result(t: T) -> void:
+	var ids: Array[String] = ["one"]
+	var state := _state(ids)
+	var profile := Profiles.new(_key())
+	var old := Save.fresh("1111111111111111")
+	old.days = 4
+	profile.join("one", "Proof", Save.seal(old, _key()))
+	state = profile.apply_for(state, "one", "Proof")
+	for earned: int in [10000, 0]:
+		var result := Day.end_day(Day.start_night(), earned, earned, ids, {}, Run.DAY_FLOOR_QUOTA, "served")
+		var change := Profiles.changed([{"type": "dayEnded", "result": result.facts}])
+		var line := profile.checkpoint(state, "one", "Proof", change.served)
+		if earned > 0:
+			var slip := Save.open(line, _key())
+			t.check(slip.ok and slip.fields.days == 5, "a made day advances the signed four-day history to five")
+		else:
+			t.check(not change.served and line.is_empty(), "a missed day preserves history without a duplicate stamp")
+	t.check(not Profiles.changed([{"type": "lightsOut"}]).served, "bedtime does not count the same day twice")
 
 func test_profile_restores_legacy_wallet_and_rejects_unsigned_or_altered_lines(t: T) -> void:
 	var key := _key()

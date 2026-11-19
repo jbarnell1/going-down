@@ -173,15 +173,17 @@ class Act extends RefCounted:
 		return a
 
 ## The radius of a gait on a surface (0: silent). `s` NONE reads as gravel.
-static func gait_radius(gait: StringName, s: int) -> float:
+static func gait_radius(gait: StringName, s: int, tuning: Settings.Values = null) -> float:
 	if gait == &"sprint":
-		return SPRINT
+		return Settings.f(tuning, &"noise.sprint", SPRINT)
 	var moss := s == MOSS
 	if gait == &"creep":
-		return CREEP_LOUD if (not moss or test_break == "moss_creep") else 0.0
+		return Settings.f(tuning, &"noise.creep_loud", CREEP_LOUD) if (not moss or test_break == "moss_creep") else 0.0
 	if moss:
-		return WALK_MOSS
-	return WALK_GRAVEL if (s == GRAVEL or s == NONE) else WALK_LITTER
+		return Settings.f(tuning, &"noise.walk_moss", WALK_MOSS)
+	if s == GRAVEL or s == NONE:
+		return Settings.f(tuning, &"noise.walk_gravel", WALK_GRAVEL)
+	return Settings.f(tuning, &"noise.walk_litter", WALK_LITTER)
 
 ## How fast `a` covered ground this tick, metres a second.
 static func ground_speed(a: Act, dt: float) -> float:
@@ -192,17 +194,17 @@ static func ground_speed(a: Act, dt: float) -> float:
 ## The one noise player `a` makes this tick (the loudest thing they did), or null for silence. `cracked` is
 ## the caller's memory of twig falls, {player id: the fall that has cracked under them this crossing}; it is
 ## updated here (pass the copy you keep).
-static func of(ground: Ground, a: Act, dt: float, cracked: Dictionary) -> Sound:
+static func of(ground: Ground, a: Act, dt: float, cracked: Dictionary, tuning: Settings.Values = null) -> Sound:
 	var s := ground.surface_at(a.body.x, a.body.z) if ground != null else NONE
 	var moving := ground_speed(a, dt) > MOVING
 	var r := 0.0
 	var kind := &""
 	if a.down:
 		if moving:
-			r = CRAWL
+			r = Settings.f(tuning, &"noise.crawl", CRAWL)
 			kind = &"crawl"
 	elif moving:
-		r = gait_radius(a.gait, s)
+		r = gait_radius(a.gait, s, tuning)
 		if a.soft_shoes and a.gait != &"sprint":
 			r *= 0.75
 		kind = a.gait
@@ -212,23 +214,26 @@ static func of(ground: Ground, a: Act, dt: float, cracked: Dictionary) -> Sound:
 		cracked.erase(a.id)
 	elif moving and not a.down and a.gait != &"creep" and int(cracked.get(a.id, -1)) != fall:
 		cracked[a.id] = fall
-		if TWIG_CRACK > r:
-			r = TWIG_CRACK
+		var crack := Settings.f(tuning, &"noise.twig", TWIG_CRACK)
+		if crack > r:
+			r = crack
 			kind = &"twig"
 	var hide := -1
-	if a.hide >= 0 and HIDE > r:
-		r = HIDE
+	var conceal := Settings.f(tuning, &"noise.hide", HIDE)
+	if a.hide >= 0 and conceal > r:
+		r = conceal
 		kind = &"hide"
 		hide = a.hide
-	if a.healed and DROP > r:
-		r = DROP
+	var fall_or_heal := Settings.f(tuning, &"noise.drop", DROP)
+	if a.healed and fall_or_heal > r:
+		r = fall_or_heal
 		kind = &"heal"
 		hide = -1
 	if not a.down and a.search_radius > r:
 		r = a.search_radius
 		kind = &"search"
 		hide = -1
-	var vocal := maxf(EMOTE if a.emote else 0.0, a.gasp_radius)
+	var vocal := maxf(Settings.f(tuning, &"noise.emote", EMOTE) if a.emote else 0.0, a.gasp_radius)
 	if vocal > r:
 		r = vocal
 		kind = &"emote"
@@ -244,8 +249,8 @@ static func search_radius(fast: bool, tuning: Settings.Values = null) -> float:
 	return Settings.f(tuning, &"noise.search_rush", SEARCH_RUSH) if fast else Settings.f(tuning, &"noise.search_open", SEARCH_OPEN)
 
 ## A tape hitting the floor at `at`, dropped by `by`.
-static func drop(by: String, at: Move.Body) -> Sound:
-	return Sound.make(by, at.x, at.z, at.level, DROP, &"drop")
+static func drop(by: String, at: Move.Body, tuning: Settings.Values = null) -> Sound:
+	return Sound.make(by, at.x, at.z, at.level, Settings.f(tuning, &"noise.drop", DROP), &"drop")
 
 ## A pinecone impact is a noise at the landing, without a player as its source.
 static func cone(x: float, z: float, level: int, tuning: Settings.Values = null) -> Sound:

@@ -230,7 +230,7 @@ func _beam(parent: Node3D, first: Vector3, last: Vector3, width: float, height: 
 	node.look_at(node.global_position + direction, Vector3.FORWARD if absf(direction.y) > 0.99 else Vector3.UP)
 	return node
 
-## The host's climb starts on support zero. Keep its iron shoe and far endpoints
+## The host's climb starts on the selected front support. Keep its iron shoe and far endpoints
 ## fixed while the nearby rope pulls laterally; rolling a vertical beam is invisible.
 func _load_bearing_support(deck: Node3D, at: Vector3) -> Node3D:
 	var line := Node3D.new()
@@ -255,7 +255,7 @@ func _pose_support(line: Node3D, pull: float) -> void:
 func _show_loaded_support(ward: Dictionary, host_now: float) -> void:
 	var current := int(ward.house) if ward.encounter in ["warning", "climbing"] else -1
 	if loaded_house >= 0 and loaded_house != current:
-		_pose_support(houses[loaded_house].support, 0.0)
+		_set_house_load(houses[loaded_house], 0.0)
 	loaded_house = current
 	if current < 0:
 		return
@@ -266,7 +266,12 @@ func _show_loaded_support(ward: Dictionary, host_now: float) -> void:
 	else:
 		var phase := clampf((elapsed - Ward.WARN_SECONDS) / Ward.CLIMB_SECONDS, 0.0, 1.0)
 		pull = 0.17 * sin(phase * TAU * 3.0) * sin(phase * PI)
-	_pose_support(houses[current].support, pull)
+	_set_house_load(houses[current], pull)
+
+func _set_house_load(house: Dictionary, pull: float) -> void:
+	_pose_support(house.support, pull)
+	for joint: Node3D in house.ties:
+		joint.rotation.z = pull * 1.6
 
 func _lamp(parent: Node3D, at: Vector3) -> void:
 	_box(parent, at, Vector3(0.16, 0.18, 0.11), "light")
@@ -320,7 +325,38 @@ func _build_house(site: Dictionary) -> void:
 				lines.append(_load_bearing_support(deck, edge))
 			else:
 				lines.append(_beam(deck, edge - Vector3.UP * 18.0, edge + Vector3.UP * 25.0, 0.07, 0.07, "rope"))
-	houses.append({"fixture": fixture, "lines": lines, "support": lines[fixture.loaded_support_index()], "root": root})
+	var support := lines[fixture.loaded_support_index()]
+	var ties := _interior_ties(root, fixture, root.to_local(support.global_position))
+	houses.append({"fixture": fixture, "lines": lines, "support": support, "root": root, "ties": ties})
+
+## The suspension shoe feeds a tie through the frame of each storey to the rear wall.
+## The weighted take-up lever swings on its iron pin when the line bears weight.
+func _interior_ties(root: Node3D, fixture: House, shoe: Vector3) -> Array[Node3D]:
+	var ties: Array[Node3D] = []
+	var rear: Vector3 = fixture.areas[&"rear"]
+	for floor: House.Storey in fixture.storeys:
+		var height := float(floor.height) + 2.12
+		var front := Vector3(shoe.x, height, shoe.z)
+		var rear_eye := Vector3(rear.x, height, rear.z)
+		var inward := front.direction_to(rear_eye)
+		# Carry the tie along the clear side of the rear stair framing.
+		rear_eye += Vector3(inward.z, 0, -inward.x) * 1.05
+		inward = front.direction_to(rear_eye)
+		# The ray through the occupied room ends at a wall even in the turned lift house.
+		var bounds := fixture.floor_bounds
+		var run_x := INF if is_zero_approx(inward.x) else (bounds.end.x - rear_eye.x if inward.x > 0 else bounds.position.x - rear_eye.x) / inward.x
+		var run_z := INF if is_zero_approx(inward.z) else (bounds.end.y - rear_eye.z if inward.z > 0 else bounds.position.y - rear_eye.z) / inward.z
+		var end := rear_eye + inward * minf(run_x, run_z)
+		_beam(root, front, end, 0.06, 0.08, "iron")
+		_box(root, front, Vector3(0.21, 0.18, 0.21), "iron")
+		_box(root, end, Vector3(0.24, 0.23, 0.13), "wood")
+		var joint := Node3D.new()
+		var mount := _beam(root, rear_eye - inward * 1.45, rear_eye - inward * 1.25, 0.18, 0.15, "wood")
+		mount.add_child(joint)
+		_box(joint, Vector3(0, -0.20, 0), Vector3(0.075, 0.40, 0.075), "iron")
+		_box(joint, Vector3(0, -0.43, 0), Vector3(0.15, 0.14, 0.11), "rope")
+		ties.append(joint)
+	return ties
 
 func _lift_wall(root: Node3D, wall: AABB) -> void:
 	var middle := wall.get_center()

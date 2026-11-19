@@ -3,6 +3,8 @@ extends Node3D
 const Floor = preload("res://sim/floor.gd")
 const Marks = preload("res://sim/marks.gd")
 const Move = preload("res://sim/move.gd")
+const Run = preload("res://sim/run.gd")
+const Sight = preload("res://sim/sight.gd")
 const PixelFont = preload("res://client/pixel_font.gd")
 
 const INKS := [Color("#72ded6"), Color("#ffd176"), Color("#c6a8ff"), Color("#ade47f"),
@@ -33,6 +35,26 @@ func show_marks(rows: Array, plan: Floor.FloorPlan, names: Dictionary) -> void:
 		if not seen.has(id):
 			(arrows[id] as MeshInstance3D).queue_free()
 			arrows.erase(id)
+
+## The mark has to be in reach of the player's feet and in the camera's view.
+func peel_target(rows: Array, plan: Floor.FloorPlan, feet: Vector3, eye: Vector3, look: Vector3, level: int) -> int:
+	var best := -1
+	var score := 0.94
+	for row: Dictionary in rows:
+		var id := int(row["id"])
+		if int(row["level"]) != level or not arrows.has(id):
+			continue
+		var mark: MeshInstance3D = arrows[id]
+		var at := mark.position
+		if Vector2(feet.x - at.x, feet.z - at.z).length() > Run.MARK_PEEL_REACH:
+			continue
+		var aim := look.dot((at - eye).normalized())
+		if aim <= score:
+			continue
+		if Sight.has_line_of_sight(plan, Sight.Point3.make(eye.x, eye.y, eye.z, level), Sight.Point3.make(at.x, at.y, at.z, level)):
+			best = id
+			score = aim
+	return best
 
 static func _ink(player: String) -> Color:
 	var seat := player.substr(1)

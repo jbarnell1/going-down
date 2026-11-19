@@ -31,6 +31,10 @@ func join(id: String, name_: String, line: String) -> void:
 	active[id] = number
 	latest[number] = fields
 
+func trade_of(id: String) -> String:
+	var fields: Dictionary = latest.get(active.get(id, ""), {})
+	return Upgrades.trade_of(fields.get("nodes", []))
+
 func leave(id: String) -> void:
 	active.erase(id)
 	applied.erase(id)
@@ -60,6 +64,9 @@ func checkpoint(s: Run.RunState, id: String, name_: String, served: bool) -> Str
 
 static func restore(s: Run.RunState, id: String, fields: Dictionary) -> Run.RunState:
 	var next := s.copy()
+	if s.flare or s.lamp:
+		next.flare_profiles = s.flare_profiles.duplicate()
+		next.flare_profiles[id] = "profile:" + str(fields.player)
 	if s.orientation_resume != null:
 		next.orientation_resume = restore(s.orientation_resume, id, fields)
 		next.wallets = next.orientation_resume.wallets
@@ -95,7 +102,7 @@ static func collect(s: Run.RunState, id: String, old: Dictionary, name_: String,
 	if s.deep_pockets:
 		fields.erase("training_refund")
 		fields.erase("training_node")
-		if wallet != null and not Upgrades.induction_node(wallet.last_id).is_empty():
+		if wallet != null and (not Upgrades.induction_node(wallet.last_id).is_empty() or (s.quick_fingers and wallet.last_id == "quick_fingers")):
 			fields.training_refund = wallet.last_price
 			if wallet.last_id != "deep_pockets":
 				fields.training_node = wallet.last_id
@@ -115,7 +122,8 @@ static func changed(events: Array) -> Dictionary:
 					ids[id] = true
 			"dayEnded":
 				all = true
-				served = bool(event.get("result", {}).get("made", false))
+				var result: Dictionary = event.get("result", {})
+				served = result.get("kind", "") == "made" or (not result.has("kind") and result.get("made", false))
 			"lightsOut":
 				all = true
 	return {"ids": ids, "all": all, "served": served}

@@ -28,19 +28,12 @@
 # The rules, exactly:
 #  - Heard: a noise inside its own radius of where the Groundskeeper stood at the start of the tick, on its
 #    level. It never fails to hear one, and it never comes to anything but the place of a noise it heard.
-#  - A noise that goes on is heard wherever it goes: while it tilts or comes to a player's noise, a noise by
-#    that same player that is as loud or louder is also heard when it is inside its radius of the PLACE the
-#    Groundskeeper is going to. (Without this a sprinter 10 m off outran its hearing during the tilt: the
-#    design's "sprinting away never works" was not true of the six states as written. With it every step of a
-#    sprint moves the place to the sprinter's feet, however far they have got, and only going quiet ends it.
-#    A quieter noise, a creep on litter after a whistle, is still heard only from where it stands.)
+#  - When steps leave earshot it investigates the last audible place. Each new step is checked again.
 #  - Heard up close: a noise made within its REACH by a player on their feet is a snatch at once, in any
 #    state. (A noise up close that nobody on their feet made, a crawl or a cone, is a noise like any other.)
 #  - Of the noises of one tick it goes for the louder; equal, the nearer; equal, the lower player id.
-#  - While it tilts or comes, the tick's noise takes the place of the one it is going to when it is as loud or
-#    louder, or nearer to it than that place is. So a sprinter's every step moves the place to their feet, a
-#    decoy's louder or nearer noise pulls it off a friend, and a quieter noise further off is let go. The tilt
-#    does not start again.
+#  - During tilt and pursuit, a new audible sprint step from the same runner moves the target.
+#    A louder or nearer noise can draw it off a friend without restarting the tilt.
 #  - While it leans, holds the beat, sweeps or strikes, a noise further off than its reach is a new noise like
 #    any other: the tilt, and it comes. (This is how a friend's whistle pulls it off someone it leans over.)
 #  - When the lean ends it takes exactly the players on their feet within REACH of where it stands, the one it
@@ -283,7 +276,7 @@ static func step(plan: Floor.FloorPlan, ground: Noises.Ground, prev: Keeper, peo
 		a.hide = p.hide_noise
 		a.healed = p.healed
 		a.search_radius = p.search_radius
-		var n := Noises.of(ground, a, dt, cracked)
+		var n := Noises.of(ground, a, dt, cracked, tuning)
 		if n != null:
 			n.t = t
 			res.noises.append(n)
@@ -296,13 +289,8 @@ static func step(plan: Floor.FloorPlan, ground: Noises.Ground, prev: Keeper, peo
 
 	# ---- What it hears: every noise inside its own radius of where it stands.
 	var far: Array[Noises.Sound] = []
-	var going := prev.target if (prev.mode == &"tilt" or prev.mode == &"coming") else null
 	for n in res.noises:
-		var hears := Noises.heard_at(n, prev.body.x, prev.body.z, prev.body.level)
-		if not hears and going != null and n.by != "" and n.by == going.by and n.r >= going.r - EPS:
-			# A noise that goes on (see the header): heard from the place it is going to.
-			hears = Noises.heard_at(n, going.x, going.z, going.level)
-		if not hears:
+		if not Noises.heard_at(n, prev.body.x, prev.body.z, prev.body.level):
 			continue
 		res.heard.append(n)
 		# Heard up close: a noise within its reach, made by a player on their feet, is a snatch at once.
@@ -321,9 +309,9 @@ static func step(plan: Floor.FloorPlan, ground: Noises.Ground, prev: Keeper, peo
 	match k.mode:
 		&"listening":
 			if best != null:
-				_tilt(k, best, events)
+				_tilt(k, best, events, tuning)
 			else:
-				k.yaw = Entity._wrap_angle(k.yaw + deg_to_rad(TURN) * dt)
+				k.yaw = Entity._wrap_angle(k.yaw + deg_to_rad(Settings.f(tuning, &"groundskeeper.turn", TURN)) * dt)
 				k.anim = &"idle"
 		&"tilt":
 			_retarget(k, best)
@@ -347,17 +335,17 @@ static func step(plan: Floor.FloorPlan, ground: Noises.Ground, prev: Keeper, peo
 		&"lean":
 			if best != null:
 				events.append({"type": "keeperLeanEnd", "t": t, "playerId": k.lean_id, "taken": [], "why": "noise"})
-				_tilt(k, best, events)
+				_tilt(k, best, events, tuning)
 			else:
 				var who := _person(people, k.lean_id)
 				if who != null:
 					_face(k, who.body.x, who.body.z, dt)
 				k.left -= dt
 				if k.left <= EPS:
-					_end_lean(k, people, near, res)
+					_end_lean(k, people, near, res, tuning)
 		&"beat", &"sweep", &"strike":
 			if best != null:
-				_tilt(k, best, events)
+				_tilt(k, best, events, tuning)
 			else:
 				k.left -= dt
 				if k.left <= EPS:
@@ -373,9 +361,9 @@ static func _listen(k: Keeper) -> void:
 	k.anim = &"idle"
 	k.anim_time = 0.0
 
-static func _tilt(k: Keeper, n: Noises.Sound, events: Array[Dictionary]) -> void:
+static func _tilt(k: Keeper, n: Noises.Sound, events: Array[Dictionary], tuning: Settings.Values) -> void:
 	k.mode = &"tilt"
-	k.left = TILT
+	k.left = Settings.f(tuning, &"groundskeeper.tilt", TILT)
 	k.target = n
 	k.lean_id = ""
 	k.open_hide = -1
@@ -383,13 +371,13 @@ static func _tilt(k: Keeper, n: Noises.Sound, events: Array[Dictionary]) -> void
 	k.anim_time = 0.0
 	events.append({"type": "keeperTilt", "t": k.t, "x": n.x, "z": n.z, "r": n.r, "by": n.by, "kind": String(n.kind)})
 
-## While it tilts or comes: the tick's noise takes the place of the one it goes to when it is as loud or
-## louder, or nearer to it.
+## Only noises heard on this tick reach this function.
 static func _retarget(k: Keeper, n: Noises.Sound) -> void:
 	if n == null or k.target == null:
 		return
 	var cur := k.target
-	if n.r >= cur.r - EPS or _flat(n.x, n.z, k.body.x, k.body.z) < _flat(cur.x, cur.z, k.body.x, k.body.z) - EPS:
+	var same_runner := n.kind == &"sprint" and cur.kind == &"sprint" and n.by != "" and n.by == cur.by
+	if same_runner or n.r > cur.r + EPS or _flat(n.x, n.z, k.body.x, k.body.z) < _flat(cur.x, cur.z, k.body.x, k.body.z) - EPS:
 		k.target = n
 		k.straight = false
 
@@ -442,12 +430,12 @@ static func _arrive(k: Keeper, people: Array[Person], tuning: Settings.Values, e
 	events.append({"type": "keeperArrived", "t": k.t, "x": n.x, "z": n.z})
 	if who == null:
 		k.mode = &"sweep"
-		k.left = SWEEP
+		k.left = Settings.f(tuning, &"groundskeeper.sweep", SWEEP)
 		k.anim = &"sweep"
 		k.anim_time = 0.0
 		k.lean_id = ""
 		k.open_hide = -1
-		events.append({"type": "keeperSweep", "t": k.t, "x": n.x, "z": n.z, "len": SWEEP})
+		events.append({"type": "keeperSweep", "t": k.t, "x": n.x, "z": n.z, "len": k.left})
 		return
 	k.mode = &"lean"
 	k.left = lean_time(tuning)
@@ -460,7 +448,7 @@ static func _arrive(k: Keeper, people: Array[Person], tuning: Settings.Values, e
 
 ## The lean is over: it takes exactly the players on their feet within its reach (and those still in the hide
 ## it leaned on), then strikes; or nobody, and holds the beat.
-static func _end_lean(k: Keeper, people: Array[Person], near: float, res: Step) -> void:
+static func _end_lean(k: Keeper, people: Array[Person], near: float, res: Step, tuning: Settings.Values) -> void:
 	var first: Person = null
 	var order: Array[Person] = []
 	var leaned := _person(people, k.lean_id)
@@ -490,7 +478,7 @@ static func _end_lean(k: Keeper, people: Array[Person], near: float, res: Step) 
 		_strike(k, first)
 		return
 	k.mode = &"beat"
-	k.left = BEAT
+	k.left = Settings.f(tuning, &"groundskeeper.beat", BEAT)
 	k.open_hide = -1
 	# The same pose: the animation runs on.
 

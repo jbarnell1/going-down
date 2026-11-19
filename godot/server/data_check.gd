@@ -35,7 +35,7 @@ static func read(path: String) -> int:
 		"res://data/report_awards.json":
 			return (Report.data().get("awards", []) as Array).size()
 		"res://data/upgrades.json":
-			for id: String in ["deep_pockets", "second_wind", "soft_shoes"]:
+			for id: String in ["deep_pockets", "second_wind", "soft_shoes", "long_burn"]:
 				if Upgrades.induction_node(id).is_empty():
 					return 0
 			return Upgrades.nodes().size() + 3

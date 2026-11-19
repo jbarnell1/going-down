@@ -80,6 +80,7 @@
 # The run has the shop and the cabinet (`shop`, on unless a test turns it off: sim/run.gd, sim/shop.gd; S2).
 extends RefCounted
 
+const Upgrades = preload("res://sim/upgrades.gd")
 const Profiles = preload("res://net/profiles.gd")
 
 const Run = preload("res://sim/run.gd")
@@ -153,6 +154,9 @@ var first_depth := 1
 ## Explicit safe practice room. Ordinary rooms keep the existing campaign sequence.
 var orientation_review := false
 var orientation_campaign := false
+var badge_search := false
+var quick_fingers := false
+var long_burn := false
 var ward_review := false
 ## The day loop in the next run (the game's; tests may turn it off).
 var days := true
@@ -233,7 +237,12 @@ func in_run(id: String) -> bool:
 func _lobby_text(now: float) -> String:
 	var list: Array = []
 	for id: String in people:
-		list.append([id, people[id], ready.has(id), watching.has(id), in_run(id), faces.get(id, "")])
+		var row := [id, people[id], ready.has(id), watching.has(id), in_run(id), faces.get(id, "")]
+		if quick_fingers:
+			var trade := _player_trade(id)
+			if not trade.is_empty():
+				row.append(trade)
+		list.append(row)
 	var without := -1.0
 	if host_id != "" and ready.has(host_id) and host == null:
 		without = float(ready[host_id]) + WITHOUT_AFTER
@@ -249,6 +258,15 @@ func _lobby_text(now: float) -> String:
 	if host != null and host.state.orientation_paid > 0:
 		lobby["orientationPaid"] = host.state.orientation_paid
 	return "m|" + JSON.stringify(lobby)
+
+func _player_trade(id: String) -> String:
+	if host != null:
+		var wallet: Upgrades.UpgradeState = host.state.wallets.get(id)
+		if wallet != null:
+			return Upgrades.trade_of(wallet.owned)
+	if profiles != null:
+		return profiles.trade_of(id)
+	return ""
 
 ## The players a run starting now takes: the ready ones, in arrival order.
 func _start_roster() -> Array[String]:
@@ -388,7 +406,7 @@ func _start(now: float) -> void:
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
 	var q := quota and not HostRules.quota_off_by_arg(false)
 	# The day quota's lock goes with the floor quota (net/host_rules.gd): quota=0 turns both off.
-	rules = HostRules.new(not (ward_review or reactor_review), first_depth, Places.deck_for_start_depth(first_depth), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop, nightly_reels, true, true, deep_pockets and not (ward_review or reactor_review), second_wind, soft_shoes)
+	rules = HostRules.new(not (ward_review or reactor_review), first_depth, Places.deck_for_start_depth(first_depth, HostRules.garden_admission_by_arg()), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop, nightly_reels, true, true, deep_pockets and not (ward_review or reactor_review), second_wind, soft_shoes, HostRules.flare_on_by_arg() and not (ward_review or reactor_review), HostRules.lamp_on_by_arg() and not (ward_review or reactor_review), badge_search and not (ward_review or reactor_review), quick_fingers and not (ward_review or reactor_review), long_burn and not (ward_review or reactor_review))
 	if orientation_review:
 		rules.enable_orientation()
 	elif orientation_campaign:

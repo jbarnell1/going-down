@@ -168,7 +168,7 @@ Checks (start `powershell -NoProfile -ExecutionPolicy Bypass -File .local/guard-
 beside any of them; the game never captures the mouse under `auto=1` or `navigator.webdriver`):
 
 ```sh
-node godot/tools/play_web.mjs 4440         # browser playthrough, 29 checks, pictures in godot/export/shots/
+node godot/tools/play_web.mjs 4440         # browser playthrough; set GD_BROWSER_CHANNEL=msedge to use installed Edge
 node godot/tools/sound_web.mjs 4440        # browser sound after a real click, then each recording against the rules
                                            # (trolley only while it moves unseen, hum gone in the dark): must PASS;
                                            # with --query=&mute=1 must FAIL

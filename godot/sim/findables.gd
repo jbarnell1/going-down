@@ -95,7 +95,10 @@ const PLAYROOM_ON := false
 const EPS := 1e-9
 
 ## What a search finds.
-const WHAT: Array[String] = ["nothing", "credits", "note", "page", "juice"]
+const WHAT: Array[String] = ["nothing", "credits", "note", "page", "juice", "badge"]
+const BADGE := &"badge"
+const BADGE_FIRST_CHANCE := 75
+const BADGE_DEPTH_CHANCE := 8
 ## The item a carton is (sim/run.gd keeps {item: count} per player for the inventory to come).
 const JUICE := &"juice"
 
@@ -276,7 +279,7 @@ class Fill:
 
 ## The fill of a floor (see the header). `base`: the floor's quota as set on arrival; `trait_name`: trait_for's;
 ## `day`: the day number (the pages' tier); `lore_used`: page ids already dealt tonight.
-static func fill_for(plan: Floor.FloorPlan, floor_seed: String, depth: int, base: int, trait_name: StringName, day: int = 1, lore_used: Array = [], garden_search: bool = false) -> Fill:
+static func fill_for(plan: Floor.FloorPlan, floor_seed: String, depth: int, base: int, trait_name: StringName, day: int = 1, lore_used: Array = [], garden_search: bool = false, badge_chance := 0.0) -> Fill:
 	var f := Fill.new()
 	f.place = plan.place
 	f.trait_name = trait_name
@@ -373,6 +376,14 @@ static func fill_for(plan: Floor.FloorPlan, floor_seed: String, depth: int, base
 		f.contents[id]["note"] = pg[0]
 		f.pages = 1
 		f.page = pg[0]
+	# A separate draw chooses only an empty far piece, so ordinary finds never move.
+	if badge_chance > 0.0:
+		var badge_rng := Rng.make_rng("find:%s:%d" % [floor_seed, depth]).fork("badge")
+		if badge_rng.next() < badge_chance:
+			var far_empty: Array = free.filter(func(id: int) -> bool: return int(steps[id]) >= FAR_STEPS)
+			if not far_empty.is_empty():
+				var id: int = far_empty[badge_rng.int_in(0, far_empty.size() - 1)]
+				f.contents[id]["what"] = String(BADGE)
 	return f
 
 ## How many of a floor's `n` searchable pieces hold credits (CREDIT_SHARE, rounded).
@@ -391,6 +402,8 @@ static func result_line(what: String, credits: int) -> String:
 			return "CREDITS +%d" % credits
 		"juice":
 			return "A CARTON OF JUICE"
+		"badge":
+			return "AN OLD CREW BADGE"
 		"page":
 			return "SOMEBODY'S PAGE"
 		"note":
@@ -454,6 +467,7 @@ class Search:
 	var id: String
 	var piece: int
 	var fast := false
+	var silent := false
 	## Host times it began and ends.
 	var from := 0.0
 	var done := 0.0
@@ -487,14 +501,14 @@ class FindFloor:
 		f.wait_release = wait_release.duplicate()
 		return f
 
-static func start_floor(plan: Floor.FloorPlan, floor_seed: String, depth: int, base: int, trait_name: StringName, day: int, lore_used: Array, garden_search: bool = false) -> FindFloor:
+static func start_floor(plan: Floor.FloorPlan, floor_seed: String, depth: int, base: int, trait_name: StringName, day: int, lore_used: Array, garden_search: bool = false, badge_chance := 0.0) -> FindFloor:
 	var f := FindFloor.new()
 	f.plan = plan
 	f.depth = depth
 	f.pieces = spots_for(plan, floor_seed, depth, garden_search)
 	for p in f.pieces:
 		f.by_id[p.id] = p
-	f.fill = fill_for(plan, floor_seed, depth, base, trait_name, day, lore_used, garden_search)
+	f.fill = fill_for(plan, floor_seed, depth, base, trait_name, day, lore_used, garden_search, badge_chance)
 	return f
 
 class SearchInput:
@@ -504,6 +518,8 @@ class SearchInput:
 	## F held for a search, and sprint held with it (the rushed search).
 	var held := false
 	var fast := false
+	var speed := 1.0
+	var silent := false
 	## On their feet, active, out of the car and out of any hide, not sprinting.
 	var able := false
 
@@ -601,6 +617,8 @@ static func step(prev: FindFloor, inputs: Array[SearchInput], t: float) -> Searc
 				res.found.append(row)
 				res.events.append({"type": "searchDone", "t": t, "playerId": inp.id, "piece": s.piece, "kind": row["kind"], "what": row["what"],
 					"credits": row["credits"], "note": row["note"], "fast": s.fast})
+				if s.silent:
+					res.events[-1]["silent"] = true
 			continue
 		if not inp.held or not inp.able or f.wait_release.has(inp.id):
 			continue
@@ -612,11 +630,14 @@ static func step(prev: FindFloor, inputs: Array[SearchInput], t: float) -> Searc
 		ns.piece = p.id
 		ns.fast = inp.fast
 		ns.from = t
-		ns.done = t + (SEARCH_FAST if inp.fast else SEARCH_SLOW)
+		ns.done = t + (SEARCH_FAST if inp.fast else SEARCH_SLOW) / inp.speed
+		ns.silent = inp.silent
 		ns.spot = inp.body
 		f.searches[inp.id] = ns
 		res.events.append({"type": "searchStart", "t": t, "playerId": inp.id, "piece": p.id, "kind": String(p.kind), "fast": ns.fast, "from": ns.from, "done": ns.done})
-		if ns.fast or test_break == "careful_noise":
+		if ns.silent:
+			res.events[-1]["silent"] = true
+		if not ns.silent and (ns.fast or test_break == "careful_noise"):
 			res.noisy.append(inp.id)
 			res.events.append({"type": "searchNoise", "t": t, "playerId": inp.id, "piece": p.id, "at": inp.body})
 	return res

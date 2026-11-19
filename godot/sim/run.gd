@@ -363,6 +363,8 @@ const Hearing = preload("res://sim/hearing.gd")
 const Findables = preload("res://sim/findables.gd")
 const Inventory = preload("res://sim/inventory.gd")
 const Shop = preload("res://sim/shop.gd")
+const Flare = preload("res://sim/flare.gd")
+const Lamp = preload("res://sim/lamp.gd")
 const GardenCones = preload("res://sim/garden_cones.gd")
 
 # ---------------------------------------------------------------------------------------------
@@ -1071,6 +1073,8 @@ class RunState:
 	var resident_navigation: bool = false
 	## Findables (FD9, with_findables; sim/findables.gd). Off: nothing below is ever made or read.
 	var findables: bool = false
+	var badge_search := false
+	var quick_fingers := false
 	## This floor's findables (a Findables.FindFloor), or null; the lore pages dealt tonight; each player's
 	## found items {id: {item: count}}. Replaced, never edited.
 	var find: Variant = null
@@ -1091,6 +1095,16 @@ class RunState:
 	var deep_pockets: bool = false
 	var second_wind: bool = false
 	var soft_shoes: bool = false
+	var long_burn: bool = false
+	var flare := false
+	var flare_plan: Floor.FloorPlan = null
+	var flare_issued := {}
+	var flare_profiles := {}
+	var flare_bursts: Array[Dictionary] = []
+	var flare_seq := 0
+	var flare_stun_until := -1.0
+	var lamp := false
+	var lamps := {}
 	var wind_spent := {}
 	var wind_profiles := {}
 	## Every cabinet and what the items left lit (Shop.ShopState). Replaced, never edited.
@@ -1116,6 +1130,8 @@ class RunState:
 		s.furniture_layout = furniture_layout
 		s.resident_navigation = resident_navigation
 		s.findables = findables
+		s.badge_search = badge_search
+		s.quick_fingers = quick_fingers
 		s.find = find
 		s.lore_used = lore_used
 		s.items = items
@@ -1131,6 +1147,16 @@ class RunState:
 		s.deep_pockets = deep_pockets
 		s.second_wind = second_wind
 		s.soft_shoes = soft_shoes
+		s.long_burn = long_burn
+		s.flare = flare
+		s.flare_plan = flare_plan
+		s.flare_issued = flare_issued
+		s.flare_profiles = flare_profiles
+		s.flare_bursts = flare_bursts
+		s.flare_seq = flare_seq
+		s.flare_stun_until = flare_stun_until
+		s.lamp = lamp
+		s.lamps = lamps
 		s.wind_spent = wind_spent
 		s.wind_profiles = wind_profiles
 		s.two_watchers = two_watchers
@@ -1374,7 +1400,7 @@ static func create_run(seed: String, player_ids: Array[String], deck: Array = []
 		s = with_downs(s)
 	return with_quota(s) if quota else s
 
-## Explicit practice entry. The ordinary first stop and its legacy recordings use create_run unchanged.
+## The campaign prelude always has course tools. Its prepared paid floor keeps its own equipment flags.
 static func with_orientation(initial: RunState, prelude := false) -> RunState:
 	var ids: Array[String] = []
 	for player in initial.players:
@@ -1387,7 +1413,9 @@ static func with_orientation(initial: RunState, prelude := false) -> RunState:
 	if prelude:
 		s.orientation_resume = initial
 		s.wallets = initial.wallets
-	return s
+	if prelude or initial.flare:
+		s = with_flare(s)
+	return with_lamp(s) if prelude or initial.lamp else s
 
 ## Turns down first, then out on for a run (see the header): nobody down, no red spots.
 static func with_downs(s0: RunState) -> RunState:
@@ -1475,7 +1503,7 @@ static func day_preview(s: RunState) -> Variant:
 		return null
 	var aboard := day_aboard(s)
 	var earned := floori(s.day_earned) if s.day_lock else aboard
-	return Day.bank_preview(s.day_state, aboard, earned, day_crew(s), s.wallets, DAY_FLOOR_QUOTA)
+	return Day.bank_preview(s.day_state, aboard, earned, day_crew(s), s.wallets, DAY_FLOOR_QUOTA, s.quick_fingers)
 ## Turns the tuned Playroom on (T15m, see the header): every Playroom from now on (and one already reached)
 ## has the long hiding time, the anger bar, the grab at 1 m and the hint events (sim/seek.gd "T15m").
 static func with_playroom_tuned(s0: RunState) -> RunState:
@@ -1498,6 +1526,14 @@ static func with_furniture_layout(s0: RunState) -> RunState:
 	return s
 
 ## Turns findables on (FD9, see the header): nothing opened, no pages dealt, nothing carried.
+## Opt-in: only rooms with search and the ordinary bag can deal badges.
+static func with_badge_search(s0: RunState) -> RunState:
+	if not s0.findables or not s0.inventory:
+		return s0
+	var s := s0.copy()
+	s.badge_search = true
+	return s
+
 static func with_findables(s0: RunState) -> RunState:
 	var s := s0.copy()
 	s.findables = true
@@ -1534,9 +1570,44 @@ static func with_second_wind(s0: RunState) -> RunState:
 	s.second_wind = true
 	return s
 
+static func with_flare(s0: RunState) -> RunState:
+	var s := s0.copy() if s0.inventory else with_inventory(s0)
+	s.flare = true
+	return s
+
+static func with_lamp(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.lamp = true
+	return s
+
+static func lamp_of(s: RunState, player_id: String) -> Dictionary:
+	return s.lamps.get(str(s.flare_profiles.get(player_id, player_id)), {})
+
+static func flare_stunned(s: RunState, t: float) -> bool:
+	return s.flare and s.flare_plan == s.plan and t < s.flare_stun_until
+
+static func flare_blinded(s: RunState, id: String, t: float) -> bool:
+	if s.flare and s.flare_plan == s.plan:
+		for burst in s.flare_bursts:
+			if burst.blind == id and t < float(burst.blindUntil):
+				return true
+	return false
+
 static func with_soft_shoes(s0: RunState) -> RunState:
 	var s := s0.copy()
 	s.soft_shoes = true
+	return s
+
+static func with_quick_fingers(s0: RunState) -> RunState:
+	if not (s0.deep_pockets and s0.inventory and s0.shop and s0.findables):
+		return s0
+	var s := s0.copy()
+	s.quick_fingers = true
+	return s
+
+static func with_long_burn(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.long_burn = true
 	return s
 
 static func training_enabled(s: RunState, id: String) -> bool:
@@ -1547,6 +1618,10 @@ static func training_enabled(s: RunState, id: String) -> bool:
 			return s.second_wind
 		"soft_shoes":
 			return s.soft_shoes
+		"long_burn":
+			return s.long_burn
+		"quick_fingers":
+			return s.quick_fingers
 	return false
 
 static func wind_spent_here(s: RunState, id: String) -> bool:
@@ -1790,16 +1865,17 @@ static func _step_orientation(s: RunState, players: Array[RunPlayer], input_of: 
 		if not _is_active(p, input_of):
 			continue
 		var input := _inp(p, input_of)
+		var blind := input.blind or flare_blinded(s, p.id, s.t)
 		if p.aboard:
-			if doors_open(s) and not input.blind:
+			if doors_open(s) and not blind:
 				watchers.append(_threshold_view(s.car, input))
 		else:
-			var view := _view_of(input, true, input.blind)
+			var view := _view_of(input, true, blind)
 			targets.append(view)
 			watchers.append(view)
 			s.orientation_standees = Orientation.trigger_standees(s.orientation_standees, p.body, s.t)
 	var before := s.orderly
-	var step := Orientation.step_target(s.plan, before, targets, watchers, dt)
+	var step := Orientation.step_target(s.plan, before, targets, watchers, dt, flare_stunned(s, s.t))
 	s.orderly = step.state
 	events.append_array(step.events)
 	var sample := Instr.EntityTick.make(s.entity_id, &"stillness", before, step.state, step.events)
@@ -2027,6 +2103,9 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 		si.voice = i.voice
 		si.horn = i.horn
 		si.light = i.light
+		var carried := lamp_of(s, p.id) if s.lamp else {}
+		if bool(carried.get("on", false)):
+			si.light = Lamp.beam(s.tuning, p.body, i.eye, i.yaw, i.pitch)
 		# The shop (S2): a wind-up toy of theirs starting to rattle is their noise.
 		si.toy = s.shop and Shop.rattles_from(s.shop_state, t_prev, t).has(p.id)
 		var mem := Instr.member(s.crew, p.id)
@@ -2178,6 +2257,8 @@ static func _step_garden(s: RunState, players: Array[RunPlayer], input_of: Dicti
 	var search_noise := {}
 	if s.garden_search:
 		for e in events:
+			if e.get("silent", false):
+				continue
 			var kind := str(e["type"])
 			if kind == "searchStart" and bool(e["fast"]):
 				search_noise[str(e["playerId"])] = Noises.search_radius(true, s.tuning)
@@ -2207,6 +2288,10 @@ static func _step_garden(s: RunState, players: Array[RunPlayer], input_of: Dicti
 				hp.hide = h.hide
 		people.append(hp)
 	var heard_things := g.drops
+	if s.flare:
+		for e in events:
+			if e.type == "flareUsed":
+				heard_things.append(Noises.Sound.make("", e.x, e.z, e.level, e.noise, &"flare"))
 	if s.shop and s.garden_cones:
 		var stock: Shop.ShopState = s.shop_state
 		if stock.plan == s.plan:
@@ -2315,7 +2400,7 @@ static func _garden_after(s: RunState, events: Array[Dictionary]) -> void:
 			g.heals[id] = int(g.heals.get(id, 0)) + 1
 			g.healed.append(id)
 		elif e.get("at") is Move.Body:
-			g.drops.append(Noises.drop(id, e["at"]))
+			g.drops.append(Noises.drop(id, e["at"], s.tuning))
 	if g != null:
 		s.garden = g
 
@@ -3185,6 +3270,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	# ---- Findables (FD9, see the header): searches, before the resident.
 	if s.findables:
 		_step_findables(s, players, input_of, t, events)
+	if s.lamp:
+		_step_lamps(s, players, input_of, t, dt, events)
+	var flare_users := _step_flares(s, players, input_of, t, events) if s.flare else {}
 
 	# ---- 2. The Orderly (not while riding: that floor is behind the crew).
 	var entity_ticks: Array[Instr.EntityTick] = []
@@ -3220,23 +3308,24 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		var views: Array[Entity.PlayerView] = []
 		for p in players:
 			var i := _inp(p, input_of)
+			var flared := flare_blinded(s, p.id, t)
 			if not _is_active(p, input_of):
 				views.append(_view_of(i, false, false))
 			elif p.aboard:
 				# Never huntable inside the car. With the doors open and the lights on, they still watch the floor.
 				var w := _threshold_view(car, i)
 				var just_w: Array[Entity.PlayerView] = [w]
-				if open and not blind and not i.blind and Entity.seen_by(s.plan, s.orderly.body, just_w, Entity.kind_of(s.orderly)) != null:
+				if open and not blind and not i.blind and not flared and Entity.seen_by(s.plan, s.orderly.body, just_w, Entity.kind_of(s.orderly)) != null:
 					views.append(w)
 				else:
 					views.append(_view_of(i, false, false))
 			else:
-				var hv := _hidden_view(s, i, blind or i.blind)
+				var hv := _hidden_view(s, i, blind or i.blind or flared)
 				# A searcher's eyes are in the drawer (findables): huntable, never a watcher.
 				# The shop's flashbulb (S2): for its second the player looks from where they stand, even in the dark, as one
 				# watcher (the deliberate break counts it twice).
 				var flash := s.shop and Shop.flashing(s.shop_state, p.id, t)
-				views.append(hv if hv != null else _view_of(i, true, (blind and not flash) or i.blind or searching(s, p.id)))
+				views.append(hv if hv != null else _view_of(i, true, (blind and not flash) or i.blind or flared or searching(s, p.id)))
 				if flash and hv == null and Shop.flash_watchers() > 1:
 					views.append(_view_of(i, true, false))
 		# The call pulls it toward the landing, until it gets there.
@@ -3255,7 +3344,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		var resident_solids := _resident_solids(s)
 		# Paced (see the header): both Stillness residents hunt at HUNT_SPEED, so both at the paced speeds.
 		# Live settings: the host's speeds for this body (_tuned_hunt), else these.
-		if blacked_out(s):
+		if flare_stunned(s, t):
+			er = Entity.step_entity(s.plan, before, views, dt, 0.0, false, need, resident_solids, true)
+		elif blacked_out(s):
 			er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, true, PACED_BLACKOUT_HUNT_SPEED if s.paced else BLACKOUT_HUNT_SPEED), false, need, resident_solids)
 		elif s.paced:
 			er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, false, PACED_HUNT_SPEED), true, need, resident_solids)
@@ -3284,7 +3375,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 					crew_events.append(e)
 		# Relocation (see the header): it may leave where nobody can see it and arrive where nobody can.
 		var moved_on: Array[Dictionary] = []
-		if s.relocation:
+		if s.relocation and not flare_stunned(s, t):
 			next = _relocate(s, next, who.trait_name, players, input_of, t, dt, moved_on)
 		s.orderly = next
 		for e in o_events:
@@ -3382,7 +3473,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		_step_inventory(s, players, input_of, t, events)
 	# ---- The shop and the cabinet (S2, see the header): after the inventory, whose requests they share.
 	if s.shop and s.inventory:
-		_step_shop(s, players, input_of, t, dt, events)
+		_step_shop(s, players, input_of, t, dt, events, flare_users)
 
 	# ---- The floor quota met: said once per floor, while the crew is still on it.
 	if s.quota and not s.quota_met and not at_home(s) and s.phase != &"riding" and s.floor_needed > 0 and quota_reached(s):
@@ -3669,7 +3760,7 @@ static func _settle_day(s: RunState, t: float, banked: int, events: Array[Dictio
 	# The car waits: whoever it left out today is paid nothing today (see the header).
 	var crew := day_crew(s)
 	var earned := floori(s.day_earned) if s.day_lock else banked
-	var r := Day.end_day(s.day_state, banked, earned, crew, s.wallets, DAY_FLOOR_QUOTA, s.seed, wiped)
+	var r := Day.end_day(s.day_state, banked, earned, crew, s.wallets, DAY_FLOOR_QUOTA, s.seed, wiped, s.quick_fingers)
 	s.wallets = r.wallets
 	s.day_next = r.state
 	var result: Dictionary = r.facts.duplicate(true)
@@ -4112,6 +4203,14 @@ static func _in_hide(s: RunState, id: String) -> bool:
 	var hp := Hiding.player_of(s.hiding as Hiding.HidingState, id)
 	return hp != null and hp.phase != &"out"
 
+## The chance is stamped when this floor's furniture is first filled, once for everyone.
+static func badge_search_chance(s: RunState) -> float:
+	if not s.badge_search:
+		return 0.0
+	var first := Settings.i(s.tuning, &"badge.chance", Findables.BADGE_FIRST_CHANCE)
+	var step := Settings.i(s.tuning, &"badge.depth_chance", Findables.BADGE_DEPTH_CHANCE)
+	return minf(1.0, 0.01 * (first + maxi(0, s.depth - 1) * step))
+
 ## One tick of searching (see the header). Updates `s` (find, crew, day_earned, items, the resident woken),
 ## `players` (rooted bodies) and appends the events.
 static func _step_findables(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, events: Array[Dictionary]) -> void:
@@ -4121,7 +4220,7 @@ static func _step_findables(s: RunState, players: Array[RunPlayer], input_of: Di
 		return
 	if s.find == null:
 		var day := s.day_state.day if s.days and s.day_state != null else 1
-		var ff := Findables.start_floor(s.plan, s.plan.seed, s.depth, find_base(s, players), Findables.trait_for(s.plan.place, s.lonely), day, s.lore_used, s.garden_search)
+		var ff := Findables.start_floor(s.plan, s.plan.seed, s.depth, find_base(s, players), Findables.trait_for(s.plan.place, s.lonely), day, s.lore_used, s.garden_search, badge_search_chance(s))
 		s.find = ff
 		if ff.fill.page != "":
 			var used := s.lore_used.duplicate()
@@ -4132,7 +4231,15 @@ static func _step_findables(s: RunState, players: Array[RunPlayer], input_of: Di
 		var i: PlayerInput = input_of.get(p.id)
 		var able := i != null and p.status == &"ok" and _is_active(p, input_of) and not p.aboard and not _in_hide(s, p.id) \
 			and i.gait != &"sprint" and not i.hide_use
-		inputs.append(Findables.SearchInput.make(p.id, p.body, i.yaw if i != null else 0.0, i != null and i.search, i != null and i.search_fast, able))
+		var search := Findables.SearchInput.make(p.id, p.body, i.yaw if i != null else 0.0, i != null and i.search, i != null and i.search_fast, able)
+		if s.quick_fingers and search.held:
+			var wallet: Upgrades.UpgradeState = s.wallets.get(p.id)
+			if wallet != null:
+				search.speed += 0.1 * Upgrades.trade_seniority(wallet.owned, "Hands")
+				search.silent = wallet.owned.has("quick_fingers")
+				if search.silent:
+					search.speed *= 2.0
+		inputs.append(search)
 	var r := Findables.step(s.find as Findables.FindFloor, inputs, t)
 	s.find = r.floor
 	events.append_array(r.events)
@@ -4147,9 +4254,8 @@ static func _step_findables(s: RunState, players: Array[RunPlayer], input_of: Di
 		var by := str(row["by"])
 		if str(row["what"]) == "credits":
 			_add_found(s, by, int(row["credits"]), int(row["piece"]), t)
-		elif str(row["what"]) == "juice" and s.inventory:
-			# The inventory (S1): the carton goes into the finder's bag, or stays in the furniture.
-			_carton_found(s, by, int(row["piece"]), t, events)
+		elif s.inventory and str(row["what"]) in ["juice", "badge"]:
+			_store_search_item(s, by, int(row["piece"]), str(row["what"]), t, events)
 		elif str(row["what"]) == "juice":
 			var items := s.items.duplicate()
 			var mine: Dictionary = (items.get(by, {}) as Dictionary).duplicate()
@@ -4206,10 +4312,105 @@ static func found_on(tape: TapeLib.Tape) -> float:
 # ---------------------------------------------------------------------------------------------
 # The four-slot inventory (S1; see the header).
 
-## A carton found by `by` (the inventory on): into their bag, or, with no room, left in the piece (not opened) and
-## "searchFull" instead of "searchDone".
-static func _carton_found(s: RunState, by: String, piece: int, t: float, events: Array[Dictionary]) -> void:
-	var r := Inventory.add(Inventory.bag_of(s.bags, by), String(Findables.JUICE), 1, inventory_limit(s, by))
+static func _step_lamps(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, dt: float, events: Array[Dictionary]) -> void:
+	var lamps := s.lamps.duplicate()
+	for p in players:
+		var identity := str(s.flare_profiles.get(p.id, p.id))
+		var before: Dictionary = lamps.get(identity, {})
+		if not _is_active(p, input_of) or p.status != &"ok":
+			if bool(before.get("on", false)):
+				var switched_off := before.duplicate()
+				switched_off.on = false
+				lamps[identity] = switched_off
+			continue
+		var i := _inp(p, input_of)
+		var charge := float(before.get("charge", Lamp.new_charge(s.tuning)))
+		var on := bool(before.get("on", false))
+		if i.inv_op == &"lamp" and charge > 0.0:
+			var wanted: bool = i.inv_arg == 1
+			if wanted != on:
+				events.append({"type": "lampSwitched", "t": t, "playerId": p.id, "on": wanted})
+			on = wanted
+		if on:
+			charge = maxf(0.0, charge - dt)
+			if charge <= 0.000001:
+				charge = 0.0
+				on = false
+				events.append({"type": "lampEmpty", "t": t, "playerId": p.id})
+		var light := Lamp.beam(s.tuning, p.body, i.eye, i.yaw, i.pitch)
+		lamps[identity] = {"on": on, "charge": charge, "x": light.x, "y": light.y, "z": light.z, "yaw": light.yaw,
+			"pitch": light.pitch, "range": light.range}
+	s.lamps = lamps
+
+static func _step_flares(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, events: Array[Dictionary]) -> Dictionary:
+	var used := {}
+	if s.flare_plan != s.plan:
+		s.flare_plan = s.plan
+		s.flare_bursts = []
+		s.flare_stun_until = -1.0
+	else:
+		s.flare_bursts = s.flare_bursts.filter(func(b: Dictionary) -> bool: return t < maxf(b.until, b.blindUntil))
+	if s.phase == &"riding" or at_home(s):
+		return used
+	for p in players:
+		if not _is_active(p, input_of) or p.status != &"ok":
+			continue
+		var id := str(s.flare_profiles.get(p.id, p.id))
+		var bag := Inventory.bag_of(s.bags, p.id)
+		if not s.flare_issued.has(id):
+			var added := Inventory.add(bag, Flare.ITEM, 1, 1)
+			if added.added != 0:
+				bag = added.bag
+				_set_bag(s, p.id, bag)
+				s.flare_issued = s.flare_issued.duplicate()
+				s.flare_issued[id] = true
+		var input := _inp(p, input_of)
+		var slot := input.inv_select if input.inv_select >= 0 and input.inv_select < Inventory.SLOTS else bag.sel
+		if input.inv_op != &"use" or bag.item(slot) != Flare.ITEM:
+			continue
+		used[p.id] = true
+		if p.aboard or _in_hide(s, p.id) or searching(s, p.id):
+			events.append({"type": "invRefused", "t": t, "playerId": p.id, "op": "use", "why": "busy"})
+			continue
+		_set_bag(s, p.id, Inventory.remove_one(bag, slot))
+		_burst_flare(s, p, input.yaw, players, input_of, t, events)
+	return used
+
+static func _burst_flare(s: RunState, p: RunPlayer, yaw: float, players: Array[RunPlayer], input_of: Dictionary, t: float, events: Array[Dictionary]) -> void:
+	var direction := Flare.forward(yaw)
+	var reach := Settings.f(s.tuning, &"flare.throw", Flare.THROW)
+	var at := Move.move_with_collision(s.plan, p.body, direction.x * reach, direction.y * reach, 0.08)
+	var struck := ""
+	var nearest := reach + 0.001
+	for other in players:
+		if p.id == other.id or other.aboard or other.status != &"ok" or not _is_active(other, input_of):
+			continue
+		if not Flare.within(p.body, other.body, reach):
+			continue
+		var along := Flare.aim(p.body, other.body, direction)
+		if along < nearest and Flare.clear(s.plan, p.body, other.body):
+			struck = other.id
+			nearest = along
+			at = other.body
+	var stunned := false
+	if struck.is_empty() and s.orderly != null and (s.orientation or resident_of(s).stillness) and not s.seek_off:
+		var radius := Settings.f(s.tuning, &"flare.reach", Flare.REACH)
+		stunned = Flare.within(at, s.orderly.body, radius) and Flare.clear(s.plan, at, s.orderly.body)
+		if stunned:
+			s.flare_stun_until = maxf(s.flare_stun_until, t + Settings.f(s.tuning, &"flare.stun", Flare.STUN))
+	s.flare_seq += 1
+	var blind_until := t + Settings.f(s.tuning, &"flare.blind", Flare.BLIND) if not struck.is_empty() else t
+	var burst := {"id": s.flare_seq, "x": at.x, "y": at.y, "z": at.z, "until": t + Flare.BURST_SECONDS,
+		"blind": struck, "blindUntil": blind_until}
+	s.flare_bursts.append(burst)
+	var event := burst.duplicate()
+	event.merge({"type": "flareUsed", "t": t, "playerId": p.id, "level": at.level, "stunned": stunned,
+		"noise": Settings.f(s.tuning, &"flare.noise", Flare.NOISE)})
+	events.append(event)
+
+## A found item goes into the bag. A full bag leaves it in the piece for a fresh search.
+static func _store_search_item(s: RunState, by: String, piece: int, item: String, t: float, events: Array[Dictionary]) -> void:
+	var r := Inventory.add(Inventory.bag_of(s.bags, by), item, 1, inventory_limit(s, by))
 	if r.added > 0:
 		var bags := s.bags.duplicate()
 		bags[by] = r.bag
@@ -4223,7 +4424,10 @@ static func _carton_found(s: RunState, by: String, piece: int, t: float, events:
 		if str(e.get("type")) == "searchDone" and str(e.get("playerId")) == by and int(e.get("piece", -1)) == piece:
 			events.remove_at(k)
 			break
-	events.append({"type": "searchFull", "t": t, "playerId": by, "piece": piece})
+	var full := {"type": "searchFull", "t": t, "playerId": by, "piece": piece}
+	if item == String(Findables.BADGE):
+		full["item"] = item
+	events.append(full)
 
 ## Every bag and pickup as one list of items ({item: count}): what the world holds (tests count it).
 static func items_in_world(s: RunState) -> Dictionary:
@@ -4355,7 +4559,7 @@ static func _step_inventory(s: RunState, players: Array[RunPlayer], input_of: Di
 				events.append({"type": "itemGiven", "t": t, "playerId": p.id, "to": q.id, "item": b.item(k), "count": r.added})
 			_:
 				# The shop's requests (S2) are the shop's step's, after this one.
-				if not (s.shop and Shop.OPS.has(String(i.inv_op))) and i.inv_op != &"skill":
+				if not (s.shop and Shop.OPS.has(String(i.inv_op))) and i.inv_op not in [&"skill", &"lamp"] and not (s.flare and i.inv_op == &"use"):
 					refuse.call("op")
 	if touched:
 		s.bags = bags
@@ -4373,7 +4577,7 @@ static func inventory_limit(s: RunState, id: String) -> int:
 
 static func _settle_training(s: RunState, id: String, t: float, events: Array[Dictionary]) -> void:
 	var wallet: Upgrades.UpgradeState = s.wallets.get(id)
-	if wallet == null or Upgrades.induction_node(wallet.last_id).is_empty():
+	if wallet == null or (Upgrades.induction_node(wallet.last_id).is_empty() and not (s.quick_fingers and wallet.last_id == "quick_fingers")):
 		return
 	var wallets := s.wallets.duplicate()
 	wallets[id] = Upgrades.next_morning(wallet)
@@ -4394,22 +4598,35 @@ static func _skill_transaction(s: RunState, p: RunPlayer, bag: Inventory.Bag, ar
 	if wallet == null:
 		wallet = Upgrades.UpgradeState.make()
 	var result: Upgrades.UpResult
-	if arg == 0 or arg == 2 or arg == 4:
-		var node_id := str({0: "deep_pockets", 2: "second_wind", 4: "soft_shoes"}[int(arg)])
+	var next_bag := bag
+	if arg in [0, 2, 4, 6]:
+		var node_id := str({0: "deep_pockets", 2: "second_wind", 4: "soft_shoes", 6: "long_burn"}[int(arg)])
 		if not training_enabled(s, node_id):
 			return "op"
 		result = Upgrades.buy_induction(wallet, node_id, Shop.SHARE)
+	elif arg == 5:
+		if not s.quick_fingers:
+			return "op"
+		var cost := int(Upgrades.trade_node("quick_fingers")["badge_cost"])
+		result = Upgrades.buy_trade(wallet, "quick_fingers", int(bag.totals().get("badge", 0)))
+		if result.ok:
+			next_bag = Inventory.spend(bag, "badge", cost)
+			if next_bag == null:
+				return "badges"
 	elif arg == 1:
 		if not training_enabled(s, wallet.last_id):
 			return "nothing_to_undo"
-		var repacked := bag
 		if wallet.last_id == "deep_pockets":
-			repacked = _unstack_bag(bag, Inventory.stack_limit(s.tuning, p.id))
-			if repacked == null:
+			next_bag = _unstack_bag(bag, Inventory.stack_limit(s.tuning, p.id))
+			if next_bag == null:
 				return "unstack"
+		elif wallet.last_id == "quick_fingers":
+			var refund := int(Upgrades.trade_node(wallet.last_id)["badge_cost"])
+			var returned := Inventory.add(bag, "badge", refund, inventory_limit(s, p.id))
+			if returned.left > 0:
+				return "badge_room"
+			next_bag = returned.bag
 		result = Upgrades.undo(wallet)
-		if result.ok and repacked != bag:
-			_set_bag(s, p.id, repacked)
 	else:
 		return "op"
 	if not result.ok:
@@ -4417,6 +4634,8 @@ static func _skill_transaction(s: RunState, p: RunPlayer, bag: Inventory.Bag, ar
 	var wallets := s.wallets.duplicate()
 	wallets[p.id] = result.state
 	s.wallets = wallets
+	if next_bag != bag:
+		_set_bag(s, p.id, next_bag)
 	var kind := "trainingUndone" if arg == 1 else "trained"
 	events.append({"type": kind, "t": t, "playerId": p.id, "node": wallet.last_id if arg == 1 else result.state.last_id})
 	return ""
@@ -4485,7 +4704,7 @@ static func _wake_in_cells(s: RunState, players: Array[RunPlayer], t: float, eve
 
 ## One tick of the shop (see the header): the floor's lit things go with it, and the requests in the run's player
 ## order. Updates `s` (shop_state, bags) and appends the events.
-static func _step_shop(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, _dt: float, events: Array[Dictionary]) -> void:
+static func _step_shop(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, _dt: float, events: Array[Dictionary], flare_users := {}) -> void:
 	var sh0: Shop.ShopState = s.shop_state
 	var sh := sh0
 	if sh.plan != s.plan:
@@ -4532,6 +4751,8 @@ static func _step_shop(s: RunState, players: Array[RunPlayer], input_of: Diction
 	var ids := _ids_of(players)
 	for p in players:
 		var i: PlayerInput = input_of.get(p.id)
+		if flare_users.has(p.id):
+			continue
 		if i == null or p.status != &"ok" or not _is_active(p, input_of):
 			continue
 		if not Shop.OPS.has(String(i.inv_op)) and not (s.deep_pockets and i.inv_op == &"skill"):
@@ -4637,6 +4858,10 @@ static func _step_shop(s: RunState, players: Array[RunPlayer], input_of: Diction
 	if sh != sh0:
 		s.shop_state = sh
 
+static func _light_duration_scale(s: RunState, id: String) -> float:
+	var wallet: Upgrades.UpgradeState = s.wallets.get(id)
+	return 2.0 if s.long_burn and wallet != null and wallet.owned.has("long_burn") else 1.0
+
 ## Uses `item` from player `p`'s hand (the shop's items; see the header). Returns ["" and the shop state after] when it
 ## worked (the caller takes the item from the hand), or [why, the shop state unchanged] when it cannot be used here.
 static func _use_item(s: RunState, sh: Shop.ShopState, sh0: Shop.ShopState, players: Array[RunPlayer], p: RunPlayer, i: PlayerInput, item: String, t: float, events: Array[Dictionary]) -> Array:
@@ -4654,7 +4879,7 @@ static func _use_item(s: RunState, sh: Shop.ShopState, sh0: Shop.ShopState, play
 			# Dropped at the feet, lit on every screen until shop.glow runs out. No rule reads its light.
 			n.seq += 1
 			var g := n.glows.duplicate()
-			g.append({"id": n.seq, "at": at, "until": t + Shop.glow_seconds(s.tuning), "by": p.id})
+			g.append({"id": n.seq, "at": at, "until": t + Shop.glow_seconds(s.tuning) * _light_duration_scale(s, p.id), "by": p.id})
 			n.glows = g
 			used["id"] = n.seq
 			used["at"] = at
@@ -4669,7 +4894,7 @@ static func _use_item(s: RunState, sh: Shop.ShopState, sh0: Shop.ShopState, play
 		"flash":
 			# One second of looking from where they stand, even in the dark (the Stillness step reads it).
 			var fl := n.flashes.duplicate()
-			fl[p.id] = t + Shop.FLASH_SECONDS
+			fl[p.id] = t + Shop.FLASH_SECONDS * _light_duration_scale(s, p.id)
 			n.flashes = fl
 			used["until"] = fl[p.id]
 		"salts":

@@ -96,7 +96,7 @@ const tapeSeen = new Set();
 const watchTape = (label, s) => { if (scr(s).screen === 'tape' || scr(s).tapePlaying) tapeSeen.add(label); return s; };
 
 // ---- The server.
-const server = launch(['--headless', '--path', project, 'res://server/server.tscn', '--', 'server', `port=${port}`, 'bind=127.0.0.1', `seed=${seed}`, 'quota=0'], { env: { GD_JOIN_SECRET: SECRET }, echo: 'server' });
+const server = launch(['--headless', '--path', project, 'res://server/server.tscn', '--', 'server', `port=${port}`, 'bind=127.0.0.1', `seed=${seed}`, 'quota=0', 'orientation_campaign=0'], { env: { GD_JOIN_SECRET: SECRET }, echo: 'server' });
 await until(async () => server.lines.join('\n'), (t) => t.includes('listening on') || server.exited, 30000);
 if (!server.lines.join('\n').includes('listening on')) { console.log('the server did not start'); process.exit(1); }
 

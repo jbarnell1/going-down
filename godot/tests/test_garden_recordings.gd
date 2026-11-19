@@ -108,3 +108,28 @@ func _bone_rotation_track(clip: Animation, bone: String) -> int:
 		if clip.track_get_type(track) == Animation.TYPE_ROTATION_3D and str(clip.track_get_path(track).get_concatenated_subnames()) == bone:
 			return track
 	return -1
+
+func test_hush_has_a_measurable_lead_before_the_keeper_is_shown(t: T) -> void:
+	var keeper := Keeper.new()
+	var scene := Engine.get_main_loop() as SceneTree
+	scene.root.add_child(keeper)
+	var pose := {"x": 0, "y": 0, "z": 0, "yaw": 0, "anim": "idle", "animTime": 0.0}
+	keeper.show_pose(pose, true)
+	t.check(keeper.has_acoustic_pose() and not keeper.visible, "the host pose is already available to the hush while the mesh is hidden")
+	keeper.heard_hush(1.0, 1.0)
+	keeper.show_pose(pose, true)
+	t.check(not keeper.visible, "ordinary ambience cannot reveal the keeper")
+	keeper._clink()
+	t.eq(keeper._clink_next, 0, "the first warning also comes before a moving badge cue")
+	keeper.heard_hush(0.6, 0.10)
+	keeper.show_pose(pose, true)
+	t.check(not keeper.visible, "the first tenth of a second of hush still precedes sight")
+	keeper._clink()
+	t.eq(keeper._clink_next, 1, "a recorded badge cue can follow the environmental warning")
+	keeper.heard_hush(0.6, 0.11)
+	keeper.show_pose(pose, true)
+	t.check(keeper.visible, "after the acoustic lead, the same real pose can be seen")
+	keeper.heard_hush(1.0, 1.0)
+	keeper.show_pose(pose, true)
+	t.check(keeper.visible, "the first warning only gates first sight, without hiding the figure again")
+	keeper.free()

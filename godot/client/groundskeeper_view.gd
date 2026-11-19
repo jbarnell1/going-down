@@ -14,6 +14,9 @@ const BLADE_CONTACT := 0.20
 const SNATCH_IMPACT := 0.085   # Seconds from the decoded start to the impact in both takes.
 const SHEARS_IMPACT := 0.149
 const LEAN_HOLD := 2.5
+## The environmental warning leads the first sight of this resident on each floor.
+const HUSH_LEAD := 0.20
+const HUSH_AUDIBLE := 0.75
 
 var drawn := {}
 var _last := Vector3.INF
@@ -23,6 +26,7 @@ var _last_us := 0
 var _anim := ""
 var _struck := false
 var _recovering := false
+var _hush_lead := 0.0
 
 var _model: Node3D
 var _player: AnimationPlayer
@@ -88,6 +92,7 @@ func reset() -> void:
 	_recovering = false
 	_last_us = 0
 	drawn = {}
+	_hush_lead = 0.0
 	_struck = false
 	visible = false
 	_quiet()
@@ -131,6 +136,15 @@ func look() -> Dictionary:
 	assets["anim"] = _anim
 	return assets
 
+## Acoustics use the host pose even before there is a visible model.
+func has_acoustic_pose() -> bool:
+	return _last != Vector3.INF
+
+func heard_hush(gain: float, dt: float) -> void:
+	if _hush_lead >= HUSH_LEAD:
+		return
+	_hush_lead = _hush_lead + dt if gain <= HUSH_AUDIBLE and has_acoustic_pose() else 0.0
+
 func show_pose(pose: Variant, show: bool) -> void:
 	if pose == null:
 		visible = false
@@ -157,7 +171,7 @@ func show_pose(pose: Variant, show: bool) -> void:
 	drawn = pd
 	position = p
 	rotation = Vector3(0, float(pd["yaw"]) + PI, 0)
-	visible = show and _model != null
+	visible = show and _model != null and _hush_lead >= HUSH_LEAD
 	var changed := anim != _anim
 	if changed:
 		_recovering = anim == "idle" and _anim == "lean"
@@ -178,6 +192,9 @@ func show_pose(pose: Variant, show: bool) -> void:
 	_sounds(anim, t, dt)
 
 func _clink() -> void:
+	# The first environmental warning has to come ahead of a badge sound as well as the rig.
+	if _hush_lead <= 0.0:
+		return
 	var recording := _garden_audio.next("badge")
 	if recording == null:
 		return

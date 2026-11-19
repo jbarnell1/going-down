@@ -35,7 +35,7 @@ const HAND_REACH := 1.5
 ## The item ids the rules know, in wire order (net/protocol.gd sends the index). data/items.json names them and
 ## says which can be used; tests/prop_inventory.gd checks the two agree.
 ## The shop's six (sim/shop.gd ITEMS, S2) follow the two found ones.
-const ITEMS: Array[String] = ["juice", "badge", "marker", "glow", "flash", "speed", "toy", "salts", "pinecone"]
+const ITEMS: Array[String] = ["juice", "badge", "marker", "glow", "flash", "speed", "toy", "salts", "pinecone", "flare"]
 const DATA_PATH := "res://data/items.json"
 const EPS := 1e-9
 
@@ -164,6 +164,19 @@ static func remove_one(bag: Bag, k: int) -> Bag:
 	var n := b.count(k) - 1
 	b.slots[k] = [b.item(k) if n > 0 else "", n]
 	return b
+
+## Consumes exactly n of an item, across slots. Null means the original bag had too few.
+static func spend(bag: Bag, item: String, n: int) -> Bag:
+	var b := bag.copy()
+	var left := n
+	for k in SLOTS:
+		if b.item(k) != item or left <= 0:
+			continue
+		var take := mini(left, b.count(k))
+		var remain := b.count(k) - take
+		b.slots[k] = [item if remain > 0 else "", remain]
+		left -= take
+	return b if left == 0 else null
 
 ## The bag with slot `k` emptied.
 static func clear_slot(bag: Bag, k: int) -> Bag:

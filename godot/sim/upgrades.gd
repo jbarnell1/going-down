@@ -41,6 +41,9 @@ const DATA_PATH := "res://data/upgrades.json"
 
 static var _nodes: Array[Dictionary] = []
 static var _induction: Dictionary = {}
+static var _trade: Dictionary = {}
+
+enum TradeOffer { AVAILABLE, LEARNED, UNDO, WRONG_TRADE, NEEDS_INDUCTION }
 static var _extra_per_owned: int = 1
 
 class UpgradeState:
@@ -86,6 +89,7 @@ static func _load() -> void:
 		return
 	var data: Dictionary = parsed
 	_induction = data.get("induction", {})
+	_trade = data.get("trade", {})
 	var pricing: Dictionary = data.get("pricing", {})
 	_extra_per_owned = int(pricing.get("extra_per_owned", 1))
 	for n: Variant in data.get("nodes", []):
@@ -101,15 +105,80 @@ static func node(id: String) -> Dictionary:
 	for n in nodes():
 		if String(n["id"]) == id:
 			return n
-	return _induction.get(id, {})
+	return _induction.get(id, _trade.get(id, {}))
 
 static func induction_node(id: String) -> Dictionary:
 	_load()
 	return _induction.get(id, {})
 
+static func trade_node(id: String) -> Dictionary:
+	_load()
+	return _trade.get(id, {})
+
+static func training_node(id: String) -> Dictionary:
+	var n := induction_node(id)
+	return trade_node(id) if n.is_empty() else n
+
+## Trade identity survives a gap in induction as long as at least one bought trade node remains.
+static func trade_of(owned: Array) -> String:
+	for id: String in owned:
+		var n := trade_node(id)
+		if not n.is_empty():
+			return str(n["trade"])
+	return ""
+
+static func trade_branch(owned: Array) -> String:
+	for id: String in owned:
+		var n := trade_node(id)
+		if not n.is_empty():
+			return str(n["branch"])
+	return ""
+
+static func trade_seniority(owned: Array, branch: String) -> int:
+	var steps := 0
+	for id: String in owned:
+		if trade_node(id).get("branch", "") == branch:
+			steps += 1
+	return steps
+
+static func loss_pool(owned: Array[String]) -> Array[String]:
+	var branch := trade_branch(owned)
+	var eligible: Array[String] = []
+	for id in owned:
+		var n := training_node(id)
+		if (branch.is_empty() and int(n.get("layer", 0)) == 1) or (not branch.is_empty() and n.get("branch", "") == branch):
+			eligible.append(id)
+	return eligible
+
+static func trade_offer(s: UpgradeState, id: String) -> TradeOffer:
+	if s.owned.has(id):
+		return TradeOffer.UNDO if s.last_id == id else TradeOffer.LEARNED
+	var n := trade_node(id)
+	var trade := trade_of(s.owned)
+	if not trade.is_empty() and trade != str(n.get("trade", "")):
+		return TradeOffer.WRONG_TRADE
+	if not s.owned.has(str(n.get("requires", ""))):
+		return TradeOffer.NEEDS_INDUCTION
+	return TradeOffer.AVAILABLE
+
+static func buy_trade(s: UpgradeState, id: String, carried_badges: int) -> UpResult:
+	var n := trade_node(id)
+	var cost := int(n.get("badge_cost", 0))
+	if cost <= 0:
+		return _refuse(s, "unknown")
+	match trade_offer(s, id):
+		TradeOffer.WRONG_TRADE:
+			return _refuse(s, "trade")
+		TradeOffer.NEEDS_INDUCTION:
+			return _refuse(s, "needs")
+		TradeOffer.AVAILABLE:
+			if carried_badges < cost:
+				return _refuse(s, "badges")
+	return _buy(s, id, n, 0)
+
 static func price_of(id: String, owned_count: int, share: int) -> int:
 	var n := node(id)
-	if n.is_empty():
+	if n.is_empty() or not trade_node(id).is_empty():
 		return 0
 	var surcharge := 0 if int(n.get("layer", 0)) == 1 else _extra_per_owned * owned_count
 	return (int(n["price_shares"]) + surcharge) * share
@@ -120,6 +189,8 @@ static func add_credits(s: UpgradeState, amount: int) -> UpgradeState:
 	return t
 
 static func buy(s: UpgradeState, id: String, share: int) -> UpResult:
+	if not trade_node(id).is_empty():
+		return _refuse(s, "unknown")
 	var n := node(id)
 	return _buy(s, id, n, price_of(id, s.owned.size(), share))
 

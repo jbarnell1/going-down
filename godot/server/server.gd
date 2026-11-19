@@ -98,16 +98,20 @@ func _ready() -> void:
 	# The game's deck, as every client's (client/main.gd); the room gives it to each run.
 	Session.deck = Places.FULL
 	_room = Room.new(_ws, say)
+	_room.badge_search = bind == "127.0.0.1" and args.get("badge_search", "0") == "1"
+	_room.long_burn = bind == "127.0.0.1" and args.get("long_burn", "0") == "1"
+	_room.quick_fingers = bind == "127.0.0.1" and args.get("quick_fingers", "0") == "1"
 	_room.orientation_review = bind == "127.0.0.1" and args.get("orientation", "0") == "1"
-	_room.orientation_campaign = not _room.orientation_review and bind == "127.0.0.1" and args.get("orientation_campaign", "0") == "1"
+	var explicit_course: bool = args.get("orientation_campaign", "") == "1"
 	if not _room.orientation_review:
 		var save := SaveSlip.key_from_env()
 		if save.ok:
 			_room.enable_stamped_profiles(save.key)
 	_room.fixed_seed = args.get("seed", "")
-	var other_reviews := not _room.orientation_review and not _room.orientation_campaign and bind == "127.0.0.1"
+	var other_reviews := not _room.orientation_review and not explicit_course and bind == "127.0.0.1"
 	_room.ward_review = other_reviews and args.get("ward_review", "0") == "1"
 	_room.reactor_review = other_reviews and not _room.ward_review and args.get("reactor_review","0")=="1"
+	_room.orientation_campaign = not (_room.orientation_review or _room.ward_review or _room.reactor_review) and args.get("orientation_campaign", "1") == "1"
 	if _room.reactor_review:
 		_room.reactor_archive_path = "user://reactor-campaigns/"+str(args.get("reactor_campaign","owner-review")).sha256_text()
 	if args.has("depth"):
