@@ -40,6 +40,7 @@ const Rng = preload("res://sim/rng.gd")
 const DATA_PATH := "res://data/upgrades.json"
 
 static var _nodes: Array[Dictionary] = []
+static var _induction: Dictionary = {}
 static var _extra_per_owned: int = 1
 
 class UpgradeState:
@@ -84,6 +85,7 @@ static func _load() -> void:
 		push_error("upgrades.json did not load")
 		return
 	var data: Dictionary = parsed
+	_induction = data.get("induction", {})
 	var pricing: Dictionary = data.get("pricing", {})
 	_extra_per_owned = int(pricing.get("extra_per_owned", 1))
 	for n: Variant in data.get("nodes", []):
@@ -99,13 +101,18 @@ static func node(id: String) -> Dictionary:
 	for n in nodes():
 		if String(n["id"]) == id:
 			return n
-	return {}
+	return _induction.get(id, {})
+
+static func induction_node(id: String) -> Dictionary:
+	_load()
+	return _induction.get(id, {})
 
 static func price_of(id: String, owned_count: int, share: int) -> int:
 	var n := node(id)
 	if n.is_empty():
 		return 0
-	return (int(n["price_shares"]) + _extra_per_owned * owned_count) * share
+	var surcharge := 0 if int(n.get("layer", 0)) == 1 else _extra_per_owned * owned_count
+	return (int(n["price_shares"]) + surcharge) * share
 
 static func add_credits(s: UpgradeState, amount: int) -> UpgradeState:
 	var t := s.copy()
@@ -114,6 +121,13 @@ static func add_credits(s: UpgradeState, amount: int) -> UpgradeState:
 
 static func buy(s: UpgradeState, id: String, share: int) -> UpResult:
 	var n := node(id)
+	return _buy(s, id, n, price_of(id, s.owned.size(), share))
+
+static func buy_induction(s: UpgradeState, id: String, share: int) -> UpResult:
+	var n := induction_node(id)
+	return _buy(s, id, n, int(n.get("price_shares", 0)) * share)
+
+static func _buy(s: UpgradeState, id: String, n: Dictionary, price: int) -> UpResult:
 	if n.is_empty():
 		return _refuse(s, "unknown")
 	if s.owned.has(id):
@@ -123,7 +137,6 @@ static func buy(s: UpgradeState, id: String, share: int) -> UpResult:
 	var need: Variant = n.get("requires", null)
 	if need != null and not s.owned.has(String(need)):
 		return _refuse(s, "needs")
-	var price := price_of(id, s.owned.size(), share)
 	if price > s.credits:
 		return _refuse(s, "poor")
 	var t := s.copy()

@@ -467,8 +467,7 @@ static func prompt_for(cell: Vector2i) -> String:
 			return "F  CHANGE YOUR FACE"
 	return ""
 
-## The prompt tonight: the teller windows are closed (buying comes with T18l and the rules ignore F
-## there), so they say so; the kiosk is open.
+## The fallback when a window is unavailable. The face kiosk remains open.
 static func tonight_prompt_for(cell: Vector2i) -> String:
 	match Prison.station_at(cell):
 		&"shop":
@@ -510,9 +509,13 @@ func _kiosk() -> void:
 	set_kiosk_face("")
 	_plate("KioskSign", "YOUR FACE", wall + out * 0.012 + Vector3(0, 2.12, 0), out, 0.16, Color(0.86, 0.84, 0.74), Color(0.08, 0.08, 0.08), 0.15)
 
-## The shop (S2): with it on, windows 1 and 2 (Prison.SHOP_WINDOWS) lose their CLOSED TONIGHT cards; 3 and 4 keep theirs.
-func set_shop_open(on: bool) -> void:
-	for n in Prison.SHOP_WINDOWS:
+## Display each service's current hours on the cards behind the glass.
+func set_shop_open(on: bool, skills_open := false) -> void:
+	_set_window_cards(Prison.SHOP_WINDOWS, on)
+	_set_window_cards(Prison.SKILLS_WINDOWS, skills_open)
+
+func _set_window_cards(windows: Array[int], on: bool) -> void:
+	for n in windows:
 		var card := lv.get_node_or_null("WindowClosed_%d" % n) as Node3D
 		if card != null and card.visible == on:
 			card.visible = not on
@@ -660,7 +663,7 @@ func _bank_room(r: Dictionary) -> void:
 		_box(_steel_dark, Vector3(px, 1.58, gz + 0.3), Vector3(0.16, 0.16, 0.02))
 		window_centres.append(Vector3(px, 1.6, gz + 0.3))
 		_plate("WindowNumber_%d" % (i + 1), str(i + 1), Vector3(px, 2.64, gz + 0.3 - 0.06), Vector3(0, 0, -1), 0.24, BRASS, Color(0.12, 0.08, 0.03), 0.2)
-		# Buying is not wired yet (T18l): every window says so, on a card hung inside the glass.
+		# This card is removed while the service is open.
 		_plate("WindowClosed_%d" % (i + 1), CLOSED_TEXT, Vector3(px, 1.92, gz + 0.3 - 0.015), Vector3(0, 0, -1), 0.11, Color(0.86, 0.84, 0.74), Color(0.55, 0.08, 0.05), 0.2)
 	_box(_brass, Vector3(cx, gy1 + 0.03, gz + 0.3), Vector3(x1 - x0, 0.06, 0.08))
 	_box(_wood, Vector3(cx, (gy1 + 0.06 + Level.LH) * 0.5, gz + 0.3), Vector3(x1 - x0, Level.LH - gy1 - 0.06, 0.1))
@@ -798,11 +801,11 @@ static func _named(text: String, names: Dictionary) -> String:
 	return t.replace(",", " /")
 
 ## Writes `lines` on the report board (in the bank room).
-func show_report(lines: Array[String]) -> void:
+func show_report(lines: Array[String], practice_paid := false) -> void:
 	if lines == report_lines or report_board_image == null:
 		return
 	report_lines = lines.duplicate()
-	_write(report_board_image, report_board_texture, lines)
+	_write(report_board_image, report_board_texture, lines, 1, practice_paid)
 
 ## Writes `lines` on the day board (in the hall, by the lift).
 func show_day_board(lines: Array[String]) -> void:
@@ -811,10 +814,16 @@ func show_day_board(lines: Array[String]) -> void:
 	day_board_lines = lines.duplicate()
 	_write(day_board_image, day_board_texture, lines, 2 if lines.size() <= 4 else 1)
 
-func _write(img: Image, tex: ImageTexture, lines: Array[String], sc := 1) -> void:
+func _write(img: Image, tex: ImageTexture, lines: Array[String], sc := 1, compact := false) -> void:
 	img.fill(SCREEN)
+	var stride := BOARD_LINE * sc
+	var top := BOARD_PAD
+	if compact and lines.size() > 1:
+		var rows := lines.size() - 1
+		stride = clampi(floori(float(img.get_height() - 7 - BOARD_PAD) / rows), 7, stride)
+		top = clampi(img.get_height() - 7 - rows * stride, 0, BOARD_PAD)
 	for i in lines.size():
-		var y := BOARD_PAD + i * BOARD_LINE * sc
+		var y := top + i * stride
 		if y + 7 * sc > img.get_height():
 			break
 		PixelFont.blit(img, lines[i], Vector2i(BOARD_PAD, y), BOARD_HEAD if i == 0 else BOARD_INK, Vector2i(sc, sc))

@@ -152,6 +152,7 @@ var fixed_seed := ""
 var first_depth := 1
 ## Explicit safe practice room. Ordinary rooms keep the existing campaign sequence.
 var orientation_review := false
+var orientation_campaign := false
 var ward_review := false
 ## The day loop in the next run (the game's; tests may turn it off).
 var days := true
@@ -187,6 +188,9 @@ var findables := true
 var inventory := true
 ## The shop and the cabinet in the next run (the game's; tests may turn it off: sim/run.gd shop, S2).
 var shop := true
+var deep_pockets := true
+var second_wind := true
+var soft_shoes := true
 ## The nightly tapes on the ride up (T24).
 var nightly_reels := true
 ## Tick cost, for the log: total and worst microseconds, and ticks.
@@ -240,6 +244,10 @@ func _lobby_text(now: float) -> String:
 		lobby["gardenDense"] = true
 	if orientation_review:
 		lobby["orientation"] = true
+	if host != null and host.state.orientation_resume != null:
+		lobby["orientationPrelude"] = true
+	if host != null and host.state.orientation_paid > 0:
+		lobby["orientationPaid"] = host.state.orientation_paid
 	return "m|" + JSON.stringify(lobby)
 
 ## The players a run starting now takes: the ready ones, in arrival order.
@@ -380,9 +388,11 @@ func _start(now: float) -> void:
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
 	var q := quota and not HostRules.quota_off_by_arg(false)
 	# The day quota's lock goes with the floor quota (net/host_rules.gd): quota=0 turns both off.
-	rules = HostRules.new(not (ward_review or reactor_review), first_depth, Places.deck_for_start_depth(first_depth), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop, nightly_reels, true, true)
+	rules = HostRules.new(not (ward_review or reactor_review), first_depth, Places.deck_for_start_depth(first_depth), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop, nightly_reels, true, true, deep_pockets and not (ward_review or reactor_review), second_wind, soft_shoes)
 	if orientation_review:
 		rules.enable_orientation()
+	elif orientation_campaign:
+		rules.enable_orientation_prelude()
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
 	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))

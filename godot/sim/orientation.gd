@@ -7,6 +7,9 @@ const Move = preload("res://sim/move.gd")
 const Rng = preload("res://sim/rng.gd")
 
 const PLACE := &"orientation"
+## The paid deck keeps its own depths. A prelude has no day block and uses this separate stop.
+const PRELUDE_DEPTH := 0
+const PRELUDE_RIDE_SECONDS := 3.0
 const WIDTH := 11
 const HEIGHT := 10
 const CELL := 2
@@ -18,6 +21,8 @@ const REARM_DISTANCE := 1.1
 const SPEED := 0.9
 const PAY_SCALE := 0.025
 const QUOTA := 1
+const STANDEE_BAYS := [Vector2(8.65, 14.2), Vector2(13.35, 10.8)]
+const STANDEES_UNTRIGGERED := Vector2(-1.0, -1.0)
 static var _target_body: Entity.BodySettings
 
 static func generate(seed: String, depth: int) -> Floor.FloorPlan:
@@ -41,6 +46,15 @@ static func generate(seed: String, depth: int) -> Floor.FloorPlan:
 	plan.entity_start = Floor.Pos.make(0, target_column, TARGET_ROW)
 	plan.sightlines = Floor.find_sightlines(plan, 3)
 	return plan
+
+## Stepping into a marked stretch of the corridor trips its physical rehearsal prop once per run.
+static func trigger_standees(stamps: Vector2, body: Move.Body, at: float) -> Vector2:
+	if body.level != 0 or absf(body.x - (CENTRE + 0.5) * CELL) > 2.6:
+		return stamps
+	for slot in STANDEE_BAYS.size():
+		if stamps[slot] < 0.0 and absf(body.z - STANDEE_BAYS[slot].y) <= 0.9:
+			stamps[slot] = at
+	return stamps
 
 static func target_body() -> Entity.BodySettings:
 	if _target_body == null:

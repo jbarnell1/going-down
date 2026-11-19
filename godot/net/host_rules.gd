@@ -125,16 +125,24 @@ var resident_navigation: bool
 var shop: bool
 var garden_cones: bool
 var garden_search: bool
+var deep_pockets: bool
+var second_wind: bool
+var soft_shoes: bool
 var nightly_reels: bool
 var orientation := false
+var orientation_prelude := false
 
 func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false,
 		watchers_: bool = false, relocation_: bool = false, long_dark_: bool = false, paced_: bool = false, car_waits_: bool = false,
 		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false, furniture_: bool = false, findables_: bool = false,
 		inventory_: bool = false, furniture_layout_: bool = false, resident_navigation_: bool = false,
-		shop_: bool = false, nightly_reels_: bool = false, garden_cones_: bool = false, garden_search_: bool = false) -> void:
+		shop_: bool = false, nightly_reels_: bool = false, garden_cones_: bool = false, garden_search_: bool = false,
+		deep_pockets_: bool = false, second_wind_: bool = false, soft_shoes_: bool = false) -> void:
 	garden_cones = garden_cones_
 	garden_search = garden_search_
+	deep_pockets = deep_pockets_
+	second_wind = second_wind_
+	soft_shoes = soft_shoes_
 	nightly_reels = nightly_reels_
 	shop = shop_
 	inventory = inventory_
@@ -162,6 +170,10 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 func enable_orientation() -> void:
 	orientation = true
 	deck = Places.ORIENTATION_ONLY
+
+## Explicit candidate route before a normal paid campaign begins.
+func enable_orientation_prelude() -> void:
+	orientation_prelude = _depth == 1 and days and _entity_on
 
 ## Where player `i` of `n` stands in the car at the start (car-local u, v).
 static func start_spot(i: int, n: int) -> PackedFloat64Array:
@@ -264,13 +276,20 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_resident_navigation(s)
 	if shop and s.inventory and not s.shop:
 		s = Run.with_shop(s)
+	if deep_pockets and s.shop and s.days and not s.deep_pockets:
+		s = Run.with_deep_pockets(s)
+	if second_wind and s.deep_pockets and not s.second_wind:
+		s = Run.with_second_wind(s)
+	if soft_shoes and s.deep_pockets and not s.soft_shoes:
+		s = Run.with_soft_shoes(s)
 	if garden_cones and deck.has(Places.ARBORETUM) and s.inventory and not s.garden_cones:
 		s = Run.with_garden_cones(s)
 	if garden_search and deck.has(Places.ARBORETUM) and s.findables and not s.garden_search:
 		s = Run.with_garden_search(s)
 	if nightly_reels and s.days:
 		s = Run.with_nightly_reels(s)
-	return _capped(s)
+	s = _capped(s)
+	return Run.with_orientation(s, true) if orientation_prelude else s
 
 ## Test-only: `quota=N` (a whole number above 0, as a desktop or server argument after `--` or the web
 ## page's ?quota=N), honoured only together with `auto=1`: every floor's quota is at most N credits, so a

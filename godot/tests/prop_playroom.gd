@@ -583,3 +583,14 @@ func test_room_count(t: T) -> void:
 		least = mini(least, f.plan.rooms.size())
 		t.check(f.plan.rooms.size() <= 80, "%s: %d rooms" % [_key(f.plan), f.plan.rooms.size()])
 	t.note("%d floors: %d to %d rooms" % [fs.size(), least, most])
+
+func test_playroom_view_uses_the_floor_and_hides_already_on_the_client(t: T) -> void:
+	var plan := Playroom.generate_playroom("arrival-a", 4)
+	var hides := Playroom.hides(plan, plan.seed)
+	var level := preload("res://client/level.gd").new()
+	var car := preload("res://sim/run.gd").car_geometry(plan)
+	level.build(preload("res://client/plan_dump.gd").dump(plan, car), plan.seed, plan, hides)
+	var view: Node = level.get_meta("playroom")
+	t.check(is_same(view.get("fp"), plan), "the Playroom draws the same floor plan that the client accepted")
+	t.check(is_same(view.get("hides"), hides), "the Playroom draws the client's ordered hiding places")
+	level.free()

@@ -99,6 +99,7 @@ var count_left := -1.0
 var my_ready := false
 var without_ok := false
 var run_depth := -1
+var run_practice := false
 ## The orientation tape: seen by this player on this PC; kept in TAPE_SAVE (false under automation: never
 ## read or written, like the hints' record); the player while it plays.
 var tape_seen := false
@@ -546,7 +547,7 @@ static func crew_state(row: Array) -> String:
 ## The line over the crew: the count, the late joiner's wait, or nothing.
 func status_line() -> String:
 	if run_depth >= 0:
-		var where := "IN THE PRISON" if run_depth == 0 else "ON FLOOR %d" % run_depth
+		var where := "ON THE PRACTICE FLOOR" if run_practice else ("IN THE PRISON" if run_depth == 0 else "ON FLOOR %d" % run_depth)
 		return "THE CREW IS %s. YOU JOIN AT THE NEXT STOP." % where
 	if count_left >= 0.0:
 		return "GOING DOWN IN %d" % maxi(1, ceili(count_left))

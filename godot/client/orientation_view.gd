@@ -8,6 +8,11 @@ const BLUE := Color("#233b6a")
 const YELLOW := Color("#f0c84b")
 const BOARD := Color("#b48957")
 const STEEL := Color("#393c38")
+const STANDEE_CLICK = preload("res://assets/sfx/annex/staple_soft.ogg")
+const POP_LEAD := 0.16
+const POP_TIME := 0.29
+const FALL_BEGINS := 0.76
+const FALL_TIME := 0.36
 
 var _face: MeshInstance3D
 var _face_code := " "
@@ -48,16 +53,77 @@ static func _sign(parent: Node3D, at: Vector3, yaw: float, title: String, instru
 	body.position = Vector3(0, -0.10, 0.023)
 	panel.add_child(body)
 
-static func dress(parent: Node3D) -> void:
+static func dress(parent: Node3D, prelude := false) -> void:
 	var x := (Orientation.CENTRE + 0.5) * Orientation.CELL
 	var end := Orientation.LANDING_ROW * Orientation.CELL
-	_sign(parent, Vector3(x, 1.86, 2.10), 0.0, "CONTINUANCE PRACTICE", "WALK: W A S D\nLOOK: MOUSE")
+	var cue_z := end - 1.6
+	# Face the lift from the first open part of the corridor, above the taped path.
+	_sign(parent, Vector3(x, 2.68, cue_z), 0.0, "CONTINUANCE PRACTICE", "FOLLOW THE YELLOW TAPE\nW A S D: WALK   MOUSE: LOOK")
+	for side: float in [-1.0, 1.0]:
+		_box(parent, Vector3(x + side * 0.80, 3.13, cue_z), Vector3(0.045, 0.15, 0.045), STEEL)
 	_sign(parent, Vector3(x + 2.91, 1.72, end - 3.0), -PI / 2.0, "TAKE A READING", "E: TAKE OUT THE INSTRUMENT\nHOLD RIGHT MOUSE TO RECORD")
 	_sign(parent, Vector3(x - 2.91, 1.72, end - 6.0), PI / 2.0, "WATCH THE NEEDLE", "CHANGE VIEW IF THE NEEDLE STAYS STILL\nGIVE THE CART ROOM IF IT HONKS")
-	_sign(parent, Vector3(x + 2.91, 1.72, end - 0.9), -PI / 2.0, "BRING IT BACK", "EARN 1 PRACTICE CREDIT. F: CALL THE LIFT\nSTAND ON BANK TO FINISH")
+	var bank := "BANK PRACTICE PAY TO ENTER THE CLINIC" if prelude else "STAND ON BANK TO FINISH"
+	_sign(parent, Vector3(x + 2.91, 1.72, end - 0.9), -PI / 2.0, "BRING IT BACK", "EARN 1 PRACTICE CREDIT. F: CALL THE LIFT\n" + bank)
 	for row in range(3, Orientation.LANDING_ROW):
 		for side: float in [-1.0, 1.0]:
 			_box(parent, Vector3(x + side * 0.95, 0.009, (row + 0.5) * Orientation.CELL), Vector3(0.10, 0.014, 1.25), YELLOW)
+	_add_standees(parent)
+
+static func _add_standees(parent: Node3D) -> void:
+	var props: Array[Dictionary] = []
+	for id in Orientation.STANDEE_BAYS.size():
+		var bay: Vector2 = Orientation.STANDEE_BAYS[id]
+		var side := -1.0 if id == 0 else 1.0
+		var base := Node3D.new()
+		base.position = Vector3(bay.x, 0.0, bay.y)
+		parent.add_child(base)
+		_box(base, Vector3(0.0, 0.10, 0.0), Vector3(0.62, 0.20, 0.40), STEEL)
+		_box(base, Vector3(0.0, 0.13, 0.206), Vector3(0.50, 0.04, 0.016), YELLOW)
+		var card := Node3D.new()
+		card.visible = false
+		base.add_child(card)
+		_box(card, Vector3(0.0, 0.60, 0.0), Vector3(0.57, 1.05, 0.036), BOARD)
+		_box(card, Vector3(0.0, 1.25, 0.0), Vector3(0.38, 0.39, 0.036), BOARD)
+		_box(card, Vector3(0.0, 1.43, 0.0), Vector3(0.43, 0.13, 0.052), YELLOW)
+		_box(card, Vector3(0.0, 0.80, 0.023), Vector3(0.53, 0.26, 0.013), BLUE)
+		var arm := _box(card, Vector3(side * 0.27, 1.11, 0.0), Vector3(0.14, 0.64, 0.036), BOARD)
+		arm.rotation.z = -side * 0.62
+		for eye: float in [-0.075, 0.075]:
+			_box(card, Vector3(eye, 1.27, 0.025), Vector3(0.045, 0.058, 0.012), STEEL)
+		var latch := AudioStreamPlayer3D.new()
+		latch.stream = STANDEE_CLICK
+		latch.volume_db = -10.0
+		latch.bus = &"Effects"
+		latch.max_distance = 9.0
+		base.add_child(latch)
+		props.append({"card": card, "latch": latch, "played": false})
+	parent.set_meta(&"orientation_standees", props)
+
+## Shared host times animate the boards. A late visitor sees the settled pose without replaying the sound.
+static func show_standees(parent: Node3D, stamps: Variant, now: float) -> void:
+	if not stamps is Array:
+		return
+	var props: Array = parent.get_meta(&"orientation_standees", [])
+	for id in props.size():
+		var at := float(stamps[id])
+		if at < 0.0 or now < at:
+			continue
+		var age := now - at
+		var prop: Dictionary = props[id]
+		var card: Node3D = prop["card"]
+		if not prop["played"]:
+			prop["played"] = true
+			if age < POP_LEAD:
+				(prop["latch"] as AudioStreamPlayer3D).play()
+		card.visible = age >= POP_LEAD
+		var rise := clampf((age - POP_LEAD) / POP_TIME, 0.0, 1.0)
+		var lift := 1.0 - (1.0 - rise) * (1.0 - rise)
+		card.position = Vector3((0.39 if id == 0 else -0.39) * lift, lerpf(-1.3, 0.13, lift), 0.0)
+		if id == 1:
+			var fall := clampf((age - FALL_BEGINS) / FALL_TIME, 0.0, 1.0)
+			card.rotation.x = -PI * 0.5 * fall * fall
+			card.position.y -= 0.08 * fall
 
 func _ready() -> void:
 	_box(self, Vector3(0, 0.21, 0), Vector3(0.64, 0.14, 0.5), BLUE)

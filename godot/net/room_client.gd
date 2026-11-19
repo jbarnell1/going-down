@@ -29,6 +29,8 @@ var host_id := ""
 var start_at := -1.0
 var without_at := -1.0
 var run_depth := -1
+var orientation_active := false
+var orientation_paid := 0
 ## What this client last said: ready, and watching the tape.
 var my_ready := false
 var my_tape := false
@@ -266,11 +268,14 @@ func _on_text(text: String, now: float) -> void:
 				start_at = now + (sa - srv) if sa >= 0.0 else -1.0
 				without_at = now + (wa - srv) if wa >= 0.0 else -1.0
 				run_depth = int(p.get("depth", -1))
+				orientation_active = p.get("orientationPrelude") == true
+				orientation_paid = maxi(0, int(p.get("orientationPaid", 0)))
 				if was_on and not run_on:
 					# Back on the Ready-up screen: the server has forgotten everyone's ready.
 					my_ready = false
 				if run_on and epoch > _epoch_joined:
 					_join_run(epoch, now, p.get("garden"), p.get("gardenDense") == true, p.get("orientation") == true)
+					client.orientation_prelude = orientation_active
 				elif not run_on and client != null:
 					client = null
 					_pipe = null

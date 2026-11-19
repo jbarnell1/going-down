@@ -17,6 +17,7 @@ const PAGE_COLS := 34
 
 ## The note or page open now ("" for none), the ones read tonight in the order first read, the list shown.
 var open_id := ""
+var wall_text := ""
 var read: Array[String] = []
 var list_on := false
 ## Set by main.gd each frame: the Esc menu is up; the prompt is shown; the second line, the result, the cartons.
@@ -44,12 +45,22 @@ func open(id: String) -> void:
 	if Findables.note_lines(id).is_empty():
 		return
 	open_id = id
+	wall_text = ""
 	list_on = false
 	if not read.has(id):
 		read.append(id)
 
+## An Annex sticky stays on its wall and is only readable here while deliberately held up.
+func open_wall(id: int, text: String) -> void:
+	if text.is_empty():
+		return
+	open_id = "annex-%d" % id
+	wall_text = text
+	list_on = false
+
 func close() -> void:
 	open_id = ""
+	wall_text = ""
 
 func is_open() -> bool:
 	return open_id != "" or list_on
@@ -71,7 +82,7 @@ func key(k: InputEventKey) -> bool:
 		return true
 	if menu_on and k.physical_keycode == KEY_N:
 		list_on = true
-		open_id = ""
+		close()
 		return true
 	return false
 
@@ -139,7 +150,7 @@ func _draw_carton(px: float) -> void:
 
 ## The slip of paper: a poem torn at the top, a page square with its writer under it.
 func _draw_card(px: float) -> void:
-	var lines := lines_of(open_id)
+	var lines := _open_lines()
 	var poem := Findables.is_poem(open_id)
 	var attribution := PackedStringArray() if poem else attribution_rows(open_id)
 	var cols := 0 if poem else PAGE_COLS
@@ -150,7 +161,8 @@ func _draw_card(px: float) -> void:
 	var h := (lines.size() * 11 + 26 + attribution.size() * 11) * lp
 	var at := Vector2(floorf((size.x - w) * 0.5), floorf((size.y - h) * 0.42))
 	draw_rect(Rect2(at + Vector2(3, 4) * px, Vector2(w, h)), Color(0, 0, 0, 0.5))
-	draw_rect(Rect2(at, Vector2(w, h)), PAPER if poem else PAPER_PAGE)
+	var paper := Color("#f0d985") if wall_text != "" else (PAPER if poem else PAPER_PAGE)
+	draw_rect(Rect2(at, Vector2(w, h)), paper)
 	if poem:
 		# The torn top edge.
 		var n := int(w / (4 * px))
@@ -188,6 +200,9 @@ func _draw_list(px: float) -> void:
 	for i in rows.size():
 		PixelFont.draw_shadowed(self, rows[i], at + Vector2(8, 8 + i * 12) * px, px, Color("#ffd27a") if i == 0 else Color("#f4f4ec"))
 
+func _open_lines() -> PackedStringArray:
+	return PixelFont.wrap(wall_text.to_upper(), PAGE_COLS) if wall_text != "" else lines_of(open_id)
+
 func describe() -> Dictionary:
-	return {"open": open_id, "lines": Array(lines_of(open_id)) if open_id != "" else [], "attribution": Array(attribution_rows(open_id)), "read": read.duplicate(), "list": list_on,
+	return {"open": open_id, "lines": Array(_open_lines()) if open_id != "" else [], "wallText": wall_text, "attribution": Array(attribution_rows(open_id)), "read": read.duplicate(), "list": list_on,
 		"prompt2": prompt2 if prompt_on else "", "result": result, "juice": juice}

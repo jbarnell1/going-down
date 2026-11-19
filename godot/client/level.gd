@@ -148,7 +148,7 @@ func build(p: Dictionary, seed_text: String, source_plan: FloorLib.FloorPlan = n
 		preload("res://client/annex_view.gd").dress(self, source_plan, source_hides)
 		return
 	if str(p.get("place", "clinic")) == "playroom":  # the Playroom's look (client/playroom_view.gd)
-		preload("res://client/playroom_view.gd").dress(self)
+		preload("res://client/playroom_view.gd").dress(self, source_plan, source_hides)
 		return
 	if str(p.get("place", "clinic")) == "arboretum":  # the Arboretum's look (client/arboretum_view.gd)
 		preload("res://client/arboretum_view.gd").dress(self, source_plan)
@@ -159,7 +159,7 @@ func build(p: Dictionary, seed_text: String, source_plan: FloorLib.FloorPlan = n
 	if str(p.get("place", "")) == "orientation":
 		_commit_chunks()
 		_build_lights()
-		preload("res://client/orientation_view.gd").dress(self)
+		preload("res://client/orientation_view.gd").dress(self, int(p["depth"]) == 0)
 		return
 	_build_stairs()
 	_build_furniture()

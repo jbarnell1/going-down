@@ -243,6 +243,7 @@ var host_stamina: Stamina.Stamina = null
 var draw_in_dark := false
 ## The room supplies the deck for this run. Direct rules tests use the session default.
 var floor_deck: Array[StringName] = []
+var orientation_prelude := false
 var garden_dense := false
 ## Live settings (docs/floors/live-settings.md LS2): the revision the host has in force (0: never tuned), and its
 ## list ({id: number}) as a tuning for this client's own predicted numbers (Settings.f; null for none). The
@@ -651,8 +652,13 @@ func _take_tune(w: Dictionary) -> void:
 
 ## The local player is on day `index` of the run: its seed is the one their floors are made from.
 func _set_day(index: int) -> void:
+	orientation_prelude = false
 	day_index = index
 	seed = Run.day_seed(str(base_seed), index)
+
+## The client's placed day separates the training stop from the later depth-zero prison.
+func placed_deck() -> Array[StringName]:
+	return Places.ORIENTATION_ONLY if orientation_prelude else floor_deck
 
 ## The day index of a snapshot (this player's own day when the run has no days).
 func _day_of(w: Dictionary) -> int:
@@ -837,7 +843,7 @@ func frame(now: float, local: LocalFrame) -> Frame:
 			_pin = null
 		var pinned := _pin != null
 		var cand: Dictionary = _pin["pose"] if pinned else (Pose.quant_pose(b["orderly"]) if _moved_on(a, b) else Pose.lerp_pose(a["orderly"], b["orderly"], alpha))
-		var plan := Session.plan_for(seed, a_depth, floor_deck, garden_dense)
+		var plan := Session.plan_for(seed, a_depth, placed_deck(), garden_dense)
 		var open := Session.doors_open_in(a["phase"]) or Session.doors_open_in(b["phase"]) or (latest != null and Session.doors_open_in(latest["phase"]))
 		var same := _drawn != null and _drawn_depth == a_depth
 		if not _still(plan.place, a, b):

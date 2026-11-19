@@ -108,3 +108,19 @@ func test_orderly_proximity_and_moving_shriek(t: T) -> void:
 	sfx._orderly(0.02, frame)
 	t.check(not sfx.orderly_breath.playing, "being watched silences the breath")
 	world.free()
+
+func test_second_wind_plays_one_nonlooped_exertion_take_at_the_player(t: T) -> void:
+	var sfx := preload("res://client/sfx.gd").new()
+	var world := Node3D.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(world)
+	world.add_child(sfx)
+	sfx.setup(world)
+	var position := Vector3(4, 1.45, 6)
+	var shot := sfx.play_at("second_wind", position)
+	if t.check(shot != null, "accepted gasp resolves the existing crew take"):
+		t.check(shot.global_position.is_equal_approx(position), "placed sound at the player")
+		var stream := shot.stream as AudioStreamOggVorbis
+		var breath := sfx.breath.stream as AudioStreamOggVorbis
+		t.check(stream != null and not stream.loop and breath != null and breath.loop, "gasp plays once without changing the winded loop")
+		t.check(stream.resource_path.ends_with("player/second_wind.ogg") and stream.get_length() < 1.0, "uses the short exertion excerpt")
+	world.free()

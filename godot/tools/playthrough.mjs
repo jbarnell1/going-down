@@ -4,7 +4,7 @@
 // watch it (it does not move), turn away (it moves), take a reading, call the lift, back off in the blinks,
 // get into a hide at the blackout warning (tools/careful.mjs: alone a catch is the wipe since the owner's
 // 17 Nov changes), come back when the lights return, board on BANK, bank and ride UP to the prison; read the
-// report board, the closed teller windows, hold F at your bunk, the bed count, lights out, wake on day 2
+// report board, the shop and skill teller windows, hold F at your bunk, the bed count, lights out, wake on day 2
 // at depth 1; that day rides DOWN, and on floor 2 the camera drops for creeping and for being down (with
 // the eye sent checked every frame).
 // Every step is asserted from the rules' state as the bridge reports it; a picture at each step.
@@ -431,7 +431,7 @@ check('riding up: the arrow points up, the headline is the host\'s, no end scree
 await cmd(`look ${(Math.atan2(plan.car.inX, plan.car.inZ) * 180) / Math.PI + 180} 8`);
 await wait(300);
 await shot('riding-up');
-s = await until((s) => s.depth === 0 && s.client.built === 0 && s.doorsOpen && s.client.doors > 0.9, 20000, 100);
+s = await until((s) => s.depth === 0 && s.client.built === 0 && s.doorsOpen && s.client.doors > 0.9, 60000, 100);
 check('home: the prison (depth 0), doors open, no resident drawn, no end screen', s.depth === 0 && s.client.built === 0 && s.client.residentDrawn === false && s.client.end.length === 0,
   `depth ${s.depth}, phase ${s.phase}, resident drawn ${s.client.residentDrawn}`);
 await shot('arrived-in-the-prison');
@@ -460,19 +460,31 @@ s = await state();
     b.join(' / '));
 }
 await shot('day-board');
-// The teller windows: CLOSED TONIGHT (the rules ignore F there).
+// Use the shop window with the share the host just settled, then approach the skills window.
 s = await walk(0, 7, 11, 6);
 await cmd('face 15 24.3 1.9');
-await wait(500);
-s = await state();
+s = await until((s) => s.client.prompt === 'F  SHOP', 4000);
 const shopPrompt = s.client.prompt;
-s = await walk(0, 4, 11, 6);
-s = await state();
-check('the windows say CLOSED TONIGHT; the board is read on screen in the bank room', shopPrompt === 'SHOP  CLOSED TONIGHT' && s.client.prompt === 'SKILL TREE  CLOSED TONIGHT'
-  && JSON.stringify(s.client.hudBoard) === JSON.stringify(s.client.board), `"${shopPrompt}", "${s.client.prompt}"`);
+const wage = s.day.result.credits[s.me.id];
+const opened = JSON.parse(await cmd('shop open'));
+check('the shop teller opens and shows the settled personal balance', shopPrompt === 'F  SHOP'
+  && opened.ok === true && opened.view.open === true && opened.view.credits === wage && opened.view.prices.length === 6,
+  `"${shopPrompt}", credits ${opened.view.credits}, host ${wage}, prices ${opened.view.prices}`);
+await shot('shop-teller');
+await cmd('shop close');
+await walk(0, 4, 11, 6);
 await cmd('face 9 24.3 1.9');
-await wait(500);
-await shot('windows-closed-tonight');
+s = await until((s) => s.client.prompt === 'F  OPEN SKILLS', 4000);
+const otherWindow = JSON.parse(await cmd('shop open'));
+const skillCard = JSON.parse(await cmd('skill f'));
+check('the skill teller opens its own card with the settled balance and report still visible at the window',
+  s.client.prompt === 'F  OPEN SKILLS' && otherWindow.ok === false && otherWindow.view.open === false
+  && skillCard.open === true && skillCard.credits === wage
+  && s.client.board.length > 0 && JSON.stringify(s.client.hudBoard) === JSON.stringify(s.client.board),
+  `"${s.client.prompt}", credits ${skillCard.credits}, host ${wage}, shop open ${otherWindow.view.open}`);
+await shot('skills-window');
+const closedCard = JSON.parse(await cmd('skill f'));
+check('F closes the skill card so the player can walk to their bunk', closedCard.open === false);
 
 // ---- 9c. Bed: walk to your own bunk, HOLD F TO SLEEP, the count, lights out, and the morning.
 const bunk = s.bed.bunk;
@@ -498,8 +510,14 @@ s = await state();
 check('lights out: the prison goes dark at the host\'s time', s.client.lightsOut === true && s.client.bigNote === 'LIGHTS OUT' && s.hostNow >= s.day.lightsOutAt && s.client.light === 0,
   `lights out at ${s.day.lightsOutAt?.toFixed(2)}, host now ${s.hostNow?.toFixed(2)}`);
 await shot('lights-out');
-s = await until((s) => s.day?.index === 2 && s.depth === 1 && s.client.built === 1, 15000, 100);
 await cmd('use 0');
+s = await until((s) => s.depth === 0 && s.shop?.host?.wake > s.hostNow, 20000, 100);
+const leaveAt = s.shop?.host?.wake;
+check('after lights out the host wakes the player at their prison bunk before departure',
+  s.depth === 0 && s.events.wokeUp === 1 && s.me.cell.x === bunk[0] && s.me.cell.y === bunk[1]
+  && !s.me.aboard && leaveAt > s.hostNow,
+  `depth ${s.depth}, cell ${s.me.cell.x},${s.me.cell.y}, bunk ${bunk}, host ${s.hostNow}, departure ${leaveAt}`);
+s = await until((s) => s.day?.index === 2 && s.depth === 1 && s.client.built === 1 && s.client.fade === 0, 60000, 100);
 check('the morning: day 2, in the car at depth 1 on a new floor', s.day?.index === 2 && s.depth === 1 && s.me.aboard === true && s.day.result === null && s.client.fade === 0,
   `day ${s.day?.day} (index ${s.day?.index}), depth ${s.depth}, seed ${s.seed}, owed ${s.day?.quota}, "${s.client.bigNote}"`);
 

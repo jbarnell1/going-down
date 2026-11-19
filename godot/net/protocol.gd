@@ -242,7 +242,10 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    "invRefused" {why: cabFull, poor, window, closed, nobody, annexOnly, unusable} besides the inventory's.
 ## Nightly reels (T24). With a reel in progress, the day block can end in [day, started, crew, votes, skipped].
 ## An input with a skip vote extends its 27-element form by a host-clock timestamp (the reel's start).
-const INV_OPS: Array[String] = ["", "drop", "take", "give", "stash", "fetch", "buy", "use", "throw"]
+const INV_OPS: Array[String] = ["", "drop", "take", "give", "stash", "fetch", "buy", "use", "throw", "skill"]
+# Skill request args: 0 buys Deep Pockets, 1 undoes the pending training, 2 buys
+# Second Wind, 3 asks to use it, and 4 buys Soft Shoes. "skills", "wind", and "shoes" give each trained player
+# 1 (settled), 2 (undoable), or for Second Wind, 3 (already used on this floor).
 
 ## Telemetry (client/telemetry.gd -> server/night_log.gd). New in the Godot game: [1, "T", kind, body] for kind
 ## "hb" (a heartbeat: body is a small JSON object as text) or "log" (one error or warning line), and
@@ -443,12 +446,20 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < WORLD_SHOP_INDEX:
 			out.append(null)
 		out.append(enc_shop(w["shop"]))
-	if w.get("ward") != null or w.get("reactor") != null:
+	if w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null:
 		var extensions := {}
+		if w.get("orientationStandees") != null:
+			extensions["orientationStandees"] = w["orientationStandees"]
 		if w.get("ward") != null:
 			extensions["ward"] = WardWire.encode(w["ward"])
 		if w.get("reactor") != null:
 			extensions["reactor"] = ReactorWire.encode(w["reactor"])
+		for key: String in ["skills", "wind", "shoes"]:
+			if w.get(key) != null:
+				var rows := []
+				for id: String in w[key]:
+					rows.append([id, w[key][id]])
+				extensions[key] = rows
 		while out.size() < WORLD_FLOOR_EXTENSIONS_INDEX:
 			out.append(null)
 		out.append(extensions)
@@ -889,7 +900,7 @@ static func encode(m: Dictionary) -> String:
 				inp.append(int(m.get("invSel", -1)))
 				inp.append(int(m.get("invs", 0)))
 				inp.append(INV_OPS.find(op))
-				inp.append(str(m["invArg"]) if op == "give" else (int(m["invArg"]) if op in ["take", "stash", "fetch", "buy"] else 0))
+				inp.append(str(m["invArg"]) if op == "give" else (int(m["invArg"]) if op in ["take", "stash", "fetch", "buy", "skill"] else 0))
 			if skip_at != null:
 				inp.append(q3(float(skip_at)))
 			return JsJson.stringify(inp)
@@ -1083,6 +1094,12 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 			c.bad = true
 			return {}
 		var extensions: Dictionary = a[WORLD_FLOOR_EXTENSIONS_INDEX]
+		# Practice pop times, or -1 for a prop the party has not reached. The state survives late entry.
+		if extensions.has("orientationStandees"):
+			var stamps := _a(c, extensions["orientationStandees"], 2, 2)
+			if c.bad:
+				return {}
+			out["orientationStandees"] = [_f(c, stamps[0], -1.0), _f(c, stamps[1], -1.0)]
 		if extensions.has("reactor"):
 			var reactor: Variant = ReactorWire.decode(extensions["reactor"])
 			if reactor == null:
@@ -1095,6 +1112,20 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 				c.bad = true
 			else:
 				out["ward"] = ward
+		for key: String in ["skills", "wind", "shoes"]:
+			if not extensions.has(key):
+				continue
+			var skills := _a(c, extensions[key], 0, 8)
+			var rows := {}
+			for entry: Variant in skills:
+				var row := _a(c, entry, 2, 2)
+				if c.bad:
+					return {}
+				var pid := _s(c, row[0])
+				if pid.is_empty() or rows.has(pid):
+					c.bad = true
+				rows[pid] = _i(c, row[1], 0, 3 if key == "wind" else 2)
+			out[key] = rows
 	return out
 
 static func _dec_report(c: _V, w: Variant) -> Dictionary:
@@ -1209,6 +1240,8 @@ static func decode(text: String) -> Variant:
 					out["invArg"] = _i(c, a[26], 0, Shop.CAB_MAX - 1)
 				elif op == "buy":
 					out["invArg"] = _i(c, a[26], 0, Shop.ITEMS.size() - 1)
+				elif op == "skill":
+					out["invArg"] = _i(c, a[26], 0, 4)
 				else:
 					out["invArg"] = _i(c, a[26], 0, 0)
 		"J":

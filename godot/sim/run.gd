@@ -1007,10 +1007,16 @@ class RunState:
 	## Hiding off the Playroom (see the header): sim/hiding.gd's state on this floor (a Hiding.HidingState),
 	## made at the first hide press on a Clinic or an Annex, else null.
 	var hiding: Variant = null
+	## The two practice prop trigger times, negative while still hidden.
+	var orientation_standees := Orientation.STANDEES_UNTRIGGERED
 	## The floor quota (see the header). Off: everything below stays as it is made and is never read.
 	var quota: bool = false
 	## A standalone safe practice stop, with no day, wallet or campaign advancement.
 	var orientation: bool = false
+	## The paid campaign prepared for its first stop. Present only in the optional Day 1 prelude.
+	var orientation_resume: RunState = null
+	## The separate spendable practice wage, shown on the first real report.
+	var orientation_paid := 0
 	## Recorded on this floor: every reading closed here (depth pay included), wherever its tape went since.
 	var floor_earned: float = 0.0
 	## The same per player, {id: value} (who did most of it: the Annex's note). Replaced, never edited.
@@ -1082,6 +1088,11 @@ class RunState:
 	var pickup_seq: int = 0
 	## The shop and the cabinet (S2, with_shop; sim/shop.gd). Off: nothing below is ever made or read.
 	var shop: bool = false
+	var deep_pockets: bool = false
+	var second_wind: bool = false
+	var soft_shoes: bool = false
+	var wind_spent := {}
+	var wind_profiles := {}
 	## Every cabinet and what the items left lit (Shop.ShopState). Replaced, never edited.
 	var shop_state: Variant = null
 
@@ -1117,6 +1128,11 @@ class RunState:
 		s.pickup_seq = pickup_seq
 		s.shop = shop
 		s.shop_state = shop_state
+		s.deep_pockets = deep_pockets
+		s.second_wind = second_wind
+		s.soft_shoes = soft_shoes
+		s.wind_spent = wind_spent
+		s.wind_profiles = wind_profiles
 		s.two_watchers = two_watchers
 		s.relocation = relocation
 		s.seed = seed
@@ -1163,9 +1179,12 @@ class RunState:
 		s.seek_off = seek_off
 		s.seek_drops = seek_drops
 		s.seek_call_at = seek_call_at
+		s.orientation_standees = orientation_standees
 		s.hiding = hiding
 		s.quota = quota
 		s.orientation = orientation
+		s.orientation_resume = orientation_resume
+		s.orientation_paid = orientation_paid
 		s.floor_earned = floor_earned
 		s.floor_by = floor_by
 		s.floor_needed = floor_needed
@@ -1214,6 +1233,7 @@ class PlayerInput:
 	var peek: bool = false
 	## An emote that plays a sound, the voice (when the microphone exists), the party horn (harmless).
 	var emote_sound: bool = false
+	var wind_gasp: bool = false
 	var voice: bool = false
 	var horn: bool = false
 	## A lamp or flash (a Seek.Light), or null. A hook: lamps do not exist yet.
@@ -1355,15 +1375,18 @@ static func create_run(seed: String, player_ids: Array[String], deck: Array = []
 	return with_quota(s) if quota else s
 
 ## Explicit practice entry. The ordinary first stop and its legacy recordings use create_run unchanged.
-static func with_orientation(initial: RunState) -> RunState:
+static func with_orientation(initial: RunState, prelude := false) -> RunState:
 	var ids: Array[String] = []
 	for player in initial.players:
 		ids.append(player.id)
-	var s := _create_run(initial.seed, ids, Places.ORIENTATION_ONLY)
+	var s := _create_run(initial.seed, ids, Places.ORIENTATION_ONLY, Orientation.PRELUDE_DEPTH if prelude else 1)
 	s.orientation = true
 	s.car_waits = true
 	s.quota = true
 	s.floor_needed = Orientation.QUOTA
+	if prelude:
+		s.orientation_resume = initial
+		s.wallets = initial.wallets
 	return s
 
 ## Turns down first, then out on for a run (see the header): nobody down, no red spots.
@@ -1501,6 +1524,46 @@ static func with_inventory(s0: RunState) -> RunState:
 	return s
 
 ## Enable searching the Arboretum's outdoor storage sites.
+static func with_deep_pockets(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.deep_pockets = true
+	return s
+
+static func with_second_wind(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.second_wind = true
+	return s
+
+static func with_soft_shoes(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.soft_shoes = true
+	return s
+
+static func training_enabled(s: RunState, id: String) -> bool:
+	match id:
+		"deep_pockets":
+			return s.deep_pockets
+		"second_wind":
+			return s.second_wind
+		"soft_shoes":
+			return s.soft_shoes
+	return false
+
+static func wind_spent_here(s: RunState, id: String) -> bool:
+	return s.wind_spent.get(s.wind_profiles.get(id, id)) == Vector2i(s.day_index, s.depth)
+
+static func can_second_wind(s: RunState, id: String) -> bool:
+	if not s.second_wind or s.depth <= 0 or s.phase in [&"riding", &"arriving", &"ended"]:
+		return false
+	var wallet: Upgrades.UpgradeState = s.wallets.get(id)
+	return wallet != null and wallet.owned.has("second_wind") and not wind_spent_here(s, id) and not _in_hide(s, id)
+
+static func spend_second_wind(s0: RunState, id: String) -> RunState:
+	var s := s0.copy()
+	s.wind_spent = s.wind_spent.duplicate()
+	s.wind_spent[s.wind_profiles.get(id, id)] = Vector2i(s.day_index, s.depth)
+	return s
+
 static func with_garden_search(s0: RunState) -> RunState:
 	var s := s0.copy()
 	s.garden_search = true
@@ -1602,15 +1665,15 @@ static func with_lonely(s0: RunState) -> RunState:
 static func resident_of(s: RunState) -> Places.Resident:
 	return Places.resident_in(s.plan.place if s.plan != null else &"", s.lonely)
 
-static func _create_run(seed: String, player_ids: Array[String], deck: Array = []) -> RunState:
+static func _create_run(seed: String, player_ids: Array[String], deck: Array = [], depth := 1) -> RunState:
 	assert(not player_ids.is_empty(), "a run needs at least one player")
 	var d := deck_of(deck)
-	var f := _floor_for(seed, 1, d)
+	var f := _floor_for(seed, depth, d)
 	var s := RunState.new()
 	s.seed = seed
 	s.deck = d
 	s.t = 0.0
-	s.depth = 1
+	s.depth = depth
 	s.plan = f.plan
 	s.car = f.car
 	s.orderly = f.orderly
@@ -1734,6 +1797,7 @@ static func _step_orientation(s: RunState, players: Array[RunPlayer], input_of: 
 			var view := _view_of(input, true, input.blind)
 			targets.append(view)
 			watchers.append(view)
+			s.orientation_standees = Orientation.trigger_standees(s.orientation_standees, p.body, s.t)
 	var before := s.orderly
 	var step := Orientation.step_target(s.plan, before, targets, watchers, dt)
 	s.orderly = step.state
@@ -2126,9 +2190,14 @@ static func _step_garden(s: RunState, players: Array[RunPlayer], input_of: Dicti
 			continue
 		var inp := _inp(p, input_of)
 		var hp := Hearing.Person.make(p.id, p.body, inp.gait)
+		if s.soft_shoes:
+			var wallet: Upgrades.UpgradeState = s.wallets.get(p.id)
+			hp.soft_shoes = wallet != null and wallet.owned.has("soft_shoes")
 		hp.up = not down
 		hp.down = down
 		hp.emote = inp.emote_sound and not down
+		if inp.wind_gasp and not down:
+			hp.gasp_radius = Settings.f(s.tuning, &"noise.emote", Noises.EMOTE)
 		hp.healed = g.healed.has(p.id)
 		hp.hide_noise = int(hide_noise.get(p.id, -1))
 		hp.search_radius = float(search_noise.get(p.id, 0.0))
@@ -2983,7 +3052,11 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			if s.orientation:
 				# The training car waits until all active crew have picked BANK.
 				var waiting := aboard.is_empty() or players.any(func(p: RunPlayer) -> bool:
-					return _is_active(p, input_of) and car_side(car, p.body) != &"bank")
+					if p.status != &"ok":
+						return false
+					if not _is_active(p, input_of):
+						return s.orientation_resume != null
+					return car_side(car, p.body) != &"bank")
 				s.bell_left = board_time(s) if waiting else s.bell_left - dt
 			else:
 				var any_hold := false
@@ -3120,7 +3193,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	if home:
 		pass  # The prison has no resident: nothing hunts there.
 	elif s.orientation:
-		if s.phase != &"ended":
+		if s.phase != &"ended" and s.phase != &"riding":
 			entity_ticks = [_step_orientation(s, players, input_of, dt, events)]
 	elif s.phase != &"riding" and s.seek != null:
 		# The Playroom: the count, the search, hiding, health (sim/seek.gd; see the header).
@@ -3327,7 +3400,10 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		_garden_after(s, events)
 
 	# ---- Arriving home (the day loop).
-	if s.phase == &"riding" and s.timer <= EPS and s.going_up:
+	if s.phase == &"riding" and s.timer <= EPS and s.orientation_resume != null:
+		res.state = _leave_orientation(s, players, t, events)
+		return res
+	elif s.phase == &"riding" and s.timer <= EPS and s.going_up:
 		_arrive_home(s, players, t, events)
 	# ---- Bed and the morning (the day loop).
 	elif home:
@@ -3529,6 +3605,9 @@ static func _bank(s: RunState, players: Array[RunPlayer], aboard_ids: Array[Stri
 		events.append({"type": "ward_tapes_lost", "t": t, "tapes": tape_ids, "value": dep.lost_value})
 	s.summary = summary
 	s.blink = null
+	if s.orientation_resume != null:
+		_pay_orientation(s, aboard_ids, floori(summary.total), t, events)
+		return
 	events.append({"type": "banked", "t": t, "summary": summary})
 	if s.days:
 		# The day: settled on what got home (made, with the lock: a locked BANK never gets here), then the
@@ -3539,6 +3618,47 @@ static func _bank(s: RunState, players: Array[RunPlayer], aboard_ids: Array[Stri
 		events.append({"type": "carLeft", "t": t, "reason": "up"})
 		return
 	s.phase = &"ended"
+
+static func _pay_orientation(s: RunState, aboard: Array[String], total: int, t: float, events: Array[Dictionary]) -> void:
+	var resume := s.orientation_resume.copy()
+	var shares := Day.split_shares(total, aboard, 1)
+	var wallets := s.wallets.duplicate()
+	for id: String in shares:
+		var wallet: Upgrades.UpgradeState = wallets.get(id)
+		wallets[id] = Upgrades.add_credits(wallet if wallet != null else Upgrades.UpgradeState.make(), int(shares[id]))
+	resume.wallets = wallets
+	s.wallets = wallets
+	s.orientation_resume = resume
+	s.orientation_paid = total
+	s.phase = &"riding"
+	s.timer = Orientation.PRELUDE_RIDE_SECONDS
+	events.append({"type": "orientationPaid", "t": t, "total": total, "shares": shares})
+	events.append({"type": "carLeft", "t": t, "reason": "ride"})
+
+static func _leave_orientation(s: RunState, players: Array[RunPlayer], t: float, events: Array[Dictionary]) -> RunState:
+	var resume := s.orientation_resume.copy()
+	resume.t = t
+	resume.tuning = s.tuning
+	resume.orientation_paid = s.orientation_paid
+	resume.players = []
+	var ids: Array[String] = []
+	var bodies := {}
+	for player in players:
+		if player.status != &"ok":
+			continue
+		var passenger := player.copy()
+		var spot := car_local(s.car, player.body.x, player.body.z)
+		passenger.body = car_body(resume.car, spot[0], spot[1])
+		passenger.aboard = true
+		passenger.side = null
+		resume.players.append(passenger)
+		ids.append(player.id)
+		bodies[player.id] = passenger.body
+	resume.crew = Instr.create_crew(ids)
+	resume.day_state = Day.morning(resume.day_state, ids.size())
+	_new_quota_floor(resume, resume.players)
+	events.append({"type": "rodeDown", "t": t, "depth": resume.depth, "bodies": bodies})
+	return resume
 
 
 ## Settles today with `banked` whole credits (Day.end_day): wallets paid, any loss rolled, the next day's
@@ -3771,6 +3891,8 @@ static func _step_bed(s: RunState, players: Array[RunPlayer], input_of: Dictiona
 			hold.erase(p.id)
 			if nb != b:
 				b = nb
+				if s.deep_pockets:
+					_settle_training(s, p.id, t, events)
 				events.append({"type": "bed", "t": t, "playerId": p.id, "inBed": true, "count": Day.count_text(b)})
 		else:
 			hold[p.id] = h
@@ -3781,6 +3903,9 @@ static func _step_bed(s: RunState, players: Array[RunPlayer], input_of: Dictiona
 	s.use_prev = prev
 	if s.lights_out_t < 0.0 and Day.is_lights_out(b, t):
 		s.lights_out_t = t
+		if s.deep_pockets:
+			for id: String in s.wallets.keys():
+				_settle_training(s, id, t, events)
 		events.append({"type": "lightsOut", "t": t, "assisted": Day.assisted(b), "morningAt": t + Day.LIGHTS_OUT_SECONDS})
 
 ## The next morning: a new day, started as day 1 was (create_run), on the next day's seed.
@@ -4084,7 +4209,7 @@ static func found_on(tape: TapeLib.Tape) -> float:
 ## A carton found by `by` (the inventory on): into their bag, or, with no room, left in the piece (not opened) and
 ## "searchFull" instead of "searchDone".
 static func _carton_found(s: RunState, by: String, piece: int, t: float, events: Array[Dictionary]) -> void:
-	var r := Inventory.add(Inventory.bag_of(s.bags, by), String(Findables.JUICE), 1, Inventory.stack_limit(s.tuning, by))
+	var r := Inventory.add(Inventory.bag_of(s.bags, by), String(Findables.JUICE), 1, inventory_limit(s, by))
 	if r.added > 0:
 		var bags := s.bags.duplicate()
 		bags[by] = r.bag
@@ -4151,7 +4276,7 @@ static func _step_inventory(s: RunState, players: Array[RunPlayer], input_of: Di
 		if i.inv_select >= 0 and i.inv_select < Inventory.SLOTS and i.inv_select != b.sel:
 			b = Inventory.select(b, i.inv_select)
 			bags[p.id] = b
-		if i.inv_op == &"" or (i.inv_op == &"throw" and not s.garden_cones):
+		if i.inv_op == &"" or (i.inv_op == &"throw" and not s.garden_cones) or (i.inv_op == &"skill" and not s.deep_pockets):
 			continue
 		var refuse := func(why: String) -> void:
 			events.append({"type": "invRefused", "t": t, "playerId": p.id, "op": String(i.inv_op), "why": why})
@@ -4182,7 +4307,7 @@ static func _step_inventory(s: RunState, players: Array[RunPlayer], input_of: Di
 				if not Inventory.within(p.body, pk.at, Inventory.PICKUP_REACH):
 					refuse.call("reach")
 					continue
-				var r := Inventory.add(b, pk.item, pk.count, Inventory.stack_limit(s.tuning, p.id))
+				var r := Inventory.add(b, pk.item, pk.count, inventory_limit(s, p.id))
 				if r.added <= 0:
 					refuse.call("full")
 					continue
@@ -4218,7 +4343,7 @@ static func _step_inventory(s: RunState, players: Array[RunPlayer], input_of: Di
 				if not Inventory.within(p.body, q.body, Inventory.hand_reach(s.tuning)):
 					refuse.call("reach")
 					continue
-				var r := Inventory.add(Inventory.bag_of(bags, q.id), b.item(k), b.count(k), Inventory.stack_limit(s.tuning, q.id))
+				var r := Inventory.add(Inventory.bag_of(bags, q.id), b.item(k), b.count(k), inventory_limit(s, q.id))
 				if r.added <= 0:
 					refuse.call("theirFull")
 					continue
@@ -4230,7 +4355,7 @@ static func _step_inventory(s: RunState, players: Array[RunPlayer], input_of: Di
 				events.append({"type": "itemGiven", "t": t, "playerId": p.id, "to": q.id, "item": b.item(k), "count": r.added})
 			_:
 				# The shop's requests (S2) are the shop's step's, after this one.
-				if not (s.shop and Shop.OPS.has(String(i.inv_op))):
+				if not (s.shop and Shop.OPS.has(String(i.inv_op))) and i.inv_op != &"skill":
 					refuse.call("op")
 	if touched:
 		s.bags = bags
@@ -4239,6 +4364,79 @@ static func _step_inventory(s: RunState, players: Array[RunPlayer], input_of: Di
 
 # ---------------------------------------------------------------------------------------------
 # The shop and the cabinet (S2; see the header).
+
+static func inventory_limit(s: RunState, id: String) -> int:
+	var wallet: Upgrades.UpgradeState = s.wallets.get(id)
+	if s.deep_pockets and wallet != null and wallet.owned.has("deep_pockets"):
+		return 3
+	return Inventory.stack_limit(s.tuning, id)
+
+static func _settle_training(s: RunState, id: String, t: float, events: Array[Dictionary]) -> void:
+	var wallet: Upgrades.UpgradeState = s.wallets.get(id)
+	if wallet == null or Upgrades.induction_node(wallet.last_id).is_empty():
+		return
+	var wallets := s.wallets.duplicate()
+	wallets[id] = Upgrades.next_morning(wallet)
+	s.wallets = wallets
+	events.append({"type": "trainingSettled", "t": t, "playerId": id})
+
+static func _skill_transaction(s: RunState, p: RunPlayer, bag: Inventory.Bag, arg: Variant, t: float, events: Array[Dictionary]) -> String:
+	if not at_home(s) or s.plan == null or p.body == null or p.body.level != 0:
+		return "window"
+	var cell := Move.cell_of(s.plan, p.body)
+	if Prison.station_at(Vector2i(cell.x, cell.y)) != &"skills":
+		return "window"
+	if (s.shop_state as Shop.ShopState).wake_until >= 0.0 or s.lights_out_t >= 0.0 or s.bed == null or Day.is_lights_out(s.bed, t):
+		return "closed"
+	if s.bed.in_bed.has(p.id):
+		return "busy"
+	var wallet: Upgrades.UpgradeState = s.wallets.get(p.id)
+	if wallet == null:
+		wallet = Upgrades.UpgradeState.make()
+	var result: Upgrades.UpResult
+	if arg == 0 or arg == 2 or arg == 4:
+		var node_id := str({0: "deep_pockets", 2: "second_wind", 4: "soft_shoes"}[int(arg)])
+		if not training_enabled(s, node_id):
+			return "op"
+		result = Upgrades.buy_induction(wallet, node_id, Shop.SHARE)
+	elif arg == 1:
+		if not training_enabled(s, wallet.last_id):
+			return "nothing_to_undo"
+		var repacked := bag
+		if wallet.last_id == "deep_pockets":
+			repacked = _unstack_bag(bag, Inventory.stack_limit(s.tuning, p.id))
+			if repacked == null:
+				return "unstack"
+		result = Upgrades.undo(wallet)
+		if result.ok and repacked != bag:
+			_set_bag(s, p.id, repacked)
+	else:
+		return "op"
+	if not result.ok:
+		return result.reason
+	var wallets := s.wallets.duplicate()
+	wallets[p.id] = result.state
+	s.wallets = wallets
+	var kind := "trainingUndone" if arg == 1 else "trained"
+	events.append({"type": kind, "t": t, "playerId": p.id, "node": wallet.last_id if arg == 1 else result.state.last_id})
+	return ""
+
+## Keep every item on undo, retaining the selected slot. Return null if the untrained bag cannot fit it all.
+static func _unstack_bag(bag: Inventory.Bag, limit: int) -> Inventory.Bag:
+	var next := bag.copy()
+	for k in Inventory.SLOTS:
+		var excess := bag.count(k) - limit
+		if excess > 0:
+			next.slots[k] = [bag.item(k), limit]
+	for k in Inventory.SLOTS:
+		var excess := bag.count(k) - limit
+		if excess <= 0:
+			continue
+		var placed := Inventory.add(next, bag.item(k), excess, limit)
+		if placed.left > 0:
+			return null
+		next = placed.bag
+	return next
 
 ## The ids of the run's players, in its order (Day.bunk_of sorts them: every bunk and cabinet is the same for all).
 static func _ids_of(players: Array[RunPlayer]) -> Array[String]:
@@ -4334,7 +4532,9 @@ static func _step_shop(s: RunState, players: Array[RunPlayer], input_of: Diction
 	var ids := _ids_of(players)
 	for p in players:
 		var i: PlayerInput = input_of.get(p.id)
-		if i == null or p.status != &"ok" or not _is_active(p, input_of) or not Shop.OPS.has(String(i.inv_op)):
+		if i == null or p.status != &"ok" or not _is_active(p, input_of):
+			continue
+		if not Shop.OPS.has(String(i.inv_op)) and not (s.deep_pockets and i.inv_op == &"skill"):
 			continue
 		# The inventory's step said "busy" to these already.
 		if s.phase == &"riding" or _in_hide(s, p.id) or searching(s, p.id):
@@ -4342,8 +4542,12 @@ static func _step_shop(s: RunState, players: Array[RunPlayer], input_of: Diction
 		var refuse := func(why: String) -> void:
 			events.append({"type": "invRefused", "t": t, "playerId": p.id, "op": String(i.inv_op), "why": why})
 		var b := Inventory.bag_of(s.bags, p.id)
-		var limit := Inventory.stack_limit(s.tuning, p.id)
+		var limit := inventory_limit(s, p.id)
 		match String(i.inv_op):
+			"skill":
+				var why := _skill_transaction(s, p, b, i.inv_arg, t, events)
+				if not why.is_empty():
+					refuse.call(why)
 			"stash", "fetch":
 				if not Shop.at_cabinet(s.plan, ids, p.id, p.body):
 					refuse.call("reach")

@@ -75,6 +75,7 @@ const RECORDED := {
 	"chew": ["entity", "orderly/chew"],
 	"rattle": ["entity", "orderly/rattle"],
 	"breath_quick": ["entity", "orderly/breath_quick"],
+	"second_wind": ["effect", "player/second_wind"],
 	"gown": ["entity", "orderly/gown"],
 	"instruments": ["entity", "orderly/instruments"],
 	"thud": ["entity", "orderly/thud"],

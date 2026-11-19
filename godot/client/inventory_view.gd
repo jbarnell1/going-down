@@ -144,7 +144,7 @@ func on_events(events: Array, my_id: String, names: Dictionary, now: int, sfx: O
 	for e: Dictionary in events:
 		var ty := str(e.get("type", ""))
 		var who := str(e.get("playerId", ""))
-		if ty == "invRefused" and who == my_id:
+		if ty == "invRefused" and who == my_id and e.get("op") != "skill":
 			say(str(REFUSED.get(str(e.get("why", "")), "NOT NOW.")), now)
 		elif ty == "searchFull" and who == my_id:
 			say("YOUR HANDS ARE FULL. IT IS STILL IN THERE.", now)

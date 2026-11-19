@@ -120,10 +120,10 @@ func down(peer: int) -> bool:
 	revision += 1
 	return true
 
-func rescue(helper: int, held: bool, dt: float) -> void:
+func rescue(helper: int, held: bool, dt: float) -> bool:
 	if not held or condition.get(helper)!="up":
 		healing.erase(helper)
-		return
+		return false
 	var victim := 0
 	for other: int in down_time:
 		if players[helper].distance_to(players[other])<=1.4:
@@ -131,7 +131,7 @@ func rescue(helper: int, held: bool, dt: float) -> void:
 			break
 	if victim==0:
 		healing.erase(helper)
-		return
+		return false
 	var progress: Dictionary = healing.get(helper,{})
 	if progress.get("peer")!=victim:
 		progress = {"peer":victim,"elapsed":0.0}
@@ -143,3 +143,4 @@ func rescue(helper: int, held: bool, dt: float) -> void:
 		down_time.erase(victim)
 		healing.erase(helper)
 		revision += 1
+	return true

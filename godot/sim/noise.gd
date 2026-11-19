@@ -156,6 +156,8 @@ class Act extends RefCounted:
 	var down: bool = false
 	## A sound emote this tick.
 	var emote: bool = false
+	var gasp_radius := 0.0
+	var soft_shoes := false
 	## Got into or out of a hide this tick: its id, else -1.
 	var hide: int = -1
 	## Healed back onto their feet this tick.
@@ -201,6 +203,8 @@ static func of(ground: Ground, a: Act, dt: float, cracked: Dictionary) -> Sound:
 			kind = &"crawl"
 	elif moving:
 		r = gait_radius(a.gait, s)
+		if a.soft_shoes and a.gait != &"sprint":
+			r *= 0.75
 		kind = a.gait
 	# The twig fall under them: a crack, once per crossing, under a walk or a sprint.
 	var fall := ground.fall_at(a.body.x, a.body.z) if ground != null else -1
@@ -224,8 +228,9 @@ static func of(ground: Ground, a: Act, dt: float, cracked: Dictionary) -> Sound:
 		r = a.search_radius
 		kind = &"search"
 		hide = -1
-	if a.emote and EMOTE > r:
-		r = EMOTE
+	var vocal := maxf(EMOTE if a.emote else 0.0, a.gasp_radius)
+	if vocal > r:
+		r = vocal
 		kind = &"emote"
 		hide = -1
 	if r <= 0.0:

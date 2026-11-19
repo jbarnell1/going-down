@@ -116,6 +116,8 @@ class Person extends RefCounted:
 	var hide: int = -1
 	## A sound emote this tick; the hide they got into or out of this tick (-1); healed up this tick.
 	var emote: bool = false
+	var gasp_radius := 0.0
+	var soft_shoes := false
 	var hide_noise: int = -1
 	var search_radius := 0.0
 	var healed: bool = false
@@ -276,6 +278,8 @@ static func step(plan: Floor.FloorPlan, ground: Noises.Ground, prev: Keeper, peo
 		var a := Noises.Act.make(p.id, p.body, prev.last.get(p.id), p.gait)
 		a.down = p.down
 		a.emote = p.emote
+		a.gasp_radius = p.gasp_radius
+		a.soft_shoes = p.soft_shoes
 		a.hide = p.hide_noise
 		a.healed = p.healed
 		a.search_radius = p.search_radius

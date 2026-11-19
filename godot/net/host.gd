@@ -879,6 +879,14 @@ func _step(now: float) -> void:
 		if not p.inv_pending.is_empty():
 			inp.inv_op = p.inv_pending[0]
 			inp.inv_arg = p.inv_pending[1]
+		if inp.inv_op == &"skill" and inp.inv_arg == 3:
+			inp.inv_op = &""
+			if p.stamina.winded and Run.can_second_wind(s, p.id):
+				s = Run.spend_second_wind(s, p.id)
+				p.stamina = Stamina.Stamina.make(1.0, false, p.stamina.tank)
+				inp.wind_gasp = true
+				extra.append({"type": "secondWind", "t": t_next, "playerId": p.id, "depth": s.depth,
+					"day": s.day_index, "x": body.x, "y": body.y, "z": body.z})
 		inputs.append(inp)
 		p.call_pending = false
 		p.pick_pending = false
@@ -1324,6 +1332,32 @@ func world(full: bool = false) -> Dictionary:
 	# The shop and the cabinet (S2): wallets, cabinets, what is lit, the timers (Protocol "shop").
 	if s.shop and s.shop_state != null:
 		out["shop"] = shop_block(s)
+	if s.deep_pockets:
+		var skills := {}
+		for p: Run.RunPlayer in s.players:
+			var wallet: Upgrades.UpgradeState = s.wallets.get(p.id)
+			if wallet != null and wallet.owned.has("deep_pockets"):
+				skills[p.id] = 2 if wallet.last_id == "deep_pockets" else 1
+		out["skills"] = skills
+	if s.second_wind:
+		var wind := {}
+		for p: Run.RunPlayer in s.players:
+			var wallet: Upgrades.UpgradeState = s.wallets.get(p.id)
+			if wallet != null and wallet.owned.has("second_wind"):
+				var status := 2 if wallet.last_id == "second_wind" else 1
+				if Run.wind_spent_here(s, p.id):
+					status = 3
+				wind[p.id] = status
+		out["wind"] = wind
+	if s.soft_shoes:
+		var shoes := {}
+		for p: Run.RunPlayer in s.players:
+			var wallet: Upgrades.UpgradeState = s.wallets.get(p.id)
+			if wallet != null and wallet.owned.has("soft_shoes"):
+				shoes[p.id] = 2 if wallet.last_id == "soft_shoes" else 1
+		out["shoes"] = shoes
+	if s.orientation and maxf(s.orientation_standees.x, s.orientation_standees.y) >= 0.0:
+		out["orientationStandees"] = [s.orientation_standees.x, s.orientation_standees.y]
 	if _ward_review != null:
 		out["ward"] = _ward_review.snapshot(s.t)
 	if _reactor_review != null:

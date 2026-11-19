@@ -133,6 +133,7 @@ The same method, the same V, the same buses; files in annex/, playroom/ and play
 - Sliding under (#6): layered: the jacket-and-jeans slide #2 from 0, #3 4 dB under it from 0.15 s (more cloth), and the shoulder bump #3 at 1.25 s as the slide stops.
 - The found-you sting (the owner: "combine both noises"): **layered**, both at once from 0: #1 (the music-box note bending, lifted 4 dB so it is not lost) strikes first, and #2's deep breath swells in under it 0.2 s later (its own lead-in), 2.2 s in all, normalised as one scare to short-term V+2.6 (4.5 dB of limiting).
 - The out-of-breath file: the crew's own clean breath, so your winded breathing now uses it (the earlier wet breaths are the Orderly's); played at pitch 1, not sped up when winded as the made-in-code one is.
+- Second Wind plays one short exertion sound at the player when the host accepts the refill. The 0.78 s excerpt starts 2.50 s into `player/breath_winded.ogg`, with a 3 dB boost and short fades.
 
 ### Every file (second batch)
 

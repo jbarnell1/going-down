@@ -75,7 +75,7 @@ const GUESS := {&"ballpit": 3, &"frame": 3, &"upper": 3, &"deck": 4, &"party": 3
 var lv: Level
 var W := 0
 var H := 0
-## The plan as the rules hold it (generated again from the plan's seed and depth), and its lists.
+## The plan as the rules hold it, and its lists.
 var fp: Floor.FloorPlan
 var hides: Array[Playroom.Hide] = []
 var zones: Array[Playroom.Zone] = []
@@ -122,15 +122,15 @@ static var _atlas_tex: ImageTexture = null
 
 ## Dresses `level` (built up to its room index by Level.build) as the Playroom. Returns the view, also
 ## kept as the level's "playroom" meta and added as its child (it sets the lights every frame).
-static func dress(level: Level) -> Node3D:
+static func dress(level: Level, source_plan: Floor.FloorPlan = null, source_hides: Array[Playroom.Hide] = []) -> Node3D:
 	var v: Node3D = new()
 	v.name = "PlayroomView"
 	# After main.gd's Level.update_lights, which this overrides for count dark.
 	v.process_priority = 1000
-	v.call(&"_dress", level)
+	v.call(&"_dress", level, source_plan, source_hides)
 	return v
 
-func _dress(level: Level) -> void:
+func _dress(level: Level, source_plan: Floor.FloorPlan, source_hides: Array[Playroom.Hide]) -> void:
 	lv = level
 	W = level.W
 	H = level.H
@@ -138,10 +138,10 @@ func _dress(level: Level) -> void:
 	level.add_child(self)
 	level.shadows = false
 	level.ambient_dark = AMBIENT_DARK
-	fp = Playroom.generate_playroom(str(level.plan.seed), int(level.plan.depth))
+	fp = source_plan if source_plan != null else Playroom.generate_playroom(str(level.plan.seed), int(level.plan.depth))
 	if fp.width != W or fp.height != H or fp.rooms.size() != (level.plan.rooms as Array).size() or fp.doors.size() != (level.plan.doors as Array).size():
 		push_error("playroom view: the plan for %s/%d does not match the one being drawn" % [level.plan.seed, level.plan.depth])
-	hides = Playroom.hides(fp, fp.seed)
+	hides = source_hides if not source_hides.is_empty() else Playroom.hides(fp, fp.seed)
 	zones = Playroom.zones(fp)
 	squeak = Playroom.squeakers(fp, fp.seed)
 	_materials()

@@ -121,7 +121,7 @@ func test_wall_stops_a_throw_and_a_disabled_run_cannot_throw(t: T) -> void:
 
 func test_shop_uses_its_slot_and_the_garden_hears_its_toy(t: T) -> void:
 	t.eq(Inventory.ITEMS, ["juice", "badge", "marker", "glow", "flash", "speed", "toy", "salts", "pinecone"], "shop item wire indexes are stable")
-	t.eq(Protocol.INV_OPS, ["", "drop", "take", "give", "stash", "fetch", "buy", "use", "throw"], "shop operation wire indexes are stable")
+	t.eq(Protocol.INV_OPS, ["", "drop", "take", "give", "stash", "fetch", "buy", "use", "throw", "skill"], "shop operation wire indexes are stable")
 	var home := ShopTests.with_credits(CabinetTests.home_run("garden-shop", ["a"] as Array[String]), {"a": 500})
 	var counter: Move.Body = ShopTests.window(home, 1)
 	var bought := CabinetTests.tick(home, {"a": counter}, {"a": ["buy", Shop.ITEMS.find("toy")]})

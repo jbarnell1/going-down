@@ -57,9 +57,12 @@ func player(id: String, at: Vector3, held: bool, gait: StringName, dt: float) ->
 		next_seat += 1
 	var seat: int = seats[id]
 	rules.observe(seat,at)
-	rules.rescue(seat,held,dt)
+	var rescuing := rules.rescue(seat,held,dt)
 	if not held:
 		use_before.erase(id)
+	elif rescuing:
+		# The helper must release use before this same press can operate a floor prop.
+		use_before[id] = "rescue"
 	else:
 		var previous: String = use_before.get(id,"")
 		# During a sprint the accepted body can still be beside the tape when the lift button arrives.

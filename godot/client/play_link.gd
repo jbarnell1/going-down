@@ -188,7 +188,7 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	var furniture_code: Variant = latest.get("solid")
 	var solid: bool = furniture_code != null
 	var furniture_layout: bool = furniture_code == Protocol.SOLID_RESTORED
-	_use_floor(str(c.seed), c.local_depth, furniture_layout, c.floor_deck, c.garden_dense)
+	_use_floor(str(c.seed), c.local_depth, furniture_layout, c.placed_deck(), c.garden_dense)
 	var me_row: Variant = _row(latest, str(c.id))
 	var status := str(me_row["status"]) if me_row != null else "ok"
 	var dt := clampf(float(inp.get("dt", 0.0)), 0.0, 0.1)
@@ -316,6 +316,7 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	lf.gait = String(gait)
 	lf.call = playing and inp.get("call") == true
 	lf.pick_up = playing and inp.get("pickUp") == true
+	lf.mark = playing and latest.get("annex") != null and inp.get("mark") == true
 	lf.use = use
 	var reel: Variant = (day as Dictionary).get("reel") if day is Dictionary else null
 	if reel != null and inp.get("skipReelAt") == reel["started"] and not reel["skipped"]:
@@ -350,7 +351,7 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 		body = f.placed
 		placed = _body_plain(body)
 		var moved_on := c.local_depth != depth_before or c.day_index != day_before
-		_use_floor(str(c.seed), c.local_depth, c.latest.get("solid") == Protocol.SOLID_RESTORED, c.floor_deck, c.garden_dense)
+		_use_floor(str(c.seed), c.local_depth, c.latest.get("solid") == Protocol.SOLID_RESTORED, c.placed_deck(), c.garden_dense)
 		if _face_on_place or (moved_on and Run.in_car(car, body)):
 			# A new floor, a new day or home: in the car, face out of its doors.
 			_face_on_place = false
@@ -388,6 +389,12 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	# lights out, the morning) are shown against the host clock as this client estimates it.
 	snap["day"] = day
 	snap["hostNow"] = c.clock.host_time(rc._now)
+	if latest.has("orientationStandees"):
+		snap["orientationStandees"] = latest["orientationStandees"]
+	snap["annexPad"] = c.mark_pad()
+	if snap["annexPad"] != null:
+		snap["annexMarks"] = c.marks()
+		snap["annexNotes"] = c.notes()
 	snap["goingUp"] = day != null and phase == "riding" and (day as Dictionary)["result"] != null
 	var ids: Array[String] = []
 	for p: Dictionary in latest["players"]:
@@ -411,6 +418,9 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	snap["inv"] = latest.get("inv")
 	# The shop and the cabinet (S2, null in a run without them): the host's shop block (client.gd shop()).
 	snap["shop"] = latest.get("shop")
+	snap["skills"] = latest.get("skills")
+	snap["wind"] = latest.get("wind")
+	snap["shoes"] = latest.get("shoes")
 	if plan_dict.has("_new"):
 		plan_dict.erase("_new")
 		snap["plan"] = plan_dict
@@ -522,6 +532,9 @@ func _snapshot(c: Client, f: Client.Frame, latest: Dictionary, me_row: Variant, 
 		_ev_index += 1
 		events.append(e)
 		match str(e.get("type", "")):
+			"secondWind":
+				if str(e.playerId) == mid and int(e.depth) == c.local_depth and int(e.day) == c.day_index:
+					tank = Stamina.Stamina.make(1.0, false, tank.tank)
 			"called":
 				_call_floors = int(e.get("floorsAway", 0))
 				_false_stop = false

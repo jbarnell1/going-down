@@ -69,6 +69,7 @@ var seed := "alpha"
 var run_seed := ""
 var _playtest_depth := -1
 var _orientation_playtest := false
+var orientation_campaign := false
 var runs := 0
 var entity_on := true
 var time_scale := 1.0
@@ -96,6 +97,9 @@ var findables: Variant = null
 var inventory: Variant = null
 ## The shop and the cabinet (sim/run.gd shop, S2): true, false, or null to follow the game's deck.
 var shop: Variant = null
+var deep_pockets: Variant = null
+var second_wind: Variant = null
+var soft_shoes: Variant = null
 ## Cost of the host's ticks on this machine (microseconds, summed), for the stats hook.
 var host_us := 0
 ## Live settings: this room's desk (no file until open_settings gives it one).
@@ -274,9 +278,14 @@ func start_run() -> void:
 	var q := quota_on()
 	var depth := HostRules.start_depth_by_arg() if _playtest_depth < 0 else maxi(1, _playtest_depth)
 	var deck := Places.deck_for_start_depth(depth) if Session.deck == Places.FULL else Session.deck
-	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL, shop_on(), Session.deck == Places.FULL, true, true)
+	var induction := Session.deck == Places.FULL if deep_pockets == null else bool(deep_pockets)
+	var nerve := Session.deck == Places.FULL if second_wind == null else bool(second_wind)
+	var ear := Session.deck == Places.FULL if soft_shoes == null else bool(soft_shoes)
+	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL, shop_on(), Session.deck == Places.FULL, true, true, induction, nerve, ear)
 	if _orientation_playtest:
 		rules.enable_orientation()
+	elif orientation_campaign and _playtest_depth < 0:
+		rules.enable_orientation_prelude()
 	# Method callables hold no reference to this object, so the pipes do not keep it alive.
 	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
 	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))
@@ -296,6 +305,8 @@ func start_run() -> void:
 	client = Client.new(_client_pipe, "host", _name, _vt, Session.INTERP_DELAY, Session.INPUT_INTERVAL, _face)
 	client.floor_deck = rules.deck
 	client.garden_dense = host.state.garden_search
+	client.orientation_prelude = host.state.orientation_resume != null
+	orientation_paid = 0
 	client.draw_in_dark = o
 	# Live settings: everything asked for is in force from the first tick.
 	desk.run_started()
@@ -391,6 +402,8 @@ func _tune_apply(note: Dictionary) -> void:
 		host.set_tuning(desk.in_force(), desk.rev, note)
 
 func _tune_tick(events: Array) -> void:
+	if host != null and orientation_campaign:
+		orientation_paid = host.state.orientation_paid
 	if host != null and not solo_profile_path.is_empty():
 		var changed := Profiles.changed(events)
 		if changed.all or changed.ids.has(ME):

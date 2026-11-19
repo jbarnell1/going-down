@@ -99,13 +99,15 @@ func _ready() -> void:
 	Session.deck = Places.FULL
 	_room = Room.new(_ws, say)
 	_room.orientation_review = bind == "127.0.0.1" and args.get("orientation", "0") == "1"
+	_room.orientation_campaign = not _room.orientation_review and bind == "127.0.0.1" and args.get("orientation_campaign", "0") == "1"
 	if not _room.orientation_review:
 		var save := SaveSlip.key_from_env()
 		if save.ok:
 			_room.enable_stamped_profiles(save.key)
 	_room.fixed_seed = args.get("seed", "")
-	_room.ward_review = not _room.orientation_review and bind == "127.0.0.1" and args.get("ward_review", "0") == "1"
-	_room.reactor_review = not _room.orientation_review and not _room.ward_review and bind == "127.0.0.1" and args.get("reactor_review","0")=="1"
+	var other_reviews := not _room.orientation_review and not _room.orientation_campaign and bind == "127.0.0.1"
+	_room.ward_review = other_reviews and args.get("ward_review", "0") == "1"
+	_room.reactor_review = other_reviews and not _room.ward_review and args.get("reactor_review","0")=="1"
 	if _room.reactor_review:
 		_room.reactor_archive_path = "user://reactor-campaigns/"+str(args.get("reactor_campaign","owner-review")).sha256_text()
 	if args.has("depth"):

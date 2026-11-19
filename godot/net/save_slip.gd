@@ -23,6 +23,8 @@
 # The canonical text (one line, ASCII only, safe inside JSON and a URL without escaping):
 #   GDS1|<player>|<name as hex>|<credits>|<nodes, sorted, comma-separated>|<days>|<records, sorted by key, key:value comma-separated>
 #   then, only when the fields have a cabinet: |<cabinet>
+#   after the cabinet, while today's training is undoable: |<training_refund> for
+#   Deep Pockets, or |<training_node>:<training_refund> for another induction.
 # The sealed line is the text, "|", then the stamp: 64 lowercase hex characters of
 # HMAC-SHA256(key, text). Same fields, same key: always the same line.
 #
@@ -69,7 +71,9 @@ const FIELDS: Array[String] = ["player", "name", "credits", "nodes", "days", "re
 
 static func check(fields: Dictionary) -> String:
 	var with_cab := fields.has("cabinet")
-	if fields.size() != FIELDS.size() + (1 if with_cab else 0):
+	var undo := fields.has("training_refund")
+	var with_node := fields.has("training_node")
+	if fields.size() != FIELDS.size() + int(with_cab) + int(undo) + int(with_node):
 		return "fields"
 	if with_cab and (not (fields["cabinet"] is String) or Shop.cabinet_from_text(String(fields["cabinet"])).is_empty()):
 		return "cabinet"
@@ -93,6 +97,11 @@ static func check(fields: Dictionary) -> String:
 		if not (n is String) or Upgrades.node(String(n)).is_empty() or seen.has(String(n)):
 			return "nodes"
 		seen.append(String(n))
+	var training: Variant = fields.get("training_node", "deep_pockets")
+	if with_node and (not undo or training == "deep_pockets" or Upgrades.induction_node(str(training)).is_empty()):
+		return "training_refund"
+	if undo and (not with_cab or not seen.has(str(training)) or typeof(fields.training_refund) != TYPE_INT or fields.training_refund != Shop.SHARE or int(credits) > MAX_INT - Shop.SHARE):
+		return "training_refund"
 	var days: Variant = fields["days"]
 	if typeof(days) != TYPE_INT or int(days) < 0 or int(days) > MAX_INT:
 		return "days"
@@ -130,6 +139,8 @@ static func make(fields: Dictionary) -> String:
 		int(fields["credits"]), ",".join(nodes), int(fields["days"]), ",".join(pairs)]
 	if fields.has("cabinet"):
 		text += "|" + String(fields["cabinet"])
+	if fields.has("training_refund"):
+		text += "|" + (str(fields.training_node) + ":" if fields.has("training_node") else "") + str(fields.training_refund)
 	if text.length() + 1 + STAMP_HEX > MAX_SEALED:
 		return ""
 	return text
@@ -164,7 +175,7 @@ static func open(sealed: String, key: PackedByteArray) -> Dictionary:
 		if not _allowed(sealed.unicode_at(i)):
 			return _no("chars")
 	var parts := sealed.split("|", true)
-	if parts.size() != FIELDS.size() + 2 and parts.size() != FIELDS.size() + 3:
+	if parts.size() < FIELDS.size() + 2 or parts.size() > FIELDS.size() + 4:
 		return _no("shape")
 	if parts[0] != VERSION:
 		return _no("version")
@@ -185,7 +196,7 @@ static func read_local(text: String) -> Dictionary:
 		if not _allowed(text.unicode_at(i)):
 			return _no("chars")
 	var parts := text.split("|", true)
-	if parts.size() != FIELDS.size() + 1 and parts.size() != FIELDS.size() + 2:
+	if parts.size() < FIELDS.size() + 1 or parts.size() > FIELDS.size() + 3:
 		return _no("shape")
 	if parts[0] != VERSION:
 		return _no("version")
@@ -220,10 +231,15 @@ static func read_local(text: String) -> Dictionary:
 				return _no("records")
 			records[kv[0]] = v
 	var fields := {"player": parts[1], "name": name, "credits": credits, "nodes": nodes, "days": days, "records": records}
-	if parts.size() == FIELDS.size() + 2:
+	if parts.size() >= FIELDS.size() + 2:
 		if Shop.cabinet_from_text(parts[7]).is_empty():
 			return _no("cabinet")
 		fields["cabinet"] = parts[7]
+	if parts.size() == FIELDS.size() + 3:
+		var training := parts[8].split(":", true)
+		if training.size() == 2:
+			fields["training_node"] = training[0]
+		fields["training_refund"] = _parse_int(training[training.size() - 1])
 	var why := check(fields)
 	if why != "":
 		return _no(why)

@@ -119,10 +119,10 @@ static func _deck_or_clinic(deck: Array) -> Array[StringName]:
 
 ## The place of floor `depth` for this seed and deck (FULL when not given).
 static func place_at(seed: String, depth: int, deck: Array = FULL) -> StringName:
-	if depth <= 0:
-		return PRISON
 	if deck == ORIENTATION_ONLY:
 		return Orientation.PLACE
+	if depth <= 0:
+		return PRISON
 	var d := _deck_or_clinic(deck)
 	var prev := PRISON
 	var here := CLINIC

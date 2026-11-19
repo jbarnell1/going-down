@@ -60,11 +60,22 @@ func checkpoint(s: Run.RunState, id: String, name_: String, served: bool) -> Str
 
 static func restore(s: Run.RunState, id: String, fields: Dictionary) -> Run.RunState:
 	var next := s.copy()
+	if s.orientation_resume != null:
+		next.orientation_resume = restore(s.orientation_resume, id, fields)
+		next.wallets = next.orientation_resume.wallets
+		return next
 	var wallets := s.wallets.duplicate()
 	var wallet := Upgrades.UpgradeState.make(int(fields.credits))
 	wallet.owned.assign(fields.nodes)
+	var training := str(fields.get("training_node", "deep_pockets"))
+	if fields.has("training_refund") and Run.training_enabled(s, training):
+		wallet.last_id = training
+		wallet.last_price = int(fields.training_refund)
 	wallets[id] = wallet
 	next.wallets = wallets
+	if s.second_wind:
+		next.wind_profiles = s.wind_profiles.duplicate()
+		next.wind_profiles[id] = "profile:" + str(fields.player)
 	if next.shop and fields.has("cabinet"):
 		next = Run.with_cabinet(next, id, Shop.cabinet_from_text(String(fields.cabinet)))
 	return next
@@ -81,6 +92,13 @@ static func collect(s: Run.RunState, id: String, old: Dictionary, name_: String,
 	if s.shop:
 		var state: Shop.ShopState = s.shop_state
 		fields.cabinet = Shop.cabinet_text(Shop.cabinet_of(state.cabinets, id))
+	if s.deep_pockets:
+		fields.erase("training_refund")
+		fields.erase("training_node")
+		if wallet != null and not Upgrades.induction_node(wallet.last_id).is_empty():
+			fields.training_refund = wallet.last_price
+			if wallet.last_id != "deep_pockets":
+				fields.training_node = wallet.last_id
 	return fields
 
 ## Only ordinary Bank and server-accepted transactions change durable state.
@@ -90,8 +108,11 @@ static func changed(events: Array) -> Dictionary:
 	var served := false
 	for event: Dictionary in events:
 		match str(event.type):
-			"stashed", "fetched", "bought":
+			"stashed", "fetched", "bought", "trained", "trainingUndone", "trainingSettled":
 				ids[str(event.playerId)] = true
+			"orientationPaid":
+				for id: String in event.shares:
+					ids[id] = true
 			"dayEnded":
 				all = true
 				served = bool(event.get("result", {}).get("made", false))

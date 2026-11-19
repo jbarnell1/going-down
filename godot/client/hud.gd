@@ -106,6 +106,7 @@ var eyes: Dictionary = {}
 ## The day quota (client/day_view.gd, FD3): the corner line under PLAY ("DAY 1650/2400"), "" for none, and
 ## whether it is met (then amber, "... MET").
 var floor_quota_line := ""
+var mark_line := ""
 var floor_quota_met := false
 var day_line := ""
 var day_met := false
@@ -182,6 +183,10 @@ func _draw() -> void:
 		_draw_quota(px, now)
 	if not board_lines.is_empty() and not black:
 		_draw_board(px)
+	if mark_line != "" and not black:
+		var at := Vector2(maxf(size.x * 0.06, 16.0), maxf(size.y * 0.06, 12.0))
+		draw_rect(Rect2(at - Vector2(4, 3) * px, Vector2(PixelFont.width(mark_line) + 8, 13) * px), Color(0, 0, 0, 0.58))
+		PixelFont.draw_shadowed(self, mark_line, at, px, Color("#ffd27a"))
 	if count_text != "" and not black:
 		var cw := PixelFont.width(count_text) * px
 		var cp := Vector2(floorf((size.x - cw) * 0.5), maxf(size.y * 0.06, 12.0))

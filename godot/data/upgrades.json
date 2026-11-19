@@ -3,6 +3,34 @@
     "note": "Prices are in shares: one share is one made day's pay for one player. Node price = (price_shares + extra_per_owned * nodes already owned) * share. The first node costs about one share; each later node costs one share more than the last.",
     "extra_per_owned": 1
   },
+  "induction": {
+    "deep_pockets": {
+      "id": "deep_pockets",
+      "name": "Deep Pockets",
+      "branch": "Hands",
+      "layer": 1,
+      "price_shares": 1,
+      "description": "The same item stacks three to a slot."
+    },
+    "second_wind": {
+      "id": "second_wind",
+      "name": "Second Wind",
+      "branch": "Nerve",
+      "layer": 1,
+      "price_shares": 1,
+      "description": "When winded, press sprint again to refill your stamina at once.",
+      "drawback": "You gasp loudly. Once a floor."
+    },
+    "soft_shoes": {
+      "id": "soft_shoes",
+      "name": "Soft Shoes",
+      "branch": "Ear",
+      "layer": 1,
+      "price_shares": 1,
+      "description": "Footsteps carry a quarter less far.",
+      "drawback": "Not while sprinting."
+    }
+  },
   "nodes": [
     {
       "id": "flashbulb",

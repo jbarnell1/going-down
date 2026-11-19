@@ -42,6 +42,8 @@ const Session = preload("res://net/session.gd")
 const Places = preload("res://sim/places.gd")
 const GroundskeeperView = preload("res://client/groundskeeper_view.gd")
 const OrientationView = preload("res://client/orientation_view.gd")
+const MarksView = preload("res://client/marks_view.gd")
+const AnnexNotesView = preload("res://client/annex_notes_view.gd")
 const EyeHeight = preload("res://client/eye_height.gd")
 const RoomClient = preload("res://net/room_client.gd")
 const LocalRoom = preload("res://net/local_room.gd")
@@ -91,6 +93,7 @@ const InventoryViewScript = preload("res://client/inventory_view.gd")
 # The shop and the cabinet on screen (S2): client/cabinet_view.gd.
 const CabinetViewScript = preload("res://client/cabinet_view.gd")
 const ShopViewScript = preload("res://client/shop_view.gd")
+const SkillsViewScript = preload("res://client/skills_view.gd")
 const Shop = preload("res://sim/shop.gd")
 ## Logs, crash and F9 reports for game night (client/telemetry.gd): read-only on this node.
 const Telemetry = preload("res://client/telemetry.gd")
@@ -159,6 +162,7 @@ var start: StartScreen
 var _playtest_active := false
 var _playtest_selection := -1
 var _playtest_orientation := false
+var _orientation_campaign := false
 var _playtest_face := ""
 var _playtest_hints: Dictionary = {}
 var _playtest_hint_persist := true
@@ -188,9 +192,11 @@ var inv_view: InventoryViewScript
 var cab_view: CabinetViewScript
 ## The shop's card at windows 1 and 2, and what bought items do on screen (S2, client/shop_view.gd).
 var shop_view: ShopViewScript
+var skills_view: SkillsViewScript
 var pending_inv_sel := -1
 var pending_inv_step := 0
 var pending_inv_op := ""
+var _sprint_was_held := false
 var pending_inv_arg: Variant = null
 var _inv_want := -1
 var _inv_want_at := -100000
@@ -256,6 +262,10 @@ var t_hold: Variant = null
 ## Tests: F held (the bunk), or null for the keyboard.
 var t_use: Variant = null
 var pending_call := false
+var pending_mark := false
+var marks_view: MarksView = null
+var annex_notes_view: AnnexNotesView = null
+var annex_note_focus: Dictionary = {}
 var pending_pick := false
 ## F pressed for a hide (the Playroom); tests: W held in a hide (peek), or null for the keyboard.
 var pending_hide := false
@@ -577,6 +587,7 @@ func _read_options() -> void:
 			"searchbreak": SearchView.test_break = val
 			"tape": tape_arg = val != "0"
 			"ready": ready_arg = val != "0"
+			"orientation_campaign": _orientation_campaign = val == "1"
 	if OS.has_feature("web"):
 		seed = _url("seed", seed)
 		quality = _url("quality", quality)
@@ -689,6 +700,9 @@ func _build_view() -> void:
 	shop_view = ShopViewScript.new()
 	shop_view.name = "ShopView"
 	hud.add_child(shop_view)
+	skills_view = SkillsViewScript.new()
+	skills_view.name = "SkillsView"
+	hud.add_child(skills_view)
 	start = StartScreen.new()
 	start.name = "StartScreen"
 	add_child(start)
@@ -851,6 +865,7 @@ func _play_alone() -> void:
 	lr.open_local(seed, nm, entity_on, start.face_code)
 	# The game's run is a run of days: BANK rides up to the prison, bed starts the next day.
 	lr.days = true
+	lr.orientation_campaign = _orientation_campaign
 	# Live settings: alone, the player's own changes are kept in user://settings.json (none under automation).
 	lr.open_settings("" if automated else LocalRoom.SETTINGS_FILE)
 	if not automated:
@@ -976,6 +991,7 @@ func _pre_run(rc: RoomClient, now: float) -> void:
 	start.count_left = rc.start_at - now if rc.start_at >= 0.0 and not rc.run_on else -1.0
 	start.without_ok = rc.host_id == rc.my_id and rc.without_at >= 0.0 and now >= rc.without_at and not rc.run_on
 	start.run_depth = rc.run_depth if rc.run_on else -1
+	start.run_practice = rc.run_on and rc.orientation_active
 
 func _leave_room() -> void:
 	_back_to_title()
@@ -1037,6 +1053,11 @@ func _clear_world() -> void:
 	note_reader.close()
 	inv_view.reset()
 	spots_root = null
+	marks_view = null
+	annex_notes_view = null
+	annex_note_focus = {}
+	pending_mark = false
+	hud.mark_line = ""
 
 # --- runs and floors ----------------------------------------------------------------------------
 
@@ -1085,6 +1106,16 @@ func _build_floor(plan: Dictionary) -> void:
 	level.props_on = props_on
 	world.add_child(level)
 	level.build(plan, str(snap.get("seed", seed)), link.plan, link.hides)
+	marks_view = null
+	annex_notes_view = null
+	annex_note_focus = {}
+	if note_reader.wall_text != "":
+		note_reader.close()
+	if str(plan.get("place", "")) == "annex":
+		marks_view = MarksView.new()
+		level.add_child(marks_view)
+		annex_notes_view = AnnexNotesView.new()
+		level.add_child(annex_notes_view)
 	sfx.set_floor(plan, str(snap.get("seed", seed)))
 	# A place's own fog and footsteps (the Arboretum's: client/arboretum_view.gd).
 	env.fog_light_color = level.get_meta(&"fog_color", Color(0.05, 0.06, 0.06))
@@ -1244,6 +1275,10 @@ func _input(event: InputEvent) -> void:
 		if k.physical_keycode in [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER] and _vote_reel():
 			get_viewport().set_input_as_handled()
 			return
+		if k.physical_keycode == KEY_F and hud.prompt == AnnexNotesView.PROMPT and not annex_note_focus.is_empty() and not _esc_menu and not wheel_open:
+			note_reader.open_wall(int(annex_note_focus["id"]), str(annex_note_focus["text"]))
+			sfx.play("search_paper")
+			return
 		if k.physical_keycode == KEY_F and _remission_readable:
 			note_reader.open(REMISSION_NOTE_ID)
 			return
@@ -1262,10 +1297,14 @@ func _input(event: InputEvent) -> void:
 				_new_run()
 		elif k.physical_keycode == KEY_E:
 			raise_latch = not raise_latch
+		elif k.physical_keycode == KEY_Q and snap.get("annexPad") != null and not _esc_menu and not wheel_open:
+			pending_mark = true
 		elif k.physical_keycode == KEY_F and _station() == "kiosk":
 			_open_kiosk()
 		elif k.physical_keycode == KEY_F and _station() == "shop" and snap.get("shop") != null:
 			_open_card("shop")
+		elif k.physical_keycode == KEY_F and _station() == "skills" and snap.get("skills") != null:
+			_open_card("skills")
 		elif k.physical_keycode == KEY_F and _at_my_cabinet():
 			_open_card("cabinet")
 		elif k.physical_keycode >= KEY_1 and k.physical_keycode <= KEY_4:
@@ -1397,9 +1436,11 @@ func _send_emote(which: String) -> void:
 ## The shop's and the cabinet's cards (S2): keys and clicks while one is open. True when the event was the card's.
 ## The card closes with F or Esc; the host decides every move (sent as the inventory's requests).
 func _card_input(event: InputEvent) -> bool:
-	if not cab_view.is_open() and not shop_view.is_open():
+	if not cab_view.is_open() and not shop_view.is_open() and not skills_view.is_open():
 		return false
 	var card: Object = shop_view if shop_view.is_open() else cab_view
+	if skills_view.is_open():
+		card = skills_view
 	if event is InputEventKey:
 		var k := event as InputEventKey
 		if not k.pressed or k.echo:
@@ -1433,6 +1474,11 @@ func _open_card(which: String) -> bool:
 		cab_view.show_card()
 	elif which == "shop":
 		shop_view.show_card()
+		sfx.play("teller_window")
+	elif which == "skills":
+		if snap.get("skills") == null or not snap.get("bed") is Dictionary or _wake_left(snap) >= 0.0 or _lights_out:
+			return false
+		skills_view.show_card()
 		sfx.play("teller_window")
 	wheel_open = false
 	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
@@ -1654,6 +1700,8 @@ func _game_input(dt: float) -> Dictionary:
 		hide_fast = false
 		f = 0.0
 	var pick: bool = pending_pick and not call and not hide
+	var mark := pending_mark and not still and not in_hide
+	pending_mark = false
 	pending_call = false
 	pending_pick = false
 	pending_hide = false
@@ -1672,6 +1720,11 @@ func _game_input(dt: float) -> Dictionary:
 		_inv_want_at = now_ms
 	var inv_op := pending_inv_op
 	var inv_arg: Variant = pending_inv_arg
+	if sprint and not _sprint_was_held and not still and inv_op == "" and snap.get("wind") is Dictionary and link != null:
+		if int(snap.wind.get(link.my_id(), 0)) in [1, 2] and bool(me.get("winded", false)):
+			inv_op = "skill"
+			inv_arg = 3
+	_sprint_was_held = sprint
 	pending_inv_sel = -1
 	pending_inv_step = 0
 	pending_inv_op = ""
@@ -1679,7 +1732,7 @@ func _game_input(dt: float) -> Dictionary:
 	var aspect := 480.0 / 270.0
 	var hfov := rad_to_deg(2.0 * atan(tan(deg_to_rad(VFOV) * 0.5) * aspect))
 	return {"dt": dt, "f": f, "r": r, "sprint": sprint, "creep": creep, "yaw": yaw, "pitch": pitch,
-		"hfov": hfov, "vfov": VFOV, "raised": raised and not still, "call": call, "hold": hold, "pickUp": pick, "still": still, "use": use,
+		"hfov": hfov, "vfov": VFOV, "raised": raised and not still, "call": call, "hold": hold, "pickUp": pick, "still": still, "use": use, "mark": mark,
 		"hide": hide, "hideFast": hide_fast, "peek": peek,
 		# Findables (FD10): F held for the search client/search_view.gd offered on the last frame.
 		"search": search_view.want_search and not hide and not call, "searchFast": search_view.want_fast,
@@ -1708,6 +1761,12 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	announcer.days_on = s.get("day") != null
 	announcer.day_lock_on = DayView.lock_of(s.get("day")) != null
 	announcer.my_id = link.my_id()
+	hud.mark_line = ""
+	var pad: Variant = s.get("annexPad")
+	if marks_view != null and pad is Dictionary:
+		hud.mark_line = "SHARED MARKS %d/%d%s" % [int(pad["pad"]), int(pad["size"]), "   Q PLACE" if int(pad["pad"]) > 0 else ""]
+		marks_view.show_marks(s["annexMarks"], link.plan, link.names())
+		annex_notes_view.show_notes(s.get("annexNotes", []))
 	_present(s.get("events", []), now)
 	_show_finds_events(s, now)
 	inv_view.on_events(s.get("events", []), link.my_id(), link.names(), now, sfx)
@@ -1789,6 +1848,8 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	# The lift: doors, indicator, votes, buttons.
 	var phase := str(s["phase"])
 	var practice := _resident_kind == "orientation"
+	if practice:
+		OrientationView.show_standees(level, s.get("orientationStandees"), float(s["hostNow"]))
 	lift.set_doors(bool(s["doorsOpen"]))
 	_show_indicator(now)
 	lift.set_vote(str(me["side"]) if me.get("side") != null else "")
@@ -1907,22 +1968,32 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	if cab_view.is_open() and (not at_cab or me_down or ended or _lights_out):
 		cab_view.close()
 	shop_view.update(s.get("shop"), link.my_id(), lc0.tuning if lc0 != null else null, float(s.get("hostNow", 0.0)))
+	skills_view.update(s.get("skills"), s.get("wind"), s.get("shoes"), link.my_id(), shop_view.credits, s.get("events", []), now)
 	shop_view.on_events(s.get("events", []), link.my_id(), now, sfx)
 	shop_view.show_world(spots_root, cam, s.get("shop"), float(s.get("hostNow", 0.0)), now, sfx)
 	if shop_view.is_open() and (station != "shop" or me_down or ended or _lights_out):
 		shop_view.close()
+	if skills_view.is_open() and (s.get("skills") == null or station != "skills" or me_down or ended or _lights_out or _wake_left(s) >= 0.0):
+		skills_view.close()
 	for e: Dictionary in s.get("events", []):
 		if str(e.get("type", "")) == "bought" and str(e.get("playerId", "")) == link.my_id():
 			sfx.play("shop_bought" if sfx.recorded.has("shop_bought") else "teller_ding")
-	if level.has_meta(&"prison"):
-		level.get_meta(&"prison").call("set_shop_open", s.get("shop") != null)
 	var wake_left := _wake_left(s)
+	var skills_open := s.get("skills") != null and s.get("bed") is Dictionary and not _lights_out and wake_left < 0.0
+	if level.has_meta(&"prison"):
+		level.get_meta(&"prison").call("set_shop_open", s.get("shop") != null, skills_open)
+	annex_note_focus = {}
+	if annex_notes_view != null and not (me_down or ended or noise or hud.menu_on or wheel_open or note_reader.is_open()) \
+			and str(me.get("status", "")) == "ok" and not bool(me.get("aboard", false)):
+		annex_note_focus = annex_notes_view.focus(link.plan, cam.position, -cam.basis.z, int(me["level"]))
 	_update_search(s, me, home, station, me_down or ended or noise or kiosk.is_open() or _lights_out)
 	if not ended and not noise and not kiosk.is_open() and not _lights_out and not me_down:
-		if down_view.prompt != "":
+		if note_reader.wall_text != "":
+			prompt = ""
+		elif down_view.prompt != "":
 			prompt = down_view.prompt
 			hud.prompt_fill = down_view.fill
-		elif cab_view.is_open() or shop_view.is_open():
+		elif cab_view.is_open() or shop_view.is_open() or skills_view.is_open():
 			prompt = ""
 		elif at_cab:
 			prompt = "F  OPEN YOUR CABINET"
@@ -1935,8 +2006,10 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 			prompt = "F  READ REMISSION NOTICE"
 		elif station != "":
 			var here := Vector2i(floori(float(me["x"]) / Prison.CELL_SIZE), floori(float(me["z"]) / Prison.CELL_SIZE))
-			# The shop (S2): windows 1 and 2 are open with the shop on, shut in the morning; the skill tree stays shut.
-			prompt = PrisonView.prompt_for(here) if station == "shop" and s.get("shop") != null and wake_left < 0.0 else PrisonView.tonight_prompt_for(here)
+			if station == "skills" and skills_open:
+				prompt = "F  OPEN SKILLS"
+			else:
+				prompt = PrisonView.prompt_for(here) if station == "shop" and s.get("shop") != null and wake_left < 0.0 else PrisonView.tonight_prompt_for(here)
 		elif wake_left >= 0.0:
 			# The morning in the cells (S2): what is in your cabinet goes down with you only if you take it out.
 			prompt = "THE LIFT LEAVES IN %d. TAKE WHAT YOU NEED FROM YOUR CABINET" % ceili(wake_left)
@@ -1944,8 +2017,10 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 			pass   # home for the night: the car cannot be called
 		elif bool(me.get("canCall", false)):
 			prompt = "F  â–¼ CALL"
+		elif not annex_note_focus.is_empty():
+			prompt = AnnexNotesView.PROMPT
 		elif practice and phase == "boarding":
-			prompt = "ALL CREW ON BANK TO FINISH"
+			prompt = "ALL CREW ON BANK TO CONTINUE" if int(s["depth"]) == 0 else "ALL CREW ON BANK TO FINISH"
 		elif bool(me.get("nearHold", false)):
 			prompt = "F  <|> HOLD"
 		elif _tape_in_reach(me):
@@ -2049,7 +2124,7 @@ func _update_search(s: Dictionary, me: Dictionary, home: bool, station: String, 
 		moving = absf(float(t_move[0])) > SearchView.MOVE_LETS_GO or absf(float(t_move[1])) > SearchView.MOVE_LETS_GO
 	elif mode == "game":
 		moving = Input.get_vector("left", "right", "back", "forward").length() > SearchView.MOVE_LETS_GO
-	if moving and note_reader.open_id != "":
+	if (moving and note_reader.open_id != "") or (off and note_reader.wall_text != ""):
 		note_reader.close()
 	var f_held: bool = (str(t_search) == "careful" or str(t_search) == "fast") if t_search != null \
 		else (mode == "game" and not kiosk.is_open() and not note_reader.is_open() and Input.is_action_pressed("use"))
@@ -2057,7 +2132,7 @@ func _update_search(s: Dictionary, me: Dictionary, home: bool, station: String, 
 	var bed: Variant = s.get("bed")
 	var blocked := off or down_view.prompt != "" or (home and bed is Dictionary and (bool((bed as Dictionary)["inBed"]) or bool((bed as Dictionary)["atBunk"]))) \
 		or station != "" or bool(me.get("canCall", false)) or bool(me.get("nearHold", false)) or _tape_in_reach(me) or int(s.get("nearHide", -1)) >= 0 \
-		or inv_view.f_op == "take"
+		or inv_view.f_op == "take" or not annex_note_focus.is_empty()
 	search_view.update(s, link.my_id(), yaw, f_held, sprint, moving, blocked)
 
 ## This frame's search events: your result line and note (into the reader), the noise of a rushed search.
@@ -2246,6 +2321,10 @@ func _floor_label(floor_n: int) -> String:
 # The indicator over the doors (src/main.ts showIndicator).
 func _show_indicator(now: int) -> void:
 	var depth := int(snap["depth"])
+	if _resident_kind == "orientation" and depth == 0:
+		var phase := str(snap["phase"])
+		lift.show_indicator("T", phase != "away", -1 if phase in ["riding", "coming"] else 0)
+		return
 	match str(snap["phase"]):
 		"arriving", "unloading", "boarding":
 			lift.show_indicator(_floor_label(depth), true, 0)
@@ -2287,6 +2366,9 @@ func _present(events: Array, now: int) -> void:
 			event_log.pop_front()
 		var mine := str(e.get("playerId", "")) == my
 		match ty:
+			"secondWind":
+				if client != null and int(e.depth) == client.local_depth and int(e.day) == client.day_index:
+					sfx.play_at("second_wind", Vector3(float(e.x), float(e.y) + 1.45, float(e.z)))
 			"doorsOpened", "doorsClosed":
 				sfx.play("doors")
 			"carLeft":
@@ -2358,6 +2440,10 @@ func _present(events: Array, now: int) -> void:
 			"orientationHonk":
 				if orderly is OrientationView:
 					(orderly as OrientationView).honk()
+			"orientationPaid":
+				var credited := int(e.get("shares", {}).get(my, 0))
+				hud.note = "%d PRACTICE CREDITS TO YOUR WALLET" % credited
+				_note_until = now + 5500
 			"wiped":
 				if snap.get("day") == null:
 					ending = {"kind": "wiped", "at": now, "summary": e["summary"]}
@@ -2524,8 +2610,11 @@ func _show_day(s: Dictionary, now: int) -> void:
 		left = "LIGHTS OUT %d" % ceili(maxf(0.0, float(lo) - hn))
 	hud.count_text = count + ("  " + left if left != "" and not _lights_out else "")
 	_board = PrisonView.report_text(result, link.names())
+	var practice_paid := result is Dictionary and int(result.get("day", 0)) == 1 and link.rc.orientation_paid > 0
+	if practice_paid:
+		_board.insert(2, "PRACTICE PAID %d TO CREW" % link.rc.orientation_paid)
 	if pv != null:
-		pv.call("show_report", _board)
+		pv.call("show_report", _board, practice_paid)
 		var lines := PrisonView.day_text(day, count)
 		if left != "":
 			lines.append(left)
@@ -2804,6 +2893,13 @@ func _command(c: String) -> String:
 				pending_inv_op = "buy"
 				pending_inv_arg = shop_view.sel
 			return JSON.stringify(shop_view.describe())
+		"skill":
+			if p.size() >= 2 and p[1] in ["f", "enter", "undo", "1", "2", "3"]:
+				var key := InputEventKey.new()
+				key.pressed = true
+				key.physical_keycode = {"f": KEY_F, "enter": KEY_ENTER, "undo": KEY_U, "1": KEY_1, "2": KEY_2, "3": KEY_3}[p[1]]
+				_input(key)
+			return JSON.stringify({"open": skills_view.is_open(), "credits": skills_view.credits, "ownership": skills_view.ownership, "notice": skills_view.notice})
 		"pieces":
 			# The floor's searchable pieces, where to stand at each and its prompt.
 			return JSON.stringify(search_view.pieces_plain())
@@ -3081,7 +3177,7 @@ func _test_state() -> Dictionary:
 		"phase": s.get("phase"), "depth": s.get("depth"), "t": s.get("t"), "dark": s.get("dark"), "warn": s.get("warn"),
 		"blackout": s.get("blackout"), "blink": s.get("blink"), "call": s.get("call"), "doorsOpen": s.get("doorsOpen"),
 		"bellLeft": s.get("bellLeft"), "votes": s.get("votes"), "summary": s.get("summary"), "playing": s.get("playing"),
-		"me": s.get("me"), "inst": s.get("inst"), "tapes": s.get("tapes"), "auto": s.get("auto"),
+		"me": s.get("me"), "inst": s.get("inst"), "tapes": s.get("tapes"), "auto": s.get("auto"), "wind": s.get("wind"),
 		"orderly": {"mode": o["mode"], "held": o["held"], "seeing": o["seeing"], "visible": o["visible"],
 			"moving": o["moving"], "frozen": o["frozen"], "distance": o["distance"], "x": o["x"], "z": o["z"],
 			"level": o["level"], "drawn": orderly.visible, "pose": o.get("pose"), "squeak": o["squeak"], "taken": o["taken"],
@@ -3113,7 +3209,7 @@ func _test_state() -> Dictionary:
 		"shop": {"host": _shop_plain(s.get("shop")), "cab": cab_view.describe(), "atCabinet": _at_my_cabinet(), "card": shop_view.describe()},
 		"day": s.get("day"), "hostNow": s.get("hostNow"), "bed": s.get("bed"), "seed": s.get("seed"),
 		"seek": s.get("seek"), "mySeek": s.get("mySeek"), "countEvent": s.get("countEvent"), "nearHide": s.get("nearHide"), "hideCam": s.get("hideCam"),
-		"place": link.plan_dict.get("place", ""),
+		"place": link.plan_dict.get("place", ""), "orientationStandees": s.get("orientationStandees"),
 		"hide": hide_view.describe(), "hud": {"health": hud.health, "rates": hud.health_rates, "countText": hud.count_text, "countBy": hud.count_by,
 			"seekNote": hud.seek_note, "subtitle": hud.subtitle, "bigNote": hud.big_note, "centerNote": hud.center_note,
 			"anger": hud.anger, "angerRates": hud.anger_rates},
