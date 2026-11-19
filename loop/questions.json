@@ -1984,6 +1984,25 @@
       "default": [
         "credits"
       ]
+    },
+    {
+      "id": "nerve-carton-refill",
+      "title": "How much Nerve should one juice carton restore?",
+      "context": "A player at 10 Nerve finds a carton in a drawer. Should drinking it bring them to 60 or all the way to 100? This decides how valuable it is to save a carton until late in a floor.",
+      "type": "single",
+      "options": [
+        {
+          "id": "add50",
+          "label": "Restore 50 Nerve, up to 100",
+          "note": "At 10 Nerve, one carton brings the player to 60."
+        },
+        {
+          "id": "full",
+          "label": "Refill the whole bar",
+          "note": "At 10 Nerve, one carton brings the player to 100."
+        }
+      ],
+      "default": []
     }
   ]
 }
