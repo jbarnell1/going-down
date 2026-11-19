@@ -899,10 +899,10 @@ class AnnexFloor:
 	## Lonely (see the header): the run time of the last chase note queued for each player, {id: t}.
 	var chase_noted: Dictionary = {}
 
-	static func start(plan_: Floor.FloorPlan, note_seq: int) -> AnnexFloor:
+	static func start(plan_: Floor.FloorPlan, note_seq: int, pad: int = Marks.DEFAULT_PAD) -> AnnexFloor:
 		var a := AnnexFloor.new()
 		a.plan = plan_
-		a.marks = Marks.MarksState.start_floor(Marks.DEFAULT_PAD)
+		a.marks = Marks.MarksState.start_floor(pad)
 		a.notes_state = Notes.new_state()
 		a.notes_from = note_seq
 		return a
@@ -1181,6 +1181,9 @@ class RunState:
 	## and stored result). The rules read it with Settings.f, falling back to today's constant. Replaced,
 	## never edited (with_tuning).
 	var tuning: Settings.Values = null
+	## The tuning in force when this floor's quota was set (floor_needed reads quota.step through it, so the host's
+	## change never moves a quota already shown). Null untuned.
+	var quota_tuning: Settings.Values = null
 	## The Arboretum (see the header): this floor's Groundskeeper and heal counts (a GardenFloor), else null.
 	var garden: GardenFloor = null
 	## A second Orderly (T9b, with_second_orderly; see "A second Orderly" in the header). Off: orderly2 is
@@ -1205,6 +1208,7 @@ class RunState:
 		s.flare_stun2_until = flare_stun2_until
 		s.cycles_done = cycles_done
 		s.tuning = tuning
+		s.quota_tuning = quota_tuning
 		s.garden = garden
 		s.lonely = lonely
 		s.day_lock = day_lock
@@ -1439,11 +1443,11 @@ static func at_home(s: RunState) -> bool:
 	return s.days and s.depth == 0
 
 ## What floor `depth` asks a crew of `crew` to record before the call button works (see QUOTA_PER_PLAYER).
-## 0 at home (depth 0 or less).
-static func floor_quota(depth: int, crew: int) -> int:
+## 0 at home (depth 0 or less). `tuning` (live settings; null: none): the host's quota.step.
+static func floor_quota(depth: int, crew: int, tuning: Settings.Values = null) -> int:
 	if depth <= 0:
 		return 0
-	var raw := float(QUOTA_PER_PLAYER * maxi(1, crew)) * M.pow_js(QUOTA_DEPTH_STEP, float(depth - 1))
+	var raw := float(QUOTA_PER_PLAYER * maxi(1, crew)) * M.pow_js(Settings.f(tuning, &"quota.step", QUOTA_DEPTH_STEP), float(depth - 1))
 	return maxi(QUOTA_ROUND, roundi(raw / QUOTA_ROUND) * QUOTA_ROUND)
 
 ## The crew a floor quota is for: everyone in the run who has not left the game (the host marks those
@@ -1477,7 +1481,8 @@ static func with_quota(s0: RunState) -> RunState:
 	s.quota = true
 	s.floor_earned = 0.0
 	s.floor_by = {}
-	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(s.players))
+	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(s.players), s.tuning)
+	s.quota_tuning = s.tuning
 	s.quota_met = false
 	return s
 
@@ -1487,7 +1492,8 @@ static func _new_quota_floor(s: RunState, players: Array[RunPlayer]) -> void:
 		return
 	s.floor_earned = 0.0
 	s.floor_by = {}
-	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(players))
+	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(players), s.tuning)
+	s.quota_tuning = s.tuning
 	s.quota_met = false
 
 ## A new run: the crew in the car at floor 1's landing, doors about to open. `deck`: the places its
@@ -1944,8 +1950,8 @@ static func with_second_orderly(s0: RunState) -> RunState:
 
 ## Whether this floor has a second Orderly by the rule (see the header).
 static func second_here(s: RunState) -> bool:
-	return s.second_orderly and not s.orientation and s.plan != null and s.plan.place == Places.CLINIC and s.depth >= SECOND_ORDERLY_DEPTH \
-		and not at_home(s)
+	return s.second_orderly and not s.orientation and s.plan != null and s.plan.place == Places.CLINIC \
+		and s.depth >= Settings.i(s.tuning, &"orderly2.first_floor", SECOND_ORDERLY_DEPTH) and not at_home(s)
 
 ## The second Orderly of the floor `s` is on (or none), as it starts: waiting at Relocate.second_start, facing
 ## the landing, settled clear of furniture. Updates `s`.
@@ -2190,7 +2196,7 @@ static func _scale_readings(crew: Instr.CrewState, ids: Dictionary, mult: float)
 
 ## step_crew, with closed readings multiplied by the depth's pay (tapes and events both).
 static func _crew_tick(s: RunState, players: Array[Instr.CrewPlayer], entities: Array[Instr.EntityTick], dt: float) -> Instr.CrewStep:
-	var out := Instr.step_crew(s.plan, s.crew, players, entities, dt)
+	var out := Instr.step_crew(s.plan, s.crew, players, entities, dt, s.tuning)
 	var mult := depth_multiplier(s.depth)
 	var ids := {}
 	for e in out.events:
@@ -2901,7 +2907,7 @@ static func _sync_annex(s: RunState) -> void:
 		return
 	if s.annex != null and s.annex.plan == s.plan:
 		return
-	s.annex = AnnexFloor.start(s.plan, s.note_seq)
+	s.annex = AnnexFloor.start(s.plan, s.note_seq, Settings.i(s.tuning, &"marks.pad", Marks.DEFAULT_PAD))
 
 ## A player's name as the notes write it: the host's name for them, without braces, else their id.
 static func name_of(s: RunState, id: String) -> String:
@@ -3687,8 +3693,13 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	# The floor quota for the crew as it is: set while the car arrives (so a player admitted at the stop
 	# counts), then it can only shrink (a player who leaves the game), never grow.
 	if s.quota and not s.orientation and not at_home(s):
-		var want := floor_quota(s.depth, quota_crew(players))
-		s.floor_needed = want if (s.phase == &"arriving" or s.floor_needed <= 0) else mini(s.floor_needed, want)
+		# Live settings: the host's quota.step as it was in force when the quota was set (quota_tuning), so a change
+		# never moves a quota already on screen; the next floor's takes the new one.
+		var setting := s.phase == &"arriving" or s.floor_needed <= 0
+		if setting:
+			s.quota_tuning = s.tuning
+		var want := floor_quota(s.depth, quota_crew(players), s.quota_tuning)
+		s.floor_needed = want if setting else mini(s.floor_needed, want)
 
 	# ---- 1. Run rules.
 	match s.phase:
@@ -4887,7 +4898,7 @@ static func searching(s: RunState, id: String) -> bool:
 
 ## The floor's quota as set on arrival, for the fill's credit units: the quota's own number, else what it would be.
 static func find_base(s: RunState, players: Array[RunPlayer]) -> int:
-	return s.floor_needed if s.quota and s.floor_needed > 0 else floor_quota(s.depth, quota_crew(players))
+	return s.floor_needed if s.quota and s.floor_needed > 0 else floor_quota(s.depth, quota_crew(players), s.tuning)
 
 ## Whether a player is in, getting into or getting out of a hide.
 static func _in_hide(s: RunState, id: String) -> bool:

@@ -9,6 +9,10 @@ const Move = preload("res://sim/move.gd")
 const House = preload("res://sim/ward/house.gd")
 const Ward = preload("res://sim/ward/state.gd")
 const View = preload("res://client/ward/view.gd")
+const Main = preload("res://client/main.gd")
+const Stamina = preload("res://sim/stamina.gd")
+const Brightness = preload("res://client/brightness.gd")
+const BrightShader = preload("res://client/ward/brightness.gdshader")
 
 var room: Variant = null
 var view: View
@@ -32,8 +36,20 @@ var card := PanelContainer.new()
 var card_open := false
 ## Going back to the title: the line the title shows (the start screen's error line), once the title is up.
 var title_reason := ""
+## WF2: the same body as on every other floor. The instrument on E (a toggle, right mouse held as well), the main
+## game's keys (client/main.gd _add_actions: arrows as well as WASD, Shift sprint, Ctrl or C creep, F use), and
+## its walk, sprint, creep and tank (sim/stamina.gd, the way client/play_link.gd steps them).
+var raise_latch := false
+var tank: Stamina.Stamina = Stamina.fresh_stamina()
+var gait: StringName = &"walk"
+## The player's brightness (client/brightness.gd, read from their settings file, never written here) on the picture,
+## as tape.gdshader's last step does it on the other floors.
+var brightness := Brightness.new()
+var bright_mat := ShaderMaterial.new()
 
 func _ready() -> void:
+	Main._add_actions()
+	_build_brightness()
 	_build_card()
 	if handed and room != null:
 		var overlay := CanvasLayer.new()
@@ -153,11 +169,14 @@ func _process(_delta: float) -> void:
 		local.body = Move.Body.make(feet.x, feet.z, 0, feet.y)
 		local.yaw = view.player.rotation.y
 		local.pitch = view.camera.rotation.x
-		local.gait = "sprint" if _running() else "walk"
-		local.use = Input.is_physical_key_pressed(KEY_F)
+		local.gait = String(gait)
+		local.stamina = tank
+		local.use = Input.is_action_pressed("use")
 		local.raised = _raised()
 		if view.caught or card_open:
 			# A watcher (or a player at the Esc card) sends nothing of their own: no use, no raise, no run.
+			raise_latch = false
+			gait = &"walk"
 			local.gait = "walk"
 			local.use = false
 			local.raised = false
@@ -221,14 +240,17 @@ func _process(_delta: float) -> void:
 func _physics_process(delta: float) -> void:
 	if view == null or room == null or card_open or view.caught or view.local_phase == "departed" or room.client == null or not room.client.playing:
 		return
-	var input := Vector2(int(Input.is_physical_key_pressed(KEY_D)) - int(Input.is_physical_key_pressed(KEY_A)),
-		int(Input.is_physical_key_pressed(KEY_S)) - int(Input.is_physical_key_pressed(KEY_W)))
+	tank = room.client.correct_stamina(tank)
+	var input := move_axes()
 	if automate and Time.get_ticks_usec() / 1000000.0 - automated_start < 2.0:
 		input.y = -1
-	var speed := Instrument.max_walk_speed(_raised(), 3.25 if _running() else 1.85)
 	var vector := view.player.basis * Vector3(input.x, 0, input.y).normalized()
 	if test_role in ["probe", "boarder"]:
 		vector = _test_walk()
+	var moving := not vector.is_zero_approx() or not stair_route.is_empty()
+	var cap := Instrument.max_walk_speed(true, Stamina.WALK_SPEED) if _raised() else INF
+	gait = Stamina.gait_for(tank, _running(), _creeping(), moving, cap)
+	var speed := minf(cap, Stamina.speed_for(gait))
 	if not stair_route.is_empty():
 		var destination := stair_route[test_leg]
 		var offset := destination - view.player.position
@@ -248,13 +270,24 @@ func _physics_process(delta: float) -> void:
 					print("WARD UPPER LANDING AND RETURN PASSED")
 					get_tree().quit()
 			return
+	var before := view.player.position
 	view._move(vector * speed, delta)
+	var after := view.player.position
+	tank = Stamina.step_stamina(tank, gait, Vector2(after.x - before.x, after.z - before.z).length() / delta if delta > 0.0 else 0.0, delta)
+
+## The main game's movement keys: x to the right, y backwards (client/main.gd _add_actions).
+static func move_axes() -> Vector2:
+	return Vector2(Input.get_action_strength("right") - Input.get_action_strength("left"),
+		Input.get_action_strength("back") - Input.get_action_strength("forward"))
 
 func _raised() -> bool:
-	return test_role == "boarder" or (test_role == "probe" and test_leg > 0) or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+	return test_role == "boarder" or (test_role == "probe" and test_leg > 0) or raise_latch or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
 
 func _running() -> bool:
-	return test_role == "probe" or Input.is_physical_key_pressed(KEY_SHIFT)
+	return test_role == "probe" or Input.is_action_pressed("sprint")
+
+func _creeping() -> bool:
+	return test_role == "" and Input.is_action_pressed("creep")
 
 func _test_walk() -> Vector3:
 	var house: House = view.houses[0].fixture
@@ -293,8 +326,34 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if card_open:
 		return
+	if view != null and not view.caught and event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_E:
+		# The instrument on E, as on every floor (client/main.gd): a press raises it, the next lowers it.
+		raise_latch = not raise_latch
+		get_viewport().set_input_as_handled()
+		return
 	if view != null:
 		view.look_input(event)
+
+func _build_brightness() -> void:
+	var layer := CanvasLayer.new()
+	# Over the 3D picture, under the Ward's words and the Esc card (the other floors' HUD is outside the tape too).
+	layer.layer = -1
+	add_child(layer)
+	var cover := ColorRect.new()
+	cover.name = "Brightness"
+	cover.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bright_mat.shader = BrightShader
+	cover.material = bright_mat
+	layer.add_child(cover)
+	brightness.load_saved()
+	apply_brightness(brightness.level)
+
+## The two numbers the other floors give tape.gdshader (client/main.gd _apply_brightness).
+func apply_brightness(lv: int) -> void:
+	var p := Brightness.params(lv)
+	bright_mat.set_shader_parameter("bright_lift", p["lift"])
+	bright_mat.set_shader_parameter("bright_gamma", p["gamma"])
 
 func _build_card() -> void:
 	var layer := CanvasLayer.new()

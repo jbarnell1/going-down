@@ -33,6 +33,7 @@ const Move = preload("res://sim/move.gd")
 const Sight = preload("res://sim/sight.gd")
 const TapeLib = preload("res://sim/tape.gd")
 const M = preload("res://sim/jsmath.gd")
+const Settings = preload("res://sim/settings.gd")
 
 # ---------------------------------------------------------------------------------------------
 # Tuning.
@@ -258,11 +259,13 @@ static func max_walk_speed(raised: bool, base_speed: float) -> float:
 ## Pay per second at a distance, before the repeat factor. 0 outside RECORD_RANGE.
 ## TypeScript writes `k ** RATE_CURVE`; JavaScript's ** calls the platform's pow, which no GDScript
 ## code can reproduce bit for bit (see jsmath.gd and godot/README.md), so this is fdlibm's pow.
-static func rate_at(distance: float) -> float:
-	if distance > RECORD_RANGE + EPS:
+## `tuning` (live settings; null: none): the host's record.reach (the range) and record.rate (the rate up close).
+static func rate_at(distance: float, tuning: Settings.Values = null) -> float:
+	var reach := Settings.f(tuning, &"record.reach", RECORD_RANGE)
+	if distance > reach + EPS:
 		return 0.0
-	var k := maxf(0.0, minf(1.0, (RECORD_RANGE - distance) / (RECORD_RANGE - NEAR_DISTANCE)))
-	return RATE_EDGE + (RATE_NEAR - RATE_EDGE) * M.pow_js(k, RATE_CURVE)
+	var k := maxf(0.0, minf(1.0, (reach - distance) / (reach - NEAR_DISTANCE)))
+	return RATE_EDGE + (Settings.f(tuning, &"record.rate", RATE_NEAR) - RATE_EDGE) * M.pow_js(k, RATE_CURVE)
 
 ## The repeat factor after `closed` readings of the same entity and trait.
 static func repeat_factor(closed: int) -> float:
@@ -306,8 +309,8 @@ static func may_record(e: EntityTick, holder_id: String) -> bool:
 	return e.holders == null or (e.holders as Dictionary).has(holder_id)
 
 ## In recording range: within RECORD_RANGE, and with line of sight if on different levels.
-static func in_record_range(plan: Floor.FloorPlan, holder: Move.Body, entity: Move.Body, distance: float) -> bool:
-	if distance > RECORD_RANGE + EPS:
+static func in_record_range(plan: Floor.FloorPlan, holder: Move.Body, entity: Move.Body, distance: float, tuning: Settings.Values = null) -> bool:
+	if distance > Settings.f(tuning, &"record.reach", RECORD_RANGE) + EPS:
 		return false
 	if holder.level == entity.level:
 		return true
@@ -333,7 +336,7 @@ class InstrumentStep:
 ## Advances one instrument by dt. Call after the entities have been stepped for this tick.
 ## `factor_for(entity_id, trait)` gives the current repeat factor for an entity and trait. `holder_id`:
 ## whose instrument it is (an entity tick may name the holders who can record it).
-static func step_instrument(plan: Floor.FloorPlan, prev: Instrument, holder_body: Move.Body, holder_active: bool, entities: Array[EntityTick], factor_for: Callable, dt: float, holder_id: String = "") -> InstrumentStep:
+static func step_instrument(plan: Floor.FloorPlan, prev: Instrument, holder_body: Move.Body, holder_active: bool, entities: Array[EntityTick], factor_for: Callable, dt: float, holder_id: String = "", tuning: Settings.Values = null) -> InstrumentStep:
 	var inst := prev.copy()
 	inst.rate = 0.0
 	inst.factor = 1.0
@@ -360,7 +363,7 @@ static func step_instrument(plan: Floor.FloorPlan, prev: Instrument, holder_body
 			sensed = true
 		if not live:
 			continue
-		if trait_acting(e) and may_record(e, holder_id) and (d <= RECORD_RANGE + EPS if not e.limb.is_empty() else in_record_range(plan, holder_body, e.next.body, d)) and (best == null or d < best_d):
+		if trait_acting(e) and may_record(e, holder_id) and (d <= Settings.f(tuning, &"record.reach", RECORD_RANGE) + EPS if not e.limb.is_empty() else in_record_range(plan, holder_body, e.next.body, d, tuning)) and (best == null or d < best_d):
 			best = e
 			best_d = d
 
@@ -370,7 +373,7 @@ static func step_instrument(plan: Floor.FloorPlan, prev: Instrument, holder_body
 			out.closed.append(cur)
 			cur = null
 		var factor: float = factor_for.call(best.id, best.trait_name)
-		var rate := rate_at(best_d) * factor
+		var rate := rate_at(best_d, tuning) * factor
 		if best.pay != null:
 			rate *= float((best.pay as Dictionary).get(holder_id, 1.0))
 		var add := rate * dt
@@ -501,7 +504,7 @@ static func _finish(ctx: _CrewTick, m: CrewMember, open: OpenReading) -> CrewMem
 ## Advances the whole crew by one tick, after the entities have been stepped. Steps every
 ## instrument, writes closed readings to tapes, prints slips, and drops the tapes of anyone the
 ## entities caught this tick. Players missing from `players` count as inactive where they last were.
-static func step_crew(plan: Floor.FloorPlan, crew: CrewState, players: Array[CrewPlayer], entities: Array[EntityTick], dt: float) -> CrewStep:
+static func step_crew(plan: Floor.FloorPlan, crew: CrewState, players: Array[CrewPlayer], entities: Array[EntityTick], dt: float, tuning: Settings.Values = null) -> CrewStep:
 	var ctx := _CrewTick.new()
 	ctx.t = crew.t + dt
 	ctx.repeats = crew.repeats.duplicate()
@@ -527,7 +530,7 @@ static func step_crew(plan: Floor.FloorPlan, crew: CrewState, players: Array[Cre
 		if m.body == null:
 			members.append(m)
 			continue
-		var r := step_instrument(plan, m.instrument, m.body, m.active, entities, factor_for, dt, m.id)
+		var r := step_instrument(plan, m.instrument, m.body, m.active, entities, factor_for, dt, m.id, tuning)
 		m.instrument = r.instrument
 		if r.recorded and not slips.has(r.recorded_trait):
 			slips.append(r.recorded_trait)

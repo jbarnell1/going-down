@@ -106,6 +106,9 @@ const ROWS: Array = [
 	# The Orderly (the Clinic).
 	[&"orderly.speed", &"orderly", "HUNT SPEED", "how fast it comes while nobody holds it", "m/s", 3.8, 2.4, 4.8, 0.05, &"now", &"LS1", F],
 	[&"orderly.dark_speed", &"orderly", "SPEED IN THE BLACKOUT", "the same, while the lights are out before the car", "m/s", 3.8, 2.4, 4.8, 0.05, &"now", &"LS1", F],
+	# The second Orderly (T9b, sim/run.gd second_here): a Clinic floor this deep or deeper has two. Decided as the car
+	# arrives, so a change waits for the next floor. Today's is Run.SECOND_ORDERLY_DEPTH.
+	[&"orderly2.first_floor", &"orderly", "SECOND ORDERLY FROM FLOOR", "a Clinic floor this deep or deeper has a second Orderly", "", 2.0, 1.0, 20.0, 1.0, &"floor", &"T22b", W],
 	[&"orderly.catch_dance", &"orderly", "BELLY DANCE AFTER A CATCH", "dance after bending over a downed crewmate", "on/off", 0.0, 0.0, 1.0, 1.0, &"now", &"T20i", W],
 	# The Temp (the Annex). Lonely (T19c, sim/lonely.gd) is on in the game's rooms: its chase speed is temp.speed
 	# (temp.dark_speed in the blackout, temp.alone_speed with a crew of one), today's its CHASE_SPEED and
@@ -134,6 +137,12 @@ const ROWS: Array = [
 	[&"minder.anger_sprint", &"minder", "SPRINTING FILLS ITS ANGER IN", "seconds of sprinting that fill an empty anger bar", "s", 1.0, 0.5, 10.0, 0.5, &"now", &"LS4", F],
 	[&"minder.anger_noise", &"minder", "ONE NOISE ADDS TO ITS ANGER", "a ball pit, a flap, a dropped tape or an emote", "in 100", 55.0, 5.0, 100.0, 1.0, &"now", &"LS4", W],
 	[&"minder.anger_cool", &"minder", "ITS ANGER COOLS FROM FULL IN", "seconds of quiet that empty a full anger bar. Does nothing with the party table on (the game's rooms): there the bar never cools by itself", "s", 50.0, 10.0, 300.0, 5.0, &"now", &"LS4", F],
+	# The party table (T15h, sim/seek.gd "Party table"): on in the game's rooms. Today's are Seek.FETCH_TIME, FETCH_ANGER
+	# and FETCH_REACH. The health the freed get back is heal.health. Read by the rules; shown on the panel once the
+	# client's table prompt (client/hide_view.gd) reads them too (see WIRED_IDS).
+	[&"party.free_time", &"minder", "FREEING THE TABLE TAKES", "seconds of F held at the party table that free everyone seated", "s", 3.0, 1.0, 10.0, 0.5, &"next", &"T22b", F],
+	[&"party.free_anger", &"minder", "FREEING THE TABLE ANGERS IT BY", "added to its anger bar when the table is freed", "in 100", 50.0, 0.0, 100.0, 5.0, &"now", &"T22b", W],
+	[&"party.reach", &"minder", "FREE THE TABLE FROM WITHIN", "how near a seat F works", "m", 1.5, 0.8, 3.0, 0.1, &"floor", &"T22b", F],
 	# The Groundskeeper (the Arboretum; sim/hearing.gd, sim/noise.gd, sim/run.gd KEEPER_HEALS). AR1 wires its
 	# speeds, reach, timings and heals, along with the radii of the garden sounds.
 	[&"groundskeeper.speed", &"groundskeeper", "COMING SPEED", "how fast it comes to a noise", "m/s", 6.0, 4.2, 9.0, 0.1, &"now", &"AR1", F],
@@ -265,6 +274,12 @@ const WIRED_IDS: Array[StringName] = [
 	&"badge.chance", &"badge.depth_chance",
 	# TT1: the Tenant clock.
 	&"tenant.minutes",
+	# T22b: the second Orderly's first floor, the flare and the lamp (already read by the rules), recording, the
+	# quota's growth and the Annex's pad. The party table's three rows (party.*) are read by the rules but wait here
+	# until client/hide_view.gd's table prompt reads them too, so the screen never says 3 S when it is 5.
+	&"orderly2.first_floor",
+	&"flare.throw", &"flare.reach", &"flare.stun", &"flare.blind", &"flare.noise", &"lamp.seconds", &"lamp.range",
+	&"record.reach", &"record.rate", &"quota.step", &"marks.pad",
 ]
 
 ## The least wait of a call is its start delay plus the floors: sim/run.gd CALL_START_DELAY_MIN (this file

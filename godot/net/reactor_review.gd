@@ -8,7 +8,25 @@ static func at_prison_station(x: float, z: float) -> bool:
 const Archive := preload("res://sim/reactor_archive.gd")
 const State := preload("res://sim/reactor.gd")
 const SPAWN := [Vector3(-3,0,-4),Vector3(1,0,-3),Vector3(6,2,-8),Vector3(6,0,-3)]
-const STORES := [Vector3(-6.8,.92,-6.5),Vector3(-6.4,.92,-10),Vector3(-5.8,.92,-2.4)]
+## RX1: where the fuse can be, one chosen from the floor seed (the same for every player; late joiners get it
+## in the block's fuseAt). Each is out of plain sight in the room the ReactorCampaign pack draws: on the floor
+## in the gap behind one of the three west pillars (x -8.5, between pillar and wall), or in the shadow under
+## the control gallery's lip (the gallery is x 3.55 to 9.25, z -10.5 to 0.5, its underside 1.1 m up), 1.45 m
+## in: seen by looking under it, and in reach (2 m) of a player standing at the edge. The old spots were three
+## open shelf tops by the west wall; the pack still draws its FUSE STORES stand at one of them.
+const FUSE_SPOTS := [Vector3(-9.02,.07,-11.0),Vector3(-9.02,.07,-5.0),Vector3(-9.02,.07,1.0),
+	Vector3(5.0,.07,-2.5),Vector3(5.0,.07,-8.0)]
+## RX1: host seconds the lights hold after the first player crosses the outage line, before the cut. The
+## owner: "The lights should stay on for awhile....Get you feeling save and then power cuts out." A constant
+## for game night (not yet a live setting: the Reactor host gets no tuning values).
+const POWER_HOLD := 45.0
+## RX1: where the pack draws the tape's plinth (its cassette node's default, floor.gd), and how far the seed
+## may move the tape and still leave it lying on the plinth top (the plinth is 0.66 m by 0.5 m).
+const TAPE_PLINTH := Vector3(-.52,0,6.6)
+## RX1 is on in the game. Off, this floor is exactly the one before RX1 (the open shelves, the tape's old offset,
+## the cut at the line): only tests turn it off, to prove that (tests/cycles_rig.gd flag_off_digest).
+static var rx1 := true
+const OLD_STORES := [Vector3(-6.8,.92,-6.5),Vector3(-6.4,.92,-10),Vector3(-5.8,.92,-2.4)]
 var seed_value: int
 var archive: Archive
 var rules: State
@@ -27,8 +45,14 @@ func _init(seed_number: int, archive_path := "") -> void:
 	for i in 4:
 		rng.randf() # each source rig has an offset for its original idle
 	var trigger := rng.randf_range(.8,2.5)
-	rules = State.new(trigger,STORES[rng.randi_range(0,2)],Vector3(-3.3,1.05,5.55))
-	rules.cassette_at = Vector3(-1.02-rng.randf_range(0,.2),0,6.58+rng.randf_range(0,.12))
+	if not rx1:
+		rules = State.new(trigger,OLD_STORES[rng.randi_range(0,2)],Vector3(-3.3,1.05,5.55))
+		rules.cassette_at = Vector3(-1.02-rng.randf_range(0,.2),0,6.58+rng.randf_range(0,.12))
+	else:
+		rules = State.new(trigger,FUSE_SPOTS[rng.randi_range(0,FUSE_SPOTS.size()-1)],Vector3(-3.3,1.05,5.55))
+		rules.power_hold = POWER_HOLD
+		# On the plinth beside the lift door (the old -1.02 offset left the tape hanging in the air beside it).
+		rules.cassette_at = TAPE_PLINTH+Vector3(rng.randf_range(-.07,.07),0,rng.randf_range(0,.12))
 	rules.collected = archive.recovered
 	grid.region = Rect2i(-9,-13,19,27)
 	grid.cell_size = Vector2.ONE

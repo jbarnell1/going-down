@@ -143,6 +143,10 @@ static func flag_off_digest() -> String:
 	parts.append("\n".join(a.ticks))
 	parts.append(a.log_text())
 	# The Reactor: floor 6 already handled (no Ward on it, as tests/prop_late_floors.gd does), down to 7, home.
+	# RX1 (net/reactor_review.gd rx1) changed the Reactor floor itself after 1013e52. It is off for this part,
+	# so the digest still pins the cycles flag alone against that commit.
+	var review_script: Script = load("res://net/reactor_review.gd")
+	review_script.set("rx1", false)
 	var b := Crew.new("cycles-off-reactor", HostRules.new(true, 6, Places.FULL, true), ["one", "two"] as Array[String], false)
 	b.host.late_floors = true
 	b.host._late_plan = b.host.state.plan
@@ -152,6 +156,7 @@ static func flag_off_digest() -> String:
 	reactor_round(b)
 	b.tick_for(3.0, func() -> bool: return b.host.state.depth == 0)
 	b.tick_for(2.0)
+	review_script.set("rx1", true)
 	parts.append("\n".join(b.ticks))
 	parts.append(b.log_text())
 	return "%d/%d %s" % [a.ticks.size(), b.ticks.size(), "\n".join(parts).sha256_text()]

@@ -19,6 +19,12 @@ var cassette_at := Vector3(-.52,0,6.6)
 var revision := 0
 var sequence := 0
 var outage_plane: float
+## RX1: how long the power holds after the first player crosses outage_plane, in host seconds. 0 cuts it at
+## once (the old rule, still the default here); the real floor (net/reactor_review.gd POWER_HOLD) sets it.
+## Counted down only in tick(), from host time, so every player sees the cut on the same host tick.
+var power_hold := 0.0
+## -1 until someone crosses the line; then the host seconds still to run before the cut.
+var hold_left := -1.0
 var fuse: Vector3
 var breaker: Vector3
 var players := {}
@@ -32,9 +38,15 @@ func observe(peer: int, at: Vector3) -> void:
 	players[peer] = at
 	if not condition.has(peer):
 		condition[peer] = "up"
-	if power==Power.NORMAL and at.z<outage_plane:
-		power = Power.EMERGENCY
-		revision += 1
+	if power==Power.NORMAL and hold_left<0 and at.z<outage_plane:
+		hold_left = power_hold
+		if hold_left<=0:
+			_cut()
+
+func _cut() -> void:
+	power = Power.EMERGENCY
+	hold_left = 0.0
+	revision += 1
 
 func leave(peer: int) -> void:
 	drop_carried(peer)
@@ -56,6 +68,10 @@ func tick(dt: float) -> void:
 			condition[peer] = "out"
 			down_time.erase(peer)
 			revision += 1
+	if power==Power.NORMAL and hold_left>0:
+		hold_left -= dt
+		if hold_left<=0:
+			_cut()
 	if power!=Power.NORMAL:
 		awake_seconds += dt
 

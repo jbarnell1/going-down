@@ -6,6 +6,8 @@ const Move = preload("res://sim/move.gd")
 const Footing = preload("res://sim/ward/footing.gd")
 const House = preload("res://sim/ward/house.gd")
 const Ward = preload("res://sim/ward/state.gd")
+## WF2: the main game's look: its mouse sensitivity, pitch limit and field of view.
+const Main = preload("res://client/main.gd")
 const RIGGER_PATH := "res://assets/ward/rigger.glb"
 const HAND_PATH := "res://assets/ward/search-hand.glb"
 const Surfaces = preload("res://client/ward/surfaces.gdshader")
@@ -611,7 +613,9 @@ func _build_crew() -> void:
 	player.add_child(collider)
 	player.add_child(camera)
 	camera.position.y = 1.56
+	camera.fov = Main.VFOV
 	camera.current = true
+	watch_camera.fov = Main.VFOV
 	player.rotation.y = PI
 	add_child(watch_camera)
 func _build_rigger() -> void:
@@ -666,13 +670,17 @@ func look_input(event: InputEvent) -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		player.rotate_y(-event.relative.x * 0.0023)
-		camera.rotation.x = clampf(camera.rotation.x - event.relative.y * 0.0023, -1.42, 1.42)
+		turn(event.relative)
 	elif event is InputEventKey and event.pressed and not event.echo:
 		if event.physical_keycode == KEY_ESCAPE:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+## A mouse movement on the player's own facing, as in the main game (client/main.gd SENS, MAX_PITCH).
+func turn(relative: Vector2) -> void:
+	player.rotate_y(-relative.x * Main.SENS)
+	camera.rotation.x = clampf(camera.rotation.x - relative.y * Main.SENS, -Main.MAX_PITCH, Main.MAX_PITCH)
 
 func _by_lift() -> bool:
 	return player.position.distance_to(lift_spot) < 1.05

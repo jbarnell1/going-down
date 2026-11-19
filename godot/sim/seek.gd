@@ -474,6 +474,9 @@ class SeekState:
 	## Who is holding F at the table to free it, and the host time the hold counts from (-1: nobody).
 	var fetch_by: String = ""
 	var fetch_from: float = -1.0
+	## The hold's length, stamped as it began (the host's party.free_time then): a hold already under way ends
+	## when its "fetchStart" said, whatever is changed meanwhile.
+	var fetch_len: float = FETCH_TIME
 
 	func copy() -> SeekState:
 		var s := SeekState.new()
@@ -481,6 +484,7 @@ class SeekState:
 		s.party = party
 		s.fetch_by = fetch_by
 		s.fetch_from = fetch_from
+		s.fetch_len = fetch_len
 		s.tuned = tuned
 		s.hide_len = hide_len
 		s.anger = anger
@@ -1436,7 +1440,7 @@ static var _live: Settings.Values = null
 ## `hunt` (PT1): the fallbacks are HUNT_ANGER_SPRINT and HUNT_ANGER_NOISE instead of today's rates.
 static func anger_gain(why: StringName, dt: float, tuning: Settings.Values = null, hunt: bool = false) -> float:
 	if why == WHY_FETCH:
-		return FETCH_ANGER
+		return fetch_anger(tuning)
 	if hunt and why == &"sprint":
 		return dt / Settings.f(tuning, &"minder.anger_sprint", HUNT_ANGER_SPRINT)
 	if hunt and ANGER_LUMPS.has(why):
@@ -1669,6 +1673,20 @@ const FETCH_REACH := 1.5
 const FETCH_ANGER := 0.5
 const FETCH_HEALTH := 50.0
 
+## Live settings (sim/settings.gd; null tuning: today's constant): the hold's seconds (party.free_time), what
+## freeing adds to the anger (party.free_anger, in 100) and how near a seat F works (party.reach). The client's
+## table prompt reads these same three functions with its own tuning.
+static func fetch_time(tuning: Settings.Values = null) -> float:
+	return Settings.f(tuning, &"party.free_time", FETCH_TIME)
+
+static func fetch_anger(tuning: Settings.Values = null) -> float:
+	if tuning == null or not tuning.has(&"party.free_anger"):
+		return FETCH_ANGER
+	return Settings.f(tuning, &"party.free_anger", FETCH_ANGER * 100.0) / 100.0
+
+static func fetch_reach(tuning: Settings.Values = null) -> float:
+	return Settings.f(tuning, &"party.reach", FETCH_REACH)
+
 ## The state with the party table on (a copy).
 static func with_party(s0: SeekState) -> SeekState:
 	var s := s0.copy()
@@ -1683,18 +1701,20 @@ static func seated_ids(s: SeekState) -> Array[String]:
 			out.append(p.id)
 	return out
 
-## Whether a body stands at the party table: within FETCH_REACH of a seat's spot, on its level.
-static func at_table(s: SeekState, b: Move.Body) -> bool:
+## Whether a body stands at the party table: within FETCH_REACH (the host's party.reach) of a seat's spot, on its
+## level.
+static func at_table(s: SeekState, b: Move.Body, tuning: Settings.Values = null) -> bool:
 	if b == null:
 		return false
+	var reach := fetch_reach(tuning)
 	for st in s.floor.seats:
-		if st.level == b.level and M.hypot2(st.at.x / 100.0 - b.x, st.at.y / 100.0 - b.z) <= FETCH_REACH:
+		if st.level == b.level and M.hypot2(st.at.x / 100.0 - b.x, st.at.y / 100.0 - b.z) <= reach:
 			return true
 	return false
 
 ## Whether this player can fetch this tick: on their feet out of a hide, F held, at the table.
 static func _can_fetch(s: SeekState, p: SeekPlayer, inp: SeekInput) -> bool:
-	return inp != null and inp.active and inp.hold and p.status == &"ok" and p.phase == &"out" and at_table(s, p.body)
+	return inp != null and inp.active and inp.hold and p.status == &"ok" and p.phase == &"out" and at_table(s, p.body, _live)
 
 ## Step 3's end with the party table on: the hold, and freeing everyone seated once it is held FETCH_TIME. The
 ## hold counts from the start of the tick it began, as a heal's does (sim/run.gd). One holder at a time: the one
@@ -1717,8 +1737,9 @@ static func _fetch_step(s: SeekState, input_of: Dictionary, t: float, dt: float,
 		s.fetch_by = by
 		s.fetch_from = t - dt if by != "" else -1.0
 		if by != "":
-			events.append({"type": "fetchStart", "t": t, "playerId": by, "from": s.fetch_from, "done": s.fetch_from + FETCH_TIME, "seated": seated.duplicate()})
-	if by == "" or t - s.fetch_from < FETCH_TIME - EPS:
+			s.fetch_len = fetch_time(_live)
+			events.append({"type": "fetchStart", "t": t, "playerId": by, "from": s.fetch_from, "done": s.fetch_from + s.fetch_len, "seated": seated.duplicate()})
+	if by == "" or t - s.fetch_from < s.fetch_len - EPS:
 		return
 	var health := clampf(Settings.f(_live, &"heal.health", FETCH_HEALTH), 0.0, HEALTH_MAX)
 	for p in s.players:

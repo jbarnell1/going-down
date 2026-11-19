@@ -67,6 +67,8 @@ func test_game_host_review_entry_and_teardown(t: T) -> void:
 	var host := room.host
 	t.check(host.world().has("reactor"),"game Host.world carries the optional review field")
 	var review := host._reactor_review
+	# The power hold (RX1) is its own test below; this one checks other rules, so the cut comes at the line.
+	review.rules.power_hold = 0.0
 	var me: String = room.ME
 	var input := GameRun.PlayerInput.new()
 	input.id = me
@@ -104,6 +106,8 @@ func test_game_host_review_entry_and_teardown(t: T) -> void:
 func test_campaign_archive_bank_loss_persistence_and_replay(t: T) -> void:
 	var directory := "user://test-reactor-archive/"+str(Time.get_ticks_usec())
 	var station := preload("res://net/reactor_review.gd").new(23,directory)
+	# The power hold (RX1) is its own test below; this one checks other rules, so the cut comes at the line.
+	station.rules.power_hold = 0.0
 	var same := preload("res://net/reactor_review.gd").new(23)
 	var different := preload("res://net/reactor_review.gd").new(24)
 	t.check(station.rules.cassette_at==same.rules.cassette_at and station.rules.cassette_at!=different.rules.cassette_at,"seed selects reproducible tape position on the landing")
@@ -271,6 +275,8 @@ func test_prison_deck_copy_distinguishes_storage_from_full_crew_playback(t: T) -
 func test_rescue_owns_use_until_release(t: T) -> void:
 	var station := preload("res://net/reactor_review.gd").new(7)
 	var rules := station.rules
+	# The power hold (RX1) is its own test below; this one checks other rules, so the cut comes at the line.
+	rules.power_hold = 0.0
 	var fuse := rules.fuse
 	var helper := fuse + Vector3(0.75,0,0)
 	station.player("victim",fuse,false,&"walk",0.02)
@@ -299,3 +305,178 @@ func test_rescue_owns_use_until_release(t: T) -> void:
 	station.player("helper",rules.breaker,false,&"walk",0.02)
 	station.player("helper",rules.breaker,true,&"walk",0.02)
 	t.eq(rules.fuse_uses,1,"fresh press after disconnect installs the fuse once")
+
+# ---- RX1: the power holds, the fuse is hidden, the tape is on its plinth and glows ----------------------
+
+const Review = preload("res://net/reactor_review.gd")
+const Marks = preload("res://client/reactor_marks.gd")
+const Screening = preload("res://client/reactor_screening.gd")
+
+func test_rx1_power_holds_after_the_line_then_cuts_on_host_time(t: T) -> void:
+	var station := Review.new(23)
+	var rules := station.rules
+	t.check(Review.POWER_HOLD >= 30.0, "the hold is long enough to feel safe (%.0f s)" % Review.POWER_HOLD)
+	t.eq(rules.power_hold, Review.POWER_HOLD, "the real floor holds the lights")
+	station.player("A", Vector3(0, 0, 9.3), false, &"walk", 0.05)
+	station.tick(0.05)
+	station.player("A", Vector3(0, 0, rules.outage_plane - 1.0), false, &"walk", 0.05)
+	t.eq(rules.power, State.Power.NORMAL, "crossing the line does not cut the power")
+	var cut_at := -1.0
+	var host_time := 0.0
+	var second := false
+	var downed_early := false
+	while host_time < Review.POWER_HOLD + 1.0:
+		station.tick(0.05)
+		host_time += 0.05
+		if host_time > 10.0 and not second:
+			# A second player crossing later must not restart the clock.
+			station.player("B", Vector3(1, 0, rules.outage_plane - 2.0), false, &"walk", 0.05)
+			second = true
+		if rules.power != State.Power.NORMAL and cut_at < 0:
+			cut_at = host_time
+		if rules.power == State.Power.NORMAL and rules.down(1):
+			downed_early = true
+	t.check(absf(cut_at - Review.POWER_HOLD) < 0.06, "the cut comes POWER_HOLD host seconds after the first crossing (at %.2f s)" % cut_at)
+	t.eq(rules.power, State.Power.EMERGENCY, "then the power is out")
+	t.check(not downed_early, "nobody can be downed while the lights hold")
+	# Before anyone crosses, the clock never runs.
+	var idle := Review.new(23)
+	idle.player("A", Vector3(0, 0, 9.3), false, &"walk", 0.05)
+	for i in 2000:
+		idle.tick(0.05)
+	t.eq(idle.rules.power, State.Power.NORMAL, "the lights stay on while the crew stays at the lift")
+	# Zero hold is the old rule: the cut at the line.
+	var old := State.new(1.0, Vector3(-6, 1, -5), Vector3(-3, 1, 5))
+	old.observe(1, Vector3(0, 0, 0))
+	t.eq(old.power, State.Power.EMERGENCY, "with no hold the line cuts at once, as before")
+
+func test_rx1_fuse_spot_comes_from_the_seed_and_is_out_of_plain_sight(t: T) -> void:
+	var used := {}
+	var bad := 0
+	for seed_number in 300:
+		var a := Review.new(seed_number)
+		var b := Review.new(seed_number)
+		if a.rules.fuse != b.rules.fuse or not Review.FUSE_SPOTS.has(a.rules.fuse):
+			bad += 1
+		used[a.rules.fuse] = true
+		for open_shelf: Vector3 in Review.OLD_STORES:
+			if a.rules.fuse.distance_to(open_shelf) < 1.0:
+				bad += 1
+		var snap := a.snapshot()
+		if Vector3(snap.fuseAt[0], snap.fuseAt[1], snap.fuseAt[2]) != a.rules.fuse:
+			bad += 1
+	t.eq(bad, 0, "one seed, one spot for every player (and late joiners: it is in fuseAt), never an open shelf")
+	t.eq(used.size(), Review.FUSE_SPOTS.size(), "every hiding place is used by some seed")
+	for spot: Vector3 in Review.FUSE_SPOTS:
+		# The pack's west pillars: x -8.72 to -8.28 at z -11, -5 and 1 (0.46 deep); the wall's face is x -9.3.
+		var behind_pillar := spot.x < -8.72 and spot.x > -9.3 and [-11.0, -5.0, 1.0].any(func(z: float) -> bool: return absf(spot.z - z) < 0.07)
+		var under_gallery := spot.x > 3.55 and spot.x < 9.25 and spot.z > -10.5 and spot.z < 0.5 and spot.y < 1.1
+		t.check(behind_pillar or under_gallery, "%s is behind a west pillar or under the gallery" % spot)
+		if under_gallery:
+			t.check(spot.x - 3.32 < 2.0, "%s is in reach of a player standing at the gallery's edge" % spot)
+
+func test_rx1_tape_lies_on_its_plinth(t: T) -> void:
+	# The pack draws the plinth at its cassette node's default spot and the tape at the node + this offset
+	# (floor.gd and crew.gd _make_tape: plinth 0.66 x 0.5 at (-0.76, 0.42, 0.12); tape 0.46 x 0.22, turned 0.26).
+	var plinth := Review.TAPE_PLINTH + Vector3(-0.76, 0, 0.12)
+	var half_x := 0.33 - (0.23 * cos(0.26) + 0.11 * sin(0.26))
+	var half_z := 0.25 - (0.23 * sin(0.26) + 0.11 * cos(0.26))
+	var bad := 0
+	for seed_number in 300:
+		var tape := Review.new(seed_number).rules.cassette_at + Vector3(-0.76, 0, 0.04)
+		if absf(tape.x - plinth.x) > half_x or absf(tape.z - plinth.z) > half_z:
+			bad += 1
+	t.eq(bad, 0, "on every seed the tape lies on the plinth top, not in the air beside it")
+	t.check(Review.new(23).rules.cassette_at != Review.new(24).rules.cassette_at, "still placed by the seed")
+	# With RX1 off the floor is the old one (the open shelf, the tape's old offset, the cut at the line).
+	Review.rx1 = false
+	var old := Review.new(23)
+	Review.rx1 = true
+	t.check(Review.OLD_STORES.has(old.rules.fuse) and old.rules.power_hold == 0.0 and old.rules.cassette_at.x <= -1.02, "rx1 off is the floor before RX1")
+
+func test_rx1_prompts_mirror_the_hosts_use(t: T) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 41
+	var bad := 0
+	var seen := {}
+	for i in 600:
+		var station := Review.new(i % 37)
+		station.rules.power_hold = 0.0
+		var rules := station.rules
+		# Somewhere near one of the three props, in any power state, with or without the tape taken.
+		var props: Array[Vector3] = [rules.fuse, rules.breaker, rules.cassette_at]
+		var near: Vector3 = props[rng.randi_range(0, 2)]
+		var at := near + Vector3(rng.randf_range(-2.6, 2.6), 0, rng.randf_range(-2.6, 2.6))
+		at.y = 0.0
+		station.player("me", at, false, &"walk", 0.02)
+		rules.power = [State.Power.NORMAL, State.Power.EMERGENCY, State.Power.RESTORED][rng.randi_range(0, 2)]
+		if rng.randf() < 0.3:
+			rules.collected = true
+		if rules.power == State.Power.EMERGENCY and rng.randf() < 0.3:
+			rules.holder = station.seats["me"]
+		var frame := station.snapshot()
+		var said := Marks.prompt_for(frame, "me", rules.breaker)
+		var did := rules.use(station.seats["me"])
+		var want: String = {"fuse": "fuse", "cassette": "tape"}.get(did, "")
+		if said != want:
+			bad += 1
+		seen[want] = true
+	t.eq(bad, 0, "the E prompt names what the host would do on that press, every time")
+	t.check(seen.has("fuse") and seen.has("tape") and seen.has(""), "fuse, tape and no-prompt cases were all tried")
+	var station := Review.new(23)
+	station.player("me", station.rules.cassette_at, false, &"walk", 0.02)
+	var frame := station.snapshot()
+	frame.status["me"] = "down"
+	t.eq(Marks.prompt_for(frame, "me", station.rules.breaker), "", "no prompt while down")
+	t.eq(Marks.prompt_for(frame, "", station.rules.breaker), "", "no prompt for nobody")
+
+class FakeFloor extends Node3D:
+	var cassette := Node3D.new()
+	var frame := {}
+	var hud := Label.new()
+	var socket := Vector3(-3.3, 1.05, 5.55)
+	var view_id := "me"
+
+func test_rx1_marks_join_only_the_reactor_scene(t: T) -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var scene := FakeFloor.new()
+	tree.root.add_child(scene)
+	scene.add_child(scene.cassette)
+	var body := Node3D.new()
+	body.position = Vector3(-0.76, 1.01, 0.04)
+	scene.cassette.add_child(body)
+	var piece := MeshInstance3D.new()
+	piece.mesh = BoxMesh.new()
+	body.add_child(piece)
+	scene.cassette.position = Review.TAPE_PLINTH
+	var layer := CanvasLayer.new()
+	scene.add_child(layer)
+	layer.add_child(scene.hud)
+	var screen := Screening.new()
+	layer.add_child(screen)
+	screen._mark_floor()
+	var marks: Variant = scene.get_node_or_null("ReactorMarks")
+	t.check(marks != null and scene.find_children("ReactorMarks", "", false, false).size() == 1, "the Reactor's scene gets the marks once")
+	if marks != null:
+		var station := Review.new(23)
+		station.player("me", station.rules.cassette_at + Vector3(0, 0, 0.8), false, &"walk", 0.02)
+		scene.frame = station.snapshot()
+		scene.hud.text = "WASD  Move"
+		marks._process(0.016)
+		marks._process(0.016)
+		t.eq(scene.hud.text, "WASD  Move" + Marks.TAPE_PROMPT, "in reach of the tape the HUD says E takes it, once")
+		t.check(marks.glow.visible and marks.glow.global_position.distance_to(body.global_position) < 0.5, "a warm light sits over the tape")
+		t.check(piece.material_override is StandardMaterial3D and (piece.material_override as StandardMaterial3D).emission_enabled, "the tape itself glows")
+		scene.frame.cassette = true
+		scene.cassette.hide()
+		marks._process(0.016)
+		t.eq(scene.hud.text, "WASD  Move", "taken: the prompt goes")
+		t.check(not marks.glow.visible, "and the light with it")
+	scene.free()
+	# The prison's cassette deck uses the same screen: no marks there.
+	var prison := Control.new()
+	tree.root.add_child(prison)
+	var deck := Screening.new()
+	prison.add_child(deck)
+	t.check(prison.get_node_or_null("ReactorMarks") == null and tree.root.get_node_or_null("ReactorMarks") == null, "no marks outside the Reactor")
+	prison.free()

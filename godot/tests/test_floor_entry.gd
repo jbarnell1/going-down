@@ -18,6 +18,7 @@ const RoomClient = preload("res://net/room_client.gd")
 const Move = preload("res://sim/move.gd")
 const Client = preload("res://net/client.gd")
 const View = preload("res://client/ward/view.gd")
+const Marks = preload("res://client/reactor_marks.gd")
 
 const WARD_SEED := 8143
 const REACTOR_SEED := 23
@@ -324,4 +325,65 @@ func test_caught_player_watches_a_living_crewmate(t: T) -> void:
 	t.check(view.hud.text.begins_with("LIFT") or view.hud.text == "STEP OUT OF THE LIFT", "the lift timer line stays: " + view.hud.text)
 	view.get_parent().remove_child(view)
 	view.free()
+	room.leave()
+
+# --- RX1: inside the real compiled Reactor (the private pack): the tape on its plinth, glowing, with its prompt;
+# the fuse where the host hid it. Skips without the pack, like the tests above.
+func test_rx1_reactor_pack_scene_shows_the_tape_and_the_hidden_fuse(t: T) -> void:
+	var packs := _packs("ReactorCampaign.pck")
+	if packs.is_empty():
+		t.note("skipped: pack not found (set GD_PACKS_DIR to the folder holding ReactorCampaign.pck)")
+		return
+	var tree := Engine.get_main_loop() as SceneTree
+	var before := tree.current_scene
+	var room := _reactor_room()
+	var main := _main_for(room, true, packs)
+	t.check(main._mount_floor_pack("reactor"), "the Reactor pack mounts")
+	var printing := Engine.print_error_messages
+	Engine.print_error_messages = false
+	var held: Array[Resource] = [load("res://reactor_campaign.tscn"), load("res://crew23_motion.glb")]
+	Engine.print_error_messages = printing
+	t.check(held.all(func(r: Resource) -> bool: return r != null), "the pack's scene loads")
+	main._enter_floor("reactor", room)
+	var scene := tree.current_scene
+	if not t.check(scene != before and scene != null and scene.scene_file_path == "res://reactor_campaign.tscn", "the Reactor's scene is on screen"):
+		_drop(main)
+		room.leave()
+		return
+	for i in 20:
+		scene._physics_process(1.0 / 60.0)
+		OS.delay_usec(2000)
+	var rules: Variant = room.host._reactor_review.rules
+	var marks: Variant = scene.get_node_or_null("ReactorMarks")
+	t.check(marks != null, "the repository's marks are in the compiled scene (added by client/reactor_screening.gd)")
+	var tape: Node3D = scene.get("cassette")
+	var body := tape.get_child(0) as Node3D
+	# The pack's plinth: the 0.66 x 0.84 x 0.5 box.
+	var plinth: MeshInstance3D = null
+	for c: Node in scene.get_children():
+		if c is MeshInstance3D and (c as MeshInstance3D).mesh is BoxMesh and ((c as MeshInstance3D).mesh as BoxMesh).size.is_equal_approx(Vector3(0.66, 0.84, 0.5)):
+			plinth = c
+	t.check(plinth != null, "the pack draws the tape's plinth")
+	if plinth != null:
+		var off := body.global_position - plinth.global_position
+		t.check(absf(off.x) < 0.1 and absf(off.z) < 0.1 and absf(off.y - 0.59) < 0.03, "the tape lies on the plinth top (offset %s)" % off)
+	t.check(tape.is_visible_in_tree(), "the tape is drawn")
+	t.check((scene.get("fuse") as Node3D).global_position.is_equal_approx(rules.fuse), "the fuse is drawn where the host hid it")
+	if marks != null:
+		marks._process(0.016)
+		t.check(marks.glow.visible and marks.glow.global_position.distance_to(body.global_position) < 0.5, "a warm light over the tape")
+		scene.walker.position = Vector3(rules.cassette_at.x, 0.04, rules.cassette_at.z + 0.8)
+		for i in 10:
+			scene._physics_process(1.0 / 60.0)
+			marks._process(0.016)
+			OS.delay_usec(2000)
+		t.check(str(scene.hud.text).ends_with(Marks.TAPE_PROMPT), "beside it the HUD says E picks it up: " + str(scene.hud.text).replace("\n", " / "))
+	tree.current_scene = before
+	var screen_node: Variant = scene.get("screen")
+	scene.set("game", null)
+	scene.get_parent().remove_child(scene)
+	scene.free()
+	if is_instance_valid(screen_node):
+		(screen_node as Node).free()
+	_drop(main)
 	room.leave()

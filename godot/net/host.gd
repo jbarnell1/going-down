@@ -788,7 +788,8 @@ func _step_ward_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> Run.R
 	var any_in := false
 	for row: Dictionary in crew.values():
 		if row.active:
-			if row.aboard:
+			# Still in the car, or in its doorway (WF1): the lift leaves only once everyone is clear of its gate.
+			if row.aboard or not _ward_review.clear_of_lift(row.position):
 				any_in = true
 			else:
 				any_out = true

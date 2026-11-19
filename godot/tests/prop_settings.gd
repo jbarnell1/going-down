@@ -56,6 +56,10 @@ const Shop = preload("res://sim/shop.gd")
 const PropCabinet = preload("res://tests/prop_cabinet.gd")
 const Upgrades = preload("res://sim/upgrades.gd")
 const Prison = preload("res://sim/prison.gd")
+const Flare = preload("res://sim/flare.gd")
+const Lamp = preload("res://sim/lamp.gd")
+const PropO2 = preload("res://tests/prop_second_orderly.gd")
+const PropParty = preload("res://tests/prop_party_table.gd")
 
 const DT := 0.05
 const EPS := 1e-9
@@ -147,6 +151,19 @@ const PROOFS := {
 	&"badge.depth_chance": "test_badge_search_odds",
 	# TT1: the Tenant clock.
 	&"tenant.minutes": "test_tenant_minutes",
+	# T22b.
+	&"orderly2.first_floor": "test_second_orderly_first_floor",
+	&"flare.throw": "test_flare_settings",
+	&"flare.reach": "test_flare_settings",
+	&"flare.stun": "test_flare_settings",
+	&"flare.blind": "test_flare_settings",
+	&"flare.noise": "test_flare_settings",
+	&"lamp.seconds": "test_lamp_settings",
+	&"lamp.range": "test_lamp_settings",
+	&"record.reach": "test_recording_reach_and_rate",
+	&"record.rate": "test_recording_reach_and_rate",
+	&"quota.step": "test_quota_step",
+	&"marks.pad": "test_marks_pad",
 }
 
 ## The rows of later pieces wired so far (sim/settings.gd WIRED_IDS), in the registry's order.
@@ -159,7 +176,9 @@ const MORE: Array[StringName] = [
 	&"lift.false_stop", &"lift.board", &"lift.hold", &"lift.ride", &"dark.min", &"dark.max", &"dark.first_min", &"dark.first_max", &"dark.warning",
 	&"stamina.tank", &"heal.time", &"heal.quiet", &"heal.health", &"health.walk", &"health.sprint", &"health.rest", &"inv.stack", &"inv.hand_reach", &"cabinet.slots",
 	&"shop.price.marker", &"shop.price.glow", &"shop.price.flash", &"shop.price.speed", &"shop.price.toy", &"shop.price.salts", &"shop.glow", &"badge.chance", &"badge.depth_chance",
-	&"tenant.minutes"]
+	&"tenant.minutes",
+	&"orderly2.first_floor", &"flare.throw", &"flare.reach", &"flare.stun", &"flare.blind", &"flare.noise", &"lamp.seconds", &"lamp.range",
+	&"quota.step", &"record.reach", &"record.rate", &"marks.pad"]
 
 ## The game's value of every setting: the constant the game uses, with the rooms' switches on (paced, the long
 ## dark, the car waits: net/host_rules.gd). This table, not the registry, is the test's oracle.
@@ -174,6 +193,10 @@ static func game_values() -> Dictionary:
 		&"reloc.near_max": Relocate.NEAR_MAX,
 		&"orderly.speed": Run.PACED_HUNT_SPEED,
 		&"orderly.catch_dance": 0.0,
+		&"orderly2.first_floor": float(Run.SECOND_ORDERLY_DEPTH),
+		&"party.free_time": Seek.FETCH_TIME,
+		&"party.free_anger": Seek.FETCH_ANGER * 100.0,
+		&"party.reach": Seek.FETCH_REACH,
 		&"orderly.dark_speed": Run.PACED_BLACKOUT_HUNT_SPEED,
 		# The Temp is Lonely in the game's rooms (sim/lonely.gd): its chase, lit and in the blackout, and alone.
 		&"temp.speed": Lonely.CHASE_SPEED,
@@ -215,9 +238,9 @@ static func game_values() -> Dictionary:
 		&"noise.hide": Noises.HIDE,
 		&"noise.drop": Noises.DROP,
 		&"noise.cone": Noises.CONE,
-		&"flare.throw": 4.0, &"flare.reach": 6.0, &"flare.stun": 1.5,
-		&"flare.blind": 1.0, &"flare.noise": 24.0,
-		&"lamp.seconds": 60.0, &"lamp.range": 12.0,
+		&"flare.throw": Flare.THROW, &"flare.reach": Flare.REACH, &"flare.stun": Flare.STUN,
+		&"flare.blind": Flare.BLIND, &"flare.noise": Flare.NOISE,
+		&"lamp.seconds": Lamp.CHARGE, &"lamp.range": Lamp.REACH,
 		&"noise.search_open": Noises.SEARCH_OPEN,
 		&"noise.search_rush": Noises.SEARCH_RUSH,
 		&"noise.emote": Noises.EMOTE,
@@ -295,7 +318,7 @@ func test_catch_dance_setting(t: T) -> void:
 func test_registry_rows(t: T) -> void:
 	var game := game_values()
 	var rows := Settings.list()
-	t.eq(rows.size(), 110, "rows in the registry")
+	t.eq(rows.size(), 114, "rows in the registry")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -343,7 +366,7 @@ func test_registry_rows(t: T) -> void:
 		if TEN.has(s.id) or MORE.has(s.id) or KEEPER_SIX.has(s.id):
 			want.append(s.id)
 	t.check(wired == want and want.size() == TEN.size() + MORE.size() + KEEPER_SIX.size(), "the wired rows are exactly those of LS1 and the groups wired since, in order: %s" % str(wired))
-	t.eq(by_group.get(&"residents", 0), 51, "residents")
+	t.eq(by_group.get(&"residents", 0), 55, "residents")
 	t.eq(by_group.get(&"lift", 0), 12, "the lift and the dark")
 	t.eq(by_group.get(&"players", 0), 30, "players")
 	t.eq(by_group.get(&"earning", 0), 10, "earning")
@@ -1783,3 +1806,234 @@ func test_custom_sprint_radius_is_checked_from_the_current_listener(t: T) -> voi
 		runner.go(&"sprint", -1.0, 0.0)
 		step = sim.tick()
 		t.check(step.heard.size() == 1 and sim.k.target.t == step.heard[0].t, "first step back within %.1f m is reacquired" % radius)
+
+# ---------------------------------------------------------------------------------------------
+# T22b: more of the host's numbers (the owner, 19 Nov: "Yes let's connect more of the live settings").
+
+## orderly2.first_floor: a Clinic floor this deep or deeper has a second Orderly, decided as the car arrives.
+func test_second_orderly_first_floor(t: T) -> void:
+	var ids: Array[String] = ["p0", "p1"]
+	var none: Array[Run.PlayerInput] = []
+	for row: Array in [[null, [false, true, true]], [3.0, [false, false, true]], [20.0, [false, false, false]], [1.0, [true, true, true]]]:
+		var given := {} if row[0] == null else {&"orderly2.first_floor": row[0]}
+		var tag := "first floor %s" % ("today's" if row[0] == null else str(row[0]))
+		var st: Array = PropO2.start("ls-o2-%s" % str(row[0]), ids, 1, true)
+		var r: HostRules = st[0]
+		var s: Run.RunState = st[1]
+		if not given.is_empty():
+			s = Run.with_tuning(s, given)
+		# Depth 1 with the setting in force as its second is decided (with_second_orderly decides it again).
+		var at1 := Run.with_second_orderly(s)
+		var seen: Array = [at1.orderly2 != null]
+		for depth: int in [2, 3]:
+			var ride := s.copy()
+			ride.phase = &"riding"
+			ride.timer = DT / 2.0
+			s = r.step(ride, none, DT).state
+			t.check(s.depth == depth, "%s: arrived at depth %d" % [tag, s.depth])
+			seen.append(s.orderly2 != null)
+		t.eq(seen, row[1], "%s: a second Orderly at depths 1, 2, 3" % tag)
+	# A change waits for the next floor: set on depth 2 (which has its second), the second stays until the car leaves.
+	var st2: Array = PropO2.start("ls-o2-wait", ids, 2, true)
+	var s2: Run.RunState = Run.with_tuning(st2[1], {&"orderly2.first_floor": 9.0})
+	s2 = (st2[0] as HostRules).step(s2, none, DT).state
+	t.check(s2.depth == 2 and s2.orderly2 != null, "a second Orderly already on the floor is not taken away mid-floor")
+
+## The flare (B3): its five numbers, each measured on a real burst.
+static func _flare_burst(given: Dictionary, teammate: bool) -> Array:
+	var ids: Array[String] = ["a"]
+	if teammate:
+		ids.append("b")
+	var s := Run.with_orientation(Run.with_flare(Run.create_run("ls-flare", ids)))
+	if not given.is_empty():
+		s = Run.with_tuning(s, given)
+	s.phase = &"away"
+	var o := s.orderly.body
+	var a := PropCabinet.inp("a", Move.Body.make(o.x, o.z + (3.0 if teammate else 1.6), o.level, o.y))
+	a.yaw = 0.0 if teammate else PI
+	a.blind = true
+	var inputs: Array[Run.PlayerInput] = [a]
+	if teammate:
+		var b := PropCabinet.inp("b", Move.Body.make(o.x, o.z + 2.0, o.level, o.y))
+		b.blind = true
+		inputs.append(b)
+	s = Run.step_run(s, inputs, DT).state
+	a.inv_op = &"use"
+	var r := Run.step_run(s, inputs, DT)
+	var used := PropCabinet.of_type(r.events, "flareUsed")
+	return [used[0] if used.size() == 1 else {}, r.state, a.body]
+
+func test_flare_settings(t: T) -> void:
+	# Thrown away from the Orderly along an open corridor (as tests/prop_flare.gd's practice): the burst lands
+	# `throw` along the aim and stuns when the Orderly is within `reach` of it.
+	for row: Array in [[{}, Flare.THROW, Flare.REACH, true], [{&"flare.reach": 5.0}, Flare.THROW, 5.0, false],
+			[{&"flare.throw": 2.0, &"flare.reach": 4.0}, 2.0, 4.0, true], [{&"flare.throw": 2.0, &"flare.reach": 3.0}, 2.0, 3.0, false]]:
+		var got := _flare_burst(row[0], false)
+		var e: Dictionary = got[0]
+		if not t.check(not e.is_empty(), "%s: a burst" % str(row[0])):
+			continue
+		var s: Run.RunState = got[1]
+		var a: Move.Body = got[2]
+		var thrown := Vector2(float(e["x"]) - a.x, float(e["z"]) - a.z).length()
+		var to_o := Vector2(float(e["x"]) - s.orderly.body.x, float(e["z"]) - s.orderly.body.z).length()
+		t.check(absf(thrown - float(row[1])) < 1e-6, "%s: thrown %.3f m, want %.1f" % [str(row[0]), thrown, row[1]])
+		t.check(bool(e["stunned"]) == row[3] and (to_o <= float(row[2])) == row[3], "%s: %.2f m from the Orderly, reach %.1f: stunned %s" % [str(row[0]), to_o, row[2], str(e["stunned"])])
+	for stun: float in [0.5, Flare.STUN, 3.0]:
+		for noise: float in [12.0, Flare.NOISE, 30.0]:
+			var given := {} if stun == Flare.STUN and noise == Flare.NOISE else {&"flare.stun": stun, &"flare.noise": noise}
+			var got := _flare_burst(given, false)
+			var e: Dictionary = got[0]
+			var s: Run.RunState = got[1]
+			t.check(not e.is_empty() and bool(e["stunned"]) and absf(s.flare_stun_until - float(e["t"]) - stun) < 1e-9 and float(e["noise"]) == noise,
+				"stun %.2f noise %.0f: stunned until +%.3f, noise %s" % [stun, noise, s.flare_stun_until - float(e.get("t", 0.0)), str(e.get("noise"))])
+	for blind: float in [0.5, Flare.BLIND, 2.0]:
+		var got := _flare_burst({} if blind == Flare.BLIND else {&"flare.blind": blind}, true)
+		var e: Dictionary = got[0]
+		t.check(not e.is_empty() and e["blind"] == "b" and absf(float(e["blindUntil"]) - float(e["t"]) - blind) < 1e-9,
+			"blind %.2f: the struck crewmate is blind for %s" % [blind, str(float(e.get("blindUntil", 0.0)) - float(e.get("t", 0.0)))])
+
+## The lamp (B4): a fresh battery's seconds, and the beam's reach, on the host's lamp row.
+func test_lamp_settings(t: T) -> void:
+	for row: Array in [[15.0, 5.0], [Lamp.CHARGE, Lamp.REACH], [180.0, 22.0]]:
+		var ids: Array[String] = ["a"]
+		var s := Run.with_lamp(Run.create_run("ls-lamp", ids))
+		if row[0] != Lamp.CHARGE:
+			s = Run.with_tuning(s, {&"lamp.seconds": row[0], &"lamp.range": row[1]})
+		var a := PropCabinet.inp("a", s.players[0].body)
+		a.inv_op = &"lamp"
+		a.inv_arg = 1
+		var r := Run.step_run(s, [a], DT)
+		var lamp := Run.lamp_of(r.state, "a")
+		t.check(absf(float(lamp.get("charge", -1.0)) - (float(row[0]) - DT)) < 1e-9 and float(lamp.get("range", -1.0)) == float(row[1]),
+			"%.0f s, %.0f m: charge %s, range %s" % [row[0], row[1], str(lamp.get("charge")), str(lamp.get("range"))])
+		if row[0] == 15.0:
+			var empty_at := -1.0
+			var st := r.state
+			for _k in roundi(16.0 / DT):
+				var rr := Run.step_run(st, [a], DT)
+				st = rr.state
+				if not PropCabinet.of_type(rr.events, "lampEmpty").is_empty():
+					empty_at = st.t
+					break
+			t.check(absf(empty_at - 15.0) < DT + 1e-6, "a 15 s battery is empty at %.2f s" % empty_at)
+
+## Recording (sim/instrument.gd): the reach the needle writes within, and the rate up close, on a crew step.
+static func _rate_at_distance(d: float, given: Dictionary) -> float:
+	var ids: Array[String] = ["a"]
+	var s := Run.create_run("ls-record", ids)
+	var plan := s.plan
+	var o := Entity.create_orderly(plan)
+	var holder := Move.Body.make(o.body.x + d, o.body.z, o.body.level, o.body.y)
+	var crew := Instr.set_raised(Instr.create_crew(ids), "a", true)
+	var players: Array[Instr.CrewPlayer] = [Instr.CrewPlayer.make("a", holder, true)]
+	var no_events: Array[Dictionary] = []
+	var e := Instr.EntityTick.make("orderly", &"hearing", o, o, no_events)
+	e.acting = true
+	var ets: Array[Instr.EntityTick] = [e]
+	var out := Instr.step_crew(plan, crew, players, ets, DT, null if given.is_empty() else Settings.make(given))
+	return Instr.member(out.crew, "a").instrument.rate
+
+func test_recording_reach_and_rate(t: T) -> void:
+	for reach: float in [4.0, Instr.RECORD_RANGE, 16.0]:
+		var given := {} if reach == Instr.RECORD_RANGE else {&"record.reach": reach}
+		var inside := _rate_at_distance(reach - 0.05, given)
+		var outside := _rate_at_distance(reach + 0.05, given)
+		t.check(inside > 0.0 and outside == 0.0, "reach %.1f: %.2f a second just inside, %.2f just outside" % [reach, inside, outside])
+	for rate: float in [40.0, Instr.RATE_NEAR, 400.0]:
+		var given := {} if rate == Instr.RATE_NEAR else {&"record.rate": rate}
+		var near := _rate_at_distance(1.0, given)
+		t.check(absf(near - rate) < 1e-9, "rate up close %.0f: %.3f a second at 1 m" % [rate, near])
+	t.eq(_rate_at_distance(5.0, {}), Instr.rate_at(5.0), "untuned, the same number by the same path")
+
+## quota.step: the floor quota grows by it a floor; a quota already shown never moves, the next floor takes the new.
+func test_quota_step(t: T) -> void:
+	for step: float in [1.0, Run.QUOTA_DEPTH_STEP, 2.0]:
+		var tun: Settings.Values = null if step == Run.QUOTA_DEPTH_STEP else Settings.make({&"quota.step": step})
+		var want := maxi(Run.QUOTA_ROUND, roundi(float(Run.QUOTA_PER_PLAYER * 2) * M.pow_js(step, 2.0) / Run.QUOTA_ROUND) * Run.QUOTA_ROUND)
+		t.eq(Run.floor_quota(3, 2, tun), want, "step %.2f: floor 3 asks a crew of two for %d" % [step, want])
+	t.eq(Run.floor_quota(1, 3, Settings.make({&"quota.step": 2.0})), Run.floor_quota(1, 3), "floor 1 does not grow")
+	var ids: Array[String] = ["p0", "p1"]
+	var none: Array[Run.PlayerInput] = []
+	var s := Run.create_run("ls-quota", ids, [], false, true)
+	s = Run.with_tuning(s, {&"quota.step": 2.0})
+	s.phase = &"riding"
+	s.timer = DT / 2.0
+	s = Run.step_run(s, none, DT).state
+	# The desk lets a NEXT FLOOR value in on "carLeft", never while the car arrives (when the quota is set).
+	for _k in roundi(5.0 / DT):
+		if s.phase != &"arriving":
+			break
+		s = Run.step_run(s, none, DT).state
+	t.check(s.depth == 2 and s.phase != &"arriving" and s.floor_needed == Run.floor_quota(2, 2, s.tuning) and s.floor_needed != Run.floor_quota(2, 2),
+		"arrived at depth %d asking %d (the step at 2.0)" % [s.depth, s.floor_needed])
+	var shown := s.floor_needed
+	s = Run.with_tuning(s, {&"quota.step": 1.0})
+	for _k in roundi(10.0 / DT):
+		s = Run.step_run(s, none, DT).state
+	t.check(s.depth == 2 and s.floor_needed == shown, "changed mid-floor, the quota on screen stays %d (now %d)" % [shown, s.floor_needed])
+	s.phase = &"riding"
+	s.timer = DT / 2.0
+	s = Run.step_run(s, none, DT).state
+	t.check(s.depth == 3 and s.floor_needed == Run.floor_quota(3, 2, s.tuning) and s.floor_needed != Run.floor_quota(3, 2),
+		"the next floor asks %d with the step at 1.0 (%d; untuned %d)" % [Run.floor_quota(3, 2, s.tuning), s.floor_needed, Run.floor_quota(3, 2)])
+
+## marks.pad: the Annex's pad a floor.
+func test_marks_pad(t: T) -> void:
+	for pad: int in [0, Marks.DEFAULT_PAD, 9]:
+		var ids: Array[String] = ["p0"]
+		var rules := HostRules.new(true, 3, Places.FULL)
+		var s := rules.prepare(Run.create_run("ls-pad", ids, Places.FULL))
+		if pad != Marks.DEFAULT_PAD:
+			s = Run.with_tuning(s, {&"marks.pad": float(pad)})
+		var none: Array[Run.PlayerInput] = []
+		s = Run.step_run(s, none, DT).state
+		t.check(s.annex != null and s.annex.marks.pad == pad and s.annex.marks.pad_size == pad, "pad %d on the Annex: %s" % [pad, "no Annex" if s.annex == null else "%d of %d" % [s.annex.marks.pad, s.annex.marks.pad_size]])
+
+## The party table's three numbers (party.free_time, party.free_anger, party.reach). Read by the rules; not yet on
+## the panel (sim/settings.gd WIRED_IDS) until the client's table prompt reads them too.
+func test_party_table_numbers(t: T) -> void:
+	var ids: Array[String] = ["a", "c"]
+	for row: Array in [[5.0, 20.0], [Seek.FETCH_TIME, Seek.FETCH_ANGER * 100.0], [1.0, 100.0]]:
+		var k := PropParty.sk(0, ids, true)
+		if row[0] != Seek.FETCH_TIME:
+			k.tuning = Settings.make({&"party.free_time": row[0], &"party.free_anger": row[1]})
+		PropParty.seat(k.s, "a", 0)
+		var evs: Array[Dictionary] = []
+		var anger0 := k.s.anger
+		var freed_at := -1.0
+		var first := -1.0
+		for j in roundi((float(row[0]) + 1.0) / DT):
+			var ev := k.step([PropParty.holder(k.s, "c", 1, true)] as Array[Seek.SeekInput])
+			evs.append_array(ev)
+			if first < 0.0:
+				first = k.s.t - DT
+			# Changed mid-hold: the hold already begun keeps the length its fetchStart gave.
+			if j == 2 and row[0] == 5.0:
+				k.tuning = Settings.make({&"party.free_time": 1.0, &"party.free_anger": row[1]})
+			if not PropHunt.of_type(ev, "tableFreed").is_empty():
+				freed_at = k.s.t
+				break
+		var st := PropHunt.of_type(evs, "fetchStart")
+		t.check(st.size() == 1 and absf(float(st[0]["done"]) - float(st[0]["from"]) - float(row[0])) < 1e-9, "%.1f s: fetchStart says %s" % [row[0], str(st)])
+		t.check(absf(freed_at - first - float(row[0])) < 1e-6, "%.1f s: freed %.3f s after the hold began" % [row[0], freed_at - first])
+		t.check(absf(k.s.anger - anger0 - float(row[1]) / 100.0) < 1e-9 or (anger0 + float(row[1]) / 100.0 >= 1.0 and k.s.counting),
+			"anger %.0f: the bar %.3f -> %.3f" % [row[1], anger0, k.s.anger])
+	# A point 1.6 to 2.4 m from the nearest seat: off the table today, at it with party.reach 2.5, off it at 1.0.
+	var k2 := PropParty.sk(0, ids, true)
+	var seat := PropParty.seat_body(k2.s, 0)
+	var off: Move.Body = null
+	var nearest := 0.0
+	for a in 16:
+		var cand := Move.Body.make(seat.x + 2.0 * cos(a * PI / 8.0), seat.z + 2.0 * sin(a * PI / 8.0), seat.level, seat.y)
+		var dmin := INF
+		for st in k2.s.floor.seats:
+			if st.level == cand.level:
+				dmin = minf(dmin, M.hypot2(st.at.x / 100.0 - cand.x, st.at.y / 100.0 - cand.z))
+		if dmin > 1.6 and dmin < 2.4:
+			off = cand
+			nearest = dmin
+			break
+	if t.check(off != null, "a point 1.6 to 2.4 m from the nearest seat"):
+		t.check(not Seek.at_table(k2.s, off) and Seek.at_table(k2.s, off, Settings.make({&"party.reach": 2.5})) and not Seek.at_table(k2.s, off, Settings.make({&"party.reach": 1.0})),
+			"%.2f m from the nearest seat: at the table only with party.reach 2.5" % nearest)
+	t.eq([Seek.fetch_time(), Seek.fetch_anger(), Seek.fetch_reach()], [Seek.FETCH_TIME, Seek.FETCH_ANGER, Seek.FETCH_REACH], "untuned, today's constants")

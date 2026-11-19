@@ -58,6 +58,19 @@ func in_lift(feet: Vector3) -> bool:
 	var offset := feet - lift_door()
 	return absf(offset.x) <= 0.67 and offset.z <= -0.22 and offset.z >= -2.93 and absf(offset.y) <= 0.45
 
+## The lift's gate (walk_clear's leaf across the car's mouth while it is away) and a walker's clearance from it.
+const GATE := Vector3(1.24, 2.18, 0.08)
+const WALK_CLEARANCE := 0.15
+
+## Out of the car and out of its doorway: the gate, shut, can no longer stand across this walker (WF1). Between
+## the car's floor (in_lift) and here a walker is in the doorway; the lift must not leave on them, or the shut
+## gate holds them where they stand, neither in nor out.
+func clear_of_lift(feet: Vector3) -> bool:
+	var offset := feet - lift_door()
+	var reach := WALK_CLEARANCE + 0.06
+	var in_mouth := absf(offset.x) <= GATE.x * 0.5 + reach and offset.z <= GATE.z * 0.5 + reach and offset.z >= -3.1
+	return not (in_mouth and absf(offset.y) <= 0.45)
+
 ## Begin collection once the normal lift has left the crew in the Ward.
 func leave(now: float) -> Array[Dictionary]:
 	if phase != &"unloading":
@@ -218,9 +231,9 @@ func walk_clear(from: Vector3, to: Vector3) -> bool:
 		AABB(at + Vector3(-0.775, 0.0, -3.06), Vector3(1.55, 2.2, 0.12)),
 	]
 	if phase in [&"away", &"departed"]:
-		walls.append(AABB(at + Vector3(-0.62, 0.0, -0.04), Vector3(1.24, 2.18, 0.08)))
+		walls.append(AABB(at + Vector3(-GATE.x * 0.5, 0.0, -GATE.z * 0.5), GATE))
 	for wall in walls:
-		if Arm._hits_box(from + Vector3.UP * 0.84, to + Vector3.UP * 0.84, wall, 0.15):
+		if Arm._hits_box(from + Vector3.UP * 0.84, to + Vector3.UP * 0.84, wall, WALK_CLEARANCE):
 			return false
 	return true
 

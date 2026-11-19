@@ -236,9 +236,10 @@ func test_reactor_starts_on_arrival_holds_the_floor_banks_the_tape_and_goes_home
 	var underneath := crew.host.state.orderly
 	var seek: Variant = crew.host.state.seek
 	var garden: Variant = crew.host.state.garden
-	# Into the dark (past the outage line): the corpses wake and hunt. Thirty seconds of it.
+	# Into the dark (past the outage line): the lights hold for POWER_HOLD (RX1), then the corpses wake and hunt.
+	# Thirty seconds of it.
 	crew.everyone_at(review.rules.fuse)
-	crew.tick_for(30.0)
+	crew.tick_for(review.POWER_HOLD + 30.0)
 	t.check(review.rules.power != ReactorState.Power.NORMAL, "the outage happened")
 	t.check(crew.host.state.orderly == underneath and crew.host.state.seek == seek and crew.host.state.garden == garden, "the floor's own resident was not stepped")
 	t.eq(String(crew.host.state.phase), "unloading", "the floor underneath holds still")

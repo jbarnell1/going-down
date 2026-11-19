@@ -711,7 +711,8 @@ func _read_options() -> void:
 		ready_arg = _url("ready", "1") != "0"
 		automated = str(JavaScriptBridge.eval("(navigator.webdriver || /[?&]auto=1/.test(location.search)) ? 'y' : 'n'", true)) == "y"
 
-func _add_actions() -> void:
+## Static: the Hanging Ward's scene (client/ward/review.gd) adds the same keys when it opens on its own.
+static func _add_actions() -> void:
 	var keys := {"forward": [KEY_W, KEY_UP], "back": [KEY_S, KEY_DOWN], "left": [KEY_A, KEY_LEFT], "right": [KEY_D, KEY_RIGHT],
 		"sprint": [KEY_SHIFT], "creep": [KEY_CTRL, KEY_C], "use": [KEY_F]}
 	for action: String in keys:
@@ -2437,7 +2438,7 @@ func _ride_rows(s: Dictionary, rows: PackedStringArray) -> PackedStringArray:
 	for p: Dictionary in (c.latest as Dictionary)["players"]:
 		if str(p["status"]) != "leftBehind":
 			crew += 1
-	return PackedStringArray([rows[0], rows[1], SearchView.sheet_for(plan, plan.seed, Run.floor_quota(next, maxi(1, crew)))])
+	return PackedStringArray([rows[0], rows[1], SearchView.sheet_for(plan, plan.seed, Run.floor_quota(next, maxi(1, crew), c.tuning))])
 
 ## Down first, then out (client/down_view.gd, already updated this frame): your timer and its lines (once
 ## the catch's noise has passed), the out screen, the red spots for everyone. Caught and down, the camera

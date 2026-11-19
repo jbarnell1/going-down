@@ -3,6 +3,7 @@ extends Control
 signal request(operation: String, ticket: int)
 const FILM_SHA256 := "f8750e67bcf117187b19ad036078a9489d5feaa50bcbea47ba84a8c68cfcbcbd"
 const SOURCE := "res://reactor_media/crew23.ogv"
+const Marks = preload("res://client/reactor_marks.gd")
 var video := VideoStreamPlayer.new()
 var title := Label.new()
 var status := Label.new()
@@ -40,6 +41,16 @@ func _ready() -> void:
 	button.pressed.connect(press)
 	if ResourceLoader.exists(SOURCE) and FileAccess.get_sha256(SOURCE) == FILM_SHA256:
 		film = load(SOURCE) as VideoStream
+	_mark_floor()
+	_mark_floor.call_deferred() # and once more after this frame, should the scene not hold the HUD layer yet
+
+## RX1: inside the Reactor's compiled scene (the pack's game_client.gd puts this screen on its HUD layer) add the
+## repository's marks (client/reactor_marks.gd: the glowing tape and the E prompts). Not in the prison.
+func _mark_floor() -> void:
+	var layer := get_parent()
+	var scene := layer.get_parent() if layer != null else null
+	if scene is Node3D and "cassette" in scene and "frame" in scene and "hud" in scene and scene.get_node_or_null("ReactorMarks") == null:
+		scene.add_child(Marks.new(scene))
 
 func show_archive(value: Dictionary, player_id: String) -> void:
 	# The legacy optional station scene owns the room until the real host places the crew home.
