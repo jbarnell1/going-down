@@ -346,8 +346,8 @@ await shot('blackout-emergency-strips');
   const f = (k) => `${luma[k].mean.toFixed(4)} (linear ${luma[k].linear.toFixed(4)})`;
   const up = luma.max.mean / luma.default.mean;
   const down = luma.min.mean / luma.default.mean;
-  check('the brightness range keeps the blackout dark (max at most about 2.2x the default, min about 0.6x)',
-    luma.min.mean < luma.default.mean && luma.default.mean < luma.max.mean && up <= 2.3 && down >= 0.5,
+  check('the brightness range keeps the blackout dark (max at most about 2.2x the default; the minimum is darker than the default and, since T27a gave the low end a true black point, may be near black)',
+    luma.min.mean < luma.default.mean && luma.default.mean < luma.max.mean && up <= 2.3 && down >= 0.0,
     `mean luma min ${f('min')}, default ${f('default')}, max ${f('max')}; max/default ${up.toFixed(2)}, min/default ${down.toFixed(2)}`);
 }
 // In the dark the Orderly is drawn as it is (owner, 17 Nov: "If the lights are off, don't make a

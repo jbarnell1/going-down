@@ -127,6 +127,10 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    last count. With the tuned Playroom (T15m): "count" gains "hide" (its seconds to hide), "found" may be
 ##    cause "grab" (outside a count, within 1 m), the Minder's modes "grab" and "drag" (appended to MODES),
 ##    and the hint events "playroomArrived" {depth} and "sprintDuringHunt" {playerId, n}.
+##    With the party table (T15h, sim/seek.gd with_party, only together with the tuned Playroom) the seek block
+##    gains a 14th element, [fetcher id or "", host time their hold counts from or -1] ("party" decoded: {by,
+##    from}), and the events "fetchStart" {playerId, from, done, seated}, "fetchStop" {playerId} and "tableFreed"
+##    {playerId (the fetcher), freed (ids), health}; "count" may be why "fetch".
 ## The floor quota (sim/run.gd quota; North Star C9). New in the Godot game, and only ever sent when the
 ## run has the quota on, so a run without it sends exactly what it did before:
 ##  - the world gains an 18th element, the quota block (enc_quota / "quota" decoded), with the 16th and
@@ -180,6 +184,16 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##  - events "downed" {playerId, until, by, at}, "healStart" {playerId (the healer), target, from, done},
 ##    "healStop" {playerId, target}, "healed" {playerId, by, at} and "out" {playerId, at, spot (null when the
 ##    car left without them)}. The resident's own "caught" still comes first, as before.
+## A second Orderly (sim/run.gd second_orderly; T9b). New in the Godot game, and only ever sent on a floor that has
+## one, so a run without it sends exactly what it did before (old fields keep their meaning: "orderly", "reloc" and
+## "watch" are always the first Orderly's):
+##  - the world's floor extensions (its 29th element) gain "o2": [the second's orderly array, exactly as the 11th
+##    element is for the first, its relocation count, its watch block as enc_watch or 0], decoded as "orderly2",
+##    "reloc2" and "watch2" (absent when 0);
+##  - an input's flags gain 512, "seeing2": the player can see the second Orderly now (as 4, "seeing", is for the
+##    first);
+##  - a seen report of the second has a 7th element, 2, decoded as "n": 2 (a report without one is of the first);
+##  - events about the second (the run's and the host's) carry "n": 2; the first's never carry "n".
 ## Relocation (sim/run.gd relocation, sim/relocate.gd; T19e). New in the Godot game, and only ever sent once the
 ## floor's resident has relocated, so a run without it sends exactly what it did before:
 ##  - the world gains a 22nd element, the relocation count ("reloc" decoded: relocations on this floor so far),
@@ -240,6 +254,15 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    a slot as in the inv block;
 ##  - events "stashed" / "fetched" {playerId, item, count, slot}, "wokeUp" {bodies, leaveAt}, and the refusals as
 ##    "invRefused" {why: cabFull, poor, window, closed, nobody, annexOnly, unusable} besides the inventory's.
+## The Tenant clock (net/host_rules.gd tenant_timer; TT1). New in the Godot game, and only ever sent in a run with it,
+## on a floor below the prison while its clock runs, so a run without it sends exactly what it did before:
+##  - the world's floor extensions (its 29th element) gain "tenant": [at, len], decoded as "tenant" {at, len}: the
+##    host time the Tenant arrives on this floor and the clock's length in seconds (the live setting tenant.minutes
+##    as it was when the doors opened). Every screen shows at - ht of the newest snapshot ("TENANT ARRIVES IN
+##    09:59", then "THE TENANT IS HERE" from zero), so they agree to the tick and a late joiner's welcome carries it.
+##    Absent on the prison, Practice, during a ride, and beside a "ward" or "reactor" block;
+##  - the event "tenantArrived" {depth, quotaMet} at the host time the clock reached zero, once a floor: a door
+##    slams and the announcer says the time is up (client/main.gd, client/announcer.gd).
 ## Nightly reels (T24). With a reel in progress, the day block can end in [day, started, crew, votes, skipped].
 ## An input with a skip vote extends its 27-element form by a host-clock timestamp (the reel's start).
 const INV_OPS: Array[String] = ["", "drop", "take", "give", "stash", "fetch", "buy", "use", "throw", "skill", "lamp"]
@@ -358,12 +381,8 @@ static func _enc_tape(t: Dictionary) -> Array:
 		a.append(q2(t["found"]))
 	return a
 
-static func enc_world(w: Dictionary) -> Array:
-	var o: Dictionary = w["orderly"]
-	var blink: Variant = 0
-	if w["blink"] != null:
-		var b: Dictionary = w["blink"]
-		blink = [b["at"], 1 if b["announced"] else 0, b["endsAt"], b["len"], b["warn"], 1 if b["blackout"] else 0]
+## The orderly array of the world (its 11th element; "o2" for a second Orderly): a pose, speed, frozen, mode, windUp.
+static func _enc_orderly(o: Dictionary) -> Array:
 	var ow := _enc_pose(o)
 	ow.append(o["speed"])
 	ow.append(1 if o["frozen"] else 0)
@@ -371,6 +390,28 @@ static func enc_world(w: Dictionary) -> Array:
 	if o.has("windUp"):
 		ow.append(o["windUp"]["target"])
 		ow.append(o["windUp"]["left"])
+	return ow
+
+static func _dec_orderly(c: _V, w: Variant) -> Dictionary:
+	var ow := _a(c, w, 10, 12)
+	if c.bad or ow.size() == 11:
+		c.bad = true
+		return {}
+	var orderly := _dec_pose(c, ow, 10, 12)
+	orderly["speed"] = _f(c, ow[7])
+	orderly["frozen"] = _f(c, ow[8]) == 1.0
+	orderly["mode"] = _code(c, MODES, ow[9])
+	if ow.size() > 11:
+		orderly["windUp"] = {"target": _s(c, ow[10]), "left": _f(c, ow[11])}
+	return orderly
+
+static func enc_world(w: Dictionary) -> Array:
+	var o: Dictionary = w["orderly"]
+	var blink: Variant = 0
+	if w["blink"] != null:
+		var b: Dictionary = w["blink"]
+		blink = [b["at"], 1 if b["announced"] else 0, b["endsAt"], b["len"], b["warn"], 1 if b["blackout"] else 0]
+	var ow := _enc_orderly(o)
 	var players: Array = []
 	for p: Dictionary in w["players"]:
 		var side: Variant = p["side"]
@@ -446,8 +487,12 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < WORLD_SHOP_INDEX:
 			out.append(null)
 		out.append(enc_shop(w["shop"]))
-	if w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null or w.get("nerve") != null:
+	if w.get("orderly2") != null or w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null or w.get("nerve") != null or w.get("tenant") != null:
 		var extensions := {}
+		if w.get("orderly2") != null:
+			extensions["o2"] = [_enc_orderly(w["orderly2"]), int(w.get("reloc2", 0)), enc_watch(w["watch2"]) if w.get("watch2") != null else 0]
+		if w.get("tenant") != null:
+			extensions["tenant"] = [q3(w["tenant"]["at"]), q3(w["tenant"]["len"])]
 		if w.get("nerve") != null:
 			var nerve: Array = w["nerve"].duplicate()
 			nerve[0] = q3(nerve[0])
@@ -793,10 +838,14 @@ static func enc_seek(k: Dictionary) -> Array:
 	if k.has("anger"):
 		out.append(q3(k["anger"]))
 		out.append(q3(k["hide"]))
+		# The party table (T15h): [fetcher id or "", host time their hold counts from or -1].
+		if k.has("party"):
+			var pt: Dictionary = k["party"]
+			out.append([str(pt["by"]), q3(pt["from"])])
 	return out
 
 static func dec_seek(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 11, 13)
+	var a := _a(c, w, 11, 14)
 	if c.bad:
 		return {}
 	var f := _i(c, a[1], 0, 15)
@@ -812,9 +861,14 @@ static func dec_seek(c: _V, w: Variant) -> Dictionary:
 	var out := {"noise": _f(c, a[0], 0.0, 1.0), "counting": (f & 1) != 0, "last": (f & 2) != 0, "called": (f & 4) != 0, "done": (f & 8) != 0,
 		"n": _i(c, a[2], 0, MAX_COUNT), "t0": _f(c, a[3]), "len": _f(c, a[4], 0.0, MAX_CLOCK), "by": _s(c, a[5]), "why": _s(c, a[6]),
 		"ended": _i(c, a[7], 0, MAX_COUNT), "calmUntil": _f(c, a[8]), "lastAt": _opt_num(c, a[9]), "players": players}
-	if a.size() == 13:
+	if a.size() >= 13:
 		out["anger"] = _f(c, a[11], 0.0, 1.0)
 		out["hide"] = _f(c, a[12], 0.0, MAX_CLOCK)
+		if a.size() == 14:
+			var pt := _a(c, a[13], 2, 2)
+			if c.bad:
+				return {}
+			out["party"] ={"by": _s(c, pt[0]), "from": _f(c, pt[1], -1.0, MAX_CLOCK)}
 	elif a.size() != 11:
 		c.bad = true
 	return out
@@ -925,10 +979,14 @@ static func encode(m: Dictionary) -> String:
 		"input":
 			var seen: Array = []
 			for r: Dictionary in m["seen"]:
-				seen.append([r["id"], r["depth"], r["a"], r["b"], q3(r["alpha"]), _enc_pose(r["pose"])])
+				var row: Array = [r["id"], r["depth"], r["a"], r["b"], q3(r["alpha"]), _enc_pose(r["pose"])]
+				if int(r.get("n", 1)) == 2:
+					row.append(2)
+				seen.append(row)
 			var flags := (1 if m["raised"] else 0) | (2 if m["holdDoors"] else 0) | (4 if m["seeing"] else 0) | (GAITS.find(String(m.get("gait", "walk"))) << 3) \
 				| (32 if m.get("use", false) == true else 0) | (64 if m.get("peek", false) == true else 0) \
-				| (128 if m.get("search", false) == true else 0) | (256 if m.get("searchFast", false) == true else 0)
+				| (128 if m.get("search", false) == true else 0) | (256 if m.get("searchFast", false) == true else 0) \
+				| (512 if m.get("seeing2", false) == true else 0)
 			var inp: Array = [PROTOCOL_VERSION, "I", m["seq"], floor3(m["ct"]), _enc_body(m["body"]), q2(m["eye"]), q3(m["yaw"]), q3(m["pitch"]),
 				q2(m["hFovDeg"]), q2(m["vFovDeg"]), flags, m["calls"], m["pickUps"], m["ackEvent"], m["ackHt"], floor3(m["renderTime"]), m["placeAck"], seen]
 			var marks := int(m.get("marks", 0))
@@ -1142,6 +1200,16 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 			c.bad = true
 			return {}
 		var extensions: Dictionary = a[WORLD_FLOOR_EXTENSIONS_INDEX]
+		if extensions.has("o2"):
+			var o2 := _a(c, extensions["o2"], 3, 3)
+			if c.bad:
+				return {}
+			out["orderly2"] = _dec_orderly(c, o2[0])
+			out["reloc2"] = _i(c, o2[1], 0, MAX_COUNT)
+			if not (_is_num(o2[2]) and float(o2[2]) == 0.0):
+				out["watch2"] = dec_watch(c, o2[2])
+			if c.bad:
+				return {}
 		if extensions.has("nerve"):
 			var nerve := _a(c, extensions["nerve"], 5, 7)
 			if c.bad or nerve.size() == 6:
@@ -1153,6 +1221,11 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 			if nerve.size() == 7:
 				out["nerve"].append(_f(c, nerve[5], -Run.Nerve.FULL, 0.0))
 				out["nerve"].append(float(_i(c, nerve[6], 0, 1)))
+		if extensions.has("tenant"):
+			var tenant := _a(c, extensions["tenant"], 2, 2)
+			if c.bad:
+				return {}
+			out["tenant"] = {"at": _f(c, tenant[0], 0.0, MAX_CLOCK), "len": _f(c, tenant[1], 0.0, 3600.0)}
 		if extensions.has("lamps"):
 			var lamps: Array[Dictionary] = []
 			var ids := {}
@@ -1213,11 +1286,14 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 	return out
 
 static func _dec_report(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 6, 6)
+	var a := _a(c, w, 6, 7)
 	if c.bad:
 		return {}
-	return {"id": _i(c, a[0], 1, MAX_COUNT), "depth": _i(c, a[1], 0, 100000), "a": _i(c, a[2], 0, MAX_COUNT), "b": _i(c, a[3], 0, MAX_COUNT),
+	var r := {"id": _i(c, a[0], 1, MAX_COUNT), "depth": _i(c, a[1], 0, 100000), "a": _i(c, a[2], 0, MAX_COUNT), "b": _i(c, a[3], 0, MAX_COUNT),
 		"alpha": _f(c, a[4], 0.0, 1.0), "pose": _dec_pose(c, a[5])}
+	if a.size() == 7:
+		r["n"] = _i(c, a[6], 2, 2)
+	return r
 
 ## Parses wire text; null for anything malformed, out of range or from another protocol version.
 static func decode(text: String) -> Variant:
@@ -1274,7 +1350,7 @@ static func decode(text: String) -> Variant:
 		"I":
 			if a.size() != 18 and a.size() != 20 and a.size() != 23 and a.size() != 27 and a.size() != 28:
 				return null
-			var f := _i(c, a[10], 0, 511)
+			var f := _i(c, a[10], 0, 1023)
 			var gait := (f >> 3) & 3
 			if gait > 2:
 				return null
@@ -1297,6 +1373,8 @@ static func decode(text: String) -> Variant:
 				out["search"] = true
 			if f & 256:
 				out["searchFast"] = true
+			if f & 512:
+				out["seeing2"] = true
 			if a.size() == 20 or (a.size() >= 23 and not (_is_num(a[18]) and float(a[18]) == 0.0)):
 				out["hides"] = _i(c, a[18], 1, MAX_COUNT)
 				out["fastHides"] = _i(c, a[19], 0, out["hides"])

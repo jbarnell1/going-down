@@ -31,6 +31,9 @@ static func _game() -> Game:
 	var game := GameScene.instantiate() as Game
 	game.automated = true   # set before _ready: no saved face, hints, tape, brightness or settings file
 	(Engine.get_main_loop() as SceneTree).root.add_child(game)
+	# The floor picker is offered on Windows only (main.gd: start.playtest_available). The clean-machine check runs on
+	# Linux, so the test turns it on itself: what is proved here is the F6 and F8 behaviour, not the platform gate.
+	game.start.playtest_available = true
 	return game
 
 static func _key(game: Game, code: Key) -> void:

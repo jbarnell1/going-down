@@ -73,6 +73,7 @@ const SECTIONS: Array = [
 	[&"temp", &"residents", "THE TEMP (THE ANNEX)"],
 	[&"minder", &"residents", "THE MINDER (THE PLAYROOM)"],
 	[&"groundskeeper", &"residents", "THE GROUNDSKEEPER (THE ARBORETUM)"],
+	[&"tenant", &"residents", "THE TENANT (EVERY FLOOR)"],
 	[&"lift", &"lift", "THE LIFT AND THE DARK"],
 	[&"stamina", &"players", "STAMINA"],
 	[&"down", &"players", "DOWN AND HEALING"],
@@ -132,7 +133,7 @@ const ROWS: Array = [
 	[&"minder.found_after", &"minder", "FOUND AFTER", "how long in its sight before you are found", "s", 1.0, 0.3, 3.0, 0.1, &"now", &"LS4", F],
 	[&"minder.anger_sprint", &"minder", "SPRINTING FILLS ITS ANGER IN", "seconds of sprinting that fill an empty anger bar", "s", 1.0, 0.5, 10.0, 0.5, &"now", &"LS4", F],
 	[&"minder.anger_noise", &"minder", "ONE NOISE ADDS TO ITS ANGER", "a ball pit, a flap, a dropped tape or an emote", "in 100", 55.0, 5.0, 100.0, 1.0, &"now", &"LS4", W],
-	[&"minder.anger_cool", &"minder", "ITS ANGER COOLS FROM FULL IN", "seconds of quiet that empty a full anger bar", "s", 50.0, 10.0, 300.0, 5.0, &"now", &"LS4", F],
+	[&"minder.anger_cool", &"minder", "ITS ANGER COOLS FROM FULL IN", "seconds of quiet that empty a full anger bar. Does nothing with the party table on (the game's rooms): there the bar never cools by itself", "s", 50.0, 10.0, 300.0, 5.0, &"now", &"LS4", F],
 	# The Groundskeeper (the Arboretum; sim/hearing.gd, sim/noise.gd, sim/run.gd KEEPER_HEALS). AR1 wires its
 	# speeds, reach, timings and heals, along with the radii of the garden sounds.
 	[&"groundskeeper.speed", &"groundskeeper", "COMING SPEED", "how fast it comes to a noise", "m/s", 6.0, 4.2, 9.0, 0.1, &"now", &"AR1", F],
@@ -158,6 +159,9 @@ const ROWS: Array = [
 	[&"noise.search_open", &"groundskeeper", "HEARS A CAREFUL SEARCH WITHIN", "the storage opening at the end of a careful search", "m", 4.0, 2.0, 6.0, 1.0, &"now", &"AR", F],
 	[&"noise.search_rush", &"groundskeeper", "HEARS A RUSHED SEARCH WITHIN", "rummaging in storage at the start of a rushed search", "m", 8.0, 6.0, 12.0, 1.0, &"now", &"AR", F],
 	[&"noise.emote", &"groundskeeper", "HEARS A WHISTLE WITHIN", "a sound emote: a whistle, a clap, a shout", "m", 18.0, 10.0, 30.0, 1.0, &"now", &"AR", F],
+	# The Tenant clock (TT1, net/host_rules.gd tenant_timer): on in the game's rooms, the clock on every floor below the
+	# prison, stamped as the doors open on arrival (a change waits for the next floor). Today's is HostRules.TENANT_MINUTES.
+	[&"tenant.minutes", &"tenant", "ARRIVES AFTER", "minutes on a floor before the Tenant arrives", "min", 10.0, 2.0, 30.0, 1.0, &"next", &"TT1", W],
 	# The lift and the dark. "Time for the elevator to return" is the first three rows.
 	[&"lift.floors_min", &"lift", "CAR STARTS, FEWEST FLOORS AWAY", "the shortest the indicator can start from", "floors", 6.0, 2.0, 19.0, 1.0, &"next", &"LS1", W],
 	[&"lift.floors_max", &"lift", "CAR STARTS, MOST FLOORS AWAY", "the longest", "floors", 12.0, 3.0, 20.0, 1.0, &"next", &"LS1", W],
@@ -182,7 +186,8 @@ const ROWS: Array = [
 	[&"heal.reach", &"down", "HEAL FROM WITHIN", "healer's feet to the downed player", "m", 1.5, 1.0, 3.0, 0.1, &"floor", &"LS6", F],
 	[&"down.crawl", &"down", "CRAWL SPEED", "a downed player", "m/s", 0.6, 0.0, 2.0, 0.1, &"floor", &"LS6", F],
 	[&"heal.quiet", &"down", "RESIDENT STANDS OFF AFTER A HEAL", "how long a resident that lost its downed player to a heal stays quiet", "s", 5.0, 0.0, 15.0, 1.0, &"next", &"LS5", F],
-	# Players: health (the Playroom).
+	# Players: health (the Playroom). With the Minder's hunt (PT1, the game's rooms) walking and sprinting cost only
+	# while it searches; without it (tests only) from the end of the first count, outside counts.
 	[&"health.walk", &"health", "WALKING COSTS", "health a second of walking, only while it hunts", "a second", 3.0, 0.0, 10.0, 0.5, &"now", &"LS5", F],
 	[&"health.sprint", &"health", "SPRINTING COSTS", "health a second of sprinting, only while it hunts", "a second", 8.0, 0.0, 20.0, 1.0, &"now", &"LS5", F],
 	[&"health.rest", &"health", "STANDING GIVES BACK", "health a second of standing", "a second", 1.0, 0.0, 5.0, 0.25, &"now", &"LS5", F],
@@ -247,6 +252,8 @@ const WIRED_IDS: Array[StringName] = [
 	&"minder.anger_sprint", &"minder.anger_noise", &"minder.anger_cool",
 	# LS5: the tank, and the heal.
 	&"stamina.tank", &"heal.time", &"heal.quiet", &"heal.health",
+	# LS5: health on the Playroom (sim/seek.gd step 7 and PT1's health).
+	&"health.walk", &"health.sprint", &"health.rest",
 	# AR1: the Groundskeeper (the Arboretum).
 	&"groundskeeper.speed", &"groundskeeper.dark_speed", &"groundskeeper.reach", &"groundskeeper.lean_range",
 	&"groundskeeper.lean", &"groundskeeper.heals",
@@ -256,6 +263,8 @@ const WIRED_IDS: Array[StringName] = [
 	&"cabinet.slots", &"shop.price.marker", &"shop.price.glow", &"shop.price.flash", &"shop.price.speed", &"shop.price.toy",
 	&"shop.price.salts", &"shop.glow",
 	&"badge.chance", &"badge.depth_chance",
+	# TT1: the Tenant clock.
+	&"tenant.minutes",
 ]
 
 ## The least wait of a call is its start delay plus the floors: sim/run.gd CALL_START_DELAY_MIN (this file

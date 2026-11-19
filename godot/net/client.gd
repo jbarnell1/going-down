@@ -92,6 +92,12 @@
 # figure is never blended: it is drawn at the newer one's pose (a snap), so it is never seen sliding through
 # walls on the way. Its arrival cue is the "relocated" event, in `events` like any other.
 #
+# A second Orderly (sim/run.gd second_orderly; T9b). On a floor that has one, the snapshots carry "orderly2", "reloc2"
+# and "watch2". Everything above holds for each Orderly on its own: the first's code draws the second with its own
+# drawing state swapped in (_swap_second) and the snapshots read as the second's (_as_second). Its seen reports carry
+# "n": 2, "I can see it" for it is "seeing2", and a catch by it ("caught" with "n": 2) has its own taken latch; either
+# latch blinds the screen. Frame.orderly2 and the fields after it are what to draw.
+#
 # Lonely (sim/lonely.gd; T19c). On a floor whose Temp is Lonely the snapshots carry "lonely" (who it chases, or
 # ""): looking does nothing to it, so it is drawn where the snapshots say, never held, nothing is reported and
 # no eye marks show, as for the Minder. The events "chaseStarted" and "chaseEnded" arrive in `events` (the
@@ -190,6 +196,17 @@ class Frame:
 	var eyes_all := false
 	## The one watcher it walks at while it needs two and has one (the watched walk), else "".
 	var watched_by := ""
+	## A second Orderly (T9b; see the header): the same as orderly, catch_active, visible, held, seeing and the eye
+	## marks above, for the second. orderly2 is null on a floor without one.
+	var orderly2: Variant = null
+	var catch_active2 := false
+	var visible2 := false
+	var held2 := false
+	var seeing2 := false
+	var eyes_on2 := false
+	var eyes_need2 := 1
+	var eyes_lit2 := 0
+	var eyes_all2 := false
 	## Depth of the floor drawn.
 	var depth := 1
 	## Everyone else, interpolated: {id, body (Move.Body), yaw, pitch, active, status, gait}.
@@ -320,6 +337,24 @@ var _caught_at := -INF
 var _orderly_from := -1
 ## This frame's eye marks: [shown, need, lit, watched by] (_set_eyes).
 var _eyes_frame: Array = [false, 1, 0, ""]
+## A second Orderly (T9b; see the header): its own drawing state, swapped with the first's (_swap_second) while
+## the first's code draws it; `latest` is swapped with its view (_as_second) too.
+var _pin2: Variant = null
+var _drawn2: Variant = null
+var _drawn_depth2 := -1
+var _frozen2 := false
+var _seeing_latch2 := false
+var _wind_up_on2 := false
+var _wind_up_saw2 := false
+var _armed_end2: Variant = null
+var _latched_end2 := -INF
+var _latch2: Variant = null
+var _caught_at2 := -INF
+var _eyes_frame2: Array = [false, 1, 0, ""]
+var _latest2: Variant = null
+var _second_pass := false
+## The last frame drawn (main.gd reads the second Orderly's part of it).
+var last_frame: Frame = null
 
 ## `interp_delay` (default INTERP_DELAY) and `input_interval` (default INPUT_INTERVAL; 0 sends every frame).
 ## `face`: the player's drawn face (FaceCodec text) to send in the join, or "" for none.
@@ -595,7 +630,9 @@ func receive(now: float) -> void:
 						_ev_buf[n] = evs[i]
 				while _ev_buf.has(_ev_next):
 					var ev: Dictionary = _ev_buf[_ev_next]
-					if ev.get("type") == "caught" and ev.get("playerId") == id:
+					if ev.get("type") == "caught" and ev.get("playerId") == id and int(ev.get("n", 1)) == 2:
+						_caught_at2 = maxf(_caught_at2, float(ev["t"]))
+					elif ev.get("type") == "caught" and ev.get("playerId") == id:
 						_caught_at = maxf(_caught_at, float(ev["t"]))
 					if ev.get("type") == "note":
 						_keep_note(ev)
@@ -822,11 +859,151 @@ func frame(now: float, local: LocalFrame) -> Frame:
 	if dk[1]:
 		stats.guard_dark_frames += 1
 	var latched_now := _update_latch(show, rt)
-	var taken := _latch != null
+	# A second Orderly (T9b): its own taken latch, from its own blocks.
+	var show2_latch := _second_show(show)
+	if not show2_latch.is_empty() or _latch2 != null or _wind_up_on2:
+		_swap_second()
+		latched_now = _update_latch(show2_latch, rt) or latched_now
+		_swap_second()
+	var taken := _latch != null or _latch2 != null
 	var blind: bool = dk[0] or taken or local.flare_blind
 	var blind_to_resident := blind
 
 	# The Orderly.
+	var r1 := _draw_orderly(show, cam, taken, blind, local)
+	var seeing_now: bool = r1["seeing"]
+	var report: Variant = r1["report"]
+	var orderly: Variant = r1["orderly"]
+	var catch_active: bool = r1["catch_active"]
+	blind_to_resident = r1["blind"]
+	# A second Orderly (T9b; see the header): the same rules on its own drawing, from the second's blocks.
+	var r2 := {}
+	var show2 := _second_show(show)
+	if not show2.is_empty() or _drawn2 != null:
+		_swap_second()
+		r2 = _draw_orderly(show2, cam, taken, blind, local)
+		_swap_second()
+		if r2["report"] != null:
+			report = r2["report"]
+
+	# Everyone else.
+	var players: Array[Dictionary] = []
+	if not show.is_empty():
+		var a: Dictionary = show[0]
+		var b: Dictionary = show[1]
+		var alpha: float = show[2]
+		for pa: Dictionary in a["players"]:
+			if pa["id"] == id:
+				continue
+			var pb := pa
+			for q: Dictionary in b["players"]:
+				if q["id"] == pa["id"]:
+					pb = q
+					break
+			var ba: Move.Body = pa["body"]
+			var bb: Move.Body = pb["body"]
+			var k := alpha if ba.level == bb.level else 0.0
+			var pay: float = pa["yaw"]
+			var pby: float = pb["yaw"]
+			var pap: float = pa["pitch"]
+			var pbp: float = pb["pitch"]
+			players.append({
+				"id": pa["id"],
+				"body": Move.Body.make(ba.x + (bb.x - ba.x) * k, ba.z + (bb.z - ba.z) * k, ba.level, ba.y + (bb.y - ba.y) * k),
+				"yaw": pay + _angle_diff(pay, pby) * k,
+				"pitch": pap + (pbp - pap) * k,
+				"active": pa["active"],
+				"status": pa["status"],
+				"gait": pa["gait"] if k < 0.5 else pb["gait"],
+			})
+
+	# The input: every INPUT_INTERVAL, and at once on a new sighting.
+	if report != null or latched_now or now - _last_send >= _input_interval - 1e-9:
+		_send(now, cam, local, rt)
+	var shown: Variant = null if taken else orderly
+	var f := Frame.new()
+	f.dark = blind
+	f.orderly = shown
+	f.catch_active = shown != null and catch_active
+	# Dark: drawn only with draw_in_dark (never while taken: `shown` is null then), and never seen.
+	f.visible = shown != null and (not blind_to_resident or (draw_in_dark and not taken))
+	f.held = _frozen
+	f.seeing = seeing_now
+	f.taken = taken
+	f.eyes_on = bool(_eyes_frame[0]) and not blind_to_resident
+	f.eyes_need = int(_eyes_frame[1])
+	f.eyes_lit = int(_eyes_frame[2]) if f.eyes_on else 0
+	f.eyes_all = f.eyes_on and f.eyes_lit >= f.eyes_need
+	f.watched_by = str(_eyes_frame[3]) if not blind_to_resident else ""
+	f.depth = int(show[0]["depth"]) if not show.is_empty() else local_depth
+	if not r2.is_empty():
+		var shown2: Variant = null if taken else r2["orderly"]
+		var b2: bool = r2["blind"]
+		f.orderly2 = shown2
+		f.catch_active2 = shown2 != null and bool(r2["catch_active"])
+		f.visible2 = shown2 != null and (not b2 or (draw_in_dark and not taken))
+		f.held2 = _frozen2
+		f.seeing2 = bool(r2["seeing"])
+		f.eyes_on2 = bool(_eyes_frame2[0]) and not b2
+		f.eyes_need2 = int(_eyes_frame2[1])
+		f.eyes_lit2 = int(_eyes_frame2[2]) if f.eyes_on2 else 0
+		f.eyes_all2 = f.eyes_on2 and f.eyes_lit2 >= f.eyes_need2
+	f.players = players
+	f.render_time = rt
+	f.placed = placed
+	last_frame = f
+	return f
+
+## A second Orderly (T9b): a snapshot as the second's drawing reads it: "orderly", "reloc" and "watch" are the
+## second's ("orderly2", "reloc2", "watch2"). Without one, its Orderly is absent (mode "absent").
+static func _as_second(w: Variant) -> Variant:
+	if not w is Dictionary:
+		return w
+	var d: Dictionary = (w as Dictionary).duplicate()
+	d["orderly"] = d["orderly2"] if d.has("orderly2") else {"mode": "absent", "anim": "idle"}
+	d.erase("reloc")
+	d.erase("watch")
+	if d.has("reloc2"):
+		d["reloc"] = d["reloc2"]
+	if d.has("watch2"):
+		d["watch"] = d["watch2"]
+	return d
+
+## The snapshots drawn (`show`: [a, b, alpha]) as the second Orderly's drawing reads them, or [] when either has none.
+static func _second_show(show: Array) -> Array:
+	if show.is_empty() or not (show[0] as Dictionary).has("orderly2") or not (show[1] as Dictionary).has("orderly2"):
+		return []
+	return [_as_second(show[0]), _as_second(show[1]), show[2]]
+
+## Swaps the first and the second Orderly's drawing state (and `latest` with the second's view of it) in place.
+func _swap_second() -> void:
+	_second_pass = not _second_pass
+	if _second_pass:
+		_latest2 = _as_second(latest)
+	var v: Variant = latest
+	latest = _latest2
+	_latest2 = v
+	v = _pin; _pin = _pin2; _pin2 = v
+	v = _drawn; _drawn = _drawn2; _drawn2 = v
+	var i := _drawn_depth; _drawn_depth = _drawn_depth2; _drawn_depth2 = i
+	var b := _frozen; _frozen = _frozen2; _frozen2 = b
+	b = _seeing_latch; _seeing_latch = _seeing_latch2; _seeing_latch2 = b
+	b = _wind_up_on; _wind_up_on = _wind_up_on2; _wind_up_on2 = b
+	b = _wind_up_saw; _wind_up_saw = _wind_up_saw2; _wind_up_saw2 = b
+	v = _armed_end; _armed_end = _armed_end2; _armed_end2 = v
+	var x := _latched_end; _latched_end = _latched_end2; _latched_end2 = x
+	v = _latch; _latch = _latch2; _latch2 = v
+	x = _caught_at; _caught_at = _caught_at2; _caught_at2 = x
+	var e := _eyes_frame; _eyes_frame = _eyes_frame2; _eyes_frame2 = e
+	if not _second_pass:
+		_latest2 = null
+
+## The Orderly as drawn on this frame (see the header: rules 1 to 3, the watchers, the bend), from `show` (the
+## snapshots drawn) and the camera. Reads and writes the drawing's state (_drawn, _frozen, _pin, _eyes_frame, the
+## wind-up's): for a second Orderly the caller swaps its own in (_swap_second). Returns {seeing, report, orderly,
+## catch_active, blind}: `blind`, blind to the resident (a confirmed beam can light it in the dark).
+func _draw_orderly(show: Array, cam: Pose.Camera, taken: bool, blind: bool, local: LocalFrame) -> Dictionary:
+	var blind_to_resident := blind
 	_eyes_frame = [false, 1, 0, ""]
 	var seeing_now := false
 	var report: Variant = null
@@ -909,61 +1086,7 @@ func frame(now: float, local: LocalFrame) -> Frame:
 	# A lone watcher of two saves nobody by looking: only a frame with every mark lit counts as seeing it.
 	if seeing_now and _wind_up_on and int(_eyes_frame[2]) >= int(_eyes_frame[1]):
 		_wind_up_saw = true
-
-	# Everyone else.
-	var players: Array[Dictionary] = []
-	if not show.is_empty():
-		var a: Dictionary = show[0]
-		var b: Dictionary = show[1]
-		var alpha: float = show[2]
-		for pa: Dictionary in a["players"]:
-			if pa["id"] == id:
-				continue
-			var pb := pa
-			for q: Dictionary in b["players"]:
-				if q["id"] == pa["id"]:
-					pb = q
-					break
-			var ba: Move.Body = pa["body"]
-			var bb: Move.Body = pb["body"]
-			var k := alpha if ba.level == bb.level else 0.0
-			var pay: float = pa["yaw"]
-			var pby: float = pb["yaw"]
-			var pap: float = pa["pitch"]
-			var pbp: float = pb["pitch"]
-			players.append({
-				"id": pa["id"],
-				"body": Move.Body.make(ba.x + (bb.x - ba.x) * k, ba.z + (bb.z - ba.z) * k, ba.level, ba.y + (bb.y - ba.y) * k),
-				"yaw": pay + _angle_diff(pay, pby) * k,
-				"pitch": pap + (pbp - pap) * k,
-				"active": pa["active"],
-				"status": pa["status"],
-				"gait": pa["gait"] if k < 0.5 else pb["gait"],
-			})
-
-	# The input: every INPUT_INTERVAL, and at once on a new sighting.
-	if report != null or latched_now or now - _last_send >= _input_interval - 1e-9:
-		_send(now, cam, local, rt)
-	var shown: Variant = null if taken else orderly
-	var f := Frame.new()
-	f.dark = blind
-	f.orderly = shown
-	f.catch_active = shown != null and catch_active
-	# Dark: drawn only with draw_in_dark (never while taken: `shown` is null then), and never seen.
-	f.visible = shown != null and (not blind_to_resident or (draw_in_dark and not taken))
-	f.held = _frozen
-	f.seeing = seeing_now
-	f.taken = taken
-	f.eyes_on = bool(_eyes_frame[0]) and not blind_to_resident
-	f.eyes_need = int(_eyes_frame[1])
-	f.eyes_lit = int(_eyes_frame[2]) if f.eyes_on else 0
-	f.eyes_all = f.eyes_on and f.eyes_lit >= f.eyes_need
-	f.watched_by = str(_eyes_frame[3]) if not blind_to_resident else ""
-	f.depth = int(show[0]["depth"]) if not show.is_empty() else local_depth
-	f.players = players
-	f.render_time = rt
-	f.placed = placed
-	return f
+	return {"seeing": seeing_now, "report": report, "orderly": orderly, "catch_active": catch_active, "blind": blind_to_resident}
 
 ## Two-watcher Stillness: [need, the other players the newest snapshot counts as watchers, every one it
 ## counts], from its watch block (none: [1, [], []]).
@@ -1098,6 +1221,10 @@ func forget_orderly() -> void:
 	_frozen = false
 	_pin = null
 	_drawn_depth = -1
+	_drawn2 = null
+	_frozen2 = false
+	_pin2 = null
+	_drawn_depth2 = -1
 
 ## The game's own tank, corrected toward the host's: by how far the host's tank after input `ackIn`
 ## differs from what this game had when it sent that input. Call once a frame with the current copy.
@@ -1134,6 +1261,8 @@ func correct_stamina(local_: Stamina.Stamina) -> Stamina.Stamina:
 func _make_report(a: Dictionary, b: Dictionary, alpha: float, pose: Dictionary) -> Dictionary:
 	_report_id += 1
 	var r := {"id": _report_id, "depth": a["depth"], "a": a["tick"], "b": b["tick"], "alpha": Protocol.q3(alpha), "pose": pose}
+	if _second_pass:
+		r["n"] = 2
 	_unacked.append(r)
 	_pin = {"pose": pose, "id": r["id"], "depth": a["depth"]}
 	stats.reports += 1
@@ -1148,6 +1277,8 @@ func _send(now: float, cam: Pose.Camera, local: LocalFrame, rt: float) -> void:
 		"gait": local.gait, "seeing": _seeing_latch, "calls": _calls, "pickUps": _pick_ups, "ackEvent": _ev_next - 1,
 		"ackHt": _ack_ht if not is_inf(_ack_ht) else -1.0, "renderTime": rt, "placeAck": _place_applied, "seen": seen,
 	}
+	if _seeing_latch2:
+		m["seeing2"] = true
 	if local.use:
 		m["use"] = true
 	if local.skip_reel_at != null:
@@ -1183,6 +1314,7 @@ func _send(now: float, cam: Pose.Camera, local: LocalFrame, rt: float) -> void:
 	last_input_frame = stats.frames
 	_last_send = now
 	_seeing_latch = false
+	_seeing_latch2 = false
 	stats.inputs += 1
 	stats.input_bytes += text.length()
 	stats.max_input_bytes = maxi(stats.max_input_bytes, text.length())

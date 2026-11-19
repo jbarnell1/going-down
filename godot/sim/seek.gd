@@ -54,6 +54,24 @@
 #     REST_GAIN a second at any time on the floor; walking or sprinting outside a search costs nothing. Never
 #     in a ride.
 #
+# The party table, from the owner's words of 19 Nov (T15h; on only for a state made with with_party(): sim/run.gd
+# party_table, which the game's rooms turn on with the tuned Playroom; off, nothing of this happens). "Make it a
+# requirement that the players find their teammate ... hold F at the table for 3s to free everyone seated with 50
+# health, but freeing the table should trigger half the aggro bar. And the aggro bar should not go down on its
+# own." See the "Party table" section at the end:
+#   - a player out of a hide holding F (SeekInput.hold) within FETCH_REACH of a party-table seat, on its level,
+#     while anyone is seated, fetches: FETCH_TIME seconds held frees everyone seated ("fetchStart", "fetchStop",
+#     "tableFreed"). Any time, a count included. Each is back on their feet at their seat's spot with the host's
+#     heal.health (HEAL_HEALTH 50). At the table F does not get anyone into a hide while someone is seated;
+#   - freeing the table is a provocation of the fetcher's (WHY_FETCH): FETCH_ANGER (half the bar) with the
+#     tuned Playroom, so it can start a count as any other one (outside a count and its calm);
+#   - the anger bar never cools by itself (minder.anger_cool does nothing). It is still full through a count
+#     and drains to empty over the calm after it, as before.
+# The lift leaving with someone still seated is the run's (sim/run.gd party_table): they are left out.
+#
+# Health's rates are the host's health.walk, health.sprint and health.rest when set (WALK_DRAIN, SPRINT_DRAIN,
+# REST_GAIN otherwise: an untuned state drains exactly as before).
+#
 # Units: Move.Body metres; hides from playroom.gd are whole centimetres. Maths through jsmath.gd.
 # State is treated as immutable: step_seek copies and never edits what it was given.
 extends RefCounted
@@ -146,6 +164,8 @@ const WHY_VOICE := &"voice"
 const WHY_CALL := &"call"
 ## A wind-up toy starting to rattle (the shop, S2: sim/shop.gd), its owner's noise, once, as a dropped tape is.
 const WHY_TOY := &"toy"
+## Freeing the party table (with_party; see the section at the end), the fetcher's.
+const WHY_FETCH := &"fetch"
 
 static var SIGHT_COS := 0.0
 static var GAP_COS := 0.0
@@ -208,6 +228,8 @@ class SeekInput:
 	var voice: bool = false
 	## Their lamp or flash, or null.
 	var light: Light = null
+	## F held this tick (with_party: at the party table it fetches).
+	var hold: bool = false
 
 	static func make(id_: String, body_: Move.Body, gait_: StringName = &"walk") -> SeekInput:
 		var i := SeekInput.new()
@@ -447,10 +469,18 @@ class SeekState:
 	var drag_t0: float = 0.0
 	## PT1 (with_hunt; see the section at the end). Off: every rule above is as every stored result has it.
 	var hunt: bool = false
+	## The party table (with_party; see the section at the end). Off: every rule above is as before.
+	var party: bool = false
+	## Who is holding F at the table to free it, and the host time the hold counts from (-1: nobody).
+	var fetch_by: String = ""
+	var fetch_from: float = -1.0
 
 	func copy() -> SeekState:
 		var s := SeekState.new()
 		s.hunt = hunt
+		s.party = party
+		s.fetch_by = fetch_by
+		s.fetch_from = fetch_from
 		s.tuned = tuned
 		s.hide_len = hide_len
 		s.anger = anger
@@ -717,6 +747,8 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 	var noisy := {}  # player id -> this tick's provocations, in order (Array[StringName])
 	var moved_of := {}
 	var level := 0.0
+	# The party table: with someone seated, F at the table frees them and gets nobody into a hide.
+	var table_busy := s.party and seated_ids(s).size() > 0
 	for p in s.players:
 		var inp: SeekInput = input_of.get(p.id, null)
 		if inp == null or not inp.active:
@@ -735,7 +767,7 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 		match p.phase:
 			&"out":
 				p.body = inp.body
-				if inp.use:
+				if inp.use and not (table_busy and at_table(s, inp.body)):
 					var h := _hide_in_reach(s, inp.body)
 					if h != null:
 						if _occupants(s, h.id) >= h.capacity:
@@ -810,6 +842,9 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 			var hb := hide_inside_body(plan, hh)
 			if _touching(m.body, hb, TICK_REASON_RANGE):
 				_reason(s, p.hide, &"tick", p.id, t, events)
+	# The party table: the fetcher's hold, after everyone has moved (see the section at the end).
+	if s.party:
+		_fetch_step(s, input_of, t, dt, noisy, events)
 	if not noisy.is_empty():
 		level = NOISE_FULL
 	s.noise = level
@@ -890,12 +925,12 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 			var inp: SeekInput = input_of.get(p.id, null)
 			if inp == null or not inp.active or p.status != &"ok":
 				continue
-			var rate := REST_GAIN
+			var rate := Settings.f(tuning, &"health.rest", REST_GAIN)
 			if p.phase == &"out" and moved_of.get(p.id, false):
 				if inp.gait == &"sprint":
-					rate = -SPRINT_DRAIN
+					rate = -Settings.f(tuning, &"health.sprint", SPRINT_DRAIN)
 				elif inp.gait == &"walk":
-					rate = -WALK_DRAIN
+					rate = -Settings.f(tuning, &"health.walk", WALK_DRAIN)
 			p.health = clampf(p.health + rate * dt, 0.0, HEALTH_MAX)
 			if p.health <= 0.0:
 				p.health = 0.0
@@ -1400,6 +1435,8 @@ static var _live: Settings.Values = null
 ## to a full bar) and minder.anger_noise (a lump, in 100).
 ## `hunt` (PT1): the fallbacks are HUNT_ANGER_SPRINT and HUNT_ANGER_NOISE instead of today's rates.
 static func anger_gain(why: StringName, dt: float, tuning: Settings.Values = null, hunt: bool = false) -> float:
+	if why == WHY_FETCH:
+		return FETCH_ANGER
 	if hunt and why == &"sprint":
 		return dt / Settings.f(tuning, &"minder.anger_sprint", HUNT_ANGER_SPRINT)
 	if hunt and ANGER_LUMPS.has(why):
@@ -1449,10 +1486,13 @@ static func _tuned_provoke(s: SeekState, t: float, dt: float, noisy: Dictionary,
 		s.anger = 1.0
 		return
 	if s.ended >= 1 and t < s.calm_until - EPS:
-		s.anger = clampf((s.calm_until - t) / CALM_TIME, 0.0, 1.0)
+		# The party table: the bar never cools by itself afterwards, so the calm's drain reaches empty on its own
+		# last tick (one tick sooner) rather than leaving the last tick's crumb.
+		var left := s.calm_until - t - (dt if s.party else 0.0)
+		s.anger = clampf(left / CALM_TIME, 0.0, 1.0)
 		return
 	if not _may_provoke(s, t, fl):
-		s.anger = maxf(0.0, s.anger - anger_cool(_live) * dt)
+		s.anger = _cooled(s, s.anger, dt)
 		return
 	var level := s.anger
 	var gained := false
@@ -1468,7 +1508,13 @@ static func _tuned_provoke(s: SeekState, t: float, dt: float, noisy: Dictionary,
 			if level >= 1.0 - EPS:
 				_start_count(s, t, p.id, why, false, events)
 				return
-	s.anger = level if gained else maxf(0.0, level - anger_cool(_live) * dt)
+	s.anger = level if gained else _cooled(s, level, dt)
+
+## The anger after a quiet tick: cooled by anger_cool, or (the party table) never by itself.
+static func _cooled(s: SeekState, level: float, dt: float) -> float:
+	if s.party:
+		return level
+	return maxf(0.0, level - anger_cool(_live) * dt)
 
 ## A count starting with T15m on: its hiding and search lengths, the bar full, and a player being dragged
 ## to the table seated at once.
@@ -1582,11 +1628,11 @@ static func _hunt_health(s: SeekState, input_of: Dictionary, moved_of: Dictionar
 		var inp: SeekInput = input_of.get(p.id, null)
 		if inp == null or not inp.active or p.status != &"ok":
 			continue
-		var rate := REST_GAIN
+		var rate := Settings.f(_live, &"health.rest", REST_GAIN)
 		if p.phase == &"out" and moved_of.get(p.id, false) and inp.gait != &"creep":
 			rate = 0.0
 			if seeking:
-				rate = -SPRINT_DRAIN if inp.gait == &"sprint" else -WALK_DRAIN
+				rate = -Settings.f(_live, &"health.sprint", SPRINT_DRAIN) if inp.gait == &"sprint" else -Settings.f(_live, &"health.walk", WALK_DRAIN)
 		p.health = clampf(p.health + rate * dt, 0.0, HEALTH_MAX)
 		if p.health <= 0.0:
 			p.health = 0.0
@@ -1606,3 +1652,92 @@ static func _drag_end(s: SeekState, m: MinderState) -> void:
 	m.timer = 0.0
 	m.stuck = 0.0
 	s.drag_seat = -1
+
+# ---------------------------------------------------------------------------------------------
+# The party table (T15h; see the header). Everything below is read only for a state made with with_party(); a
+# state without it is stepped exactly as every stored result has it.
+# Owner, 19 Nov: "make it a requirement that the players find their teammate. If the elevator leaves with them
+# still at the table, they are effectively dead ... I love the f at the table for 3s to free everyone seated with
+# 50 health, but freeing the table should trigger half the aggro bar. And the aggro bar should not go down on its
+# own."
+
+## Seconds of F held at the table that free everyone seated; how near a seat (feet to the seat's spot, same
+## level) the holder must stand; what freeing it adds to the anger (half the bar); the health the freed get back
+## when the host has not set heal.health (sim/run.gd HEAL_HEALTH, the same 50).
+const FETCH_TIME := 3.0
+const FETCH_REACH := 1.5
+const FETCH_ANGER := 0.5
+const FETCH_HEALTH := 50.0
+
+## The state with the party table on (a copy).
+static func with_party(s0: SeekState) -> SeekState:
+	var s := s0.copy()
+	s.party = true
+	return s
+
+## The ids of everyone seated at the party table, in player order.
+static func seated_ids(s: SeekState) -> Array[String]:
+	var out: Array[String] = []
+	for p in s.players:
+		if p.status == &"taken" and p.seat >= 0:
+			out.append(p.id)
+	return out
+
+## Whether a body stands at the party table: within FETCH_REACH of a seat's spot, on its level.
+static func at_table(s: SeekState, b: Move.Body) -> bool:
+	if b == null:
+		return false
+	for st in s.floor.seats:
+		if st.level == b.level and M.hypot2(st.at.x / 100.0 - b.x, st.at.y / 100.0 - b.z) <= FETCH_REACH:
+			return true
+	return false
+
+## Whether this player can fetch this tick: on their feet out of a hide, F held, at the table.
+static func _can_fetch(s: SeekState, p: SeekPlayer, inp: SeekInput) -> bool:
+	return inp != null and inp.active and inp.hold and p.status == &"ok" and p.phase == &"out" and at_table(s, p.body)
+
+## Step 3's end with the party table on: the hold, and freeing everyone seated once it is held FETCH_TIME. The
+## hold counts from the start of the tick it began, as a heal's does (sim/run.gd). One holder at a time: the one
+## already holding, else the first in player order. Freeing is the fetcher's provocation (WHY_FETCH).
+static func _fetch_step(s: SeekState, input_of: Dictionary, t: float, dt: float, noisy: Dictionary, events: Array[Dictionary]) -> void:
+	var seated := seated_ids(s)
+	var by := ""
+	if not seated.is_empty():
+		var cur := player_of(s, s.fetch_by) if s.fetch_by != "" else null
+		if cur != null and _can_fetch(s, cur, input_of.get(cur.id, null)):
+			by = cur.id
+		else:
+			for p in s.players:
+				if _can_fetch(s, p, input_of.get(p.id, null)):
+					by = p.id
+					break
+	if by != s.fetch_by:
+		if s.fetch_by != "":
+			events.append({"type": "fetchStop", "t": t, "playerId": s.fetch_by})
+		s.fetch_by = by
+		s.fetch_from = t - dt if by != "" else -1.0
+		if by != "":
+			events.append({"type": "fetchStart", "t": t, "playerId": by, "from": s.fetch_from, "done": s.fetch_from + FETCH_TIME, "seated": seated.duplicate()})
+	if by == "" or t - s.fetch_from < FETCH_TIME - EPS:
+		return
+	var health := clampf(Settings.f(_live, &"heal.health", FETCH_HEALTH), 0.0, HEALTH_MAX)
+	for p in s.players:
+		if not seated.has(p.id):
+			continue
+		var st := s.floor.seats[p.seat]
+		p.status = &"ok"
+		p.seat = -1
+		p.phase = &"out"
+		p.hide = -1
+		p.phase_left = 0.0
+		p.peeking = false
+		p.sight = 0.0
+		p.gap = 0.0
+		p.seen_entering = false
+		p.health = health
+		p.body = point_body(s.floor.plan, st.at, st.level)
+		p.last = p.body
+	events.append({"type": "tableFreed", "t": t, "playerId": by, "freed": seated.duplicate(), "health": health})
+	s.fetch_by = ""
+	s.fetch_from = -1.0
+	_note(noisy, by, WHY_FETCH)

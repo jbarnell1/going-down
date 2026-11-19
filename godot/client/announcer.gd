@@ -31,6 +31,10 @@
 # both with the caption "EARNED 1650 OF 2400" from the event (the recordings carry no numbers); a day_met
 # line stands in for the floor's quota line only on the same tick (the caption explains both gates). hint_day
 # stands in for the ride line on the night's first ride down of its first day (days on).
+#
+# The Tenant clock at zero (TT1, "tenantArrived"; client/tenant_clock.gd): TENANT_DELAY_MS after the door slam, the
+# moment "tenant" (tenant_1: the crew failed to reach quota in time) or, when the floor's quota was already met,
+# "tenant_met" (tenant_met_1), so the line never lies. Without a recording, its words as a caption.
 class_name Announcer
 extends Node
 
@@ -38,6 +42,7 @@ const CountLines = preload("res://client/count_lines.gd")
 const Hints = preload("res://client/hints.gd")
 const DayCaption = preload("res://client/day_view.gd")
 const FloorQuota = preload("res://client/quota_view.gd")
+const TenantClock = preload("res://client/tenant_clock.gd")
 
 const EXPIRE_MS := 4000
 const EXPIRE_LONG_MS := 9000
@@ -54,6 +59,10 @@ const SAVE_PATH := "user://hints.cfg"
 ## Lines dealt only on some places: id -> the places it may be dealt on ("only") or never ("never").
 const PLACE_ONLY := {"doors_1": ["clinic"], "slip_2": ["clinic"]}
 const PLACE_NEVER := {"arrived_5": ["playroom"], "blackout_3": ["playroom"]}
+## The Tenant clock's line comes this long after the door slam, and its words when no line is recorded.
+const TENANT_DELAY_MS := 1000
+const TENANT_CAPTIONS := {"tenant": "Time's up! Your crew has failed to reach quota in time. The Tenant will see you now.",
+	"tenant_met": "Time's up! Your quota was met, well done. The Tenant is here all the same."}
 
 var voice := "bella"
 var lines := {}          # id -> {moment, plain}
@@ -82,6 +91,9 @@ var _search_followups: Array[Callable] = []
 var _search_quota := {}
 ## The latest Playroom floor quota is met and the car can still be called.
 var playroom_call_ready := false
+## The newest world on this screen (client/main.gd sets it before on_events): the Tenant's line only for the floor
+## shown, never beside the Ward's or the Reactor's clock (TenantClock.arrived_here). Null: no such check (tests).
+var tenant_latest: Variant = null
 
 ## The hints' gate (client/hints.gd) and what it needs from the game: this screen's player id, the place
 ## of the floor ("clinic", "annex", "playroom", "prison"), whether the run has days, and the Playroom
@@ -286,6 +298,10 @@ func on_events(events: Array, first_depth := 1, floor_quota: Variant = null) -> 
 			"bed":
 				if bool(e.get("inBed", false)):
 					_bed_seen = true
+			"tenantArrived":
+				if tenant_latest == null or TenantClock.arrived_here(e, tenant_latest):
+					var mo := "tenant_met" if bool(e.get("quotaMet", false)) else "tenant"
+					_later.append({"at": now + TENANT_DELAY_MS, "id": mo, "unless": "keep", "expire": EXPIRE_LONG_MS})
 			"quotaMet":
 				queue = queue.filter(func(q: Dictionary) -> bool: return q.moment != "hint_call_dead")
 				if str(current.get("moment", "")) == "hint_call_dead":
@@ -584,8 +600,11 @@ func update() -> void:
 					continue
 		if Hints.is_hint(str(l.id)):
 			hint(str(l.id))
+		elif TENANT_CAPTIONS.has(str(l.id)) and not by_moment.has(str(l.id)):
+			caption = TENANT_CAPTIONS[str(l.id)]
+			caption_until = now + EXPIRE_LONG_MS
 		else:
-			request(str(l.id))
+			request(str(l.id), int(l.get("expire", EXPIRE_MS)))
 	if not _after_count.is_empty() and not _busy("count"):
 		for a: Dictionary in _after_count:
 			if a.id == "hint_play_instruments" and bool(count_ctx.get("last", false)):

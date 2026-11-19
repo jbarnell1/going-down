@@ -111,6 +111,8 @@ const BuildInfo = preload("res://net/build_info.gd")
 ## The player's brightness and its card (client/brightness.gd, client/brightness_card.gd).
 const Brightness = preload("res://client/brightness.gd")
 const BrightnessCard = preload("res://client/brightness_card.gd")
+## The Tenant clock on screen (TT1, client/tenant_clock.gd).
+const TenantClock = preload("res://client/tenant_clock.gd")
 
 const VFOV := 70.0
 const SENS := 0.0022
@@ -169,6 +171,12 @@ var level: Level
 var lift: Lift
 ## The resident's view on this floor: an OrderlyView, or a TempView in the Annex (_use_resident).
 var orderly: Node3D
+## A second Orderly (T9b; net/client.gd Frame.orderly2): its own view, made on the first floor that has one; the plan
+## it was set up for; a catch by it turns the downed camera to it.
+var orderly2: OrderlyView = null
+var _orderly2_plan: Variant = null
+var _orderly2_tpl: Run.Entity.OrderlyState = null
+var _turn_to2 := false
 var _resident_kind := "orderly"
 var others: OthersView
 var sfx: Sfx
@@ -2014,6 +2022,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	orderly.call(&"show_pose", o.get("pose"), bool(o.get("visible", false)) and not _noise_on() and not _no_resident)
 	var seen := bool(o.get("seeing", false)) and _resident_kind != "minder"
 	hud.eyes = o.get("eyes", {"on": seen, "need": 1, "lit": 1, "all": true}) if not _noise_on() and not _no_resident else {}
+	_show_second(s, dt, seen)
 
 	# Everyone else, and their name tags (not through walls, fading with distance, not in the dark).
 	var dark: bool = s["dark"]
@@ -2149,6 +2158,10 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	var tapes: Dictionary = s["tapes"]
 	hud.set_tapes(int(tapes["count"]), float(tapes["value"]))
 	hud.subtitle = announcer.shown(lc.quota() if lc != null else null)
+	# The Tenant clock (TT1): the host's deadline against the newest snapshot's host time.
+	var tenant := TenantClock.line(lc.latest if lc != null else null)
+	hud.tenant_line = str(tenant["text"])
+	hud.tenant_warn = bool(tenant["warn"])
 	if reel != null and bool(s.get("playing", true)):
 		# The picture stays in the car. The subtitle remains legible through the camcorder
 		# at any seat, and eligible crew outside the car still get a vote prompt.
@@ -2454,7 +2467,7 @@ func _show_down(s: Dictionary, now: int, dt: float, noise: bool) -> void:
 			if absf(angle_difference(yaw, rear)) < 0.02 and absf(pitch) < 0.02:
 				down_view.drag_yaw = null
 	elif now < _turn_until and str((s["me"] as Dictionary)["status"]) == "down":
-		var op: Variant = (s["orderly"] as Dictionary).get("pose")
+		var op: Variant = _second_pose() if _turn_to2 else (s["orderly"] as Dictionary).get("pose")
 		if op is Dictionary:
 			var lv := Vector3(float(op["x"]), float(op["y"]) + 1.2, float(op["z"]))
 			var want_yaw := atan2(-(lv.x - cam.position.x), -(lv.z - cam.position.z))
@@ -2471,6 +2484,9 @@ func _show_count(s: Dictionary, dt: float) -> void:
 	hud.seek_note = ""
 	hud.health = -1.0
 	var r := hide_view.update(s, dt, _now(), link.names(), link.my_id(), sfx, announcer, hud, level, s.get("others", []))
+	# The party table (T15h): the lift's panel says who is still seated and that it leaves without them.
+	if lift != null:
+		lift.show_party(hide_view.party_line)
 	# The count as this screen has it, for the hints' gate (client/hints.gd number_in).
 	var cev: Dictionary = s.get("countEvent", {})
 	announcer.count_ctx = {} if cev.is_empty() else {"phase": hide_view.count_phase, "left": hide_view.count_left,
@@ -2617,6 +2633,7 @@ func _present(events: Array, now: int) -> void:
 	if events.is_empty():
 		return
 	var client := link.client()
+	announcer.tenant_latest = client.latest if client != null else {}
 	announcer.on_events(events, 1, client.quota() if client != null else null)
 	var my := link.my_id()
 	quota_view.on_events(events, my, sfx, now)
@@ -2636,6 +2653,10 @@ func _present(events: Array, now: int) -> void:
 						sfx.play_at("step", Vector3(float(e.x), float(e.y), float(e.z)), -5.0)
 			"flareUsed":
 				sfx.play_at("pop", Vector3(float(e.x), float(e.y) + 0.6, float(e.z)), 8.0)
+			"tenantArrived":
+				# The Tenant clock at zero (TT1): a door slams somewhere above, for everyone; the line follows.
+				if client != null and TenantClock.arrived_here(e, client.latest):
+					sfx.tenant_slam()
 			"secondWind":
 				if client != null and int(e.depth) == client.local_depth and int(e.day) == client.day_index:
 					sfx.play_at("second_wind", Vector3(float(e.x), float(e.y) + 1.45, float(e.z)))
@@ -2757,6 +2778,11 @@ func _present(events: Array, now: int) -> void:
 					raise_latch = false
 			"caught":
 				var op: Variant = (snap.get("orderly", {}) as Dictionary).get("pose")
+				# A second Orderly's catch (T9b, "n": 2): its roar comes from where it is drawn.
+				if int(e.get("n", 1)) == 2:
+					op = _second_pose()
+				if mine:
+					_turn_to2 = int(e.get("n", 1)) == 2
 				var staple := bool(e.get("annexStaple", false))
 				sfx.caught(mine, Vector3(float(op["x"]), float(op["y"]) + 2.0, float(op["z"])) if op is Dictionary else null, staple)
 				if mine:
@@ -2806,6 +2832,54 @@ func _show_end(now: int) -> void:
 
 ## Whether the prison's lights are out on this screen: the host's lights-out time has come by the host
 ## clock as estimated here (never by when the news arrived).
+## A second Orderly (T9b): its pose as this screen draws it (net/client.gd Frame.orderly2), or null.
+func _second_pose() -> Variant:
+	var c := link.client() if link != null else null
+	return c.last_frame.orderly2 if c != null and c.last_frame != null else null
+
+## A second Orderly (T9b): drawn exactly as the frame says, as the first is, with its own sounds (OrderlyView.voice)
+## and, while only it is seen, its eye marks. Nothing on a floor without one.
+func _show_second(s: Dictionary, dt: float, first_seen: bool) -> void:
+	var c := link.client()
+	var f: PlayLink.Client.Frame = c.last_frame if c != null else null
+	var pose: Variant = f.orderly2 if f != null and _resident_kind == "orderly" and not _no_resident and not _noise_on() else null
+	if pose == null:
+		if orderly2 != null:
+			orderly2.show_pose(null, false)
+			orderly2.voice(dt, {}, cam.global_position)
+		return
+	if orderly2 == null:
+		orderly2 = OrderlyView.new()
+		orderly2.name = "Orderly2"
+		sub.add_child(orderly2)
+		# The owner (19 Nov): the second looks slightly different (OrderlyView.use_second_look).
+		orderly2.use_second_look()
+	if _orderly2_plan != link.plan:
+		orderly2.reset()
+		orderly2.set_floor(link.plan, level.pieces)
+		_orderly2_plan = link.plan
+		_orderly2_tpl = Places.create_resident(link.plan)
+	var pd: Dictionary = (pose as Dictionary).duplicate()
+	if f.catch_active2:
+		pd["catch_active"] = true
+	orderly2.bellydance_on_catch = c.catch_dance_enabled()
+	orderly2.show_pose(pd, f.visible2)
+	# Its trolley from the rules' audibility where it is drawn, only while it moves unseen (as play_link.gd does it).
+	var lo: Dictionary = c.latest.get("orderly2", {}) if c.latest is Dictionary else {}
+	var held := f.held2 or f.seeing2
+	var moving := float(lo.get("speed", 0.0)) > 0.0
+	var squeak := {"gain": 0.0, "muffled": false}
+	if not held and moving and _orderly2_tpl != null:
+		var drawn := _orderly2_tpl.copy()
+		drawn.body = Move.Body.make(float(pd["x"]), float(pd["z"]), int(pd["level"]), float(pd["y"]))
+		drawn.moving = true
+		var a := Run.Entity.audibility(link.plan, drawn, link.view_body(), float((s["me"] as Dictionary)["eye"]))
+		squeak = {"gain": a.gain, "muffled": a.muffled}
+	orderly2.voice(dt, {"pose": pd, "held": held, "taken": f.taken, "mode": str(lo.get("mode", "")), "speed": float(lo.get("speed", 0.0)),
+		"squeak": squeak}, cam.global_position)
+	if f.seeing2 and not first_seen:
+		hud.eyes = {"on": f.eyes_on2, "need": f.eyes_need2, "lit": f.eyes_lit2, "all": f.eyes_all2}
+
 ## The Arboretum, for the checks: the ground under this player as the view has it, and what the view drew.
 func _garden_state() -> Variant:
 	if level == null or not level.has_meta(&"arboretum"):

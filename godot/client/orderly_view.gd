@@ -428,3 +428,184 @@ func _twist_bone(bone_name: String, axis: Vector3, angle: float) -> void:
 	var out := cur * delta
 	_skel.set_bone_pose_rotation(b, out)
 	_twist[b] = [out, delta]
+
+# --- A second Orderly's own sounds (T9b) ------------------------------------------------------------------
+# The first Orderly's sounds are client/sfx.gd's. A second Orderly (sim/run.gd second_orderly) carries its own
+# here, on the Entity bus, from the same recordings and on the same curves (Sfx's): the trolley's squeak and roll
+# from the rules' audibility (only while it moves unseen; through a wall duller and MUFFLED_DB louder, by its own
+# low-pass rather than the Trolley bus the first one switches), its slow breath and its throat rattle only on the
+# listener's storey and near (breath_db), never while it is held, and the quick breath as a wind-up starts.
+
+var _voice_on := false
+var _v_wheel: AudioStreamPlayer3D
+var _v_roll: AudioStreamPlayer3D
+var _v_breath: AudioStreamPlayer3D
+var _v_rattle: AudioStreamPlayer3D
+var _v_quick: AudioStreamPlayer3D
+var _v_rattle_in := 10.0
+var _v_prev_mode := ""
+var _v_rng := RandomNumberGenerator.new()
+
+func _voice_player(path: String, loop: bool) -> AudioStreamPlayer3D:
+	var p := AudioStreamPlayer3D.new()
+	var file := Sfx.DIR + path + ".ogg"
+	if ResourceLoader.exists(file):
+		var st := load(file) as AudioStreamOggVorbis
+		if st != null:
+			st.loop = loop
+			p.stream = st
+	p.bus = "Entity"
+	p.max_db = 0.0
+	p.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
+	add_child(p)
+	return p
+
+func _voice_loop(p: AudioStreamPlayer3D, on: bool, db: float) -> void:
+	if p.stream == null:
+		return
+	if on:
+		p.volume_db = db
+		if not p.playing:
+			p.play()
+	elif p.playing:
+		p.stop()
+
+## Whether the voice's loops are playing now (tests): [wheels, breath].
+func voice_playing() -> Array:
+	return [_v_wheel != null and _v_wheel.playing, _v_breath != null and _v_breath.playing]
+
+## Per frame, for a second Orderly only. `o`: {pose (as drawn, or null), held (frozen or seen on this screen), taken,
+## mode, moving, speed, squeak {gain, muffled}}; `ear`: the camera. An empty `o` silences it.
+func voice(delta: float, o: Dictionary, ear: Vector3) -> void:
+	if not _voice_on:
+		_voice_on = true
+		_v_wheel = _voice_player("orderly/trolley_squeak", true)
+		_v_roll = _voice_player("orderly/trolley_roll", true)
+		_v_breath = _voice_player("orderly/breath_slow", true)
+		_v_rattle = _voice_player("orderly/rattle", false)
+		_v_quick = _voice_player("orderly/breath_quick", false)
+	var pose: Variant = o.get("pose")
+	if pose == null:
+		for p: AudioStreamPlayer3D in [_v_wheel, _v_roll, _v_breath]:
+			_voice_loop(p, false, 0.0)
+		_v_prev_mode = ""
+		return
+	var pd: Dictionary = pose
+	var feet := Vector3(float(pd["x"]), float(pd["y"]), float(pd["z"]))
+	var held := bool(o.get("held", false)) or bool(o.get("taken", false))
+	var sq: Dictionary = o.get("squeak", {})
+	var g := clampf(float(sq.get("gain", 0.0)), 0.0, 1.0)
+	var wheels := g > 0.0 and not held
+	var muffled := wheels and bool(sq.get("muffled", false))
+	var at: Vector3 = trolley_squeak_at() if _squeak_wheel != null and trolley != null and trolley.visible else feet + Vector3(0.0, 0.4, 0.0)
+	_v_wheel.global_position = at
+	_v_roll.global_position = at
+	var cut := 1500.0 if muffled else 20500.0
+	_v_wheel.attenuation_filter_cutoff_hz = cut
+	_v_roll.attenuation_filter_cutoff_hz = cut
+	var wdb := Sfx.BASE_DB + Sfx.APPROACH_DB - 3.0 * (1.0 - g) + (Sfx.MUFFLED_DB if muffled else 0.0)
+	var pitch := clampf(0.75 + 0.25 * float(o.get("speed", Sfx.HUNT_SPEED)) / Sfx.HUNT_SPEED, 0.8, 1.05)
+	_v_wheel.pitch_scale = pitch
+	_v_roll.pitch_scale = pitch
+	_voice_loop(_v_wheel, wheels, wdb)
+	_voice_loop(_v_roll, wheels, wdb - 4.0)
+	# Breath and rattle: on the listener's storey only, near, never while held.
+	var head := feet + Vector3(0.0, 2.2, 0.0)
+	var same_storey := Sfx.storey_of_eye(ear.y) == Sfx.storey_of_feet(feet.y)
+	var d := ear.distance_to(head)
+	var bdb := Sfx.breath_db(d, wheels) if same_storey else Sfx.SILENT_DB - 1.0
+	_v_breath.global_position = head
+	_v_breath.attenuation_filter_cutoff_hz = Sfx._far_cutoff(d)
+	_voice_loop(_v_breath, not held and bdb > Sfx.SILENT_DB, Sfx.BASE_DB + bdb)
+	var mode := str(o.get("mode", ""))
+	if mode == "windUp" and _v_prev_mode != "windUp" and not held and _v_quick.stream != null:
+		_v_quick.global_position = head
+		_v_quick.volume_db = Sfx.BASE_DB
+		_v_quick.play()
+	_v_prev_mode = mode
+	if not held and same_storey and d < Sfx.RATTLE_FAR and _v_rattle.stream != null:
+		_v_rattle_in -= delta
+		if _v_rattle_in <= 0.0:
+			var rdb := Sfx.breath_db(d, wheels, "rattle")
+			if rdb > Sfx.SILENT_DB:
+				_v_rattle.global_position = head
+				_v_rattle.volume_db = Sfx.BASE_DB + rdb
+				_v_rattle.play()
+			_v_rattle_in = _v_rng.randf_range(Sfx.RATTLE_EVERY.x, Sfx.RATTLE_EVERY.y)
+
+# --- A second Orderly's look (T9b) ------------------------------------------------------------------------
+# The owner (19 Nov): "the second resident should look slightly different (same skeleton is fine, but features
+# darker/lighter, different colors, etc)". Same model, skeleton and clips; only its own copy of the material, with
+# its own copy of the atlas (sim-free, never the shared resource, the .glb or the Blender source): the gown's
+# patches of the atlas (assets_src/blender/orderly/build_orderly.py REG: gown, gown_top, gown_in, the torn strips,
+# holes and dirty edges) multiplied by SECOND_GOWN, darker and browner, a dirtier gown; the skin's patches (skin,
+# skin_lo, skin_hi, bruise, skin_dk and the sewn lids' socket) turned SECOND_SKIN_GREY of the way to their own grey
+# and then SECOND_SKIN_PALE of the way to SECOND_SKIN_TO, paler and greyer. The mask and its printed face, the cap,
+# the band, the ink, the tie and the nails stay exactly as they are. Alpha is never touched (the torn cloth keeps its
+# holes). The tinted atlas is made once per run of the game and shared by every second view.
+
+const SECOND_GOWN := Color(0.55, 0.5, 0.42)
+const SECOND_SKIN_GREY := 0.6
+const SECOND_SKIN_PALE := 0.3
+const SECOND_SKIN_TO := Color(0.86, 0.86, 0.84)
+## The patches, as Godot's UV rectangles [u0, v0, u1, v1] (v down: Blender's v flipped by the glTF export).
+const SECOND_GOWN_UV: Array = [[0.5, 0.0, 1.0, 0.5], [0.75, 0.5, 1.0, 0.625], [0.375, 0.75, 0.875, 1.0],
+	[0.0, 0.75, 0.25, 0.875], [0.875, 0.875, 1.0, 1.0]]
+const SECOND_SKIN_UV: Array = [[0.0, 0.5, 0.25, 0.75], [0.25, 0.5, 0.5, 0.75], [0.875, 0.75, 1.0, 0.875]]
+
+static var _second_atlas: Texture2D = null
+static var _second_from: Texture2D = null
+## This view wears the second Orderly's look (use_second_look).
+var second_look := false
+
+## The second Orderly's look on this view only (see above). Call once it is in the tree.
+func use_second_look() -> void:
+	second_look = true
+	if model == null:
+		return
+	for mi: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
+		for i in mi.mesh.get_surface_count():
+			var base := mi.get_active_material(i) as StandardMaterial3D
+			if base == null:
+				continue
+			var m := base.duplicate() as StandardMaterial3D
+			m.resource_name = base.resource_name + "_second"
+			var tex := second_atlas(base.albedo_texture)
+			if tex != null:
+				m.albedo_texture = tex
+			else:
+				m.albedo_color = base.albedo_color * SECOND_GOWN
+			mi.set_surface_override_material(i, m)
+
+## The atlas `from` with the second Orderly's tint (see above), made once; null when its pixels cannot be read.
+static func second_atlas(from: Texture2D) -> Texture2D:
+	if from == null:
+		return null
+	if _second_atlas != null and _second_from == from:
+		return _second_atlas
+	var img := from.get_image()
+	if img == null:
+		return null
+	img = img.duplicate() as Image
+	if img.is_compressed():
+		img.decompress()
+	img.clear_mipmaps()
+	img.convert(Image.FORMAT_RGBA8)
+	var w := img.get_width()
+	var h := img.get_height()
+	for r: Array in SECOND_GOWN_UV:
+		for y in range(int(r[1] * h), int(r[3] * h)):
+			for x in range(int(r[0] * w), int(r[2] * w)):
+				var c := img.get_pixel(x, y)
+				img.set_pixel(x, y, Color(c.r * SECOND_GOWN.r, c.g * SECOND_GOWN.g, c.b * SECOND_GOWN.b, c.a))
+	for r: Array in SECOND_SKIN_UV:
+		for y in range(int(r[1] * h), int(r[3] * h)):
+			for x in range(int(r[0] * w), int(r[2] * w)):
+				var c := img.get_pixel(x, y)
+				var g := c.r * 0.299 + c.g * 0.587 + c.b * 0.114
+				var grey := Color(c.r, c.g, c.b).lerp(Color(g, g, g), SECOND_SKIN_GREY).lerp(SECOND_SKIN_TO, SECOND_SKIN_PALE)
+				img.set_pixel(x, y, Color(grey.r, grey.g, grey.b, c.a))
+	img.generate_mipmaps()
+	_second_atlas = ImageTexture.create_from_image(img)
+	_second_from = from
+	return _second_atlas

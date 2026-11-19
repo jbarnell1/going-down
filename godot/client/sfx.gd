@@ -83,6 +83,8 @@ const RECORDED := {
 	"blackout_warn": ["effect", "clinic/flicker"],
 	"pop": ["effect", "clinic/pop"],
 	"slam": ["room", "clinic/slam_1", "clinic/slam_2"],
+	# The Tenant clock at zero (TT1): the same heavy door, heard by everyone, not in the world (tenant_slam()).
+	"tenant_slam": ["scare", "clinic/slam_1"],
 	"intercom": ["room", "clinic/intercom_1", "clinic/intercom_2"],
 	"bed_roll": ["room", "clinic/bed_roll"],
 	"step": ["steps", "player/step_1", "player/step_2", "player/step_3", "player/step_4"],
@@ -200,6 +202,16 @@ static func breath_db(d: float, trolley: bool, curve := "breath") -> float:
 	return db
 
 ## Far sounds lose their top: a low-pass from open at 8 m to 2.5 kHz at 60 m and beyond.
+## The party horn (T15h): heard across the whole floor with its direction, so a crew can walk to the table. Never
+## quieter than HORN_FLOOR_DB under its level at the table (it falls HORN_DB_PER_M a metre until then), and never
+## duller than HORN_CUTOFF_MIN. Before T15h it fell 0.5 dB a metre to 14 dB down (at 28 m).
+const HORN_DB_PER_M := 0.2
+const HORN_FLOOR_DB := 8.0
+const HORN_CUTOFF_MIN := 5000.0
+
+static func horn_db(d: float) -> float:
+	return -minf(HORN_FLOOR_DB, maxf(0.0, d) * HORN_DB_PER_M)
+
 static func _far_cutoff(d: float) -> float:
 	return lerpf(20500.0, 2500.0, clampf((d - 8.0) / 52.0, 0.0, 1.0))
 
@@ -559,6 +571,14 @@ func play(name: String, gain_db := 0.0, pitch := 1.0) -> void:
 	pick.play()
 	_by_name[name] = [pick, st]
 
+## The Tenant clock at zero (TT1; client/tenant_clock.gd): one heavy door slam for everyone, on the Scare bus so the
+## announcer's duck does not take it, not placed in the world ("somewhere above"). slam_1 is a room tone at V-10 (MIX.md);
+## +6.5 dB lifts its momentary peak to about V-1 (-23.8 + 6.5 against V = -16.1) with the file's sample peak at
+## -2.1 dBFS, under the Master limiter's -2.0 ceiling: as loud as the voice, under the scares' V+3.
+const TENANT_SLAM_DB := 6.5
+func tenant_slam() -> void:
+	play("tenant_slam", TENANT_SLAM_DB)
+
 ## Cut a one-shot short (the blink warning's flicker when the lights go), if it is still the one playing.
 func stop(name: String) -> void:
 	var e: Array = _by_name.get(name, [])
@@ -597,10 +617,13 @@ func play_at(name: String, pos: Vector3, gain_db := 0.0) -> AudioStreamPlayer3D:
 	# Scares and the rattle carry across the floor on their own curve (far_db), duller with distance.
 	var curve := "scare" if cat == "scare" else ("rattle" if name == "rattle" else "")
 	if name == "horn":
-		# The seated player's signal carries across the whole floor, panned from the table.
+		# The seated player's signal carries across the whole floor, panned from the table (T15h: the crew walks
+		# toward it to find their friend), a little quieter and duller the further it is (horn_db).
+		var hd := _ear_distance(pos)
 		p.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
 		p.max_distance = 0.0
-		p.volume_db -= minf(14.0, _ear_distance(pos) * 0.5)
+		p.volume_db += horn_db(hd)
+		p.attenuation_filter_cutoff_hz = maxf(HORN_CUTOFF_MIN, _far_cutoff(hd))
 	elif curve != "":
 		var d := _ear_distance(pos)
 		var fd := far_db(curve, d) if curve == "scare" else breath_db(d, squeak != null and squeak.playing, curve)

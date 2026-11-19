@@ -178,6 +178,21 @@
 # {name}.", where it left from, naming who it went to); a chase note at most once per player per
 # NOTE_HUNT_EVERY seconds.
 #
+# A second Orderly (T9b; owner, V3: "On deeper floors a second Orderly may appear"), on only for a run made with it
+# (with_second_orderly(): net/host_rules.gd turns it on for the game's rooms; tests and every stored result leave it
+# off, and then orderly2 is always null and nothing below happens). With it on, a Clinic floor at depth
+# SECOND_ORDERLY_DEPTH (2) or deeper has a second Orderly (`orderly2`, entity id "orderly2-<depth>"); depth 1 keeps
+# one. It is a full, independent Stillness resident: every tick, right after the first, the same step
+# (_step_stillness) runs on it, swapped into `orderly` (_swap_second), with the same eyes as they stand after the
+# first's catches. Looking at one does nothing to the other; every rule of the first applies to it as it is
+# (watchers, relocation with its own draws, furniture, the flare's stun on its own clock, lamps, hides, the long
+# dark, downs and heals, Nerve). Its events carry "n": 2. Its start: sim/relocate.gd second_start (far from the
+# landing and from the first, out of view of the landing; from the floor's seed). The call and a rushed search wake
+# it as they wake the first. The instrument: both are entities of the tick; each instrument records the nearest one
+# being tested in range (sim/instrument.gd), so never both at once, and repeat readings count per Orderly. Known
+# limits: the call's pull ends for both once either reaches the landing; one resident watches the hides each tick
+# (_hide_watcher).
+#
 # Down first, then out (North Star B6; loop/NIGHT-PLAN.md A5, T8a), on only for a run made with it
 # (create_run's `downs`, with_downs(): net/host_rules.gd turns it on for the game's rooms; tests and every
 # stored result leave it off, and then nothing below happens and a catch is "caught" as before). With it on:
@@ -245,6 +260,13 @@
 # ("playroomArrived", "sprintDuringHunt") for the announcer.
 # The Minder's hunt (PT1, `minder_hunt`, with_minder_hunt: the same again, Seek.with_hunt): the Minder never acts on
 # an instrument, its anger fills sooner, and health drains only while it searches (seek.gd "PT1").
+# The party table (T15h, `party_table`, with_party_table: the same again, Seek.with_party; the game's rooms turn it on
+# with the tuned Playroom; tests and every stored result leave it off, and then nothing below happens): a player on
+# their feet holding F (PlayerInput.use) at the table for 3 s frees everyone seated (seek.gd "tableFreed"): their run
+# status goes from caught back to ok where the seek puts them, beside the table. Freeing it adds half the anger bar,
+# and the bar never cools by itself (seek.gd). Anyone still seated when the car leaves (a ride down or a BANK) is
+# left out for the day exactly as the car waits leaves out a player on the floor (_leave_out, `left_out`: needs
+# car_waits, which the game's rooms have on): not brought back on the next floor, no share of the bank.
 # Solid furniture (FD7, `furniture`, with_furniture: docs/floors/findables-and-day.md section 4; net/host_rules.gd
 # turns it on for the game's rooms; tests and every stored result leave it off, and then nothing below happens).
 # Players' bodies (move_in_run: the local player, the bots, a crawl) slide along every solid piece of the
@@ -1088,6 +1110,9 @@ class RunState:
 	## The Minder's hunt from the owner's playtest of 19 Nov (PT1, with_minder_hunt; sim/seek.gd "PT1"). Off: the
 	## Playroom's rules are exactly as every stored result has them.
 	var minder_hunt: bool = false
+	## The party table from the owner's words of 19 Nov (T15h, with_party_table; sim/seek.gd "Party table"). Off:
+	## the Playroom's rules are exactly as every stored result has them.
+	var party_table: bool = false
 	## Solid furniture (FD7, with_furniture; sim/furniture.gd): players slide along the floor's pieces. Off:
 	## nothing blocks but walls, as every stored result has it.
 	var furniture: bool = false
@@ -1146,9 +1171,21 @@ class RunState:
 	var tuning: Settings.Values = null
 	## The Arboretum (see the header): this floor's Groundskeeper and heal counts (a GardenFloor), else null.
 	var garden: GardenFloor = null
+	## A second Orderly (T9b, with_second_orderly; see "A second Orderly" in the header). Off: orderly2 is
+	## always null and nothing below is ever read.
+	var second_orderly := false
+	## This floor's second Orderly (a full, independent Stillness resident), or null; its entity id
+	## ("orderly2-<depth>", its own subject for repeat readings); the flare's stun on it.
+	var orderly2: Entity.OrderlyState = null
+	var entity_id2 := ""
+	var flare_stun2_until := -1.0
 
 	func copy() -> RunState:
 		var s := RunState.new()
+		s.second_orderly = second_orderly
+		s.orderly2 = orderly2
+		s.entity_id2 = entity_id2
+		s.flare_stun2_until = flare_stun2_until
 		s.tuning = tuning
 		s.garden = garden
 		s.lonely = lonely
@@ -1157,6 +1194,7 @@ class RunState:
 		s.day_met = day_met
 		s.playroom_tuned = playroom_tuned
 		s.minder_hunt = minder_hunt
+		s.party_table = party_table
 		s.furniture = furniture
 		s.furniture_layout = furniture_layout
 		s.resident_navigation = resident_navigation
@@ -1287,6 +1325,10 @@ class PlayerInput:
 	var pick_up: Variant = null  # TypeScript: pickUp
 	## Sees nothing this tick, though present and huntable (the host's call).
 	var blind: bool = false
+	## A second Orderly (T9b): blind to the first or to the second Orderly only this tick (the host's catch
+	## wait, net/host.gd, set only while a second one is on the floor). `blind` still blinds to both.
+	var blind_first: bool = false
+	var blind_second: bool = false
 	## F is held (the use key): in the prison, held on a bunk it lies you down (days on only).
 	var use: bool = false
 	## The Playroom only (see the header). The gait the player has this tick (Stamina.gait_for): "walk",
@@ -1568,6 +1610,23 @@ static func with_minder_hunt(s0: RunState) -> RunState:
 		s.seek = Seek.with_hunt(s.seek as Seek.SeekState)
 	return s
 
+## Turns the party table on (T15h, see the header; sim/seek.gd "Party table"): every Playroom from now on (and one
+## already reached) lets a crewmate free the table, never cools the anger by itself, and leaves out whoever is
+## still seated when the car leaves.
+static func with_party_table(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.party_table = true
+	if s.seek != null:
+		s.seek = Seek.with_party(s.seek as Seek.SeekState)
+	return s
+
+## The party table: whether this player is seated at it now (Seek "taken" with a seat), off the Playroom never.
+static func at_party_table(s: RunState, id: String) -> bool:
+	if s.seek == null:
+		return false
+	var sp := Seek.player_of(s.seek as Seek.SeekState, id)
+	return sp != null and sp.status == &"taken" and sp.seat >= 0
+
 ## Turns solid furniture on (FD7, see the header): from now on players slide along every floor's pieces.
 static func with_furniture(s0: RunState) -> RunState:
 	var s := s0.copy()
@@ -1773,6 +1832,8 @@ static func with_resident_navigation(s0: RunState) -> RunState:
 	var s := s0.copy()
 	s.resident_navigation = true
 	s.orderly = _settled_resident(s, s.orderly)
+	if s.orderly2 != null:
+		s.orderly2 = _settled_resident(s, s.orderly2)
 	return s
 
 static func _resident_solids(s: RunState) -> Move.Solids:
@@ -1848,7 +1909,67 @@ static func _leave_out(s: RunState, players: Array[RunPlayer], aboard: Dictionar
 	for p in players:
 		if p.status == &"ok" and not aboard.has(p.id):
 			out[p.id] = true
+		elif s.party_table and not aboard.has(p.id) and at_party_table(s, p.id):
+			# The party table (T15h): still seated when the car leaves, left out as anyone the car leaves is.
+			out[p.id] = true
 	s.left_out = out
+## A second Orderly (T9b; see the header): from this depth on a Clinic floor has two.
+const SECOND_ORDERLY_DEPTH := 2
+
+## The run with a second Orderly on (T9b; see the header). The floor the run is on gets its second now if it
+## qualifies.
+static func with_second_orderly(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.second_orderly = true
+	_spawn_second(s)
+	return s
+
+## Whether this floor has a second Orderly by the rule (see the header).
+static func second_here(s: RunState) -> bool:
+	return s.second_orderly and not s.orientation and s.plan != null and s.plan.place == Places.CLINIC and s.depth >= SECOND_ORDERLY_DEPTH \
+		and not at_home(s)
+
+## The second Orderly of the floor `s` is on (or none), as it starts: waiting at Relocate.second_start, facing
+## the landing, settled clear of furniture. Updates `s`.
+static func _spawn_second(s: RunState) -> void:
+	s.orderly2 = null
+	s.entity_id2 = ""
+	s.flare_stun2_until = -1.0
+	if not second_here(s):
+		return
+	var first := Move.cell_of(s.plan, Places.create_resident(s.plan).body)
+	var r := s.car.rect
+	var cell := Relocate.second_start(s.plan, s.seed, s.depth, first, PackedFloat64Array([r.x0, r.z0, r.x1, r.z1]), s.car.level)
+	if cell == null:
+		return
+	var o := Entity.create_orderly(s.plan, Places.resident(s.plan.place).body)
+	o.body = Move.body_at_cell(s.plan, cell)
+	var cs := float(s.plan.cell_size)
+	o.yaw = Entity.yaw_toward((s.plan.landing.x + 0.5) * cs - o.body.x, (s.plan.landing.y + 0.5) * cs - o.body.z)
+	s.orderly2 = _settled_resident(s, o)
+	s.entity_id2 = "orderly2-%d" % s.depth
+
+## Swaps the first and second Orderly (and what is theirs alone) in place, so the first's rules run on the second
+## exactly as they are; swapped back right after (see the header).
+static func _swap_second(s: RunState) -> void:
+	var o := s.orderly
+	s.orderly = s.orderly2
+	s.orderly2 = o
+	var id := s.entity_id
+	s.entity_id = s.entity_id2
+	s.entity_id2 = id
+	var st := s.flare_stun_until
+	s.flare_stun_until = s.flare_stun2_until
+	s.flare_stun2_until = st
+
+## The Orderly nearest `body` in a straight line (the first on a floor with one; T9b, for the bots).
+static func nearest_orderly(s: RunState, body: Move.Body) -> Entity.OrderlyState:
+	if s.orderly2 == null or body == null:
+		return s.orderly
+	var d1 := M.hypot2(body.x - s.orderly.body.x, body.z - s.orderly.body.z) + (1000.0 if s.orderly.body.level != body.level else 0.0)
+	var d2 := M.hypot2(body.x - s.orderly2.body.x, body.z - s.orderly2.body.z) + (1000.0 if s.orderly2.body.level != body.level else 0.0)
+	return s.orderly2 if d2 < d1 else s.orderly
+
 ## The run with Lonely on (sim/lonely.gd; docs/floors/traits-and-hiding.md section 2): see the header.
 static func with_lonely(s0: RunState) -> RunState:
 	var s := s0.copy()
@@ -2188,7 +2309,7 @@ static func step_doorway_shadow(s: RunState, inputs: Array[PlayerInput], dt: flo
 	if s.phase != &"away" or s.orientation or at_home(s) or s.call != null or s.blink != null or Places.place_at(s.seed, s.depth, s.deck) != Places.CLINIC:
 		s.shadow_quiet = 0.0
 		return
-	if s.orderly.mode not in [&"waiting", &"dormant"] or not s.down.is_empty():
+	if s.orderly.mode not in [&"waiting", &"dormant"] or not s.down.is_empty() or (s.orderly2 != null and s.orderly2.mode not in [&"waiting", &"dormant"]):
 		s.shadow_quiet = 0.0
 		return
 	for i in inputs:
@@ -2258,6 +2379,8 @@ static func _sync_seek(s: RunState) -> void:
 		s.seek = Seek.tune(s.seek as Seek.SeekState)
 	if s.minder_hunt:
 		s.seek = Seek.with_hunt(s.seek as Seek.SeekState)
+	if s.party_table:
+		s.seek = Seek.with_party(s.seek as Seek.SeekState)
 	s.seek_drops = []
 	s.seek_call_at = -1.0
 
@@ -2299,6 +2422,8 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 		si.voice = i.voice
 		si.horn = i.horn
 		si.light = i.light
+		# The party table: F held at it frees whoever is seated (read only with the party table on).
+		si.hold = i.use
 		var carried := lamp_of(s, p.id) if s.lamp else {}
 		if bool(carried.get("on", false)):
 			si.light = Lamp.beam(s.tuning, p.body, i.eye, i.yaw, i.pitch)
@@ -2357,6 +2482,13 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 			np = p.copy()
 			np.status = &"caught"
 			np.side = null
+		elif s.party_table and sp.status == &"ok" and p.status == &"caught":
+			# The party table freed (sim/seek.gd "tableFreed"): back on their feet beside it.
+			np = p.copy()
+			np.status = &"ok"
+			np.side = null
+			np.body = sp.body
+			np.aboard = in_car(s.car, np.body)
 		if crawls:
 			continue
 		if _seek_holds(sp) and not (np.body.x == sp.body.x and np.body.z == sp.body.z and np.body.level == sp.body.level and np.body.y == sp.body.y):
@@ -2648,7 +2780,7 @@ static func _step_hiding(s: RunState, players: Array[RunPlayer], input_of: Dicti
 		s.hiding = Hiding.create(s.plan)
 	var base := (s.hiding as Hiding.HidingState).copy()
 	base.t = t_prev
-	var o := s.orderly
+	var o := _hide_watcher(s, inputs)
 	var w := Hiding.Watcher.make(o.body, o.yaw, Entity.kind_of(o).height)
 	var r := Hiding.step_hiding(base, inputs, w, dt)
 	s.hiding = r.state
@@ -2663,6 +2795,24 @@ static func _step_hiding(s: RunState, players: Array[RunPlayer], input_of: Dicti
 			np.body = held
 			np.aboard = false
 			players[k] = np
+
+## The resident that watches the hides this tick (sim/hiding.gd takes one): the first Orderly, or with a second
+## (T9b) whichever of the two is nearer, in a straight line on the same level, to any player on the floor this
+## tick (a known limit: only that one can see someone getting into a hide, sim/hiding.gd "seen").
+static func _hide_watcher(s: RunState, inputs: Array[Hiding.HideInput]) -> Entity.OrderlyState:
+	if s.orderly2 == null or inputs.is_empty():
+		return s.orderly
+	var best := s.orderly
+	var best_d := INF
+	for o: Entity.OrderlyState in [s.orderly, s.orderly2]:
+		for hi in inputs:
+			if hi.body.level != o.body.level:
+				continue
+			var d := M.hypot2(hi.body.x - o.body.x, hi.body.z - o.body.z)
+			if d < best_d:
+				best_d = d
+				best = o
+	return best
 
 ## The resident's view of a player in a hide (sim/entity.gd "Hidden players"), or null when they are not in
 ## one. Sat back they see nothing; peeking, they look out of the gap from the hide's eye, turned only
@@ -3203,6 +3353,8 @@ static func _step_downs(s: RunState, players: Array[RunPlayer], input_of: Dictio
 			events.append({"type": "healed", "t": t, "playerId": p.id, "by": healer, "at": np.body})
 			if s.orderly.mode == &"bending" and str(s.orderly.bend_target) == p.id:
 				s.orderly = Entity.stand_off(s.orderly, Settings.f(s.tuning, &"heal.quiet", HEAL_QUIET))
+			if s.orderly2 != null and s.orderly2.mode == &"bending" and str(s.orderly2.bend_target) == p.id:
+				s.orderly2 = Entity.stand_off(s.orderly2, Settings.f(s.tuning, &"heal.quiet", HEAL_QUIET))
 			_seek_heal(s, np)
 			continue
 		if t >= nd.until - EPS:
@@ -3221,6 +3373,8 @@ static func _step_downs(s: RunState, players: Array[RunPlayer], input_of: Dictio
 			events.append({"type": "out", "t": t, "playerId": p.id, "at": b, "spot": spot})
 			if s.orderly.mode == &"bending" and str(s.orderly.bend_target) == p.id:
 				s.orderly = Entity.stand_off(s.orderly, 0.0)
+			if s.orderly2 != null and s.orderly2.mode == &"bending" and str(s.orderly2.bend_target) == p.id:
+				s.orderly2 = Entity.stand_off(s.orderly2, 0.0)
 			if s.seek != null:
 				s.seek_drops.append(p.id)
 			continue
@@ -3327,6 +3481,7 @@ static func _step_nerve(prev: RunState, s: RunState, input_of: Dictionary, dt: f
 			resident = s.garden.keeper.body
 		elif s.orderly != null:
 			resident = s.orderly.body
+	var resident2: Move.Body = s.orderly2.body if s.orderly2 != null and not s.seek_off else null
 	var apart := {}
 	if resident != null and resident_of(s).trait_name == &"lonely":
 		apart = Lonely.lonely_ids(s.plan, lonely_people(s, s.players, input_of))
@@ -3347,13 +3502,131 @@ static func _step_nerve(prev: RunState, s: RunState, input_of: Dictionary, dt: f
 					if q.id != p.id and (_is_active(q, input_of) or q.status == &"down") and _nerve_near(p.body, q.body):
 						with_crew = true
 						break
-			value = Nerve.step(value, dt, dark, _nerve_near(p.body, resident), apart.has(p.id), with_crew)
+			value = Nerve.step(value, dt, dark, _nerve_near(p.body, resident) or _nerve_near(p.body, resident2), apart.has(p.id), with_crew)
 			if not catches.is_empty():
 				for victim in s.players:
 					if victim.id != p.id and catches.has(victim.id) and _catch_in_view(s, p, input, victim):
 						value = maxf(0.0, value - Nerve.WITNESSED_CATCH)
 		readings[p.id] = value
 	s.nerve_readings = readings
+
+## One tick of a Stillness resident on the floor (the Clinic's Orderly, the Annex's Temp): the crew's views of it,
+## the call's pull, its step, the car check, the down rule's bend, relocation, its events, and its catches (a
+## player caught goes down or is caught). Reads and writes s.orderly; `second`: it is the second Orderly
+## (T9b), swapped into s.orderly by the caller (_swap_second), whose events carry "n": 2.
+static func _step_stillness(s: RunState, prev: RunState, players: Array[RunPlayer], input_of: Dictionary, who: Places.Resident, t: float, dt: float, events: Array[Dictionary], second: bool) -> Instr.EntityTick:
+	var car := s.car
+	var blind := blinking(s)
+	var open := doors_open(s)
+	var views: Array[Entity.PlayerView] = []
+	for player_index in players.size():
+		var p := players[player_index]
+		var i := _inp(p, input_of)
+		# The host's catch wait blinds a player to one Orderly only (blind_first, blind_second).
+		var iblind := i.blind or (i.blind_second if second else i.blind_first)
+		var flared := flare_blinded(s, p.id, t)
+		if not _is_active(p, input_of):
+			views.append(_view_of(i, false, false))
+		elif p.aboard:
+			# Never huntable inside the car. With the doors open and the lights on, they still watch the floor.
+			var w := _threshold_view(car, i)
+			var just_w: Array[Entity.PlayerView] = [w]
+			if open and not blind and not iblind and not flared and Entity.seen_by(s.plan, s.orderly.body, just_w, Entity.kind_of(s.orderly)) != null:
+				views.append(w)
+			else:
+				views.append(_view_of(i, false, false))
+		else:
+			var hv := _hidden_view(s, i, blind or iblind or flared)
+			# A searcher's eyes are in the drawer (findables): huntable, never a watcher.
+			# The shop's flashbulb (S2): for its second the player looks from where they stand, even in the dark, as one
+			# watcher (the deliberate break counts it twice).
+			var flash := s.shop and Shop.flashing(s.shop_state, p.id, t)
+			if hv != null:
+				views.append(hv)
+				continue
+			var gaze := not flared and not iblind and _steady_light(s, p, prev.players[player_index].body, i, flash)
+			var view := _view_of(i, true, (blind and not flash and not gaze) or iblind or flared or searching(s, p.id))
+			view.steady_gaze = gaze
+			views.append(view)
+			if flash and Shop.flash_watchers() > 1:
+				views.append(_view_of(i, true, false))
+	# The call pulls it toward the landing, until it gets there.
+	var s2 := float(s.plan.cell_size)
+	var lx := (s.plan.landing.x + 0.5) * s2
+	var lz := (s.plan.landing.y + 0.5) * s2
+	if s.lure and M.hypot2(s.orderly.body.x - lx, s.orderly.body.z - lz) <= LURE_DROP_DISTANCE:
+		s.lure = false
+	if s.lure:
+		views.append(Entity.PlayerView.make(LURE_ID, Move.Body.make(lx, lz, s.plan.landing.level, car.floor_y), 1.6, 0.0, 0.0, 1.0, 1.0, true, true))
+	var before := s.orderly
+	# In the blackout it runs its prey down: no creeping up on the still (that is for recording it,
+	# and nobody can see to time a turn in the dark), at BLACKOUT_HUNT_SPEED.
+	var er: Entity.StepResult
+	var need := Entity.watch_need(stillness_up_count(players, input_of)) if s.two_watchers else 1
+	var resident_solids := _resident_solids(s)
+	# Paced (see the header): both Stillness residents hunt at HUNT_SPEED, so both at the paced speeds.
+	# Live settings: the host's speeds for this body (_tuned_hunt), else these.
+	if flare_stunned(s, t):
+		er = Entity.step_entity(s.plan, before, views, dt, 0.0, false, need, resident_solids, true)
+	elif blacked_out(s):
+		er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, true, PACED_BLACKOUT_HUNT_SPEED if s.paced else BLACKOUT_HUNT_SPEED), false, need, resident_solids)
+	elif s.paced:
+		er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, false, PACED_HUNT_SPEED), true, need, resident_solids)
+	else:
+		er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, false, -1.0), true, need, resident_solids)
+	var next := er.state
+	# Belt and braces: it can never end a tick in (or overlapping) the car.
+	if rect_distance(car.rect, next.body.x, next.body.z) < Entity.ORDERLY_RADIUS - 1e-3 and next.body.level == car.level:
+		next = next.copy()
+		next.body = before.body
+		next.moving = false
+		next.speed = 0.0
+	var o_events: Array[Dictionary] = []
+	for e in er.events:
+		if not e.has("playerId") or e["playerId"] != LURE_ID:
+			o_events.append(_second_event(e) if second else e)
+	# Down first, then out: a catch puts the player down, and the resident bends over them. Their tape
+	# stays with them until they are out (the instrument does not hear this catch).
+	var crew_events := o_events
+	if s.downs:
+		crew_events = []
+		for e in o_events:
+			if e["type"] == "caught":
+				next = Entity.bend_over(next, str(e["playerId"]))
+			else:
+				crew_events.append(e)
+	# Relocation (see the header): it may leave where nobody can see it and arrive where nobody can.
+	var moved_on: Array[Dictionary] = []
+	if s.relocation and not flare_stunned(s, t):
+		next = _relocate(s, next, who.trait_name, players, input_of, t, dt, moved_on, "#2" if second else "")
+	s.orderly = next
+	for e in o_events:
+		events.append(_with_t(_annex_catch_event(s, e), t))
+	for e in moved_on:
+		events.append(_second_event(e) if second else e)
+	var et := Instr.EntityTick.make(s.entity_id, who.trait_name, before, next, crew_events)
+	# Caught out of a hide (its look-in): pulled out onto the hide's front spot first.
+	_release_caught(s, players, o_events)
+	for e in o_events:
+		if e["type"] != "caught":
+			continue
+		for k in players.size():
+			if players[k].id == e["playerId"]:
+				if s.downs:
+					if players[k].status == &"ok":
+						_go_down(s, players, k, t, &"catch", events)
+					continue
+				var np := players[k].copy()
+				np.status = &"caught"
+				np.side = null
+				players[k] = np
+	return et
+
+## A second Orderly's event (T9b): the same, with "n": 2 (the first's never carry "n").
+static func _second_event(e: Dictionary) -> Dictionary:
+	var out := e.duplicate()
+	out["n"] = 2
+	return out
 
 static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) -> RunStep:
 	var res := RunStep.new()
@@ -3481,6 +3754,13 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 					o.replan_in = 0.0
 					s.orderly = o
 					events.append({"type": "startedHunting", "t": t})
+				# A second Orderly (T9b) hears the call the same way.
+				if not s.orientation and s.orderly2 != null and s.orderly2.mode == &"waiting":
+					var o2 := s.orderly2.copy()
+					o2.mode = &"hunting"
+					o2.replan_in = 0.0
+					s.orderly2 = o2
+					events.append({"type": "startedHunting", "t": t, "n": 2})
 				s.blink = _blink_of(s.call, 0)
 				events.append({"type": "called", "t": t, "playerId": caller.id, "floorsAway": plan.floors, "at": caller.body})
 				events.append({"type": "indicator", "t": t, "floorsAway": plan.floors, "floor": s.depth - plan.floors})
@@ -3701,107 +3981,13 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	elif s.phase != &"riding":
 		# Hiding (sim/hiding.gd), before the resident: who is in a hide, peeking, or has given it a reason.
 		_step_hiding(s, players, input_of, prev.t, dt, events)
-		var blind := blinking(s)
-		var open := doors_open(s)
-		var views: Array[Entity.PlayerView] = []
-		for player_index in players.size():
-			var p := players[player_index]
-			var i := _inp(p, input_of)
-			var flared := flare_blinded(s, p.id, t)
-			if not _is_active(p, input_of):
-				views.append(_view_of(i, false, false))
-			elif p.aboard:
-				# Never huntable inside the car. With the doors open and the lights on, they still watch the floor.
-				var w := _threshold_view(car, i)
-				var just_w: Array[Entity.PlayerView] = [w]
-				if open and not blind and not i.blind and not flared and Entity.seen_by(s.plan, s.orderly.body, just_w, Entity.kind_of(s.orderly)) != null:
-					views.append(w)
-				else:
-					views.append(_view_of(i, false, false))
-			else:
-				var hv := _hidden_view(s, i, blind or i.blind or flared)
-				# A searcher's eyes are in the drawer (findables): huntable, never a watcher.
-				# The shop's flashbulb (S2): for its second the player looks from where they stand, even in the dark, as one
-				# watcher (the deliberate break counts it twice).
-				var flash := s.shop and Shop.flashing(s.shop_state, p.id, t)
-				if hv != null:
-					views.append(hv)
-					continue
-				var gaze := not flared and _steady_light(s, p, prev.players[player_index].body, i, flash)
-				var view := _view_of(i, true, (blind and not flash and not gaze) or i.blind or flared or searching(s, p.id))
-				view.steady_gaze = gaze
-				views.append(view)
-				if flash and Shop.flash_watchers() > 1:
-					views.append(_view_of(i, true, false))
-		# The call pulls it toward the landing, until it gets there.
-		var s2 := float(s.plan.cell_size)
-		var lx := (s.plan.landing.x + 0.5) * s2
-		var lz := (s.plan.landing.y + 0.5) * s2
-		if s.lure and M.hypot2(s.orderly.body.x - lx, s.orderly.body.z - lz) <= LURE_DROP_DISTANCE:
-			s.lure = false
-		if s.lure:
-			views.append(Entity.PlayerView.make(LURE_ID, Move.Body.make(lx, lz, s.plan.landing.level, car.floor_y), 1.6, 0.0, 0.0, 1.0, 1.0, true, true))
-		var before := s.orderly
-		# In the blackout it runs its prey down: no creeping up on the still (that is for recording it,
-		# and nobody can see to time a turn in the dark), at BLACKOUT_HUNT_SPEED.
-		var er: Entity.StepResult
-		var need := Entity.watch_need(stillness_up_count(players, input_of)) if s.two_watchers else 1
-		var resident_solids := _resident_solids(s)
-		# Paced (see the header): both Stillness residents hunt at HUNT_SPEED, so both at the paced speeds.
-		# Live settings: the host's speeds for this body (_tuned_hunt), else these.
-		if flare_stunned(s, t):
-			er = Entity.step_entity(s.plan, before, views, dt, 0.0, false, need, resident_solids, true)
-		elif blacked_out(s):
-			er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, true, PACED_BLACKOUT_HUNT_SPEED if s.paced else BLACKOUT_HUNT_SPEED), false, need, resident_solids)
-		elif s.paced:
-			er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, false, PACED_HUNT_SPEED), true, need, resident_solids)
-		else:
-			er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, false, -1.0), true, need, resident_solids)
-		var next := er.state
-		# Belt and braces: it can never end a tick in (or overlapping) the car.
-		if rect_distance(car.rect, next.body.x, next.body.z) < Entity.ORDERLY_RADIUS - 1e-3 and next.body.level == car.level:
-			next = next.copy()
-			next.body = before.body
-			next.moving = false
-			next.speed = 0.0
-		var o_events: Array[Dictionary] = []
-		for e in er.events:
-			if not e.has("playerId") or e["playerId"] != LURE_ID:
-				o_events.append(e)
-		# Down first, then out: a catch puts the player down, and the resident bends over them. Their tape
-		# stays with them until they are out (the instrument does not hear this catch).
-		var crew_events := o_events
-		if s.downs:
-			crew_events = []
-			for e in o_events:
-				if e["type"] == "caught":
-					next = Entity.bend_over(next, str(e["playerId"]))
-				else:
-					crew_events.append(e)
-		# Relocation (see the header): it may leave where nobody can see it and arrive where nobody can.
-		var moved_on: Array[Dictionary] = []
-		if s.relocation and not flare_stunned(s, t):
-			next = _relocate(s, next, who.trait_name, players, input_of, t, dt, moved_on)
-		s.orderly = next
-		for e in o_events:
-			events.append(_with_t(_annex_catch_event(s, e), t))
-		events.append_array(moved_on)
-		entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, before, next, crew_events)]
-		# Caught out of a hide (its look-in): pulled out onto the hide's front spot first.
-		_release_caught(s, players, o_events)
-		for e in o_events:
-			if e["type"] != "caught":
-				continue
-			for k in players.size():
-				if players[k].id == e["playerId"]:
-					if s.downs:
-						if players[k].status == &"ok":
-							_go_down(s, players, k, t, &"catch", events)
-						continue
-					var np := players[k].copy()
-					np.status = &"caught"
-					np.side = null
-					players[k] = np
+		entity_ticks = [_step_stillness(s, prev, players, input_of, who, t, dt, events, false)]
+		# A second Orderly (T9b): the same rules, on its own state, with the same eyes as they stand now.
+		if s.orderly2 != null:
+			_swap_second(s)
+			var et2 := _step_stillness(s, prev, players, input_of, who, t, dt, events, true)
+			_swap_second(s)
+			entity_ticks.append(et2)
 
 	# ---- Down first, then out (see the header): heals, and the timer running out.
 	if s.downs and not s.down.is_empty() and s.phase != &"riding":
@@ -3958,6 +4144,8 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		s.car = f.car
 		s.orderly = _settled_resident(s, f.orderly)
 		s.entity_id = f.entity_id
+		if s.second_orderly:
+			_spawn_second(s)
 		var nc := s.crew.copy()
 		nc.members = []
 		for m in s.crew.members:
@@ -4314,6 +4502,8 @@ static func _arrive_home(s: RunState, players: Array[RunPlayer], t: float, event
 	o.dormant_left = INF
 	s.orderly = o
 	s.entity_id = Places.entity_id(plan.place, 0)
+	if s.second_orderly:
+		_spawn_second(s)
 	# After a wipe the day's tapes are still held: they are lost now (a bank gave fresh ones as it left).
 	var nc := _fresh_crew(s.crew) if _holds_tapes(s.crew) else s.crew.copy()
 	var members: Array[Instr.CrewMember] = []
@@ -4447,6 +4637,8 @@ static func _morning(s: RunState, players: Array[RunPlayer], t: float, events: A
 	s.car = f.car
 	s.orderly = _settled_resident(s, f.orderly)
 	s.entity_id = f.entity_id
+	if s.second_orderly:
+		_spawn_second(s)
 	var nc := _fresh_crew(s.crew)
 	for m in nc.members:
 		m.body = bodies.get(m.id, m.body)
@@ -4512,10 +4704,11 @@ static func relocation_free(s: RunState) -> bool:
 	return s.phase != &"boarding" and s.phase != &"riding" and not (s.blink != null and (s.blink.announced or s.blink.ends_at != null))
 
 ## One tick of relocation for the resident just stepped (`o`), its "relocated" event added to `events`.
-static func _relocate(s: RunState, o: Entity.OrderlyState, trait_name: StringName, players: Array[RunPlayer], input_of: Dictionary, t: float, dt: float, events: Array[Dictionary]) -> Entity.OrderlyState:
+## `suffix`: added to the run's seed for the pick ("#2" for a second Orderly, T9b: its own draws).
+static func _relocate(s: RunState, o: Entity.OrderlyState, trait_name: StringName, players: Array[RunPlayer], input_of: Dictionary, t: float, dt: float, events: Array[Dictionary], suffix := "") -> Entity.OrderlyState:
 	var r := s.car.rect
 	var bars := Relocate.barred(s.plan, s.plan.seed, PackedFloat64Array([r.x0, r.z0, r.x1, r.z1]), s.car.level)
-	var st := Relocate.step(s.plan, s.seed, s.depth, trait_name, o, relocation_eyes(s, players, input_of), bars, relocation_free(s), t, dt, _resident_solids(s))
+	var st := Relocate.step(s.plan, s.seed + suffix, s.depth, trait_name, o, relocation_eyes(s, players, input_of), bars, relocation_free(s), t, dt, _resident_solids(s))
 	if st.event != null:
 		events.append(st.event)
 	return st.state
@@ -4663,6 +4856,12 @@ static func _step_findables(s: RunState, players: Array[RunPlayer], input_of: Di
 		o.replan_in = 0.0
 		s.orderly = o
 		events.append({"type": "startedHunting", "t": t})
+	if not r.noisy.is_empty() and s.orderly2 != null and s.orderly2.mode == &"waiting":
+		var o2 := s.orderly2.copy()
+		o2.mode = &"hunting"
+		o2.replan_in = 0.0
+		s.orderly2 = o2
+		events.append({"type": "startedHunting", "t": t, "n": 2})
 	for row in r.found:
 		var by := str(row["by"])
 		if str(row["what"]) == "credits":
@@ -4761,6 +4960,7 @@ static func _step_flares(s: RunState, players: Array[RunPlayer], input_of: Dicti
 		s.flare_plan = s.plan
 		s.flare_bursts = []
 		s.flare_stun_until = -1.0
+		s.flare_stun2_until = -1.0
 	else:
 		s.flare_bursts = s.flare_bursts.filter(func(b: Dictionary) -> bool: return t < maxf(b.until, b.blindUntil))
 	if s.phase == &"riding" or at_home(s):
@@ -4811,6 +5011,10 @@ static func _burst_flare(s: RunState, p: RunPlayer, yaw: float, players: Array[R
 		stunned = Flare.within(at, s.orderly.body, radius) and Flare.clear(s.plan, at, s.orderly.body)
 		if stunned:
 			s.flare_stun_until = maxf(s.flare_stun_until, t + Settings.f(s.tuning, &"flare.stun", Flare.STUN))
+		# A second Orderly (T9b): stunned by the same burst on its own, if it is within the burst's reach.
+		if s.orderly2 != null and Flare.within(at, s.orderly2.body, radius) and Flare.clear(s.plan, at, s.orderly2.body):
+			s.flare_stun2_until = maxf(s.flare_stun2_until, t + Settings.f(s.tuning, &"flare.stun", Flare.STUN))
+			stunned = true
 	s.flare_seq += 1
 	var blind_until := t + Settings.f(s.tuning, &"flare.blind", Flare.BLIND) if not struck.is_empty() else t
 	var burst := {"id": s.flare_seq, "x": at.x, "y": at.y, "z": at.z, "until": t + Flare.BURST_SECONDS,
@@ -5406,6 +5610,8 @@ static func _salts_heal(s: RunState, players: Array[RunPlayer], k: int, by: Stri
 	events.append({"type": "healed", "t": t, "playerId": p.id, "by": by, "at": np.body, "salts": true})
 	if s.orderly.mode == &"bending" and str(s.orderly.bend_target) == p.id:
 		s.orderly = Entity.stand_off(s.orderly, Settings.f(s.tuning, &"heal.quiet", HEAL_QUIET))
+	if s.orderly2 != null and s.orderly2.mode == &"bending" and str(s.orderly2.bend_target) == p.id:
+		s.orderly2 = Entity.stand_off(s.orderly2, Settings.f(s.tuning, &"heal.quiet", HEAL_QUIET))
 	_seek_heal(s, np)
 
 ## The bags with player `id`'s replaced.

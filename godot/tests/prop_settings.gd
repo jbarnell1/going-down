@@ -43,6 +43,7 @@ const HostRules = preload("res://net/host_rules.gd")
 const Snap = preload("res://tests/snap.gd")
 const CountRun = preload("res://tests/prop_count_run.gd")
 const PropSeek = preload("res://tests/prop_seek.gd")
+const PropHunt = preload("res://tests/prop_minder_hunt.gd")
 const PropLonely = preload("res://tests/prop_lonely.gd")
 const Lonely = preload("res://sim/lonely.gd")
 const Hearing = preload("res://sim/hearing.gd")
@@ -127,6 +128,9 @@ const PROOFS := {
 	&"heal.time": "test_heal_time_and_quiet",
 	&"heal.quiet": "test_heal_time_and_quiet",
 	&"heal.health": "test_heal_health",
+	&"health.walk": "test_health_rates",
+	&"health.sprint": "test_health_rates",
+	&"health.rest": "test_health_rates",
 	# S1: carrying (the four-slot inventory).
 	&"inv.stack": "test_inventory_stack_and_hand_reach",
 	&"inv.hand_reach": "test_inventory_stack_and_hand_reach",
@@ -141,6 +145,8 @@ const PROOFS := {
 	&"shop.glow": "test_glow_seconds",
 	&"badge.chance": "test_badge_search_odds",
 	&"badge.depth_chance": "test_badge_search_odds",
+	# TT1: the Tenant clock.
+	&"tenant.minutes": "test_tenant_minutes",
 }
 
 ## The rows of later pieces wired so far (sim/settings.gd WIRED_IDS), in the registry's order.
@@ -151,8 +157,9 @@ const MORE: Array[StringName] = [
 	&"orderly.catch_dance", &"noise.cone", &"noise.search_open", &"noise.search_rush", &"minder.stroll", &"minder.hide_time", &"minder.hide_more", &"minder.last_hide", &"minder.search",
 	&"minder.anger_sprint", &"minder.anger_noise", &"minder.anger_cool",
 	&"lift.false_stop", &"lift.board", &"lift.hold", &"lift.ride", &"dark.min", &"dark.max", &"dark.first_min", &"dark.first_max", &"dark.warning",
-	&"stamina.tank", &"heal.time", &"heal.quiet", &"heal.health", &"inv.stack", &"inv.hand_reach", &"cabinet.slots",
-	&"shop.price.marker", &"shop.price.glow", &"shop.price.flash", &"shop.price.speed", &"shop.price.toy", &"shop.price.salts", &"shop.glow", &"badge.chance", &"badge.depth_chance"]
+	&"stamina.tank", &"heal.time", &"heal.quiet", &"heal.health", &"health.walk", &"health.sprint", &"health.rest", &"inv.stack", &"inv.hand_reach", &"cabinet.slots",
+	&"shop.price.marker", &"shop.price.glow", &"shop.price.flash", &"shop.price.speed", &"shop.price.toy", &"shop.price.salts", &"shop.glow", &"badge.chance", &"badge.depth_chance",
+	&"tenant.minutes"]
 
 ## The game's value of every setting: the constant the game uses, with the rooms' switches on (paced, the long
 ## dark, the car waits: net/host_rules.gd). This table, not the registry, is the test's oracle.
@@ -214,6 +221,7 @@ static func game_values() -> Dictionary:
 		&"noise.search_open": Noises.SEARCH_OPEN,
 		&"noise.search_rush": Noises.SEARCH_RUSH,
 		&"noise.emote": Noises.EMOTE,
+		&"tenant.minutes": float(HostRules.TENANT_MINUTES),
 		&"lift.floors_min": float(Run.CALL_FLOORS_MIN),
 		&"lift.floors_max": float(Run.CALL_FLOORS_MAX),
 		&"lift.floor_time": Run.FLOOR_TIME,
@@ -287,7 +295,7 @@ func test_catch_dance_setting(t: T) -> void:
 func test_registry_rows(t: T) -> void:
 	var game := game_values()
 	var rows := Settings.list()
-	t.eq(rows.size(), 109, "rows in the registry")
+	t.eq(rows.size(), 110, "rows in the registry")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -335,7 +343,7 @@ func test_registry_rows(t: T) -> void:
 		if TEN.has(s.id) or MORE.has(s.id) or KEEPER_SIX.has(s.id):
 			want.append(s.id)
 	t.check(wired == want and want.size() == TEN.size() + MORE.size() + KEEPER_SIX.size(), "the wired rows are exactly those of LS1 and the groups wired since, in order: %s" % str(wired))
-	t.eq(by_group.get(&"residents", 0), 50, "residents")
+	t.eq(by_group.get(&"residents", 0), 51, "residents")
 	t.eq(by_group.get(&"lift", 0), 12, "the lift and the dark")
 	t.eq(by_group.get(&"players", 0), 30, "players")
 	t.eq(by_group.get(&"earning", 0), 10, "earning")
@@ -1358,6 +1366,53 @@ func test_heal_health(t: T) -> void:
 	var r0 := CountRun.Rig.new("ls5-health-0")
 	t.eq(Settings.f(r0.st.tuning, &"heal.health", Run.HEAL_HEALTH), Run.HEAL_HEALTH, "untuned: Run.HEAL_HEALTH")
 
+## Health on the Playroom (sim/seek.gd step 7, and PT1's health as the game's rooms have it): a second of walking,
+## sprinting (each moving every tick, out of a hide) or standing still changes health by exactly the host's
+## health.walk, health.sprint or health.rest, at least, today's and most; untuned (null, empty, or all three at
+## today's) it is the rules' WALK_DRAIN, SPRINT_DRAIN and REST_GAIN to the last bit.
+static func health_after(i: int, hunt: bool, gait: StringName, given: Variant) -> float:
+	var k := PropHunt.sk(i, ["a"] as Array[String], hunt, hunt)
+	var s := k.s
+	if hunt:
+		# The search is running (after its time to hide), the Minder far from "a".
+		var ev: Array[Dictionary] = []
+		Seek._start_count(s, s.t, "x", &"sprint", false, ev)
+		s.t0 = s.t - s.hide_len - 0.01
+	else:
+		# After the first count, outside any: health runs (and the lift called, so a sprint starts no count).
+		s.ended = 1
+		s.calm_until = 0.0
+		s.called = true
+	if given != null:
+		k.tuning = Settings.make(given)
+	var pair := PropHunt.far_pair(k, i)
+	# One tick to stand there first (a body's first tick is never a move), then 50 health and one second.
+	k.step([PropSeek.inp("a", pair[0], &"creep")] as Array[Seek.SeekInput])
+	Seek.player_of(k.s, "a").health = 50.0
+	for n in roundi(1.0 / DT):
+		var inp: Seek.SeekInput = PropHunt.pace("a", pair, n + 1, gait) if gait != &"stand" else PropSeek.inp("a", pair[0], &"creep")
+		k.step([inp] as Array[Seek.SeekInput])
+	var p := Seek.player_of(k.s, "a")
+	return p.health if p.status == &"ok" else NAN
+
+func test_health_rates(t: T) -> void:
+	var lines: Array[String] = []
+	for hunt: bool in [true, false]:
+		for row_id: StringName in [&"health.walk", &"health.sprint", &"health.rest"]:
+			var gait: StringName = {&"health.walk": &"walk", &"health.sprint": &"sprint", &"health.rest": &"stand"}[row_id]
+			var sign := 1.0 if row_id == &"health.rest" else -1.0
+			var base := health_after(0, hunt, gait, null)
+			for given: Variant in [{}, {row_id: Settings.today(row_id)}, {&"health.walk": Settings.today(&"health.walk"), &"health.sprint": Settings.today(&"health.sprint"), &"health.rest": Settings.today(&"health.rest")}]:
+				t.eq(health_after(0, hunt, gait, given), base, "hunt %s, %s, tuning %s: exactly the untuned health" % [str(hunt), row_id, str(given)])
+			var want0: float = {&"health.walk": Seek.WALK_DRAIN, &"health.sprint": Seek.SPRINT_DRAIN, &"health.rest": Seek.REST_GAIN}[row_id]
+			t.check(absf(base - (50.0 + sign * want0)) < 1e-6, "hunt %s, %s untuned: 50 -> %.4f (the rules' %.2f a second)" % [str(hunt), row_id, base, want0])
+			var row := Settings.row(row_id)
+			for v: float in [row.lo, row.today, row.hi]:
+				var got := health_after(0, hunt, gait, {row_id: v})
+				t.check(absf(got - (50.0 + sign * v)) < 1e-6, "hunt %s, %s = %.2f: a second moves health 50 -> %.4f" % [str(hunt), row_id, v, got])
+				lines.append("%s%s %.2f -> %.2f" % ["" if hunt else "old ", row_id, v, got])
+	t.note("; ".join(lines))
+
 ## S1, carrying: ONE SLOT HOLDS (a pickup of five juice taken into empty hands: slot 1 holds exactly the number, the rest
 ## stays on the floor) and HAND OVER WITHIN (a hand-over 5 cm inside the reach goes through, 5 cm outside is refused),
 ## each at least, today's and most, through the rules.
@@ -1413,6 +1468,38 @@ func test_cabinet_slots(t: T) -> void:
 
 ## S2, the prices: each item's price at least, today's and most, bought at window 1 with exactly that many credits
 ## (bought, nothing left) and with one fewer (refused, poor).
+## TT1: the Tenant clock's length is the setting, stamped as the doors open on arrival (tests/prop_tenant.gd has the
+## rest: once a floor, never in the prison or on Practice, the same on every screen).
+func test_tenant_minutes(t: T) -> void:
+	for m: float in [2.0, float(HostRules.TENANT_MINUTES), 30.0]:
+		var r := HostRules.new(true, 1, Places.FULL, false, true, true)
+		r.tenant_timer = true
+		var s := r.prepare(Run.create_run("ls-tenant-%d" % int(m), ["p0"]))
+		if m != float(HostRules.TENANT_MINUTES):
+			s = Run.with_tuning(s, {&"tenant.minutes": m})
+		var opened := -1.0
+		var arrived := -1.0
+		var k := 0
+		# The least is run to the moment itself; today's and the most are read off the clock the doors started.
+		while arrived < 0.0 and k < int((m * 60.0 + 30.0) / DT) and (m == 2.0 or opened < 0.0):
+			var inputs: Array[Run.PlayerInput] = []
+			for p in s.players:
+				if p.status == &"ok" or p.status == &"down":
+					inputs.append(Run.PlayerInput.make(p.id, p.body, 1.65, 0.0, 0.0, 90.0, 70.0))
+			var st := r.step(s, inputs, DT)
+			s = st.state
+			k += 1
+			for e in st.events:
+				if e["type"] == "doorsOpened" and e.get("reason") == "arrival" and opened < 0.0:
+					opened = s.t
+				elif e["type"] == "tenantArrived":
+					arrived = s.t
+		var b: Variant = r.tenant_block(s)
+		if m == 2.0:
+			t.check(opened >= 0.0 and absf(arrived - opened - m * 60.0) < DT + 1e-6, "%d minutes: the doors opened at %.2f, the Tenant arrived at %.2f" % [int(m), opened, arrived])
+		t.check(b is Dictionary and absf(float(b["at"]) - opened - m * 60.0) < 1e-6 and absf(float(b["len"]) - m * 60.0) < 1e-9,
+			"%d minutes: the clock the doors started is %s (opened %.2f)" % [int(m), str(b), opened])
+
 func test_badge_search_odds(t: T) -> void:
 	var ids: Array[String] = ["crew"]
 	var s := Run.with_inventory(Run.with_findables(Run.create_run("badge-settings", ids)))

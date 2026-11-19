@@ -74,7 +74,8 @@ const CATCH_NEAR := 3.0
 const CATCH_FULL := 0.9
 ## What started a count, in words.
 const WHY := {"sprint": "SPRINTING", "squeaker": "A SQUEAKY TILE", "ballpit": "JUMPING IN THE BALL PIT", "flap": "LETTING A FLAP GO",
-	"tape": "A DROPPED TAPE", "emote": "A NOISE", "bump": "BUMPING INTO IT", "light": "A LIGHT ON IT", "voice": "A VOICE", "call": "CALLING THE LIFT"}
+	"tape": "A DROPPED TAPE", "emote": "A NOISE", "bump": "BUMPING INTO IT", "light": "A LIGHT ON IT", "voice": "A VOICE", "call": "CALLING THE LIFT",
+	"fetch": "FREEING THE PARTY TABLE"}
 const KIND_NAMES := {"pit": "BALL PIT", "slide": "TUBE SLIDE", "den": "CRAWL DEN", "playhouse": "PLAYHOUSE", "table": "UNDER THE TABLE",
 	"chest": "TOY CHEST", "cubby": "COAT CUBBY", "bed": "UNDER THE BED", "cabinet": "IN THE CABINET", "desk": "UNDER THE DESK",
 	"shed": "IN THE SHED", "bench": "UNDER THE BENCH", "under": "UNDER THE BANDSTAND", "log": "IN THE HOLLOW LOG"}
@@ -89,7 +90,11 @@ var tuning: Settings.Values = null
 
 ## The anger bar's printed rates: ANGER_RATES, or the same words with the host's numbers. `hunt` (PT1): the
 ## numbers in force are the host's or else Seek.HUNT_ANGER_SPRINT and Seek.HUNT_ANGER_NOISE.
-static func anger_rates_text(t: Settings.Values, hunt: bool = false) -> String:
+static func anger_rates_text(t: Settings.Values, hunt: bool = false, party: bool = false) -> String:
+	# The party table (T15h): the bar never goes down by itself, only after a count (it drains over the calm), and the
+	# words say so.
+	if party:
+		return anger_rates_text(t, hunt) + ". ONLY A SEARCH EMPTIES IT"
 	if not hunt and (t == null or not (t.has(&"minder.anger_sprint") or t.has(&"minder.anger_noise"))):
 		return ANGER_RATES
 	var sprint0 := Seek.HUNT_ANGER_SPRINT if hunt else 1.0 / float(Seek.ANGER_RATES[&"sprint"])
@@ -103,9 +108,58 @@ static func anger_rates_text(t: Settings.Values, hunt: bool = false) -> String:
 static func hunt_of(seek: Dictionary) -> bool:
 	return seek.has("anger")
 
-## The health bar's printed rates.
-static func health_rates_text(hunt: bool) -> String:
-	return HUNT_HEALTH_RATES if hunt else HEALTH_RATES
+## The health bar's printed rates: the host's health.walk, health.sprint and health.rest when set, else the
+## rules' WALK_DRAIN, SPRINT_DRAIN and REST_GAIN (HEALTH_RATES and HUNT_HEALTH_RATES, word for word).
+static func health_rates_text(hunt: bool, t: Settings.Values = null) -> String:
+	var num := func(id: StringName, v: float) -> String: return ("%.2f" % Settings.f(t, id, v)).trim_suffix("0").trim_suffix("0").trim_suffix(".")
+	var walk: String = num.call(&"health.walk", Seek.WALK_DRAIN)
+	var sprint: String = num.call(&"health.sprint", Seek.SPRINT_DRAIN)
+	var rest: String = num.call(&"health.rest", Seek.REST_GAIN)
+	return "WALK -%s/S  SPRINT -%s/S%s  STILL OR CREEP +%s/S" % [walk, sprint, " ONLY WHILE IT SEARCHES" if hunt else "", rest]
+
+## The party table (T15h): whether the run has it (the seek block carries "party", only with the tuned Playroom).
+static func party_of(seek: Dictionary) -> bool:
+	return seek.has("party")
+
+## The names of everyone seated at the party table, in the block's player order.
+static func seated_names(seek: Dictionary, names: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	for p: Dictionary in seek.get("players", []):
+		if str(p.get("status", "")) == "taken" and int(p.get("seat", -1)) >= 0:
+			out.append(str(names.get(str(p["id"]), str(p["id"]))).to_upper())
+	return out
+
+## The party table's warning, printed on every screen and on the lift while anyone is seated (with the party table
+## on), so nobody loses a friend to a rule they were not told: "ANN IS AT THE PARTY TABLE. THE LIFT LEAVES WITHOUT
+## THEM." "" when nobody is seated, or without the party table. `me_seated`: the seated player's own line.
+static func party_warning(seek: Dictionary, names: Dictionary, me_seated := false) -> String:
+	if not party_of(seek):
+		return ""
+	if me_seated:
+		return "THE LIFT LEAVES WITHOUT YOU. A CREWMATE HOLDING F HERE FOR %d S FREES YOU." % int(Seek.FETCH_TIME)
+	var who := seated_names(seek, names)
+	if who.is_empty():
+		return ""
+	var list := who[0]
+	if who.size() > 1:
+		list = ", ".join(who.slice(0, who.size() - 1)) + " AND " + who[who.size() - 1]
+	return "%s %s AT THE PARTY TABLE. THE LIFT LEAVES WITHOUT THEM." % [list, "IS" if who.size() == 1 else "ARE"]
+
+## Whether a point stands at the party table as the rules judge it (Seek.at_table: within FETCH_REACH of a seat's
+## spot, on its level). `seats`: Playroom.seats of the floor.
+static func near_table(seats: Array, x: float, z: float, level: int) -> bool:
+	for st: Playroom.Seat in seats:
+		if st.level == level and Vector2(st.at.x / 100.0 - x, st.at.y / 100.0 - z).length() <= Seek.FETCH_REACH:
+			return true
+	return false
+
+## The fetcher's line at the table: what holding F does and what it costs, then the hold's seconds left.
+## `left` < 0: not holding yet.
+static func fetch_note(n_seated: int, left: float) -> String:
+	var cost := "ITS ANGER +%d" % roundi(Seek.FETCH_ANGER * 100.0)
+	if left >= 0.0:
+		return "FREEING THE PARTY TABLE... %.1f S   %s" % [maxf(0.0, left), cost]
+	return "HOLD F %d S  FREE THE PARTY TABLE (%d SEATED)   %s" % [int(Seek.FETCH_TIME), n_seated, cost]
 
 ## Whether the health bar shows: once the first count has ended; with the hunt also from the first search on
 ## (health drains there). `phase`: this screen's count phase ("hide", "seek", "over" or "").
@@ -150,6 +204,17 @@ var _rising_until := 0
 var _found_ids := {}
 ## The feet heard (_step_sounds): player id -> [cell index, room id] last frame.
 var _feet := {}
+## The party table (T15h): the warning for the lift's panel (party_warning; "" none), and the floor's seats.
+var party_line := ""
+var _seats_fp: Floor.FloorPlan = null
+var _seats: Array = []
+
+func _seats_of(pv: Object) -> Array:
+	var fp: Floor.FloorPlan = pv.get("fp")
+	if fp != _seats_fp:
+		_seats_fp = fp
+		_seats = Playroom.seats(fp) if fp != null else []
+	return _seats
 
 func setup(parent: Node, sub: SubViewport) -> void:
 	overlay = HideOverlay.new()
@@ -278,6 +343,8 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 		hud.anger = -1.0
 		hud.count_by = ""
 		hud.count_text = ""
+		hud.party_note = ""
+		party_line = ""
 		_hiding_only(s, hud)
 		return {"on": false}
 	if not k is Dictionary:
@@ -286,6 +353,8 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 		sfx.playroom(false, 0.0)
 		hud.health = -1.0
 		hud.anger = -1.0
+		hud.party_note = ""
+		party_line = ""
 		hud.count_by = ""
 		hud.seek_note = ""
 		return {"on": false}
@@ -425,7 +494,7 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 	# T15m: the anger bar, the host's own number (the snapshot's seek block), the same on every screen.
 	hud.anger = clampf(float(seek["anger"]), 0.0, 1.0) if seek.has("anger") else -1.0
 	var hunt := hunt_of(seek)
-	hud.anger_rates = anger_rates_text(tuning, hunt) if seek.has("anger") else ""
+	hud.anger_rates = anger_rates_text(tuning, hunt, party_of(seek)) if seek.has("anger") else ""
 	# --- this player.
 	var look: Variant = null
 	var note := ""
@@ -466,6 +535,14 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 		elif int(s.get("nearHide", -1)) >= 0:
 			var kind := str(s.get("nearHideKind", ""))
 			note = "F  HIDE: %s    SHIFT+F  QUICK BUT LOUD" % str(KIND_NAMES.get(kind, "HIDE"))
+		# The party table (T15h): with someone seated, F held at the table frees them (and gets nobody into a hide).
+		if phase == "out" and party_of(seek):
+			var n_seated := seated_names(seek, names).size()
+			var pt: Dictionary = seek["party"]
+			if str(pt.get("by", "")) == my_id and float(pt.get("from", -1.0)) >= 0.0:
+				note = fetch_note(n_seated, float(pt["from"]) + Seek.FETCH_TIME - host_now)
+			elif n_seated > 0 and pv != null and near_table(_seats_of(pv), float(me["x"]), float(me["z"]), int(me.get("level", 0))):
+				note = fetch_note(n_seated, -1.0)
 	elif status == "found":
 		hud.big_note = "FOUND"
 		if pose is Dictionary:
@@ -482,11 +559,14 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 				catch_k = move_toward(catch_k, 0.0, dt * 2.0)
 	elif status == "taken":
 		hud.center_note = "AT THE PARTY TABLE   [F] BLOW HORN" if seek.has("anger") else "TAKEN: AT THE PARTY TABLE. WATCH."
+	# The party table (T15h): told before it can happen, on every screen and on the lift.
+	party_line = party_warning(seek, names)
+	hud.party_note = party_warning(seek, names, status == "taken") if status == "taken" else party_line
 	if status != "found":
 		catch_k = move_toward(catch_k, 0.0, dt * 4.0)
 	hud.seek_note = note
 	hud.health = float(row["health"]) if row is Dictionary and shows_health(seek, count_phase, hunt) and status == "ok" else -1.0
-	hud.health_rates = health_rates_text(hunt)
+	hud.health_rates = health_rates_text(hunt, tuning)
 	# The overlay: the dark inside, the gap's frame, the catch, the hat.
 	overlay.mode = ov_mode
 	overlay.kind = ov_kind

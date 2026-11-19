@@ -58,6 +58,8 @@
 # places a player where the rules hold them when they get into a hide, start getting out, are found, are
 # taken to the party table or go down, and adds the seek block to every snapshot (Protocol.enc_seek). The
 # count is the run's own event, stamped with the host's time: every client works the count out from it.
+# With the party table (sim/run.gd party_table, T15h) F held ("use") reaches the run as always; a "tableFreed"
+# places everyone it freed beside the table, and the seek block carries who is freeing it (Protocol.enc_seek).
 #
 # The floor quota (sim/run.gd quota; North Star C9): the run decides, the host only reports. When the run
 # has the quota on, every snapshot carries the quota block (Protocol.enc_quota: earned and needed, whole
@@ -102,6 +104,13 @@
 # no seen report or "I can see it" is applied to it: looking does nothing. The catch still waits for its
 # victim's screen (_confirm_catch), which the Lonely step honours. Every snapshot on its floor carries who it
 # chases (Protocol "lonely"), which also tells each client not to hold the figure.
+#
+# A second Orderly (sim/run.gd second_orderly; T9b): everything above holds for each Orderly on its own. The
+# second's seen reports carry "n": 2 and "I can see it" for it is the input's "seeing2"; the host keeps its own
+# history, counts as sent and catch waiting (_hist2, _sent_watch2, _pending_catch2) and runs exactly the first's
+# code on it (_second_reports: the second swapped in). Each catch wait blinds a late sighting to its own Orderly
+# only (PlayerInput blind_first, blind_second). Every snapshot on its floor carries "orderly2", "reloc2" and, with
+# two watchers needed, "watch2" (Protocol "o2"); events from the host about it carry "n": 2, as the run's do.
 #
 # Live settings (docs/floors/live-settings.md LS2; set_tuning): the room's desk decides what is in force and hands it
 # over between ticks; the host puts it on the state (RunState.tuning, read by the rules), announces a change with the
@@ -291,6 +300,12 @@ var _roster_ids := {}
 ## A catch waiting for its victim's screen: {victim, armedAt, armedHost, body}.
 var _pending_catch: Variant = null
 var _last_catch_tick := -1
+## A second Orderly (T9b; see the header): its own history, counts as sent, catch waiting and last catch, swapped
+## with the first's (_swap_second) while the first's code runs on it.
+var _hist2 := {}
+var _sent_watch2 := {}
+var _pending_catch2: Variant = null
+var _last_catch_tick2 := -1
 var _next_id := 1
 var _step_fn: Callable
 var _trusted := {}
@@ -444,6 +459,16 @@ func replace_orderly(o: Entity.OrderlyState) -> void:
 	for k: int in _hist.keys():
 		_hist[k] = h
 	_hist[tick] = h
+	_states[tick] = state
+
+## A second Orderly (T9b), for tests: as replace_orderly, for the second one.
+func replace_orderly2(o: Entity.OrderlyState) -> void:
+	state = state.copy()
+	state.orderly2 = o
+	var h := History.make(o)
+	for k: int in _hist2.keys():
+		_hist2[k] = h
+	_hist2[tick] = h
 	_states[tick] = state
 
 ## Changes the run outside a tick: f(RunState) -> RunStep. The events reach every client with the next snapshot.
@@ -623,6 +648,8 @@ func _leave(peer: String) -> void:
 	p.input = null
 	if _pending_catch != null and _pending_catch["victim"] == p.id:
 		_pending_catch = null
+	if _pending_catch2 != null and _pending_catch2["victim"] == p.id:
+		_pending_catch2 = null
 
 func _on_input(p: HostPlayer, m: Dictionary, ht: float) -> void:
 	p.ack_event = maxi(p.ack_event, mini(int(m["ackEvent"]), event_log.size()))
@@ -790,7 +817,8 @@ func _step(now: float) -> void:
 	_queue = []
 	if still:
 		for item: Array in q:
-			s = _apply_report(s, item[0], item[1], extra, t_next)
+			if int((item[1] as Dictionary).get("n", 1)) == 1:
+				s = _apply_report(s, item[0], item[1], extra, t_next)
 
 	# 2. Anyone saying they can see it now: held, and a wind-up is off. With two watchers needed, each
 	# is one watcher for the count instead (Entity.note_look): a lone one holds nothing.
@@ -810,6 +838,10 @@ func _step(now: float) -> void:
 
 	# 3. A catch waits for its victim's screen.
 	s = _confirm_catch(s, ht)
+
+	# 1 to 3 again for a second Orderly (T9b): the same code, on the second swapped in (see the header).
+	if s.orderly2 != null:
+		s = _second_reports(s, q, ht, t_next, extra)
 
 	# The players' names, for the Annex's notes (sim/run.gd names).
 	var names := {}
@@ -867,16 +899,24 @@ func _step(now: float) -> void:
 			continue
 		var m: Dictionary = p.input
 		var pc: Variant = _pending_catch
+		var pc2: Variant = _pending_catch2 if s.orderly2 != null else null
 		var body: Move.Body
 		if pc != null and pc["victim"] == p.id and pc["body"] != null:
 			body = pc["body"]
+		elif pc2 != null and pc2["victim"] == p.id and pc2["body"] != null:
+			body = pc2["body"]
 		else:
 			body = p.body if p.body != null else rp.body
 		var inp := Run.PlayerInput.make(p.id, body, m["eye"], m["yaw"], m["pitch"], m["hFovDeg"], m["vFovDeg"])
 		inp.raised = m["raised"]
 		inp.hold_doors = m["holdDoors"]
 		# While a catch waits for its victim, a player drawing a moment past the wind-up's end cannot save them.
-		inp.blind = not _before_armed(m["renderTime"], false)
+		if s.orderly2 == null:
+			inp.blind = not _before_armed(m["renderTime"], false)
+		else:
+			# A second Orderly (T9b): each catch wait blinds to its own Orderly only.
+			inp.blind_first = not _before_armed(m["renderTime"], false)
+			inp.blind_second = not _before_armed2(m["renderTime"])
 		inp.call = p.call_pending
 		inp.pick_up = true if p.pick_pending else null
 		inp.use = m.get("use", false) == true
@@ -939,6 +979,13 @@ func _step(now: float) -> void:
 		_reactor_plan = st.plan
 		r.events.append_array(home_events)
 		events.append_array(home_events)
+	# The Tenant clock (TT1) is not the Ward's or the Reactor's: they keep their own clocks.
+	if _ward_review != null or _reactor_review != null:
+		var kept_events: Array[Dictionary] = []
+		for e in events:
+			if e["type"] != "tenantArrived":
+				kept_events.append(e)
+		events = kept_events
 
 	# 6. After: placements, the gone, joiners.
 	for e in r.events:
@@ -957,6 +1004,12 @@ func _step(now: float) -> void:
 			var hp := _find_run_player(st, str(e["playerId"]))
 			if hp != null:
 				_place(hp.id, hp.body, st.depth, st)
+		elif ty == "tableFreed":
+			# The party table freed (T15h): everyone who was seated stands beside it, where the rules put them.
+			for fid: Variant in e["freed"]:
+				var fp := _find_run_player(st, str(fid))
+				if fp != null:
+					_place(fp.id, fp.body, st.depth, st)
 		elif ty == "juiceOut":
 			# The shop's speed juice ran out (S2): winded, as a tank run dry is.
 			var jp: HostPlayer = _players.get(str(e["playerId"]))
@@ -964,10 +1017,18 @@ func _step(now: float) -> void:
 				jp.stamina = Stamina.Stamina.make(0.0, true, jp.stamina.tank)
 		elif ty == "flareUsed" and e.stunned:
 			_pending_catch = null
+			_pending_catch2 = null
+		elif ty == "caught" and int(e.get("n", 1)) == 2:
+			_last_catch_tick2 = tick + 1
+			if _pending_catch2 != null and _pending_catch2["victim"] == e["playerId"]:
+				_pending_catch2 = null
 		elif ty == "caught":
 			_last_catch_tick = tick + 1
 			if _pending_catch != null and _pending_catch["victim"] == e["playerId"]:
 				_pending_catch = null
+		elif ty == "windUpCancelled" and int(e.get("n", 1)) == 2:
+			if _pending_catch2 != null and _pending_catch2["victim"] == e["playerId"]:
+				_pending_catch2 = null
 		elif ty == "windUpCancelled" and _pending_catch != null and _pending_catch["victim"] == e["playerId"]:
 			_pending_catch = null
 	# The tuned Playroom (sim/seek.gd T15m): a grabbed player being dragged to the party table is placed where
@@ -982,6 +1043,8 @@ func _step(now: float) -> void:
 			_place(dragged.id, dragged.body, st.depth, st)
 	if st.orderly.mode != &"windUp":
 		_pending_catch = null
+	if st.orderly2 == null or st.orderly2.mode != &"windUp":
+		_pending_catch2 = null
 	var gone := {}
 	for p: HostPlayer in _players.values():
 		if p.in_run and p.left:
@@ -1029,8 +1092,68 @@ func _record() -> void:
 	_hist.erase(tick - HISTORY_TICKS)
 	_sent_watch[tick] = [s.t, s.orderly.need, s.orderly.watchers]
 	_sent_watch.erase(tick - HISTORY_TICKS)
+	if s.orderly2 != null:
+		_hist2[tick] = History.make(s.orderly2)
+		_sent_watch2[tick] = [s.t, s.orderly2.need, s.orderly2.watchers]
+	_hist2.erase(tick - HISTORY_TICKS)
+	_sent_watch2.erase(tick - HISTORY_TICKS)
 	_states[tick] = s
 	_states.erase(tick - STATE_TICKS)
+
+## A second Orderly (T9b; see the header): swaps the first's and the second's host state (history, counts as sent,
+## catch waiting, last catch), so the first's code runs on the second as it is. Swapped back right after.
+func _swap_second() -> void:
+	var h := _hist
+	_hist = _hist2
+	_hist2 = h
+	var w := _sent_watch
+	_sent_watch = _sent_watch2
+	_sent_watch2 = w
+	var pc: Variant = _pending_catch
+	_pending_catch = _pending_catch2
+	_pending_catch2 = pc
+	var lc := _last_catch_tick
+	_last_catch_tick = _last_catch_tick2
+	_last_catch_tick2 = lc
+
+## Whether a sighting at drawn host time `t` still counts for the second Orderly's catch wait (_before_armed).
+func _before_armed2(t: float) -> bool:
+	var pc: Variant = _pending_catch2
+	return pc == null or t < float(pc["armedAt"]) - 1e-6
+
+## Steps 1 to 3 of the tick for a second Orderly (T9b): its seen reports ("n": 2), "I can see it" for it
+## ("seeing2"), and its catch waiting for its victim's screen. Exactly the first's code, run with the second
+## swapped in (Run._swap_second, _swap_second); events it adds carry "n": 2.
+func _second_reports(s0: Run.RunState, q: Array, ht: float, t_next: float, extra: Array[Dictionary]) -> Run.RunState:
+	var s := s0.copy()
+	Run._swap_second(s)
+	_swap_second()
+	var mine: Array[Dictionary] = []
+	for item: Array in q:
+		if int((item[1] as Dictionary).get("n", 1)) == 2:
+			s = _apply_report(s, item[0], item[1], mine, t_next)
+	var seeing := false
+	var two := s.orderly.need >= 2
+	for p: HostPlayer in _players.values():
+		if _playing(p) and not Run.flare_blinded(s, p.id, s.t) and p.input.get("seeing2", false) == true and ht - p.input_at <= Session.SEEING_TIMEOUT and _before_armed(p.input["renderTime"], true):
+			seeing = true
+			if not two:
+				break
+			var looked := Entity.note_look(s.orderly, p.id, s.orderly.t)
+			if looked != s.orderly:
+				s = s.copy()
+				s.orderly = looked
+	if seeing and not two:
+		s = _hold(s, true, mine, t_next, false)
+	s = _confirm_catch(s, ht)
+	_swap_second()
+	var out := s.copy()
+	Run._swap_second(out)
+	for e in mine:
+		var n := e.duplicate()
+		n["n"] = 2
+		extra.append(n)
+	return out
 
 ## `s`: the run the placement is on (its day index goes with it when it has days).
 func _place(id: String, body: Move.Body, depth: int, s: Run.RunState) -> void:
@@ -1348,6 +1471,13 @@ func world(full: bool = false) -> Dictionary:
 	# Relocation (T19e): the count, once it has relocated on this floor (Protocol "reloc").
 	if s.orderly.relocations > 0:
 		out["reloc"] = s.orderly.relocations
+	# A second Orderly (T9b; Protocol "o2"): its pose, its relocation count, and its own count of watchers.
+	if s.orderly2 != null:
+		out["orderly2"] = Protocol.orderly_snap(s.orderly2)
+		out["reloc2"] = s.orderly2.relocations
+		var watch2: Variant = watch_block(s, true)
+		if watch2 != null:
+			out["watch2"] = watch2
 	# Lonely (T19c): on a Lonely resident's floor, who it chases ("" for nobody; Protocol "lonely").
 	if not Run.at_home(s) and Run.resident_of(s).trait_name == &"lonely":
 		var o := s.orderly
@@ -1449,7 +1579,20 @@ func world(full: bool = false) -> Dictionary:
 		out["ward"] = _ward_review.snapshot(s.t)
 	if _reactor_review != null:
 		out["reactor"] = _reactor_review.snapshot()
+	# The Tenant clock (TT1; net/host_rules.gd, Protocol "tenant"): the floor's deadline in host time. Never beside
+	# the Ward's or the Reactor's own clock. Absent with the flag off.
+	var tenant: Variant = tenant_block()
+	if tenant != null and not out.has("ward") and not out.has("reactor"):
+		out["tenant"] = tenant
 	return out
+
+## The Tenant clock's block from the rules stepping this run (net/host_rules.gd tenant_block), or null: the plain
+## run's step, or rules without the clock.
+func tenant_block() -> Variant:
+	var rules: Object = _step_fn.get_object() if _step_fn.is_valid() else null
+	if rules == null or not rules.has_method("tenant_block"):
+		return null
+	return rules.call("tenant_block", state)
 
 ## Nerve is an owner's private floor reading. The shared world never carries the crew's values.
 func _world_for(shared: Dictionary, peer: HostPlayer) -> Dictionary:
@@ -1522,13 +1665,14 @@ static func find_block(s: Run.RunState) -> Variant:
 ## Two-watcher Stillness (T19a; Protocol.enc_watch): the count as the host has it this tick, {need,
 ## watchers (ids, with grace; twice for a qualified Steady Gaze)}. Only in a run with two-watcher Stillness on and Entity.WATCH_CREW or more
 ## players (null otherwise): with fewer, one watcher is always enough, and the snapshot is what it always was.
-static func watch_block(s: Run.RunState) -> Variant:
+static func watch_block(s: Run.RunState, second := false) -> Variant:
 	if not s.two_watchers or s.players.size() < Entity.WATCH_CREW:
 		return null
+	var o := s.orderly2 if second else s.orderly
 	var ids: Array = []
-	for id in s.orderly.watchers:
+	for id in o.watchers:
 		ids.append(id)
-	return {"need": s.orderly.need, "watchers": ids}
+	return {"need": o.need, "watchers": ids}
 
 ## The downs block of a run with the down rule (Protocol.enc_downs): who is down (in the run's player order),
 ## when they went down and when they are out unless healed, who holds F beside them and since when (host
@@ -1585,6 +1729,9 @@ static func seek_block(s: Run.RunState) -> Variant:
 	if ss.tuned:
 		k["anger"] = ss.anger
 		k["hide"] = ss.hide_len
+		# The party table (T15h, sim/seek.gd with_party): who is freeing it and the host time their hold counts from.
+		if ss.party:
+			k["party"] = {"by": ss.fetch_by, "from": ss.fetch_from}
 	return k
 
 ## Hiding off the Playroom (sim/hiding.gd, T19b) in the seek block's shape (Protocol.enc_seek, no new

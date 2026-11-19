@@ -67,6 +67,11 @@
         "Bella"
       ],
       "audition": "One take of each beat. The tape cuts its pictures on the pauses between sentences, so a re-take needs the cue times rebuilt (node godot/tools/tape_cues.mjs)."
+    },
+    "tenant": {
+      "title": "The Tenant clock",
+      "about": "The ten-minute clock on every floor below the prison (TT1, the owner on 19 Nov: \"a Timer that says Tenant arrives in: xx:xx\"). When it runs out a door slams somewhere above, and about a second later the announcer says the time is up: tenant_1 when the floor's quota was not met, tenant_met_1 when it was (the line never lies). Dealt by moment by godot/client/announcer.gd.",
+      "audition": "One take each. Cheerful corporate bad news: the time is up and that is somehow good news."
     }
   },
   "moments": {
@@ -329,6 +334,14 @@
     "day_met": {
       "priority": 3,
       "when": "the crew has earned the day quota: BANK is open (once a day; FD2 \"dayMet\")"
+    },
+    "tenant": {
+      "priority": 4,
+      "when": "the floor's Tenant clock reaches zero and the floor's quota is not met (about a second after the door slam)"
+    },
+    "tenant_met": {
+      "priority": 4,
+      "when": "the floor's Tenant clock reaches zero and the floor's quota is already met (about a second after the door slam)"
     }
   },
   "lines": [
@@ -2488,6 +2501,32 @@
       },
       "takes": 1,
       "note": "Concierge polish; \"we encourage greed\" said as a genuine company value."
+    },
+    {
+      "id": "tenant_1",
+      "moment": "tenant",
+      "group": "tenant",
+      "text": "[delighted] Time's up! [short pause] Your crew has failed to reach quota in time. [warmly] The Tenant will see you now.",
+      "plain": "Time's up! Your crew has failed to reach quota in time. The Tenant will see you now.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "A game-show host announcing the end of the round; the last sentence is a receptionist calling the next appointment. Never cross."
+    },
+    {
+      "id": "tenant_met_1",
+      "moment": "tenant_met",
+      "group": "tenant",
+      "text": "[delighted] Time's up! [short pause] Your quota was met, well done. [warmly] The Tenant is here all the same.",
+      "plain": "Time's up! Your quota was met, well done. The Tenant is here all the same.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Proud of the crew, then a cheerful shrug: rules are rules."
     }
   ]
 }

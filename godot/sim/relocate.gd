@@ -343,3 +343,50 @@ static func step(plan: Floor.FloorPlan, seed: String, depth: int, trait_name: St
 	out.event = {"type": "relocated", "t": t, "from": o.body, "to": body, "near": to, "k": out.state.relocations,
 		"who": String(k.name), "reach": k.hear_range, "why": String(why)}
 	return out
+
+# ---------------------------------------------------------------------------------------------
+# A second Orderly's start (T9b; sim/run.gd "A second Orderly").
+#
+# The second Orderly on a deeper Clinic starts on a walkable cell that is not barred (barred(): hides, the lobby,
+# the landing, the car's zone, stairs), at least SECOND_FROM_LANDING metres by walking from the landing, at least
+# SECOND_FROM_FIRST metres by walking from the first Orderly's start, and out of view (out_of_view) of an eye at
+# the landing's centre: whichever way anyone faces, from the landing or any cell round it, nobody sees it as the
+# doors open. The pick is Rng "orderly2:<seed>:<depth>", a seeded shuffle of the cells that pass the distances and
+# the bars, in cell order, then the first out of view: the same on every machine. None passes: the distance from
+# the first is relaxed to SECOND_FROM_FIRST_MIN; none again: no second Orderly on this floor (null).
+
+## Walking metres from the landing (twice its wake distance: it never wakes as the doors open).
+const SECOND_FROM_LANDING := 24.0
+## Walking metres from the first Orderly's start; relaxed to SECOND_FROM_FIRST_MIN when nothing passes.
+const SECOND_FROM_FIRST := 16.0
+const SECOND_FROM_FIRST_MIN := 8.0
+
+## The cell the second Orderly starts on (see above), or null for none. `first`: the first Orderly's start cell.
+static func second_start(plan: Floor.FloorPlan, seed: String, depth: int, first: Floor.Pos, car: PackedFloat64Array, car_level: int) -> Floor.Pos:
+	var cs := float(plan.cell_size)
+	var from_landing := Floor.distances_from(plan, plan.landing)
+	var from_first := Floor.distances_from(plan, first)
+	var bars := barred(plan, seed, car, car_level)
+	var at := Move.body_at_cell(plan, plan.landing)
+	var eyes: Array[Eye] = [Eye.make("#landing", at, 1.65, plan.landing, false)]
+	var k := Entity.orderly_body()
+	for apart: float in [SECOND_FROM_FIRST, SECOND_FROM_FIRST_MIN]:
+		var cands: Array[int] = []
+		for i in from_landing.size():
+			var dl := from_landing[i]
+			var df := from_first[i]
+			if dl < 0 or df < 0 or dl * cs < SECOND_FROM_LANDING - EPS or df * cs < float(apart) - EPS or bars.has(i):
+				continue
+			var p := Floor.pos_from_index(plan, i)
+			if Floor.is_walkable(plan, p.level, p.x, p.y):
+				cands.append(i)
+		var rng := Rng.make_rng("orderly2:%s:%d" % [seed, depth])
+		for n in cands.size():
+			var j := rng.int_in(n, cands.size() - 1)
+			var c := cands[j]
+			cands[j] = cands[n]
+			cands[n] = c
+			var p := Floor.pos_from_index(plan, c)
+			if out_of_view(plan, eyes, Move.body_at_cell(plan, p), k):
+				return p
+	return null

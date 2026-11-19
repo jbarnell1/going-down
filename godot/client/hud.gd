@@ -94,6 +94,9 @@ var nerve: Array = []
 ## what fills it, printed under it.
 var anger := -1.0
 var anger_rates := ""
+## The party table (T15h, client/hide_view.gd party_warning): who is seated and that the lift leaves without
+## them, on every screen while anyone is ("" none).
+var party_note := ""
 ## The floor quota (client/quota_view.gd): the call panel's words, printed under the prompt while the
 ## call button is in reach or a refusal flashes; its tone ("count", "met", "refused").
 var quota_line := ""
@@ -120,6 +123,10 @@ var floor_quota_met := false
 var day_line := ""
 var loss_rows := PackedStringArray()
 var day_met := false
+## The Tenant clock (client/tenant_clock.gd, TT1): its line, last in the corner stack under PLAY ("" for none), and
+## whether it is in the warning colour (the last minute).
+var tenant_line := ""
+var tenant_warn := false
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -224,6 +231,11 @@ func _draw() -> void:
 		_draw_nerve(px)
 	if anger >= 0.0 and not black:
 		_draw_anger(px)
+	if party_note != "" and not black:
+		var nw := PixelFont.width(party_note) * px
+		var np := Vector2(floorf((size.x - nw) * 0.5), floorf(size.y * 0.22))
+		draw_rect(Rect2(np - Vector2(4, 3) * px, Vector2(nw + 8 * px, 13 * px)), Color(0, 0, 0, 0.5))
+		PixelFont.draw_shadowed(self, party_note, np, px, Color("#ff7a6a"))
 	if down_head != "" and not black:
 		_draw_down(px)
 	if EYE_MARKS and not black and not eyes.is_empty() and bool(eyes.get("on", false)):
@@ -266,6 +278,9 @@ func _draw_quota_corner(px: float, margin: Vector2) -> void:
 		var x := size.x - margin.x - PixelFont.width(loss_rows[i]) * px
 		PixelFont.draw_shadowed(self, loss_rows[i], Vector2(x, y), px, Color("#ffd27a") if i == 0 else Color("#f4f4ec"))
 		y += 10.0 * px
+	# Not over the down timer (big, at a fifth of the height) or the out screen.
+	if tenant_line != "" and down_head == "" and not out_on:
+		PixelFont.draw_shadowed(self, tenant_line, Vector2(size.x - margin.x - PixelFont.width(tenant_line) * px, y), px, Color("#ff7a6a") if tenant_warn else Color("#f4f4ec"))
 
 ## The call panel's words under the prompt: amber while counting, green once met, red (blinking) when a
 ## press was refused.

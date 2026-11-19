@@ -53,6 +53,13 @@ const DAY_PX := Vector2i(DAY_COLS * 6 + 4, 44)
 const DAY_SIZE := Vector2(2.8, 2.8 * 44.0 / (DAY_COLS * 6 + 4))
 const DAY_Y := 1.36
 const DAY_SCROLL := 3.0
+## The party table's warning (show_party, T15h): a red-lit strip on the landing wall right of the doors (on the
+## landing cell's right wall in a one-cell lobby), up to PARTY_COLS characters a row, three rows. Its picture in
+## pixels, its size and height on the wall.
+const PARTY_COLS := 20
+const PARTY_PX := Vector2i(PARTY_COLS * 6 + 4, 32)
+const PARTY_SIZE := Vector2(1.0, 1.0 * 32.0 / (PARTY_COLS * 6 + 4))
+const PARTY_AT := Vector2(1.45, 1.45)
 const LOSS_PX := Vector2i(286, 94)
 const LOSS_SIZE := Vector2(2.8, 2.8 * LOSS_PX.y / LOSS_PX.x)
 
@@ -113,6 +120,11 @@ var _loss_monitor: MeshInstance3D
 var _loss_image: Image
 var _loss_texture: ImageTexture
 var _bank_floor: MeshInstance3D
+## The party table's warning (show_party): what it shows ("" while hidden).
+var party_text := ""
+var _party_node: Node3D
+var _party_img: Image
+var _party_tex: ImageTexture
 var _bank_open_mat: ShaderMaterial
 var _bank_locked_mat: ShaderMaterial
 
@@ -248,6 +260,7 @@ func build(car: Dictionary, left_wall := false) -> void:
 		_box(Vector3(CALL_BUTTON.x, CALL_BUTTON.y, LAND + 0.02), Vector3(0.14, 0.26, 0.03), dark)
 		_box(Vector3(CALL_BUTTON.x, CALL_BUTTON.y, LAND + 0.04), Vector3(0.06, 0.06, 0.02), _call_mat)
 	_build_quota_panel(left_wall, dark)
+	_build_party_panel(left_wall, dark)
 	_box(Vector3(HOLD_BUTTON.x, HOLD_BUTTON.y, -FRONT - 0.03), Vector3(0.14, 0.2, 0.03), dark)
 	_hold_mat = Level.glow_material(Color(0.4, 1.0, 0.5), 0.25)
 	_box(Vector3(HOLD_BUTTON.x, HOLD_BUTTON.y, -FRONT - 0.05), Vector3(0.06, 0.06, 0.02), _hold_mat)
@@ -427,6 +440,51 @@ func show_quota(text: String, tone: String, lit := true) -> void:
 		var w := PixelFont.width(rows[i])
 		PixelFont.blit(_quota_img, rows[i], Vector2i((QUOTA_PX.x - w) / 2, 3 + i * 10), ink)
 	_quota_tex.update(_quota_img)
+
+## The party table's warning panel (T15h), right of the doors, facing the landing.
+func _build_party_panel(left_wall: bool, dark: ShaderMaterial) -> void:
+	_party_img = Image.create(PARTY_PX.x, PARTY_PX.y, false, Image.FORMAT_RGBA8)
+	_party_img.fill(QUOTA_BG)
+	_party_tex = ImageTexture.create_from_image(_party_img)
+	_party_node = Node3D.new()
+	_party_node.name = "PartyPanel"
+	add_child(_party_node)
+	if left_wall:
+		var wx := Level.S * 0.5 - Level.WALL_T * 0.5
+		_party_node.position = Vector3(wx, PARTY_AT.y, CALL_SIDE.x + 0.6)
+		_party_node.rotation = Vector3(0, -PI / 2.0, 0)
+	else:
+		_party_node.position = Vector3(PARTY_AT.x, PARTY_AT.y, LAND)
+	_box(Vector3(0, 0, 0.015), Vector3(PARTY_SIZE.x + 0.05, PARTY_SIZE.y + 0.05, 0.03), dark, _party_node)
+	var q := QuadMesh.new()
+	q.size = PARTY_SIZE
+	var mi := MeshInstance3D.new()
+	mi.name = "PartyScreen"
+	mi.mesh = q
+	mi.material_override = Level.glow_material(Color.WHITE, 1.0, _party_tex)
+	mi.position = Vector3(0, 0, 0.032)
+	_party_node.add_child(mi)
+	_party_node.visible = false
+
+## What the party table's warning shows (client/hide_view.gd party_warning): `text` wrapped at PARTY_COLS, at most
+## three rows; "" hides it.
+func show_party(text: String) -> void:
+	if text == party_text or _party_img == null:
+		return
+	party_text = text
+	_party_node.visible = text != ""
+	if text == "":
+		return
+	_party_img.fill(QUOTA_BG)
+	var rows := PixelFont.wrap(text, PARTY_COLS)
+	for i in mini(rows.size(), 3):
+		var w := PixelFont.width(rows[i])
+		PixelFont.blit(_party_img, rows[i], Vector2i((PARTY_PX.x - w) / 2, 1 + i * 10), Color("#ff4a34"))
+	_party_tex.update(_party_img)
+
+## Tests: the lines the party table's warning draws now.
+func party_lines() -> PackedStringArray:
+	return PackedStringArray() if party_text == "" else PixelFont.wrap(party_text, PARTY_COLS).slice(0, 3)
 
 ## Tests: the middle of the call panel's screen in the world.
 func quota_point() -> Vector3:

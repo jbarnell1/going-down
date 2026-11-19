@@ -104,7 +104,7 @@ func _decide(s: Run.RunState, dt: float, human: Run.RunPlayer, input: Client.Loc
 		return
 	if s.quota and Run.quota_reached(s) and not Run.day_locked(s):
 		_walk_to(s, s.plan.landing, dt, Stamina.WALK_SPEED)
-		Bot._aim_at(_walker, s.orderly.body)
+		Bot._aim_at(_walker, Run.nearest_orderly(s, _walker.body).body)
 		return
 	_read_or_scout(s, dt, input)
 
@@ -118,7 +118,8 @@ func _vote(s: Run.RunState, human: Run.RunPlayer, dt: float) -> void:
 	_enter_or_exit(s, Run.car_body(s.car, 1.0 + 0.5 * number, sign_ * 0.8), dt)
 
 func _read_or_scout(s: Run.RunState, dt: float, input: Client.LocalFrame) -> void:
-	var resident := s.orderly.body
+	# A second Orderly (T9b): the nearer one.
+	var resident := Run.nearest_orderly(s, _walker.body).body
 	var gap := Bot._flat_gap(_walker.body, resident)
 	if gap <= Entity.HEAR_RANGE:
 		var active := fposmod(s.t + 2.0 * number, RECORD_SECONDS + REST_SECONDS) < RECORD_SECONDS

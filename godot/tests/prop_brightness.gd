@@ -4,9 +4,8 @@
 #   2. A saved value is read back; a player who never chose has nothing saved (the card shows at the start).
 #   3. Automated runs (persist = false, as main.gd sets under auto=1) never read or write the file and always
 #      play at the default.
-#   4. For every setting in range the card's greys keep their order after the change: right < the threshold
-#      < left < middle, the left one above the game's black, the middle one plain: so "raise until the left
-#      badge is barely there, the right one should stay hidden" is always possible.
+#   4. For every setting in range the card's greys never swap places (black <= right <= left < middle) and
+#      the middle one is plain. How the left one appears step by step: tests/prop_brightness_curve.gd.
 #   5. The card: arrows and A / D move it a step and say so, Enter is done and saves.
 # The tape's last step (client/tape.gdshader) is the same sum as Brightness.apply; tools/playthrough.mjs
 # measures a blackout frame at the lowest, the default and the highest setting.
@@ -85,16 +84,19 @@ func test_automated_runs_never_touch_the_file(t: T) -> void:
 	t.eq(Brightness.SAVE_PATH, "user://settings.cfg", "the player's settings file")
 
 func test_badge_greys_ordered_at_every_setting(t: T) -> void:
-	t.check(Brightness.BLACK < Brightness.RIGHT and Brightness.RIGHT < Brightness.THRESHOLD and Brightness.THRESHOLD < Brightness.LEFT and Brightness.LEFT < Brightness.MIDDLE,
-		"the greys as drawn: black < right < threshold < left < middle")
+	# T27a: the old order (black < right < threshold < left at every setting) made the left badge visible at
+	# both ends, which is the bug the owner saw. Now the badges never swap places, the two dark ones may
+	# merge into the black at the bottom, and the middle one is plain everywhere. The 8-bit steps are in
+	# tests/prop_brightness_curve.gd.
+	t.check(Brightness.BLACK < Brightness.RIGHT and Brightness.RIGHT < Brightness.LEFT and Brightness.LEFT < Brightness.MIDDLE,
+		"the greys as drawn: black < right < left < middle")
+	t.check(is_equal_approx(Brightness.LEFT, Brightness.GAME_BLACK), "the left badge is the game's own black in the dark")
 	for lv in range(0, Brightness.STEPS + 1):
 		var bl := Brightness.apply(Brightness.BLACK, lv)
 		var r := Brightness.apply(Brightness.RIGHT, lv)
-		var th := Brightness.apply(Brightness.THRESHOLD, lv)
 		var l := Brightness.apply(Brightness.LEFT, lv)
 		var m := Brightness.apply(Brightness.MIDDLE, lv)
-		t.check(r < th and th < l and l < m, "setting %d: right %.4f < threshold %.4f < left %.4f < middle %.4f" % [lv, r, th, l, m])
-		t.check(l > bl and r >= bl, "setting %d: the left badge %.4f above the black %.4f (right %.4f)" % [lv, l, bl, r])
+		t.check(bl <= r and r <= l and l < m, "setting %d: black %.4f <= right %.4f <= left %.4f < middle %.4f" % [lv, bl, r, l, m])
 		t.check(m - bl > 0.2, "setting %d: the middle badge plain to see (%.3f over the black)" % [lv, m - bl])
 	# The range does its job: at the top the left badge stands clearly off the black, at the bottom the
 	# right one is lost in it.

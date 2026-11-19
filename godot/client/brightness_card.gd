@@ -1,5 +1,7 @@
 # The brightness card (client/brightness.gd): a black screen with three old crew badges in a row, drawn in
-# code in the greys the setting is judged by, the game's pixel font for the words, and a slider. Shown once
+# code in the greys the setting is judged by, the game's pixel font for the words, and a slider. The card is
+# drawn over the picture, not through the tape filter: every grey on it goes through Brightness.apply and
+# nothing else, so tools/brightness_table.gd computes its pixels exactly. Shown once
 # on a PC before its first game (main.gd _ready, the title on a first launch), and any time from the Esc
 # menu (B, BRIGHTNESS). Its own small screen: start() opens it, `finished` says it is closed (the choice is
 # saved then). Left / right arrows or A / D move the slider a step, the mouse drags it; Enter, Esc or a
@@ -18,8 +20,12 @@ var _dragging := false
 ## Where the slider's track was drawn (window pixels), for the mouse.
 var _track := Rect2()
 
-const LINE_1 := "RAISE UNTIL THE LEFT BADGE IS BARELY THERE."
-const LINE_2 := "THE RIGHT ONE SHOULD STAY HIDDEN."
+## The words over the badges (T27a). The card opens at the player's own setting (the default on a first
+## launch), where on most screens both dark badges show, so it says to go down first. At most 52 letters
+## a line, so a line fits the card's 320-pixel width.
+const LINE_1 := "LOWER IT UNTIL THE LEFT BADGE IS GONE,"
+const LINE_2 := "THEN RAISE IT UNTIL IT IS BARELY THERE."
+const LINE_3 := "THE RIGHT ONE SHOULD STAY HIDDEN."
 const DONE := "ENTER OR CLICK: DONE"
 const LATER := "YOU CAN CHANGE THIS LATER: ESC, BRIGHTNESS"
 
@@ -105,8 +111,8 @@ func _draw() -> void:
 		return
 	var px := _scale()
 	var lv := setting.level
-	# The game's black (a touch of the tape's blue in it), through the setting like everything else.
-	draw_rect(Rect2(Vector2.ZERO, size), Brightness.apply_color(Color(Brightness.BLACK, Brightness.BLACK + 0.004, Brightness.BLACK + 0.008), lv))
+	# True black, through the setting like everything else (lifted only above the default).
+	draw_rect(Rect2(Vector2.ZERO, size), _grey(Brightness.BLACK))
 	var pale := Color("#f4f4ec")
 	var amber := Color("#ffd27a")
 	var cx := size.x * 0.5
@@ -114,6 +120,7 @@ func _draw() -> void:
 	var y := floorf(size.y * 0.12)
 	_centred(LINE_1, y, px, pale)
 	_centred(LINE_2, y + 11 * px, px, pale)
+	_centred(LINE_3, y + 22 * px, px, pale)
 	# Three badges in a row: left (barely there), middle (plain), right (hidden).
 	var bw := 34.0 * px
 	var bh := 46.0 * px
@@ -143,7 +150,7 @@ func _draw() -> void:
 ## One old crew badge: a card with a clip slot, a photo of a head and shoulders and two lines of type, all
 ## cut out of the one grey (so the badge is a single grey on black).
 func _badge(r: Rect2, g: Color, px: float) -> void:
-	var bg := Brightness.apply_color(Color(Brightness.BLACK, Brightness.BLACK + 0.004, Brightness.BLACK + 0.008), setting.level)
+	var bg := _grey(Brightness.BLACK)
 	# The card, its corners clipped by a pixel.
 	draw_rect(Rect2(r.position + Vector2(px, 0), Vector2(r.size.x - 2 * px, r.size.y)), g)
 	draw_rect(Rect2(r.position + Vector2(0, px), Vector2(r.size.x, r.size.y - 2 * px)), g)

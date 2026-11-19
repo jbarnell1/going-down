@@ -206,6 +206,12 @@
     },
     "day_met": {
       "priority": 3
+    },
+    "tenant": {
+      "priority": 4
+    },
+    "tenant_met": {
+      "priority": 4
     }
   },
   "lines": [
@@ -1098,6 +1104,16 @@
       "id": "day_met_3",
       "moment": "day_met",
       "plain": "That's today's debt covered. Anything further is greed, and we encourage greed."
+    },
+    {
+      "id": "tenant_1",
+      "moment": "tenant",
+      "plain": "Time's up! Your crew has failed to reach quota in time. The Tenant will see you now."
+    },
+    {
+      "id": "tenant_met_1",
+      "moment": "tenant_met",
+      "plain": "Time's up! Your quota was met, well done. The Tenant is here all the same."
     }
   ]
 }

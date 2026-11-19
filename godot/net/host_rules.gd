@@ -51,6 +51,13 @@
 #  - The Minder's hunt from the owner's playtest of 19 Nov (sim/run.gd minder_hunt, sim/seek.gd PT1): off unless
 #    asked (`minder_hunt`, the last parameter); the game's rooms ask for it with the tuned Playroom, so the Minder
 #    never acts on an instrument, angers sooner, and health drains only while it searches.
+#  - The party table from the owner's words of 19 Nov (sim/run.gd party_table, sim/seek.gd "Party table", T15h):
+#    off unless asked (`party_table_`, the last parameter, after another branch's `late_floors_`); the game's
+#    rooms ask for it with the tuned Playroom, so a crewmate holding F at the table for 3 s frees everyone seated
+#    (half the anger bar), the bar never cools by itself, and anyone still seated when the car leaves is left out.
+#  - A second Orderly (sim/run.gd second_orderly, T9b): off unless asked (`second_orderly`, the last parameter,
+#    after late_floors, party_table and tenant_timer, which are only stored here); the game's rooms ask for it, so a
+#    Clinic at depth 2 or deeper has two Orderlies. prepare() turns it on last, and only with the resident on.
 #  - The day quota's lock (sim/run.gd day_lock, FD2): off unless asked (`day_lock`, the last parameter); the
 #    game's rooms ask for it together with the floor quota, so BANK is refused until the crew has earned the
 #    day quota. prepare() turns it on before the first tick, and only when the run has days and the floor
@@ -74,6 +81,15 @@
 #    the full deck. The host (net/host.gd enable_late_floors) then starts the Hanging Ward's overlay on arriving at
 #    WARD_DEPTH and the Reactor's on arriving at REACTOR_DEPTH, each seeded from the day's floor seed. prepare() and
 #    step() do nothing different: the overlays are the host's, exactly as their review starts are.
+#  - The Tenant clock (TT1, the owner on 19 Nov: "a Timer that says Tenant arrives in: xx:xx, with a ten minute
+#    timer per level"): off unless asked (`tenant_timer`, the last parameter); the game's rooms ask for it. On every
+#    floor below the prison (not the prison, not a ride, not Practice) the clock starts the tick the doors open on
+#    arrival, `tenant.minutes` (live setting, stamped then) long, in host time, and stops when the car rides on.
+#    At zero, once a floor, the step adds "tenantArrived" {depth, quotaMet}: the clients slam a door and the
+#    announcer says the time is up. Nothing else happens at zero (no catch, no phase change, the quota as it was);
+#    _tenant_arrived is the one place a consequence goes later. The clock lives here, not in the run's state, so
+#    with the flag off the run is exactly what it was; net/host.gd sends it as the world's "tenant" block.
+#    `late_floors` and `party_table` are other pieces' flags, kept in plain fields and not read here.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -82,6 +98,7 @@ const Entity = preload("res://sim/entity.gd")
 const Places = preload("res://sim/places.gd")
 const Move = preload("res://sim/move.gd")
 const Instr = preload("res://sim/instrument.gd")
+const Settings = preload("res://sim/settings.gd")
 
 ## Where a player stands alone in the car at the start: the middle, so the doorway is straight ahead.
 const START_U := Run.CAR_DEPTH / 2.0
@@ -152,11 +169,29 @@ var nerve_passive: bool
 var annex_drag: bool
 ## The Minder's hunt from the owner's playtest of 19 Nov (off unless asked; sim/run.gd minder_hunt, PT1).
 var minder_hunt: bool
-## The late floors (FL1, see the header).
+## Another branch's flag (stored only here so the parameter order is agreed; this branch does nothing with it).
 var late_floors: bool
+## The party table from the owner's words of 19 Nov (off unless asked; sim/run.gd party_table, T15h).
+var party_table: bool
+## A second Orderly on deeper Clinic floors (off unless asked; sim/run.gd second_orderly, T9b).
+var second_orderly: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
+## Other pieces' flags (stored only; this file does not read them).
+## The Tenant clock (TT1; see the header). Off unless asked.
+var tenant_timer: bool
+## The game's length of the clock (minutes), the live setting `tenant.minutes` when the host has changed it.
+const TENANT_MINUTES := 10
+## This floor's clock: host time the Tenant arrives (-1: no clock on this floor), its length in seconds, the
+## floor it runs on (depth and day), and whether the moment has come.
+var tenant_at := -1.0
+var tenant_len := 0.0
+var tenant_depth := -1
+var tenant_day := -1
+var tenant_fired := false
+## Tests: how many times the moment came (one a floor).
+var tenant_arrivals := 0
 
 func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, quota_: bool = false, downs_: bool = false,
 		watchers_: bool = false, relocation_: bool = false, long_dark_: bool = false, paced_: bool = false, car_waits_: bool = false,
@@ -164,9 +199,13 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		inventory_: bool = false, furniture_layout_: bool = false, resident_navigation_: bool = false,
 		shop_: bool = false, nightly_reels_: bool = false, garden_cones_: bool = false, garden_search_: bool = false,
 		deep_pockets_: bool = false, second_wind_: bool = false, soft_shoes_: bool = false, flare_: bool = false, lamp_: bool = false, badge_search_: bool = false, quick_fingers_: bool = false, long_burn_: bool = false, field_dressing_: bool = false, doorway_shadow_: bool = false, steady_gaze_: bool = false, throwing_arm_: bool = false,
-		nerve_passive_: bool = false, annex_drag_: bool = false, minder_hunt_: bool = false, late_floors_: bool = false) -> void:
+		nerve_passive_: bool = false, annex_drag_: bool = false, minder_hunt_: bool = false, late_floors_: bool = false,
+		party_table_: bool = false, tenant_timer_: bool = false, second_orderly_: bool = false) -> void:
+	tenant_timer = tenant_timer_
 	minder_hunt = minder_hunt_
 	late_floors = late_floors_
+	party_table = party_table_
+	second_orderly = second_orderly_
 	garden_cones = garden_cones_
 	garden_search = garden_search_
 	deep_pockets = deep_pockets_
@@ -303,6 +342,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_playroom_tuned(s)
 	if minder_hunt and not s.minder_hunt:
 		s = Run.with_minder_hunt(s)
+	if party_table and not s.party_table:
+		s = Run.with_party_table(s)
 	# The day lock needs something to earn: only with days and the floor quota on (so never with the
 	# resident off, and never with the test switch quota=0).
 	if day_lock and s.days and s.quota and not s.day_lock:
@@ -355,6 +396,9 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_flare(s)
 	if lamp:
 		s = Run.with_lamp(s)
+	# A second Orderly (T9b): last, so its start settles with every other rule already on. Never with the resident off.
+	if second_orderly and _entity_on and not s.second_orderly:
+		s = Run.with_second_orderly(s)
 	s = _capped(s)
 	return Run.with_orientation(s, true) if orientation_prelude else s
 
@@ -504,6 +548,8 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 				players.append(p)
 		var st := alt.state.copy()
 		st.orderly = r.state.orderly
+		st.orderly2 = r.state.orderly2
+		st.flare_stun2_until = r.state.flare_stun2_until
 		st.crew = r.state.crew
 		# The floor quota goes with the crew: the victim's reading closed as they were caught counts.
 		st.floor_earned = r.state.floor_earned
@@ -557,7 +603,45 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 	var out := Run.RunStep.new()
 	out.state = _capped(state)
 	out.events = events
+	if tenant_timer:
+		_step_tenant(out.state, out.events)
 	return out
+
+## Whether floor `s` runs the Tenant clock: below the prison, never the prison itself or Practice.
+static func tenant_floor(s: Run.RunState) -> bool:
+	return s.depth >= 1 and not s.orientation and not Run.at_home(s)
+
+## The Tenant clock after a tick (see the header): started as the doors open on arrival, stopped when the car
+## rides on (or the run is somewhere else), and the moment once a floor at zero.
+func _step_tenant(s: Run.RunState, events: Array[Dictionary]) -> void:
+	for e in events:
+		if e["type"] == "doorsOpened" and str(e.get("reason", "")) == "arrival" and tenant_floor(s):
+			# The length is stamped now: a change to the setting mid-floor waits for the next floor.
+			tenant_len = 60.0 * Settings.i(s.tuning, &"tenant.minutes", TENANT_MINUTES)
+			tenant_at = s.t + tenant_len
+			tenant_depth = s.depth
+			tenant_day = s.day_index
+			tenant_fired = false
+	if tenant_at >= 0.0 and (s.phase == &"riding" or s.phase == &"ended" or s.depth != tenant_depth or s.day_index != tenant_day or not tenant_floor(s)):
+		tenant_at = -1.0
+		tenant_fired = false
+	if tenant_at >= 0.0 and not tenant_fired and s.t >= tenant_at - 1e-6:
+		tenant_fired = true
+		tenant_arrivals += 1
+		events.append({"type": "tenantArrived", "t": s.t, "depth": s.depth, "quotaMet": Run.quota_reached(s)})
+		_tenant_arrived(s, events)
+
+## The one place for what the Tenant does when it arrives. Today nothing: the owner asked only for the clock, a
+## door slam and the line (TT1). A consequence added here changes the state of the tick that `s` is.
+func _tenant_arrived(_s: Run.RunState, _events: Array[Dictionary]) -> void:
+	pass
+
+## The world's "tenant" block for run state `s` (net/host.gd): {at (host time the Tenant arrives), len (the
+## clock's seconds)}, or null when there is no clock on this floor (the flag off, the prison, Practice, a ride).
+func tenant_block(s: Run.RunState) -> Variant:
+	if not tenant_timer or tenant_at < 0.0 or s.depth != tenant_depth or s.day_index != tenant_day or not tenant_floor(s):
+		return null
+	return {"at": tenant_at, "len": tenant_len}
 
 static func _copy_input(i: Run.PlayerInput) -> Run.PlayerInput:
 	var n := Run.PlayerInput.make(i.id, i.body, i.eye, i.yaw, i.pitch, i.h_fov_deg, i.v_fov_deg)
@@ -566,6 +650,8 @@ static func _copy_input(i: Run.PlayerInput) -> Run.PlayerInput:
 	n.raised = i.raised
 	n.pick_up = i.pick_up
 	n.blind = i.blind
+	n.blind_first = i.blind_first
+	n.blind_second = i.blind_second
 	n.use = i.use
 	n.gait = i.gait
 	n.hide_use = i.hide_use

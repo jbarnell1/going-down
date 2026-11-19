@@ -369,7 +369,8 @@ static func _on_landing(plan: Floor.FloorPlan, body: Move.Body) -> bool:
 ## the warnings, and the doors.
 static func step_wait_bot(st: Run.RunState, bot: WaitBot, dt: float) -> void:
 	var plan := st.plan
-	var o := st.orderly.body
+	# A second Orderly (T9b): the bot minds the nearer one.
+	var o := Run.nearest_orderly(st, bot.body).body
 	var b := st.blink
 	var dark := b != null and b.ends_at != null
 	var warn: Run.BlinkState = b if (b != null and b.announced and b.ends_at == null) else null
