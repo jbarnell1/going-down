@@ -1942,32 +1942,6 @@
       "default": [
         "bunk"
       ]
-    },
-    {
-      "id": "story-names-2",
-      "title": "The new story names",
-      "context": "City above: Overton (or Lidgate, Mount Pleasant). Old district: Coldbath (or The Soke, Carr End). Company: Continuance (or Hallam Grieve, Overton Amenity). Slogan: \"Leave it with us.\" (or \"We keep things going.\", \"Nothing left unfinished.\"). Prison: Overton Reception Centre (or Approved Premises No. 1, Tarry House). Programme: Day Release (or Fresh Start, Earned Days). Crew 41 kept; a convict who missed the car comes back as seat 41-5. Aloud: \"Hello! And welcome to Continuance.\"",
-      "type": "single",
-      "options": [
-        {
-          "id": "set",
-          "label": "The recommended set: Overton, Coldbath, Continuance, \"Leave it with us.\", Overton Reception Centre, Day Release",
-          "note": "Recommended."
-        },
-        {
-          "id": "mix",
-          "label": "A mix: write which ones in the box",
-          "note": ""
-        },
-        {
-          "id": "again",
-          "label": "None of these: try again",
-          "note": ""
-        }
-      ],
-      "default": [
-        "set"
-      ]
     }
   ]
 }
