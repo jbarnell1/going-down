@@ -258,7 +258,7 @@ var _room_player: AudioStreamPlayer3D   # the one room tone playing, if any
 var _loops := {}                # name -> [player, group]
 var _steps: Array[AudioStreamPlayer3D] = []
 var _step_next := 0
-var _entity_bus := -1
+var _trolley_bus := -1
 var _duck := 0.0
 var _tick_phase := 0.0
 var _rng := RandomNumberGenerator.new()
@@ -307,9 +307,9 @@ func setup(world_parent: Node3D) -> void:
 		var hl := AudioServer.get_bus_effect(mi, e) as AudioEffectHardLimiter
 		if hl != null:
 			hl.ceiling_db = MASTER_CEILING
-	_entity_bus = AudioServer.get_bus_index("Entity")
-	if _entity_bus >= 0 and AudioServer.get_bus_effect_count(_entity_bus) == 0:
-		_entity_bus = -1
+	_trolley_bus = AudioServer.get_bus_index("Trolley")
+	if _trolley_bus >= 0 and AudioServer.get_bus_effect_count(_trolley_bus) == 0:
+		_trolley_bus = -1
 	streams["tick"] = _wav(_tick(), false)
 	streams["chime"] = _wav(_tones([[660.0, 0.0], [880.0, 0.32]], 1.3, 0.5), false)
 	streams["chime_far"] = _wav(_tones([[660.0, 0.0], [880.0, 0.32]], 1.3, 0.18), false)
@@ -349,14 +349,15 @@ func setup(world_parent: Node3D) -> void:
 		p3.max_db = 0.0
 		world_parent.add_child(p3)
 		_shots3d.append(p3)
-	# The trolley: ATTENUATION_DISABLED, its loudness is the rules' audibility (distance and walls).
-	squeak = _player3d(world_parent, _rec("orderly/trolley_squeak", true), "Entity", 6.0, 40.0)
+	# The wheels have a separate wall filter before they reach Entity, where the breath also plays.
+	var wheel_bus := "Trolley" if _trolley_bus >= 0 else "Entity"
+	squeak = _player3d(world_parent, _rec("orderly/trolley_squeak", true), wheel_bus, 6.0, 40.0)
 	if squeak.stream == null:
 		squeak.stream = _wav(_squeak(), true)
 	squeak.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
-	roll = _player3d(world_parent, _rec("orderly/trolley_roll", true), "Entity", 6.0, 40.0)
+	roll = _player3d(world_parent, _rec("orderly/trolley_roll", true), wheel_bus, 6.0, 40.0)
 	roll.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
-	# No air absorption either: walls and distance are in the rules' gain and the Entity bus' low-pass, and
+	# No air absorption: walls and distance are in the rules' gain and the Trolley bus' low-pass, and
 	# the engine's distance filter took the squeal out of a far trolley entirely.
 	squeak.attenuation_filter_db = 0.0
 	roll.attenuation_filter_db = 0.0
@@ -606,7 +607,11 @@ func play_at(name: String, pos: Vector3, gain_db := 0.0) -> AudioStreamPlayer3D:
 ## Per frame: the trolley from the rules' audibility, the ticking, breathing, the lift's machinery.
 func update(delta: float, sq: Dictionary, pose: Variant, tick_hz: float, loudness: float, exertion: float, winded: bool, machine: float, door_pos: Vector3, speed := HUNT_SPEED, trolley_at: Variant = null) -> void:
 	var g := clampf(float(sq.get("gain", 0.0)), 0.0, 1.0)
-	if g > 0.0 and pose != null:
+	var wheels_on := g > 0.0 and pose != null
+	var muffled := wheels_on and bool(sq.get("muffled", false))
+	if _trolley_bus >= 0 and AudioServer.is_bus_effect_enabled(_trolley_bus, 0) != muffled:
+		AudioServer.set_bus_effect_enabled(_trolley_bus, 0, muffled)
+	if wheels_on:
 		var at := Vector3(float(pose.x), float(pose.y) + 0.4, float(pose.z)) if trolley_at == null else (trolley_at as Vector3)
 		squeak.global_position = at
 		roll.global_position = at
@@ -614,16 +619,12 @@ func update(delta: float, sq: Dictionary, pose: Variant, tick_hz: float, loudnes
 		# about 7 dB: +APPROACH_DB brings it back to the voice -3 LU right behind you, falling 3 dB to the edge
 		# of hearing; through a wall the low-pass takes more and MUFFLED_DB gives it back. Measured by
 		# tools/mix_check.mjs: never so quiet that it is not heard before it is seen (MIX.md).
-		var muffled := bool(sq.get("muffled", false))
 		var db := BASE_DB + APPROACH_DB - 3.0 * (1.0 - g) + (MUFFLED_DB if muffled else 0.0)
 		var pitch := clampf(0.75 + 0.25 * speed / HUNT_SPEED, 0.8, 1.05)
 		squeak.pitch_scale = pitch
 		roll.pitch_scale = pitch
 		_loop(squeak, "approach", true, db + (float(SYNTH_DB["squeak"]) if squeak.stream is AudioStreamWAV else 0.0))
 		_loop(roll, "approach", true, db - 4.0)
-		if _entity_bus >= 0:
-			var lp := AudioServer.get_bus_effect(_entity_bus, 0) as AudioEffectLowPassFilter
-			lp.cutoff_hz = 4000.0 if muffled else 20000.0
 	else:
 		_loop(squeak, "approach", false, 0.0)
 		_loop(roll, "approach", false, 0.0)

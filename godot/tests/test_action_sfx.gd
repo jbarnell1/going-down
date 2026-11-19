@@ -110,6 +110,37 @@ func test_orderly_proximity_and_moving_shriek(t: T) -> void:
 	t.check(not sfx.orderly_breath.playing, "being watched silences the breath")
 	world.free()
 
+func test_wheel_wall_filter_cannot_dull_the_near_breath_or_shriek(t: T) -> void:
+	var sfx := preload("res://client/sfx.gd").new()
+	var world := Node3D.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(world)
+	var camera := Camera3D.new()
+	world.add_child(camera)
+	camera.position.y = 2.2
+	camera.make_current()
+	world.add_child(sfx)
+	sfx.setup(world)
+	var wheel_bus := AudioServer.get_bus_index("Trolley")
+	var entity_bus := AudioServer.get_bus_index("Entity")
+	if not t.check(wheel_bus >= 0 and entity_bus >= 0, "the installed layout exposes both buses"):
+		world.free()
+		return
+	var entity_filter := AudioServer.get_bus_effect(entity_bus, 0) as AudioEffectLowPassFilter
+	var wheel_filter := AudioServer.get_bus_effect(wheel_bus, 0) as AudioEffectLowPassFilter
+	var pose := {"x": 0.0, "y": 0.0, "z": -1.0, "anim": "walk"}
+	sfx.update(0.02, {"gain": 1.0, "muffled": true}, pose, 0.0, 0.0, 0.0, false, 0.0, Vector3.ZERO)
+	sfx._orderly(0.02, {"pose": pose})
+	var shriek := sfx.play_at("shriek", Vector3(0.0, 2.2, -1.0))
+	t.check(sfx.squeak.playing and sfx.roll.playing and sfx.squeak.bus == &"Trolley" and sfx.roll.bus == &"Trolley", "both occluded wheels reach their own filter")
+	t.check(AudioServer.get_bus_send(wheel_bus) == &"Entity" and AudioServer.is_bus_effect_enabled(wheel_bus, 0) and wheel_filter.cutoff_hz == 4000.0, "the occupied wheel route remains muffled")
+	t.check(sfx.orderly_breath.playing and sfx.orderly_breath.bus == &"Entity" and entity_filter.cutoff_hz == 20000.0, "the simultaneous near breath keeps its open bandwidth")
+	t.check(shriek != null and shriek.bus == &"Scare" and shriek.attenuation_filter_cutoff_hz == 20500.0, "the simultaneous near shriek keeps its open bandwidth")
+	sfx.update(0.02, {"gain": 0.0}, pose, 0.0, 0.0, 0.0, false, 0.0, Vector3.ZERO)
+	sfx._orderly(0.02, {"pose": pose})
+	t.check(not AudioServer.is_bus_effect_enabled(wheel_bus, 0) and sfx.orderly_breath.volume_db == sfx.BASE_DB, "stopping the wheels clears the muffle and the normal breath duck")
+	world.free()
+
+
 func test_second_wind_plays_one_nonlooped_exertion_take_at_the_player(t: T) -> void:
 	var sfx := preload("res://client/sfx.gd").new()
 	var world := Node3D.new()

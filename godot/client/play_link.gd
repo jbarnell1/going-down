@@ -441,6 +441,8 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 		snap["medic"] = latest["medic"]
 	if latest.has("steady"):
 		snap["steady"] = latest["steady"]
+	if latest.has("listener"):
+		snap["listener"] = latest["listener"]
 	if plan_dict.has("_new"):
 		plan_dict.erase("_new")
 		snap["plan"] = plan_dict

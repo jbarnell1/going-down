@@ -136,6 +136,7 @@ var doorway_shadow: bool
 var long_burn: bool
 var field_dressing: bool
 var steady_gaze: bool
+var throwing_arm: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -145,7 +146,7 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		lonely_: bool = false, playroom_tuned_: bool = false, day_lock_: bool = false, furniture_: bool = false, findables_: bool = false,
 		inventory_: bool = false, furniture_layout_: bool = false, resident_navigation_: bool = false,
 		shop_: bool = false, nightly_reels_: bool = false, garden_cones_: bool = false, garden_search_: bool = false,
-		deep_pockets_: bool = false, second_wind_: bool = false, soft_shoes_: bool = false, flare_: bool = false, lamp_: bool = false, badge_search_: bool = false, quick_fingers_: bool = false, long_burn_: bool = false, field_dressing_: bool = false, doorway_shadow_: bool = false, steady_gaze_: bool = false) -> void:
+		deep_pockets_: bool = false, second_wind_: bool = false, soft_shoes_: bool = false, flare_: bool = false, lamp_: bool = false, badge_search_: bool = false, quick_fingers_: bool = false, long_burn_: bool = false, field_dressing_: bool = false, doorway_shadow_: bool = false, steady_gaze_: bool = false, throwing_arm_: bool = false) -> void:
 	garden_cones = garden_cones_
 	garden_search = garden_search_
 	deep_pockets = deep_pockets_
@@ -159,6 +160,7 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 	field_dressing = field_dressing_
 	doorway_shadow = doorway_shadow_
 	steady_gaze = steady_gaze_
+	throwing_arm = throwing_arm_
 	nightly_reels = nightly_reels_
 	shop = shop_
 	inventory = inventory_
@@ -312,6 +314,8 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_long_burn(s)
 	if steady_gaze:
 		s = Run.with_steady_gaze(s)
+	if throwing_arm:
+		s = Run.with_throwing_arm(s)
 	if field_dressing:
 		s = Run.with_field_dressing(s)
 	if quick_fingers:

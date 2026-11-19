@@ -26,6 +26,7 @@ const REFUSED := {
 	"gone": "IT IS NOT THERE ANY MORE.",
 	"busy": "NOT NOW.",
 	"throw": "YOU CAN'T THROW A CONE HERE.",
+	"throw_toy": "YOU CAN'T THROW A TOY HERE.",
 	# The shop and the cabinet (S2, sim/run.gd _step_shop).
 	"cabFull": "THE CABINET IS FULL.",
 	"poor": "NOT ENOUGH CREDITS.",

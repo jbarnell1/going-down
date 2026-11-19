@@ -57,7 +57,12 @@
       "name": "Throwing Arm",
       "branch": "Ear",
       "trade": "Listener",
-      "layer": 2
+      "layer": 2,
+      "badge_cost": 2,
+      "requires": "soft_shoes",
+      "description": "Middle mouse throws a toy up to 15m.",
+      "drawback": "Your wind-up toys rattle twice as long.",
+      "seniority": "Listener footsteps carry 10 percent less far."
     },
     "quick_fingers": {
       "id": "quick_fingers",

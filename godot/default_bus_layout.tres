@@ -1,4 +1,4 @@
-[gd_resource type="AudioBusLayout" load_steps=6 format=3]
+[gd_resource type="AudioBusLayout" load_steps=7 format=3]
 
 [sub_resource type="AudioEffectHardLimiter" id="master_limit"]
 resource_name = "HardLimiter"
@@ -21,6 +21,10 @@ gain = 12.8
 [sub_resource type="AudioEffectLowPassFilter" id="entity_lp"]
 resource_name = "LowPassFilter"
 cutoff_hz = 20000.0
+
+[sub_resource type="AudioEffectLowPassFilter" id="trolley_lp"]
+resource_name = "LowPassFilter"
+cutoff_hz = 4000.0
 
 [resource]
 bus/0/name = &"Master"
@@ -75,3 +79,11 @@ bus/6/mute = false
 bus/6/bypass_fx = false
 bus/6/volume_db = 0.0
 bus/6/send = &"Master"
+bus/7/name = &"Trolley"
+bus/7/solo = false
+bus/7/mute = false
+bus/7/bypass_fx = false
+bus/7/volume_db = 0.0
+bus/7/send = &"Entity"
+bus/7/effect/0/effect = SubResource("trolley_lp")
+bus/7/effect/0/enabled = false

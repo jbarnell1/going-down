@@ -49,6 +49,7 @@ const AnnexNotesView = preload("res://client/annex_notes_view.gd")
 const EyeHeight = preload("res://client/eye_height.gd")
 const RoomClient = preload("res://net/room_client.gd")
 const LocalRoom = preload("res://net/local_room.gd")
+const SoloDiagnostics = preload("res://client/solo_diagnostics.gd")
 const PLAYTEST_REVIEWS := {
 	"ward_ground": {
 		"pack":"WardGroundMedia.pck", "scene":"res://client/ward/review.tscn",
@@ -173,6 +174,7 @@ var _quick_fingers := true
 var _long_burn := true
 var _field_dressing := true
 var _steady_gaze := true
+var _throwing_arm := true
 var _playtest_face := ""
 var _playtest_hints: Dictionary = {}
 var _playtest_hint_persist := true
@@ -235,6 +237,8 @@ var bright_card: BrightnessCard
 
 var seed := "alpha"
 var _solo_bots := 0
+var _diagnostics_requested := false
+var _solo_diagnostics: SoloDiagnostics
 var quality := "light"
 var props_on := true
 var entity_on := true
@@ -592,6 +596,7 @@ func _read_options() -> void:
 		match key:
 			"seed": seed = val
 			"bots": _solo_bots = clampi(int(val), 0, LocalRoom.BOT_NAMES.size())
+			"debug": _diagnostics_requested = val == "1"
 			"quality": quality = val
 			"auto": automated = val != "0"
 			"props": props_on = val != "0"
@@ -611,9 +616,11 @@ func _read_options() -> void:
 			"long_burn": _long_burn = val == "1"
 			"field_dressing": _field_dressing = val == "1"
 			"steady_gaze": _steady_gaze = val == "1"
+			"throwing_arm": _throwing_arm = val == "1"
 	if OS.has_feature("web"):
 		seed = _url("seed", seed)
 		_solo_bots = clampi(int(_url("bots", "0")), 0, LocalRoom.BOT_NAMES.size())
+		_diagnostics_requested = _url("debug", "0") == "1"
 		quality = _url("quality", quality)
 		props_on = _url("props", "1") != "0"
 		entity_on = _url("entity", "1") != "0"
@@ -779,6 +786,7 @@ func _now() -> float:
 # --- the start screen and the room ----------------------------------------------------------------
 
 func _show_start(which: String) -> void:
+	_clear_solo_diagnostics()
 	mode = which
 	start.show_screen(which)
 	hud.end_lines = []
@@ -895,6 +903,7 @@ func _configure_campaign_trades(lr: LocalRoom) -> void:
 	lr.long_burn = full_deck and _long_burn
 	lr.field_dressing = full_deck and _field_dressing
 	lr.steady_gaze = full_deck and _steady_gaze
+	lr.throwing_arm = full_deck and _throwing_arm
 
 ## "Play alone": a room on this machine, a run at once.
 func _play_alone() -> void:
@@ -1041,6 +1050,10 @@ func _enter_game() -> void:
 	start.show_screen("")
 	menu_overlay = false
 	hud.osd_on = true
+	if link != null and SoloDiagnostics.allowed(_diagnostics_requested, link.rc) and _solo_diagnostics == null:
+		_solo_diagnostics = SoloDiagnostics.new()
+		_solo_diagnostics.name = "SoloDiagnostics"
+		hud.add_child(_solo_diagnostics)
 	snap = {}
 	_reel_skip_at = null
 	_remission_index = -1
@@ -1070,8 +1083,15 @@ func _close_words(code: int) -> String:
 		return "THE SERVER STOPPED."
 	return "CONNECTION LOST."
 
+func _clear_solo_diagnostics() -> void:
+	if _solo_diagnostics != null:
+		_solo_diagnostics.hide()
+		_solo_diagnostics.queue_free()
+		_solo_diagnostics = null
+
 func _clear_world() -> void:
 	kiosk.close()
+	_clear_solo_diagnostics()
 	for c: Node in world.get_children():
 		c.queue_free()
 	level = null
@@ -1392,8 +1412,14 @@ func inv_key(key: String) -> bool:
 			pending_inv_step += 1
 		"throw":
 			var active := pending_inv_sel if pending_inv_sel >= 0 else inv_view.sel
-			if active >= inv_view.slots.size() or str(inv_view.slots[active][0]) != "pinecone":
+			if active >= inv_view.slots.size():
 				return false
+			var item := str(inv_view.slots[active][0])
+			if item != "pinecone":
+				var listener: Dictionary = snap.get("listener", {})
+				var trade := int(listener.get(link.my_id(), Upgrades.TradeOffer.AVAILABLE))
+				if item != "toy" or trade not in [Upgrades.TradeOffer.LEARNED, Upgrades.TradeOffer.UNDO]:
+					return false
 			pending_inv_op = "throw"
 			pending_inv_arg = 0
 		"g":
@@ -1689,6 +1715,9 @@ func _process(delta: float) -> void:
 		hud.center_note = "JOINING THE RUN..."
 		return
 	_game_frame(s, dt)
+	if _solo_diagnostics != null and frames % 6 == 0:
+		var host_ms := (link.rc as LocalRoom).host_us / 1000.0 / maxi(game_frames, 1)
+		_solo_diagnostics.present(link.plan, s, yaw, Engine.get_frames_per_second(), 1000.0 * _ft_sum / maxi(_ft_n, 1), host_ms)
 	game_frames += 1
 	var ms := link.last_ms
 	rules_ms_sum += ms
@@ -2026,7 +2055,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	if cab_view.is_open() and (not at_cab or me_down or ended or _lights_out):
 		cab_view.close()
 	shop_view.update(s.get("shop"), link.my_id(), lc0.tuning if lc0 != null else null, float(s.get("hostNow", 0.0)))
-	skills_view.update(s.get("skills"), s.get("wind"), s.get("shoes"), link.my_id(), shop_view.credits, s.get("events", []), now, s.get("porter"), inv_view.slots, s.get("longBurn"), s.get("medic"), s.get("steady"))
+	skills_view.update(s.get("skills"), s.get("wind"), s.get("shoes"), link.my_id(), shop_view.credits, s.get("events", []), now, s.get("porter"), inv_view.slots, s.get("longBurn"), s.get("medic"), s.get("steady"), s.get("listener"))
 	shop_view.on_events(s.get("events", []), link.my_id(), now, sfx)
 	shop_view.show_world(spots_root, cam, s.get("shop"), float(s.get("hostNow", 0.0)), now, sfx)
 	flare_view.update(level, s.get("flares"), link.my_id(), float(s.get("hostNow", 0.0)))
@@ -2956,14 +2985,14 @@ func _command(c: String) -> String:
 			# the screenshot of a full row) | inv (what the squares show).
 			if p.size() >= 3 and p[1] == "key":
 				return JSON.stringify({"ok": inv_key(p[2]), "view": inv_view.describe()})
-			if p.size() == 2 and p[1] == "click":
-				var left := InputEventMouseButton.new()
-				left.button_index = MOUSE_BUTTON_LEFT
-				left.pressed = true
+			if p.size() == 2 and p[1] in ["click", "middle"]:
+				var mouse := InputEventMouseButton.new()
+				mouse.button_index = MOUSE_BUTTON_MIDDLE if p[1] == "middle" else MOUSE_BUTTON_LEFT
+				mouse.pressed = true
 				_testing_inventory_click = true
-				_input(left)
+				_input(mouse)
 				_testing_inventory_click = false
-				return JSON.stringify({"ok": pending_inv_op == "use"})
+				return JSON.stringify({"ok": pending_inv_op == ("throw" if p[1] == "middle" else "use")})
 			if p.size() >= 3 and p[1] == "demo":
 				inv_view.demo_slots = []
 				inv_view.demo_sel = -1
@@ -3008,10 +3037,10 @@ func _command(c: String) -> String:
 				pending_inv_arg = shop_view.sel
 			return JSON.stringify(shop_view.describe())
 		"skill":
-			if p.size() >= 2 and p[1] in ["f", "enter", "undo", "1", "2", "3", "4", "5", "6", "7"]:
+			if p.size() >= 2 and p[1] in ["f", "enter", "undo", "1", "2", "3", "4", "5", "6", "7", "8"]:
 				var key := InputEventKey.new()
 				key.pressed = true
-				key.physical_keycode = {"f": KEY_F, "enter": KEY_ENTER, "undo": KEY_U, "1": KEY_1, "2": KEY_2, "3": KEY_3, "4": KEY_4, "5": KEY_5, "6": KEY_6, "7": KEY_7}[p[1]]
+				key.physical_keycode = {"f": KEY_F, "enter": KEY_ENTER, "undo": KEY_U, "1": KEY_1, "2": KEY_2, "3": KEY_3, "4": KEY_4, "5": KEY_5, "6": KEY_6, "7": KEY_7, "8": KEY_8}[p[1]]
 				_input(key)
 			return JSON.stringify({"open": skills_view.is_open(), "credits": skills_view.credits, "ownership": skills_view.ownership, "notice": skills_view.notice,
 				"badges": skills_view.badges, "action": skills_view.action_label(), "selected": skills_view.selected})
@@ -3271,8 +3300,10 @@ static func _shop_plain(block: Variant) -> Variant:
 		var list: Array = []
 		for g: Dictionary in (block as Dictionary)[key]:
 			var e := g.duplicate()
-			var at: Variant = g["at"]
-			e["at"] = {"x": at.x, "y": at.y, "z": at.z, "level": at.level} if at is Object else at
+			for body_key: String in ["at", "from"]:
+				var at: Variant = g.get(body_key)
+				if at is Object:
+					e[body_key] = {"x": at.x, "y": at.y, "z": at.z, "level": at.level}
 			list.append(e)
 		out[key] = list
 	return out
@@ -3287,7 +3318,7 @@ func _test_state() -> Dictionary:
 		var d := x.duplicate()
 		d.merge(others.describe(str(x["id"])))
 		oth.append(d)
-	return {
+	var state := {
 		"screen": _screen_state(),
 		"phase": s.get("phase"), "depth": s.get("depth"), "t": s.get("t"), "dark": s.get("dark"), "warn": s.get("warn"),
 		"blackout": s.get("blackout"), "blink": s.get("blink"), "call": s.get("call"), "doorsOpen": s.get("doorsOpen"),
@@ -3343,6 +3374,9 @@ func _test_state() -> Dictionary:
 		"bells": sfx.bells.duplicate(), "seekHist": _seek_hist.duplicate(), "camPos": [cam.position.x, cam.position.y, cam.position.z],
 		"events": event_counts,
 	}
+	if _solo_diagnostics != null:
+		state["soloDiagnostics"] = _solo_diagnostics.describe()
+	return state
 
 # --- live settings (LS3) ------------------------------------------------------------------------
 

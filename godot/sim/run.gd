@@ -1105,6 +1105,7 @@ class RunState:
 	var long_burn: bool = false
 	var field_dressing := false
 	var steady_gaze := false
+	var throwing_arm := false
 	var flare := false
 	var flare_plan: Floor.FloorPlan = null
 	var flare_issued := {}
@@ -1159,6 +1160,7 @@ class RunState:
 		s.long_burn = long_burn
 		s.field_dressing = field_dressing
 		s.steady_gaze = steady_gaze
+		s.throwing_arm = throwing_arm
 		s.flare = flare
 		s.flare_plan = flare_plan
 		s.flare_issued = flare_issued
@@ -1518,7 +1520,7 @@ static func day_preview(s: RunState) -> Variant:
 		return null
 	var aboard := day_aboard(s)
 	var earned := floori(s.day_earned) if s.day_lock else aboard
-	return Day.bank_preview(s.day_state, aboard, earned, day_crew(s), s.wallets, DAY_FLOOR_QUOTA, s.quick_fingers or s.field_dressing or s.steady_gaze)
+	return Day.bank_preview(s.day_state, aboard, earned, day_crew(s), s.wallets, DAY_FLOOR_QUOTA, s.quick_fingers or s.field_dressing or s.steady_gaze or s.throwing_arm)
 ## Turns the tuned Playroom on (T15m, see the header): every Playroom from now on (and one already reached)
 ## has the long hiding time, the anger bar, the grab at 1 m and the hint events (sim/seek.gd "T15m").
 static func with_playroom_tuned(s0: RunState) -> RunState:
@@ -1663,6 +1665,19 @@ static func _steady_light(s: RunState, p: RunPlayer, before: Move.Body, i: Playe
 	var body := Entity.kind_of(s.orderly)
 	return Seek.lights(s.plan, beam, s.orderly.body, body.height, body.radius)
 
+static func with_throwing_arm(s0: RunState) -> RunState:
+	if not (s0.soft_shoes and s0.shop and s0.inventory):
+		return s0
+	var s := s0.copy()
+	s.throwing_arm = true
+	return s
+
+static func has_throwing_arm(s: RunState, id: String) -> bool:
+	if not s.throwing_arm:
+		return false
+	var wallet: Upgrades.UpgradeState = s.wallets.get(id)
+	return wallet != null and wallet.owned.has("throwing_arm")
+
 static func training_enabled(s: RunState, id: String) -> bool:
 	match id:
 		"deep_pockets":
@@ -1679,6 +1694,8 @@ static func training_enabled(s: RunState, id: String) -> bool:
 			return s.field_dressing
 		"steady_gaze":
 			return s.steady_gaze
+		"throwing_arm":
+			return s.throwing_arm
 	return false
 
 static func wind_spent_here(s: RunState, id: String) -> bool:
@@ -2404,6 +2421,8 @@ static func _step_garden(s: RunState, players: Array[RunPlayer], input_of: Dicti
 		if s.soft_shoes:
 			var wallet: Upgrades.UpgradeState = s.wallets.get(p.id)
 			hp.soft_shoes = wallet != null and wallet.owned.has("soft_shoes")
+			if s.throwing_arm and wallet != null:
+				hp.footstep_scale = 1.0 - 0.1 * Upgrades.trade_seniority(wallet.owned, "Ear")
 		hp.up = not down
 		hp.down = down
 		hp.emote = inp.emote_sound and not down
@@ -2422,7 +2441,7 @@ static func _step_garden(s: RunState, players: Array[RunPlayer], input_of: Dicti
 		for e in events:
 			if e.type == "flareUsed":
 				heard_things.append(Noises.Sound.make("", e.x, e.z, e.level, e.noise, &"flare"))
-	if s.shop and s.garden_cones:
+	if s.shop and (s.garden_cones or s.throwing_arm):
 		var stock: Shop.ShopState = s.shop_state
 		if stock.plan == s.plan:
 			for toy: Dictionary in stock.toys:
@@ -3905,7 +3924,7 @@ static func _settle_day(s: RunState, t: float, banked: int, events: Array[Dictio
 	# The car waits: whoever it left out today is paid nothing today (see the header).
 	var crew := day_crew(s)
 	var earned := floori(s.day_earned) if s.day_lock else banked
-	var r := Day.end_day(s.day_state, banked, earned, crew, s.wallets, DAY_FLOOR_QUOTA, s.seed, wiped, s.quick_fingers or s.field_dressing or s.steady_gaze)
+	var r := Day.end_day(s.day_state, banked, earned, crew, s.wallets, DAY_FLOOR_QUOTA, s.seed, wiped, s.quick_fingers or s.field_dressing or s.steady_gaze or s.throwing_arm)
 	s.wallets = r.wallets
 	s.day_next = r.state
 	var result: Dictionary = r.facts.duplicate(true)
@@ -4625,7 +4644,8 @@ static func _step_inventory(s: RunState, players: Array[RunPlayer], input_of: Di
 		if i.inv_select >= 0 and i.inv_select < Inventory.SLOTS and i.inv_select != b.sel:
 			b = Inventory.select(b, i.inv_select)
 			bags[p.id] = b
-		if i.inv_op == &"" or (i.inv_op == &"throw" and not s.garden_cones) or (i.inv_op == &"skill" and not s.deep_pockets):
+		var toy_throw := s.throwing_arm and i.inv_op == &"throw" and b.item(b.sel) == "toy"
+		if i.inv_op == &"" or (i.inv_op == &"throw" and not (s.garden_cones or toy_throw)) or (i.inv_op == &"skill" and not s.deep_pockets):
 			continue
 		var refuse := func(why: String) -> void:
 			events.append({"type": "invRefused", "t": t, "playerId": p.id, "op": String(i.inv_op), "why": why})
@@ -4667,6 +4687,8 @@ static func _step_inventory(s: RunState, players: Array[RunPlayer], input_of: Di
 					pickups.remove_at(at)
 				events.append({"type": "itemTaken", "t": t, "playerId": p.id, "pickup": pk.id, "item": pk.item, "count": r.added, "left": r.left})
 			&"throw":
+				if toy_throw:
+					continue  # The shop owns wind-up toys and consumes the selected item.
 				if s.garden == null or in_car(s.car, p.body) or b.item(k) != GardenCones.ITEM or b.count(k) < 1:
 					refuse.call("throw")
 					continue
@@ -4749,8 +4771,8 @@ static func _skill_transaction(s: RunState, p: RunPlayer, bag: Inventory.Bag, ar
 		if not training_enabled(s, node_id):
 			return "op"
 		result = Upgrades.buy_induction(wallet, node_id, Shop.SHARE)
-	elif arg in [5, 7, 8]:
-		var node_id := str({5: "quick_fingers", 7: "field_dressing", 8: "steady_gaze"}[int(arg)])
+	elif arg in [5, 7, 8, 9]:
+		var node_id := str({5: "quick_fingers", 7: "field_dressing", 8: "steady_gaze", 9: "throwing_arm"}[int(arg)])
 		if not training_enabled(s, node_id):
 			return "op"
 		var cost := int(Upgrades.trade_node(node_id)["badge_cost"])
@@ -4901,14 +4923,15 @@ static func _step_shop(s: RunState, players: Array[RunPlayer], input_of: Diction
 			continue
 		if i == null or p.status != &"ok" or not _is_active(p, input_of):
 			continue
-		if not Shop.OPS.has(String(i.inv_op)) and not (s.deep_pockets and i.inv_op == &"skill"):
+		var b := Inventory.bag_of(s.bags, p.id)
+		var toy_throw := s.throwing_arm and i.inv_op == &"throw" and b.item(b.sel) == "toy"
+		if not Shop.OPS.has(String(i.inv_op)) and not (s.deep_pockets and i.inv_op == &"skill") and not toy_throw:
 			continue
 		# The inventory's step said "busy" to these already.
 		if s.phase == &"riding" or _in_hide(s, p.id) or searching(s, p.id):
 			continue
 		var refuse := func(why: String) -> void:
 			events.append({"type": "invRefused", "t": t, "playerId": p.id, "op": String(i.inv_op), "why": why})
-		var b := Inventory.bag_of(s.bags, p.id)
 		var limit := inventory_limit(s, p.id)
 		match String(i.inv_op):
 			"skill":
@@ -4984,7 +5007,7 @@ static func _step_shop(s: RunState, players: Array[RunPlayer], input_of: Diction
 				s.wallets = wallets
 				_set_bag(s, p.id, Inventory.add(b, item, 1, limit).bag)
 				events.append({"type": "bought", "t": t, "playerId": p.id, "item": item, "price": price, "credits": nw.credits})
-			"use":
+			"use", "throw":
 				var k := b.sel
 				if b.count(k) <= 0:
 					refuse.call("empty")
@@ -5030,11 +5053,27 @@ static func _use_item(s: RunState, sh: Shop.ShopState, sh0: Shop.ShopState, play
 			used["id"] = n.seq
 			used["at"] = at
 		"toy":
-			# Set at the feet: TOY_WAIT later it rattles for TOY_RATTLE.
+			# Both toys wind up after reaching their spot. Trained toys keep running twice as long.
+			var trained := has_throwing_arm(s, p.id)
+			var launched := i.inv_op == &"throw"
+			if launched and (not trained or p.aboard or at_home(s)):
+				return ["throw_toy", sh]
+			var flight := 0.0
+			var from := at
+			if launched:
+				at = GardenCones.landing(s.plan, solids_in(s), p.body, i.yaw, i.pitch, Shop.TOY_THROW_RANGE)
+				var distance := M.hypot2(at.x - from.x, at.z - from.z)
+				flight = maxf(0.12, distance / GardenCones.SPEED)
+			var start := t + flight + Shop.TOY_WAIT
 			n.seq += 1
-			var g := n.toys.duplicate()
-			g.append({"id": n.seq, "at": at, "start": t + Shop.TOY_WAIT, "end": t + Shop.TOY_WAIT + Shop.TOY_RATTLE, "by": p.id})
-			n.toys = g
+			var toy := {"id": n.seq, "at": at, "start": start, "end": start + Shop.TOY_RATTLE * (2.0 if trained else 1.0), "by": p.id}
+			if launched:
+				toy["from"] = from
+				toy["launch"] = t
+				toy["land"] = t + flight
+			var toys := n.toys.duplicate()
+			toys.append(toy)
+			n.toys = toys
 			used["id"] = n.seq
 			used["at"] = at
 		"flash":

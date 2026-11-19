@@ -446,7 +446,7 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < WORLD_SHOP_INDEX:
 			out.append(null)
 		out.append(enc_shop(w["shop"]))
-	if w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null:
+	if w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null:
 		var extensions := {}
 		if w.get("lamps") != null:
 			var lamps := []
@@ -464,7 +464,7 @@ static func enc_world(w: Dictionary) -> Array:
 			extensions["ward"] = WardWire.encode(w["ward"])
 		if w.get("reactor") != null:
 			extensions["reactor"] = ReactorWire.encode(w["reactor"])
-		for key: String in ["skills", "wind", "shoes", "porter", "longBurn", "medic", "steady"]:
+		for key: String in ["skills", "wind", "shoes", "porter", "longBurn", "medic", "steady", "listener"]:
 			if w.get(key) != null:
 				var rows := []
 				for id: String in w[key]:
@@ -534,7 +534,10 @@ static func enc_shop(k: Dictionary) -> Array:
 		glows.append([g["id"], _enc_body(g["at"]), floor3(g["until"])])
 	var toys: Array = []
 	for g: Dictionary in k["toys"]:
-		toys.append([g["id"], _enc_body(g["at"]), floor3(g["start"]), floor3(g["end"])])
+		var row := [g["id"], _enc_body(g["at"]), floor3(g["start"]), floor3(g["end"])]
+		if g.has("from"):
+			row.append_array([_enc_body(g["from"]), floor3(g["launch"]), floor3(g["land"])])
+		toys.append(row)
 	var timers: Array = []
 	for r: Dictionary in k["timers"]:
 		timers.append([r["playerId"], floor3(r["juice"]), floor3(r["flash"])])
@@ -573,10 +576,16 @@ static func dec_shop(c: _V, w: Variant) -> Dictionary:
 		glows.append({"id": _i(c, g[0], 0, MAX_COUNT), "at": _dec_body(c, g[1]), "until": _f(c, g[2])})
 	var toys: Array = []
 	for gw: Variant in _a(c, a[3], 0, 256):
-		var g := _a(c, gw, 4, 4)
-		if c.bad:
+		var g := _a(c, gw, 4, 7)
+		if c.bad or g.size() not in [4, 7]:
+			c.bad = true
 			return {}
-		toys.append({"id": _i(c, g[0], 0, MAX_COUNT), "at": _dec_body(c, g[1]), "start": _f(c, g[2]), "end": _f(c, g[3])})
+		var toy := {"id": _i(c, g[0], 0, MAX_COUNT), "at": _dec_body(c, g[1]), "start": _f(c, g[2]), "end": _f(c, g[3])}
+		if g.size() == 7:
+			toy["from"] = _dec_body(c, g[4])
+			toy["launch"] = _f(c, g[5])
+			toy["land"] = _f(c, g[6])
+		toys.append(toy)
 	var timers: Array = []
 	for rw: Variant in _a(c, a[4], 0, 64):
 		var r := _a(c, rw, 3, 3)
@@ -1162,7 +1171,7 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 				c.bad = true
 			else:
 				out["ward"] = ward
-		for key: String in ["skills", "wind", "shoes", "porter", "longBurn", "medic", "steady"]:
+		for key: String in ["skills", "wind", "shoes", "porter", "longBurn", "medic", "steady", "listener"]:
 			if not extensions.has(key):
 				continue
 			var skills := _a(c, extensions[key], 0, 8)
@@ -1174,7 +1183,7 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 				var pid := _s(c, row[0])
 				if pid.is_empty() or rows.has(pid):
 					c.bad = true
-				var max_status := 4 if key in ["porter", "medic", "steady"] else (3 if key == "wind" else 2)
+				var max_status := 4 if key in ["porter", "medic", "steady", "listener"] else (3 if key == "wind" else 2)
 				rows[pid] = _i(c, row[1], 0, max_status)
 			out[key] = rows
 	return out
@@ -1292,7 +1301,7 @@ static func decode(text: String) -> Variant:
 				elif op == "buy":
 					out["invArg"] = _i(c, a[26], 0, Shop.ITEMS.size() - 1)
 				elif op == "skill":
-					out["invArg"] = _i(c, a[26], 0, 8)
+					out["invArg"] = _i(c, a[26], 0, 9)
 				elif op == "lamp":
 					out["invArg"] = _i(c, a[26], 0, 1)
 				else:

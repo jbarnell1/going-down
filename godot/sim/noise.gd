@@ -158,6 +158,7 @@ class Act extends RefCounted:
 	var emote: bool = false
 	var gasp_radius := 0.0
 	var soft_shoes := false
+	var footstep_scale := 1.0
 	## Got into or out of a hide this tick: its id, else -1.
 	var hide: int = -1
 	## Healed back onto their feet this tick.
@@ -204,7 +205,7 @@ static func of(ground: Ground, a: Act, dt: float, cracked: Dictionary, tuning: S
 			r = Settings.f(tuning, &"noise.crawl", CRAWL)
 			kind = &"crawl"
 	elif moving:
-		r = gait_radius(a.gait, s, tuning)
+		r = gait_radius(a.gait, s, tuning) * a.footstep_scale
 		if a.soft_shoes and a.gait != &"sprint":
 			r *= 0.75
 		kind = a.gait

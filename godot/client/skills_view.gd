@@ -12,14 +12,14 @@ var selected := 0
 var ownership: int:
 	get:
 		return _states[selected]
-var _states: Array[int] = [0, 0, 0, 0, 0, 0, 0]
+var _states: Array[int] = [0, 0, 0, 0, 0, 0, 0, 0]
 var _cards: Array[int] = [0]
 var notice := ""
 var notice_until := 0
 var _action := Rect2()
 var _tabs: Array[Rect2] = []
-const NODES := ["deep_pockets", "second_wind", "soft_shoes", "quick_fingers", "long_burn", "field_dressing", "steady_gaze"]
-const BUY_ARGS := [0, 2, 4, 5, 6, 7, 8]
+const NODES := ["deep_pockets", "second_wind", "soft_shoes", "quick_fingers", "long_burn", "field_dressing", "steady_gaze", "throwing_arm"]
+const BUY_ARGS := [0, 2, 4, 5, 6, 7, 8, 9]
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -36,7 +36,7 @@ func show_card() -> void:
 func close() -> void:
 	open = false
 
-func update(skills: Variant, wind: Variant, shoes: Variant, id: String, balance: int, events: Array, now: int, porter: Variant = null, slots: Array = [], long_burn: Variant = null, medic: Variant = null, steady: Variant = null) -> void:
+func update(skills: Variant, wind: Variant, shoes: Variant, id: String, balance: int, events: Array, now: int, porter: Variant = null, slots: Array = [], long_burn: Variant = null, medic: Variant = null, steady: Variant = null, listener: Variant = null) -> void:
 	credits = balance
 	badges = 0
 	for slot: Array in slots:
@@ -49,6 +49,7 @@ func update(skills: Variant, wind: Variant, shoes: Variant, id: String, balance:
 	_states[4] = int(long_burn.get(id, 0)) if long_burn is Dictionary else 0
 	_states[5] = int(medic.get(id, 0)) if medic is Dictionary else 0
 	_states[6] = int(steady.get(id, 0)) if steady is Dictionary else 0
+	_states[7] = int(listener.get(id, 0)) if listener is Dictionary else 0
 	_cards.assign([0])
 	if wind is Dictionary:
 		_cards.append(1)
@@ -62,6 +63,8 @@ func update(skills: Variant, wind: Variant, shoes: Variant, id: String, balance:
 		_cards.append(5)
 	if steady is Dictionary:
 		_cards.append(6)
+	if listener is Dictionary:
+		_cards.append(7)
 	if not _cards.has(selected):
 		selected = 0
 	for e: Dictionary in events:
@@ -104,7 +107,7 @@ func key(event: InputEventKey) -> Array:
 			return _buy_request()
 		KEY_U:
 			return ["skill", 1] if ownership == 2 else []
-		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7:
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8:
 			var card := event.physical_keycode - KEY_1
 			if card < _cards.size():
 				selected = _cards[card]

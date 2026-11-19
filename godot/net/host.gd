@@ -1397,6 +1397,14 @@ func world(full: bool = false) -> Dictionary:
 				wallet = Upgrades.UpgradeState.make()
 			steady[p.id] = Upgrades.trade_offer(wallet, "steady_gaze")
 		out["steady"] = steady
+	if s.throwing_arm:
+		var listener := {}
+		for p: Run.RunPlayer in s.players:
+			var wallet: Upgrades.UpgradeState = s.wallets.get(p.id)
+			if wallet == null:
+				wallet = Upgrades.UpgradeState.make()
+			listener[p.id] = Upgrades.trade_offer(wallet, "throwing_arm")
+		out["listener"] = listener
 	if s.orientation and maxf(s.orientation_standees.x, s.orientation_standees.y) >= 0.0:
 		out["orientationStandees"] = [s.orientation_standees.x, s.orientation_standees.y]
 	if s.flare:
@@ -1436,7 +1444,12 @@ static func shop_block(s: Run.RunState) -> Dictionary:
 		glows.append({"id": g["id"], "at": g["at"], "until": g["until"]})
 	var toys: Array = []
 	for g: Dictionary in sh.toys:
-		toys.append({"id": g["id"], "at": g["at"], "start": g["start"], "end": g["end"]})
+		var toy := {"id": g["id"], "at": g["at"], "start": g["start"], "end": g["end"]}
+		if g.has("from"):
+			toy["from"] = g["from"]
+			toy["launch"] = g["launch"]
+			toy["land"] = g["land"]
+		toys.append(toy)
 	return {"credits": credits, "cabinets": cabs, "glows": glows, "toys": toys, "timers": timers, "wake": sh.wake_until}
 
 ## The inventory (S1; Protocol.enc_inv): {bags: [{playerId, sel, slots}], pickups: [{id, item, count, at}]}, every

@@ -142,8 +142,13 @@ func show_world(root: Node3D, cam: Camera3D, shop: Variant, host_now: float, now
 			if not (_toys.has(id) and is_instance_valid(_toys[id])):
 				_toys[id] = _toy_node(_pos(g["at"]), id)
 				root.add_child(_toys[id])
+			var toy: Node3D = _toys[id]
+			if g.has("from"):
+				var progress := clampf(inverse_lerp(float(g["launch"]), float(g["land"]), host_now), 0.0, 1.0)
+				toy.position = _pos(g["from"]).lerp(_pos(g["at"]), progress)
+				toy.position.y += sin(PI * progress) * 0.8
 			var rattling := host_now >= float(g["start"]) and host_now < float(g["end"])
-			(_toys[id] as Node3D).rotation.y = float(id) * 1.1 + (sin(now * 0.06) * 0.25 if rattling else 0.0)
+			toy.rotation.y = float(id) * 1.1 + (sin(now * 0.06) * 0.25 if rattling else 0.0)
 			if audio != null:
 				audio.call("shop_toy_audio", _toys[id], rattling)
 	for id: int in _glows.keys():

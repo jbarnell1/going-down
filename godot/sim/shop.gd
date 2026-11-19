@@ -49,6 +49,7 @@ const FLASH_SECONDS := 1.0
 const FLASH_WHITE_SECONDS := 2.0
 const TOY_WAIT := 3.0
 const TOY_RATTLE := 6.0
+const TOY_THROW_RANGE := 15.0
 ## How far the toy's rattle carries (the host event `noise`; as a mark's slap, Marks.NOISE_RADIUS).
 const TOY_RADIUS := 8.0
 ## Smelling salts: facing the downed crewmate within this many degrees of where you look (as a hand-over).

@@ -47,10 +47,10 @@ static func placements(plan: Floor.FloorPlan) -> Array[Move.Body]:
 	return chosen
 
 ## Stop at the first collision along the aim ray. Each open landing is on the same floor as the thrower.
-static func landing(plan: Floor.FloorPlan, solids: Move.Solids, start: Move.Body, yaw: float, pitch: float) -> Move.Body:
+static func landing(plan: Floor.FloorPlan, solids: Move.Solids, start: Move.Body, yaw: float, pitch: float, max_range := RANGE) -> Move.Body:
 	var dx := -sin(yaw)
 	var dz := -cos(yaw)
-	var reach := RANGE * cos(pitch)
+	var reach := max_range * cos(pitch)
 	var at := start
 	var steps := maxi(1, ceili(reach / TRACE_STEP))
 	for step in range(1, steps + 1):

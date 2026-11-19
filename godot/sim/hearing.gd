@@ -111,6 +111,7 @@ class Person extends RefCounted:
 	var emote: bool = false
 	var gasp_radius := 0.0
 	var soft_shoes := false
+	var footstep_scale := 1.0
 	var hide_noise: int = -1
 	var search_radius := 0.0
 	var healed: bool = false
@@ -273,6 +274,7 @@ static func step(plan: Floor.FloorPlan, ground: Noises.Ground, prev: Keeper, peo
 		a.emote = p.emote
 		a.gasp_radius = p.gasp_radius
 		a.soft_shoes = p.soft_shoes
+		a.footstep_scale = p.footstep_scale
 		a.hide = p.hide_noise
 		a.healed = p.healed
 		a.search_radius = p.search_radius
