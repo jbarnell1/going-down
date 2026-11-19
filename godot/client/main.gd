@@ -96,6 +96,7 @@ const InventoryViewScript = preload("res://client/inventory_view.gd")
 const CabinetViewScript = preload("res://client/cabinet_view.gd")
 const ShopViewScript = preload("res://client/shop_view.gd")
 const SkillsViewScript = preload("res://client/skills_view.gd")
+const Upgrades = preload("res://sim/upgrades.gd")
 const FlareViewScript = preload("res://client/flare_view.gd")
 const LampViewScript = preload("res://client/lamp_view.gd")
 const Shop = preload("res://sim/shop.gd")
@@ -171,6 +172,7 @@ var _badge_search := true
 var _quick_fingers := true
 var _long_burn := true
 var _field_dressing := true
+var _steady_gaze := true
 var _playtest_face := ""
 var _playtest_hints: Dictionary = {}
 var _playtest_hint_persist := true
@@ -232,6 +234,7 @@ var brightness := Brightness.new()
 var bright_card: BrightnessCard
 
 var seed := "alpha"
+var _solo_bots := 0
 var quality := "light"
 var props_on := true
 var entity_on := true
@@ -588,6 +591,7 @@ func _read_options() -> void:
 		var val := a.substr(key.length() + 1) if a.contains("=") else "1"
 		match key:
 			"seed": seed = val
+			"bots": _solo_bots = clampi(int(val), 0, LocalRoom.BOT_NAMES.size())
 			"quality": quality = val
 			"auto": automated = val != "0"
 			"props": props_on = val != "0"
@@ -606,8 +610,10 @@ func _read_options() -> void:
 			"quick_fingers": _quick_fingers = val == "1"
 			"long_burn": _long_burn = val == "1"
 			"field_dressing": _field_dressing = val == "1"
+			"steady_gaze": _steady_gaze = val == "1"
 	if OS.has_feature("web"):
 		seed = _url("seed", seed)
+		_solo_bots = clampi(int(_url("bots", "0")), 0, LocalRoom.BOT_NAMES.size())
 		quality = _url("quality", quality)
 		props_on = _url("props", "1") != "0"
 		entity_on = _url("entity", "1") != "0"
@@ -888,12 +894,13 @@ func _configure_campaign_trades(lr: LocalRoom) -> void:
 	lr.quick_fingers = full_deck and _quick_fingers
 	lr.long_burn = full_deck and _long_burn
 	lr.field_dressing = full_deck and _field_dressing
+	lr.steady_gaze = full_deck and _steady_gaze
 
 ## "Play alone": a room on this machine, a run at once.
 func _play_alone() -> void:
 	var lr := LocalRoom.new()
 	var nm := start.player_name if not start.player_name.is_empty() else "YOU"
-	lr.open_local(seed, nm, entity_on, start.face_code)
+	lr.open_local(seed, nm, entity_on, start.face_code, _solo_bots)
 	# The game's run is a run of days: BANK rides up to the prison, bed starts the next day.
 	lr.days = true
 	lr.orientation_campaign = not automated if _orientation_campaign == null else bool(_orientation_campaign)
@@ -1889,6 +1896,9 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	var near := clampf(maxf(1.0 - light, float(level.get_meta(&"near_light", 0.0))), 0.0, 1.0)
 	near_light.light_energy = NEAR_LIGHT_ENERGY * near * float(level.get_meta(&"near_light_gain", 1.0))
 	near_light.visible = near > 0.02
+	var steady: Dictionary = s.get("steady", {})
+	var light_trade := int(steady.get(link.my_id(), Upgrades.TradeOffer.AVAILABLE))
+	near_light.omni_range = NEAR_LIGHT_REACH + (0.5 if light_trade in [Upgrades.TradeOffer.LEARNED, Upgrades.TradeOffer.UNDO] else 0.0)
 	env.background_color = Color(0.02, 0.025, 0.025) * light
 
 	# The lift: doors, indicator, votes, buttons.
@@ -2016,7 +2026,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	if cab_view.is_open() and (not at_cab or me_down or ended or _lights_out):
 		cab_view.close()
 	shop_view.update(s.get("shop"), link.my_id(), lc0.tuning if lc0 != null else null, float(s.get("hostNow", 0.0)))
-	skills_view.update(s.get("skills"), s.get("wind"), s.get("shoes"), link.my_id(), shop_view.credits, s.get("events", []), now, s.get("porter"), inv_view.slots, s.get("longBurn"), s.get("medic"))
+	skills_view.update(s.get("skills"), s.get("wind"), s.get("shoes"), link.my_id(), shop_view.credits, s.get("events", []), now, s.get("porter"), inv_view.slots, s.get("longBurn"), s.get("medic"), s.get("steady"))
 	shop_view.on_events(s.get("events", []), link.my_id(), now, sfx)
 	shop_view.show_world(spots_root, cam, s.get("shop"), float(s.get("hostNow", 0.0)), now, sfx)
 	flare_view.update(level, s.get("flares"), link.my_id(), float(s.get("hostNow", 0.0)))
@@ -2152,7 +2162,19 @@ func _show_day_lock(s: Dictionary) -> void:
 	_day_view_tick = int((dc.latest as Dictionary)["tick"]) if dc != null and dc.latest is Dictionary else -1
 	hud.day_line = day_view.hud_line
 	hud.day_met = day_view.met
+	var loss_rows := PackedStringArray()
+	hud.loss_rows = loss_rows
+	if int(s.get("depth", 0)) > 0 and str(s.get("phase", "")) in ["unloading", "away", "coming", "boarding"]:
+		var day: Variant = s.get("day")
+		if day is Dictionary and day.has("lossOdds"):
+			loss_rows = DayView.loss_rows(day, link.names())
+		var me: Dictionary = s.get("me", {})
+		if link.car != null and not me.is_empty() and bool(s.get("playing", false)) and str(me["status"]) == "ok":
+			var near := int(me["level"]) == link.car.level and Vector2(float(me["x"]), float(me["z"])).distance_to(Vector2(link.car.door_x, link.car.door_z)) <= Run.CALL_REACH
+			if bool(me["aboard"]) or near:
+				hud.loss_rows = loss_rows
 	if lift != null:
+		lift.show_loss_odds(loss_rows)
 		# Findables (FD10): riding down, the next floor's sheet is the day view's third row too.
 		day_view.rows = _ride_rows(s, day_view.rows)
 		lift.show_day(day_view.rows)
@@ -2986,10 +3008,10 @@ func _command(c: String) -> String:
 				pending_inv_arg = shop_view.sel
 			return JSON.stringify(shop_view.describe())
 		"skill":
-			if p.size() >= 2 and p[1] in ["f", "enter", "undo", "1", "2", "3", "4", "5", "6"]:
+			if p.size() >= 2 and p[1] in ["f", "enter", "undo", "1", "2", "3", "4", "5", "6", "7"]:
 				var key := InputEventKey.new()
 				key.pressed = true
-				key.physical_keycode = {"f": KEY_F, "enter": KEY_ENTER, "undo": KEY_U, "1": KEY_1, "2": KEY_2, "3": KEY_3, "4": KEY_4, "5": KEY_5, "6": KEY_6}[p[1]]
+				key.physical_keycode = {"f": KEY_F, "enter": KEY_ENTER, "undo": KEY_U, "1": KEY_1, "2": KEY_2, "3": KEY_3, "4": KEY_4, "5": KEY_5, "6": KEY_6, "7": KEY_7}[p[1]]
 				_input(key)
 			return JSON.stringify({"open": skills_view.is_open(), "credits": skills_view.credits, "ownership": skills_view.ownership, "notice": skills_view.notice,
 				"badges": skills_view.badges, "action": skills_view.action_label(), "selected": skills_view.selected})

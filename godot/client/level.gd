@@ -91,7 +91,7 @@ var hides: Array[PlayroomLib.Hide] = []
 var mat_hide: ShaderMaterial
 ## The floor's furniture (sim/furniture.gd, FD7) on the Clinic and the Annex, and what was drawn for each piece
 ## (tests: {piece, kind, rect}: the mesh's floor footprint, world x, z, measured from what was drawn).
-var pieces: Array = []
+var pieces: Array[Furniture.Piece] = []
 var furniture_drawn: Array[Dictionary] = []
 
 static var _shared := {}

@@ -53,6 +53,8 @@ const DAY_PX := Vector2i(DAY_COLS * 6 + 4, 44)
 const DAY_SIZE := Vector2(2.8, 2.8 * 44.0 / (DAY_COLS * 6 + 4))
 const DAY_Y := 1.36
 const DAY_SCROLL := 3.0
+const LOSS_PX := Vector2i(286, 94)
+const LOSS_SIZE := Vector2(2.8, 2.8 * LOSS_PX.y / LOSS_PX.x)
 
 ## The car as the rules give it (plan.car): half its width, its depth, half its door.
 var half := 2.0
@@ -106,6 +108,10 @@ var _day_img: Image
 var _day_tex: ImageTexture
 var _day_key := "-"
 var _day_scroll := 0.0
+var loss_rows := PackedStringArray()
+var _loss_monitor: MeshInstance3D
+var _loss_image: Image
+var _loss_texture: ImageTexture
 var _bank_floor: MeshInstance3D
 var _bank_open_mat: ShaderMaterial
 var _bank_locked_mat: ShaderMaterial
@@ -217,6 +223,18 @@ func build(car: Dictionary, left_wall := false) -> void:
 	dm.position = Vector3(0, DAY_Y, -depth + 0.032)
 	add_child(dm)
 	show_day(PackedStringArray())
+	# Fixed rows below the day monitor keep the odds available without waiting for the ticker.
+	_loss_image = Image.create(LOSS_PX.x, LOSS_PX.y, false, Image.FORMAT_RGB8)
+	_loss_texture = ImageTexture.create_from_image(_loss_image)
+	var odds_quad := QuadMesh.new()
+	odds_quad.size = LOSS_SIZE
+	_loss_monitor = MeshInstance3D.new()
+	_loss_monitor.name = "LossOddsMonitor"
+	_loss_monitor.mesh = odds_quad
+	_loss_monitor.material_override = Level.glow_material(Color.WHITE, 0.95, _loss_texture)
+	_loss_monitor.position = Vector3(0, DAY_Y - (DAY_SIZE.y + LOSS_SIZE.y) * 0.5 - 0.04, -depth + 0.032)
+	_loss_monitor.hide()
+	add_child(_loss_monitor)
 	# The call button, left of the doors: on the landing wall beyond the landing cell when the lobby is
 	# wider than it, else on the landing cell's own left wall, near the doors. Hold button inside.
 	_call_mat = Level.glow_material(Color(1.0, 0.55, 0.15), 0.25)
@@ -433,6 +451,18 @@ func show_day(rows: PackedStringArray) -> void:
 	day_rows.assign(Array(rows))
 	_day_scroll = 0.0
 	_draw_day()
+
+func show_loss_odds(rows: PackedStringArray) -> void:
+	if _loss_monitor == null or rows == loss_rows:
+		return
+	loss_rows = rows.duplicate()
+	_loss_monitor.visible = not rows.is_empty()
+	if rows.is_empty():
+		return
+	_loss_image.fill(MON_BG)
+	for i in rows.size():
+		PixelFont.blit(_loss_image, rows[i], Vector2i(4, 4 + 10 * i), Color("#ffd27a") if i == 0 else Color("#d8ddd9"))
+	_loss_texture.update(_loss_image)
 
 ## The lines the day monitor draws now: rows 1 and 2 wrapped, then row 3's window of DAY_COLS characters.
 func day_lines() -> PackedStringArray:

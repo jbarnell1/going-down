@@ -12,14 +12,14 @@ var selected := 0
 var ownership: int:
 	get:
 		return _states[selected]
-var _states: Array[int] = [0, 0, 0, 0, 0, 0]
+var _states: Array[int] = [0, 0, 0, 0, 0, 0, 0]
 var _cards: Array[int] = [0]
 var notice := ""
 var notice_until := 0
 var _action := Rect2()
 var _tabs: Array[Rect2] = []
-const NODES := ["deep_pockets", "second_wind", "soft_shoes", "quick_fingers", "long_burn", "field_dressing"]
-const BUY_ARGS := [0, 2, 4, 5, 6, 7]
+const NODES := ["deep_pockets", "second_wind", "soft_shoes", "quick_fingers", "long_burn", "field_dressing", "steady_gaze"]
+const BUY_ARGS := [0, 2, 4, 5, 6, 7, 8]
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -36,7 +36,7 @@ func show_card() -> void:
 func close() -> void:
 	open = false
 
-func update(skills: Variant, wind: Variant, shoes: Variant, id: String, balance: int, events: Array, now: int, porter: Variant = null, slots: Array = [], long_burn: Variant = null, medic: Variant = null) -> void:
+func update(skills: Variant, wind: Variant, shoes: Variant, id: String, balance: int, events: Array, now: int, porter: Variant = null, slots: Array = [], long_burn: Variant = null, medic: Variant = null, steady: Variant = null) -> void:
 	credits = balance
 	badges = 0
 	for slot: Array in slots:
@@ -48,6 +48,7 @@ func update(skills: Variant, wind: Variant, shoes: Variant, id: String, balance:
 	_states[3] = int(porter.get(id, 0)) if porter is Dictionary else 0
 	_states[4] = int(long_burn.get(id, 0)) if long_burn is Dictionary else 0
 	_states[5] = int(medic.get(id, 0)) if medic is Dictionary else 0
+	_states[6] = int(steady.get(id, 0)) if steady is Dictionary else 0
 	_cards.assign([0])
 	if wind is Dictionary:
 		_cards.append(1)
@@ -59,6 +60,8 @@ func update(skills: Variant, wind: Variant, shoes: Variant, id: String, balance:
 		_cards.append(4)
 	if medic is Dictionary:
 		_cards.append(5)
+	if steady is Dictionary:
+		_cards.append(6)
 	if not _cards.has(selected):
 		selected = 0
 	for e: Dictionary in events:
@@ -77,11 +80,12 @@ func update(skills: Variant, wind: Variant, shoes: Variant, id: String, balance:
 				if e.get("op") != "skill":
 					continue
 				var why := str(e.get("why", ""))
+				var prereq := Upgrades.induction_node(str(Upgrades.trade_node(NODES[selected]).get("requires", "deep_pockets")))
 				notice = {
 					"poor": "NOT ENOUGH CREDITS.",
 					"badges": "BRING TWO OLD CREW BADGES.",
 					"badge_room": "MAKE ROOM FOR BOTH BADGES, THEN UNDO.",
-					"needs": "LEARN SECOND WIND FIRST." if selected == 5 else "LEARN DEEP POCKETS FIRST.",
+					"needs": "LEARN %s FIRST." % str(prereq["name"]).to_upper(),
 					"trade": "NOT YOUR TRADE.",
 					"owned": "YOU ALREADY KNOW THIS SKILL.",
 					"unstack": "DROP OR STORE EXTRA ITEMS, THEN UNDO.",
@@ -100,7 +104,7 @@ func key(event: InputEventKey) -> Array:
 			return _buy_request()
 		KEY_U:
 			return ["skill", 1] if ownership == 2 else []
-		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6:
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7:
 			var card := event.physical_keycode - KEY_1
 			if card < _cards.size():
 				selected = _cards[card]
@@ -145,7 +149,7 @@ func _draw() -> void:
 	var has_tabs := _cards.size() > 1
 	var grid := _cards.size() > 3
 	var extra := 12 * ((_cards.size() - 1) / 2) if grid else 0
-	var description_extra := 10 if selected == 5 else 0
+	var description_extra := 10 if Upgrades.training_node(NODES[selected]).has("seniority") else 0
 	var px := minf(2.0, minf(size.x / 286.0, size.y / ((127.0 if has_tabs else 102.0) + extra + description_extra)))
 	var panel := Vector2(274, (115 if has_tabs else 90) + extra + description_extra) * px
 	var origin := ((size - panel) * 0.5).floor()

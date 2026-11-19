@@ -109,6 +109,7 @@ var floor_quota_line := ""
 var mark_line := ""
 var floor_quota_met := false
 var day_line := ""
+var loss_rows := PackedStringArray()
 var day_met := false
 
 func _ready() -> void:
@@ -242,6 +243,11 @@ func _draw_quota_corner(px: float, margin: Vector2) -> void:
 	if day_line != "":
 		var x := size.x - margin.x - PixelFont.width(day_line) * px
 		PixelFont.draw_shadowed(self, day_line, Vector2(x, y), px, Color("#ffd27a") if day_met else Color("#f4f4ec"))
+		y += 10.0 * px
+	for i in loss_rows.size():
+		var x := size.x - margin.x - PixelFont.width(loss_rows[i]) * px
+		PixelFont.draw_shadowed(self, loss_rows[i], Vector2(x, y), px, Color("#ffd27a") if i == 0 else Color("#f4f4ec"))
+		y += 10.0 * px
 
 ## The call panel's words under the prompt: amber while counting, green once met, red (blinking) when a
 ## press was refused.

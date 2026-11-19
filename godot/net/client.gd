@@ -824,6 +824,7 @@ func frame(now: float, local: LocalFrame) -> Frame:
 	var latched_now := _update_latch(show, rt)
 	var taken := _latch != null
 	var blind: bool = dk[0] or taken or local.flare_blind
+	var blind_to_resident := blind
 
 	# The Orderly.
 	_eyes_frame = [false, 1, 0, ""]
@@ -837,6 +838,10 @@ func frame(now: float, local: LocalFrame) -> Frame:
 		var alpha: float = show[2]
 		var a_depth: int = a["depth"]
 		var eyes := _eyes()
+		# Use the two snapshots being drawn. A confirmed beam can light the figure during a blackout.
+		var steady := _own_steady(a) and _own_steady(b)
+		if steady and not taken and not local.flare_blind:
+			blind_to_resident = false
 		var enough: bool = eyes[0] <= 1 or eyes[1].size() >= eyes[0] - 1
 		# Pinned: until the snapshots drawn show the host has handled our last report, they are the
 		# timeline it is about to abandon (it puts the Orderly back where we froze it), so keep that.
@@ -858,14 +863,14 @@ func frame(now: float, local: LocalFrame) -> Frame:
 			# Bent over a downed player: its bend is the one movement it makes while watched (sim/entity.gd,
 			# "except while it has someone"), so it is drawn as the snapshots say, seen or not. It stands
 			# where it caught them; a held pose somewhere else keeps the usual rule below.
-			seeing_now = _sees(plan, cam, cand, open, blind)
+			seeing_now = _sees(plan, cam, cand, open, blind_to_resident)
 			_frozen = false
 			if _drawn == null or not Pose.same_pose(_drawn, cand):
 				_drawn = cand
-		elif _frozen and same and enough and _sees(plan, cam, _drawn, open, blind):
+		elif _frozen and same and enough and _sees(plan, cam, _drawn, open, blind_to_resident):
 			# Seen: held exactly where it is, whatever the snapshots say.
 			seeing_now = true
-		elif _frozen and same and enough and _sees(plan, cam, cand, open, blind):
+		elif _frozen and same and enough and _sees(plan, cam, cand, open, blind_to_resident):
 			# The held pose has left the view but the snapshots' pose is in it: keep holding until
 			# neither is, so the jump between them never happens on screen.
 			pass
@@ -877,12 +882,12 @@ func frame(now: float, local: LocalFrame) -> Frame:
 				stats.max_release_jump = maxf(stats.max_release_jump, jump)
 				if jump > 0.25:
 					stats.big_releases += 1
-			if _sees(plan, cam, cand, open, blind) and enough:
+			if _sees(plan, cam, cand, open, blind_to_resident) and enough:
 				_frozen = true
 				seeing_now = true
 				if not pinned:
 					report = _make_report(a, b, alpha, cand)
-			elif _sees(plan, cam, cand, open, blind):
+			elif _sees(plan, cam, cand, open, blind_to_resident):
 				# One mark of two: it walks on (at this player, perhaps), and this player is one watcher.
 				_frozen = false
 				seeing_now = true
@@ -895,7 +900,7 @@ func frame(now: float, local: LocalFrame) -> Frame:
 		# A watched bend can stay pinned after the victim is up.
 		catch_active = orderly != null and orderly["anim"] == "bend" and not pinned and not _frozen and _bending(a, b)
 		if _still(plan.place, a, b):
-			_set_eyes(eyes, seeing_now, not pinned and not _bending(a, b))
+			_set_eyes(eyes, seeing_now, not pinned and not _bending(a, b), steady)
 	else:
 		_drawn = null
 		_frozen = false
@@ -945,15 +950,15 @@ func frame(now: float, local: LocalFrame) -> Frame:
 	f.orderly = shown
 	f.catch_active = shown != null and catch_active
 	# Dark: drawn only with draw_in_dark (never while taken: `shown` is null then), and never seen.
-	f.visible = shown != null and (not blind or (draw_in_dark and not taken))
+	f.visible = shown != null and (not blind_to_resident or (draw_in_dark and not taken))
 	f.held = _frozen
 	f.seeing = seeing_now
 	f.taken = taken
-	f.eyes_on = bool(_eyes_frame[0]) and not blind
+	f.eyes_on = bool(_eyes_frame[0]) and not blind_to_resident
 	f.eyes_need = int(_eyes_frame[1])
 	f.eyes_lit = int(_eyes_frame[2]) if f.eyes_on else 0
 	f.eyes_all = f.eyes_on and f.eyes_lit >= f.eyes_need
-	f.watched_by = str(_eyes_frame[3]) if not blind else ""
+	f.watched_by = str(_eyes_frame[3]) if not blind_to_resident else ""
 	f.depth = int(show[0]["depth"]) if not show.is_empty() else local_depth
 	f.players = players
 	f.render_time = rt
@@ -972,12 +977,18 @@ func _eyes() -> Array:
 			others.append(str(w))
 	return [int(wb["need"]), others, wb["watchers"]]
 
+func _own_steady(snapshot: Dictionary) -> bool:
+	var watch: Variant = snapshot.get("watch")
+	return watch is Dictionary and watch["watchers"].count(str(id)) > 1
+
 ## This frame's eye marks ([shown, need, lit, watched by]) from the count (`eyes`, _eyes()) and the local look.
 ## `free`: the figure may be walking (not pinned to a report, not bent over someone), for the watched walk.
-func _set_eyes(eyes: Array, seeing_now: bool, free: bool) -> void:
+func _set_eyes(eyes: Array, seeing_now: bool, free: bool, steady := false) -> void:
 	var need: int = eyes[0]
 	var others: Array = eyes[1]
-	var lit := mini(need, others.size() + (1 if seeing_now else 0))
+	# Only the host can confirm a qualified second watch. The local sight still controls both pips.
+	var mine := (2 if steady else 1) if seeing_now else 0
+	var lit := mini(need, others.size() + mine)
 	var by := ""
 	if need >= 2 and free and lit < need:
 		var all: Array = eyes[2]

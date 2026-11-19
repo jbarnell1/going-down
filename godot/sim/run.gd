@@ -1104,6 +1104,7 @@ class RunState:
 	var soft_shoes: bool = false
 	var long_burn: bool = false
 	var field_dressing := false
+	var steady_gaze := false
 	var flare := false
 	var flare_plan: Floor.FloorPlan = null
 	var flare_issued := {}
@@ -1157,6 +1158,7 @@ class RunState:
 		s.soft_shoes = soft_shoes
 		s.long_burn = long_burn
 		s.field_dressing = field_dressing
+		s.steady_gaze = steady_gaze
 		s.flare = flare
 		s.flare_plan = flare_plan
 		s.flare_issued = flare_issued
@@ -1516,7 +1518,7 @@ static func day_preview(s: RunState) -> Variant:
 		return null
 	var aboard := day_aboard(s)
 	var earned := floori(s.day_earned) if s.day_lock else aboard
-	return Day.bank_preview(s.day_state, aboard, earned, day_crew(s), s.wallets, DAY_FLOOR_QUOTA, s.quick_fingers or s.field_dressing)
+	return Day.bank_preview(s.day_state, aboard, earned, day_crew(s), s.wallets, DAY_FLOOR_QUOTA, s.quick_fingers or s.field_dressing or s.steady_gaze)
 ## Turns the tuned Playroom on (T15m, see the header): every Playroom from now on (and one already reached)
 ## has the long hiding time, the anger bar, the grab at 1 m and the hint events (sim/seek.gd "T15m").
 static func with_playroom_tuned(s0: RunState) -> RunState:
@@ -1636,6 +1638,31 @@ static func has_field_dressing(s: RunState, id: String) -> bool:
 	var wallet: Upgrades.UpgradeState = s.wallets.get(id)
 	return wallet != null and wallet.owned.has("field_dressing")
 
+static func with_steady_gaze(s0: RunState) -> RunState:
+	if not (s0.long_burn and s0.shop and s0.inventory):
+		return s0
+	var s := s0.copy()
+	s.steady_gaze = true
+	return s
+
+## Stand still in an ordinary, unobstructed watching position. A flash counts through its existing
+## sight rule. A held lamp must actually reach the real body through its narrower directed beam.
+static func _steady_light(s: RunState, p: RunPlayer, before: Move.Body, i: PlayerInput, flash: bool) -> bool:
+	if not s.steady_gaze or not s.two_watchers or i.blind or searching(s, p.id):
+		return false
+	var wallet: Upgrades.UpgradeState = s.wallets.get(p.id)
+	if wallet == null or not wallet.owned.has("steady_gaze"):
+		return false
+	if before.level != p.body.level or M.hypot3(p.body.x - before.x, p.body.y - before.y, p.body.z - before.z) > EPS:
+		return false
+	if flash:
+		return true
+	if not bool(lamp_of(s, p.id).get("on", false)):
+		return false
+	var beam := Lamp.beam(s.tuning, p.body, i.eye, i.yaw, i.pitch)
+	var body := Entity.kind_of(s.orderly)
+	return Seek.lights(s.plan, beam, s.orderly.body, body.height, body.radius)
+
 static func training_enabled(s: RunState, id: String) -> bool:
 	match id:
 		"deep_pockets":
@@ -1650,6 +1677,8 @@ static func training_enabled(s: RunState, id: String) -> bool:
 			return s.quick_fingers
 		"field_dressing":
 			return s.field_dressing
+		"steady_gaze":
+			return s.steady_gaze
 	return false
 
 static func wind_spent_here(s: RunState, id: String) -> bool:
@@ -3415,7 +3444,8 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		var blind := blinking(s)
 		var open := doors_open(s)
 		var views: Array[Entity.PlayerView] = []
-		for p in players:
+		for player_index in players.size():
+			var p := players[player_index]
 			var i := _inp(p, input_of)
 			var flared := flare_blinded(s, p.id, t)
 			if not _is_active(p, input_of):
@@ -3434,8 +3464,14 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				# The shop's flashbulb (S2): for its second the player looks from where they stand, even in the dark, as one
 				# watcher (the deliberate break counts it twice).
 				var flash := s.shop and Shop.flashing(s.shop_state, p.id, t)
-				views.append(hv if hv != null else _view_of(i, true, (blind and not flash) or i.blind or flared or searching(s, p.id)))
-				if flash and hv == null and Shop.flash_watchers() > 1:
+				if hv != null:
+					views.append(hv)
+					continue
+				var gaze := not flared and _steady_light(s, p, prev.players[player_index].body, i, flash)
+				var view := _view_of(i, true, (blind and not flash and not gaze) or i.blind or flared or searching(s, p.id))
+				view.steady_gaze = gaze
+				views.append(view)
+				if flash and Shop.flash_watchers() > 1:
 					views.append(_view_of(i, true, false))
 		# The call pulls it toward the landing, until it gets there.
 		var s2 := float(s.plan.cell_size)
@@ -3869,7 +3905,7 @@ static func _settle_day(s: RunState, t: float, banked: int, events: Array[Dictio
 	# The car waits: whoever it left out today is paid nothing today (see the header).
 	var crew := day_crew(s)
 	var earned := floori(s.day_earned) if s.day_lock else banked
-	var r := Day.end_day(s.day_state, banked, earned, crew, s.wallets, DAY_FLOOR_QUOTA, s.seed, wiped, s.quick_fingers or s.field_dressing)
+	var r := Day.end_day(s.day_state, banked, earned, crew, s.wallets, DAY_FLOOR_QUOTA, s.seed, wiped, s.quick_fingers or s.field_dressing or s.steady_gaze)
 	s.wallets = r.wallets
 	s.day_next = r.state
 	var result: Dictionary = r.facts.duplicate(true)
@@ -4713,8 +4749,8 @@ static func _skill_transaction(s: RunState, p: RunPlayer, bag: Inventory.Bag, ar
 		if not training_enabled(s, node_id):
 			return "op"
 		result = Upgrades.buy_induction(wallet, node_id, Shop.SHARE)
-	elif arg in [5, 7]:
-		var node_id := "quick_fingers" if arg == 5 else "field_dressing"
+	elif arg in [5, 7, 8]:
+		var node_id := str({5: "quick_fingers", 7: "field_dressing", 8: "steady_gaze"}[int(arg)])
 		if not training_enabled(s, node_id):
 			return "op"
 		var cost := int(Upgrades.trade_node(node_id)["badge_cost"])

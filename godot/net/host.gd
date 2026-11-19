@@ -1389,6 +1389,14 @@ func world(full: bool = false) -> Dictionary:
 				wallet = Upgrades.UpgradeState.make()
 			medic[p.id] = Upgrades.trade_offer(wallet, "field_dressing")
 		out["medic"] = medic
+	if s.steady_gaze:
+		var steady := {}
+		for p: Run.RunPlayer in s.players:
+			var wallet: Upgrades.UpgradeState = s.wallets.get(p.id)
+			if wallet == null:
+				wallet = Upgrades.UpgradeState.make()
+			steady[p.id] = Upgrades.trade_offer(wallet, "steady_gaze")
+		out["steady"] = steady
 	if s.orientation and maxf(s.orientation_standees.x, s.orientation_standees.y) >= 0.0:
 		out["orientationStandees"] = [s.orientation_standees.x, s.orientation_standees.y]
 	if s.flare:
@@ -1464,7 +1472,7 @@ static func find_block(s: Run.RunState) -> Variant:
 	return {"opened": opened, "searching": searching, "items": items, "base": ff.fill.base if ff != null else 0}
 
 ## Two-watcher Stillness (T19a; Protocol.enc_watch): the count as the host has it this tick, {need,
-## watchers (ids, with grace)}. Only in a run with two-watcher Stillness on and Entity.WATCH_CREW or more
+## watchers (ids, with grace; twice for a qualified Steady Gaze)}. Only in a run with two-watcher Stillness on and Entity.WATCH_CREW or more
 ## players (null otherwise): with fewer, one watcher is always enough, and the snapshot is what it always was.
 static func watch_block(s: Run.RunState) -> Variant:
 	if not s.two_watchers or s.players.size() < Entity.WATCH_CREW:
@@ -1575,6 +1583,11 @@ static func day_block(s: Run.RunState) -> Dictionary:
 		out["aboard"] = pv.banked
 		out["each"] = pv.each
 		out["stakes"] = pv.rows[2]
+		if not pv.per_player.is_empty():
+			var loss_odds := {}
+			for owner in pv.per_player:
+				loss_odds[owner["player"]] = owner["owned"]
+			out["lossOdds"] = loss_odds
 	return out
 
 func _send_snapshots(ht: float) -> void:

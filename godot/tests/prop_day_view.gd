@@ -327,3 +327,106 @@ func test_quota_prompt_and_refusal_fit_above_a_long_intercom_caption(t: T) -> vo
 	hud.quota_line = ""
 	t.eq(hud._prompt_y(2.0), 360.0 * 0.62, "unrelated prompts keep the old position")
 	hud.free()
+
+
+func test_every_seat_reads_all_named_loss_odds_before_the_roll(t: T) -> void:
+	const Host = preload("res://net/host.gd")
+	const Protocol = preload("res://net/protocol.gd")
+	const Transport = preload("res://net/transport.gd")
+	const Client = preload("res://net/client.gd")
+	const Upgrades = preload("res://sim/upgrades.gd")
+	const PixelFont = preload("res://client/pixel_font.gd")
+	var st := Run.RunState.new()
+	st.days = true
+	st.day_state = Day.start_night()
+	st.day_lock = true
+	var car := Run.car_geometry(Clinic.generate_clinic("loss-board", 1))
+	var lift := LiftScript.new()
+	lift.build(PlanDump.car_plain(car))
+	for crew_size: int in [1, 3, 4, 8]:
+		st.wallets.clear()
+		var names := {}
+		var roster: Array[String] = []
+		var expected := PackedStringArray(["LOSE ONE ON WIPE: ODDS PER UPGRADE"])
+		for index: int in crew_size:
+			var id := str(index + 1)
+			roster.append(id)
+			var wallet := Upgrades.UpgradeState.make()
+			var count := 1 if index % 2 == 0 else 4
+			wallet.owned.append("deep_pockets")
+			if count == 4:
+				wallet.owned.append_array(["second_wind", "long_burn", "soft_shoes"])
+			st.wallets[id] = wallet
+			var name := "CREW MEMBER %02d" % (index + 1)
+			names[id] = name
+			expected.append("%s  1 IN %d" % [name, count])
+		var local := Host.day_block(st)
+		var with_reel := local.duplicate()
+		with_reel["reel"] = {"day": 1, "started": 1.0, "crew": crew_size, "votes": [], "skipped": false}
+		var validation := Protocol._V.new()
+		var decoded := Protocol.dec_day(validation, Protocol.enc_day(with_reel))
+		t.check(not validation.bad and decoded.has("reel"), "%d owners decode odds with the existing reel suffix" % crew_size)
+		t.eq(DayView.loss_rows(decoded, names), expected, "%d owners see all fractions with the reel active" % crew_size)
+		var network := Transport.MemoryNetwork.new("pre-roll-odds-%d" % crew_size)
+		var host := Host.new(network.connect_peer("host"), "loss-board", roster, 0.0, func(initial: Run.RunState) -> Run.RunState:
+			var campaign := Run.with_day_lock(Run.with_days(initial))
+			campaign.wallets = st.wallets.duplicate()
+			return campaign)
+		var clients: Array[Client] = []
+		for id in roster:
+			clients.append(Client.new(network.connect_peer(id), "host", str(names[id]), 0.0))
+		for tick in range(1, 10):
+			network.now = tick * 0.05
+			host.update(network.now)
+			for joined in clients:
+				joined.receive(network.now)
+		for joined in clients:
+			if t.check(joined.latest is Dictionary, "%d owners seat %s received a real host snapshot" % [crew_size, joined.name]):
+				var rows := DayView.loss_rows(joined.latest.get("day"), names)
+				t.eq(rows, expected, "%d owners seat %s sees every fraction before a miss" % [crew_size, joined.name])
+				print("  odds evidence | %d owners | %s | %s" % [crew_size, joined.name, " / ".join(rows)])
+		lift.show_loss_odds(DayView.loss_rows(local, names))
+		t.eq(lift.loss_rows, expected, "%d owners see the complete named list on the lift monitor" % crew_size)
+		t.check(lift.get_node("LossOddsMonitor").visible, "the fixed monitor displays the odds")
+		for row in lift.loss_rows:
+			t.check(PixelFont.width(row) + 8 <= LiftScript.LOSS_PX.x, "the full name and fraction fit the monitor")
+			t.check(PixelFont.width(row) * 2 + 29 <= 480, "the full line fits the 480-pixel HUD")
+		t.check(4 + 10 * (lift.loss_rows.size() - 1) + 7 <= LiftScript.LOSS_PX.y, "the last owner fits on the monitor")
+	st.quick_fingers = true
+	var trained: Upgrades.UpgradeState = st.wallets["2"]
+	trained.owned.append("quick_fingers")
+	var trade_day := Host.day_block(st)
+	t.eq(int(trade_day.get("lossOdds", {}).get("2", 0)), 2, "trade odds include only the licensed branch and its induction")
+	var protected: Upgrades.UpgradeState = st.wallets["1"]
+	protected.owned.assign(["marker_pad"])
+	t.check(not Host.day_block(st).get("lossOdds", {}).has("1"), "a protected-only wallet has no odds row")
+	st.day_state.misses = Day.MISSES_FOR_GAME_OVER - 1
+	var final := Host.day_block(st)
+	t.check(not final.has("lossOdds"), "the deterministic third miss has no roll")
+	t.check(DayView.loss_rows(final, {}).is_empty(), "the third miss draws no odds")
+	lift.show_loss_odds(DayView.loss_rows(final, {}))
+	t.check(not lift.get_node("LossOddsMonitor").visible, "the fixed odds panel clears")
+	st.day_state = Day.start_night()
+	st.wallets.clear()
+	t.check(DayView.loss_rows(Host.day_block(st), {}).is_empty(), "no owned upgrades means no loss odds")
+	st.wallets["1"] = protected
+	t.check(DayView.loss_rows(Host.day_block(st), {}).is_empty(), "protected-only crew gets no list")
+	lift.free()
+
+
+func test_day_odds_wire_extension_preserves_old_reels_and_rejects_malformed_tails(t: T) -> void:
+	const Protocol = preload("res://net/protocol.gd")
+	var old_day := block(2, 1200, 1200, 1000, 500)
+	old_day["reel"] = {"day": 2, "started": 1.0, "crew": 2, "votes": ["2"], "skipped": false}
+	var wire := Protocol.enc_day(old_day)
+	var validation := Protocol._V.new()
+	var decoded := Protocol.dec_day(validation, wire)
+	t.check(not validation.bad and decoded.has("reel") and not decoded.has("lossOdds"), "old reel packet still decodes without an odds list")
+	t.eq(decoded.get("reel", {}).get("votes"), ["2"], "old reel vote survives")
+	for tail: Variant in [[], {}, {"1": 0}, {"1": "4"}, {"": 4}]:
+		validation = Protocol._V.new()
+		Protocol.dec_day(validation, wire + [tail])
+		t.check(validation.bad, "reject malformed odds tail %s" % [tail])
+	validation = Protocol._V.new()
+	Protocol.dec_day(validation, [])
+	t.check(validation.bad, "reject an empty day array")

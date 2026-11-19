@@ -446,7 +446,7 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < WORLD_SHOP_INDEX:
 			out.append(null)
 		out.append(enc_shop(w["shop"]))
-	if w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null:
+	if w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null:
 		var extensions := {}
 		if w.get("lamps") != null:
 			var lamps := []
@@ -464,7 +464,7 @@ static func enc_world(w: Dictionary) -> Array:
 			extensions["ward"] = WardWire.encode(w["ward"])
 		if w.get("reactor") != null:
 			extensions["reactor"] = ReactorWire.encode(w["reactor"])
-		for key: String in ["skills", "wind", "shoes", "porter", "longBurn", "medic"]:
+		for key: String in ["skills", "wind", "shoes", "porter", "longBurn", "medic", "steady"]:
 			if w.get(key) != null:
 				var rows := []
 				for id: String in w[key]:
@@ -798,7 +798,7 @@ static func dec_seek(c: _V, w: Variant) -> Dictionary:
 	return out
 
 ## The day block (see the header): {index, day, quota, streak, misses, inBed, countFrom, lightsOutAt,
-## result, crew} as an array.
+## result, crew} as an array, with an optional last dictionary of owner IDs and loss denominators.
 static func enc_day(d: Dictionary) -> Array:
 	var in_bed: Array = []
 	for id: Variant in d["inBed"]:
@@ -810,13 +810,17 @@ static func enc_day(d: Dictionary) -> Array:
 	if d.has("reel"):
 		var r: Dictionary = d["reel"]
 		out.append([r["day"], q3(r["started"]), r["crew"], r["votes"], 1 if r["skipped"] else 0])
+	if d.has("lossOdds"):
+		out.append(d["lossOdds"])
 	return out
 
 static func dec_day(c: _V, w: Variant) -> Dictionary:
-	var a := _a(c, w, 10, 16)
+	var a := _a(c, w, 10, 17)
 	if c.bad:
 		return {}
-	if not a.size() in [10, 11, 15, 16]:
+	var has_odds: bool = a[-1] is Dictionary
+	var size := a.size() - (1 if has_odds else 0)
+	if not size in [10, 11, 15, 16] or (has_odds and size < 15):
 		c.bad = true
 		return {}
 	var in_bed: Array = []
@@ -828,14 +832,14 @@ static func dec_day(c: _V, w: Variant) -> Dictionary:
 	var out := {"index": _i(c, a[0], 1, MAX_COUNT), "day": _i(c, a[1], 1, MAX_COUNT), "quota": _i(c, a[2], 0, MAX_COUNT), "streak": _i(c, a[3], 0, MAX_COUNT),
 		"misses": _i(c, a[4], 0, MAX_COUNT), "inBed": in_bed, "countFrom": _opt_num(c, a[6]), "lightsOutAt": _opt_num(c, a[7]), "result": result,
 		"crew": _i(c, a[9], 0, 64)}
-	if a.size() >= 15:
+	if size >= 15:
 		out["earned"] = _i(c, a[10], 0, MAX_COUNT)
 		out["locked"] = _i(c, a[11], 0, 1) == 1
 		out["aboard"] = _i(c, a[12], 0, MAX_COUNT)
 		out["each"] = _i(c, a[13], 0, MAX_COUNT)
 		out["stakes"] = _s(c, a[14], 400)
-	if a.size() == 11 or a.size() == 16:
-		var r := _a(c, a[-1], 5, 5)
+	if size == 11 or size == 16:
+		var r := _a(c, a[size - 1], 5, 5)
 		if c.bad:
 			return {}
 		var votes: Array[String] = []
@@ -843,6 +847,18 @@ static func dec_day(c: _V, w: Variant) -> Dictionary:
 			votes.append(_s(c, id))
 		out["reel"] = {"day": _i(c, r[0], 1, 3), "started": _f(c, r[1]), "crew": _i(c, r[2], 0, 64),
 			"votes": votes, "skipped": _i(c, r[4], 0, 1) == 1}
+	if has_odds:
+		var wire: Dictionary = a[-1]
+		if wire.is_empty() or wire.size() > 64:
+			c.bad = true
+			return {}
+		var loss_odds := {}
+		for id: Variant in wire:
+			var owner := _s(c, id)
+			if owner.is_empty():
+				c.bad = true
+			loss_odds[owner] = _i(c, wire[id], 1, MAX_COUNT)
+		out["lossOdds"] = loss_odds
 	return out
 
 ## The JSON text of a world snapshot (computed once per tick, shared by every client's snapshot).
@@ -1146,7 +1162,7 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 				c.bad = true
 			else:
 				out["ward"] = ward
-		for key: String in ["skills", "wind", "shoes", "porter", "longBurn", "medic"]:
+		for key: String in ["skills", "wind", "shoes", "porter", "longBurn", "medic", "steady"]:
 			if not extensions.has(key):
 				continue
 			var skills := _a(c, extensions[key], 0, 8)
@@ -1158,7 +1174,7 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 				var pid := _s(c, row[0])
 				if pid.is_empty() or rows.has(pid):
 					c.bad = true
-				var max_status := 4 if key in ["porter", "medic"] else (3 if key == "wind" else 2)
+				var max_status := 4 if key in ["porter", "medic", "steady"] else (3 if key == "wind" else 2)
 				rows[pid] = _i(c, row[1], 0, max_status)
 			out[key] = rows
 	return out
@@ -1276,7 +1292,7 @@ static func decode(text: String) -> Variant:
 				elif op == "buy":
 					out["invArg"] = _i(c, a[26], 0, Shop.ITEMS.size() - 1)
 				elif op == "skill":
-					out["invArg"] = _i(c, a[26], 0, 7)
+					out["invArg"] = _i(c, a[26], 0, 8)
 				elif op == "lamp":
 					out["invArg"] = _i(c, a[26], 0, 1)
 				else:

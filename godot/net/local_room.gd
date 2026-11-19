@@ -53,6 +53,7 @@ const Run = preload("res://sim/run.gd")
 const Move = preload("res://sim/move.gd")
 const Places = preload("res://sim/places.gd")
 const TuningDesk = preload("res://net/tuning_desk.gd")
+const CrewBot = preload("res://net/local_crew_bot.gd")
 
 ## The file playing alone keeps the host's changes in (client/main.gd passes it unless automated).
 const SETTINGS_FILE := "user://settings.json"
@@ -62,6 +63,7 @@ const PROFILE_FILE := "user://saves/solo.gds"
 const ME := "me"
 ## A frame longer than this (seconds of real time) moves the room's clock only this far.
 const MAX_STEP := 0.25
+const BOT_NAMES := ["Ash", "Moss", "Flint"]
 
 var host: Host = null
 var rules: HostRules = null
@@ -74,6 +76,7 @@ var badge_search := false
 var quick_fingers := false
 var long_burn := false
 var field_dressing := false
+var steady_gaze := false
 var runs := 0
 var entity_on := true
 var time_scale := 1.0
@@ -114,16 +117,20 @@ var _vt := 0.0
 var _last_real := -1.0
 var _host_pipe: Transport.Pipe = null
 var _client_pipe: Transport.Pipe = null
+var _bot_count := 0
+var _bot_network: Transport.MemoryNetwork
+var _crew_bots: Array[CrewBot] = []
 
 ## Opens the room (no run yet: start_run() starts one). `face`: the player's drawn face ("" for none).
-func open_local(seed_: String, player_name: String, entity: bool, face: String = "") -> void:
+func open_local(seed_: String, player_name: String, entity: bool, face: String = "", bot_count := 0) -> void:
 	seed = seed_
 	_name = player_name
 	_face = face
 	entity_on = entity
+	_bot_count = clampi(bot_count, 0, BOT_NAMES.size())
 	my_id = ME
 	host_id = ME
-	people = [[ME, player_name, false, false, false, face]]
+	_update_local_people(false, false, false)
 	status = "lobby"
 	_take_tune(desk.message(ME))
 
@@ -140,9 +147,15 @@ func open_settings(file: String) -> void:
 func set_ready(on: bool, tape: bool = false) -> void:
 	my_ready = on
 	my_tape = tape and not on
-	people = [[ME, _name, on, my_tape, run_on, _face]]
+	_update_local_people(run_on, on, my_tape)
 	if on and not run_on:
 		start_run()
+
+func _update_local_people(active: bool, ready: bool, tape: bool) -> void:
+	people = [[ME, _name, ready, tape, active, _face]]
+	if _playtest_depth < 0:
+		for i in _bot_count:
+			people.append(["bot-%d" % (i + 1), BOT_NAMES[i], true, false, active, ""])
 
 ## Whether the next run has the day loop.
 func days_on() -> bool:
@@ -285,17 +298,32 @@ func start_run() -> void:
 	var induction := Session.deck == Places.FULL if deep_pockets == null else bool(deep_pockets)
 	var nerve := Session.deck == Places.FULL if second_wind == null else bool(second_wind)
 	var ear := Session.deck == Places.FULL if soft_shoes == null else bool(soft_shoes)
-	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL, shop_on(), Session.deck == Places.FULL, true, true, induction, nerve, ear, HostRules.flare_on_by_arg(), HostRules.lamp_on_by_arg(), badge_search, quick_fingers, long_burn, field_dressing, HostRules.doorway_shadow_on_by_arg() and Session.deck == Places.FULL and not _orientation_playtest)
+	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL, shop_on(), Session.deck == Places.FULL, true, true, induction, nerve, ear, HostRules.flare_on_by_arg(), HostRules.lamp_on_by_arg(), badge_search, quick_fingers, long_burn, field_dressing, HostRules.doorway_shadow_on_by_arg() and Session.deck == Places.FULL and not _orientation_playtest, steady_gaze)
 	if _orientation_playtest:
 		rules.enable_orientation()
 	elif orientation_campaign and _playtest_depth < 0:
 		rules.enable_orientation_prelude()
 	# Method callables hold no reference to this object, so the pipes do not keep it alive.
-	_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
-	_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))
 	var roster: Array[String] = [ME]
+	var host_link: Transport.Transport
+	var human_link: Transport.Transport
+	if _bot_count > 0 and _playtest_depth < 0:
+		_bot_network = Transport.MemoryNetwork.new(run_seed)
+		_bot_network.now = _vt
+		host_link = _bot_network.connect_peer("host")
+		human_link = _bot_network.connect_peer(ME)
+		for i in _bot_count:
+			var id := "bot-%d" % (i + 1)
+			var peer := Client.new(_bot_network.connect_peer(id), "host", BOT_NAMES[i], _vt)
+			_crew_bots.append(CrewBot.new(id, i, peer))
+			roster.append(id)
+	else:
+		_host_pipe = Transport.Pipe.new("host", Callable(self, "_to_client"), Callable(self, "_to_client_all"))
+		_client_pipe = Transport.Pipe.new(ME, Callable(self, "_from_client"), Callable(self, "_to_host"))
+		host_link = _host_pipe
+		human_link = _client_pipe
 	var prepare := Callable(self, "_prepare_playtest_prison") if _playtest_depth == 0 else Callable(rules, "prepare")
-	host = Host.new(_host_pipe, run_seed, roster, _vt, prepare, Callable(rules, "step"), roster)
+	host = Host.new(host_link, run_seed, roster, _vt, prepare, Callable(rules, "step"), roster)
 	if not solo_profile_path.is_empty():
 		if _solo_profile.is_empty():
 			var read := SaveSlip.read_local(ProfileStore.read(solo_profile_path))
@@ -304,21 +332,26 @@ func start_run() -> void:
 	# A trusted player gets no placement from the host at the start; send the start spot as one, as the
 	# server's room does for its players, so the game takes its body from the same place either way.
 	for p in host.state.players:
-		if p.id == ME:
-			host.place_player(ME, p.body)
-	client = Client.new(_client_pipe, "host", _name, _vt, Session.INTERP_DELAY, Session.INPUT_INTERVAL, _face)
+		if p.id in roster:
+			host.place_player(p.id, p.body)
+	client = Client.new(human_link, "host", _name, _vt, Session.INTERP_DELAY, Session.INPUT_INTERVAL, _face)
 	client.floor_deck = rules.deck
 	client.garden_dense = host.state.garden_search
 	client.orientation_prelude = host.state.orientation_resume != null
 	orientation_paid = 0
 	client.draw_in_dark = o
+	for bot in _crew_bots:
+		bot.peer.floor_deck = client.floor_deck
+		bot.peer.garden_dense = client.garden_dense
+		bot.peer.orientation_prelude = client.orientation_prelude
+		bot.peer.draw_in_dark = o
 	# Live settings: everything asked for is in force from the first tick.
 	desk.run_started()
 	host.on_tick = Callable(self, "_tune_tick")
 	host.set_tuning(desk.in_force(), desk.rev)
 	run_on = true
 	status = "running"
-	people = [[ME, _name, my_ready, false, true, _face]]
+	_update_local_people(true, my_ready, false)
 
 func _to_client(to: String, data: String) -> void:
 	if to == ME and _client_pipe != null:
@@ -339,24 +372,33 @@ func _to_host(data: String) -> void:
 func _close_run() -> void:
 	if client != null and not client.ended:
 		client.leave()
+	for bot in _crew_bots:
+		bot.peer.leave()
 	if host != null:
 		host.update(_vt)
 		host.close()
 	host = null
 	client = null
+	_crew_bots.clear()
+	_bot_network = null
 	run_on = false
 	desk.run_ended()
 
 func poll(now: float) -> void:
 	if _last_real < 0.0:
 		_last_real = now
-	_vt += clampf(now - _last_real, 0.0, MAX_STEP) * maxf(0.0, time_scale)
+	var dt := clampf(now - _last_real, 0.0, MAX_STEP) * maxf(0.0, time_scale)
+	_vt += dt
 	_last_real = now
 	_now = _vt
 	for note in desk.poll(now):
 		_tune_apply(note)
 	if host != null:
 		var t0 := Time.get_ticks_usec()
+		if _bot_network != null:
+			_bot_network.now = _vt
+			for bot in _crew_bots:
+				bot.poll(host.state, _vt, dt, ME)
 		host.update(_vt)
 		host_us += Time.get_ticks_usec() - t0
 	if client != null:

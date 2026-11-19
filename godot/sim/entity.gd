@@ -201,6 +201,8 @@ class PlayerView extends Sight.Viewer:
 	## Present and huntable (it can target, reach for and catch them) but seeing nothing this tick,
 	## e.g. during a light blink. Never counts as looking. Default false.
 	var blind: bool = false
+	## A confirmed directed light adds one watch only while this view actually sees the resident.
+	var steady_gaze: bool = false
 	## Inside a hide (T19b, sim/hiding.gd; see "Hidden players" below): never hunted or reached for. Their
 	## hide's id, whether it has a reason, its front and inside spots, and where they were last seen out.
 	var hidden: bool = false
@@ -822,6 +824,8 @@ static func _count_watchers(plan: Floor.FloorPlan, prev: OrderlyState, s: Orderl
 				copied = true
 			looked[p.id] = t
 			watchers.append(p.id)
+			if p.steady_gaze:
+				watchers.append(p.id)
 		elif looked.has(p.id) and t - dt - float(looked[p.id]) < GRACE - EPS:
 			watchers.append(p.id)
 	s.looked_at = looked

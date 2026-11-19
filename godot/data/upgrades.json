@@ -45,7 +45,12 @@
       "name": "Steady Gaze",
       "branch": "Lamp",
       "trade": "Lamplighter",
-      "layer": 2
+      "layer": 2,
+      "badge_cost": 2,
+      "requires": "long_burn",
+      "description": "Stand still. Aim your light at a resident.",
+      "drawback": "While looking, you count as two watchers.",
+      "seniority": "Lamplighter near light reaches 0.5m further."
     },
     "throwing_arm": {
       "id": "throwing_arm",

@@ -43,6 +43,19 @@ static func monitor(d: Dictionary, boarding: bool) -> PackedStringArray:
 		r = r.slice(0, 2)
 	return r
 
+## Each of these upgrades has the same odds for its owner. Only the host knows the loss pool.
+static func loss_rows(day: Variant, names: Dictionary) -> PackedStringArray:
+	var rows := PackedStringArray()
+	if lock_of(day) == null:
+		return rows
+	var odds: Dictionary = day.get("lossOdds", {})
+	if odds.is_empty():
+		return rows
+	rows.append("LOSE ONE ON WIPE: ODDS PER UPGRADE")
+	for id: Variant in odds:
+		rows.append("%s  1 IN %d" % [str(names.get(id, id)).to_upper(), int(odds[id])])
+	return rows
+
 ## The caption under a day line: the event's own numbers.
 static func caption(e: Dictionary) -> String:
 	return "DAY EARNED %d OF %d" % [int(e.get("earned", 0)), int(e.get("quota", 0))]

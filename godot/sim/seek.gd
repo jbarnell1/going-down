@@ -585,8 +585,8 @@ static func eye_in_gap(plan: Floor.FloorPlan, m_body: Move.Body, yaw: float, h: 
 static func _touching(m_body: Move.Body, b: Move.Body, reach: float) -> bool:
 	return b.level == m_body.level and M.hypot2(b.x - m_body.x, b.z - m_body.z) <= reach
 
-## Whether a light lights the Minder.
-static func lights(plan: Floor.FloorPlan, l: Light, m_body: Move.Body) -> bool:
+## Whether the directed light reaches the figure, using the Minder's dimensions by default.
+static func lights(plan: Floor.FloorPlan, l: Light, body: Move.Body, height := 2.3, radius := MINDER_RADIUS) -> bool:
 	var v := Sight.Viewer.new()
 	v.body = Move.Body.make(l.x, l.z, l.level, l.y)
 	v.eye = 0.0
@@ -594,7 +594,7 @@ static func lights(plan: Floor.FloorPlan, l: Light, m_body: Move.Body) -> bool:
 	v.pitch = l.pitch
 	v.h_fov_deg = 2.0 * l.half_deg
 	v.v_fov_deg = 2.0 * l.half_deg
-	return Sight.can_see(plan, v, m_body, 0.0, l.range, 2.3, MINDER_RADIUS)
+	return Sight.can_see(plan, v, body, 0.0, l.range, height, radius)
 
 static func _zone_at(f: SeekFloor, plan: Floor.FloorPlan, b: Move.Body) -> int:
 	var c := Move.cell_of(plan, b)

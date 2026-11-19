@@ -270,3 +270,10 @@ func test_the_recorded_trolley_audio_follows_its_wheel_while_unseen(t: T) -> voi
 	t.eq(audio.roll.global_position, source, "the roll co-locates with the wheel")
 	t.check(audio.squeak.playing and audio.roll.playing, "the cart remains audible while off-camera")
 	view.free()
+
+func test_prison_empty_furniture_can_be_passed_to_the_trolley(t: T) -> void:
+	var level := preload("res://client/level.gd").new()
+	const Furniture = preload("res://sim/furniture.gd")
+	var empty: Array[Furniture.Piece] = []
+	t.check(level.pieces.is_same_typed(empty), "a floor with no props supplies a typed empty piece list")
+	level.free()
