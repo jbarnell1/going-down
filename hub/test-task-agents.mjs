@@ -24,6 +24,17 @@ try {
   await copyFile(new URL('./track.mjs', import.meta.url), tracker);
   const fixture = ['A', 'B', 'C'].map((id) => ({ id, title: id, status: 'todo', ns: [] }));
   await writeFile(state, JSON.stringify({ tasks: fixture, gates: [], decisions: [], feed: [] }));
+  await writeFile(path.join(root, 'old.txt'), 'old preview');
+  await writeFile(path.join(root, 'new.txt'), 'current preview');
+  await run(['media', 'A', 'old.txt:Original']);
+  const original = (await task('A')).media[0];
+  await run(['media', 'A', 'new.txt:Updated', '--replace', original.src]);
+  const updated = (await task('A')).media;
+  assert.equal(updated.length, 1);
+  assert.equal(updated[0].caption, 'Updated');
+  assert.equal(await readFile(path.join(root, '.local', 'media', updated[0].src), 'utf8'), 'current preview');
+  await assert.rejects(run(['media', 'A', 'old.txt', '--replace', original.src]), /no such attachment/);
+  assert.deepEqual((await task('A')).media, updated);
   await Promise.all([
     run(['start', 'A', 'Building'], { CODEX_THREAD_ID: 'test' }),
     run(['start', 'B', 'Checking'], { CLAUDECODE: '1' }),

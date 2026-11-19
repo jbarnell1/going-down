@@ -8,6 +8,7 @@
 //   node hub/track.mjs reserve T2a --for openai|claude|free     change who may pick up unfinished work
 //   node hub/track.mjs done T2a --summary "what is now true and how it was checked" --media shot.png:"caption" --media map.txt
 //   node hub/track.mjs media T3 render.png:"second pass, front view"      attach pictures to a task at any time
+//   node hub/track.mjs media T3 preview.wav:"Current audio" --replace T3/previous.ogg
 //   node hub/track.mjs gate G2 passed "evidence" [--media ...]           passed | unverified | open
 //   node hub/track.mjs add T1b "Title" --why "why a player cares" [--after T1] [--for openai|claude|free] [--ns H1,B6 | --ns none --ns-why "..."]
 //   node hub/track.mjs link T8 B6,F3            tie a task to North Star mechanics (see hub/ns.mjs); or: link T2w none --why "tooling"
@@ -254,8 +255,15 @@ switch (cmd) {
   }
   case 'media': {
     const t = task(s, pos[0]);
-    for (const m of pos.slice(1)) (t.media ??= []).push(keep(m, t.id));
-    feed(s, `New pictures for ${t.id}: ${t.title}.`, 'media');
+    if (flags.replace) {
+      if (pos.length !== 2 || flags.replace.length !== 1) die('replace takes one source file and one existing attachment');
+      const index = t.media?.findIndex((m) => m.src === flag('replace')) ?? -1;
+      if (index < 0) die(`no such attachment on ${t.id}`);
+      t.media[index] = keep(pos[1], t.id);
+    } else {
+      for (const m of pos.slice(1)) (t.media ??= []).push(keep(m, t.id));
+    }
+    feed(s, `Updated media for ${t.id}: ${t.title}.`, 'media');
     break;
   }
   case 'gate': {
