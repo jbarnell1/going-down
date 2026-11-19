@@ -213,6 +213,11 @@ var desk: TuningDesk
 var _tune_host := ""
 var profiles: Profiles
 
+func configure_campaign_trades(args: Dictionary) -> void:
+	badge_search = args.get("badge_search", "1") == "1"
+	long_burn = args.get("long_burn", "1") == "1"
+	quick_fingers = args.get("quick_fingers", "1") == "1"
+
 func _init(ws: WsServer, log: Callable) -> void:
 	_ws = ws
 	_log = log

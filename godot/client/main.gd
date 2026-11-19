@@ -166,9 +166,9 @@ var _playtest_active := false
 var _playtest_selection := -1
 var _playtest_orientation := false
 var _orientation_campaign: Variant = null
-var _badge_search := false
-var _quick_fingers := false
-var _long_burn := false
+var _badge_search := true
+var _quick_fingers := true
+var _long_burn := true
 var _playtest_face := ""
 var _playtest_hints: Dictionary = {}
 var _playtest_hint_persist := true
@@ -855,6 +855,8 @@ func _select_playtest(id: String) -> void:
 	var face := start.face_code
 	var player_name := start.player_name if not start.player_name.is_empty() else "YOU"
 	lr.open_local(seed, player_name, entity_on, face)
+	if not practice:
+		_configure_campaign_trades(lr)
 	if practice:
 		lr.start_orientation()
 	elif not lr.start_playtest(depth):
@@ -877,6 +879,12 @@ func _select_playtest(id: String) -> void:
 	hud.note = "CONTINUANCE PRACTICE" if practice else "F6  HOST PLAYTEST"
 	_note_until = Time.get_ticks_msec() + 4000
 
+func _configure_campaign_trades(lr: LocalRoom) -> void:
+	var full_deck := Session.deck == Places.FULL
+	lr.badge_search = full_deck and _badge_search
+	lr.quick_fingers = full_deck and _quick_fingers
+	lr.long_burn = full_deck and _long_burn
+
 ## "Play alone": a room on this machine, a run at once.
 func _play_alone() -> void:
 	var lr := LocalRoom.new()
@@ -885,9 +893,7 @@ func _play_alone() -> void:
 	# The game's run is a run of days: BANK rides up to the prison, bed starts the next day.
 	lr.days = true
 	lr.orientation_campaign = not automated if _orientation_campaign == null else bool(_orientation_campaign)
-	lr.badge_search = _badge_search
-	lr.quick_fingers = _quick_fingers
-	lr.long_burn = _long_burn
+	_configure_campaign_trades(lr)
 	# Live settings: alone, the player's own changes are kept in user://settings.json (none under automation).
 	lr.open_settings("" if automated else LocalRoom.SETTINGS_FILE)
 	if not automated:
@@ -1718,7 +1724,8 @@ func _game_input(dt: float) -> Dictionary:
 	# The Playroom: F at a hide's front, or in a hide, is for the hide (the call wins at the lift).
 	var my_seek: Variant = snap.get("mySeek")
 	var in_hide := my_seek is Dictionary and str((my_seek as Dictionary)["phase"]) == "inside"
-	var hide: bool = pending_hide and not call and (int(snap.get("nearHide", -1)) >= 0 or in_hide)
+	var seated := my_seek is Dictionary and str(my_seek.get("status", "")) == "taken"
+	var hide: bool = pending_hide and not call and (int(snap.get("nearHide", -1)) >= 0 or in_hide or seated)
 	var hide_fast: bool = pending_hide_fast or sprint
 	# A desk (the Annex, sim/hiding.gd): no key press. Ctrl held and walking forward at its kneehole crawls
 	# under; inside one, S (a new press of it) or F crawls back out. Never fast: Ctrl is a creep.
@@ -1963,7 +1970,8 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	hud.went_down = caught_at >= 0 and now - caught_at >= BLACK_MS + NOISE_MS and now - caught_at < BLACK_MS + NOISE_MS + LINE_MS and ending.is_empty() and s.get("downs") == null
 	var tapes: Dictionary = s["tapes"]
 	hud.set_tapes(int(tapes["count"]), float(tapes["value"]))
-	hud.subtitle = announcer.shown()
+	var lc := link.client()
+	hud.subtitle = announcer.shown(lc.quota() if lc != null else null)
 	if reel != null and bool(s.get("playing", true)):
 		# The picture stays in the car. The subtitle remains legible through the camcorder
 		# at any seat, and eligible crew outside the car still get a vote prompt.
@@ -2099,7 +2107,6 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		hud.quota_line = ""
 	_show_day(s, now)
 	_show_count(s, dt)
-	var lc := link.client()
 	hint_cues.update(announcer, s, lc.latest if lc != null else null, lc.quota() if lc != null else null, car_waiting, now)
 	_show_down(s, now, dt, noise)
 	var sk: Variant = s.get("seek")
@@ -3294,7 +3301,7 @@ func _test_state() -> Dictionary:
 			"hud": hud.quota_line, "floorHud": hud.floor_quota_line, "floorMet": hud.floor_quota_met, "carWaiting": car_waiting, "view": quota_view.describe(), "at": [lift.quota_point().x, lift.quota_point().y, lift.quota_point().z]},
 		"dayLock": {"host": link.client().day_lock() if link.client() != null else null, "tick": int((link.client().latest as Dictionary)["tick"]) if link.client() != null and link.client().latest is Dictionary else -1,
 			"view": day_view.describe(), "viewTick": _day_view_tick, "hudLine": hud.day_line, "hudMet": hud.day_met, "monitor": lift.day_rows, "bankLocked": lift.bank_locked,
-			"monitorAt": [lift.day_point().x, lift.day_point().y, lift.day_point().z], "subtitle": announcer.shown(),
+			"monitorAt": [lift.day_point().x, lift.day_point().y, lift.day_point().z], "subtitle": announcer.shown(link.client().quota() if link.client() != null else null),
 			"said": announcer.history.filter(func(h: Dictionary) -> bool: return str(h.moment) in ["bank_refused", "day_met", "ride", "hint_day", "hint_bank_locked", "hint_floor_not_day", "hint_stakes"])},
 		"downs": {"host": s.get("downs"), "view": down_view.describe(), "hud": {"head": hud.down_head, "left": hud.down_left, "line": hud.down_line,
 			"line2": hud.down_line2, "heal": hud.down_heal, "out": hud.out_on, "outLines": hud.out_lines, "prompt": hud.prompt, "fill": hud.prompt_fill},

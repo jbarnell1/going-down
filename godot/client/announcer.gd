@@ -45,6 +45,7 @@ const EXPIRE_BOARD_MS := 12000
 const GAP_MS := 450
 ## The floor quota met, when no "quota" line is recorded.
 const QUOTA_CAPTION := "Quota met! The car may now be called."
+const FLOOR_STILL_NEEDED := " FLOOR QUOTA STILL NEEDED TO CALL."
 ## The player's own hint record and setting.
 const SAVE_PATH := "user://hints.cfg"
 ## Lines dealt only on some places: id -> the places it may be dealt on ("only") or never ("never").
@@ -224,7 +225,7 @@ func on_events(events: Array, first_depth := 1, floor_quota: Variant = null) -> 
 					# A newer floor event can be in the same packet as the original day unlock.
 					var future_floor_met := floor_met_ticks.keys().any(func(when: Variant) -> bool: return float(when) > float(e.get("t", 0.0)))
 					if future_floor_met or (floor_quota is Dictionary and not FloorQuota.floor_met(floor_quota)):
-						detail += ". FLOOR QUOTA STILL NEEDED TO CALL."
+						detail += "." + FLOOR_STILL_NEEDED
 					request("day_met", EXPIRE_BOARD_MS, DayCaption.caption(e) + detail, "day_met_3")
 			"called":
 				# On the Playroom the call starts the last count: the count's own line says so (hide_view.gd).
@@ -407,9 +408,9 @@ func say_count(line: String, text: String, ms: int, number := -1, length := 0, l
 		_cut()
 
 ## The subtitle to show: the announcer's own line, else the count's caption while it lasts.
-func shown() -> String:
+func shown(floor_quota: Variant = null) -> String:
 	if subtitle != "":
-		return subtitle
+		return subtitle.trim_suffix(FLOOR_STILL_NEEDED) if FloorQuota.floor_met(floor_quota) else subtitle
 	return caption if _ms() < caption_until else ""
 
 ## Whether any voice is playing (the beds duck under it).

@@ -494,3 +494,20 @@ func test_t15m_hint_events(t: T) -> void:
 	oe.append_array(off.run([PS.inp("a", b, &"sprint")], 8.0))
 	t.check(of_type(oe, "playroomArrived").is_empty() and of_type(oe, "sprintDuringHunt").is_empty(), "off: no hint events")
 	t.note("playroomArrived once off the ride; sprintDuringHunt %d for 2 sprints in the search, none while hiding" % says)
+
+func test_party_horn_requires_a_seat_and_never_changes_the_count(t: T) -> void:
+	var k := sk(1, ["a", "b"], true)
+	var guest := Seek.player_of(k.s, "a")
+	guest.body = away(k, 1)
+	for status: StringName in [&"ok", &"found", &"down", &"taken"]:
+		guest.status = status
+		t.check(Seek.party_horn(k.s, "a", 20.0).is_empty(), "no seat, no horn: " + str(status))
+	guest.seat = 0
+	var number := k.s.counts
+	var horn := Seek.party_horn(k.s, "a", 20.0)
+	t.eq(horn.get("type"), "partyHorn", "one signal for the seated player")
+	t.eq(horn.get("x"), guest.body.x, "located at the authoritative body")
+	t.eq(k.s.counts, number, "harmless in the Playroom")
+	t.check(Seek.party_horn(k.s, "b", 20.0).is_empty(), "the helper has no horn")
+	k.s.tuned = false
+	t.check(Seek.party_horn(k.s, "a", 20.0).is_empty(), "original runs remain unchanged")

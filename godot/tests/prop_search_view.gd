@@ -143,6 +143,33 @@ func test_the_sheet_is_the_hosts(t: T) -> void:
 			t.eq(SearchView.sheet_for(next, next.seed, base), Findables.sheet_text(Findables.start_floor(next, next.seed, depth + 1, base, &"lonely", 1, []).fill),
 				"depth %d: the ride down's sheet is the next floor's" % (depth + 1))
 
+func test_the_clinic_landing_notice_clears_the_jamb_at_readable_size(t: T) -> void:
+	var original_mount := Vector3(1.3, 1.42, 0.1)
+	for depth: int in [1, 3]:
+		var s := PropSearch.open_doors(PropSearch.find_run("g10-clinic", PropSearch._ids(4), depth))
+		var v := SearchView.new()
+		v.use_plan(s.plan)
+		var lift := Node3D.new()
+		v.show_sheet(lift, Host.find_block(s), s.plan.seed, original_mount)
+		var notice := lift.get_node_or_null("FindSheet") as Node3D
+		t.check(notice != null, "depth %d has its laminated search-odds notice" % depth)
+		if notice != null:
+			var face := notice.get_child(0) as MeshInstance3D
+			var size := (face.mesh as QuadMesh).size
+			if depth == 1:
+				t.check(size.x >= 1.55, "the Clinic sheet spans at least 1.55 m for standing-distance reading")
+				t.check(notice.position.x - size.x * 0.5 > 1.02, "the sheet clears the right jamb")
+				t.check(notice.position.y - size.y * 0.5 > 1.3, "the sheet clears the bumper")
+				t.eq(notice.position.z, original_mount.z, "the sheet stays on the same wall face")
+				var print_image := (face.material_override as StandardMaterial3D).albedo_texture.get_image()
+				t.check(print_image != null and print_image.get_pixel(0, 0).v < 0.3
+					and print_image.get_pixel(3, 3).v > 0.8, "a dark rim frames the inset laminate")
+			else:
+				t.check(is_equal_approx(size.x, 0.42), "the Annex keeps its existing sheet width")
+				t.eq(notice.position, original_mount, "the Annex keeps its existing mount")
+			t.eq(v.sheet, Findables.sheet_text(s.find.fill), "the printed odds match the host's fill")
+		lift.free()
+
 func test_the_reader(t: T) -> void:
 	var r := NoteReader.new()
 	r.open("stillness-1")

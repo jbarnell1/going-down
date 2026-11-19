@@ -418,7 +418,11 @@ func show_sheet(lift: Node3D, block: Variant, seed: String, at: Vector3) -> void
 	sheet = sheet_for(_ff.plan, seed, base, _garden_sites)
 	if _sheet_node != null and is_instance_valid(_sheet_node):
 		_sheet_node.queue_free()
-	_sheet_node = sheet_node(sheet)
+	var clinic := _ff.plan.place == Places.CLINIC
+	_sheet_node = sheet_node(sheet, clinic)
+	# Keep the larger Clinic sheet beyond the lift jamb and above the wall bumper.
+	if clinic:
+		at += Vector3(0.70, 0.50, 0.0)
 	_sheet_node.position = at
 	lift.add_child(_sheet_node)
 
@@ -434,19 +438,32 @@ static var _sheet_cache_key := ""
 static var _sheet_cache := ""
 
 ## A laminated sheet showing `text` (wrapped), a quad facing +z.
-static func sheet_node(text: String) -> Node3D:
-	var cols := 18
+static func sheet_node(text: String, clinic := false) -> Node3D:
+	var cols := 21 if clinic else 18
 	var lines := PixelFont.wrap(text, cols)
+	if clinic:
+		lines.clear()
+		for sentence: String in text.replace(". ", ".\n").split("\n"):
+			lines.append_array(PixelFont.wrap(sentence, cols))
 	var img := Image.create(cols * 6 + 6, lines.size() * 10 + 14, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0.93, 0.92, 0.86))
-	PixelFont.blit(img, "PLEASE NOTE", Vector2i(3, 3), Color(0.55, 0.12, 0.08))
+	var paper := Color(0.93, 0.92, 0.86)
+	if clinic:
+		img.fill(Color("#263b36"))
+		img.fill_rect(Rect2i(Vector2i.ONE, img.get_size() - Vector2i(2, 2)), paper)
+	else:
+		img.fill(paper)
+	var heading_ink := Color("#53190f") if clinic else Color(0.55, 0.12, 0.08)
+	var body_ink := Color("#111615") if clinic else Color(0.12, 0.12, 0.14)
+	var inset := 5 if clinic else 3
+	PixelFont.blit(img, "PLEASE NOTE", Vector2i(inset, inset), heading_ink)
 	for i in lines.size():
-		PixelFont.blit(img, lines[i], Vector2i(3, 14 + i * 10), Color(0.12, 0.12, 0.14))
+		PixelFont.blit(img, lines[i], Vector2i(inset, 14 + i * 10), body_ink)
 	var tex := ImageTexture.create_from_image(img)
 	var n := Node3D.new()
 	n.name = "FindSheet"
 	var q := QuadMesh.new()
-	q.size = Vector2(0.42, 0.42 * img.get_height() / img.get_width())
+	var width := 1.68 if clinic else 0.42
+	q.size = Vector2(width, width * img.get_height() / img.get_width())
 	var mi := MeshInstance3D.new()
 	mi.mesh = q
 	var m := StandardMaterial3D.new()

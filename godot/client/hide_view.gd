@@ -353,6 +353,8 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 						if int(h.get("id")) == int(e["hide"]):
 							hk = str(h.get("kind"))
 					sfx.hide_move(hk, ty == "hideStart", bool(e.get("fast", false)), at)
+			"partyHorn":
+				sfx.play_at("horn", Vector3(float(e["x"]), float(e["y"]), float(e["z"])))
 			"emptyHide":
 				var mp: Variant = (s.get("orderly", {}) as Dictionary).get("pose")
 				if mp is Dictionary:
@@ -449,7 +451,7 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 				# T15m: dragged to the party table, you see it pulling you along.
 				catch_k = move_toward(catch_k, 0.0, dt * 2.0)
 	elif status == "taken":
-		hud.center_note = "TAKEN: AT THE PARTY TABLE. WATCH."
+		hud.center_note = "AT THE PARTY TABLE   [F] BLOW HORN" if seek.has("anger") else "TAKEN: AT THE PARTY TABLE. WATCH."
 	if status != "found":
 		catch_k = move_toward(catch_k, 0.0, dt * 4.0)
 	hud.seek_note = note

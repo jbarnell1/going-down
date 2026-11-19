@@ -526,6 +526,14 @@ static func phase_of(s: SeekState) -> StringName:
 		return &"none"
 	return &"hide" if s.t < s.t0 + s.hide_len - EPS else &"seek"
 
+static func party_horn(s: SeekState, id: String, t: float) -> Dictionary:
+	if not s.tuned:
+		return {}
+	var player := player_of(s, id)
+	if player == null or player.status != &"taken" or player.seat < 0 or player.body == null:
+		return {}
+	return {"type": "partyHorn", "playerId": id, "t": t, "x": player.body.x, "y": player.body.y + 1.0, "z": player.body.z}
+
 static func player_of(s: SeekState, id: String) -> SeekPlayer:
 	for p in s.players:
 		if p.id == id:

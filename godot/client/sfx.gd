@@ -147,7 +147,6 @@ const READY := {
 	"hide_in (Annex)": "getting into an Annex filing cabinet: the cabinet's hide event (the Playroom's chests and cubbies already use it)",
 	"note_slap": "a sticky note posted (T7, notes.gd): play_at('note_slap') where it is stuck",
 	"note_peel": "a sticky note taken down (no such action yet)",
-	"horn": "the party horn blown (T15h, inp.horn reaches the host but no event comes back to the screens)",
 	"cell_door": "a cell door sliding shut (no cell doors in the rules yet)",
 	"teller_window": "a teller window's shutter rolling up as a player steps up to it (F at a window: no event comes back to the screens)",
 	"teller_ding": "the counter bell when a purchase or a skill is taken at a window (no such event yet)",
@@ -580,7 +579,12 @@ func play_at(name: String, pos: Vector3, gain_db := 0.0) -> AudioStreamPlayer3D:
 	p.pitch_scale = 1.0
 	# Scares and the rattle carry across the floor on their own curve (far_db), duller with distance.
 	var curve := "scare" if cat == "scare" else ("rattle" if name == "rattle" else "")
-	if curve != "":
+	if name == "horn":
+		# The seated player's signal carries across the whole floor, panned from the table.
+		p.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
+		p.max_distance = 0.0
+		p.volume_db -= minf(14.0, _ear_distance(pos) * 0.5)
+	elif curve != "":
 		var d := _ear_distance(pos)
 		var fd := far_db(curve, d) if curve == "scare" else breath_db(d, squeak != null and squeak.playing, curve)
 		p.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED

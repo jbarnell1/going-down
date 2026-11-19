@@ -338,7 +338,9 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	var near_hide := -1
 	if hides_here and body != null and s_status == "ok" and s_phase == "out":
 		near_hide = hide_in_reach(body)
-	if hides_here and playing and inp.get("hide") == true and s_status == "ok" and (s_phase == "inside" or near_hide >= 0):
+	if c.playing and not still and phase != "ended" and s_status == "taken" and inp.get("hide") == true:
+		lf.hide = true
+	elif hides_here and playing and inp.get("hide") == true and s_status == "ok" and (s_phase == "inside" or near_hide >= 0):
 		lf.hide = true
 		lf.hide_fast = inp.get("hideFast") == true
 		_hide_wait = HIDE_WAIT

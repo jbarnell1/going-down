@@ -838,6 +838,10 @@ func _step(now: float) -> void:
 			p.peel_pending = -1
 			p.inv_pending = []
 			continue
+		if p != null and p.connected and p.in_run and not p.left and p.hide_pending and rp.status == &"caught" and s.seek != null:
+			var horn := Seek.party_horn(s.seek, p.id, s.t)
+			if not horn.is_empty():
+				extra.append(horn)
 		if p == null or not _playing(p) or p.input == null:
 			if p != null:
 				# Out of the run this tick: a press or an emote made meanwhile is not saved up for later.

@@ -150,3 +150,34 @@ func test_clinic_door_clears_head_and_hands_from_either_side(t: T) -> void:
 			t.check(absf((Vector2(wrist.x, wrist.z) - centre).dot(across)) < 0.49,
 				"wrist has room inside the jamb from direction %s" % direction)
 	view.free()
+
+func test_early_catch_keeps_reaching_hands_on_the_room_side_of_a_wall(t: T) -> void:
+	var view := _view()
+	var plan := preload("res://sim/clinic.gd").generate_clinic("clinic-thursday", 1)
+	view.floor_plan = plan
+	for door in plan.doors:
+		if door.ay == door.by:
+			continue
+		var centre := Vector2(door.ax + door.bx + 1, door.ay + door.by + 1) * (0.5 * plan.cell_size)
+		var forward := Vector2(door.bx - door.ax, door.by - door.ay)
+		var along := Vector2(-forward.y, forward.x)
+		for side: float in [1.0, -1.0]:
+			var at := centre + along * 0.85 + forward * 0.42 * side
+			var aim := along * 0.8 - forward * 0.08 * side
+			var pose := _pose("bend", 0.0, true)
+			pose.x = at.x
+			pose.z = at.y
+			pose.yaw = atan2(-aim.x, -aim.y)
+			pose.level = door.level
+			for clock: float in [0.0, 0.1, 0.3, 0.5, 0.8, 1.3, 2.2]:
+				pose.animTime = clock
+				view.show_pose(pose, true)
+				for name: String in ["hand.L", "hand.R"]:
+					var bone := view.skel.find_bone(name)
+					var wrist := view.skel.to_global(view.skel.get_bone_global_pose(bone).origin)
+					var inside := (Vector2(wrist.x, wrist.z) - centre).dot(forward) * side
+					t.check(inside >= 0.06, "%s crosses the room-side wall face at %.2f s" % [name, clock])
+		view.free()
+		return
+	view.free()
+	t.check(false, "the seed contains a doorway with a north/south normal")

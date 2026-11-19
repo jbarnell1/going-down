@@ -289,6 +289,23 @@ func test_day_first_intercom_uses_safe_recording_and_keeps_later_call_event(t: T
 		t.check(str(a.queue[0].caption2).contains("DAY EARNED") and str(a.queue[0].caption2).contains("CALL READY"), "combined cue captions both gates")
 	a.free()
 
+func test_day_caption_drops_stale_call_warning_without_cutting_the_take(t: T) -> void:
+	var a := _announcer("quota-live-caption")
+	a.day_lock_on = true
+	var short := {"earned": 400, "needed": 1160}
+	var paid := {"earned": 1160, "needed": 1160}
+	a.on_events([{"type": "dayMet", "t": 5.0, "day": 1, "earned": 1200, "quota": 1200}], 1, short)
+	a.clock_ms = 1000
+	a.update()
+	t.check(str(a.shown(short)).ends_with("BANK UNLOCKED. FLOOR QUOTA STILL NEEDED TO CALL."),
+		"while the live floor gate is short, the day caption names CALL's remaining condition")
+	var current := str(a.shown(paid))
+	t.check(current.ends_with("DAY EARNED 1200 OF 1200\nBANK UNLOCKED.") and not current.contains("STILL NEEDED"),
+		"the active caption drops the stale floor clause as soon as the host floor gate is met")
+	t.check(a.history.size() == 1 and a.history[0].id == "day_met_3",
+		"fresh gate information neither cuts nor replaces the playing recording")
+	a.free()
+
 func test_call_refusal_flash_yields_to_the_paid_floor(t: T) -> void:
 	const FloorQuota = preload("res://client/quota_view.gd")
 	var v := FloorQuota.new()

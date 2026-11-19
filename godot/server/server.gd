@@ -98,9 +98,7 @@ func _ready() -> void:
 	# The game's deck, as every client's (client/main.gd); the room gives it to each run.
 	Session.deck = Places.FULL
 	_room = Room.new(_ws, say)
-	_room.badge_search = bind == "127.0.0.1" and args.get("badge_search", "0") == "1"
-	_room.long_burn = bind == "127.0.0.1" and args.get("long_burn", "0") == "1"
-	_room.quick_fingers = bind == "127.0.0.1" and args.get("quick_fingers", "0") == "1"
+	_room.configure_campaign_trades(args)
 	_room.orientation_review = bind == "127.0.0.1" and args.get("orientation", "0") == "1"
 	var explicit_course: bool = args.get("orientation_campaign", "") == "1"
 	if not _room.orientation_review:

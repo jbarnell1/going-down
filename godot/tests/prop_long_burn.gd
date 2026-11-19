@@ -67,3 +67,31 @@ func test_real_shop_lights_prolong_only_the_trained_players_use(t: T) -> void:
 	holding.long_burn = false
 	var disabled := Cabinet.tick(holding, {}, requests)
 	t.check(not Shop.flashing(ShopTest.sh_of(disabled.state), "p0", disabled.state.t + 1.5), "a saved skill does not alter play when the run flag is off")
+
+func test_campaign_trades_default_and_individual_rollback(t: T) -> void:
+	var room := preload("res://server/room.gd").new(null, func(_s: String) -> void: pass)
+	var game := preload("res://client/main.gd").new()
+	var local := preload("res://net/local_room.gd").new()
+	const Places = preload("res://sim/places.gd")
+	const Session = preload("res://net/session.gd")
+	var original := Session.deck
+	Session.deck = Places.FULL
+	game._configure_campaign_trades(local)
+	t.check(local.badge_search and local.quick_fingers and local.long_burn, "full deck defaults support all three without arguments")
+	Session.deck = Places.CLINIC_ONLY
+	game._configure_campaign_trades(local)
+	t.check(not local.badge_search and not local.quick_fingers and not local.long_burn, "reference deck stays unchanged")
+	for disabled: String in ["", "badge_search", "quick_fingers", "long_burn"]:
+		var args := {}
+		if disabled != "":
+			args[disabled] = "0"
+		room.configure_campaign_trades(args)
+		Session.deck = Places.FULL
+		for key: String in ["badge_search", "quick_fingers", "long_burn"]:
+			game.set("_" + key, key != disabled)
+		game._configure_campaign_trades(local)
+		for key: String in ["badge_search", "quick_fingers", "long_burn"]:
+			t.eq(room.get(key), key != disabled, "dedicated campaign " + key)
+			t.eq(local.get(key), key != disabled, "solo campaign " + key)
+	Session.deck = original
+	game.free()

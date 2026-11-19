@@ -117,6 +117,8 @@ func show_pose(pose: Variant, show: bool) -> void:
 	if anim == "bend":
 		var catch_active := bool(pose.get("catch_active", false))
 		_show_bend(t, catch_active)
+		# Keep the reaching elbows clear until the fold brings them in beside the victim.
+		_tuck_arms(clearance.y * (1.0 - smoothstep(BEND_IN * 0.6, BEND_IN, t)))
 		if catch_active and bellydance_on_catch and t > DANCE_AFTER and ap.has_animation("bellydance"):
 			_show_dance(t - DANCE_AFTER)
 		return
