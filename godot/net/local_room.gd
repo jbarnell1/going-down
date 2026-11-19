@@ -300,7 +300,8 @@ func start_run() -> void:
 	var nerve := Session.deck == Places.FULL if second_wind == null else bool(second_wind)
 	var ear := Session.deck == Places.FULL if soft_shoes == null else bool(soft_shoes)
 	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL, shop_on(), Session.deck == Places.FULL, true, true, induction, nerve, ear, HostRules.flare_on_by_arg(), HostRules.lamp_on_by_arg(), badge_search, quick_fingers, long_burn, field_dressing, HostRules.doorway_shadow_on_by_arg() and Session.deck == Places.FULL and not _orientation_playtest, steady_gaze, throwing_arm,
-		HostRules.nerve_passive_on_by_arg() and not _orientation_playtest)
+		HostRules.nerve_passive_on_by_arg() and not _orientation_playtest,
+		HostRules.annex_drag_on_by_arg() and not _orientation_playtest)
 	if _orientation_playtest:
 		rules.enable_orientation()
 	elif orientation_campaign and _playtest_depth < 0:

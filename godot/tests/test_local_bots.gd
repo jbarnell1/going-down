@@ -65,3 +65,49 @@ func test_local_companions_walk_and_take_a_real_reading(t: T) -> void:
 	t.check(closed, "the ordinary host credits a reading taken by a bot with its own instrument")
 	room.leave()
 	Session.deck = old_deck
+
+func test_local_companions_leave_practice_recording_to_the_player(t: T) -> void:
+	var old_deck := Session.deck
+	Session.deck = Places.FULL
+	var room := LocalRoom.new()
+	room.orientation_campaign = true
+	room.open_local("bots-a", "Player", true, "", 3)
+	room.set_ready(true)
+	var body: Move.Body = room.host.state.players[0].body
+	var seen_ticks := 0
+	var held_without_earnings := false
+	var closed := false
+	const WATCH_TICKS := 20
+	for tick in 460:
+		var now := tick * Session.TICK
+		room.poll(now)
+		var s := room.host.state
+		var input := Client.LocalFrame.new()
+		if s.phase == &"unloading" or s.phase == &"away":
+			var target := Vector2(13.0, 11.0) if s.phase == &"away" else Vector2(11.0, 16.4)
+			var step := (target - Vector2(body.x, body.z)).limit_length(0.13)
+			body = Run.move_in_run(s, body, step.x, step.y, 0.3)
+			if s.phase == &"away" and step.length() < 0.04:
+				seen_ticks += 1
+				input.raised = true
+				if seen_ticks == WATCH_TICKS:
+					held_without_earnings = s.orderly.held and is_zero_approx(s.floor_earned)
+		input.body = body
+		input.eye = 1.6
+		input.h_fov_deg = 90.0
+		input.v_fov_deg = 65.0
+		var toward := Vector2(s.orderly.body.x - body.x, s.orderly.body.z - body.z)
+		input.yaw = atan2(-toward.x, -toward.y)
+		if seen_ticks > WATCH_TICKS:
+			input.yaw += PI
+		var frame := room.frame(now, input)
+		if frame != null and frame.placed != null:
+			body = frame.placed
+		if s.floor_earned >= 1.0:
+			closed = room.host.event_log.any(func(event: Host.LoggedEvent) -> bool:
+				return event.e.get("type") == "readingClosed" and event.e.get("playerId") == LocalRoom.ME)
+			break
+	t.check(held_without_earnings, "the practice cart still stops while the human watches it with the instrument up")
+	t.check(closed, "the human can look away to record a payable practice tape with all three companions present")
+	room.leave()
+	Session.deck = old_deck

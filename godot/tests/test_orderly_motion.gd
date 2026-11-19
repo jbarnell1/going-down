@@ -184,6 +184,23 @@ func test_early_catch_keeps_reaching_hands_on_the_room_side_of_a_wall(t: T) -> v
 	view.free()
 	t.check(false, "the seed contains a doorway with a north/south normal")
 
+func test_small_arm_tuck_moves_the_forearm_during_the_catch_fold(t: T) -> void:
+	var view := _view()
+	# First rejected pose from a linked witness in the seeded Clinic.
+	view.floor_plan = preload("res://sim/clinic.gd").generate_clinic("down-1", 1)
+	var pose := _pose("bend", 0.411, true, 51.1541217241805)
+	pose.z = 5.84372882721202
+	pose.yaw = 0.1806753890036
+	pose.level = 0
+	var tuck := Vector3(0.0, -0.95, -0.20).normalized()
+	view._show_bend(pose.animTime, true)
+	var untucked := (_bone(view, "forearm.R").origin - _bone(view, "upperarm.R").origin).normalized()
+	view.show_pose(pose, true)
+	var tucked := (_bone(view, "forearm.R").origin - _bone(view, "upperarm.R").origin).normalized()
+	t.check(tucked.distance_to(tuck) < untucked.distance_to(tuck) - 0.0005,
+		"the forearm turns toward its wall-clearance direction while the catch is still folding")
+	view.free()
+
 func test_the_trolley_contacts_the_floor_and_clears_the_jamb(t: T) -> void:
 	var view := _view()
 	var plan := preload("res://sim/clinic.gd").generate_clinic("av4-clinic", 1)

@@ -141,6 +141,8 @@ func _process(_d: float) -> void:
 func _scale() -> float:
 	return maxf(2.0, floor(size.y / 320.0))
 
+var annex_forehead_note := false
+
 func _draw() -> void:
 	var px := _scale()
 	var now := Time.get_ticks_msec()
@@ -151,6 +153,11 @@ func _draw() -> void:
 		return
 	if fade > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, clampf(fade, 0.0, 1.0)))
+	if annex_forehead_note and not black:
+		var w := size.x
+		var h := size.y
+		draw_colored_polygon(PackedVector2Array([Vector2(w * 0.30, 0), Vector2(w * 0.65, 0),
+			Vector2(w * 0.63, h * 0.17), Vector2(w * 0.34, h * 0.20)]), Color("#d3b14f"))
 	if out_on and not black:
 		_draw_out(px)
 	if osd_on:

@@ -99,6 +99,8 @@ func _decide(s: Run.RunState, dt: float, human: Run.RunPlayer, input: Client.Loc
 	if s.orientation:
 		# Leave the course's demonstration to the human.
 		_walk_to(s, s.plan.landing, dt, Stamina.WALK_SPEED)
+		if Move.cell_of(s.plan, _walker.body).equals(s.plan.landing):
+			Bot._aim_at(_walker, Run.car_body(s.car, 1.0, 0.0))
 		return
 	if s.quota and Run.quota_reached(s) and not Run.day_locked(s):
 		_walk_to(s, s.plan.landing, dt, Stamina.WALK_SPEED)

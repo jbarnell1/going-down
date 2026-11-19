@@ -123,6 +123,9 @@ const RECORDED := {
 	"phone": ["room", "annex/phone"],
 	"copier": ["room", "annex/copier"],
 	"staple_soft": ["entity", "annex/staple_soft"],
+	"catch_staple_1": ["entity", "annex/staple_1"],
+	"catch_staple_2": ["entity", "annex/staple_2"],
+	"catch_staple_3": ["entity", "annex/staple_3"],
 	"note_slap": ["effect", "annex/note_slap"],
 	"note_peel": ["effect", "annex/note_peel"],
 	"lift_bell": ["ui", "annex/lift_bell"],
@@ -208,6 +211,7 @@ func _ear_distance(pos: Vector3) -> float:
 const PHONE_DB := -6.0
 ## The stapler going into you at the end of a catch on the Annex, this long after the roar.
 const STAPLE_AFTER := 600
+const CATCH_STAPLE_GAP := 180
 ## Gain (dB, on top of BASE_DB) that puts each generated stand-in at its category's level (measured with
 ## tools/sfx_levels.gd; UI at the voice -8 LU, effects -6, scare short-term +2).
 ## The "far" variants keep their own step down from the near ones. The ticking: a train at 12 a second at
@@ -961,7 +965,7 @@ func _orderly(delta: float, o: Dictionary) -> void:
 
 ## Someone was taken. Mine: the roar in my face, then the chewing. Someone else's: heard from where it is.
 ## On the Playroom, found and down are client/hide_view.gd's (the found-you sting, the fall): nothing here.
-func caught(mine: bool, pos: Variant) -> void:
+func caught(mine: bool, pos: Variant, annex_staple := false) -> void:
 	# (The Arboretum's snatch is the shears closing, from the Groundskeeper's own view: no roar.)
 	if _place == "playroom" or _place == "arboretum":
 		return
@@ -972,7 +976,7 @@ func caught(mine: bool, pos: Variant) -> void:
 	if _clinic:
 		after = "chew"
 		wait = 1300
-	elif _place == "annex" and recorded.has("staple_soft"):
+	elif _place == "annex" and not annex_staple and recorded.has("staple_soft"):
 		after = "staple_soft"
 		wait = STAPLE_AFTER
 	if mine or pos == null:
@@ -986,6 +990,13 @@ func caught(mine: bool, pos: Variant) -> void:
 		play_at("roar", pos)
 		if after != "":
 			_later.append({"at": Time.get_ticks_msec() + wait, "name": after, "pos": pos, "gain": 0.0})
+	if annex_staple and _place == "annex" and (mine or pos != null):
+		var start := Time.get_ticks_msec() + STAPLE_AFTER
+		for index in 3:
+			var name := "catch_staple_%d" % (index + 1)
+			if recorded.has(name):
+				_later.append({"at": start + index * CATCH_STAPLE_GAP, "name": name,
+					"pos": null if mine else pos, "gain": 0.0})
 	_last["scare"] = Time.get_ticks_msec()
 
 func _run_later() -> void:

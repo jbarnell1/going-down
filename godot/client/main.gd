@@ -316,6 +316,7 @@ var dark_since := -1
 var emergency := 0.0
 var light := 1.0
 var caught_at := -1
+var _annex_note_at := -1
 var ending: Dictionary = {}
 var end_shown_at := -1
 var left_at := -1
@@ -1132,6 +1133,7 @@ func _on_new_run() -> void:
 	end_shown_at = -1
 	hud.end_lines = []
 	caught_at = -1
+	_annex_note_at = -1
 	left_at = -1
 	ride_started = -1
 	prev_bell_left = BOARD_TIME
@@ -1206,6 +1208,7 @@ func _build_floor(plan: Dictionary) -> void:
 ## (client/temp_view.gd, with its own stapler click, so the trolley squeak stays the Orderly's), anywhere
 ## else the Orderly. The Playroom's Minder gets its own line here.
 func _use_resident(plan: Dictionary) -> void:
+	_annex_note_at = -1
 	var kind := "orderly"
 	match str(plan.get("place", "")):
 		"annex":
@@ -1322,6 +1325,8 @@ func _input(event: InputEvent) -> void:
 			else:
 				wheel_vec = mm.position - get_viewport().get_visible_rect().size * 0.5
 		elif Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+			if mm.relative.length_squared() > 0.0:
+				down_view.keep_drag_look()
 			yaw -= mm.relative.x * SENS
 			pitch = clampf(pitch - mm.relative.y * SENS, -MAX_PITCH, MAX_PITCH)
 	elif event is InputEventKey:
@@ -2019,6 +2024,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	tape_mat.set_shader_parameter("snow", 1.0 if (noise and not black) else 0.0)
 	tape_mat.set_shader_parameter("glitch", 1.0 if noise else 0.0)
 	hud.black = black
+	hud.annex_forehead_note = _annex_note_at >= 0 and now >= _annex_note_at and _resident_kind == "temp" and str(me.get("status", "")) == "down"
 	# With the down rule the timer says it instead (client/down_view.gd).
 	hud.went_down = caught_at >= 0 and now - caught_at >= BLACK_MS + NOISE_MS and now - caught_at < BLACK_MS + NOISE_MS + LINE_MS and ending.is_empty() and s.get("downs") == null
 	var tapes: Dictionary = s["tapes"]
@@ -2050,7 +2056,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	hud.prompt_fill = -1.0
 	# Down first, then out (client/down_view.gd): your own timer or the out screen, or a crewmate to help.
 	var holding: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and not settings_panel.is_open() and Input.is_action_pressed("use"))
-	down_view.update(s, link.my_id(), link.names(), holding)
+	down_view.update(s, link.my_id(), link.names(), holding, announcer.place)
 	var me_down := str(me["status"]) == "down" or str(me["status"]) == "out" or _left_out(s)
 	# The four-slot inventory (S1): the squares and what F would take or give here, from the host's block.
 	var lc0 := link.client()
@@ -2114,7 +2120,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		elif phase == "night":
 			pass   # home for the night: the car cannot be called
 		elif bool(me.get("canCall", false)):
-			prompt = "F  Ã¢â€“Â¼ CALL"
+			prompt = QuotaView.CALL_PROMPT
 		elif not annex_note_focus.is_empty():
 			prompt = AnnexNotesView.PROMPT
 		elif practice and phase == "boarding":
@@ -2179,7 +2185,7 @@ func _show_quota(s: Dictionary, now: int) -> void:
 	var q: Variant = c.quota() if c != null else null
 	hud.floor_quota_line = QuotaView.floor_hud_text(q, int(s.get("depth", 0)), str(s.get("phase", "")))
 	hud.floor_quota_met = QuotaView.floor_met(q)
-	hud.quota_line = quota_view.update(q, lift, hud.prompt == "F  Ã¢â€“Â¼ CALL", now)
+	hud.quota_line = quota_view.update(q, lift, hud.prompt, now)
 	hud.quota_tone = quota_view.tone
 	# The car waits (FD4): standing open on arrival for whoever is still aboard, the panel says who.
 	car_waiting = car_waiting_text(c.latest if c != null else null, link.names(), now)
@@ -2318,7 +2324,17 @@ func _show_down(s: Dictionary, now: int, dt: float, noise: bool) -> void:
 		hud.out_lines = LEFT_OUT_LINES
 	var block: Variant = s.get("downs")
 	down_view.show_spots(spots_root, (block as Dictionary)["spots"] if block is Dictionary else [])
-	if now < _turn_until and str((s["me"] as Dictionary)["status"]) == "down":
+	if down_view.dragged:
+		_turn_until = -1
+		if down_view.drag_yaw != null:
+			var rear := float(down_view.drag_yaw)
+			var k := 1.0 - exp(-dt * TURN_RATE)
+			yaw = lerp_angle(yaw, rear, k)
+			pitch = lerpf(pitch, 0.0, k)
+			cam.rotation = Vector3(pitch, yaw, 0.0)
+			if absf(angle_difference(yaw, rear)) < 0.02 and absf(pitch) < 0.02:
+				down_view.drag_yaw = null
+	elif now < _turn_until and str((s["me"] as Dictionary)["status"]) == "down":
 		var op: Variant = (s["orderly"] as Dictionary).get("pose")
 		if op is Dictionary:
 			var lv := Vector3(float(op["x"]), float(op["y"]) + 1.2, float(op["z"]))
@@ -2608,6 +2624,7 @@ func _present(events: Array, now: int) -> void:
 						_note_until = now + 7000
 			"healed":
 				if mine:
+					_annex_note_at = -1
 					_turn_until = -1
 					hud.note = "> BACK ON YOUR FEET"
 					_note_until = now + 2000
@@ -2616,12 +2633,15 @@ func _present(events: Array, now: int) -> void:
 					_note_until = now + 2000
 			"out":
 				if mine:
+					_annex_note_at = -1
 					_turn_until = -1
 					raise_latch = false
 			"caught":
 				var op: Variant = (snap.get("orderly", {}) as Dictionary).get("pose")
-				sfx.caught(mine, Vector3(float(op["x"]), float(op["y"]) + 2.0, float(op["z"])) if op is Dictionary else null)
+				var staple := bool(e.get("annexStaple", false))
+				sfx.caught(mine, Vector3(float(op["x"]), float(op["y"]) + 2.0, float(op["z"])) if op is Dictionary else null, staple)
 				if mine:
+					_annex_note_at = now + sfx.STAPLE_AFTER if staple else -1
 					caught_at = now
 					raise_latch = false
 			"slip":

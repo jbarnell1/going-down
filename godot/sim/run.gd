@@ -347,6 +347,7 @@ const Floor = preload("res://sim/floor.gd")
 const Instr = preload("res://sim/instrument.gd")
 const Landing = preload("res://sim/landing.gd")
 const Move = preload("res://sim/move.gd")
+const Follow = preload("res://sim/follow.gd")
 const Rng = preload("res://sim/rng.gd")
 const TapeLib = preload("res://sim/tape.gd")
 const M = preload("res://sim/jsmath.gd")
@@ -927,6 +928,11 @@ class Downed:
 	var heal_from: float = -1.0
 	## Seconds that hold takes, stamped as it begins (HEAL_TIME, or the host's heal.time then: live settings).
 	var heal_len: float = HEAL_TIME
+	## Host-owned Temp drag. The destination remains fixed until the victim is freed.
+	var drag_goal: Move.Body = null
+	var drag_walk: Follow.ResidentWalk = null
+	var drag_m := 0.0
+	var drag_rear: Variant = null
 
 	func copy() -> Downed:
 		var d := Downed.new()
@@ -937,6 +943,10 @@ class Downed:
 		d.healer = healer
 		d.heal_from = heal_from
 		d.heal_len = heal_len
+		d.drag_goal = drag_goal
+		d.drag_walk = drag_walk
+		d.drag_m = drag_m
+		d.drag_rear = drag_rear
 		return d
 
 class RunState:
@@ -1108,6 +1118,7 @@ class RunState:
 	var steady_gaze := false
 	var throwing_arm := false
 	var nerve_passive := false
+	var annex_drag := false
 	## Per-owner floor readings. A missing owner on an enabled floor starts full.
 	var nerve_readings: Dictionary = {}
 	var flare := false
@@ -1166,6 +1177,7 @@ class RunState:
 		s.steady_gaze = steady_gaze
 		s.throwing_arm = throwing_arm
 		s.nerve_passive = nerve_passive
+		s.annex_drag = annex_drag
 		s.nerve_readings = nerve_readings
 		s.flare = flare
 		s.flare_plan = flare_plan
@@ -1441,6 +1453,11 @@ static func with_orientation(initial: RunState, prelude := false) -> RunState:
 	return with_lamp(s) if prelude or initial.lamp else s
 
 ## Turns down first, then out on for a run (see the header): nobody down, no red spots.
+static func with_annex_drag(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.annex_drag = true
+	return s
+
 static func with_downs(s0: RunState) -> RunState:
 	var s := s0.copy()
 	s.downs = true
@@ -2074,6 +2091,13 @@ static func _summarize(s: RunState, tapes: Array[TapeLib.Tape], wiped: bool) -> 
 			r.tapes.append(tp.id)
 	r.wiped = wiped
 	return r
+
+static func _annex_catch_event(s: RunState, event: Dictionary) -> Dictionary:
+	if not s.annex_drag or not s.downs or s.plan.place != &"annex" or event["type"] != "caught":
+		return event
+	var tagged := event.duplicate()
+	tagged["annexStaple"] = true
+	return tagged
 
 static func _with_t(e: Dictionary, t: float) -> Dictionary:
 	var ne := e.duplicate()
@@ -2982,10 +3006,121 @@ static func _go_down(s: RunState, players: Array[RunPlayer], k: int, t: float, b
 	d.at = t
 	d.until = t + Settings.f(s.tuning, &"down.time", DOWN_TIME)
 	d.by = by
+	if s.annex_drag and by == &"catch" and s.plan.place == &"annex" and s.orderly.mode == &"bending" \
+		and str(s.orderly.bend_target) == np.id:
+		d.drag_goal = _copy_room_goal(s, np.body)
+		if d.drag_goal != null:
+			d.drag_walk = Follow.ResidentWalk.new()
 	var down := s.down.duplicate()
 	down[np.id] = d
 	s.down = down
 	events.append({"type": "downed", "t": t, "playerId": np.id, "until": d.until, "by": String(by), "at": np.body})
+
+const ANNEX_DRAG_SPEED := 1.0
+const ANNEX_DRAG_LIMIT := 10.0
+
+## Drives the victim's own client through the existing authoritative placement channel.
+static func annex_dragging(s: RunState, id: String) -> bool:
+	if not s.annex_drag or s.orderly == null or s.orderly.mode != &"bending" or str(s.orderly.bend_target) != id:
+		return false
+	var d: Downed = s.down.get(id)
+	return d != null and d.drag_goal != null
+
+## Choose the nearest reachable copy room by the actual floor graph, with plan order breaking ties.
+static func _copy_room_goal(s: RunState, at: Move.Body) -> Move.Body:
+	var from := Move.cell_of(s.plan, at)
+	var dist := Floor.distances_from(s.plan, from)
+	var best: Move.Body = null
+	var best_steps := 1 << 30
+	var solids := solids_in(s)
+	for room: Floor.Room in s.plan.rooms:
+		if room.kind != &"copy":
+			continue
+		for z in range(room.y, room.y + room.h):
+			for x in range(room.x, room.x + room.w):
+				var spot := Floor.Pos.make(room.level, x, z)
+				var steps := dist[Floor.pos_index(s.plan, spot)]
+				if steps < 0 or steps >= best_steps:
+					continue
+				var to := Move.body_at_cell(s.plan, spot)
+				if Move.clear_at(s.plan, solids, spot.level, to.x, to.z, CRAWL_RADIUS):
+					best = to
+					best_steps = steps
+	return best
+
+## Both bodies use the floor collision. A watched Stillness Temp never advances; a Lonely one can.
+static func _step_annex_drag(s: RunState, players: Array[RunPlayer], previous: Entity.OrderlyState, stillness: bool, dt: float) -> void:
+	if not s.annex_drag:
+		return
+	var victim := str(s.orderly.bend_target)
+	if not annex_dragging(s, victim):
+		return
+	if stillness and s.orderly.held:
+		# The attached drag obeys the same Stillness verdict as its physical movement.
+		if previous.mode == &"bending" and str(previous.bend_target) == victim:
+			s.orderly = s.orderly.copy()
+			s.orderly.anim_time = previous.anim_time
+		return
+	var d: Downed = s.down[victim]
+	var budget := minf(dt * ANNEX_DRAG_SPEED, ANNEX_DRAG_LIMIT - d.drag_m)
+	if budget <= EPS or s.t <= d.at + EPS:
+		return
+	for i: int in players.size():
+		var p := players[i]
+		if p.id == victim and p.status == &"down":
+			_drag_bodies(s, players, i, d, budget)
+			return
+
+static func _drag_bodies(s: RunState, players: Array[RunPlayer], i: int, d: Downed, budget: float) -> void:
+	var body := players[i].body
+	var temp := s.orderly.body
+	var solids := solids_in(s)
+	if solids == null:
+		solids = Move.Solids.new()
+	var walk := d.drag_walk.copy()
+	var moved := Follow.step_resident_walk(s.plan, walk, body, d.drag_goal, budget, CRAWL_RADIUS, solids)
+	var distance := M.hypot3(moved.x - body.x, moved.y - body.y, moved.z - body.z)
+	# The path follower's stride is horizontal. Reduce it on a ramp to respect the total travel cap.
+	if distance > budget + EPS:
+		walk = d.drag_walk.copy()
+		moved = Follow.step_resident_walk(s.plan, walk, body, d.drag_goal, budget * budget / distance, CRAWL_RADIUS, solids)
+		distance = M.hypot3(moved.x - body.x, moved.y - body.y, moved.z - body.z)
+	if distance <= EPS:
+		if walk.next != d.drag_walk.next or walk.goal != d.drag_walk.goal:
+			var settled := d.copy()
+			settled.drag_walk = walk
+			s.down = s.down.duplicate()
+			s.down[d.id] = settled
+		return
+	if distance > budget + EPS or in_car(s.car, moved):
+		return
+	var radius := Entity.kind_of(s.orderly).radius
+	var leader := Move.move_with_collision(s.plan, temp, moved.x - body.x, moved.z - body.z, radius, solids)
+	if _drag_in_car(s, leader, radius):
+		return
+	var separation := M.hypot3(moved.x - leader.x, moved.y - leader.y, moved.z - leader.z)
+	if separation > Entity.REACH_RANGE + EPS:
+		# The Temp catches on a corner first. It can move closer to its held player before pulling again.
+		var toward := Vector2(body.x - temp.x, body.z - temp.z).limit_length(budget)
+		leader = Move.move_with_collision(s.plan, temp, toward.x, toward.y, radius, solids)
+		if not _drag_in_car(s, leader, radius):
+			s.orderly = s.orderly.copy()
+			s.orderly.body = leader
+		return
+	var next := d.copy()
+	next.drag_walk = walk
+	next.drag_m += distance
+	next.drag_rear = atan2(moved.x - body.x, moved.z - body.z)
+	s.down = s.down.duplicate()
+	s.down[d.id] = next
+	var player := players[i].copy()
+	player.body = moved
+	players[i] = player
+	s.orderly = s.orderly.copy()
+	s.orderly.body = leader
+
+static func _drag_in_car(s: RunState, body: Move.Body, radius: float) -> bool:
+	return body.level == s.car.level and rect_distance(s.car.rect, body.x, body.z) < radius - EPS
 
 ## Whether player `id` may heal someone lying at `at` this tick: on their feet, F held, feet within
 ## HEAL_REACH on the same level. Their distance, or -1 when they may not.
@@ -3226,7 +3361,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	for p in prev.players:
 		var np := p.copy()
 		var given: PlayerInput = input_of.get(p.id)
-		if given != null and p.status == &"down" and prev.down.has(p.id):
+		if annex_dragging(prev, p.id):
+			np.body = p.body
+		elif given != null and p.status == &"down" and prev.down.has(p.id):
 			# Down: they crawl, no faster than CRAWL_SPEED toward where they say they are.
 			np.body = _crawl(prev, p.body, given.body, dt)
 		else:
@@ -3630,7 +3767,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			next = _relocate(s, next, who.trait_name, players, input_of, t, dt, moved_on)
 		s.orderly = next
 		for e in o_events:
-			events.append(_with_t(e, t))
+			events.append(_with_t(_annex_catch_event(s, e), t))
 		events.append_array(moved_on)
 		entity_ticks = [Instr.EntityTick.make(s.entity_id, who.trait_name, before, next, crew_events)]
 		# Caught out of a hide (its look-in): pulled out onto the hide's front spot first.
@@ -3652,6 +3789,10 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	# ---- Down first, then out (see the header): heals, and the timer running out.
 	if s.downs and not s.down.is_empty() and s.phase != &"riding":
 		var outs := _step_downs(s, players, input_of, t, dt, events)
+		if s.annex_drag:
+			_step_annex_drag(s, players, prev.orderly, who.stillness, dt)
+			if not entity_ticks.is_empty() and annex_dragging(s, str(s.orderly.bend_target)):
+				entity_ticks[0].next = s.orderly
 		if not outs.is_empty():
 			# Out: the tape drops where they lie (the instrument's "caught").
 			var dropped: Array[Dictionary] = []
@@ -4406,7 +4547,7 @@ static func _step_lonely(s: RunState, players: Array[RunPlayer], input_of: Dicti
 		next = _relocate(s, next, &"lonely", players, input_of, t, dt, moved_on)
 	s.orderly = next
 	for e in er.events:
-		events.append(_with_t(e, t))
+		events.append(_with_t(_annex_catch_event(s, e), t))
 	events.append_array(moved_on)
 	var et := Instr.EntityTick.make(s.entity_id, &"lonely", before, next, crew_events)
 	var who := Lonely.chased(before, next)

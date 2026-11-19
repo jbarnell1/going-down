@@ -20,7 +20,7 @@ const FILES: Array[String] = [
 	"prop_stamina", "prop_clinic", "prop_entity", "prop_instrument", "prop_run", "prop_blackout", "prop_net",
 	"prop_lift", "prop_annex", "prop_prison", "prop_notes", "prop_marks", "test_marks_view", "test_annex_notes_view", "prop_upgrades", "prop_report", "prop_day", "prop_save", "prop_profiles", "prop_face_net",
 	"prop_playroom", "prop_seek", "prop_places", "prop_temp", "prop_day_net", "prop_count_run", "prop_door_shadow", "prop_count_net", "prop_quota_net", "prop_marks_net",
-	"prop_downs", "prop_down_view", "prop_watchers", "prop_relocate", "prop_hides", "prop_owner_0833", "prop_lonely", "prop_playroom_tuned",
+	"prop_downs", "prop_down_view", "prop_watchers", "prop_relocate", "prop_hides", "prop_owner_0833", "prop_lonely", "prop_annex_drag", "prop_playroom_tuned",
 	"prop_settings", "prop_settings_net", "prop_hints", "prop_tapes", "prop_telemetry", "prop_day_view", "prop_furniture", "prop_ready", "prop_ready_screen", "test_local_bots", "test_solo_diagnostics",
 	"prop_orientation", "prop_flare", "prop_lamp", "prop_nerve", "prop_shaken",
 	"prop_hearing", "prop_arboretum", "prop_garden_cones", "prop_garden_search", "test_garden_recordings", "prop_ward_net",

@@ -955,6 +955,10 @@ func _step(now: float) -> void:
 		var dp := _find_run_player(st, (st.seek as Seek.SeekState).minder.victim)
 		if dp != null:
 			_place(dp.id, dp.body, st.depth, st)
+	if st.annex_drag and Run.annex_dragging(st, str(st.orderly.bend_target)):
+		var dragged := _find_run_player(st, str(st.orderly.bend_target))
+		if dragged != null:
+			_place(dragged.id, dragged.body, st.depth, st)
 	if st.orderly.mode != &"windUp":
 		_pending_catch = null
 	var gone := {}
@@ -1517,6 +1521,8 @@ static func downs_block(s: Run.RunState) -> Dictionary:
 		# Live settings: a hold the host timed differently from Run.HEAL_TIME says how long it takes (Protocol "healFor").
 		if d.healer != "" and d.heal_len != Run.HEAL_TIME:
 			row["healFor"] = d.heal_len
+		if Run.annex_dragging(s, d.id):
+			row["drag"] = {"rear": d.drag_rear, "held": Run.resident_of(s).stillness and s.orderly.held}
 		down.append(row)
 	return {"down": down, "spots": s.spots.duplicate()}
 

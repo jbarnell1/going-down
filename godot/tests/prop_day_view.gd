@@ -311,8 +311,8 @@ func test_call_refusal_flash_yields_to_the_paid_floor(t: T) -> void:
 	var v := FloorQuota.new()
 	v.flash_text = FloorQuota.refused_text(0, 800)
 	v.flash_until = 2200
-	t.eq(v.update({"earned": 0, "needed": 800}, null, true, 1000), v.flash_text, "early CALL shows the refusal")
-	t.eq(v.update({"earned": 800, "needed": 800}, null, true, 1001), "QUOTA MET. CALL THE CAR.", "paid floor immediately overrides old refusal")
+	t.eq(v.update({"earned": 0, "needed": 800}, null, FloorQuota.CALL_PROMPT, 1000), v.flash_text, "early CALL shows the refusal")
+	t.eq(v.update({"earned": 800, "needed": 800}, null, FloorQuota.CALL_PROMPT, 1001), "QUOTA MET. CALL THE CAR.", "paid floor immediately overrides old refusal")
 	t.check(not v.flashing and v.tone == "met", "paid color and gate agree")
 
 func test_quota_prompt_and_refusal_fit_above_a_long_intercom_caption(t: T) -> void:
@@ -430,3 +430,19 @@ func test_day_odds_wire_extension_preserves_old_reels_and_rejects_malformed_tail
 	validation = Protocol._V.new()
 	Protocol.dec_day(validation, [])
 	t.check(validation.bad, "reject an empty day array")
+
+func test_call_prompt_exact_code_points_and_quota_line(t: T) -> void:
+	const FloorQuota = preload("res://client/quota_view.gd")
+	const HudView = preload("res://client/hud.gd")
+	var hud := HudView.new()
+	hud.prompt = FloorQuota.CALL_PROMPT
+	var cps: Array[int] = []
+	for i in hud.prompt.length():
+		cps.append(hud.prompt.unicode_at(i))
+	t.eq(cps, [0x46, 0x20, 0x20, 0x25bc, 0x20, 0x43, 0x41, 0x4c, 0x4c],
+		"CALL displays an exact U+25BC down triangle with the original spacing")
+	var quota := FloorQuota.new()
+	var q := {"earned": 0, "needed": 800}
+	t.eq(quota.update(q, null, hud.prompt, 500), "RECORDED 0 OF 800", "the same displayed prompt shows quota")
+	t.eq(quota.update(q, null, "F  CALL", 500), "", "an unrelated prompt does not show quota")
+	hud.free()

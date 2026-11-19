@@ -683,13 +683,16 @@ static func dec_watch(c: _V, w: Variant) -> Dictionary:
 	return {"need": _i(c, a[0], 1, 2), "watchers": ids}
 
 ## The downs block (see the header) from its readable form {down: [{id, at, until, by, healer, healFrom}],
-## spots: [{playerId, x, z, level, y, t}]}.
+## spots: [{playerId, x, z, level, y, t}]}. Opt-in Annex drag appends [rear yaw or null, Stillness hold].
 static func enc_downs(k: Dictionary) -> Array:
 	var down: Array = []
 	for d: Dictionary in k["down"]:
 		var row: Array = [d["id"], q3(d["at"]), q3(d["until"]), DOWN_BY.find(String(d["by"])), d["healer"], null if d["healFrom"] == null else q3(d["healFrom"])]
-		if d.get("healFor") != null:
-			row.append(q3(d["healFor"]))
+		var drag: Variant = d.get("drag")
+		if d.get("healFor") != null or drag != null:
+			row.append(null if d.get("healFor") == null else q3(d["healFor"]))
+		if drag != null:
+			row.append([null if drag["rear"] == null else q3(drag["rear"]), 1 if drag["held"] else 0])
 		down.append(row)
 	var spots: Array = []
 	for p: Dictionary in k["spots"]:
@@ -702,13 +705,19 @@ static func dec_downs(c: _V, w: Variant) -> Dictionary:
 		return {}
 	var down: Array = []
 	for dw: Variant in _a(c, a[0], 0, 64):
-		var d := _a(c, dw, 6, 7)
+		var d := _a(c, dw, 6, 8)
 		if c.bad:
 			return {}
 		var row := {"id": _s(c, d[0]), "at": _f(c, d[1]), "until": _f(c, d[2]), "by": _code(c, DOWN_BY, d[3]), "healer": _s(c, d[4]),
 			"healFrom": _opt_num(c, d[5])}
-		if d.size() > 6:
+		if d.size() > 6 and (d.size() == 7 or d[6] != null):
 			row["healFor"] = _f(c, d[6], 0.0, 60.0)
+		if d.size() == 8:
+			var drag := _a(c, d[7], 2, 2)
+			if c.bad:
+				return {}
+			row["drag"] = {"rear": null if drag[0] == null else _f(c, drag[0], -PI - 0.001, PI + 0.001),
+				"held": _i(c, drag[1], 0, 1) == 1}
 		down.append(row)
 	var spots: Array = []
 	for pw: Variant in _a(c, a[1], 0, 256):

@@ -358,8 +358,12 @@ func _aim_limb(parent: String, child: String, direction: Vector3, weight: float)
 	var a := skel.get_bone_global_pose(skel.find_bone(parent)).origin
 	var b := skel.get_bone_global_pose(skel.find_bone(child)).origin
 	var turn := Quaternion((b-a).normalized(), direction.normalized())
-	if turn.get_angle() > 0.00001:
-		_rotate_bone(parent, turn.get_axis(), turn.get_angle() * weight)
+	var angle := turn.get_angle()
+	if angle > 0.00001:
+		# Extracting the axis from a small turn can lose precision near the identity.
+		var axis := turn.get_axis().normalized()
+		if not axis.is_zero_approx():
+			_rotate_bone(parent, axis, angle * weight)
 
 ## The shared catch clock advances the dance. Blend up from the already completed bend.
 func _show_dance(t: float) -> void:

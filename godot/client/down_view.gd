@@ -37,11 +37,18 @@ var fill := -1.0
 var target := ""
 ## Seconds left on your own timer (-1 when you are not down), as shown.
 var seconds := -1.0
+## The host reports the Annex drag even when both bodies are stationary.
+var dragged := false
+var drag_yaw: Variant = null
+var _drag_at := -1.0
+var _drag_rear: Variant = null
+var _drag_manual := false
 ## The red spots drawn (keys: player id and host time), and their root in the world.
 var _spots := {}
 var _root: Node3D = null
 
 func reset() -> void:
+	_clear_drag()
 	head = ""
 	left = -1.0
 	line = ""
@@ -57,7 +64,7 @@ func reset() -> void:
 	_root = null
 
 ## This frame. `s` the snapshot (play_link.gd), `my` this player's id, `names` by id, `holding` F held.
-func update(s: Dictionary, my: String, names: Dictionary, holding: bool) -> void:
+func update(s: Dictionary, my: String, names: Dictionary, holding: bool, place := "") -> void:
 	head = ""
 	left = -1.0
 	line = ""
@@ -71,11 +78,14 @@ func update(s: Dictionary, my: String, names: Dictionary, holding: bool) -> void
 	seconds = -1.0
 	var block: Variant = s.get("downs")
 	if not block is Dictionary:
+		_clear_drag()
 		return
 	var downs: Array = (block as Dictionary)["down"]
 	var hn := float(s.get("hostNow", 0.0))
 	var me: Dictionary = s["me"]
 	var status := str(me["status"])
+	if status != "down":
+		_clear_drag()
 	if status == "out":
 		out = true
 		out_lines = ["OUT", "", "YOU REJOIN WHEN THE CAR NEXT MOVES"]
@@ -83,8 +93,10 @@ func update(s: Dictionary, my: String, names: Dictionary, holding: bool) -> void
 	if status == "down":
 		var d: Variant = _row(downs, my)
 		if d == null:
+			_clear_drag()
 			return
 		var dd: Dictionary = d
+		_step_drag(dd, place)
 		var until := float(dd["until"])
 		var span := maxf(0.001, until - float(dd["at"]))
 		seconds = maxf(0.0, until - hn)
@@ -98,7 +110,7 @@ func update(s: Dictionary, my: String, names: Dictionary, holding: bool) -> void
 			line = "A CREWMATE CAN HOLD F BESIDE YOU"
 		else:
 			line = "NOBODY IS LEFT TO HELP YOU UP"
-		line2 = "CRAWL: W A S D"
+		line2 = "BEING DRAGGED" if dragged else "CRAWL: W A S D"
 		return
 	if status != "ok":
 		return
@@ -127,6 +139,37 @@ func update(s: Dictionary, my: String, names: Dictionary, holding: bool) -> void
 	fill = 0.0
 	if holding and healer == my and rd["healFrom"] != null:
 		fill = clampf((hn - float(rd["healFrom"])) / float(rd.get("healFor", Run.HEAL_TIME)), 0.0, 1.0)
+
+func _clear_drag() -> void:
+	dragged = false
+	drag_yaw = null
+	_drag_at = -1.0
+	_drag_rear = null
+	_drag_manual = false
+
+func keep_drag_look() -> void:
+	if _drag_at >= 0.0:
+		_drag_manual = true
+		drag_yaw = null
+
+func _step_drag(down: Dictionary, place: String) -> void:
+	var drag: Variant = down.get("drag")
+	if place != "annex" or down.get("by") != "catch" or not drag is Dictionary:
+		_clear_drag()
+		return
+	var at := float(down["at"])
+	if _drag_at != at:
+		_clear_drag()
+		_drag_at = at
+	dragged = true
+	var rear: Variant = drag["rear"]
+	if rear == null:
+		return
+	if _drag_rear == null or absf(angle_difference(float(_drag_rear), float(rear))) > PI / 3.0:
+		_drag_rear = rear
+		if not _drag_manual:
+			drag_yaw = rear
+
 
 static func _row(downs: Array, id: String) -> Variant:
 	for d: Dictionary in downs:
@@ -221,4 +264,4 @@ func spots_drawn() -> Array:
 
 func describe() -> Dictionary:
 	return {"head": head, "left": left, "seconds": seconds, "line": line, "line2": line2, "heal": heal, "out": out, "outLines": out_lines,
-		"prompt": prompt, "fill": fill, "target": target, "spots": spots_drawn()}
+		"prompt": prompt, "fill": fill, "target": target, "spots": spots_drawn(), "dragged": dragged}

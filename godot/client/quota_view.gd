@@ -10,6 +10,8 @@
 #  - "quotaMet": the announcer's quota line (announcer.gd on_events, moment "quota").
 extends RefCounted
 
+const CALL_PROMPT := "F  \u25bc CALL"
+
 const FLASH_MS := 1600
 const BLINK_MS := 160
 
@@ -64,9 +66,8 @@ func on_events(events: Array, my_id: String, sfx: Sfx, now: int) -> void:
 			refusals += 1
 			sfx.play("refused")
 
-## The panel and the line under the prompt for this frame. `q` the host's quota block; `in_reach` the
-## player can press the call button. Returns the line to print under the prompt ("" for none).
-func update(q: Variant, lift: Lift, in_reach: bool, now: int) -> String:
+## The panel and the line under the prompt for this frame. `q` the host's quota block; `prompt` is the current line shown on the HUD. Returns the line to print under the prompt ("" for none).
+func update(q: Variant, lift: Lift, prompt: String, now: int) -> String:
 	var base := panel_text(q)
 	flashing = now < flash_until and base != "" and not floor_met(q)
 	text = flash_text if flashing else base
@@ -75,7 +76,7 @@ func update(q: Variant, lift: Lift, in_reach: bool, now: int) -> String:
 	var lit := not flashing or ((flash_until - now) / BLINK_MS) % 2 == 0
 	if lift != null:
 		lift.show_quota(text, tone, lit)
-	if flashing or (in_reach and base != ""):
+	if flashing or (prompt == CALL_PROMPT and base != ""):
 		return text
 	return ""
 
