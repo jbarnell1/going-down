@@ -1,6 +1,6 @@
 // The hub: one small always-on server for checking in on the game.
 //   /            links and the current build
-//   /play/       the last known-good build of the game (copied to .live/ by `npm run deploy:live`)
+//   /play/       the promoted browser game; falls back to .live/ before the first promotion
 //   /status      the loop's progress file and the newest screenshots and renders
 //   /questions   open questions for the owner to answer; answers are saved to .local/answers.json
 // No dependencies. Binds to localhost only; put it behind a private reverse proxy to reach it remotely.
@@ -110,6 +110,15 @@ async function latestFiles(limit = 40) {
   return out.sort((a, b) => b.mtime - a.mtime).slice(0, limit);
 }
 
+async function promotedBuild() {
+  const dir = path.join(ROOT, 'play');
+  const build = await readJson(path.join(dir, 'build.json'), null);
+  if (typeof build?.commit !== 'string' || !build.commit.trim()) return null;
+  const required = ['index.html', 'index.js', 'index.wasm', 'index.pck'];
+  const files = await Promise.all(required.map((name) => fs.stat(path.join(dir, 'web', name)).catch(() => null)));
+  return files.every((file) => file?.isFile() && file.size > 0) ? build : null;
+}
+
 async function apiStatus() {
   const qs = await readJson(QUESTIONS, { questions: [] });
   const ans = await readJson(ANSWERS, {});
@@ -118,7 +127,7 @@ async function apiStatus() {
     state: await readJson(STATE, null),
     latest: await latestFiles(),
     live: await readJson(path.join(LIVE, 'version.json'), null),
-    godotBuild: await readJson(path.join(ROOT, 'play', 'build.json'), null),
+    godotBuild: await promotedBuild(),
     questionsOpen: qs.questions.filter((q) => !ans[q.id]).length,
   };
 }
@@ -130,12 +139,12 @@ const page = (title, body, refresh = '') => `<!doctype html><html lang="en"><hea
 ${body}</main></body></html>`;
 
 async function home() {
-  const v = await readJson(path.join(LIVE, 'version.json'), null);
+  const v = await promotedBuild() ?? await readJson(path.join(LIVE, 'version.json'), null);
   const qs = await readJson(QUESTIONS, { questions: [] });
   const ans = await readJson(ANSWERS, {});
   const open = qs.questions.filter((q) => !ans[q.id]).length;
   const build = v
-    ? `<p>Live build: <strong>${esc(v.commit || 'unknown')}</strong>, deployed ${esc(v.deployedAt || '')}.<br>${esc(v.note || '')}</p>`
+    ? `<p>Live build: <strong>${esc(v.commit || 'unknown')}</strong>, deployed ${esc(v.promotedAt || v.deployedAt || '')}.<br>${esc(v.note || '')}</p>`
     : '<p>No build has been deployed yet. The first one appears here after the loop finishes project setup.</p>';
   return page('Going Down hub', `<h1>Going Down</h1>${build}
 <div class="tiles">
@@ -230,7 +239,10 @@ const server = http.createServer(async (req, res) => {
       const hidden = /\.(br|gz)$/i.test(rel);
       return (file && !hidden && (await serveBuild(req, res, file))) || send(res, 404, 'No Godot build on this machine', 'text/plain');
     }
-    if (p === '/play') return send(res, 302, '', 'text/plain', { Location: '/play/' });
+    if (p === '/play' || p === '/play/' || p === '/play/index.html') {
+      if (await promotedBuild()) return send(res, 302, '', 'text/plain', { Location: '/godot/' + url.search });
+      if (p === '/play') return send(res, 302, '', 'text/plain', { Location: '/play/' + url.search });
+    }
     if (p.startsWith('/play/')) {
       let rel = p.slice('/play/'.length) || 'index.html';
       if (rel.endsWith('/')) rel += 'index.html';
@@ -246,4 +258,4 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '127.0.0.1', () => console.log(`hub listening on http://127.0.0.1:${PORT}`));
+server.listen(PORT, '127.0.0.1', () => console.log(`hub listening on http://127.0.0.1:${server.address().port}`));

@@ -14,7 +14,7 @@ const get = (p, method = 'GET', body) => new Promise((resolve, reject) => {
   const req = http.request({ host: '127.0.0.1', port: PORT, path: p, method, headers: body ? { 'Content-Type': 'application/json' } : {} }, (res) => {
     let data = '';
     res.on('data', (c) => { data += c; });
-    res.on('end', () => resolve({ status: res.statusCode, type: res.headers['content-type'] ?? '', body: data }));
+    res.on('end', () => resolve({ status: res.statusCode, type: res.headers['content-type'] ?? '', location: res.headers.location, body: data }));
   });
   req.on('error', reject);
   if (body) req.write(body);
@@ -28,12 +28,18 @@ try {
   for (let i = 0; i < 40; i++) {
     try { await get('/'); break; } catch { await new Promise((r) => setTimeout(r, 100)); }
   }
-  for (const p of ['/', '/status', '/questions', '/audition', '/hub.css', '/play/']) {
+  for (const p of ['/', '/status', '/questions', '/audition', '/hub.css']) {
     const r = await get(p);
     expect(`GET ${p}`, r.status === 200, `-> ${r.status}`);
   }
   const status = await get('/api/status');
   const parsed = JSON.parse(status.body);
+  const play = await get('/play/?bots=3');
+  if (parsed.godotBuild) {
+    expect('Play opens the promoted browser build with companions', play.status === 302 && play.location === '/godot/?bots=3');
+  } else {
+    expect('Play works before the first promotion', play.status === 200);
+  }
   expect('status api has tasks', Array.isArray(parsed.state?.tasks) && parsed.state.tasks.length > 0);
   expect('status api lists latest files', Array.isArray(parsed.latest));
   const qs = JSON.parse((await get('/api/questions')).body);
