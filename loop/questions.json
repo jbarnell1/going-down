@@ -2027,6 +2027,25 @@
         }
       ],
       "default": []
+    },
+    {
+      "id": "nerve-third-lamp",
+      "title": "Whose torch should count when you witness a catch in a blackout?",
+      "context": "Your torch is off. Six metres ahead, another player lights the crewmate being caught. The T21b Progress card shows the same view with the beam clear and blocked by a wall. This decides when witnessing the catch costs 15 Nerve.",
+      "type": "single",
+      "options": [
+        {
+          "id": "visible",
+          "label": "Count a clear view under any crewmate's torch",
+          "note": "A blocked beam or a glint on the floor is insufficient. You can add a distance preference in the comment."
+        },
+        {
+          "id": "own",
+          "label": "Require my own torch or flash in a blackout",
+          "note": "Another player's torch can show me the catch without costing me the 15 Nerve."
+        }
+      ],
+      "default": []
     }
   ]
 }
