@@ -50,6 +50,10 @@ const EyeHeight = preload("res://client/eye_height.gd")
 const RoomClient = preload("res://net/room_client.gd")
 const LocalRoom = preload("res://net/local_room.gd")
 const SoloDiagnostics = preload("res://client/solo_diagnostics.gd")
+## The two floors drawn by their own scenes (FL1): the snapshot block that marks each, and the picker's name for it.
+const FLOOR_PLACE_LABELS := {"ward": "HANGING WARD", "reactor": "REACTOR"}
+const FLOOR_NAMES := {"ward": "the Hanging Ward", "reactor": "the Reactor"}
+const FLOOR_REVIEWS := {"ward": "ward_ground", "reactor": "reactor"}
 const PLAYTEST_REVIEWS := {
 	"ward_ground": {
 		"pack":"WardGroundMedia.pck", "scene":"res://client/ward/review.tscn",
@@ -144,6 +148,12 @@ var reactor_entry_pending := false
 var reactor_prison := false
 var ward_room: Variant = null
 var _ward_prison_pending := false
+## FL1: a scene swap to the Ward or the Reactor is queued; the floor whose media pack is missing (the player
+## stays in the room and this screen says which file to install); a directory that overrides where the two
+## optional packs are looked for (tests and `-- packs=<dir>`; otherwise beside the executable).
+var _floor_entry_pending := false
+var _floor_media_missing := ""
+var pack_dir := ""
 var sub: SubViewport
 var env: Environment
 var cam: Camera3D
@@ -379,31 +389,92 @@ func _owner_review_requested() -> bool:
 			return true
 	return false
 
-func _enter_joined_reactor(room: Variant) -> void:
-	var review: Dictionary = PLAYTEST_REVIEWS.reactor
+## FL1: which of the two own-scene floors this snapshot is on ("ward", "reactor" or ""). The Ward from its
+## block until its lift has gone; the Reactor while its crew is below (its block stays home with `lift` on).
+static func floor_handover(latest: Variant) -> String:
+	if not latest is Dictionary or int(latest.get("depth", 0)) <= 0:
+		return ""
+	var ward: Variant = latest.get("ward")
+	if ward is Dictionary and str(ward.get("phase", "")) != "departed":
+		return "ward"
+	var reactor: Variant = latest.get("reactor")
+	if reactor is Dictionary and not bool(reactor.get("lift", false)):
+		return "reactor"
+	return ""
+
+## The solo floor picker's name for a place: the two own-scene floors by name, the rest as the place reads.
+static func playtest_area(place: Variant) -> String:
+	return str(FLOOR_PLACE_LABELS.get(str(place), str(place).replace("_", " ").to_upper()))
+
+## The line shown while a floor's optional media pack is missing: the file to put beside the game.
+static func floor_media_line(into: String) -> String:
+	return "Put %s beside the game to see %s. You are still in the room." % [PLAYTEST_REVIEWS[FLOOR_REVIEWS[into]].pack, FLOOR_NAMES[into]]
+
+## Mounts the floor's pack (once per process); false when it is not there or does not hold the floor's scene.
+func _mount_floor_pack(into: String) -> bool:
+	var review: Dictionary = PLAYTEST_REVIEWS[FLOOR_REVIEWS[into]]
+	var probe := "res://assets/ward/rigger.glb" if into == "ward" else str(review.scene)
+	if ResourceLoader.exists(probe):
+		return true
 	var pack := _review_pack_path(review)
-	if not FileAccess.file_exists(pack) or not ProjectSettings.load_resource_pack(pack, false) or not ResourceLoader.exists(review.scene):
-		room.leave()
-		link = null
-		reactor_entry_pending = false
-		_show_start("join")
-		start.error = "Install ReactorCampaign.pck beside the game to join this floor."
+	return FileAccess.file_exists(pack) and ProjectSettings.load_resource_pack(pack, false) and ResourceLoader.exists(probe)
+
+## The floor's scene, holding the room this screen already plays in (no second room is opened).
+## The Ward: client/ward/review.tscn, given the room before it enters the tree. The Reactor: the pack's
+## compiled scene; its own _ready opens a room of its own, so the room is handed over after add_child
+## (`_hand_reactor_room`), the way the joined route always did it.
+func _floor_scene(into: String, room: Variant) -> Node:
+	var review: Dictionary = PLAYTEST_REVIEWS[FLOOR_REVIEWS[into]]
+	var scene := (load(str(review.scene)) as PackedScene).instantiate()
+	if into == "ward":
+		scene.set("room", room)
+		scene.set("handed", true)
+	return scene
+
+static func _hand_reactor_room(station: Node, room: Variant) -> void:
+	var own: Variant = station.get("game")
+	if own != null and own != room:
+		own.leave()
+	station.set("game", room)
+	station.set("remote_url", "joined")
+	station.set("view_id", str(room.client.id))
+
+func _enter_floor(into: String, room: Variant) -> void:
+	_floor_entry_pending = false
+	if link == null or link.rc != room:
 		return
-	var station := (load(review.scene) as PackedScene).instantiate()
-	var tree := get_tree()
-	tree.root.add_child(station)
-	# The original sidecar also runs standalone. Transfer the already joined campaign connection.
-	if station.game != null:
-		station.game.leave()
-	station.game = room
-	station.remote_url = "joined"
-	station.view_id = str(room.client.id)
+	if not _mount_floor_pack(into):
+		# Stay in the room: the run carries on (the floor's rules run on the host) and the ride home brings this
+		# player back to the prison with everyone else. Only the floor's own pictures are missing.
+		_floor_media_missing = into
+		_show_floor_media_line()
+		print("FLOOR MEDIA MISSING %s" % into)
+		return
+	var scene := _floor_scene(into, room)
+	var tree := Engine.get_main_loop() as SceneTree
 	link = null
-	tree.current_scene = station
-	queue_free()
+	tree.root.add_child(scene)
+	if into == "reactor":
+		reactor_entry_pending = true
+		_hand_reactor_room(scene, room)
+	tree.current_scene = scene
+	print("FLOOR ENTERED %s local=%s" % [into, room is LocalRoom])
+	if is_inside_tree():
+		queue_free()
+
+func _show_floor_media_line() -> void:
+	hud.note = floor_media_line(_floor_media_missing)
+	_note_until = Time.get_ticks_msec() + 1000
 
 func _review_pack_path(review: Dictionary) -> String:
-	return OS.get_executable_path().get_base_dir().path_join(str(review["pack"]))
+	var dir := pack_dir
+	if dir.is_empty():
+		for arg: String in OS.get_cmdline_user_args():
+			if arg.begins_with("packs="):
+				dir = arg.trim_prefix("packs=")
+	if dir.is_empty():
+		dir = OS.get_executable_path().get_base_dir()
+	return dir.path_join(str(review["pack"]))
 
 func _start_owner_review(id: String) -> void:
 	var review: Dictionary = PLAYTEST_REVIEWS[id]
@@ -854,7 +925,7 @@ func _open_playtest() -> void:
 	start.playtest_choices.append({"id": "orientation", "label": "CONTINUANCE PRACTICE"})
 	for destination in LocalRoom.playtest_destinations(seed, Session.deck):
 		var depth := int(destination["depth"])
-		var area := str(destination["place"]).replace("_", " ").to_upper()
+		var area := playtest_area(destination["place"])
 		var label := area if depth == 0 else "FLOOR %d - %s" % [depth, area]
 		start.playtest_choices.append({"id": str(depth), "label": label})
 	if not OS.has_feature("editor"):
@@ -1717,12 +1788,17 @@ func _process(delta: float) -> void:
 	if link == null:
 		return
 	var rc := link.rc
-	if not link.local and not reactor_prison and rc.client != null and rc.client.latest != null:
-		var incoming: Variant = rc.client.latest.get("reactor")
-		if incoming != null and rc.client.latest.depth > 0 and not incoming.lift:
-			if not reactor_entry_pending:
-				reactor_entry_pending = true
-				_enter_joined_reactor.call_deferred(rc)
+	if rc.client != null and rc.client.latest != null:
+		# FL1: the Ward and the Reactor are drawn by their own scenes, alone or joined, with this same room.
+		var into := floor_handover(rc.client.latest)
+		if into.is_empty():
+			_floor_media_missing = ""
+		elif into == _floor_media_missing:
+			_show_floor_media_line()
+		else:
+			if not _floor_entry_pending:
+				_floor_entry_pending = true
+				_enter_floor.call_deferred(into, rc)
 			return
 	if rc.status == "closed":
 		var words := "" if _leaving else _close_words(rc.close_code)

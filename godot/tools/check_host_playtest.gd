@@ -33,9 +33,15 @@ func _check() -> void:
 	var destinations := LocalRoom.playtest_destinations(game.seed, Session.deck)
 	for destination in destinations:
 		var depth := int(destination["depth"])
+		# The late floors (FL1) hand the screen to their own scene (main is replaced), so this tool stops short of them:
+		# tests/test_floor_entry.gd plays that hand-over and the way home.
+		if String(destination["place"]) in ["ward", "reactor"]:
+			continue
 		game.start.press(str(depth))
 		await _wait_for_floor(game, depth)
-		_expect(game.built_depth == depth and game.link.plan_dict.get("place") == String(destination["place"]),
+		# The late floors (FL1) are overlays on that depth's own plan: the plan's place is the deck's, not "ward"/"reactor".
+		var overlay := String(destination["place"]) in ["ward", "reactor"]
+		_expect(game.built_depth == depth and (overlay or game.link.plan_dict.get("place") == String(destination["place"])),
 			"the client draws the real selected area on floor %d" % depth)
 		_f6(game)
 		_expect(game.start.screen == "playtest", "F6 opens the picker from floor %d" % depth)

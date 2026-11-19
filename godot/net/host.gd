@@ -111,6 +111,7 @@ extends RefCounted
 
 const ReactorReview := preload("res://net/reactor_review.gd")
 const Ward = preload("res://sim/ward/state.gd")
+const HostRules = preload("res://net/host_rules.gd")
 
 const Run = preload("res://sim/run.gd")
 const Entity = preload("res://sim/entity.gd")
@@ -300,6 +301,19 @@ var _reactor_plan: Floor.FloorPlan
 var _ward_review: Ward
 var _ward_plan: Floor.FloorPlan
 var _ward_use := {}
+## The late floors (FL1; net/host_rules.gd late_floors): off unless enable_late_floors() is called. On, arriving
+## at HostRules.WARD_DEPTH starts the Ward exactly as start_ward_review does, and HostRules.REACTOR_DEPTH the
+## Reactor exactly as start_reactor_review does, seeded from the day's floor seed (state.seed), with the crew placed
+## at the overlay's own lift. While a late Reactor runs (until its lift is called) the floor underneath is held:
+## no resident, car, quota or catch of its own is stepped (_step_reactor_hold), as the Ward's step already replaces
+## the run's. Each overlay ends the day at the prison as its review does.
+var late_floors := false
+## Where a late Reactor keeps its recovered tape (sim/reactor_archive.gd), or "" to keep it in memory only.
+var late_archive_path := ""
+## The floor plan a late overlay was last started on (each arrival starts one, once).
+var _late_plan: Floor.FloorPlan
+## Whether the running Reactor was started by the late floors (the review keeps its own stepping).
+var _reactor_late := false
 ## Live settings (docs/floors/live-settings.md LS2; set_tuning): the revision in force (0: never tuned, and the
 ## snapshot is what it always was), the list in force, the notices waiting for the next tick, and when the
 ## snapshot next carries the whole list. on_tick: called with every tick's run events after the tick (the room's
@@ -902,7 +916,14 @@ func _step(now: float) -> void:
 
 	# 5. The run.
 	var ward_active := _ward_review != null and _ward_review.phase != &"departed"
-	var r: Run.RunStep = _step_ward_review(s, inputs) if ward_active else _step_fn.call(s, inputs, TICK)
+	var reactor_hold := _reactor_late and _reactor_review != null and s.plan == _reactor_plan and not _reactor_review.rules.returned
+	var r: Run.RunStep
+	if ward_active:
+		r = _step_ward_review(s, inputs)
+	elif reactor_hold:
+		r = _step_reactor_hold(s, inputs)
+	else:
+		r = _step_fn.call(s, inputs, TICK)
 	var st := r.state
 	var events: Array[Dictionary] = []
 	events.append_array(extra)
@@ -991,6 +1012,8 @@ func _step(now: float) -> void:
 	if _ward_review != null and st.plan != _ward_plan:
 		_ward_review = null
 		_ward_plan = null
+	if late_floors:
+		_start_late_floor()
 	tick += 1
 	stats.ticks += 1
 	for e in events:
@@ -1665,10 +1688,11 @@ func tapes_of(id: String) -> Array[String]:
 		out.append("%s:%d:%s" % [t.id, t.readings.size(), M.to_fixed(t.total, 2)])
 	return out
 
-## Local review entry. Ordinary rooms never construct this floor.
+## Local review entry. Ordinary rooms construct this floor only through the late floors (enable_late_floors).
 func start_reactor_review(review_seed: int, place_crew := false, archive_path := "") -> void:
 	_ward_review = null
 	_ward_plan = null
+	_reactor_late = false
 	_reactor_review = ReactorReview.new(review_seed,archive_path)
 	_reactor_plan = state.plan
 	for i in state.players.size():
@@ -1677,6 +1701,44 @@ func start_reactor_review(review_seed: int, place_crew := false, archive_path :=
 		_reactor_review.player(rp.id,at,false,&"walk",0)
 		if place_crew:
 			_place(rp.id,Move.Body.make(at.x,at.z,0,at.y),state.depth,state)
+
+## Turn the late floors on (see _reactor_late's header above). Called by the room right after the host is made;
+## a run that starts on a late floor (the solo floor picker) gets its overlay now, before the first tick.
+func enable_late_floors(archive_path := "") -> void:
+	late_floors = true
+	late_archive_path = archive_path
+	_start_late_floor()
+
+## The late floor of the current state, started once per arrival.
+func _start_late_floor() -> void:
+	var s := state
+	if s == null or s.plan == null or s.plan == _late_plan or s.phase == &"ended":
+		return
+	if s.depth == HostRules.WARD_DEPTH and _ward_review == null:
+		_late_plan = s.plan
+		start_ward_review(late_seed(s), true)
+	elif s.depth == HostRules.REACTOR_DEPTH and _reactor_review == null:
+		_late_plan = s.plan
+		start_reactor_review(late_seed(s), true, late_archive_path)
+		_reactor_late = true
+
+## The overlay's seed: the day's floor seed (the run's seed on day one, as the review rooms use it).
+static func late_seed(s: Run.RunState) -> int:
+	return s.seed.hash()
+
+## A late Reactor's tick on the floor underneath: the clock and the accepted bodies move, nothing else does. The
+## floor's own resident, car, quota and catches are not stepped (Run.step_ward with no Rigger, no cues and nobody
+## active), and the phase reads "unloading" (the crew is out of the lift) so nobody is admitted mid-floor.
+func _step_reactor_hold(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> Run.RunStep:
+	var crew := {}
+	for rp in s.players:
+		crew[rp.id] = {"position": Vector3(rp.body.x, rp.body.y, rp.body.z), "aboard": false, "active": false}
+	for i in inputs:
+		if crew.has(i.id):
+			crew[i.id].position = Vector3(i.body.x, i.body.y, i.body.z)
+	var nobody: Array[String] = []
+	var no_cues: Array[Dictionary] = []
+	return Run.step_ward(s, inputs, crew, PackedVector3Array(), &"unloading", 0.0, nobody, TICK, no_cues)
 
 func _step_reactor_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> void:
 	if _reactor_review==null: return

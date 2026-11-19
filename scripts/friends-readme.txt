@@ -7,6 +7,7 @@ HOW TO START
 1. Unzip this folder anywhere you like. Nothing needs installing.
 2. Double-click GoingDown.exe.
 3. Windows may say "Windows protected your PC". That is only because the game is not signed. Click "More info", then "Run anyway".
+4. Keep every file from the zip together in one folder. The .pck files beside GoingDown.exe are two of the floors.
 
 HEADPHONES
 Please wear headphones. The sound matters a lot.

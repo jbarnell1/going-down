@@ -112,6 +112,9 @@ func _ready() -> void:
 	_room.orientation_campaign = not (_room.orientation_review or _room.ward_review or _room.reactor_review) and args.get("orientation_campaign", "1") == "1"
 	if _room.reactor_review:
 		_room.reactor_archive_path = "user://reactor-campaigns/"+str(args.get("reactor_campaign","owner-review")).sha256_text()
+	else:
+		# The late floors' Reactor (FL1): the same private user data folder, one subfolder per run seed.
+		_room.late_archive_root = "user://reactor-campaigns"
 	if args.has("depth"):
 		_room.first_depth = HostRules.start_depth_by_arg(true)
 		say("TEST: every run starts at depth %d (depth=; tools/exported_server_check.mjs only)" % _room.first_depth)

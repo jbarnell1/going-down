@@ -70,6 +70,10 @@
 #  - The shop and the cabinet (sim/run.gd shop, sim/shop.gd, S2): off unless asked (`shop`, the last parameter); the
 #    game's rooms ask for it, and it needs the inventory. prepare() turns it on before the first tick. The soft catch
 #    keeps the cabinets, the lit things and the wallets of the real tick.
+#  - The late floors (FL1, `late_floors`, the last parameter): off unless asked; the game's rooms ask for it with
+#    the full deck. The host (net/host.gd enable_late_floors) then starts the Hanging Ward's overlay on arriving at
+#    WARD_DEPTH and the Reactor's on arriving at REACTOR_DEPTH, each seeded from the day's floor seed. prepare() and
+#    step() do nothing different: the overlays are the host's, exactly as their review starts are.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -81,6 +85,10 @@ const Instr = preload("res://sim/instrument.gd")
 
 ## Where a player stands alone in the car at the start: the middle, so the doorway is straight ahead.
 const START_U := Run.CAR_DEPTH / 2.0
+## The late floors (FL1): the depth whose arrival starts the Hanging Ward, and the Reactor's. The one place these
+## numbers live (net/host.gd, net/local_room.gd and the tests read them here).
+const WARD_DEPTH := 6
+const REACTOR_DEPTH := 7
 
 ## Catches turned from a wipe into the placeholder (see the header). (TypeScript: softCatches)
 var soft_catches := 0
@@ -144,6 +152,8 @@ var nerve_passive: bool
 var annex_drag: bool
 ## The Minder's hunt from the owner's playtest of 19 Nov (off unless asked; sim/run.gd minder_hunt, PT1).
 var minder_hunt: bool
+## The late floors (FL1, see the header).
+var late_floors: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -154,8 +164,9 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		inventory_: bool = false, furniture_layout_: bool = false, resident_navigation_: bool = false,
 		shop_: bool = false, nightly_reels_: bool = false, garden_cones_: bool = false, garden_search_: bool = false,
 		deep_pockets_: bool = false, second_wind_: bool = false, soft_shoes_: bool = false, flare_: bool = false, lamp_: bool = false, badge_search_: bool = false, quick_fingers_: bool = false, long_burn_: bool = false, field_dressing_: bool = false, doorway_shadow_: bool = false, steady_gaze_: bool = false, throwing_arm_: bool = false,
-		nerve_passive_: bool = false, annex_drag_: bool = false, minder_hunt_: bool = false) -> void:
+		nerve_passive_: bool = false, annex_drag_: bool = false, minder_hunt_: bool = false, late_floors_: bool = false) -> void:
 	minder_hunt = minder_hunt_
+	late_floors = late_floors_
 	garden_cones = garden_cones_
 	garden_search = garden_search_
 	deep_pockets = deep_pockets_

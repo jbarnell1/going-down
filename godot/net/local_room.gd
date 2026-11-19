@@ -235,7 +235,16 @@ func inventory_on() -> bool:
 func room_time() -> float:
 	return _vt
 
-## The fixed floors and any additional places available in the seeded deck.
+## Whether the next run has the late floors (FL1, net/host_rules.gd late_floors): the game's deck only.
+func late_floors_on() -> bool:
+	return Session.deck == Places.FULL
+
+## Where a solo run keeps its recovered Reactor tape: the game's user data, one folder per run seed ("" keeps it in
+## memory; tests may set it).
+var late_archive_root := "user://reactor-campaigns"
+
+## The fixed floors and any additional places available in the seeded deck; with the game's deck, the late floors
+## too (place &"ward" at HostRules.WARD_DEPTH, &"reactor" at HostRules.REACTOR_DEPTH: overlays on that depth's plan).
 static func playtest_destinations(seed_: String, deck: Array[StringName]) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var seen: Array[StringName] = []
@@ -246,6 +255,9 @@ static func playtest_destinations(seed_: String, deck: Array[StringName]) -> Arr
 			seen.append(place)
 		if depth >= Places.FIXED.size() - 1 and deck.all(func(p: StringName) -> bool: return seen.has(p)):
 			break
+	if deck == Places.FULL:
+		out.append({"depth": HostRules.WARD_DEPTH, "place": &"ward"})
+		out.append({"depth": HostRules.REACTOR_DEPTH, "place": &"reactor"})
 	return out
 
 ## Start a fresh sandbox run at a destination on this machine. Reopening the same floor uses the same seed.
@@ -317,7 +329,7 @@ func start_run() -> void:
 	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL, shop_on(), Session.deck == Places.FULL, true, true, induction, nerve, ear, HostRules.flare_on_by_arg(), HostRules.lamp_on_by_arg(), badge_search, quick_fingers, long_burn, field_dressing, HostRules.doorway_shadow_on_by_arg() and Session.deck == Places.FULL and not _orientation_playtest, steady_gaze, throwing_arm,
 		HostRules.nerve_passive_on_by_arg() and not _orientation_playtest,
 		HostRules.annex_drag_on_by_arg() and not _orientation_playtest,
-		playroom_tuned_on())
+		playroom_tuned_on(), late_floors_on() and not _orientation_playtest)
 	if _orientation_playtest:
 		rules.enable_orientation()
 	elif orientation_campaign and _playtest_depth < 0:
@@ -353,6 +365,8 @@ func start_run() -> void:
 	for p in host.state.players:
 		if p.id in roster:
 			host.place_player(p.id, p.body)
+	if rules.late_floors:
+		host.enable_late_floors("" if late_archive_root.is_empty() else late_archive_root.path_join(("solo:" + run_seed).sha256_text()))
 	client = Client.new(human_link, "host", _name, _vt, Session.INTERP_DELAY, Session.INPUT_INTERVAL, _face)
 	client.floor_deck = rules.deck
 	client.garden_dense = host.state.garden_search

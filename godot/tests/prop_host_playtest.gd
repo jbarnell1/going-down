@@ -24,7 +24,11 @@ func test_start_and_restart(t: T) -> void:
 		t.check(room.start_playtest(depth), "start a local run at depth %d" % depth)
 		var state := room.host.state
 		t.eq(state.depth, depth, "host is on selected depth")
-		t.eq(state.plan.place, place, "host generated selected area")
+		if place == &"ward" or place == &"reactor":
+			# The late floors (FL1): an overlay on that depth's own plan, running before the first tick.
+			t.check(room.host.world().has(String(place)), "host runs the %s on floor %d" % [place, depth])
+		else:
+			t.eq(state.plan.place, place, "host generated selected area")
 		t.check(state.days and state.day_state != null, "real day rules stay enabled")
 		t.check(Run.in_car(state.car, state.players[0].body), "player starts inside the lift")
 		if depth == 0:

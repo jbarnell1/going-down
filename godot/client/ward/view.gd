@@ -45,6 +45,20 @@ var door_houses: Array[StaticBody3D] = []
 var colors := {}
 var peers := {}
 var local_phase := ""
+## Caught: after WATCH_DELAY seconds (host clock) the screen watches a living crewmate through their eyes
+## (their accepted feet, yaw and pitch from the snapshot, smoothed), and left click or E moves on to the
+## next. With no one left to watch it looks down on the houses from above. Client-side only: nothing a
+## watcher does reaches the host (look_input leaves the player's own body and facing alone).
+const WATCH_DELAY := 2.0
+const WATCH_EYE := 1.56
+const WATCH_EASE := 0.25
+var caught_at := -1.0
+var watching := false
+var watch_id := ""
+var watch_index := 0
+var watch_camera := Camera3D.new()
+## Player names by id (the room's people list), set by the scene each frame.
+var names := {}
 
 func _init(seed_: int, spawn_: Vector3) -> void:
 	seed_value = seed_
@@ -98,7 +112,11 @@ func show_host(ward: Dictionary, host_now: float, id: String, crew: Array) -> vo
 	var door := _by_door()
 	prompt.text = ""
 	if caught:
+		if caught_at < 0.0:
+			caught_at = host_now
 		prompt.text = "THE HAND CAUGHT YOU"
+		if host_now - caught_at >= WATCH_DELAY:
+			prompt.text = _watch(watch_targets(crew, ward, id), crew)
 	elif phase != "departed":
 		if not winch.is_empty():
 			prompt.text = "F   RAISE BRIDGE" if bridge_is_open else "F   LOWER BRIDGE"
@@ -106,6 +124,52 @@ func show_host(ward: Dictionary, host_now: float, id: String, crew: Array) -> vo
 			prompt.text = "F   CLOSE DOOR" if ward.doors[door] else "F   OPEN DOOR"
 	_show_rigger(ward, host_now)
 	_show_crew(crew, id)
+
+## The crewmates a caught player can watch: connected, not caught, not this player; in a fixed order.
+static func watch_targets(crew: Array, ward: Dictionary, my_id: String) -> Array[String]:
+	var out: Array[String] = []
+	var caught_ids: Array = ward.get("caught", [])
+	for row: Dictionary in crew:
+		var id := str(row.id)
+		if id != my_id and bool(row.get("connected", true)) and not caught_ids.has(id):
+			out.append(id)
+	out.sort()
+	return out
+
+static func watch_line(name: String) -> String:
+	if name.is_empty():
+		return "NO ONE LEFT TO WATCH"
+	return "WATCHING THROUGH %s'S EYES   LEFT CLICK OR E: NEXT" % name.to_upper()
+
+## Points the watching camera and returns the line under it.
+func _watch(targets: Array[String], crew: Array) -> String:
+	var first := not watching
+	watching = true
+	watch_camera.current = true
+	if targets.is_empty():
+		watch_id = ""
+		var centre := lift_spot
+		for site: Dictionary in walk_model.layout.houses:
+			centre += Vector3(float(site.x), lift_spot.y, float(site.y))
+		centre /= float(walk_model.layout.houses.size() + 1)
+		watch_camera.position = centre + Vector3(0, 16, 14)
+		watch_camera.look_at(centre, Vector3.UP)
+		return watch_line("")
+	watch_id = targets[posmod(watch_index, targets.size())]
+	for row: Dictionary in crew:
+		if str(row.id) == watch_id:
+			var body: Move.Body = row.body
+			var eye := Vector3(body.x, body.y + WATCH_EYE, body.z)
+			var ease := 1.0 if first else WATCH_EASE
+			watch_camera.position = watch_camera.position.lerp(eye, ease)
+			watch_camera.rotation = Vector3(lerp_angle(watch_camera.rotation.x, float(row.get("pitch", 0.0)), ease),
+				lerp_angle(watch_camera.rotation.y, float(row.get("yaw", 0.0)), ease), 0.0)
+			break
+	return watch_line(str(names.get(watch_id, "a crewmate")))
+
+## Left click or E while watching: the next living crewmate.
+func next_watch() -> void:
+	watch_index += 1
 
 func _show_rigger(ward: Dictionary, host_now: float) -> void:
 	_show_loaded_support(ward, host_now)
@@ -155,7 +219,7 @@ func _show_crew(crew: Array, my_id: String) -> void:
 		var body: Move.Body = row.body
 		var ghost: MeshInstance3D = peers[id]
 		ghost.position = Vector3(body.x, body.y + 0.81, body.z)
-		ghost.show()
+		ghost.visible = not (watching and id == watch_id)
 
 func play_event(event: Dictionary) -> void:
 	if event.type == "ward_line_loaded":
@@ -549,6 +613,7 @@ func _build_crew() -> void:
 	camera.position.y = 1.56
 	camera.current = true
 	player.rotation.y = PI
+	add_child(watch_camera)
 func _build_rigger() -> void:
 	rigger = (load(RIGGER_PATH) as PackedScene).instantiate()
 	add_child(rigger)
@@ -591,6 +656,15 @@ func _build_hud() -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func look_input(event: InputEvent) -> void:
+	if caught:
+		# A caught player's own body and facing stay as the host last accepted them.
+		var next: bool = (event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_E) \
+			or (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT)
+		if next and watching:
+			next_watch()
+		if event is InputEventMouseButton and event.pressed and DisplayServer.get_name() != "headless":
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		player.rotate_y(-event.relative.x * 0.0023)
 		camera.rotation.x = clampf(camera.rotation.x - event.relative.y * 0.0023, -1.42, 1.42)

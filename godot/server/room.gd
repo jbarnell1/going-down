@@ -189,6 +189,12 @@ var furniture := true
 ## Restored wall furniture in the next run (T20j).
 var reactor_review := false
 var reactor_archive_path := ""
+## The late floors in the next run (FL1, net/host_rules.gd late_floors: the Hanging Ward at floor 6, the Reactor at 7;
+## the game's; `late_floors=0` or tests turn it off). Never in a review or practice room.
+var late_floors := true
+## Where a normal room keeps each run's recovered Reactor tape (server/server.gd sets the game's user data folder;
+## "" keeps it in memory, as tests do). One folder per run seed (late_archive_path).
+var late_archive_root := ""
 var furniture_layout := true
 ## Findables in the next run (the game's; tests may turn it off: sim/run.gd findables, sim/findables.gd, FD9).
 var findables := true
@@ -224,6 +230,7 @@ func configure_campaign_trades(args: Dictionary) -> void:
 	steady_gaze = args.get("steady_gaze", "1") == "1"
 	throwing_arm = args.get("throwing_arm", "1") == "1"
 	nerve_passive = args.get("nerve_passive", "0") == "1"
+	late_floors = args.get("late_floors", "1") == "1"
 	quick_fingers = args.get("quick_fingers", "1") == "1"
 
 func _init(ws: WsServer, log: Callable) -> void:
@@ -236,6 +243,12 @@ func enable_stamped_profiles(key: PackedByteArray) -> void:
 
 func running() -> bool:
 	return host != null
+
+## The recovered-tape folder of a normal run with seed `run_seed` ("" without a root).
+func late_archive_path(run_seed: String) -> String:
+	if late_archive_root.is_empty():
+		return ""
+	return late_archive_root.path_join(("run:" + run_seed).sha256_text())
 
 func send_run(to: String, data: String) -> void:
 	_ws.send(to, "n%d|%s" % [epoch, data])
@@ -422,7 +435,7 @@ func _start(now: float) -> void:
 	rules = HostRules.new(not (ward_review or reactor_review), first_depth, Places.deck_for_start_depth(first_depth, HostRules.garden_admission_by_arg()), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop, nightly_reels, true, true, deep_pockets and not (ward_review or reactor_review), second_wind, soft_shoes, HostRules.flare_on_by_arg() and not (ward_review or reactor_review), HostRules.lamp_on_by_arg() and not (ward_review or reactor_review), badge_search and not (ward_review or reactor_review), quick_fingers and not (ward_review or reactor_review), long_burn and not (ward_review or reactor_review), field_dressing and not (ward_review or reactor_review), HostRules.doorway_shadow_on_by_arg() and not (ward_review or reactor_review or orientation_review), steady_gaze and not (ward_review or reactor_review or orientation_review), throwing_arm and not (ward_review or reactor_review or orientation_review),
 		nerve_passive and not (ward_review or reactor_review or orientation_review),
 		HostRules.annex_drag_on_by_arg() and not (ward_review or reactor_review or orientation_review),
-		playroom_tuned)
+		playroom_tuned, late_floors and not (ward_review or reactor_review or orientation_review))
 	if orientation_review:
 		rules.enable_orientation()
 	elif orientation_campaign:
@@ -437,6 +450,8 @@ func _start(now: float) -> void:
 		host.start_ward_review(seed.hash(), true)
 	elif reactor_review:
 		host.start_reactor_review(seed.hash(), true, reactor_archive_path)
+	elif rules.late_floors:
+		host.enable_late_floors(late_archive_path(seed))
 	# Live settings: everything asked for is in force from the first tick.
 	desk.run_started()
 	host.on_tick = Callable(self, "_tune_tick")
@@ -465,7 +480,7 @@ func _on_message(id: String, data: String, now: float) -> void:
 			return
 		match String(p["t"]):
 			"rxFilm":
-				if reactor_review and host!=null and p.get("epoch")==epoch and p.get("op") in ["watch","skip","end"] and (p.get("ticket") is float or p.get("ticket") is int):
+				if (reactor_review or (rules != null and rules.late_floors)) and host!=null and p.get("epoch")==epoch and p.get("op") in ["watch","skip","end"] and (p.get("ticket") is float or p.get("ticket") is int):
 					host.reactor_screening(id,p.op,int(p.ticket))
 			"profile":
 				var line: Variant = p.get("line")
