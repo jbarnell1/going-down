@@ -274,7 +274,7 @@ func _on_text(text: String, now: float) -> void:
 					# Back on the Ready-up screen: the server has forgotten everyone's ready.
 					my_ready = false
 				if run_on and epoch > _epoch_joined:
-					_join_run(epoch, now, p.get("garden"), p.get("gardenDense") == true, p.get("orientation") == true, p.get("cycles") == true)
+					_join_run(epoch, now, p.get("garden"), p.get("gardenDense") == true, p.get("orientation") == true, p.get("cycles") == true, p.get("reactorPlace") == true)
 					client.orientation_prelude = orientation_active
 				elif not run_on and client != null:
 					client = null
@@ -286,7 +286,7 @@ func _on_text(text: String, now: float) -> void:
 		if bar > 1 and int(text.substr(1, bar - 1)) == _epoch_joined:
 			_pipe.push("host", text.substr(bar + 1))
 
-func _join_run(e: int, now: float, garden: Variant, garden_dense: bool, orientation := false, cycles := false) -> void:
+func _join_run(e: int, now: float, garden: Variant, garden_dense: bool, orientation := false, cycles := false, reactor_place := false) -> void:
 	_epoch_joined = e
 	# Weak, so the pipe's callables do not keep this object alive.
 	var me: WeakRef = weakref(self)
@@ -305,6 +305,9 @@ func _join_run(e: int, now: float, garden: Variant, garden_dense: bool, orientat
 		# Cycles (FL2, the lobby's "cycles"): the run's deck repeats its floors in sevens (sim/places.gd).
 		if cycles:
 			client.floor_deck = Places.with_cycles(client.floor_deck)
+		# RN1 (the lobby's "reactorPlace"): floor 7 is the generated station (sim/places.gd REACTOR).
+		if reactor_place:
+			client.floor_deck = Places.with_reactor(client.floor_deck)
 	# The game (client/main.gd sets the full deck) draws a Stillness resident in the dark too (T20a).
 	client.draw_in_dark = Session.deck == preload("res://sim/places.gd").FULL
 	status = "running"

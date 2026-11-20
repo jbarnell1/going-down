@@ -47,6 +47,8 @@ const MarksView = preload("res://client/marks_view.gd")
 const MarkPeel = preload("res://client/mark_peel.gd")
 const AnnexNotesView = preload("res://client/annex_notes_view.gd")
 const EyeHeight = preload("res://client/eye_height.gd")
+## WN1: the Hanging Ward as a normal level, hosted in this scene (client/ward/floor.gd).
+const WardFloor = preload("res://client/ward/floor.gd")
 const RoomClient = preload("res://net/room_client.gd")
 const LocalRoom = preload("res://net/local_room.gd")
 const SoloDiagnostics = preload("res://client/solo_diagnostics.gd")
@@ -155,6 +157,8 @@ var _ward_prison_pending := false
 ## optional packs are looked for (tests and `-- packs=<dir>`; otherwise beside the executable).
 var _floor_entry_pending := false
 var _floor_media_missing := ""
+## WN1: the Ward played as a normal level (net/host_rules.gd ward_place): its world in this scene's picture, or null.
+var _ward_floor: WardFloor = null
 var pack_dir := ""
 var sub: SubViewport
 var env: Environment
@@ -404,9 +408,11 @@ static func floor_handover(latest: Variant) -> String:
 		return ""
 	var ward: Variant = latest.get("ward")
 	if ward is Dictionary and str(ward.get("phase", "")) != "departed":
-		return "ward"
+		# WN1: a Ward the host plays as a normal level stays in this scene (_ward_frame).
+		return "" if ward.get("native", false) == true else "ward"
 	var reactor: Variant = latest.get("reactor")
-	if reactor is Dictionary and not bool(reactor.get("lift", false)):
+	# RN2: a station the main game draws itself (the place "reactor", its block `native`) is never handed over.
+	if reactor is Dictionary and not bool(reactor.get("lift", false)) and not bool(reactor.get("native", false)):
 		return "reactor"
 	return ""
 
@@ -1309,7 +1315,11 @@ func _build_floor(plan: Dictionary) -> void:
 	level.shadows = quality == "full"
 	level.props_on = props_on
 	world.add_child(level)
+	if str(plan.get("place", "")) == "reactor":
+		_mount_floor_pack("reactor")   # RN2: the four's faces and crawl from the private pack when it is there (optional)
 	level.build(plan, str(snap.get("seed", seed)), link.plan, link.hides)
+	if level.has_meta(&"station"):
+		level.get_meta(&"station").call(&"follow", link, sfx)
 	marks_view = null
 	annex_notes_view = null
 	annex_note_focus = {}
@@ -1360,7 +1370,7 @@ func _use_resident(plan: Dictionary) -> void:
 		"orientation":
 			kind = "orientation"
 	# The prison has no resident (Places.resident names none): nothing is drawn there.
-	_no_resident = Places.resident(StringName(str(plan.get("place", "")))).name == ""
+	_no_resident = Places.resident(StringName(str(plan.get("place", "")))).name == "" or str(plan.get("place", "")) == "reactor"
 	if kind != _resident_kind:
 		var view: Node3D
 		match kind:
@@ -1816,6 +1826,9 @@ func _process(delta: float) -> void:
 	if rc.client != null and rc.client.latest != null:
 		# FL1: the Ward and the Reactor are drawn by their own scenes, alone or joined, with this same room.
 		var into := floor_handover(rc.client.latest)
+		# WN1: a native Ward whose lift has gone leaves this scene first, even on a frame that swaps or draws nothing.
+		if _ward_floor != null and not ward_native_on(rc.client.latest):
+			_leave_ward_floor()
 		if into.is_empty():
 			_floor_media_missing = ""
 		elif into == _floor_media_missing:
@@ -1907,6 +1920,9 @@ func _game_input(dt: float) -> Dictionary:
 		creep = Input.is_action_pressed("creep")
 	var raised: bool = t_raise if t_raise != null else (raise_latch or (mode == "game" and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)))
 	var me: Dictionary = snap.get("me", {})
+	if level != null and level.has_meta(&"station") and me.has("x") and bool(level.get_meta(&"station").call(&"crouch_at", float(me["x"]), float(me["z"]))):
+		creep = true   # RN2: the crawl is creep-only (sim/station.gd creep_only), the same on every client
+		sprint = false
 	var hold: bool = t_hold if t_hold != null else (mode == "game" and Input.is_action_pressed("use") and bool(me.get("nearHold", false)))
 	var use: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and not settings_panel.is_open() and Input.is_action_pressed("use"))
 	var call: bool = pending_call and bool(me.get("canCall", false))
@@ -2108,7 +2124,8 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		var pv: Object = level.get_meta(&"prison")
 		if str(pv.get("kiosk_face")) != start.face_code:
 			pv.call("set_kiosk_face", start.face_code)
-	if phase == "boarding":
+	# WN1: the Ward's lift has its own calls (client/ward/view.gd play_event); not the plan's car's bell over them.
+	if phase == "boarding" and _ward_floor == null:
 		var bell_left := float(s["bellLeft"])
 		for w: float in BELL_WARNINGS:
 			if prev_bell_left > w and bell_left <= w:
@@ -2276,6 +2293,8 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 			prompt = "ALL CREW ON BANK TO CONTINUE" if int(s["depth"]) == 0 else "ALL CREW ON BANK TO FINISH"
 		elif bool(me.get("nearHold", false)):
 			prompt = "F  <|> HOLD"
+		elif level.has_meta(&"station") and str(level.get_meta(&"station").get(&"prompt")) != "":
+			prompt = str(level.get_meta(&"station").get(&"prompt"))   # RN2: the fuse, the socket, the cassette
 		elif _tape_in_reach(me):
 			prompt = "F  PICK UP"
 		elif inv_view.f_op == "take" and int(s.get("nearHide", -1)) < 0:
@@ -2326,6 +2345,85 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		if _seek_hist.size() > 80:
 			_seek_hist.pop_front()
 	_show_end(now)
+	_ward_frame(dt)
+
+## WN1: the Hanging Ward as a normal level. While the newest snapshot carries a Ward block the host marks `native`
+## (net/host_rules.gd ward_place) and its lift has not gone, this scene hosts the Ward's world (client/ward/floor.gd)
+## in place of the floor plan's level and lift, walks this player through the Ward's walk model, and puts the Ward's
+## lines on the HUD. Everything else of this scene goes on as on any floor. With no such block: nothing at all.
+func _ward_frame(_dt: float) -> void:
+	var c: Variant = link.client() if link != null else null
+	var latest: Variant = c.latest if c != null else null
+	var ward: Variant = latest.get("ward") if latest is Dictionary else null
+	var on: bool = ward_native_on(latest) and level != null
+	if not on:
+		if _ward_floor != null:
+			_leave_ward_floor()
+		return
+	if _ward_floor == null or not is_instance_valid(_ward_floor) or _ward_floor.seed_value != int(ward["seed"]):
+		_enter_ward_floor(int(ward["seed"]), c)
+	# The room's own clock (a room on this machine runs on its own virtual time), as play_link.gd reads host time.
+	var host_now: float = c.clock.host_time(link.rc._now)
+	var me: Dictionary = snap.get("me", {})
+	var feet := Vector3(float(me.get("x", 0.0)), float(me.get("y", 0.0)), float(me.get("z", 0.0)))
+	_ward_floor.update(ward, host_now, link.my_id(), feet, latest["players"], c.events, link.names())
+	# The floor plan's own resident, lift and lines are not on this floor.
+	level.visible = false
+	lift.visible = false
+	orderly.call(&"show_pose", null, false)
+	hud.eyes = {}
+	hud.tenant_line = _ward_floor.clock_line
+	hud.tenant_warn = _ward_floor.clock_warn
+	hud.prompt = _ward_floor.prompt_line
+	_ward_floor.apply_environment(env)
+	var watch: Variant = _ward_floor.watch_transform()
+	if watch is Transform3D:
+		cam.global_transform = watch
+	# A step the host refused (a door or deck that changed under the player): back to where the host has them.
+	for row: Dictionary in latest["players"]:
+		if str(row["id"]) == link.my_id() and link.body != null:
+			var accepted: Move.Body = row["body"]
+			var at := Vector3(accepted.x, accepted.y, accepted.z)
+			var predicted := Vector3(link.body.x, link.body.y, link.body.z)
+			if _ward_floor.model.walk_clear(at, at) and not _ward_floor.model.walk_clear(predicted, predicted):
+				link.body = accepted
+			break
+
+## WN1: whether a snapshot is on a Ward the host plays as a normal level, its lift not yet gone.
+static func ward_native_on(latest: Variant) -> bool:
+	if not latest is Dictionary or int(latest.get("depth", 0)) <= 0:
+		return false
+	var ward: Variant = latest.get("ward")
+	return ward is Dictionary and ward.get("native", false) == true and str(ward.get("phase", "")) != "departed"
+
+func _enter_ward_floor(seed_value: int, c: Variant) -> void:
+	if _ward_floor != null and is_instance_valid(_ward_floor):
+		_ward_floor.queue_free()
+	var media := _mount_floor_pack("ward")
+	_ward_floor = WardFloor.new()
+	_ward_floor.name = "WardFloor"
+	_ward_floor.setup(seed_value, media, c.events.size())
+	world.add_child(_ward_floor)
+	link.walker = _ward_floor.walk
+	_floor_media_missing = "" if media else "ward"
+	if not media:
+		_show_floor_media_line()
+	print("FLOOR NATIVE ward seed=%d media=%s" % [seed_value, media])
+
+func _leave_ward_floor() -> void:
+	if link != null:
+		link.walker = Callable()
+	if is_instance_valid(_ward_floor):
+		_ward_floor.queue_free()
+	_ward_floor = null
+	_floor_media_missing = ""
+	if level != null and is_instance_valid(level):
+		level.visible = true
+		env.fog_light_color = level.get_meta(&"fog_color", Color(0.05, 0.06, 0.06))
+		env.fog_density = float(level.get_meta(&"fog_density", 0.035))
+	if lift != null and is_instance_valid(lift):
+		lift.visible = true
+	print("FLOOR NATIVE ward left")
 
 ## The floor quota (client/quota_view.gd): the call panel shows the host's quota block, and its words go
 ## under the prompt while the call button is in reach or a refused press flashes.
@@ -2414,7 +2512,8 @@ func _update_search(s: Dictionary, me: Dictionary, home: bool, station: String, 
 	var bed: Variant = s.get("bed")
 	var blocked := off or down_view.prompt != "" or (home and bed is Dictionary and (bool((bed as Dictionary)["inBed"]) or bool((bed as Dictionary)["atBunk"]))) \
 		or station != "" or bool(me.get("canCall", false)) or bool(me.get("nearHold", false)) or _tape_in_reach(me) or int(s.get("nearHide", -1)) >= 0 \
-		or inv_view.f_op == "take" or not annex_note_focus.is_empty()
+		or inv_view.f_op == "take" or not annex_note_focus.is_empty() \
+		or (level != null and level.has_meta(&"station") and str(level.get_meta(&"station").get(&"prompt")) != "")
 	search_view.update(s, link.my_id(), yaw, f_held, sprint, moving, blocked)
 
 ## This frame's search events: your result line and note (into the reader), the noise of a rushed search.
@@ -2570,6 +2669,11 @@ func _name_tags(s: Dictionary, dark: bool) -> void:
 	var open: bool = s["doorsOpen"]
 	var sees := func(at: Vector3, level: int) -> bool:
 		return link.can_see_point(vb, at, level, open)
+	if _ward_floor != null:
+		# WN1: on the Ward, past its own walls.
+		var from := cam.global_position
+		sees = func(at: Vector3, _level: int) -> bool:
+			return _ward_floor.sees(from, at)
 	for o: Dictionary in s["others"]:
 		var tag := name_tag(o, cam, win, dark, sees)
 		if not tag.is_empty():

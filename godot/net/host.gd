@@ -329,6 +329,14 @@ var late_archive_path := ""
 var _late_plan: Floor.FloorPlan
 ## Whether the running Reactor was started by the late floors (the review keeps its own stepping).
 var _reactor_late := false
+## RN1, the Reactor as a place (net/host_rules.gd reactor_place): its rules are the run's (state.station); the host
+## keeps only the recovered tape's archive (sim/reactor_archive.gd, at late_archive_path), the station whose arrival it
+## last saw, and, once the crew has gone up with the lift, the last block, sent on in the prison (lift on, so the
+## prison's tape deck works) until the next descent. With the flag off none of these is ever set.
+var _station_archive: ReactorReview.Archive
+var _station_plan: Floor.FloorPlan
+var _station_home: Dictionary = {}
+var _station_home_plan: Floor.FloorPlan
 ## Live settings (docs/floors/live-settings.md LS2; set_tuning): the revision in force (0: never tuned, and the
 ## snapshot is what it always was), the list in force, the notices waiting for the next tick, and when the
 ## snapshot next carries the whole list. on_tick: called with every tick's run events after the tick (the room's
@@ -983,8 +991,9 @@ func _step(now: float) -> void:
 		_reactor_plan = st.plan
 		r.events.append_array(home_events)
 		events.append_array(home_events)
+	_step_station_host(st, events)
 	# The Tenant clock (TT1) is not the Ward's or the Reactor's: they keep their own clocks.
-	if _ward_review != null or _reactor_review != null:
+	if _ward_review != null or _reactor_review != null or st.station != null:
 		var kept_events: Array[Dictionary] = []
 		for e in events:
 			if e["type"] != "tenantArrived":
@@ -1581,8 +1590,13 @@ func world(full: bool = false) -> Dictionary:
 		out["lamps"] = lamps
 	if _ward_review != null:
 		out["ward"] = _ward_review.snapshot(s.t)
+		# WN1: the main scene plays this Ward as a normal level (net/host_rules.gd ward_place); absent with the flag off.
+		if ward_native():
+			out["ward"]["native"] = true
 	if _reactor_review != null:
 		out["reactor"] = _reactor_review.snapshot()
+	elif s.station != null or not _station_home.is_empty():
+		out["reactor"] = _station_block(s)
 	# The Tenant clock (TT1; net/host_rules.gd, Protocol "tenant"): the floor's deadline in host time. Never beside
 	# the Ward's or the Reactor's own clock. Absent with the flag off.
 	var tenant: Variant = tenant_block()
@@ -1592,6 +1606,11 @@ func world(full: bool = false) -> Dictionary:
 	if Run.cycles_on(s) and Run.cycle_now(s) >= 2:
 		out["cycle"] = Run.cycle_now(s)
 	return out
+
+## WN1: whether the rules stepping this run play the Ward as a normal level (net/host_rules.gd ward_place).
+func ward_native() -> bool:
+	var rules: Object = _step_fn.get_object() if _step_fn.is_valid() else null
+	return rules != null and bool(rules.get("ward_place"))
 
 ## The Tenant clock's block from the rules stepping this run (net/host_rules.gd tenant_block), or null: the plain
 ## run's step, or rules without the clock.
@@ -1874,6 +1893,9 @@ func _start_late_floor() -> void:
 		return
 	# Cycles (FL2): the floor of cycle one this floor repeats (13 is a Ward, 14 a Reactor); without them, the depth.
 	var local := Places.local_depth(s.depth, s.deck)
+	if s.plan.place == Places.REACTOR:
+		# RN1: the Reactor is a place here; its rules run in the run (no overlay, no scene swap).
+		return
 	if local == HostRules.WARD_DEPTH and _ward_review == null:
 		_late_plan = s.plan
 		start_ward_review(late_seed(s), true)
@@ -1920,7 +1942,59 @@ func _step_reactor_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> vo
 			_reactor_review.player(input.id,Vector3(input.body.x,input.body.y,input.body.z),input.use,input.gait,TICK)
 	_reactor_review.tick(TICK)
 
+## RN1: after each tick on the station's rules (state.station): the archive is opened when the crew reaches the
+## station (a tape already recovered is not on the table again), and banked when the tape is carried out; the last
+## block is kept for the prison once the lift has gone up, and dropped at the next descent.
+func _step_station_host(st: Run.RunState, events: Array[Dictionary]) -> void:
+	var sf: Run.StationRules.StationFloor = st.station
+	if sf != null and sf.plan != _station_plan:
+		_station_plan = sf.plan
+		_station_home = {}
+		_station_home_plan = null
+		if _station_archive == null:
+			_station_archive = ReactorReview.Archive.new(late_archive_path)
+		if _station_archive.recovered and not sf.collected:
+			# This tick's own copy (the run made it this tick): the tape is already in the archive.
+			sf.collected = true
+	for e in events:
+		if e["type"] == "tapeExtracted" and _station_archive != null:
+			_station_archive.bank()
+	if sf != null and sf.returned:
+		_station_home = {}
+		_station_home = _station_block(st)
+		_station_home_plan = null
+	elif sf == null and not _station_home.is_empty():
+		if _station_home_plan == null and st.depth == 0:
+			_station_home_plan = st.plan
+		elif _station_home_plan != st.plan:
+			_station_home = {}
+			_station_home_plan = null
+
+## RN1: the world's "reactor" block on the station (or, in the prison after its lift, the last one kept), with every
+## field the old floor's block has (net/reactor_review.gd snapshot), positions in the plan's metres, plus native.
+func _station_block(s: Run.RunState) -> Dictionary:
+	var sf: Run.StationRules.StationFloor = s.station
+	var block: Dictionary
+	if sf == null:
+		block = _station_home.duplicate()
+	else:
+		var connected := {}
+		for rp in s.players:
+			var hp: HostPlayer = _players.get(rp.id)
+			if hp != null and hp.connected and rp.status != &"leftBehind":
+				connected[rp.id] = rp
+		block = ReactorReview.native_snapshot(sf, connected, s.tuning)
+	block["archive"] = _station_archive.snapshot() if _station_archive != null else {"recovered": false, "discovered": false, "playing": {}}
+	return block
+
 func reactor_screening(peer: String, operation: String, ticket: int) -> bool:
+	if _reactor_review == null and _station_archive != null and not _station_home.is_empty():
+		# RN1: the prison's tape deck after the station's lift.
+		if not _players.has(peer) or not _players[peer].connected or state.depth != 0: return false
+		if operation == "watch":
+			var at: Move.Body = _players[peer].body
+			if not ReactorReview.at_prison_station(at.x, at.z): return false
+		return _station_archive.action(peer, operation, ticket, state.t)
 	if _reactor_review==null or not _players.has(peer) or not _players[peer].connected: return false
 	if state.depth != 0: return false
 	if operation == "watch":

@@ -34,6 +34,7 @@ const Annex = preload("res://sim/annex.gd")
 const Playroom = preload("res://sim/playroom.gd")
 const Prison = preload("res://sim/prison.gd")
 const Arboretum = preload("res://sim/arboretum.gd")
+const Station = preload("res://sim/station.gd")
 const Entity = preload("res://sim/entity.gd")
 const Rng = preload("res://sim/rng.gd")
 
@@ -43,6 +44,11 @@ const ANNEX := &"annex"
 const PLAYROOM := &"playroom"
 ## The Arboretum (North Star A2): a forest indoors; its Groundskeeper hears (sim/hearing.gd).
 const ARBORETUM := &"arboretum"
+## The Reactor, the generating station (RN1; sim/station.gd): a deck marker as much as a place. A deck that carries
+## it (with_reactor; net/host_rules.gd reactor_place) has the station at local floor REACTOR_FLOOR (7, and with cycles
+## 14, 21, ...); it is never drawn. Without it every function here returns exactly what it returned before.
+const REACTOR := &"reactor"
+const REACTOR_FLOOR := 7
 const Orientation = preload("res://sim/orientation.gd")
 const ORIENTATION_ONLY: Array[StringName] = [Orientation.PLACE]
 
@@ -71,6 +77,15 @@ static func with_cycles(deck: Array) -> Array[StringName]:
 		out.append(StringName(p))
 	if not out.has(CYCLES):
 		out.append(CYCLES)
+	return out
+
+## The deck with the Reactor at floor 7 (once, at the end; the places keep their order).
+static func with_reactor(deck: Array) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for p: Variant in deck:
+		out.append(StringName(p))
+	if not out.has(REACTOR):
+		out.append(REACTOR)
 	return out
 
 ## Whether the deck repeats its floors in cycles.
@@ -150,7 +165,7 @@ static func _deck_or_clinic(deck: Array) -> Array[StringName]:
 	var out: Array[StringName] = []
 	for p: Variant in deck:
 		var sp := StringName(p)
-		if sp != PRISON and sp != CYCLES and not out.has(sp):
+		if sp != PRISON and sp != CYCLES and sp != REACTOR and not out.has(sp):
 			out.append(sp)
 	if out.is_empty():
 		out.append(CLINIC)
@@ -168,8 +183,11 @@ static func place_at(seed: String, depth: int, deck: Array = FULL) -> StringName
 	var d := _deck_or_clinic(deck)
 	var prev := PRISON
 	var here := CLINIC
+	var reactor := deck.has(REACTOR)
 	for k in range(1, depth + 1):
-		if k < FIXED.size() and d.has(FIXED[k]):
+		if reactor and k == REACTOR_FLOOR:
+			here = REACTOR
+		elif k < FIXED.size() and d.has(FIXED[k]):
 			here = FIXED[k]
 		else:
 			var choices: Array = []
@@ -193,6 +211,8 @@ static func generate(seed: String, depth: int, deck: Array = FULL, garden_dense:
 			return Playroom.generate_playroom(seed, depth)
 		ARBORETUM:
 			return Arboretum.generate_arboretum(seed, depth, garden_dense)
+		REACTOR:
+			return Station.generate_station(seed, depth)
 		Orientation.PLACE:
 			return Orientation.generate(seed, depth)
 	return Clinic.generate_clinic(seed, depth)

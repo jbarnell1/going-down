@@ -95,6 +95,10 @@
 #    sevens (sim/places.gd), the Ward's lift rides down to the Reactor, the Reactor's return settles the day, and
 #    each morning starts at the cycle the campaign has reached (sim/run.gd "Cycles"). A run made to start past
 #    floor 7 (the floor picker's floor 8) counts the cycles before it as done.
+#  - The late floors as places (RN1, `ward_place` then `reactor_place`, the last two parameters): off unless asked,
+#    and only with the late floors. `ward_place` is another worker's flag, stored only. With `reactor_place` the deck
+#    carries Places.REACTOR: floor 7 (and 14, 21 with cycles) is the generated station (sim/station.gd), its rules
+#    stepped by the run itself (sim/run.gd "The Reactor", sim/station_floor.gd), and net/host.gd starts no overlay there.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -182,6 +186,14 @@ var party_table: bool
 var second_orderly: bool
 ## Cycles (FL2, see the header). On only together with the late floors.
 var cycles: bool
+## WN1: the Hanging Ward as a normal level. On, the main scene draws and plays floor 6 itself (client/main.gd,
+## client/ward/floor.gd) and never swaps to client/ward/review.tscn; the host marks the Ward's snapshot block
+## `native`. The rules of the Ward do not change. On only together with the late floors. Off: FL1's swap.
+var ward_place: bool
+## The Reactor as a place (RN1, the last parameter; sim/station.gd, sim/station_floor.gd): off unless asked, and only
+## with the late floors; the game's rooms ask for it with them. The deck then carries Places.REACTOR, so floor 7 (14,
+## 21 with cycles) is the generated station with its rules in the run, and the host starts no Reactor overlay there.
+var reactor_place: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -207,8 +219,11 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		shop_: bool = false, nightly_reels_: bool = false, garden_cones_: bool = false, garden_search_: bool = false,
 		deep_pockets_: bool = false, second_wind_: bool = false, soft_shoes_: bool = false, flare_: bool = false, lamp_: bool = false, badge_search_: bool = false, quick_fingers_: bool = false, long_burn_: bool = false, field_dressing_: bool = false, doorway_shadow_: bool = false, steady_gaze_: bool = false, throwing_arm_: bool = false,
 		nerve_passive_: bool = false, annex_drag_: bool = false, minder_hunt_: bool = false, late_floors_: bool = false,
-		party_table_: bool = false, tenant_timer_: bool = false, second_orderly_: bool = false, cycles_: bool = false) -> void:
+		party_table_: bool = false, tenant_timer_: bool = false, second_orderly_: bool = false, cycles_: bool = false,
+		ward_place_: bool = false, reactor_place_: bool = false) -> void:
+	ward_place = ward_place_ and late_floors_
 	tenant_timer = tenant_timer_
+	reactor_place = reactor_place_ and late_floors_
 	minder_hunt = minder_hunt_
 	late_floors = late_floors_
 	party_table = party_table_
@@ -244,6 +259,8 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 	_entity_on = entity_on
 	_depth = depth
 	deck = Places.with_cycles(Run.deck_of(deck_)) if cycles else Run.deck_of(deck_)
+	if reactor_place:
+		deck = Places.with_reactor(deck)
 	days = days_
 	quota = quota_
 	_quota_cap = quota_cap_by_arg() if quota_ else 0
@@ -412,13 +429,31 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = s.copy()
 		s.cycles_done = Places.cycle_of(_depth) - 1
 	s = _capped(s)
+	if reactor_place and s.plan != null and s.plan.place == Places.REACTOR:
+		# RN1: a run made to start on the station (the floor picker's floor 7) has its state before the first tick,
+		# so the first snapshot already carries its block.
+		s = s.copy()
+		Run._sync_station(s)
 	return Run.with_orientation(s, true) if orientation_prelude else s
 
 static func doorway_shadow_on_by_arg() -> bool:
 	return not OS.get_cmdline_user_args().has("doorway_shadow=0")
 
+## RN1: the Reactor as a place unless `reactor_place=0` (an argument after `--`, or the web page's ?reactor_place=0).
+static func reactor_place_by_arg() -> bool:
+	for raw in OS.get_cmdline_user_args():
+		if raw.trim_prefix("--") == "reactor_place=0":
+			return false
+	if OS.has_feature("web"):
+		return str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('reactor_place') ?? ''", true)) != "0"
+	return true
+
 static func garden_admission_by_arg() -> bool:
 	return not OS.get_cmdline_user_args().has("garden_admission=0")
+
+## WN1: `ward_place=0` on the command line falls back to FL1's scene swap for the Ward (no new build needed).
+static func ward_place_off_by_arg() -> bool:
+	return OS.get_cmdline_user_args().has("ward_place=0")
 
 static func flare_on_by_arg() -> bool:
 	return OS.get_cmdline_user_args().has("flare=1")
@@ -574,6 +609,8 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 		st.day_met = r.state.day_met
 		# The Annex's marks and notes too: the catch's note was triggered by the real tick.
 		st.annex = r.state.annex
+		# The Reactor (RN1): the station's tick that caught them.
+		st.station = r.state.station
 		st.note_seq = r.state.note_seq
 		# Findables (FD9): what was opened and found on the real tick (the credits ride on its crew's tapes).
 		st.find = r.state.find

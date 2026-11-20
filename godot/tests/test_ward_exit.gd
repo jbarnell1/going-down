@@ -70,12 +70,17 @@ func _enter(t: T, packs: String) -> Dictionary:
 	var before := tree.current_scene
 	var room := LocalRoom.new()
 	room.open_local("wf1-ward-exit", "Tester", true)
+	# This file checks FL1's scene swap: the Ward as a normal level (WN1, net/host_rules.gd ward_place) off.
+	room.ward_place = false
+	room.reactor_place = false   # and the Reactor as a place (RN1) off: this file checks the old hand-over
 	room.late_archive_root = ""
 	t.check(room.start_playtest(HostRules.WARD_DEPTH), "the floor picker starts floor 6")
-	var clock := 0.0
+	# On the real clock, the one the Ward's scene polls with: a made-up clock here would jump the host's time by the
+	# process's age at the first real poll, and the client's estimate of host time takes a while to catch a jump
+	# (under a long suite the lift's clock then read minutes off; WN1: steadier, the same claims).
 	for i in 10:
-		clock += 0.05
-		room.poll(clock)
+		OS.delay_usec(50000)
+		room.poll(Time.get_ticks_usec() / 1000000.0)
 	t.eq(Main.floor_handover(room.client.latest), "ward", "floor 6 of a solo run is the Ward")
 	var main := Main.new()
 	main.hud = Hud.new()

@@ -65,6 +65,11 @@ var names := {}
 ## labels still hold the Ward's lines for it, unseen, and no grey capsules are drawn.
 var own_hud := true
 var capsules := true
+## WN1: false when the main scene plays the Ward as a normal level (client/ward/floor.gd): the main game's camera,
+## environment and mouse are used; the Ward's environment is kept in `environment` for the main scene to take.
+var own_camera := true
+var own_environment := true
+var environment: Environment
 
 func _init(seed_: int, spawn_: Vector3) -> void:
 	seed_value = seed_
@@ -151,7 +156,7 @@ static func watch_line(name: String) -> String:
 func _watch(targets: Array[String], crew: Array) -> String:
 	var first := not watching
 	watching = true
-	watch_camera.current = true
+	watch_camera.current = own_camera
 	if targets.is_empty():
 		watch_id = ""
 		var centre := lift_spot
@@ -275,7 +280,11 @@ func _setup_world() -> void:
 	env.fog_light_color = Color("#0d151d")
 	env.fog_density = 0.022
 	world.environment = env
-	add_child(world)
+	environment = env
+	if own_environment:
+		add_child(world)
+	else:
+		world.free()
 
 func _box(parent: Node3D, at: Vector3, dims: Vector3, color: String, solid := false) -> Node3D:
 	var anchor: Node3D = StaticBody3D.new() if solid else Node3D.new()
@@ -620,7 +629,7 @@ func _build_crew() -> void:
 	player.add_child(camera)
 	camera.position.y = 1.56
 	camera.fov = Main.VFOV
-	camera.current = true
+	camera.current = own_camera
 	watch_camera.fov = Main.VFOV
 	player.rotation.y = PI
 	add_child(watch_camera)
@@ -663,7 +672,7 @@ func _build_hud() -> void:
 	subtitles.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	subtitles.position.y -= 64.0
 	subtitles.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	if DisplayServer.get_name() != "headless":
+	if DisplayServer.get_name() != "headless" and own_hud:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func look_input(event: InputEvent) -> void:

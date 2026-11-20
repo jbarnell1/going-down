@@ -29,6 +29,9 @@ static func _packs(file: String) -> String:
 static func _ward_room() -> LocalRoom:
 	var room := LocalRoom.new()
 	room.open_local("fl2-ward", "Tester", true)
+	# This file checks FL1's scene swap: the Ward as a normal level (WN1, net/host_rules.gd ward_place) off.
+	room.ward_place = false
+	room.reactor_place = false   # and the Reactor as a place (RN1) off: this file checks the old hand-over
 	room.late_archive_root = ""
 	room.start_playtest(6)
 	for i in 6:

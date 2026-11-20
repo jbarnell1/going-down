@@ -7,6 +7,31 @@ static func at_prison_station(x: float, z: float) -> bool:
 
 const Archive := preload("res://sim/reactor_archive.gd")
 const State := preload("res://sim/reactor.gd")
+const StationRules := preload("res://sim/station_floor.gd")
+
+## RN1, the Reactor as a place: the same block as snapshot() below, built from the run's station (sim/station_floor.gd)
+## and the run's players {id: RunPlayer} on the floor (connected, still in the run). Every old field, positions in the
+## plan's metres; new: native (true), holdLeft (seconds of light left, -1 before the hold starts, 0 after the cut),
+## seats ([1, 2, 3, 4], the crew poses' seat numbers). The host adds archive.
+static func native_snapshot(sf: StationRules.StationFloor, players: Dictionary, tuning: Variant) -> Dictionary:
+	var peers := {}
+	var states := {}
+	var low := {}
+	for id: String in players:
+		var rp: Variant = players[id]
+		var b: Variant = rp.body
+		peers[id] = [b.x, b.y, b.z]
+		var st := str(rp.status)
+		states[id] = "up" if st == "ok" else ("down" if st == "down" else "out")
+		low[id] = bool(sf.low.get(id, false))
+	var seats := []
+	for b in sf.bodies:
+		seats.append(b.seat)
+	return {"seed": sf.seed_value, "seq": sf.seq, "rev": sf.rev, "power": sf.power, "time": sf.awake,
+		"holder": sf.holder if not sf.holder.is_empty() else 0, "fuseUses": sf.fuse_uses, "cassette": sf.collected,
+		"lift": sf.returned, "players": peers, "crew": StationRules.seat_poses(sf, tuning), "status": states, "low": low,
+		"cassetteHolder": sf.cassette_holder, "extracted": sf.extracted, "fuseAt": [sf.fuse.x, sf.fuse.y, sf.fuse.z],
+		"tapeAt": [sf.tape.x, sf.tape.y, sf.tape.z], "native": true, "holdLeft": sf.hold_left, "seats": seats}
 const SPAWN := [Vector3(-3,0,-4),Vector3(1,0,-3),Vector3(6,2,-8),Vector3(6,0,-3)]
 ## RX1: where the fuse can be, one chosen from the floor seed (the same for every player; late joiners get it
 ## in the block's fuseAt). Each is out of plain sight in the room the ReactorCampaign pack draws: on the floor

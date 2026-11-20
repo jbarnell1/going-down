@@ -398,6 +398,8 @@ const Nerve = preload("res://sim/nerve.gd")
 const Furniture = preload("res://sim/furniture.gd")
 const Noises = preload("res://sim/noise.gd")
 const Hearing = preload("res://sim/hearing.gd")
+## The Reactor's rules on the generated station (RN1; see "The Reactor" below).
+const StationRules = preload("res://sim/station_floor.gd")
 const Findables = preload("res://sim/findables.gd")
 const Inventory = preload("res://sim/inventory.gd")
 const Shop = preload("res://sim/shop.gd")
@@ -1186,6 +1188,9 @@ class RunState:
 	var quota_tuning: Settings.Values = null
 	## The Arboretum (see the header): this floor's Groundskeeper and heal counts (a GardenFloor), else null.
 	var garden: GardenFloor = null
+	## The Reactor (RN1; StationRules.StationFloor): the power, the four, the fuse and the tape, on a floor whose place
+	## is the Reactor; null on every other floor (and always with the Reactor out of the deck).
+	var station: RefCounted = null
 	## A second Orderly (T9b, with_second_orderly; see "A second Orderly" in the header). Off: orderly2 is
 	## always null and nothing below is ever read.
 	var second_orderly := false
@@ -1210,6 +1215,7 @@ class RunState:
 		s.tuning = tuning
 		s.quota_tuning = quota_tuning
 		s.garden = garden
+		s.station = station
 		s.lonely = lonely
 		s.day_lock = day_lock
 		s.day_earned = day_earned
@@ -2765,6 +2771,76 @@ static func _garden_after(s: RunState, events: Array[Dictionary]) -> void:
 		s.garden = g
 
 # ---------------------------------------------------------------------------------------------
+# The Reactor (RN1; sim/station_floor.gd, whose header is the rule). On a floor whose place is the Reactor (only with
+# Places.REACTOR in the deck: net/host_rules.gd reactor_place) the run holds `station`, made as the crew reaches the
+# floor and dropped at home or on any other floor. The floor asks no quota (want 0), the call is refused until the
+# power is restored ("callRefused" reason "power"); the tick the power comes back the held car opens its doors
+# ("carArrived" wait 0, "doorsOpened" boarding: today's floor had its lift there the moment it was lit); a later call
+# (after an empty bell) brings it at once (one floor, 3 s, as Practice's) with no blink; and the bell always goes up (a DOWN
+# win too, never refused by the day lock): StationRules.board, then _bank; with cycles the cycle is done, as
+# bank_reactor says. Its four catch through _step_station: "caught" {by "station"}, then the run's own down.
+
+## Keeps `station` the state of this floor (see above).
+static func _sync_station(s: RunState) -> void:
+	if s.plan == null or s.plan.place != Places.REACTOR or at_home(s) or s.orientation:
+		if s.station != null:
+			s.station = null
+		return
+	if s.station != null and (s.station as StationRules.StationFloor).plan == s.plan:
+		return
+	s.station = StationRules.make(s.plan)
+
+## One tick of the station's rules. Updates `s` (station) and `players` (statuses), appends the events.
+static func _step_station(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, dt: float, events: Array[Dictionary]) -> void:
+	var st := (s.station as StationRules.StationFloor).copy()
+	var crew: Array[StationRules.Crew] = []
+	for p in players:
+		var inp: PlayerInput = input_of.get(p.id)
+		crew.append(StationRules.Crew.make(p.id, p.body, p.status, inp.gait if inp != null else &"walk",
+			inp != null and inp.use, _is_active(p, input_of)))
+	var from := events.size()
+	var caught := StationRules.step(st, crew, t, dt, s.tuning, events)
+	s.station = st
+	s.lure = false
+	# The power back: the held car opens its doors at once (the old floor's lift was there the moment it was lit).
+	for k in range(from, events.size()):
+		if events[k]["type"] == "powerRestored" and s.phase == &"away":
+			s.phase = &"boarding"
+			s.call = null
+			s.blink = null
+			s.bell_left = board_time(s)
+			s.hold_left = hold_limit(s)
+			s.held = false
+			events.append({"type": "carArrived", "t": t, "wait": 0.0})
+			events.append({"type": "doorsOpened", "t": t, "depth": s.depth, "reason": "boarding"})
+			break
+	for id in caught:
+		for n in players.size():
+			if players[n].id != id or players[n].status != &"ok":
+				continue
+			events.append({"type": "caught", "t": t, "playerId": id, "by": "station"})
+			if s.downs:
+				_go_down(s, players, n, t, &"catch", events)
+			else:
+				var np := players[n].copy()
+				np.side = null
+				np.status = &"caught"
+				players[n] = np
+			StationRules.drop_carried(st, id, players[n].body, events, t)
+
+## After the tick's heals: the healed get StationRules.GRACE before the four can catch them again.
+static func _station_after(s: RunState, events: Array[Dictionary], t: float) -> void:
+	var st: StationRules.StationFloor = null
+	for e in events:
+		if e["type"] != "healed":
+			continue
+		if st == null:
+			st = (s.station as StationRules.StationFloor).copy()
+		st.grace[str(e["playerId"])] = t + StationRules.GRACE
+	if st != null:
+		s.station = st
+
+# ---------------------------------------------------------------------------------------------
 # Hiding off the Playroom (see the header).
 
 ## Whether this floor has hides the run steps with sim/hiding.gd: a Clinic or an Annex with its resident.
@@ -3688,6 +3764,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	_sync_hiding(s)
 	_sync_annex(s)
 	_sync_garden(s)
+	_sync_station(s)
 	# Who called the car on the Playroom this tick (it starts the last count).
 	var seek_call_by := ""
 	# The floor quota for the crew as it is: set while the car arrives (so a player admitted at the stop
@@ -3698,7 +3775,8 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		var setting := s.phase == &"arriving" or s.floor_needed <= 0
 		if setting:
 			s.quota_tuning = s.tuning
-		var want := floor_quota(s.depth, quota_crew(players), s.quota_tuning)
+		# The Reactor (RN1): nothing here gives a reading, so it asks no quota; its lift waits for the power instead.
+		var want := 0 if s.station != null else floor_quota(s.depth, quota_crew(players), s.quota_tuning)
 		s.floor_needed = want if setting else mini(s.floor_needed, want)
 
 	# ---- 1. Run rules.
@@ -3747,6 +3825,10 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				# The floor quota (C9): the button does nothing until the crew has recorded enough here.
 				events.append({"type": "callRefused", "t": t, "playerId": caller.id, "earned": floori(s.floor_earned), "needed": s.floor_needed})
 				caller = null
+			if caller != null and s.station != null and (s.station as StationRules.StationFloor).power != StationRules.Power.RESTORED:
+				# The Reactor (RN1): the lift needs power to return.
+				events.append({"type": "callRefused", "t": t, "playerId": caller.id, "earned": 0, "needed": 0, "reason": "power"})
+				caller = null
 			if caller != null and s.seek != null and not (s.seek as Seek.SeekState).done:
 				# The Playroom: the call starts the last count; the car comes when it ends (see the header).
 				s.calls += 1
@@ -3759,8 +3841,10 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				events.append({"type": "called", "t": t, "playerId": caller.id, "floorsAway": 0, "at": caller.body, "last": true})
 			elif caller != null:
 				var index := s.calls
-				var plan := CallPlan.new() if s.orientation else call_plan(s.seed, index, s.last_floors, s.depth, s.long_dark, s.tuning)
-				if s.orientation:
+				# The Reactor (RN1): the car is held at the landing for want of power, so once it is back it comes at once.
+				var held_car := s.station != null
+				var plan := CallPlan.new() if (s.orientation or held_car) else call_plan(s.seed, index, s.last_floors, s.depth, s.long_dark, s.tuning)
+				if s.orientation or held_car:
 					plan.floors = 1
 					plan.delay = 0.5
 					plan.floor_time = 2.5
@@ -3790,7 +3874,8 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 					o2.replan_in = 0.0
 					s.orderly2 = o2
 					events.append({"type": "startedHunting", "t": t, "n": 2})
-				s.blink = _blink_of(s.call, 0)
+				# The Reactor (RN1): restored light lets the crew see its way to the car: no blink, no blackout.
+				s.blink = null if s.station != null else _blink_of(s.call, 0)
 				events.append({"type": "called", "t": t, "playerId": caller.id, "floorsAway": plan.floors, "at": caller.body})
 				events.append({"type": "indicator", "t": t, "floorsAway": plan.floors, "floor": s.depth - plan.floors})
 		&"coming":
@@ -3894,9 +3979,12 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			elif p.side == &"down":
 				down += 1
 		var outcome := "empty" if aboard.is_empty() else ("bank" if bank > down else "ride")
+		# The Reactor (RN1): its lift only goes up (the old floor's return), and the day is settled as it was.
+		if s.station != null and outcome == "ride":
+			outcome = "bank"
 		# The day quota's lock (FD2): BANK won but today's quota is not met. The vote is refused and the car
 		# rides down exactly as if DOWN had won.
-		var refused := outcome == "bank" and day_locked(s)
+		var refused := outcome == "bank" and day_locked(s) and s.station == null
 		if refused:
 			outcome = "ride"
 			events.append({"type": "bell", "t": t, "bank": bank, "down": down, "outcome": outcome, "refused": true})
@@ -3919,7 +4007,17 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		var aboard_ids: Array[String] = []
 		for p in _active_aboard(players, input_of):
 			aboard_ids.append(p.id)
+		var station_floor := s.station != null
+		if station_floor:
+			var stf := (s.station as StationRules.StationFloor).copy()
+			StationRules.board(stf, aboard_ids, t, events)
+			s.station = stf
 		_bank(s, players, aboard_ids, t, events)
+		if station_floor and cycles_on(s):
+			# Cycles: the Reactor's return finishes the cycle, as bank_reactor does, unless that was the game over.
+			var over := s.day_result is Dictionary and str((s.day_result as Dictionary).get("kind", "")) == "game_over"
+			if not over:
+				s.cycles_done = maxi(s.cycles_done, Places.cycle_of(s.depth))
 		return res
 
 	if departing == &"ride":
@@ -3944,6 +4042,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	elif s.orientation:
 		if s.phase != &"ended" and s.phase != &"riding":
 			entity_ticks = [_step_orientation(s, players, input_of, dt, events)]
+	elif s.phase != &"riding" and s.station != null:
+		# The Reactor (RN1; sim/station_floor.gd): the power, the four, the fuse and the tape. No readings here.
+		_step_station(s, players, input_of, t, dt, events)
 	elif s.phase != &"riding" and s.seek != null:
 		# The Playroom: the count, the search, hiding, health (sim/seek.gd; see the header).
 		entity_ticks = [_step_seek(s, players, input_of, seek_call_by, prev.t, t, dt, events)]
@@ -4067,6 +4168,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	# ---- The Arboretum: what the Groundskeeper will hear next tick (a heal, a dropped tape).
 	if s.garden != null:
 		_garden_after(s, events)
+	# ---- The Reactor: a crewmate just healed is not caught again at once.
+	if s.station != null:
+		_station_after(s, events, t)
 
 	# ---- Arriving home (the day loop).
 	if s.phase == &"riding" and s.timer <= EPS and s.orientation_resume != null:
@@ -4148,6 +4252,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	_sync_hiding(s)
 	_sync_annex(s)
 	_sync_garden(s)
+	_sync_station(s)
 
 	# ---- A wipe: nobody left who can call or board.
 	var everyone_out := true

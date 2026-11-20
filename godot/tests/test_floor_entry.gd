@@ -32,6 +32,9 @@ static func _packs(file: String) -> String:
 static func _ward_room() -> LocalRoom:
 	var room := LocalRoom.new()
 	room.open_local("fl1-ward", "Tester", true)
+	# This file checks FL1's scene swap: the Ward as a normal level (WN1, net/host_rules.gd ward_place) off.
+	room.ward_place = false
+	room.reactor_place = false   # and the Reactor as a place (RN1) off: this file checks the old hand-over
 	room.start_playtest(1)
 	room.host.start_ward_review(WARD_SEED, true)
 	for i in 6:
@@ -145,21 +148,26 @@ func test_ward_block_enters_the_ward_and_returns_to_the_prison(t: T) -> void:
 	var ward: Variant = room.host._ward_review
 	ward.phase = &"away"
 	ward.collection_at = room.host.state.t + 0.5
-	room.time_scale = 60.0
+	# Thirty times real time (it was sixty): under a loaded machine sixty could carry the client from the boarding
+	# snapshot to the prison's in one frame, so this scene never drew the departed one (WN1: steadier, same claims).
+	room.time_scale = 30.0
 	var due := false
+	var saw_departed := false
 	# The lift's boarding and the ride home take well under 90 s of host time; past that the hand-back is late.
 	var give_up := room.host.state.t + 90.0
 	var steps := 0
 	while room.host.state.t < give_up and steps < 4000:
 		steps += 1
 		scene._process(0.016)
+		if scene.get("view") != null and scene.get("view").get("local_phase") == "departed":
+			saw_departed = true
 		if not scene.is_processing():
 			due = Review.handback_due(room.client.latest)
 			break
 		OS.delay_usec(2000)
 	t.note("ward hand-back after %d frames, host time %.1f s" % [steps, room.host.state.t])
 	t.check(due, "the Ward's day ends with the crew home and this scene handing back (depth %d)" % room.client.latest.depth)
-	t.check(scene.get("view").get("local_phase") == "departed", "after the lift departed")
+	t.check(saw_departed, "after the lift departed (drawn on this scene before the hand-back)")
 	var prison := Review.prison_for(room)
 	t.check(prison.get("ward_room") == room, "the prison gets the same room")
 	prison.free()

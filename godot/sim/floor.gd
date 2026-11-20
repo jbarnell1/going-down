@@ -131,6 +131,9 @@ class FloorPlan:
 	## The Arboretum only (sim/noise.gd, sim/arboretum.gd): the floor's ground (a Noises.Ground, or the
 	## generator's Garden, which is one): a surface per cell. Null on every other place.
 	var ground: RefCounted = null
+	## The Reactor only (sim/station.gd): the generating station's anchors (world metres; the shapes are listed at
+	## the top of sim/station.gd). Empty on every other place.
+	var station: Dictionary = {}
 
 	# Caches (TypeScript keeps these in WeakMaps keyed by the plan object).
 	var _index: PlanIndex = null
@@ -158,6 +161,7 @@ class FloorPlan:
 		p.entity_start = entity_start
 		p.sightlines = sightlines.duplicate()
 		p.ground = ground
+		p.station = station
 		return p
 
 class PlanIndex:

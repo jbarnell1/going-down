@@ -235,9 +235,17 @@ func inventory_on() -> bool:
 func room_time() -> float:
 	return _vt
 
+## WN1: the Hanging Ward as a normal level in the next run (net/host_rules.gd ward_place), with the late floors.
+## Tests set it false for FL1's scene swap; the command line's `ward_place=0` does the same.
+var ward_place := true
+
 ## Whether the next run has the late floors (FL1, net/host_rules.gd late_floors): the game's deck only.
 func late_floors_on() -> bool:
 	return Session.deck == Places.FULL
+
+## The Reactor as a generated place (RN1, net/host_rules.gd reactor_place), with the late floors. On unless the game
+## was started with `reactor_place=0` (the way back to the old overlay without a new build); tests may set it.
+var reactor_place := HostRules.reactor_place_by_arg()
 
 ## Where a solo run keeps its recovered Reactor tape: the game's user data, one folder per run seed ("" keeps it in
 ## memory; tests may set it).
@@ -342,7 +350,8 @@ func start_run() -> void:
 	rules = HostRules.new(entity_on, depth, deck, days_on(), q, downs_on(), false, relocation_on(), o, o, o, lonely_on(), playroom_tuned_on(), q, furniture_on(), findables_on(), inventory_on(), furniture_layout_on(), Session.deck == Places.FULL, shop_on(), Session.deck == Places.FULL, true, true, induction, nerve, ear, HostRules.flare_on_by_arg(), HostRules.lamp_on_by_arg(), badge_search, quick_fingers, long_burn, field_dressing, HostRules.doorway_shadow_on_by_arg() and Session.deck == Places.FULL and not _orientation_playtest, steady_gaze, throwing_arm,
 		HostRules.nerve_passive_on_by_arg() and not _orientation_playtest,
 		HostRules.annex_drag_on_by_arg() and not _orientation_playtest,
-		playroom_tuned_on(), late_floors_on() and not _orientation_playtest, playroom_tuned_on(), Session.deck == Places.FULL, Session.deck == Places.FULL, late_floors_on() and not _orientation_playtest)
+		playroom_tuned_on(), late_floors_on() and not _orientation_playtest, playroom_tuned_on(), Session.deck == Places.FULL, Session.deck == Places.FULL, late_floors_on() and not _orientation_playtest,
+		late_floors_on() and not _orientation_playtest and not HostRules.ward_place_off_by_arg() and ward_place, reactor_place and late_floors_on() and not _orientation_playtest)
 	if _orientation_playtest:
 		rules.enable_orientation()
 	elif orientation_campaign and _playtest_depth < 0:

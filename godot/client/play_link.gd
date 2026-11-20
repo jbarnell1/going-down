@@ -92,6 +92,9 @@ var rc: RoomClient
 var local := false
 ## The player's own body (null until the host places it), their tank, gait and speed this frame.
 var body: Move.Body = null
+## WN1: the floor's own walk, in place of the floor plan's (client/ward/floor.gd walk: the Hanging Ward played as a
+## normal level). Called with (body, dx, dz), returns the body after the step. Empty: the plan's walk, as always.
+var walker := Callable()
 var tank: Stamina.Stamina = Stamina.fresh_stamina()
 var gait: StringName = &"walk"
 var speed := 0.0
@@ -262,7 +265,10 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 				sp = CRAWL_PACE
 			var sn := M.sin_js(in_yaw)
 			var cs := M.cos_js(in_yaw)
-			body = Session.move_local(plan, phase, body, (-sn * nf + cs * nr) * sp * dt, (-cs * nf - sn * nr) * sp * dt, PLAYER_RADIUS, solid, furniture_layout)
+			if walker.is_valid():
+				body = walker.call(body, (-sn * nf + cs * nr) * sp * dt, (-cs * nf - sn * nr) * sp * dt)
+			else:
+				body = Session.move_local(plan, phase, body, (-sn * nf + cs * nr) * sp * dt, (-cs * nf - sn * nr) * sp * dt, PLAYER_RADIUS, solid, furniture_layout)
 			speed = sp
 	if before != null and body != null and dt > 0.0:
 		tank = Stamina.step_stamina(tank, gait, M.hypot2(body.x - before.x, body.z - before.z) / dt, dt)

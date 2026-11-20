@@ -59,6 +59,14 @@ func test_the_ward_has_the_main_games_hud(t: T) -> void:
 	Exit._frame(scene)
 	t.check(hud.tenant_line.begins_with("LIFT RETURNS IN "), "out of the lift: LIFT RETURNS IN under PLAY: " + hud.tenant_line)
 	t.check(hud.tenant_line == "LIFT RETURNS IN 10:00" or hud.tenant_line.begins_with("LIFT RETURNS IN 9:"), "the design's ten minutes: " + hud.tenant_line)
+	# WN1: the clock is read on the room's own time (a room on this machine runs on virtual time; reading host time
+	# off the process's clock put the line minutes out, by however long the game had been open).
+	var parts := hud.tenant_line.trim_prefix("LIFT RETURNS IN ").split(":")
+	var shown := int(parts[0]) * 60 + int(parts[1]) if parts.size() == 2 else -1
+	var room: Variant = w.room
+	var left := float(room.client.latest.ward.collectionAt) - float(room.host.state.t)
+	t.note("clock %s, host says %.1f s left; process clock %.1f s ahead of the room's" % [hud.tenant_line, left, Time.get_ticks_usec() / 1000000.0 - float(room._now)])
+	t.check(absf(float(shown) - left) <= 2.0, "the line is the host's time left (%d against %.1f s)" % [shown, left])
 	t.check(not hud.tenant_warn, "not yet in the warning colour")
 	t.eq(hud.prompt, "", "and no prompt once out")
 	# The instrument, drawn into the picture: E raises it, as on every floor.

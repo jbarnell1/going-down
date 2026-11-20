@@ -74,6 +74,7 @@ const SECTIONS: Array = [
 	[&"minder", &"residents", "THE MINDER (THE PLAYROOM)"],
 	[&"groundskeeper", &"residents", "THE GROUNDSKEEPER (THE ARBORETUM)"],
 	[&"tenant", &"residents", "THE TENANT (EVERY FLOOR)"],
+	[&"reactor", &"residents", "THE FOUR (THE REACTOR)"],
 	[&"lift", &"lift", "THE LIFT AND THE DARK"],
 	[&"stamina", &"players", "STAMINA"],
 	[&"down", &"players", "DOWN AND HEALING"],
@@ -171,6 +172,15 @@ const ROWS: Array = [
 	# The Tenant clock (TT1, net/host_rules.gd tenant_timer): on in the game's rooms, the clock on every floor below the
 	# prison, stamped as the doors open on arrival (a change waits for the next floor). Today's is HostRules.TENANT_MINUTES.
 	[&"tenant.minutes", &"tenant", "ARRIVES AFTER", "minutes on a floor before the Tenant arrives", "min", 10.0, 2.0, 30.0, 1.0, &"next", &"TT1", W],
+	# The Reactor (RN1, sim/station_floor.gd): on in the game's rooms with the late floors. Today's are its POWER_HOLD,
+	# WAKE_AFTER, WAKE_GAP, CRAWL_TIME, CRAWL_SPEED and RUN_SPEED (the old floor's numbers). A player walks at 3 m/s and
+	# sprints at 5.
+	[&"reactor.power_hold", &"reactor", "LIGHTS HOLD FOR", "seconds of light after the first player passes the landing, before the power cuts", "s", 45.0, 10.0, 180.0, 5.0, &"next", &"RN1", F],
+	[&"reactor.wake_after", &"reactor", "FIRST STIRS AFTER", "seconds from the cut to the first of the four moving (its sound comes then)", "s", 1.1, 0.0, 10.0, 0.1, &"now", &"RN1", F],
+	[&"reactor.wake_gap", &"reactor", "EACH NEXT STIRS AFTER", "seconds between one of the four stirring and the next", "s", 0.62, 0.0, 10.0, 0.01, &"now", &"RN1", F],
+	[&"reactor.crawl_time", &"reactor", "CRAWLS FOR", "seconds each crawls before it stands and pursues (a crawler catches nobody)", "s", 4.2, 0.0, 30.0, 0.1, &"now", &"RN1", F],
+	[&"reactor.crawl_speed", &"reactor", "CRAWL SPEED", "how fast they crawl", "m/s", 0.43, 0.1, 2.0, 0.01, &"now", &"RN1", F],
+	[&"reactor.run_speed", &"reactor", "PURSUIT SPEED", "how fast they pursue once standing (walk 3, sprint 5)", "m/s", 3.4, 1.5, 6.0, 0.1, &"now", &"RN1", F],
 	# The lift and the dark. "Time for the elevator to return" is the first three rows.
 	[&"lift.floors_min", &"lift", "CAR STARTS, FEWEST FLOORS AWAY", "the shortest the indicator can start from", "floors", 6.0, 2.0, 19.0, 1.0, &"next", &"LS1", W],
 	[&"lift.floors_max", &"lift", "CAR STARTS, MOST FLOORS AWAY", "the longest", "floors", 12.0, 3.0, 20.0, 1.0, &"next", &"LS1", W],
@@ -274,6 +284,9 @@ const WIRED_IDS: Array[StringName] = [
 	&"badge.chance", &"badge.depth_chance",
 	# TT1: the Tenant clock.
 	&"tenant.minutes",
+	# RN1: the Reactor's power and its four.
+	&"reactor.power_hold", &"reactor.wake_after", &"reactor.wake_gap", &"reactor.crawl_time", &"reactor.crawl_speed",
+	&"reactor.run_speed",
 	# T22b: the second Orderly's first floor, the flare and the lamp (already read by the rules), recording, the
 	# quota's growth and the Annex's pad.
 	&"orderly2.first_floor",

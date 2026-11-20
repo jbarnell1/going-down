@@ -226,7 +226,7 @@ func _process(_delta: float) -> void:
 	elif frame.placed != null:
 		view.player.position = Vector3(frame.placed.x, frame.placed.y, frame.placed.z)
 	view.names = names_of(room.people)
-	view.show_host(snapshot, c.clock.host_time(now), str(c.id), world.players)
+	view.show_host(snapshot, c.clock.host_time(room._now), str(c.id), world.players)
 	if c.playing and snapshot.phase != "departed":
 		for row: Dictionary in world.players:
 			if row.id == str(c.id):
@@ -390,7 +390,7 @@ func _show_hud(world: Dictionary, ward: Dictionary, c: Client, frame: Client.Fra
 	var phase := str(ward.phase)
 	var line: String = view.hud.text
 	hud.tenant_line = "" if phase == "unloading" else line
-	hud.tenant_warn = phase == "boarding" or (phase == "away" and float(ward.collectionAt) - c.clock.host_time(now) <= 60.0)
+	hud.tenant_warn = phase == "boarding" or (phase == "away" and float(ward.collectionAt) - c.clock.host_time(room._now) <= 60.0)
 	hud.prompt = view.prompt.text if view.prompt.text != "" else (line if phase == "unloading" else "")
 	var count := 0
 	var value := 0.0

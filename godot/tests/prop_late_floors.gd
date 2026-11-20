@@ -99,7 +99,8 @@ func test_the_flag_is_the_last_parameter_and_off_by_default(t: T) -> void:
 		names.append(str(a["name"]))
 	var at := names.find("late_floors_")
 	# FL2 added the agreed four after it (party_table_, tenant_timer_, second_orderly_, cycles_: tests/prop_cycles.gd).
-	t.eq(names.slice(at), ["late_floors_", "party_table_", "tenant_timer_", "second_orderly_", "cycles_"] as Array[String], "late_floors_ is followed only by the four agreed flags")
+	# RN1 added ward_place_ and reactor_place_ after cycles_, in the order agreed for the three workers.
+	t.eq(names.slice(at), ["late_floors_", "party_table_", "tenant_timer_", "second_orderly_", "cycles_", "ward_place_", "reactor_place_"] as Array[String], "late_floors_ is followed only by the six agreed flags")
 	t.eq(names[at - 1], "minder_hunt_", "minder_hunt_ comes just before it")
 	t.eq(names[at - 2], "annex_drag_", "after annex_drag_")
 	var plain := HostRules.new(true, 1, Places.FULL, true)
@@ -315,6 +316,9 @@ func test_sandbox_reactor_always_has_its_tape(t: T) -> void:
 	var sandbox := LocalRoom.new()
 	sandbox.open_local("late-tape", "Tester", true)
 	sandbox.late_archive_root = root
+	# RN1: this checks the old overlay's archive (the fallback, reactor_place=0); tests/prop_station.gd checks the
+	# same promise on the Reactor as a place.
+	sandbox.reactor_place = false
 	# The campaign's folder for this seed, with a recovery recorded in it.
 	var campaign := LocalRoom.new()
 	campaign.open_local("late-tape", "Tester", true)

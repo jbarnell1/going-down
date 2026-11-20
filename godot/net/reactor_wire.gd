@@ -15,6 +15,9 @@ static func encode(s: Dictionary) -> Array:
 	var payload := [1,s.seed,s.seq,s.rev,s.power,s.time,s.holder,s.fuseUses,s.cassette,s.lift,s.fuseAt,s.tapeAt,actors,players]
 	if s.has("archive"):
 		payload.append([s.get("cassetteHolder",""),s.get("extracted",false),s.archive.recovered,s.archive.discovered,s.archive.playing])
+		# RN1, the Reactor as a place: slot 15 [native, holdLeft, seats]. Absent on the old floor (14 or 15 slots, as before).
+		if s.get("native", false):
+			payload.append([true,s.holdLeft,s.seats])
 	return payload
 
 static func number(value: Variant, lo: float, hi: float) -> bool:
@@ -32,7 +35,7 @@ static func point(value: Variant) -> bool:
 	return true
 
 static func decode(raw: Variant) -> Variant:
-	if not raw is Array or raw.size() not in [14,15] or not integer(raw[0],1,1):
+	if not raw is Array or raw.size() not in [14,15,16] or not integer(raw[0],1,1):
 		return null
 	if not integer(raw[1],-2147483648,2147483647) or not integer(raw[2],0,2147483647) or not integer(raw[3],0,2147483647):
 		return null
@@ -64,7 +67,18 @@ static func decode(raw: Variant) -> Variant:
 	var out := {"seed":int(raw[1]),"seq":int(raw[2]),"rev":int(raw[3]),"power":int(raw[4]),"time":raw[5],
 		"holder":raw[6],"fuseUses":int(raw[7]),"cassette":raw[8],"lift":raw[9],"fuseAt":raw[10],
 		"tapeAt":raw[11],"crew":actors,"players":players,"status":states,"low":low}
-	if raw.size()==15:
+	if raw.size()==16:
+		var n: Variant = raw[15]
+		if not n is Array or n.size()!=3 or n[0]!=true or not number(n[1],-1,86400) or not n[2] is Array or n[2].size()!=4:
+			return null
+		for seat: Variant in n[2]:
+			if not integer(seat,1,4): return null
+		out["native"] = true
+		out["holdLeft"] = n[1]
+		var seats := []
+		for seat: Variant in n[2]: seats.append(int(seat))
+		out["seats"] = seats
+	if raw.size()>=15:
 		var a: Variant = raw[14]
 		if not a is Array or a.size()!=5 or not a[0] is String or a[0].length()>64 or not a[1] is bool or not a[2] is bool or not a[3] is bool or not a[4] is Dictionary or a[4].size()>8:
 			return null

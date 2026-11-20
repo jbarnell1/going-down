@@ -56,6 +56,8 @@ const Shop = preload("res://sim/shop.gd")
 const PropCabinet = preload("res://tests/prop_cabinet.gd")
 const Upgrades = preload("res://sim/upgrades.gd")
 const Prison = preload("res://sim/prison.gd")
+const StationRules = preload("res://sim/station_floor.gd")
+const StationPlan = preload("res://sim/station.gd")
 const Flare = preload("res://sim/flare.gd")
 const Lamp = preload("res://sim/lamp.gd")
 const PropO2 = preload("res://tests/prop_second_orderly.gd")
@@ -151,6 +153,13 @@ const PROOFS := {
 	&"badge.depth_chance": "test_badge_search_odds",
 	# TT1: the Tenant clock.
 	&"tenant.minutes": "test_tenant_minutes",
+	# RN1: the Reactor.
+	&"reactor.power_hold": "test_reactor_numbers",
+	&"reactor.wake_after": "test_reactor_numbers",
+	&"reactor.wake_gap": "test_reactor_numbers",
+	&"reactor.crawl_time": "test_reactor_numbers",
+	&"reactor.crawl_speed": "test_reactor_numbers",
+	&"reactor.run_speed": "test_reactor_numbers",
 	# T22b.
 	&"orderly2.first_floor": "test_second_orderly_first_floor",
 	&"flare.throw": "test_flare_settings",
@@ -181,6 +190,7 @@ const MORE: Array[StringName] = [
 	&"stamina.tank", &"heal.time", &"heal.quiet", &"heal.health", &"health.walk", &"health.sprint", &"health.rest", &"inv.stack", &"inv.hand_reach", &"cabinet.slots",
 	&"shop.price.marker", &"shop.price.glow", &"shop.price.flash", &"shop.price.speed", &"shop.price.toy", &"shop.price.salts", &"shop.glow", &"badge.chance", &"badge.depth_chance",
 	&"tenant.minutes",
+	&"reactor.power_hold", &"reactor.wake_after", &"reactor.wake_gap", &"reactor.crawl_time", &"reactor.crawl_speed", &"reactor.run_speed",
 	&"orderly2.first_floor", &"flare.throw", &"flare.reach", &"flare.stun", &"flare.blind", &"flare.noise", &"lamp.seconds", &"lamp.range",
 	&"quota.step", &"record.reach", &"record.rate", &"marks.pad",
 	&"party.free_time", &"party.free_anger", &"party.reach"]
@@ -250,6 +260,12 @@ static func game_values() -> Dictionary:
 		&"noise.search_rush": Noises.SEARCH_RUSH,
 		&"noise.emote": Noises.EMOTE,
 		&"tenant.minutes": float(HostRules.TENANT_MINUTES),
+		&"reactor.power_hold": StationRules.POWER_HOLD,
+		&"reactor.wake_after": StationRules.WAKE_AFTER,
+		&"reactor.wake_gap": StationRules.WAKE_GAP,
+		&"reactor.crawl_time": StationRules.CRAWL_TIME,
+		&"reactor.crawl_speed": StationRules.CRAWL_SPEED,
+		&"reactor.run_speed": StationRules.RUN_SPEED,
 		&"lift.floors_min": float(Run.CALL_FLOORS_MIN),
 		&"lift.floors_max": float(Run.CALL_FLOORS_MAX),
 		&"lift.floor_time": Run.FLOOR_TIME,
@@ -323,7 +339,7 @@ func test_catch_dance_setting(t: T) -> void:
 func test_registry_rows(t: T) -> void:
 	var game := game_values()
 	var rows := Settings.list()
-	t.eq(rows.size(), 114, "rows in the registry")
+	t.eq(rows.size(), 120, "rows in the registry")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -371,7 +387,7 @@ func test_registry_rows(t: T) -> void:
 		if TEN.has(s.id) or MORE.has(s.id) or KEEPER_SIX.has(s.id):
 			want.append(s.id)
 	t.check(wired == want and want.size() == TEN.size() + MORE.size() + KEEPER_SIX.size(), "the wired rows are exactly those of LS1 and the groups wired since, in order: %s" % str(wired))
-	t.eq(by_group.get(&"residents", 0), 55, "residents")
+	t.eq(by_group.get(&"residents", 0), 61, "residents")
 	t.eq(by_group.get(&"lift", 0), 12, "the lift and the dark")
 	t.eq(by_group.get(&"players", 0), 30, "players")
 	t.eq(by_group.get(&"earning", 0), 10, "earning")
@@ -1498,6 +1514,64 @@ func test_cabinet_slots(t: T) -> void:
 ## (bought, nothing left) and with one fewer (refused, poor).
 ## TT1: the Tenant clock's length is the setting, stamped as the doors open on arrival (tests/prop_tenant.gd has the
 ## rest: once a floor, never in the prison or on Practice, the same on every screen).
+## RN1, the Reactor (sim/station_floor.gd): each of its six numbers at least, today's and most, the others at today's,
+## on a generated station with one player standing on the landing after passing into the hall: the cut comes
+## power_hold after the hold starts; the first stir wake_after after the cut and the second body wake_gap later; seat
+## 1 stands crawl_time after it stirs; its metres a second crawling and in its first second standing follow the two
+## speeds. Untuned (null) reads today's.
+func test_reactor_numbers(t: T) -> void:
+	var plan := StationPlan.generate_station("ls-reactor", 7)
+	var land: Rect2 = plan.station["landing"]
+	var hall: Rect2 = plan.station["hall"]
+	for id: StringName in [&"reactor.power_hold", &"reactor.wake_after", &"reactor.wake_gap", &"reactor.crawl_time",
+			&"reactor.crawl_speed", &"reactor.run_speed"]:
+		var row := Settings.row(id)
+		for v: float in [row.lo, row.today, row.hi]:
+			var tuning: Settings.Values = null if v == row.today else Settings.make({id: v})
+			var r := _reactor_clock(plan, tuning, land, hall)
+			var want := {&"reactor.power_hold": float(r["cut"]) - float(r["hold"]), &"reactor.wake_after": float(r["stir"]) - float(r["cut"]),
+				&"reactor.wake_gap": float(r["second"]) - float(r["stir"]), &"reactor.crawl_time": float(r["stand"]) - float(r["stir"]),
+				&"reactor.crawl_speed": float(r["crawl_m"]) / maxf(1e-9, float(r["crawl_s"])), &"reactor.run_speed": float(r["run_m"]) / maxf(1e-9, float(r["run_s"]))}
+			var got := float(want[id])
+			var ok := absf(got - v) <= DT + 1e-6 if not String(id).ends_with("speed") else (got <= v + 1e-6 and got >= 0.85 * v)
+			t.check(ok, "%s at %s: measured %.3f" % [id, str(v), got])
+
+## One player passes into the hall then stands on the landing; the times of the hold, the cut, the first and second
+## stir and seat 1 standing, and seat 1's metres crawling and in its first second standing.
+func _reactor_clock(plan: Floor.FloorPlan, tuning: Settings.Values, land: Rect2, hall: Rect2) -> Dictionary:
+	var st := StationRules.make(plan)
+	var out := {"hold": -1.0, "cut": -1.0, "stir": -1.0, "second": -1.0, "stand": -1.0, "crawl_m": 0.0, "crawl_s": 0.0, "run_m": 0.0, "run_s": 0.0}
+	var tt := 0.0
+	var x := hall.get_center().x
+	for k in 8000:
+		tt += DT
+		var z := land.position.y - 1.0 if k < 3 else land.end.y - 1.0
+		var crew: Array[StationRules.Crew] = [StationRules.Crew.make("p0", Move.Body.make(x, z, 0, 0.0), &"ok", &"walk", false, true)]
+		var events: Array[Dictionary] = []
+		var before: Move.Body = st.bodies[0].body
+		var phase0 := st.bodies[0].phase
+		StationRules.step(st, crew, tt, DT, tuning, events)
+		var moved := M.hypot2(st.bodies[0].body.x - before.x, st.bodies[0].body.z - before.z)
+		if phase0 == "zombie_crawl" and st.bodies[0].phase == "zombie_crawl":
+			out["crawl_m"] = float(out["crawl_m"]) + moved
+			out["crawl_s"] = float(out["crawl_s"]) + DT
+		elif phase0 == "zombie_run" and float(out["run_s"]) < 1.0 - 1e-9:
+			out["run_m"] = float(out["run_m"]) + moved
+			out["run_s"] = float(out["run_s"]) + DT
+		for e in events:
+			match str(e["type"]):
+				"powerHold": out["hold"] = tt
+				"powerCut": out["cut"] = tt
+				"stationStir": out["stir"] = tt
+				"bodyStands":
+					if int(e["seat"]) == 1:
+						out["stand"] = tt
+		if float(out["second"]) < 0.0 and st.bodies[1].phase != "still":
+			out["second"] = tt
+		if float(out["run_s"]) >= 1.0 - 1e-9 and float(out["second"]) >= 0.0:
+			break
+	return out
+
 func test_tenant_minutes(t: T) -> void:
 	for m: float in [2.0, float(HostRules.TENANT_MINUTES), 30.0]:
 		var r := HostRules.new(true, 1, Places.FULL, false, true, true)
