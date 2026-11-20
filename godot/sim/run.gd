@@ -4123,29 +4123,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		# The day's earned (FD2): the same, over the whole day.
 		if s.day_lock and e["type"] == "readingClosed":
 			s.day_earned += float(e["value"])
-	for p in players:
-		var given: PlayerInput = input_of.get(p.id)
-		if given == null or given.pick_up == null or not _is_active(p, input_of):
-			continue
-		var want: Variant = given.pick_up
-		var m := Instr.member(s.crew, p.id)
-		var tape_id: Variant = null
-		if want is bool and want == true:
-			var best := INF
-			for f in s.crew.floor:
-				var d := Instr.feet_distance(m.body, f.at) if (m != null and m.body != null) else INF
-				if d <= Instr.PICKUP_REACH + EPS and d < best:
-					best = d
-					tape_id = f.tape.id
-		elif want is String:
-			tape_id = want
-		if tape_id == null:
-			continue
-		var up := Instr.pick_up_tape(s.crew, p.id, tape_id)
-		if up.ok:
-			s.crew = up.crew
-			if up.event != null:
-				events.append(_with_t(up.event, t))
+	_step_tape_pickups(s, players, input_of, t, events)
 
 	# ---- The four-slot inventory (S1, see the header).
 	if s.inventory:
@@ -4384,6 +4362,55 @@ static func bank_reactor(s: RunState, t: float, events: Array[Dictionary]) -> vo
 	var over := s.day_result is Dictionary and str((s.day_result as Dictionary).get("kind", "")) == "game_over"
 	if not over:
 		s.cycles_done = maxi(s.cycles_done, Places.cycle_of(s.depth))
+
+## F near a tape on the floor (pick_up): the nearest within reach, or the one asked for, back on its holder.
+static func _step_tape_pickups(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, events: Array[Dictionary]) -> void:
+	for p in players:
+		var given: PlayerInput = input_of.get(p.id)
+		if given == null or given.pick_up == null or not _is_active(p, input_of):
+			continue
+		var want: Variant = given.pick_up
+		var m := Instr.member(s.crew, p.id)
+		var tape_id: Variant = null
+		if want is bool and want == true:
+			var best := INF
+			for f in s.crew.floor:
+				var d := Instr.feet_distance(m.body, f.at) if (m != null and m.body != null) else INF
+				if d <= Instr.PICKUP_REACH + EPS and d < best:
+					best = d
+					tape_id = f.tape.id
+		elif want is String:
+			tape_id = want
+		if tape_id == null:
+			continue
+		var up := Instr.pick_up_tape(s.crew, p.id, tape_id)
+		if up.ok:
+			s.crew = up.crew
+			if up.event != null:
+				events.append(_with_t(up.event, t))
+
+## WN2: the Ward played as a normal level (net/host_rules.gd ward_place; net/host.gd _step_ward_review). After
+## step_ward's tick, while its lift has not gone, the run's own pieces for what a crew carries, in step_run's order:
+## the lamp, flares, tapes picked up, the four-slot inventory, then the shop's items. `land` (body, motion) -> body and
+## `line` (body, body) -> bool are the Ward's walk model (sim/ward/state.gd) in place of the floor plan for a thrown
+## flare. Only the host calls it, only with the flag on; with it off step_ward is all there is, as before.
+static func step_ward_kit(s: RunState, inputs: Array[PlayerInput], dt: float, events: Array[Dictionary], land: Callable, line: Callable) -> void:
+	if s.phase == &"ended" or s.phase == &"riding" or at_home(s):
+		return
+	var t := s.t
+	var input_of := {}
+	for inp in inputs:
+		input_of[inp.id] = inp
+	var players := s.players
+	if s.lamp:
+		_step_lamps(s, players, input_of, t, dt, events)
+	var flare_users := _step_flares(s, players, input_of, t, events, land, line) if s.flare else {}
+	_step_tape_pickups(s, players, input_of, t, events)
+	if s.inventory:
+		_step_inventory(s, players, input_of, t, events)
+	if s.shop and s.inventory:
+		_step_shop(s, players, input_of, t, dt, events, flare_users)
+	s.players = players
 
 ## Ward review uses the same instrument, departure, wallet and day records.
 static func step_ward(prev: RunState, inputs: Array[PlayerInput], crew_rows: Dictionary, limb: PackedVector3Array,
@@ -5159,7 +5186,9 @@ static func _step_lamps(s: RunState, players: Array[RunPlayer], input_of: Dictio
 			"pitch": light.pitch, "range": light.range}
 	s.lamps = lamps
 
-static func _step_flares(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, events: Array[Dictionary]) -> Dictionary:
+## `land` and `line` (WN2, step_ward_kit): the Ward's own geometry in place of the floor plan's; empty, the plan's.
+static func _step_flares(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, events: Array[Dictionary],
+		land := Callable(), line := Callable()) -> Dictionary:
 	var used := {}
 	if s.flare_plan != s.plan:
 		s.flare_plan = s.plan
@@ -5191,13 +5220,15 @@ static func _step_flares(s: RunState, players: Array[RunPlayer], input_of: Dicti
 			events.append({"type": "invRefused", "t": t, "playerId": p.id, "op": "use", "why": "busy"})
 			continue
 		_set_bag(s, p.id, Inventory.remove_one(bag, slot))
-		_burst_flare(s, p, input.yaw, players, input_of, t, events)
+		_burst_flare(s, p, input.yaw, players, input_of, t, events, land, line)
 	return used
 
-static func _burst_flare(s: RunState, p: RunPlayer, yaw: float, players: Array[RunPlayer], input_of: Dictionary, t: float, events: Array[Dictionary]) -> void:
+static func _burst_flare(s: RunState, p: RunPlayer, yaw: float, players: Array[RunPlayer], input_of: Dictionary, t: float, events: Array[Dictionary],
+		land := Callable(), line := Callable()) -> void:
 	var direction := Flare.forward(yaw)
 	var reach := Settings.f(s.tuning, &"flare.throw", Flare.THROW)
-	var at := Move.move_with_collision(s.plan, p.body, direction.x * reach, direction.y * reach, 0.08)
+	var ward := land.is_valid()
+	var at: Move.Body = land.call(p.body, direction * reach) if ward else Move.move_with_collision(s.plan, p.body, direction.x * reach, direction.y * reach, 0.08)
 	var struck := ""
 	var nearest := reach + 0.001
 	for other in players:
@@ -5206,12 +5237,13 @@ static func _burst_flare(s: RunState, p: RunPlayer, yaw: float, players: Array[R
 		if not Flare.within(p.body, other.body, reach):
 			continue
 		var along := Flare.aim(p.body, other.body, direction)
-		if along < nearest and Flare.clear(s.plan, p.body, other.body):
+		if along < nearest and (bool(line.call(p.body, other.body)) if ward else Flare.clear(s.plan, p.body, other.body)):
 			struck = other.id
 			nearest = along
 			at = other.body
 	var stunned := false
-	if struck.is_empty() and s.orderly != null and (s.orientation or resident_of(s).stillness) and not s.seek_off:
+	# The Ward (WN2): the floor plan's resident is not on this floor, and the design gives the Rigger no stun.
+	if struck.is_empty() and not ward and s.orderly != null and (s.orientation or resident_of(s).stillness) and not s.seek_off:
 		var radius := Settings.f(s.tuning, &"flare.reach", Flare.REACH)
 		stunned = Flare.within(at, s.orderly.body, radius) and Flare.clear(s.plan, at, s.orderly.body)
 		if stunned:

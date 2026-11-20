@@ -346,6 +346,27 @@ static func creep_only(plan: Floor.FloorPlan, cx: int, cy: int) -> bool:
 		return false
 	return (plan.station["crawl"] as Array).has(Vector2i(cx, cy))
 
+## Whether a step from (fx, fz) to (tx, tz) on `level` keeps the crawl creep-only (RN3: "a player can crawl between
+## the cable trays"): stepping into a crawl cell from outside it needs a creep (a downed player's crawl counts);
+## every step inside it, out of it or nowhere near it is fine. The client stops its own body with this and the host
+## refuses an input that breaks it (net/host.gd _on_input), both from the plan alone.
+static func crawl_step_ok(plan: Floor.FloorPlan, level: int, fx: float, fz: float, tx: float, tz: float, creeping: bool) -> bool:
+	if creeping or level != 0 or plan.station.is_empty():
+		return true
+	var to := cell_of(tx, tz)
+	if not creep_only(plan, to.x, to.y):
+		return true
+	var from := cell_of(fx, fz)
+	return creep_only(plan, from.x, from.y)
+
+## Whether a body at (x, z) on `level` is in the crawl, so it creeps whatever is asked (it cannot stand under the
+## trays until it is out).
+static func in_crawl(plan: Floor.FloorPlan, level: int, x: float, z: float) -> bool:
+	if level != 0 or plan.station.is_empty():
+		return false
+	var c := cell_of(x, z)
+	return creep_only(plan, c.x, c.y)
+
 ## The cell a world point lies in.
 static func cell_of(x: float, z: float) -> Vector2i:
 	return Vector2i(int(floor(x / CELL)), int(floor(z / CELL)))

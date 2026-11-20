@@ -41,6 +41,8 @@ const FILES: Array[String] = [
 	"test_ward_exit",
 	"test_ward_look",
 	"test_ward_native",
+	"test_ward_kit",
+	"test_station_look",
 	"test_station_view",
 ]
 

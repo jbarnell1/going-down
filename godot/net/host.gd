@@ -143,6 +143,7 @@ const Findables = preload("res://sim/findables.gd")
 const Inventory = preload("res://sim/inventory.gd")
 const Shop = preload("res://sim/shop.gd")
 const Upgrades = preload("res://sim/upgrades.gd")
+const StationPlan = preload("res://sim/station.gd")
 
 const EPS := 1e-9
 const TICK := Session.TICK
@@ -714,6 +715,11 @@ func _on_input(p: HostPlayer, m: Dictionary, ht: float) -> void:
 		if p.body != null and not _ward_review.walk_clear(Vector3(p.body.x, p.body.y, p.body.z), Vector3(mb.x, mb.y, mb.z)):
 			stats.clamped_inputs += 1
 			return
+	# RN3: the Reactor's crawl is creep-only; a standing step into it is refused here as the client stops it.
+	if p.body != null and state != null and state.plan != null and not _trusted.has(p.id) and p.body.level == mb.level \
+			and not StationPlan.crawl_step_ok(state.plan, mb.level, p.body.x, p.body.z, mb.x, mb.z, p.gait == "creep"):
+		stats.clamped_inputs += 1
+		return
 	if p.body != null and p.body_ct != null and not _trusted.has(p.id):
 		var flat := M.hypot2(mb.x - p.body.x, mb.z - p.body.z)
 		# Climbing a stair adds height at most 0.8 m per metre; anything steeper counts as distance.
@@ -810,8 +816,32 @@ func _step_ward_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> Run.R
 		event["type"] = "ward_" + str(event["kind"])
 		event["t"] = event["at"]
 		cues.append(event)
-	return Run.step_ward(s, inputs, crew, _ward_review.posed_limb(next_time), _ward_review.phase,
+	var r := Run.step_ward(s, inputs, crew, _ward_review.posed_limb(next_time), _ward_review.phase,
 		maxf(0.0, _ward_review.depart_at - next_time), _ward_review.boarded, TICK, cues)
+	if ward_native() and _ward_review.phase != &"departed":
+		_step_ward_kit(r, inputs, next_time)
+	return r
+
+## WN2: the Ward as a normal level (ward_place): what the crew carries works here as on any floor (Run.step_ward_kit),
+## thrown through the Ward's own walls, and a flare's burst or a toy's rattle is a noise the Ward hears where it is.
+func _step_ward_kit(r: Run.RunStep, inputs: Array[Run.PlayerInput], now: float) -> void:
+	var ward := _ward_review
+	var land := func(from: Move.Body, motion: Vector2) -> Move.Body:
+		var to := ward.throw_landing(Vector3(from.x, from.y, from.z), motion)
+		return Move.Body.make(to.x, to.z, from.level, to.y)
+	var line := func(a: Move.Body, b: Move.Body) -> bool:
+		return ward.walk_clear(Vector3(a.x, a.y, a.z), Vector3(b.x, b.y, b.z))
+	var first := r.events.size()
+	Run.step_ward_kit(r.state, inputs, TICK, r.events, land, line)
+	for k in range(first, r.events.size()):
+		var e: Dictionary = r.events[k]
+		if e["type"] != "flareUsed" and e["type"] != "noise":
+			continue
+		for cue in ward.hear_at(Vector3(float(e["x"]), float(e["y"]), float(e["z"])), now):
+			var event := cue.duplicate()
+			event["type"] = "ward_" + str(event["kind"])
+			event["t"] = event["at"]
+			r.events.append(event)
 
 func _step(now: float) -> void:
 	var ht := host_time(now)

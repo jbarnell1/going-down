@@ -128,6 +128,8 @@ const EMERGENCY_DELAY := 0.8    # src/render/lighting.ts
 const EMERGENCY_RISE := 0.8
 const LEAVE_FLOORS := 5
 const LEAVE_FLOOR_MS := 1300
+## RN3: the Reactor's crawl stops a standing player at its mouth (the creep key, CTRL or C: client/hud.gd).
+const CRAWL_PROMPT := "CTRL  CREEP TO CRAWL UNDER"
 const RIDE_TIME := 6.0
 const BOARD_TIME := 20.0
 ## The car waits (FD4): "CAR WAITING FOR: ..." shows once the arrival doors have stood open this long (ms),
@@ -1920,9 +1922,8 @@ func _game_input(dt: float) -> Dictionary:
 		creep = Input.is_action_pressed("creep")
 	var raised: bool = t_raise if t_raise != null else (raise_latch or (mode == "game" and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)))
 	var me: Dictionary = snap.get("me", {})
-	if level != null and level.has_meta(&"station") and me.has("x") and bool(level.get_meta(&"station").call(&"crouch_at", float(me["x"]), float(me["z"]))):
-		creep = true   # RN2: the crawl is creep-only (sim/station.gd creep_only), the same on every client
-		sprint = false
+	# The Reactor's crawl is creep-only: client/play_link.gd creeps a body inside it and stops a standing one at its
+	# mouth (sim/station.gd crawl_step_ok, the host's own check), with the prompt below.
 	var hold: bool = t_hold if t_hold != null else (mode == "game" and Input.is_action_pressed("use") and bool(me.get("nearHold", false)))
 	var use: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and not settings_panel.is_open() and Input.is_action_pressed("use"))
 	var call: bool = pending_call and bool(me.get("canCall", false))
@@ -2238,9 +2239,11 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	skills_view.update(s.get("skills"), s.get("wind"), s.get("shoes"), link.my_id(), shop_view.credits, s.get("events", []), now, s.get("porter"), inv_view.slots, s.get("longBurn"), s.get("medic"), s.get("steady"), s.get("listener"))
 	shop_view.on_events(s.get("events", []), link.my_id(), now, sfx)
 	shop_view.show_world(spots_root, cam, s.get("shop"), float(s.get("hostNow", 0.0)), now, sfx)
-	flare_view.update(level, s.get("flares"), link.my_id(), float(s.get("hostNow", 0.0)))
+	# WN2: on the Ward the floor plan's level is hidden (_ward_frame); the lights hang in the Ward's world instead.
+	var lights_in: Node3D = _ward_floor if _ward_floor != null and is_instance_valid(_ward_floor) else level
+	flare_view.update(lights_in, s.get("flares"), link.my_id(), float(s.get("hostNow", 0.0)))
 	shop_view.flare_blind = flare_view.blind
-	lamp_view.update(level, s.get("lamps"), link.my_id())
+	lamp_view.update(lights_in, s.get("lamps"), link.my_id())
 	if shop_view.is_open() and (station != "shop" or me_down or ended or _lights_out):
 		shop_view.close()
 	if skills_view.is_open() and (s.get("skills") == null or station != "skills" or me_down or ended or _lights_out or _wake_left(s) >= 0.0):
@@ -2293,6 +2296,8 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 			prompt = "ALL CREW ON BANK TO CONTINUE" if int(s["depth"]) == 0 else "ALL CREW ON BANK TO FINISH"
 		elif bool(me.get("nearHold", false)):
 			prompt = "F  <|> HOLD"
+		elif bool(me.get("crawlRefused", false)):
+			prompt = CRAWL_PROMPT   # RN3: the crawl's mouth stopped you standing
 		elif level.has_meta(&"station") and str(level.get_meta(&"station").get(&"prompt")) != "":
 			prompt = str(level.get_meta(&"station").get(&"prompt"))   # RN2: the fuse, the socket, the cassette
 		elif _tape_in_reach(me):
@@ -2374,7 +2379,11 @@ func _ward_frame(_dt: float) -> void:
 	hud.eyes = {}
 	hud.tenant_line = _ward_floor.clock_line
 	hud.tenant_warn = _ward_floor.clock_warn
+	# WN2: with no Ward line of its own, a tape or an item in reach keeps the main game's prompt (F takes it).
+	var own_prompt := hud.prompt
 	hud.prompt = _ward_floor.prompt_line
+	if hud.prompt == "" and own_prompt != "" and (own_prompt == inv_view.prompt or own_prompt == "F  PICK UP"):
+		hud.prompt = own_prompt
 	_ward_floor.apply_environment(env)
 	var watch: Variant = _ward_floor.watch_transform()
 	if watch is Transform3D:
@@ -2724,7 +2733,9 @@ func _tape_in_reach(me: Dictionary) -> bool:
 			return true
 	return false
 
-func _floor_label(floor_n: int) -> String:
+## The indicator's text for a floor (src/main.ts floorLabel): B1 to B9, then the number alone so two digits fit the
+## display's two places; G at ground. Static for tests (RN3: tests/test_station_look.gd).
+static func _floor_label(floor_n: int) -> String:
 	if floor_n >= 1:
 		return "B%d" % floor_n if floor_n < 10 else str(floor_n)
 	return "G" if floor_n == 0 else str(-floor_n)

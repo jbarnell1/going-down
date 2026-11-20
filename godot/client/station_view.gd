@@ -40,7 +40,7 @@ const FUSE_PROMPT := "F  TAKE FUSE"
 const INSTALL_PROMPT := "F  INSTALL FUSE"
 const TAPE_PROMPT := "F  PICK UP CASSETTE"
 ## Paint and light.
-const C_GREEN := Color(0.25, 0.42, 0.31)
+const C_GREEN := Color(0.31, 0.5, 0.37)
 const C_GREEN_DARK := Color(0.17, 0.29, 0.22)
 const C_CONCRETE := Color(0.56, 0.55, 0.52)
 const C_STEEL := Color(0.42, 0.44, 0.45)
@@ -59,14 +59,34 @@ const LAMP_ENERGY := 1.6
 const LAMP_REACH := 7.0
 const EM_ENERGY := 0.42
 const EM_REACH := 5.5
-const BATTEN_ENERGY := 0.9
+## RN3: the battens are the Clinic's ceiling panels' numbers (client/level.gd _build_lights: the same placement,
+## spot angle, cone softness and reach), a little stronger because board-marked concrete and green paint reflect
+## less than the Clinic's cream paint and linoleum; tests/test_station_look.gd holds the hall's floor light at
+## least as bright as a Clinic's through the same numbers.
+const BATTEN_ENERGY := 1.25
+const BATTEN_ANGLE := 78.0
+const BATTEN_SOFT := 0.6
+const BATTEN_REACH := 7.5
 const BATTEN_LIMIT := 120
-## The baked-in light of the architecture (surface.gdshader self_light), with the mains and in the cut.
-const SELF_LIT := 0.16
+## The baked-in light of the architecture (surface.gdshader self_light), with the mains and in the cut (the
+## Clinic's ceiling has 0.22).
+const SELF_LIT := 0.22
 const SELF_CUT := 0.0
 ## The player's near light share in the cut (client/main.gd reads the level's meta).
 const NEAR_CUT := 0.95
+## The concrete's greys (sRGB): pale enough that the mains read as a lit, safe place (RN3).
+const WALL_GREY := 0.64
+const FLOOR_GREY := 0.6
+const CEIL_GREY := 0.56
 const CASSETTE_GLOW := Color("#ffb347")
+## The cassette's own glow (RN3: "A glowing VHS cassette lies near the elevator door"): its whole shell lit, its
+## label brighter, a soft halo that still reads as a few pixels through the 480x270 tape picture, and a small warm
+## light that reaches the table top but not across the landing. None of it is on the mains: the cut leaves it lit.
+const TAPE_SHELL_GLOW := 1.0
+const TAPE_FACE_GLOW := 1.8
+const TAPE_LIGHT_ENERGY := 1.4
+const TAPE_LIGHT_REACH := 1.8
+const TAPE_HALO := 0.5
 ## The cassette table's top above its foot (sim/station.gd PLINTH_TOP).
 const PLINTH_TOP := 0.9
 ## Tests only: one-line breaks the tests prove themselves with. "lights": the cut leaves the battens on;
@@ -108,6 +128,9 @@ var cassette_node: Node3D
 var socket_fuse: Node3D
 var socket_lamp: ShaderMaterial
 var _tape_light: OmniLight3D
+var _tape_halo: MeshInstance3D
+## The cassette shell's glow (glow.gdshader `energy`), for checks.
+var tape_shell: ShaderMaterial
 var _socket := Vector3.INF
 var _plinth_top := -INF
 var _plinth := Vector3.INF
@@ -273,7 +296,7 @@ static func wall_tex(green: bool) -> Texture2D:
 		var board := y / 13
 		for x in w:
 			var n := _hash01(x / 2, y / 2, 3) * 0.5 + _hash01(x / 9, y / 7, 4) * 0.5
-			var g := 0.5 + 0.09 * (n - 0.5) + 0.03 * (_hash01(board, 0, 5) - 0.5)
+			var g := WALL_GREY + 0.09 * (n - 0.5) + 0.03 * (_hash01(board, 0, 5) - 0.5)
 			var col := Color(g, g * 0.985, g * 0.95)
 			if y % 13 == 0:
 				col *= 0.86
@@ -294,7 +317,7 @@ static func floor_tex() -> Texture2D:
 	var img := Image.create(n, n, false, Image.FORMAT_RGB8)
 	for y in n:
 		for x in n:
-			var k := 0.46 + 0.08 * (_hash01(x, y, 11) - 0.5) + 0.05 * (_hash01(x / 8, y / 8, 12) - 0.5)
+			var k := FLOOR_GREY + 0.08 * (_hash01(x, y, 11) - 0.5) + 0.05 * (_hash01(x / 8, y / 8, 12) - 0.5)
 			if x == 0 or y == 0:
 				k *= 0.8
 			img.set_pixel(x, y, Color(k, k * 0.98, k * 0.93))
@@ -307,7 +330,7 @@ static func ceil_tex() -> Texture2D:
 	var img := Image.create(n, n, false, Image.FORMAT_RGB8)
 	for y in n:
 		for x in n:
-			var k := 0.4 + 0.06 * (_hash01(x / 2, y / 2, 21) - 0.5)
+			var k := CEIL_GREY + 0.06 * (_hash01(x / 2, y / 2, 21) - 0.5)
 			if y % 32 < 2:
 				k *= 0.7
 			img.set_pixel(x, y, Color(k, k, k * 0.96))
@@ -456,7 +479,7 @@ func _battens() -> void:
 				if lv.main_lights.size() >= BATTEN_LIMIT:
 					return
 				var k := lv.kind(level, x, y)
-				var want := (k == "corridor" and (x + y) % 3 == 0) or (k == "room" and x % 3 == 1 and y % 3 == 1) or k == "landing"
+				var want := (k == "corridor" or k == "room" or k == "landing") and lv._want_panel(level, x, y)
 				if not want or _crawl.has(Vector3i(level, x, y)):
 					continue
 				var pos := lv.cell_center(level, x, y)
@@ -472,8 +495,9 @@ func _battens() -> void:
 				var l := SpotLight3D.new()
 				l.position = pos - Vector3(0, 0.06, 0)
 				l.rotation_degrees = Vector3(-90, 0, 0)
-				l.spot_angle = 80.0
-				l.spot_range = 7.5
+				l.spot_angle = BATTEN_ANGLE
+				l.spot_angle_attenuation = BATTEN_SOFT
+				l.spot_range = BATTEN_REACH
 				l.light_color = BATTEN
 				l.light_energy = BATTEN_ENERGY
 				l.distance_fade_enabled = true
@@ -867,22 +891,58 @@ func _movables() -> void:
 	var bm := BoxMesh.new()
 	bm.size = Vector3(0.19, 0.025, 0.105)
 	shell.mesh = bm
-	shell.material_override = Level.prop_material(Color(0.22, 0.12, 0.07), null, false, 0.0, 0.0)
+	tape_shell = Level.glow_material(CASSETTE_GLOW.darkened(0.45), TAPE_SHELL_GLOW)
+	shell.material_override = tape_shell
+	shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	cassette_node.add_child(shell)
 	var face := MeshInstance3D.new()
 	var fm := BoxMesh.new()
 	fm.size = Vector3(0.12, 0.027, 0.05)
 	face.mesh = fm
-	face.material_override = Level.glow_material(CASSETTE_GLOW, 1.3)
+	face.material_override = Level.glow_material(CASSETTE_GLOW.lightened(0.2), TAPE_FACE_GLOW)
 	cassette_node.add_child(face)
+	_tape_halo = MeshInstance3D.new()
+	_tape_halo.name = "Halo"
+	var hq := QuadMesh.new()
+	hq.size = Vector2(TAPE_HALO, TAPE_HALO)
+	_tape_halo.mesh = hq
+	_tape_halo.material_override = _halo_material()
+	_tape_halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_tape_halo.position = Vector3(0, 0.03, 0)
+	cassette_node.add_child(_tape_halo)
 	_tape_light = OmniLight3D.new()
 	_tape_light.light_color = CASSETTE_GLOW
-	_tape_light.light_energy = 1.1
-	_tape_light.omni_range = 2.4
-	_tape_light.position = Vector3(0, 0.3, 0)
+	_tape_light.light_energy = TAPE_LIGHT_ENERGY
+	_tape_light.omni_range = TAPE_LIGHT_REACH
+	_tape_light.omni_attenuation = 1.0
+	_tape_light.shadow_enabled = false
+	_tape_light.position = Vector3(0, 0.25, 0)
 	cassette_node.add_child(_tape_light)
 	cassette_node.visible = false
 	add_child(cassette_node)
+
+## The halo round the cassette: a soft warm disc, added on top of what is behind it, always facing the camera.
+static func _halo_material() -> StandardMaterial3D:
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1, 1, 1, 1))
+	grad.set_color(1, Color(1, 1, 1, 0))
+	var gt := GradientTexture2D.new()
+	gt.gradient = grad
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.5)
+	gt.fill_to = Vector2(0.5, 0.0)
+	gt.width = 32
+	gt.height = 32
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.albedo_texture = gt
+	m.albedo_color = Color(CASSETTE_GLOW.r, CASSETTE_GLOW.g, CASSETTE_GLOW.b, 0.55)
+	return m
 
 ## Where a player's carried thing is drawn: the camera's lower right for this player, at another's hip.
 func _carried_at(block: Dictionary, id: String, me: String, side: float) -> Variant:
@@ -928,12 +988,14 @@ func show_block(block: Variant, me: String) -> void:
 		cassette_node.position = p + Vector3(0, 0.014, 0)
 		cassette_node.visible = true
 		_tape_light.visible = true
+		_tape_halo.visible = true
 	elif not tape_holder.is_empty():
 		var c2: Variant = _carried_at(b, tape_holder, me, -1.0)
 		cassette_node.visible = c2 != null
 		if c2 != null:
 			cassette_node.position = c2
 		_tape_light.visible = tape_holder != me
+		_tape_halo.visible = tape_holder != me   # not a glare in your own hand
 	else:
 		cassette_node.visible = false
 	prompt = prompt_for(b, me, _socket)
@@ -995,10 +1057,16 @@ func _follow_frame() -> void:
 	elif crew != null:
 		crew.call(&"show_blocks", block, block, 1.0)
 
-## Whether a player standing at (x, z) metres is in the crawl, so the main game creeps them (the crawl is
-## creep-only: sim/station.gd creep_only; the rules do not enforce it, every client does, from the plan).
+## Whether a player standing at (x, z) metres is in the crawl (sim/station.gd creep_only). RN3: the creep itself is
+## client/play_link.gd's (in_crawl, crawl_step_ok), and the host refuses a standing step in (net/host.gd).
 func crouch_at(x: float, z: float) -> bool:
 	return _crawl.has(Vector3i(0, floori(x / S), floori(z / S)))
+
+## What a check reads of the cassette's glow: drawn, its shell's energy, its own light and halo.
+func tape_glow() -> Dictionary:
+	return {"drawn": cassette_node.visible, "shell": float(tape_shell.get_shader_parameter("energy")),
+		"light": _tape_light.visible and cassette_node.visible, "energy": _tape_light.light_energy, "reach": _tape_light.omni_range,
+		"halo": _tape_halo.visible and cassette_node.visible}
 
 ## What a check reads: counts, the anchors placed, the lights, the prompt.
 func check() -> Dictionary:

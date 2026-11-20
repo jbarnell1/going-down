@@ -117,13 +117,30 @@ func step(now: float, delta: float, boarding_seconds: float, crew: Dictionary) -
 			_use_near(at, now, crew, events)
 		if member.get("sprint", false) and now >= float(_sprint_at.get(id, -INF)):
 			_sprint_at[id] = now + 0.65
-			for i in houses.size():
-				var area := houses[i].area_at(houses[i].to_local(at + Vector3.UP * 1.25))
-				if area != &"":
-					_hear(i, area, now, events)
-					break
+			_hear_point(at, now, events)
 	_pursue(now, delta, crew, events)
 	return events
+
+## A disturbance at a point (feet): the room of the house it is in, if any, is heard as a sprint there is.
+func _hear_point(at: Vector3, now: float, events: Array[Dictionary]) -> void:
+	for i in houses.size():
+		var area := houses[i].area_at(houses[i].to_local(at + Vector3.UP * 1.25))
+		if area != &"":
+			_hear(i, area, now, events)
+			return
+
+## WN2: a noise the run made at a point (a flare's burst, a toy's rattle; sim/run.gd step_ward_kit) is heard the same
+## way, at the same times step hears a sprint (the lift gone and not yet left again). Returns the cues it raised.
+func hear_at(at: Vector3, now: float) -> Array[Dictionary]:
+	var events: Array[Dictionary] = []
+	if phase != &"away" and phase != &"boarding":
+		return events
+	_hear_point(at, now, events)
+	return events
+
+## WN2: where a thrown thing comes down from `from` (feet) along `motion`: the walk model's own footing and walls.
+func throw_landing(from: Vector3, motion: Vector2) -> Vector3:
+	return walk(from, motion)
 
 func _use_near(at: Vector3, now: float, crew: Dictionary, events: Array[Dictionary]) -> void:
 	for button in switches:

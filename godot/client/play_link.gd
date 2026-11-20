@@ -87,6 +87,9 @@ const HIDE_WAIT := 1.0
 ## A downed player crawls this fast (m/s): a little under the rules' crawl speed, so the run's body follows
 ## the screen's exactly (sim/run.gd CRAWL_SPEED).
 const CRAWL_PACE := Run.CRAWL_SPEED * 0.95
+const Station = preload("res://sim/station.gd")
+## RN3: how long the "creep to crawl in" prompt stays after the crawl's mouth stopped a standing player (s).
+const CRAWL_REFUSED_HOLD := 1.2
 
 var rc: RoomClient
 var local := false
@@ -97,6 +100,8 @@ var body: Move.Body = null
 var walker := Callable()
 var tank: Stamina.Stamina = Stamina.fresh_stamina()
 var gait: StringName = &"walk"
+## Seconds left on the crawl's "creep to crawl in" prompt (RN3); 0 when the mouth has not stopped you lately.
+var crawl_refused := 0.0
 var speed := 0.0
 ## The eyes' height above the feet this frame (eye_height.gd: standing, creeping, down, eased). The
 ## camera is drawn from it (snapshot `me.eye`, camera_point) and the client's frame carries the same
@@ -248,6 +253,8 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 					_auto = null
 					auto_status = "failed: stuck"
 		gait = _auto_gait
+		if Station.in_crawl(plan, body.level, body.x, body.z):
+			gait = &"creep"   # RN3: a scripted walk through the crawl creeps there, as a player must
 		speed = M.hypot2(body.x - b0.x, body.z - b0.z) / dt if dt > 0.0 else 0.0
 	elif body != null:
 		var free := (playing and not in_bed and not held_here) or crawling
@@ -255,7 +262,9 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 		var rt := clampf(float(inp.get("r", 0.0)), -1.0, 1.0) if free else 0.0
 		var moving := fw != 0.0 or rt != 0.0
 		var cap := Instr.max_walk_speed(true, Stamina.WALK_SPEED) if want_raised else INF
-		gait = Stamina.gait_for(tank, inp.get("sprint") == true and not crawling, inp.get("creep") == true or crawling, moving, cap)
+		# RN3: under the gallery's cable trays a body creeps whatever is asked (sim/station.gd in_crawl).
+		var tray := Station.in_crawl(plan, body.level, body.x, body.z)
+		gait = Stamina.gait_for(tank, inp.get("sprint") == true and not crawling and not tray, inp.get("creep") == true or crawling or tray, moving, cap)
 		if moving:
 			var wl := M.hypot2(fw, rt)
 			var nf := fw / maxf(1.0, wl)
@@ -269,7 +278,13 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 				body = walker.call(body, (-sn * nf + cs * nr) * sp * dt, (-cs * nf - sn * nr) * sp * dt)
 			else:
 				body = Session.move_local(plan, phase, body, (-sn * nf + cs * nr) * sp * dt, (-cs * nf - sn * nr) * sp * dt, PLAYER_RADIUS, solid, furniture_layout)
+			# RN3: standing or sprinting, the crawl's mouth stops you (the host refuses the same step).
+			var from: Move.Body = before
+			if from != null and not Station.crawl_step_ok(plan, body.level, from.x, from.z, body.x, body.z, gait == &"creep"):
+				body = from
+				crawl_refused = CRAWL_REFUSED_HOLD
 			speed = sp
+	crawl_refused = maxf(0.0, crawl_refused - dt)
 	if before != null and body != null and dt > 0.0:
 		tank = Stamina.step_stamina(tank, gait, M.hypot2(body.x - before.x, body.z - before.z) / dt, dt)
 	# The shop's speed juice (S2): the host holds this player's tank full while it lasts; so does this screen.
@@ -672,6 +687,7 @@ func _snapshot(c: Client, f: Client.Frame, latest: Dictionary, me_row: Variant, 
 			"side": me_row["side"] if me_row != null else null,
 			"standing": String(standing) if standing != null else null,
 			"gait": String(gait),
+			"crawlRefused": crawl_refused > 0.0,
 			"speed": speed,
 			"stamina": tank.level,
 			"winded": tank.winded,
