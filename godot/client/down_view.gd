@@ -13,7 +13,8 @@
 #    the host has you as their healer and you are holding F, and empties when you let go or step out of
 #    reach, as the rules do (they start the count again).
 #  - Out (your own status "out", with the down rule on): the screen goes dark: "OUT", "YOU REJOIN WHEN THE
-#    CAR NEXT MOVES". (The cameras on F3 are a later task.)
+#    CAR NEXT MOVES". With a crewmate still in it, the screen looks through their eyes instead (DV1,
+#    client/crew_watch.gd, standing in for F3's cameras), with these words in one line above the caption.
 #  - The pressures (DF1, from floor 8): with heals counted, the prompt says how many the crew has left on the floor;
 #    with none, "NO HEALS LEFT ON THIS FLOOR" for the helper and the downed (who can still crawl).
 #  - Red spots: one stain on the floor where each player who went out lay, for everyone, this floor only.
@@ -26,6 +27,8 @@ const Run = preload("res://sim/run.gd")
 const HELP_REACH := Run.HEAL_REACH - 0.05
 ## DF1: the words when the crew has no heals left on this floor.
 const NO_HEALS := "NO HEALS LEFT ON THIS FLOOR"
+## The out screen's words.
+const OUT_LINES: Array = ["OUT", "", "YOU REJOIN WHEN THE CAR NEXT MOVES"]
 
 ## DF1: whether the host's pressure block says no help can start: no heals left, and `my` has no free Field Dressing
 ## help here (`downed`: nobody but `my` has one).
@@ -107,7 +110,7 @@ func update(s: Dictionary, my: String, names: Dictionary, holding: bool, place :
 		_clear_drag()
 	if status == "out":
 		out = true
-		out_lines = ["OUT", "", "YOU REJOIN WHEN THE CAR NEXT MOVES"]
+		out_lines = OUT_LINES.duplicate()
 		return
 	if status == "down":
 		var d: Variant = _row(downs, my)

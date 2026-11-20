@@ -22,6 +22,6 @@ docker rm -f going-down >/dev/null 2>&1 || true
 docker run -d --name going-down --network gd-net \
   --read-only --tmpfs /tmp:size=1m,mode=1777 --cap-drop ALL --security-opt no-new-privileges \
   --memory 256m --pids-limit 64 --cpus 2 \
-  -p 127.0.0.1:4450:4450 --env-file "$ENVFILE" $SETTINGS_ARGS going-down-server >/dev/null
+  -p 127.0.0.1:4450:4450 --env-file "$ENVFILE" $SETTINGS_ARGS going-down-server flare=1 lamp=1 >/dev/null
 sleep 2
 docker logs going-down 2>&1 | tail -3

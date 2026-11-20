@@ -144,3 +144,21 @@ func test_the_new_figure_walks_in_the_view(t: T) -> void:
 	t.eq(keeper._player.assigned_animation, &"walk", "the host's walk plays the walk clip")
 	t.check(feet[0].distance_to(feet[1]) > 0.05 and feet[1].distance_to(feet[2]) > 0.05, "the left foot moves as he walks (%s)" % [feet])
 	keeper.queue_free()
+
+## PF1: in the browser Meshy's full body (about 33,600 triangles, 33,000 vertices) cost about 1.1 ms a frame more
+## than today's figure and five times as many frames over 33 ms (tools/perf_figures.mjs). The build thins it to
+## about 15,000 triangles (assets_src/blender/groundskeeper/build_groundskeeper_v2.py TRIS).
+func test_the_new_figure_keeps_to_its_triangle_budget(t: T) -> void:
+	var fresh := _scene(Keeper.MODEL_NEW)
+	var tris := 0
+	var verts := 0
+	for mesh: MeshInstance3D in fresh.find_children("*", "MeshInstance3D", true, false):
+		for s in mesh.mesh.get_surface_count():
+			var arrays := mesh.mesh.surface_get_arrays(s)
+			var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+			var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			tris += index.size() / 3 if index.size() > 0 else points.size() / 3
+			verts += points.size()
+	t.check(tris > 8000 and tris <= 16000, "the figure draws %d triangles (budget 16000)" % tris)
+	t.check(verts <= 22000, "the figure has %d vertices to skin (budget 22000)" % verts)
+	fresh.free()

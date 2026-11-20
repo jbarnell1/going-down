@@ -86,6 +86,7 @@ const Day = preload("res://sim/day.gd")
 const HideView = preload("res://client/hide_view.gd")
 const QuotaView = preload("res://client/quota_view.gd")
 const DownView = preload("res://client/down_view.gd")
+const CrewWatch = preload("res://client/crew_watch.gd")
 const HintCues = preload("res://client/hint_cues.gd")
 const DayView = preload("res://client/day_view.gd")
 # Findables on screen (FD10): client/search_view.gd (the prompt, the bar, what is open) and client/note_reader.gd.
@@ -212,6 +213,10 @@ var hide_view: HideView
 var quota_view := QuotaView.new()
 ## Down first, then out on screen: your timer, the help prompt, the out screen, the red spots (client/down_view.gd).
 var down_view := DownView.new()
+## DV1: out, the camera looks through a crewmate's eyes (client/crew_watch.gd).
+var crew_watch := CrewWatch.new()
+## DV1: since when (msec) the native Ward has had this player on its caught list, or -1.
+var _ward_caught_ms := -1
 ## Findables (FD10): the search's prompt, bar and open pieces, and the reader over the HUD; the test's F for a
 ## search (null: the keyboard; "careful", "fast" or "off"); a find block has been seen in this run.
 var search_view := SearchView.new()
@@ -1232,6 +1237,8 @@ func _clear_world() -> void:
 	sfx.clear_floor()
 	hide_view.reset()
 	down_view.reset()
+	crew_watch.clear()
+	_ward_caught_ms = -1
 	search_view.reset()
 	note_reader.close()
 	inv_view.reset()
@@ -1266,6 +1273,8 @@ func _on_new_run() -> void:
 	hud.set_seed(str(link.client().seed) if link.client().seed != null else seed)
 	quota_view.reset()
 	down_view.reset()
+	crew_watch.clear()
+	_ward_caught_ms = -1
 	search_view.reset()
 	note_reader.close()
 	inv_view.reset()
@@ -1426,6 +1435,11 @@ func _input(event: InputEvent) -> void:
 		return
 	if _card_input(event):
 		return
+	if crew_watch.watching and not wheel_open and watch_next_input(event, Input.mouse_mode == Input.MOUSE_MODE_CAPTURED):
+		# DV1: out and watching, LEFT CLICK or E is the next crewmate (and nothing else).
+		crew_watch.next()
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		# The mouse is captured only after a real click, never under automation.
@@ -1525,6 +1539,17 @@ func _input(event: InputEvent) -> void:
 		elif k.physical_keycode == KEY_T:
 			var st: float = tape_mat.get_shader_parameter("strength")
 			tape_mat.set_shader_parameter("strength", 0.0 if st > 0.5 else 1.0)
+
+## DV1: whether an input is the watching view's "next crewmate": E pressed, or a left click with the mouse already
+## held by the game (the first click, with the mouse free, still only takes the mouse).
+static func watch_next_input(event: InputEvent, captured: bool) -> bool:
+	if event is InputEventKey:
+		var k := event as InputEventKey
+		return k.pressed and not k.echo and k.physical_keycode == KEY_E
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		return mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and captured
+	return false
 
 ## The four-slot inventory's keys (S1): "1" to "4", "up" / "down" (the wheel), "g" (drop what you hold), "f" (take or
 ## give, only while the inventory's prompt is the one on screen: heal, the bunk, the lift, a tape and a hide come
@@ -2024,6 +2049,8 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	cam.rotation = Vector3(pitch, yaw, 0)
 	if not held:
 		_eye_check(me)
+	# DV1: out, the camera goes to a crewmate's eyes (before the crew is drawn, so their own figure is hidden).
+	_update_watch(s, held)
 
 	# The Orderly: drawn exactly as the frame says (in the dark too, with nothing added: T20a), never while taken.
 	var o: Dictionary = s["orderly"]
@@ -2223,7 +2250,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	# The four-slot inventory (S1): the squares and what F would take or give here, from the host's block.
 	var lc0 := link.client()
 	inv_view.update(s.get("inv"), link.my_id(), me if not (me_down or ended or noise or _lights_out) else {}, s.get("others", []), yaw, lc0.tuning if lc0 != null else null)
-	inv_view.hidden_now = hud.black or not hud.end_lines.is_empty() or hud.menu_on or hud.out_on
+	inv_view.hidden_now = hud.black or not hud.end_lines.is_empty() or hud.menu_on or hud.out_on or crew_watch.watching
 	inv_view.show_pickups(spots_root)
 	# The shop and the cabinet (S2): the card shows the host's blocks, and closes when you walk away or cannot use it.
 	var at_cab := _at_my_cabinet()
@@ -2346,6 +2373,54 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 			_seek_hist.pop_front()
 	_show_end(now)
 	_ward_frame(dt)
+	_apply_watch()
+
+## DV1: out (client/crew_watch.gd), the camera at a crewmate's eyes, looking where they look. Not on the Ward (its
+## own watching camera), not at the Playroom's party table (a taken seek row), not during the catch's own scene or
+## the end. The player's own `yaw` and `pitch` are left alone: nothing of this reaches the host.
+func _update_watch(s: Dictionary, held: bool) -> void:
+	var c: Variant = link.client() if link != null else null
+	var latest: Variant = c.latest if c != null else null
+	var me := link.my_id()
+	# The native Ward: caught by its rule (not the run's status) is out too, after the Ward's own delay.
+	var ward_out := false
+	var ward_held: Array = []
+	if ward_native_on(latest):
+		ward_held = ((latest as Dictionary)["ward"] as Dictionary).get("caught", [])
+		if ward_held.has(me):
+			if _ward_caught_ms < 0:
+				_ward_caught_ms = _now()
+			ward_out = _now() - _ward_caught_ms >= int(WardFloor.View.WATCH_DELAY * 1000.0)
+		else:
+			_ward_caught_ms = -1
+	else:
+		_ward_caught_ms = -1
+	var words: Array = LEFT_OUT_LINES if _left_out(s) else ([] if ward_held.has(me) else DownView.OUT_LINES)
+	crew_watch.update(s, me, link.names(), watch_allowed(s, held, _noise_on(), hud.end_lines.is_empty()), words, ward_out, ward_held)
+	_apply_watch()
+
+## DV1, for other code (WC1's web cocoon on the Ward): look through a crewmate's eyes now, whatever the run's status;
+## back to your own view; or not yet (your floor's own camera sequence plays). See client/crew_watch.gd.
+func watch_crewmate() -> void:
+	crew_watch.watch_crewmate()
+
+func stop_watching() -> void:
+	crew_watch.stop_watching()
+
+func defer_watching() -> void:
+	crew_watch.defer_watching()
+
+## DV1: whether the crewmate's-eyes view may be used this frame (see _update_watch): not at the Playroom's party
+## table (seated there, `held`), not in the catch's own noise, not on the end screen.
+static func watch_allowed(s: Dictionary, held: bool, noise: bool, no_end: bool) -> bool:
+	var my_seek: Variant = s.get("mySeek")
+	var seated := held and my_seek is Dictionary and str((my_seek as Dictionary).get("status", "")) == "taken"
+	return not seated and not noise and no_end and str(s.get("phase", "")) != "ended"
+
+func _apply_watch() -> void:
+	if crew_watch.watching:
+		cam.position = crew_watch.eye
+		cam.rotation = Vector3(crew_watch.pitch, crew_watch.yaw, 0.0)
 
 ## WN1: the Hanging Ward as a normal level. While the newest snapshot carries a Ward block the host marks `native`
 ## (net/host_rules.gd ward_place) and its lift has not gone, this scene hosts the Ward's world (client/ward/floor.gd)
@@ -2381,7 +2456,10 @@ func _ward_frame(_dt: float) -> void:
 		hud.prompt = own_prompt
 	_ward_floor.apply_environment(env)
 	var watch: Variant = _ward_floor.watch_transform()
-	if watch is Transform3D:
+	if crew_watch.watching:
+		# DV1: caught on the Ward, the crewmate's-eyes view (client/crew_watch.gd), its caption, its keys.
+		hud.prompt = crew_watch.caption
+	elif watch is Transform3D:
 		cam.global_transform = watch
 	# A step the host refused, or a door or deck that changed under the player: back to where the host has them
 	# (WN3, client/ward/floor.gd reconcile: by the input the host last answered for).
@@ -2585,6 +2663,14 @@ func _show_down(s: Dictionary, now: int, dt: float, noise: bool) -> void:
 		# The car waits (FD4): left out, the screen goes dark until the crew gets home.
 		hud.out_on = true
 		hud.out_lines = LEFT_OUT_LINES
+	# DV1: watching a crewmate, the picture is theirs: the out screen's words in one line, the caption under it.
+	hud.watch_note = ""
+	if crew_watch.watching and hud.end_lines.is_empty():
+		hud.out_on = false
+		hud.prompt = crew_watch.caption
+		hud.prompt_fill = -1.0
+		hud.watch_note = crew_watch.note
+		hud.tags = []
 	var block: Variant = s.get("downs")
 	down_view.show_spots(spots_root, (block as Dictionary)["spots"] if block is Dictionary else [])
 	if down_view.dragged:
@@ -3215,6 +3301,10 @@ func _command(c: String) -> String:
 				"draw_calls": RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
 				"objects": RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME),
 				"prims": RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME),
+				# PF1 (tools/perf_figures.mjs): what the renderer holds now, in bytes (0 under the headless dummy renderer).
+				"video_mem": RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_VIDEO_MEM_USED),
+				"texture_mem": RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TEXTURE_MEM_USED),
+				"buffer_mem": RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_BUFFER_MEM_USED),
 				"quality": quality, "renderer": RenderingServer.get_current_rendering_method(),
 				"rules": ("local room" if link != null and link.local else "network") if link != null else "none", "peaks": _bus_peaks()})
 		"peaks":
@@ -3898,6 +3988,7 @@ func _test_state() -> Dictionary:
 			"view": day_view.describe(), "viewTick": _day_view_tick, "hudLine": hud.day_line, "hudMet": hud.day_met, "monitor": lift.day_rows, "bankLocked": lift.bank_locked,
 			"monitorAt": [lift.day_point().x, lift.day_point().y, lift.day_point().z], "subtitle": announcer.shown(link.client().quota() if link.client() != null else null),
 			"said": announcer.history.filter(func(h: Dictionary) -> bool: return str(h.moment) in ["bank_refused", "day_met", "ride", "hint_day", "hint_bank_locked", "hint_floor_not_day", "hint_stakes"])},
+		"watch": crew_watch.describe(),
 		"downs": {"host": s.get("downs"), "view": down_view.describe(), "hud": {"head": hud.down_head, "left": hud.down_left, "line": hud.down_line,
 			"line2": hud.down_line2, "heal": hud.down_heal, "out": hud.out_on, "outLines": hud.out_lines, "prompt": hud.prompt, "fill": hud.prompt_fill},
 			"turning": _turn_until > Time.get_ticks_msec(), "bend": orderly.get("bend") if orderly != null else null},

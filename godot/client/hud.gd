@@ -111,6 +111,8 @@ var down_line2 := ""
 var down_heal := -1.0
 var out_on := false
 var out_lines: Array = []
+## DV1: out and watching a crewmate (client/crew_watch.gd): the out screen's words in one line, red, near the top.
+var watch_note := ""
 ## The eye marks (see EYE_MARKS), from the frame: {on (the resident is in your view), need (1 or 2), lit,
 ## all}, or {} for none. One mark per watcher needed; one lit per watcher the host counts, your own the frame
 ## you look; all lit, the row closes into a bar (it is held); one of two lit, the second pulses ("one more").
@@ -173,6 +175,11 @@ func _draw() -> void:
 			Vector2(w * 0.63, h * 0.17), Vector2(w * 0.34, h * 0.20)]), Color("#d3b14f"))
 	if out_on and not black:
 		_draw_out(px)
+	if watch_note != "" and not out_on and not black:
+		var ww := PixelFont.width(watch_note) * px
+		var wp := Vector2(floorf((size.x - ww) * 0.5), floorf(size.y * 0.2))
+		draw_rect(Rect2(wp - Vector2(4, 3) * px, Vector2(ww + 8 * px, 13 * px)), Color(0, 0, 0, 0.45))
+		PixelFont.draw_shadowed(self, watch_note, wp, px, Color("#ff7a6a"))
 	if osd_on:
 		var blink_on := (now / 700) % 2 == 0
 		var top := "PLAY >" if blink_on else "PLAY  "
@@ -227,7 +234,7 @@ func _draw() -> void:
 		PixelFont.draw_shadowed(self, seek_note, sp, px, Color("#f4f4ec"))
 	if health >= 0.0 and not black:
 		_draw_health(px)
-	if not nerve.is_empty() and not black and not out_on and down_head.is_empty():
+	if not nerve.is_empty() and not black and not out_on and down_head.is_empty() and watch_note == "":
 		_draw_nerve(px)
 	if anger >= 0.0 and not black:
 		_draw_anger(px)

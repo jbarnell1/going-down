@@ -31,6 +31,10 @@ LEAN_HOLD = 2.5
 # Today's Head joint stands at 2.29 m; Meshy's at 1.999 m. The same factor takes the dead branch to ~3 m.
 SCALE = 2.29 / 1.999
 TEXTURE = 1024
+# PF1: Meshy's body (about 33,600 triangles) is thinned to this before the shears join it. In the browser the
+# full body cost about 1.1 ms a frame more than today's figure and five times as many frames over 33 ms
+# (tools/perf_figures.mjs); at the game's 480x270 picture the thinned one draws the same.
+TRIS = 15000
 
 # Meshy (Mixamo names) -> game names. Helper and end bones fold into their parents.
 RENAME = {"Hips": "Hips", "Spine": "Spine", "Spine1": "Spine1", "Spine2": "Chest", "Neck": "Neck", "Head": "Head"}
@@ -195,6 +199,22 @@ def rigid_parts(body):
     bm.to_mesh(mesh)
     bm.free()
     return len(doomed), rigid
+
+
+def thin(body):
+    """PF1: collapse the body to about TRIS triangles (Blender's Decimate, which carries the UVs and the bone
+    weights along). Returns (before, after)."""
+    before = sum(len(p.vertices) - 2 for p in body.data.polygons)
+    if before > TRIS:
+        bpy.ops.object.select_all(action="DESELECT")
+        body.select_set(True)
+        bpy.context.view_layer.objects.active = body
+        mod = body.modifiers.new("thin", "DECIMATE")
+        mod.ratio = TRIS / before
+        mod.use_collapse_triangulate = True
+        bpy.ops.object.modifier_move_to_index(modifier="thin", index=0)
+        bpy.ops.object.modifier_apply(modifier="thin")
+    return before, sum(len(p.vertices) - 2 for p in body.data.polygons)
 
 
 def hanging_parts(body):
@@ -750,6 +770,7 @@ def main():
     print("small pieces: %d vertices of floating islands removed, %d pieces made rigid" % rigid_parts(body))
     print(f"tags and beard re-skinned: {hanging_parts(body)} vertices")
     print(f"face repainted: {paint_face(body)} texels")
+    print("body thinned: %d triangles -> %d" % thin(body))
     to_game = game_space(rig)
     scale_and_centre(rig, body, to_game)
     blade_axis = add_props(rig, body, shears, to_game)
