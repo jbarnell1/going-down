@@ -52,11 +52,19 @@ func test_the_data_files_the_rules_name_exist(t: T) -> void:
 ## the one split: the full copy in the Windows build, the lighter one in the browser build.
 const FLOOR_FILES: Array[String] = [
 	"assets/ward/rigger.glb", "assets/ward/search-hand.glb",
+	# MR1: the hand-rigged Meshy figure (shown with figures=new) and the albedo the import extracts from it.
+	"assets/ward/rigger_v2.glb", "assets/ward/rigger_v2_rigger_v2_albedo.png",
 	"assets/ward/voice/bella/ward_lift_departed.mp3", "assets/ward/voice/bella/ward_lift_last_minute.mp3",
 	"assets/ward/voice/bella/ward_lift_returned.mp3", "assets/ward/voice/bella/ward_lift_final_call.mp3",
 	"assets/ward/voice/bella/ward_lift_closed.mp3", "assets/sfx/playroom/net_flap.ogg",
 	"assets/station/crew_zombie.glb", "assets/station/faces/seat-1.png", "assets/station/faces/seat-2.png",
 	"assets/station/faces/seat-3.png", "assets/station/faces/seat-4.png",
+	# MT1: the Temp's new figure (figures=new), loaded by name rather than preloaded, so named here.
+	"assets/entities/temp_v2.glb",
+	"assets/entities/groundskeeper_v2.glb",
+	"assets/entities/minder_v2.glb",
+	# MO1: the Orderly's second model (drawn with figures=new) and the texture Godot takes out of it.
+	"assets/entities/orderly_v2.glb", "assets/entities/orderly_v2_Orderly_v2_albedo.webp",
 ]
 const TAPE := {"Web": "assets/station/tape/crew23_web.ogv", "Windows": "assets/station/tape/crew23.ogv"}
 

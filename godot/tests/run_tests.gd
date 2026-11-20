@@ -20,15 +20,16 @@ const FILES: Array[String] = [
 	"prop_stamina", "prop_clinic", "prop_entity", "prop_instrument", "prop_run", "prop_blackout", "prop_net",
 	"prop_lift", "prop_annex", "prop_prison", "prop_notes", "prop_marks", "test_marks_view", "test_annex_notes_view", "prop_upgrades", "prop_report", "prop_day", "prop_save", "prop_profiles", "prop_face_net",
 	"prop_playroom", "prop_seek", "prop_places", "prop_temp", "prop_day_net", "prop_count_run", "prop_door_shadow", "prop_count_net", "prop_quota_net", "prop_marks_net",
-	"prop_downs", "prop_down_view", "prop_watchers", "prop_relocate", "prop_hides", "prop_owner_0833", "prop_lonely", "prop_annex_drag", "prop_playroom_tuned", "prop_minder_hunt", "prop_minder_hunt_view", "prop_party_table",
+	"prop_downs", "prop_down_view", "prop_watchers", "prop_relocate", "prop_hides", "prop_owner_0833", "prop_lonely", "prop_annex_drag", "prop_playroom_tuned", "prop_minder_hunt", "prop_minder_hunt_view", "test_minder_v2","prop_party_table",
 	"prop_settings", "prop_settings_net", "prop_tenant", "prop_hints", "prop_tapes", "prop_telemetry", "prop_day_view", "prop_furniture", "prop_ready", "prop_ready_screen", "test_local_bots", "test_solo_diagnostics",
 	"prop_orientation", "prop_flare", "prop_lamp", "prop_nerve", "prop_shaken",
-	"prop_hearing", "prop_arboretum", "prop_garden_cones", "prop_garden_search", "test_garden_recordings", "prop_ward_net",
+	"prop_hearing", "prop_arboretum", "prop_garden_cones", "prop_garden_search", "test_garden_recordings", "test_keeper_figure", "prop_ward_net",
 	"test_data_check",
 	"prop_brightness", "prop_brightness_curve",
 	"prop_findables", "prop_badge_search", "prop_search", "prop_search_view", "test_findables_data",
 	"prop_inventory", "prop_inventory_net",
 	"test_crew_motion", "test_orderly_motion", "test_temp_animation", "test_temp_motion",
+	"test_temp_v2",
 	"prop_furniture_layout",
 	"prop_resident_navigation", "test_floor_materials", "test_action_sfx", "prop_host_playtest", "test_host_tools",
 	"prop_cabinet", "prop_shop", "prop_shop_net", "prop_deep_pockets", "prop_second_wind", "prop_soft_shoes", "prop_quick_fingers", "prop_long_burn", "prop_field_dressing", "prop_steady_gaze", "prop_throwing_arm", "test_reactor",
@@ -51,6 +52,8 @@ const FILES: Array[String] = [
 	"prop_ward_reach",
 	"test_station_view",
 	"test_floor_media",
+	"test_rigger_v2",
+	"test_orderly_v2",
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).

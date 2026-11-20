@@ -31,6 +31,10 @@ const BEND_IN := 0.8
 const CHEW_HZ := 1.4
 const DANCE_AFTER := BEND_IN + 0.35  # let the full bend read before starting the optional gag
 const DANCE_BLEND := 0.45
+## The second model (figures=new) folds its spine this much further over a downed player (measured: its head
+## then comes as low over the face as today's does).
+const BEND_GAIN_V2 := 1.2
+const BEND_KNEE_V2 := 1.25
 const ROAR_BONES := ["spine", "spine1", "spine2", "neck", "head"]
 ## The watched walk: how far the head may turn from the body (radians), shared neck / head; the left
 ## upper arm's twist (radians about its own length) that swings the bent forearm down off the trolley
@@ -60,8 +64,31 @@ var _grip_left: Node3D
 var _grip_right: Node3D
 var _trolley_solids: Move.Solids
 
+## Today's model and the second one, made from the Meshy figure (assets_src/blender/orderly/build_orderly_v2.py):
+## the same bone names, skirt bones, clip names and clip lengths, the same height and feet. The second is drawn
+## only when the game was started with `figures=new` (after `--` on the command line, or `?figures=new` on the web).
+const MODEL := "res://assets/entities/orderly.glb"
+const MODEL_V2 := "res://assets/entities/orderly_v2.glb"
+## Tests: "new" or "old" overrides the command line; "" reads it.
+static var figures_override := ""
+## This view draws the second model.
+var figure_v2 := false
+
+## Whether the game was asked for the new resident figures (`figures=new`).
+static func new_figures() -> bool:
+	if figures_override != "":
+		return figures_override == "new"
+	for arg: String in OS.get_cmdline_user_args():
+		if arg.trim_prefix("--") == "figures=new":
+			return true
+	if OS.has_feature("web"):
+		var q: Variant = JavaScriptBridge.eval("new URLSearchParams(window.location.search).get('figures') || ''", true)
+		return str(q) == "new"
+	return false
+
 func _ready() -> void:
-	var ps: PackedScene = load("res://assets/entities/orderly.glb")
+	figure_v2 = new_figures()
+	var ps: PackedScene = load(MODEL_V2 if figure_v2 else MODEL)
 	model = ps.instantiate()
 	add_child(model)
 	ap = model.find_child("AnimationPlayer", true, false)
@@ -303,15 +330,17 @@ func _show_bend(t: float, catch_active: bool) -> void:
 	var e := k * k * (3.0 - 2.0 * k)
 	var chew := 0.5 - 0.5 * cos(t * TAU * CHEW_HZ)
 	var angles := [0.34, 0.36, 0.30 + 0.06 * chew, 0.22 + 0.12 * chew, 0.10 + 0.22 * chew]
+	# The second model's body is shorter on longer legs: it folds further to bring its face as low.
+	var gain := BEND_GAIN_V2 if figure_v2 else 1.0
 	for j in ROAR_BONES.size():
 		var i := skel.find_bone(ROAR_BONES[j])
 		# Positive about the bone's own x folds it forward (the model faces +z; its bones run up y).
-		var q := skel.get_bone_pose_rotation(i) * Quaternion(Vector3.RIGHT, float(angles[j]) * e)
+		var q := skel.get_bone_pose_rotation(i) * Quaternion(Vector3.RIGHT, float(angles[j]) * e * gain)
 		if not roar_rotations.is_empty():
 			q *= Quaternion.IDENTITY.slerp(roar_rotations[j], roar_weight * 0.55)
 		skel.set_bone_pose_rotation(i, q)
-	_rotate_bone("spine", Vector3.RIGHT, 0.55 * e)
-	_fold_knees(1.00 * e)
+	_rotate_bone("spine", Vector3.RIGHT, 0.55 * e * gain)
+	_fold_knees((BEND_KNEE_V2 if figure_v2 else 1.00) * e)
 	_brace_hand(".L", e)
 	_brace_hand(".R", e)
 	_bent = true
@@ -411,7 +440,8 @@ func _watched_walk(walking: bool) -> void:
 		# Its own frame (it stands straight in the world: a SubViewport child).
 		var local := transform.affine_inverse() * (watched_at as Vector3)
 		turn = clampf(atan2(local.x, local.z), -WATCH_TURN_MAX, WATCH_TURN_MAX)
-	_twist_bone("neck1", Vector3.UP, turn * WATCH_NECK_SHARE)
+	# The second model's neck is one bone (Mixamo's): it takes the neck's share itself.
+	_twist_bone("neck1" if _skel.find_bone("neck1") >= 0 else "neck", Vector3.UP, turn * WATCH_NECK_SHARE)
 	_twist_bone("head", Vector3.UP, turn * (1.0 - WATCH_NECK_SHARE))
 	_twist_bone("upperarm.L", Vector3.UP, WATCH_ARM_DROP if on else 0.0)
 
@@ -570,6 +600,11 @@ func use_second_look() -> void:
 				continue
 			var m := base.duplicate() as StandardMaterial3D
 			m.resource_name = base.resource_name + "_second"
+			if figure_v2:
+				# The Meshy texture has no atlas patches to tint: the whole figure darker and browner instead.
+				m.albedo_color = base.albedo_color * SECOND_GOWN.lerp(Color.WHITE, 0.35)
+				mi.set_surface_override_material(i, m)
+				continue
 			var tex := second_atlas(base.albedo_texture)
 			if tex != null:
 				m.albedo_texture = tex

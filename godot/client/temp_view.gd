@@ -77,6 +77,12 @@ const BLEND_M := 0.4
 const CARRY_S := 0.25
 const BEND_IN := 0.8
 const MODEL := preload("res://assets/entities/temp.glb")
+## The new figure (MT1: the owner's Meshy model with today's six clips, assets_src/blender/temp/build_temp_v2.py),
+## drawn only when the game was started with `figures=new` (on the web, `?figures=new`). Same clip names, bone
+## names, hands for the stapler and notes, and the same A4 sheet (material temp_face_sheet) over its face.
+const MODEL_V2 := "res://assets/entities/temp_v2.glb"
+## Tests only: true or false picks the figure regardless of how the game was started; null reads the start.
+static var force_new_figure: Variant = null
 const Entity = preload("res://sim/entity.gd")
 const SQUEEZE_M := 0.22         # metres of walk one squeeze of the stapler lasts
 const SQUEEZE_S := 0.2          # seconds one idle squeeze lasts
@@ -498,8 +504,26 @@ func _aim(which: String, next: String, direction: Vector3) -> void:
 	var goal := (_model_basis().inverse() * direction.normalized()).normalized()
 	_spin(which, Quaternion(current, goal))
 
+## Was the game started with `figures=new` (or, on the web, `?figures=new`)?
+static func new_figure() -> bool:
+	if force_new_figure != null:
+		return bool(force_new_figure)
+	for raw: String in OS.get_cmdline_user_args():
+		if raw == "figures=new" or raw == "--figures=new":
+			return true
+	if OS.has_feature("web"):
+		return str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('figures') ?? ''", true)) == "new"
+	return false
+
+## Which figure file this view draws.
+static func model_path() -> String:
+	return MODEL_V2 if new_figure() and ResourceLoader.exists(MODEL_V2) else MODEL.resource_path
+
 func _build_model() -> void:
-	_model = MODEL.instantiate() as Node3D
+	var scene: PackedScene = MODEL
+	if model_path() == MODEL_V2:
+		scene = load(MODEL_V2) as PackedScene
+	_model = scene.instantiate() as Node3D
 	add_child(_model)
 	_skel = _model.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
 	_ap = _model.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer

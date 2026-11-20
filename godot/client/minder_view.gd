@@ -4,6 +4,12 @@
 # in the dark; it walks upright and drops to all fours to search and run, and crouches with both hands
 # over the mask while it counts.
 #
+# Started with figures=new (`-- figures=new` on the command line, `?figures=new` on the web) it draws the
+# second figure instead (MN1, assets/entities/minder_v2.glb, built by build_minder_v2.py from Meshy's rigged
+# model): heavy, on all fours in every pose, the same clip names and lengths, the card mask its own
+# "Minder_mask" material, and its gaits on its own ground speeds (GAIT_SPEED_V2). Only the picture
+# changes: where the rules put it, how it hears and every timing are the same.
+#
 #   show_pose(pose, show)   pose {x, y, z, level, yaw, anim, animTime} or null; show: may it be drawn
 #   follow(link)            the PlayLink whose network client it reads the un-held pose from
 #   set_floor(plan, level)  the floor (heard duller through walls) and its Level (the Playroom's view
@@ -47,6 +53,10 @@ const Move = preload("res://sim/move.gd")
 const Pose = preload("res://net/pose.gd")
 
 const MODEL := "res://assets/entities/minder.glb"
+## The second figure (MN1), on all fours: built by assets_src/blender/minder/build_minder_v2.py from Meshy's
+## rigged model. Drawn only when the game was started with figures=new (see new_figures()); otherwise the
+## first model, exactly as before.
+const MODEL_V2 := "res://assets/entities/minder_v2.glb"
 ## Not a Stillness resident: the pose hold is off (see the header).
 const STILLNESS := false
 const NOTE_STEP := 0.5          # metres walked per note: three per 1.5 m
@@ -83,6 +93,13 @@ const CLIPS := {
 const RULE_POSES: Array[String] = ["stand", "walk", "straighten", "cover", "prowl", "sweep", "look", "slump", "run", "catch"]
 ## The gaits' own ground speed in the model, m/s: these clips run on the distance walked.
 const GAIT_SPEED := {"walk": 1.0, "prowl": 2.1, "run": 5.2}
+## The same for the second figure: each gait clip's stride over its length, as build_minder_v2.py prints
+## it (walk 1.10 m in 1.5 s; prowl 2.60 m, two steps of each foot, in 0.667 s; run 2.40 m in 0.5 s).
+const GAIT_SPEED_V2 := {"walk": 1.1 / 1.5, "prowl": 2.6 / (2.0 / 3.0), "run": 2.4 / 0.5}
+## The second figure's music box rides at its chest, low: it is on all fours in every pose.
+const BOX_HEIGHT_V2 := 0.9
+## Bone names the tests' helpers use, for the second figure (Meshy's rig).
+const JOINTS_V2 := {"knee_l": "rearLwr.L", "knee_r": "rearLwr.R", "hand_l": "frontHorselink.L", "hand_r": "frontHorselink.R"}
 ## Seconds a new pose takes to fade in from the last.
 const BLEND := 0.2
 
@@ -106,6 +123,8 @@ const HALO_E := 1.6
 ## check must go red); "hold" draws the held pose handed in (the hold check must go red); "clip+hold"
 ## both.
 static var test_break := ""
+## Tests: "new" or "old" picks the figure whatever the command line says; "" reads it (new_figures()).
+static var figures := ""
 
 ## Every note so far (tests): {semi, gain, muffled, at}.
 var notes: Array[Dictionary] = []
@@ -119,6 +138,9 @@ var clip := ""
 var clip_time := 0.0
 var fade := 1.0
 
+## The figure drawn is the second one (MN1, all fours), and the gaits' ground speeds it uses.
+var v2 := false
+var gait_speed: Dictionary = GAIT_SPEED
 var model: Node3D
 var skel: Skeleton3D
 var mesh: MeshInstance3D
@@ -227,8 +249,22 @@ func reset() -> void:
 
 # --- the model ------------------------------------------------------------------------------------
 
+## Was the game started with figures=new (a user argument after "--", or ?figures=new on the web)?
+static func new_figures() -> bool:
+	if figures != "":
+		return figures == "new"
+	for a: String in OS.get_cmdline_user_args():
+		if a.trim_prefix("--") == "figures=new":
+			return true
+	if OS.has_feature("web"):
+		var q: Variant = JavaScriptBridge.eval("new URLSearchParams(window.location.search).get('figures') || ''", true)
+		return str(q) == "new"
+	return false
+
 func _load_model() -> void:
-	var ps: PackedScene = load(MODEL)
+	v2 = new_figures() and ResourceLoader.exists(MODEL_V2)
+	gait_speed = GAIT_SPEED_V2 if v2 else GAIT_SPEED
+	var ps: PackedScene = load(MODEL_V2 if v2 else MODEL)
 	model = ps.instantiate()
 	model.name = "Model"
 	add_child(model)
@@ -400,7 +436,7 @@ func show_pose(pose: Variant, show: bool) -> void:
 			step = d
 	_last = p
 	_dist += step
-	body_kind = family(anim)
+	body_kind = _kind(anim)
 	var k := floori(_dist / NOTE_STEP)
 	if k > _note_k:
 		_note(p, k)
@@ -425,6 +461,12 @@ static func family(anim: String) -> String:
 			return "cover"
 	return "upright"
 
+## The body a pose name asks for, as this figure draws it: the second one is on all fours in every pose
+## but the cover.
+func _kind(anim: String) -> String:
+	var k := family(anim)
+	return "fours" if v2 and k == "upright" else k
+
 ## The clip that draws a pose name ("" when there is none).
 static func clip_for(anim: String) -> String:
 	if test_break.contains("clip") and anim == "look":
@@ -443,19 +485,19 @@ func _advance(anim: String, dt: float, step: float) -> void:
 		clip_time = 0.0
 		_fade_t = 0.0 if _prev != "" else BLEND
 	else:
-		clip_time += _rate(clip, dt, step)
+		clip_time += _rate(clip, dt, step, gait_speed)
 		_fade_t += dt
 	if _prev != "":
-		_prev_t += _rate(_prev, dt, step)
+		_prev_t += _rate(_prev, dt, step, gait_speed)
 	fade = clampf(_fade_t / BLEND, 0.0, 1.0)
 	if fade >= 1.0:
 		_prev = ""
 
 ## How far a clip's clock moves this frame: a gait by the distance walked over its own ground speed,
 ## anything else by the time.
-static func _rate(c: String, dt: float, step: float) -> float:
-	if GAIT_SPEED.has(c):
-		return step / float(GAIT_SPEED[c])
+static func _rate(c: String, dt: float, step: float, speeds: Dictionary = GAIT_SPEED) -> float:
+	if speeds.has(c):
+		return step / float(speeds[c])
 	return dt
 
 ## The clip's own time for a clock: round and round for a loop, held at the end for a one-shot.
@@ -510,7 +552,7 @@ func hold_clip(anim: String, t: float) -> void:
 	clip_time = t
 	_prev = ""
 	fade = 1.0
-	body_kind = family(anim)
+	body_kind = _kind(anim)
 	_set_clip_pose(clip, t, "", 0.0, 1.0)
 
 ## Tests: the model as built (every bone at rest, upright). The next show_pose poses it again.
@@ -611,7 +653,7 @@ func _main_bone(s: int) -> PackedStringArray:
 static func _in_hand(bone: String, side: String) -> bool:
 	if not bone.ends_with("." + side):
 		return false
-	for p: String in ["hand", "index", "middle", "ring", "thumb"]:
+	for p: String in ["hand", "index", "middle", "ring", "thumb", "frontHorselink", "frontToe"]:
 		if bone.begins_with(p):
 			return true
 	return false
@@ -659,6 +701,8 @@ func hand_middle(n: String) -> Vector3:
 ## knee_r, hand_l, hand_r).
 func joint_point(n: String) -> Vector3:
 	var names := {"knee_l": "shin.L", "knee_r": "shin.R", "hand_l": "hand.L", "hand_r": "hand.R"}
+	if v2:
+		names = JOINTS_V2
 	var b := skel.find_bone(str(names.get(n, n)))
 	return _skel_xf() * _bone_global(b).origin
 
@@ -687,7 +731,7 @@ func mask_info() -> Dictionary:
 
 func _note(feet: Vector3, k: int) -> void:
 	var semi := TUNE[k % TUNE.size()]
-	var at := feet + Vector3(0, BOX_HEIGHT if body_kind == "upright" else 0.7, 0)
+	var at := feet + Vector3(0, BOX_HEIGHT_V2 if v2 else (BOX_HEIGHT if body_kind == "upright" else 0.7), 0)
 	var gain := 1.0
 	var muffled := false
 	var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null

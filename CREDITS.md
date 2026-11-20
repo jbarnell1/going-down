@@ -46,3 +46,12 @@ each prop came from.
   **Adobe Mixamo** clips baked in: Zombie Crawl and Zombie Running, downloaded by the owner and retargeted
   onto the crew rig by `assets_src/blender/convict/build_zombie_clips.py` and `zombie_clips.mjs`. The same
   rule: the raw files stay in `assets_src/inbox/`, only the baked model is published.
+
+## The Orderly's second model (`godot/assets/entities/orderly_v2.glb`)
+
+- **Meshy**, AI 3D generation and auto-rigging, on the owner's paid plan. The figure, its texture and its
+  skeleton (`assets_src/meshy/orderly/`) were generated from the owner's approved concept picture.
+  `assets_src/blender/orderly/build_orderly_v2.py` rebuilds the game file from them.
+- **Adobe Mixamo** clips baked in, the same takes as today's Orderly (Zombie Idle, Scary Clown Walk, Push,
+  Zombie Attack, Yelling Out, Bellydancing). The same rule: the raw files stay on the owner's machine, only
+  the baked model is published.

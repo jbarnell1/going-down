@@ -16,6 +16,28 @@ const WARNING_PATH := "res://assets/sfx/playroom/net_flap.ogg"
 ## The rig (assets_src/blender/rigger/build_rigger.py) is authored around the abdomen. The forward wrist sits 3.82 m
 ## ahead of that origin; the host supplies the contact at the sill, not the abdomen.
 const RIGGER_WRIST := Vector3(1.81, 0.88, 3.82)
+## MR1: the owner's Meshy figure, rigged by hand (assets_src/blender/rigger/build_rigger_v2.py), shown only when the
+## game was started with `figures=new` (on the web `?figures=new`). Its origin is the abdomen's centre; its wrist (the
+## hand bone's head while "Rigger Climb" plays, where the arm and body are held at rest) is measured by the build and
+## checked by tests/test_rigger_v2.gd. Its own hand is folded away in that clip: search-hand.glb stays the only hand.
+const RIGGER_V2_PATH := "res://assets/ward/rigger_v2.glb"
+const RIGGER_WRIST_V2 := Vector3(0.788, 2.484, 4.965)
+## The helmet lamp: weak and short, so it never shows him before the loaded line and the climb are heard. It only
+## exists while he is drawn (climbing or searching), and lights about 3 m around his head.
+const LAMP_ENERGY := 0.6
+const LAMP_RANGE := 3.0
+## True when this run asked for the new figures (read once, in _init; tests may set it before the view is added).
+var figures_new := false
+var rigger_wrist := RIGGER_WRIST
+var lamp_light: OmniLight3D
+
+## `figures=new` on the command line (after --), or `?figures=new` in the web build's address.
+static func new_figures() -> bool:
+	if OS.get_cmdline_user_args().has("figures=new"):
+		return true
+	if OS.has_feature("web"):
+		return str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('figures') ?? ''", true)) == "new"
+	return false
 const LIFT_DEPTH := 3.0
 
 var seed_value: int
@@ -79,6 +101,7 @@ func _init(seed_: int, spawn_: Vector3) -> void:
 	seed_value = seed_
 	walk_model = Ward.new(seed_)
 	spawn = spawn_
+	figures_new = new_figures()
 
 func _ready() -> void:
 	var layout := walk_model.layout
@@ -205,7 +228,7 @@ func _show_rigger(ward: Dictionary, host_now: float) -> void:
 	rigger.position = (bases - Vector3.UP * 10.0).lerp(bases, minf(1.0, progress * 1.18))
 	rigger.position = rigger.position.lerp(shoulder, smoothstep(0.78, 1.0, progress))
 	rigger.rotation.y = (room.root as Node3D).rotation.y - fixture.window_side * PI * 0.5
-	rigger.position -= rigger.basis * RIGGER_WRIST
+	rigger.position -= rigger.basis * rigger_wrist
 	if animation != null and climb_animation != &"":
 		animation.play(climb_animation)
 		animation.pause()
@@ -638,7 +661,11 @@ func _build_crew() -> void:
 	player.rotation.y = PI
 	add_child(watch_camera)
 func _build_rigger() -> void:
-	rigger = (load(RIGGER_PATH) as PackedScene).instantiate()
+	var path := RIGGER_PATH
+	if figures_new and ResourceLoader.exists(RIGGER_V2_PATH):
+		path = RIGGER_V2_PATH
+		rigger_wrist = RIGGER_WRIST_V2
+	rigger = (load(path) as PackedScene).instantiate()
 	add_child(rigger)
 	rigger.hide()
 	var players := rigger.find_children("*", "AnimationPlayer")
@@ -648,6 +675,17 @@ func _build_rigger() -> void:
 			if key != &"RESET":
 				climb_animation = key
 				break
+		# The v2 figure has more clips; the view plays the one with today's name.
+		if path == RIGGER_V2_PATH and animation.has_animation(&"Rigger Climb"):
+			climb_animation = &"Rigger Climb"
+	var lamp := rigger.find_child("Lamp", true, false) as Node3D
+	if path == RIGGER_V2_PATH and lamp != null:
+		lamp_light = OmniLight3D.new()
+		lamp_light.light_color = Color("#ffc98a")
+		lamp_light.light_energy = LAMP_ENERGY
+		lamp_light.omni_range = LAMP_RANGE
+		lamp_light.shadow_enabled = false
+		lamp.add_child(lamp_light)
 	hand = (load(HAND_PATH) as PackedScene).instantiate()
 	add_child(hand)
 	hand.hide()
