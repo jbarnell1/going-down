@@ -1,8 +1,9 @@
 # MO1: the Orderly's second model (assets/entities/orderly_v2.glb, from the Meshy figure; built by
-# assets_src/blender/orderly/build_orderly_v2.py) can stand in for today's. It is drawn only when the game is
-# started with `figures=new`. These checks hold it to what the view needs: every clip today's model has, the
-# same lengths; the bones the view drives; the same height and feet; today's motion checks (test_orderly_motion,
-# among them the rule that no bone stretches); and with no argument nothing changes.
+# assets_src/blender/orderly/build_orderly_v2.py) stands in for today's. It is drawn unless the game is
+# started with `figures=old` (client/figures.gd). These checks hold it to what the view needs: every clip today's
+# model has, the same lengths; the bones the view drives; the same height and feet; today's motion checks
+# (test_orderly_motion, among them the rule that no bone stretches); with no argument the new model is drawn, and
+# with figures=old today's, unchanged.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -124,15 +125,44 @@ func test_todays_motion_checks_hold_on_the_new_model(t: T) -> void:
 	View.figures_override = ""
 	t.check(ran >= 9, "today's motion checks ran on the new model (%d)" % ran)
 
-func test_with_no_argument_the_view_draws_todays_model(t: T) -> void:
+## The same motion checks on the old model (figures=old), now that test_orderly_motion runs on the new default.
+func test_todays_motion_checks_still_hold_on_the_old_model(t: T) -> void:
+	var m := Motion.new()
+	var ran := 0
+	View.figures_override = "old"
+	for method: Dictionary in m.get_method_list():
+		var name: String = method.name
+		if name.begins_with("test_") and not name.contains("breathing") and not name.contains("heard") \
+				and not name.contains("prison_empty"):
+			var before := t.failures.size()
+			m.call(name, t)
+			for i in range(before, t.failures.size()):
+				t.failures[i] = "old model, %s: %s" % [name, t.failures[i]]
+			ran += 1
 	View.figures_override = ""
-	t.check(not OS.get_cmdline_user_args().has("figures=new"), "the test run was not started with figures=new")
-	t.check(not View.new_figures(), "no argument: not the new figures")
+	t.check(ran >= 9, "today's motion checks ran on the old model (%d)" % ran)
+
+func test_with_no_argument_the_view_draws_the_new_model(t: T) -> void:
+	View.figures_override = ""
+	t.eq(Figures.override, "", "the shared override is clear")
+	t.check(not OS.get_cmdline_user_args().has("figures=old"), "the test run was not started with figures=old")
+	t.check(View.new_figures(), "no argument: the new figures")
 	var view := _view("")
-	t.check(not view.figure_v2, "the view keeps today's model")
-	t.eq(view.model.scene_file_path, View.MODEL, "the view loaded orderly.glb")
-	t.check(view.skel.find_bone("neck1") >= 0 and view.skel.find_bone("index1.L") >= 0, "today's skeleton, fingers and all")
+	t.check(view.figure_v2, "the view draws the new model")
+	t.eq(view.model.scene_file_path, View.MODEL_V2, "the view loaded orderly_v2.glb")
+	t.check(view.skel.find_bone("neck1") < 0, "the new skeleton, not today's")
 	view.free()
 	var new := _view("new")
 	t.eq(new.model.scene_file_path, View.MODEL_V2, "figures=new loads orderly_v2.glb")
 	new.free()
+
+func test_with_figures_old_the_view_draws_todays_model(t: T) -> void:
+	View.figures_override = ""
+	Figures.override = "old"
+	t.check(not View.new_figures(), "figures=old: not the new figures")
+	var view := _view("")
+	Figures.override = ""
+	t.check(not view.figure_v2, "the view keeps today's model")
+	t.eq(view.model.scene_file_path, View.MODEL, "the view loaded orderly.glb")
+	t.check(view.skel.find_bone("neck1") >= 0 and view.skel.find_bone("index1.L") >= 0, "today's skeleton, fingers and all")
+	view.free()

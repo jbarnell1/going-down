@@ -1,11 +1,11 @@
 # MR1: the Rigger's second figure, the owner's Meshy model rigged by hand (assets_src/blender/rigger/build_rigger_v2.py,
-# godot/assets/ward/rigger_v2.glb), shown only when the game was started with `figures=new`.
+# godot/assets/ward/rigger_v2.glb), shown unless the game was started with `figures=old` (client/figures.gd).
 #   1. It has today's climb clip with today's length, and its own clips: climb, hang, reach, search, withdraw.
 #   2. Its skeleton has exactly eight leg chains of four bones and one arm (at least six bones shoulder to wrist).
 #   3. No vertex of a leg carries weight from another leg; the arm's vertices only from the arm.
 #   4. Placed by the Ward's view while he searches, his wrist is at the house's shoulder, his own hand is folded away,
 #      and the search hand is at the arm's last point, as for today's figure.
-#   5. With no argument the view loads today's files, wrist and clip, and adds no lamp.
+#   5. With no argument the view loads the new figure; with figures=old today's files, wrist and clip, and no lamp.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -123,7 +123,7 @@ func test_no_leg_vertex_is_weighted_to_another_leg(t: T) -> void:
 	figure.free()
 
 ## A Ward view searching in house 0, as test_floor_media poses today's figure.
-## force: 1 asks for the new figures, 0 for today's, -1 leaves the view as it builds itself (from the command line).
+## force: 1 asks for the new figures, 0 for today's, -1 leaves the view as it builds itself (the shared switch).
 static func _searching(force: int) -> Dictionary:
 	var tree := Engine.get_main_loop() as SceneTree
 	var view := View.new(8143, Vector3.ZERO)
@@ -162,9 +162,22 @@ func test_the_wrist_lands_at_the_house_shoulder(t: T) -> void:
 	t.check(light != null and light.global_position.distance_to(head) < 1.5, "the lamp rides the head (%.2f m from the head bone)" % (light.global_position.distance_to(head) if light else -1.0))
 	view.free()
 
-func test_with_no_argument_nothing_changes(t: T) -> void:
-	t.check(not OS.get_cmdline_user_args().has("figures=new") and not View.new_figures(), "the tests run without figures=new")
+func test_with_no_argument_the_new_figure_loads(t: T) -> void:
+	t.eq(Figures.override, "", "the shared override is clear")
+	t.check(not OS.get_cmdline_user_args().has("figures=old") and View.new_figures(), "the tests run without figures=old: the new figures")
 	var r := _searching(-1)
+	var view: View = r.view
+	t.check(view.figures_new, "the view asks for the new figures")
+	t.check(view.rigger.scene_file_path == View.RIGGER_V2_PATH, "the new figure loads (%s)" % view.rigger.scene_file_path)
+	t.eq(view.rigger_wrist, View.RIGGER_WRIST_V2, "the new figure's wrist")
+	t.check(view.lamp_light != null, "the helmet lamp is lit while he searches")
+	view.free()
+
+func test_with_figures_old_nothing_changes(t: T) -> void:
+	Figures.override = "old"
+	t.check(not View.new_figures(), "figures=old: not the new figures")
+	var r := _searching(-1)
+	Figures.override = ""
 	var view: View = r.view
 	t.check(view.rigger.scene_file_path == View.RIGGER_PATH, "today's figure loads (%s)" % view.rigger.scene_file_path)
 	t.eq(view.rigger_wrist, View.RIGGER_WRIST, "today's wrist")

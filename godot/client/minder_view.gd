@@ -4,8 +4,8 @@
 # in the dark; it walks upright and drops to all fours to search and run, and crouches with both hands
 # over the mask while it counts.
 #
-# Started with figures=new (`-- figures=new` on the command line, `?figures=new` on the web) it draws the
-# second figure instead (MN1, assets/entities/minder_v2.glb, built by build_minder_v2.py from Meshy's rigged
+# Unless started with figures=old (client/figures.gd: `-- figures=old`, or `?figures=old` on the web) it draws
+# the second figure (MN1, assets/entities/minder_v2.glb, built by build_minder_v2.py from Meshy's rigged
 # model): heavy, on all fours in every pose, the same clip names and lengths, the card mask its own
 # "Minder_mask" material, and its gaits on its own ground speeds (GAIT_SPEED_V2). Only the picture
 # changes: where the rules put it, how it hears and every timing are the same.
@@ -54,8 +54,8 @@ const Pose = preload("res://net/pose.gd")
 
 const MODEL := "res://assets/entities/minder.glb"
 ## The second figure (MN1), on all fours: built by assets_src/blender/minder/build_minder_v2.py from Meshy's
-## rigged model. Drawn only when the game was started with figures=new (see new_figures()); otherwise the
-## first model, exactly as before.
+## rigged model. Drawn unless the game was started with figures=old (see new_figures()) or the file is
+## missing; then the first model, exactly as before.
 const MODEL_V2 := "res://assets/entities/minder_v2.glb"
 ## Not a Stillness resident: the pose hold is off (see the header).
 const STILLNESS := false
@@ -123,7 +123,7 @@ const HALO_E := 1.6
 ## check must go red); "hold" draws the held pose handed in (the hold check must go red); "clip+hold"
 ## both.
 static var test_break := ""
-## Tests: "new" or "old" picks the figure whatever the command line says; "" reads it (new_figures()).
+## Tests: "new" or "old" picks the figure whatever the shared choice says; "" follows it (new_figures()).
 static var figures := ""
 
 ## Every note so far (tests): {semi, gain, muffled, at}.
@@ -249,17 +249,11 @@ func reset() -> void:
 
 # --- the model ------------------------------------------------------------------------------------
 
-## Was the game started with figures=new (a user argument after "--", or ?figures=new on the web)?
+## Does this run draw the new figures (client/figures.gd: yes unless started with figures=old)?
 static func new_figures() -> bool:
 	if figures != "":
 		return figures == "new"
-	for a: String in OS.get_cmdline_user_args():
-		if a.trim_prefix("--") == "figures=new":
-			return true
-	if OS.has_feature("web"):
-		var q: Variant = JavaScriptBridge.eval("new URLSearchParams(window.location.search).get('figures') || ''", true)
-		return str(q) == "new"
-	return false
+	return Figures.use_new()
 
 func _load_model() -> void:
 	v2 = new_figures() and ResourceLoader.exists(MODEL_V2)

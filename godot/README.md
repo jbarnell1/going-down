@@ -158,6 +158,13 @@ Desktop arguments (after `--`) and URL parameters, besides the ones below: `join
 **`pass=` is for local tests only**: it shows in the process list, the address bar and the browser
 history. Never put a real passphrase there.
 
+The residents are drawn with their new figures (the Orderly, the Temp, the Groundskeeper, the Minder and
+the Rigger: the `*_v2.glb` files). `figures=old` (`-- figures=old` or `-- --figures=old` on the desktop,
+`?figures=old` in the browser) draws the old ones instead; `figures=new` is still accepted and means the
+new ones. One switch decides it for every view (`client/figures.gd`); a view whose new file is missing
+draws its old figure. Only the picture changes: where the rules put a resident, its reach, its timings and
+its sounds are the same with either.
+
 `npm run godot:export -- web` or `-- windows` builds one. URL parameters and desktop
 arguments (`seed=`, `quality=`, `entity=0`, `auto=1`, `testport=`, `--bench=`) are the client's,
 unchanged: see `spikes/godot-client/README.md`. After the web export `godot:export` runs

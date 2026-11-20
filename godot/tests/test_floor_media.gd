@@ -27,7 +27,11 @@ static func _no_pack(t: T) -> void:
 func test_the_riggers_figure_and_hand_are_placed_in_a_ward_with_no_pack(t: T) -> void:
 	_no_pack(t)
 	var tree := Engine.get_main_loop() as SceneTree
+	# FD1: this checks the old rigger.glb (its many parts, RIGGER_WRIST), so it draws the old figure;
+	# tests/test_rigger_v2.gd places the new one the same way.
+	Figures.override = "old"
 	var view := View.new(8143, Vector3.ZERO)
+	Figures.override = ""
 	view.own_hud = false
 	tree.root.add_child(view)
 	if not t.check(view.rigger != null and view.hand != null, "the Rigger and his hand are built from the game's files"):

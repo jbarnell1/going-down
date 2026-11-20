@@ -56,6 +56,7 @@ const FILES: Array[String] = [
 	"test_orderly_v2",
 	"test_ward_route",
 	"test_late_archive",
+	"test_figures",
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).

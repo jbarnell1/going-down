@@ -4,8 +4,8 @@ extends Node3D
 
 const GardenSound = preload("res://client/garden_sound.gd")
 const MODEL := "res://assets/entities/groundskeeper.glb"
-## The Meshy figure (MG1), behind a switch until the owner turns it on: `-- figures=new` after the game's
-## own arguments, or `?figures=new` in the browser build's address. Same clips, bones and timings.
+## The Meshy figure (MG1), drawn unless the game was started with `figures=old` (client/figures.gd), or its
+## file is missing. Same clips, bones and timings.
 const MODEL_NEW := "res://assets/entities/groundskeeper_v2.glb"
 const CLIPS := {"idle": &"listen", "tilt": &"tilt", "walk": &"walk", "lean": &"lean",
 	"sweep": &"sweep", "catch": &"snatch"}
@@ -48,19 +48,13 @@ var _garden_audio := GardenSound.new()
 ## Which figure _build loads. Empty: whatever the switch says.
 var figure_model := ""
 
-## The figure the switch picks from the user arguments and the browser address's query string.
+## The figure the shared switch (client/figures.gd) picks from the user arguments and the address's query string.
 static func model_for(args: PackedStringArray, query: String) -> String:
-	for arg in args:
-		if arg.trim_prefix("--") == "figures=new":
-			return MODEL_NEW
-	return MODEL_NEW if query.trim_prefix("?").split("&").has("figures=new") else MODEL
+	return MODEL_NEW if Figures.new_for(args, query) else MODEL
 
+## The figure this run draws: the new one unless Figures says old, or today's when the new file is missing.
 static func model_path() -> String:
-	var query := ""
-	if OS.has_feature("web"):
-		var search: Variant = JavaScriptBridge.eval("window.location.search", true)
-		query = str(search) if search != null else ""
-	return model_for(OS.get_cmdline_user_args(), query)
+	return MODEL_NEW if Figures.use_new() and ResourceLoader.exists(MODEL_NEW) else MODEL
 
 func _ready() -> void:
 	_build()
@@ -68,6 +62,8 @@ func _ready() -> void:
 
 func _build() -> void:
 	var path := figure_model if figure_model != "" else model_path()
+	if not ResourceLoader.exists(path):
+		path = MODEL
 	var scene := load(path) as PackedScene if ResourceLoader.exists(path) else null
 	if scene != null:
 		_model = scene.instantiate() as Node3D

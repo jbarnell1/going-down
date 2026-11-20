@@ -66,28 +66,22 @@ var _trolley_solids: Move.Solids
 
 ## Today's model and the second one, made from the Meshy figure (assets_src/blender/orderly/build_orderly_v2.py):
 ## the same bone names, skirt bones, clip names and clip lengths, the same height and feet. The second is drawn
-## only when the game was started with `figures=new` (after `--` on the command line, or `?figures=new` on the web).
+## unless the game was started with `figures=old` (client/figures.gd), or its file is missing.
 const MODEL := "res://assets/entities/orderly.glb"
 const MODEL_V2 := "res://assets/entities/orderly_v2.glb"
-## Tests: "new" or "old" overrides the command line; "" reads it.
+## Tests: "new" or "old" overrides the shared choice (Figures); "" follows it.
 static var figures_override := ""
 ## This view draws the second model.
 var figure_v2 := false
 
-## Whether the game was asked for the new resident figures (`figures=new`).
+## Whether this run draws the new resident figures (client/figures.gd).
 static func new_figures() -> bool:
 	if figures_override != "":
 		return figures_override == "new"
-	for arg: String in OS.get_cmdline_user_args():
-		if arg.trim_prefix("--") == "figures=new":
-			return true
-	if OS.has_feature("web"):
-		var q: Variant = JavaScriptBridge.eval("new URLSearchParams(window.location.search).get('figures') || ''", true)
-		return str(q) == "new"
-	return false
+	return Figures.use_new()
 
 func _ready() -> void:
-	figure_v2 = new_figures()
+	figure_v2 = new_figures() and ResourceLoader.exists(MODEL_V2)
 	var ps: PackedScene = load(MODEL_V2 if figure_v2 else MODEL)
 	model = ps.instantiate()
 	add_child(model)

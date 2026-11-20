@@ -16,8 +16,8 @@ const WARNING_PATH := "res://assets/sfx/playroom/net_flap.ogg"
 ## The rig (assets_src/blender/rigger/build_rigger.py) is authored around the abdomen. The forward wrist sits 3.82 m
 ## ahead of that origin; the host supplies the contact at the sill, not the abdomen.
 const RIGGER_WRIST := Vector3(1.81, 0.88, 3.82)
-## MR1: the owner's Meshy figure, rigged by hand (assets_src/blender/rigger/build_rigger_v2.py), shown only when the
-## game was started with `figures=new` (on the web `?figures=new`). Its origin is the abdomen's centre; its wrist (the
+## MR1: the owner's Meshy figure, rigged by hand (assets_src/blender/rigger/build_rigger_v2.py), shown unless the
+## game was started with `figures=old` (client/figures.gd) or the file is missing. Its origin is the abdomen's centre; its wrist (the
 ## hand bone's head while "Rigger Climb" plays, where the arm and body are held at rest) is measured by the build and
 ## checked by tests/test_rigger_v2.gd. Its own hand is folded away in that clip: search-hand.glb stays the only hand.
 const RIGGER_V2_PATH := "res://assets/ward/rigger_v2.glb"
@@ -31,13 +31,9 @@ var figures_new := false
 var rigger_wrist := RIGGER_WRIST
 var lamp_light: OmniLight3D
 
-## `figures=new` on the command line (after --), or `?figures=new` in the web build's address.
+## The shared choice (client/figures.gd): the new figures unless started with `figures=old`.
 static func new_figures() -> bool:
-	if OS.get_cmdline_user_args().has("figures=new"):
-		return true
-	if OS.has_feature("web"):
-		return str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('figures') ?? ''", true)) == "new"
-	return false
+	return Figures.use_new()
 const LIFT_DEPTH := 3.0
 
 var seed_value: int

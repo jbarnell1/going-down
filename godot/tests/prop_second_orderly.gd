@@ -750,6 +750,8 @@ static func _mean(tex: Texture2D, r: Array) -> Color:
 	return sum / float(n)
 
 func test_the_second_wears_its_own_darker_gown_and_paler_skin(t: T) -> void:
+	# FD1: this reads the old model's atlas patches (SECOND_GOWN_UV, SECOND_SKIN_UV), so it draws the old figure.
+	Figures.override = "old"
 	var root := (Engine.get_main_loop() as SceneTree).root
 	var first := View.new()
 	root.add_child(first)
@@ -759,6 +761,7 @@ func test_the_second_wears_its_own_darker_gown_and_paler_skin(t: T) -> void:
 	var shared_color := shared.albedo_color
 	var second := View.new()
 	root.add_child(second)
+	Figures.override = ""
 	second.use_second_look()
 	var m1 := _mats(first)
 	var m2 := _mats(second)
@@ -781,5 +784,27 @@ func test_the_second_wears_its_own_darker_gown_and_paler_skin(t: T) -> void:
 	t.check(sat.call(skin2) < sat.call(skin1) * 0.7, "the second's skin is not greyer: %s vs %s" % [skin2, skin1])
 	t.check(mask2.is_equal_approx(mask1), "the mask and its printed face changed: %s vs %s" % [mask2, mask1])
 	t.note("gown luminance %.3f -> %.3f; skin saturation %.3f -> %.3f; mask unchanged" % [gown1.get_luminance(), gown2.get_luminance(), skin1.s, skin2.s])
+	first.queue_free()
+	second.queue_free()
+
+## FD1: on the new figure (the default) the second wears its own darker copy of every material; the first's untouched.
+func test_on_the_new_figure_the_second_is_darker_in_its_own_materials(t: T) -> void:
+	var root := (Engine.get_main_loop() as SceneTree).root
+	var first := View.new()
+	root.add_child(first)
+	var second := View.new()
+	root.add_child(second)
+	t.check(first.figure_v2 and second.figure_v2, "both views draw the new figure")
+	var before := _mats(first)
+	second.use_second_look()
+	var m1 := _mats(first)
+	var m2 := _mats(second)
+	t.eq(m1.size(), m2.size(), "surfaces")
+	for i in m1.size():
+		t.check(m1[i] == before[i], "the first view's material %d was kept" % i)
+		t.check(m2[i] != m1[i], "the second view has its own material %d" % i)
+		var c1 := (m1[i] as StandardMaterial3D).albedo_color
+		var c2 := (m2[i] as StandardMaterial3D).albedo_color
+		t.check(c2.get_luminance() < c1.get_luminance() * 0.9, "the second's surface %d is darker: %s vs %s" % [i, c2, c1])
 	first.queue_free()
 	second.queue_free()

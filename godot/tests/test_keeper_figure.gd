@@ -1,6 +1,7 @@
-## MG1: the Groundskeeper's Meshy figure (groundskeeper_v2.glb) sits behind the `figures=new` switch. It must
-## carry today's seven clips at today's lengths, the bones the view drives, and stand as tall as today's
-## figure. Without the switch the view loads today's figure and nothing else changes.
+## MG1: the Groundskeeper's Meshy figure (groundskeeper_v2.glb) is drawn unless the game is started with
+## `figures=old` (client/figures.gd). It must carry today's seven clips at today's lengths, the bones the view
+## drives, and stand as tall as today's figure. With figures=old the view loads today's figure and nothing else
+## changes.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -10,22 +11,44 @@ const LENGTHS := {&"listen": 3.2, &"walk": 0.5, &"tilt": 0.8, &"sweep": 2.0, &"l
 	&"snatch": 19.0 / 30.0, &"recover": 0.6}
 
 func test_the_switch_picks_the_figure(t: T) -> void:
-	t.eq(Keeper.model_for(PackedStringArray(), ""), Keeper.MODEL, "no argument: today's figure")
+	t.eq(Keeper.model_for(PackedStringArray(), ""), Keeper.MODEL_NEW, "no argument: the new figure")
 	t.eq(Keeper.model_for(PackedStringArray(["figures=new"]), ""), Keeper.MODEL_NEW, "figures=new: the new figure")
 	t.eq(Keeper.model_for(PackedStringArray(["--figures=new"]), ""), Keeper.MODEL_NEW, "--figures=new: the new figure")
-	t.eq(Keeper.model_for(PackedStringArray(["figures=old", "x"]), ""), Keeper.MODEL, "another value: today's figure")
+	t.eq(Keeper.model_for(PackedStringArray(["figures=old", "x"]), ""), Keeper.MODEL, "figures=old: today's figure")
+	t.eq(Keeper.model_for(PackedStringArray(["--figures=old"]), ""), Keeper.MODEL, "--figures=old: today's figure")
+	t.eq(Keeper.model_for(PackedStringArray(["x"]), ""), Keeper.MODEL_NEW, "another argument: the new figure")
 	t.eq(Keeper.model_for(PackedStringArray(), "?figures=new"), Keeper.MODEL_NEW, "?figures=new in the address")
-	t.eq(Keeper.model_for(PackedStringArray(), "?room=a&figures=new"), Keeper.MODEL_NEW, "among other query fields")
-	t.eq(Keeper.model_for(PackedStringArray(), "?figures=newer"), Keeper.MODEL, "only the exact field counts")
-	t.eq(Keeper.model_path(), Keeper.MODEL, "this test run has no switch, so the game would load today's figure")
+	t.eq(Keeper.model_for(PackedStringArray(), "?room=a&figures=old"), Keeper.MODEL, "?figures=old among other query fields")
+	t.eq(Keeper.model_for(PackedStringArray(), "?figures=older"), Keeper.MODEL_NEW, "only the exact field counts")
+	t.eq(Keeper.model_path(), Keeper.MODEL_NEW, "this test run has no switch, so the game would load the new figure")
 	t.check(ResourceLoader.exists(Keeper.MODEL_NEW), "the new figure is in the project")
 
-func test_with_no_switch_the_view_loads_todays_figure(t: T) -> void:
+func test_with_no_switch_the_view_loads_the_new_figure(t: T) -> void:
+	t.eq(Figures.override, "", "the shared override is clear")
 	var keeper := Keeper.new()
 	keeper._build()
+	if t.check(keeper._model != null, "the new figure loads"):
+		t.eq(keeper._model.scene_file_path, Keeper.MODEL_NEW, "the view loaded groundskeeper_v2.glb")
+		t.check(keeper._rig.find_bone("Spine1") >= 0, "it is the new skeleton")
+	keeper.free()
+
+func test_with_figures_old_the_view_loads_todays_figure(t: T) -> void:
+	Figures.override = "old"
+	t.eq(Keeper.model_path(), Keeper.MODEL, "figures=old: the game would load today's figure")
+	var keeper := Keeper.new()
+	keeper._build()
+	Figures.override = ""
 	if t.check(keeper._model != null, "today's figure loads"):
 		t.eq(keeper._model.scene_file_path, Keeper.MODEL, "the view loaded groundskeeper.glb")
 		t.check(keeper._rig.find_bone("Chest") >= 0 and keeper._rig.find_bone("Spine1") < 0, "it is today's skeleton")
+	keeper.free()
+
+func test_a_missing_figure_file_falls_back_to_todays(t: T) -> void:
+	var keeper := Keeper.new()
+	keeper.figure_model = "res://assets/entities/not-there_v2.glb"
+	keeper._build()
+	if t.check(keeper._model != null, "a figure still loads"):
+		t.eq(keeper._model.scene_file_path, Keeper.MODEL, "the view fell back to groundskeeper.glb")
 	keeper.free()
 
 func _scene(path: String) -> Node3D:

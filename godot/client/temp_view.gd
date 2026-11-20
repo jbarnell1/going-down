@@ -78,7 +78,7 @@ const CARRY_S := 0.25
 const BEND_IN := 0.8
 const MODEL := preload("res://assets/entities/temp.glb")
 ## The new figure (MT1: the owner's Meshy model with today's six clips, assets_src/blender/temp/build_temp_v2.py),
-## drawn only when the game was started with `figures=new` (on the web, `?figures=new`). Same clip names, bone
+## drawn unless the game was started with `figures=old` (client/figures.gd) or its file is missing. Same clip names, bone
 ## names, hands for the stapler and notes, and the same A4 sheet (material temp_face_sheet) over its face.
 const MODEL_V2 := "res://assets/entities/temp_v2.glb"
 ## Tests only: true or false picks the figure regardless of how the game was started; null reads the start.
@@ -504,16 +504,11 @@ func _aim(which: String, next: String, direction: Vector3) -> void:
 	var goal := (_model_basis().inverse() * direction.normalized()).normalized()
 	_spin(which, Quaternion(current, goal))
 
-## Was the game started with `figures=new` (or, on the web, `?figures=new`)?
+## Does this run draw the new figures (client/figures.gd: yes unless started with `figures=old`)?
 static func new_figure() -> bool:
 	if force_new_figure != null:
 		return bool(force_new_figure)
-	for raw: String in OS.get_cmdline_user_args():
-		if raw == "figures=new" or raw == "--figures=new":
-			return true
-	if OS.has_feature("web"):
-		return str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('figures') ?? ''", true)) == "new"
-	return false
+	return Figures.use_new()
 
 ## Which figure file this view draws.
 static func model_path() -> String:

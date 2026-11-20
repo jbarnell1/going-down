@@ -1,6 +1,6 @@
 # MT1: the Temp's new figure (assets/entities/temp_v2.glb, built by assets_src/blender/temp/build_temp_v2.py from
-# the owner's Meshy model). It is drawn only when the game starts with `figures=new`; otherwise today's figure,
-# unchanged. The new one must give the view everything today's does: the six clips at today's lengths (the rules'
+# the owner's Meshy model). It is drawn unless the game starts with `figures=old` (client/figures.gd); with that,
+# today's figure, unchanged. The new one must give the view everything today's does: the six clips at today's lengths (the rules'
 # timings do not move), the bones the view turns, the stapler and notes in the hands, the sheet for the
 # photocopy, and today's height with the feet on the floor (where the rules think it is, its size).
 extends RefCounted
@@ -143,24 +143,42 @@ func test_stapler_stays_in_the_hand_through_the_reach(t: T) -> void:
 	v.free()
 
 
-func test_without_the_argument_the_view_draws_todays_figure(t: T) -> void:
+## The view built with no override at all, following the shared switch (client/figures.gd).
+func _view_default() -> TempView:
 	View.force_new_figure = null
-	t.check(not View.new_figure(), "no figures=new in this run's arguments")
-	t.eq(View.model_path(), TODAY, "the view's figure file without the argument")
+	var v := View.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(v)
+	return v
+
+
+func test_without_the_argument_the_view_draws_the_new_figure(t: T) -> void:
+	View.force_new_figure = null
+	t.eq(Figures.override, "", "the shared override is clear")
+	t.check(View.new_figure(), "no figures=old in this run's arguments: the new figure")
+	t.eq(View.model_path(), NEW, "the view's figure file without the argument")
 	var today := _figure(TODAY)
 	var new := _figure(NEW)
-	var v := _view(false)
-	t.eq(_skel(v).get_bone_count(), _skel(today).get_bone_count(), "the drawn skeleton is today's")
+	t.check(_skel(today).get_bone_count() != _skel(new).get_bone_count(), "the two skeletons can be told apart")
+	var v := _view_default()
+	t.eq(_skel(v).get_bone_count(), _skel(new).get_bone_count(), "the drawn skeleton is the new one")
 	v.free()
-	View.force_new_figure = true
-	t.eq(View.model_path(), NEW, "the view's figure file with figures=new")
-	View.force_new_figure = null
 	var w := _view(true)
 	t.eq(_skel(w).get_bone_count(), _skel(new).get_bone_count(), "with figures=new the new skeleton is drawn")
-	t.check(_skel(today).get_bone_count() != _skel(new).get_bone_count(), "the two skeletons can be told apart")
 	w.free()
 	today.free()
 	new.free()
+
+
+func test_with_figures_old_the_view_draws_todays_figure(t: T) -> void:
+	Figures.override = "old"
+	t.check(not View.new_figure(), "figures=old: not the new figure")
+	t.eq(View.model_path(), TODAY, "the view's figure file with figures=old")
+	var today := _figure(TODAY)
+	var v := _view_default()
+	Figures.override = ""
+	t.eq(_skel(v).get_bone_count(), _skel(today).get_bone_count(), "the drawn skeleton is today's")
+	v.free()
+	today.free()
 
 
 ## Every check today's figure passes in test_temp_animation (clips sampled by the view, height, the bend's fold,
@@ -175,4 +193,18 @@ func test_the_new_figure_passes_the_temp_animation_checks(t: T) -> void:
 			suite.call(name, t)
 			for i in range(before, t.failures.size()):
 				t.failures[i] = "new figure, %s: %s" % [name, t.failures[i]]
+	View.force_new_figure = null
+
+
+## The same checks on today's figure (figures=old), now that test_temp_animation runs on the new default.
+func test_the_old_figure_still_passes_the_temp_animation_checks(t: T) -> void:
+	var suite: RefCounted = load("res://tests/test_temp_animation.gd").new()
+	View.force_new_figure = false
+	for m: Dictionary in suite.get_method_list():
+		var name: String = m["name"]
+		if name.begins_with("test_"):
+			var before := t.failures.size()
+			suite.call(name, t)
+			for i in range(before, t.failures.size()):
+				t.failures[i] = "old figure, %s: %s" % [name, t.failures[i]]
 	View.force_new_figure = null

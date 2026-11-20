@@ -1,6 +1,6 @@
 # The Minder's second figure (MN1: assets/entities/minder_v2.glb, built by
-# assets_src/blender/minder/build_minder_v2.py from Meshy's rigged model), drawn by client/minder_view.gd only
-# when the game was started with figures=new. Residents "always obey their rule": the figure is only a picture,
+# assets_src/blender/minder/build_minder_v2.py from Meshy's rigged model), drawn by client/minder_view.gd unless
+# the game was started with figures=old (client/figures.gd). Residents "always obey their rule": the figure is only a picture,
 # so these hold the picture to what the view needs and leave the old figure exactly as it was:
 #   1. v2 has every clip the view plays, at the old model's lengths, loops looping and one-shots held;
 #   2. its card mask is its own material ("Minder_mask", one surface, with its glow map), on the front of the
@@ -8,7 +8,8 @@
 #   3. every bone the clips drive and the view names is in its skeleton;
 #   4. its gaits' ground speeds in the view (GAIT_SPEED_V2) are the speeds its planted feet move back in the
 #      clips, so the feet do not slide;
-#   5. with no argument the view loads today's model, with today's clips, speeds and body kinds.
+#   5. with no argument the view loads the second figure; with figures=old today's model, with today's clips,
+#      speeds and body kinds.
 # The sizes against today's figure are printed as notes.
 extends RefCounted
 
@@ -128,11 +129,23 @@ func test_v2_gait_speeds_keep_the_feet_still(t: T) -> void:
 	t.eq(v.gait_speed, MinderView.GAIT_SPEED_V2, "the second figure runs its gaits on its own speeds")
 	v.free()
 
-func test_with_no_argument_the_view_is_unchanged(t: T) -> void:
+func test_with_no_argument_the_view_draws_the_second_figure(t: T) -> void:
 	t.eq(MinderView.figures, "", "the tests' switch is clear")
-	t.check(not MinderView.new_figures(), "no figures=new on this command line")
+	t.eq(Figures.override, "", "the shared override is clear")
+	t.check(MinderView.new_figures(), "no figures=old on this command line: the new figures")
 	var v: MinderView = MinderViewScript.new()
-	t.check(not v.v2, "no argument: the first figure")
+	t.check(v.v2, "no argument: the second figure")
+	t.eq(v.gait_speed, MinderView.GAIT_SPEED_V2, "its own gait speeds")
+	t.eq(v.model.scene_file_path, MinderView.MODEL_V2, "loaded from minder_v2.glb")
+	v.free()
+
+func test_with_figures_old_the_view_is_unchanged(t: T) -> void:
+	t.eq(MinderView.figures, "", "the tests' switch is clear")
+	Figures.override = "old"
+	t.check(not MinderView.new_figures(), "figures=old: not the new figures")
+	var v: MinderView = MinderViewScript.new()
+	Figures.override = ""
+	t.check(not v.v2, "figures=old: the first figure")
 	t.eq(v.gait_speed, MinderView.GAIT_SPEED, "its gait speeds")
 	t.eq(v.skel.get_bone_count(), 43, "today's skeleton (43 bones)")
 	t.check(v.skel.find_bone("rearLwr.L") < 0 and v.skel.find_bone("shin.L") >= 0, "today's bone names")
