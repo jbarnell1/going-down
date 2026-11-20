@@ -10,7 +10,8 @@
 //   holds and cuts on the same host time for both, the four stir, Ann fetches the fuse while Bob goes to meet the
 //   four, a catch puts Bob down, Ann heals him with F held (the host's panel first drops the four back to a crawl,
 //   so a two-player crew can survive the heal), power restored, the lift called, the tape carried out, both ride
-//   up and arrive in the prison. A third client (Cy) joins after the cut and is compared with Ann.
+//   up and arrive in the prison. A third client (Cy) joins after the cut and is compared with Ann;
+//   he readies on Ready-up (the server admits only ready late joiners) and is admitted as the car reaches the prison.
 //   Fallback A (server on P+6, `ward_place=0 reactor_place=0`): one client rides to floor 6 and must hand over to
 //   the old Ward scene ("FLOOR ENTERED ward"; client/ward/review.tscn, inside the game).
 //   Fallback B (server on P+8, `reactor_place=0`): one client walks the native Ward, boards, and rides to floor 7.
@@ -66,7 +67,7 @@ const quick = arg('quick', '0') === '1';
 const godot = process.env.GODOT || join(root, 'tools', 'godot', 'Godot_v4.7.2-stable_win64_console.exe');
 if (!existsSync(godot)) throw new Error(`no engine at ${godot}: set GODOT`);
 const P = { server: port, A: port + 1, B: port + 2, C: port + 3, fa: port + 6, fa1: port + 7, fb: port + 8, fb1: port + 9 };
-for (const p of [...(doMain ? [P.server, P.A, P.B, P.C] : []), ...(doFallback ? [P.fa, P.fa1, P.fb, P.fb1] : [])]) if (!(p >= 4740 && p <= 4819)) throw new Error(`port ${p} is outside 4740-4819`);
+for (const p of [...(doMain ? [P.server, P.A, P.B, P.C] : []), ...(doFallback ? [P.fa, P.fa1, P.fb, P.fb1] : [])]) if (!(p >= 4740 && p <= 4859)) throw new Error(`port ${p} is outside 4740-4859`);
 if (!(liftMinutes >= 1 && liftMinutes <= 20 && Number.isInteger(liftMinutes))) throw new Error(`--lift-minutes=${liftMinutes}: a whole number from 1 to 20 (the setting's range)`);
 const SECRET = 'test-passphrase';
 
@@ -742,6 +743,14 @@ async function mainSession() {
       const sameAll = pc.a.reactor && pc.b.reactor && pc.a.reactor.power === pc.b.reactor.power && pc.a.reactor.holder === pc.b.reactor.holder && J(pc.a.reactor.crew) === J(pc.b.reactor.crew);
       check('late joiner: Cy, joined after the cut, sees the same power state, fuse holder and bodies as Ann', sameAll,
         `Cy screen ${scr(sc).screen} "${scr(sc).line}", Cy's block ${lc.reactor ? `power ${lc.reactor.power} holder ${lc.reactor.holder}` : J(lc).slice(0, 120)}; ticks Ann ${pc.a.tick} Cy ${pc.b.tick}`);
+      // LJ1: the server admits only a late joiner who has readied (server/room.gd _ready_up sets the host's admit_only
+      // to the ready players; net/host.gd _admit takes no one else), as on floors 1 to 5 (tools/play_ready.mjs readies
+      // Cy too). Without this Cy waits on Ready-up for ever, whatever the floor.
+      check('late joiner: Cy gets Ready-up with THE CREW IS ON FLOOR 7. YOU JOIN AT THE NEXT STOP.', scr(sc).screen === 'lobby' && scr(sc).line === 'THE CREW IS ON FLOOR 7. YOU JOIN AT THE NEXT STOP.' && !inGame(sc),
+        `screen ${scr(sc).screen} "${scr(sc).line}", in game ${inGame(sc)}`);
+      await C.cmd('ready');
+      const cr = await until(C.state, (s) => scr(s).ready === true, 5000, 100);
+      check('late joiner: Cy readies and still waits on the Reactor (no stop mid-floor)', scr(cr).ready === true && !inGame(cr) && scr(cr).screen === 'lobby', `screen ${scr(cr).screen}, ready ${scr(cr).ready}, in game ${inGame(cr)}`);
     }
     // The call, by whoever is on their feet with the power back (Ann is beside the landing), then to ground.
     let called = { ok: false, why: 'power not restored' };

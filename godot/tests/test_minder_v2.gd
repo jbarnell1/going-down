@@ -182,3 +182,92 @@ func test_sizes_against_todays_figure(t: T) -> void:
 		t.note(r)
 	old.free()
 	v.free()
+
+## MO2: the face plate is a worn, handled card with the same drawn smiley (build_minder_v2.py paint_face): an
+## edge cut by hand (not a true oval), marker-pen line work that thickens and thins, grime in the lower third.
+## The face itself is unchanged: two eye holes cut through, a dark smile, the glow map dark where the ink is.
+## Texture coordinates here are the build's: u across, v up (the image's rows run down).
+func _plate(v: MinderView) -> Array[Image]:
+	for s in v.mesh.mesh.get_surface_count():
+		var m := v.mesh.mesh.surface_get_material(s) as StandardMaterial3D
+		if m and m.resource_name == "Minder_mask":
+			var out: Array[Image] = []
+			for tex: Texture2D in [m.albedo_texture, m.emission_texture]:
+				var img := tex.get_image()
+				if img.is_compressed():
+					img.decompress()
+				out.append(img)
+			return out
+	return []
+
+func _at(img: Image, u: float, v: float) -> Color:
+	var n := img.get_width()
+	return img.get_pixel(clampi(int(u * n), 0, n - 1), clampi(int((1.0 - v) * img.get_height()), 0, img.get_height() - 1))
+
+func _lum(c: Color) -> float:
+	return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b
+
+func test_v2_plate_is_a_worn_card_with_the_same_smiley(t: T) -> void:
+	var v := _view("new")
+	var maps := _plate(v)
+	v.free()
+	t.check(maps.size() == 2, "the plate has its print and its glow map")
+	if maps.size() != 2:
+		return
+	var img: Image = maps[0]
+	var glow: Image = maps[1]
+	# The same face: eye holes cut through, the card between them, the smile dark and not glowing.
+	for e: Vector2 in [Vector2(0.33, 0.62), Vector2(0.67, 0.62)]:
+		t.check(_at(img, e.x, e.y).a < 0.5, "an eye hole is cut through at %s" % e)
+	t.check(_at(img, 0.5, 0.62).a > 0.5 and _lum(_at(img, 0.5, 0.62)) > 0.5, "pale card between the eyes")
+	t.check(_lum(_at(img, 0.5, 0.31)) < 0.3 and _lum(_at(glow, 0.5, 0.31)) < 0.05, "the smile is drawn in dark ink that does not glow")
+	# The edge: where the card ends, walking out from the middle, at 90 angles. A true oval would end at the
+	# same radius all round (to within a texel or two).
+	var lo := INF
+	var hi := -INF
+	for k in 90:
+		var a := TAU * k / 90.0
+		var r := 0.30
+		while r < 0.495 and _at(img, 0.5 + r * cos(a), 0.5 + r * sin(a)).a > 0.5:  # (the texture ends at 0.5)
+			r += 0.002
+		lo = minf(lo, r)
+		hi = maxf(hi, r)
+	t.note("plate edge: from %.3f to %.3f of the card's width out from its middle" % [lo, hi])
+	t.check(hi - lo > 0.02, "the edge is cut by hand, not a true oval (%.3f to %.3f)" % [lo, hi])
+	# The smile's stroke, measured straight out from its centre: marker pen, thick and thin.
+	var thin := INF
+	var thick := -INF
+	for k in 15:
+		var a := deg_to_rad(-90.0 - 35.0 + 70.0 * k / 14.0)
+		var ink := 0
+		for j in 60:
+			var r := 0.19 + 0.12 * j / 60.0
+			var c := _at(img, 0.5 + r * cos(a), 0.56 + r * sin(a))
+			if c.a > 0.5 and _lum(c) < 0.3:
+				ink += 1
+		thin = minf(thin, ink)
+		thick = maxf(thick, ink)
+	t.note("smile stroke: %d to %d steps of 0.002 thick" % [thin, thick])
+	t.check(thin > 0 and thick >= 1.5 * thin, "the smile's line thickens and thins like marker pen (%d to %d)" % [thin, thick])
+	# Grime where it is held: the bare card in the lower third darker than across the middle.
+	var low := []
+	var mid := []
+	for i in 40:
+		for j in 40:
+			var u := 0.2 + 0.6 * i / 39.0
+			var w := 0.08 + 0.84 * j / 39.0
+			var c := _at(img, u, w)
+			if c.a < 0.5 or _lum(_at(glow, u, w)) < 0.05:
+				continue  # a hole, the outside, or ink
+			if w < 0.28:
+				low.append(_lum(c))
+			elif w > 0.45 and w < 0.75:
+				mid.append(_lum(c))
+	var ml := 0.0
+	var mm := 0.0
+	for x: float in low:
+		ml += x / low.size()
+	for x: float in mid:
+		mm += x / mid.size()
+	t.note("card brightness: lower third %.2f, middle %.2f" % [ml, mm])
+	t.check(low.size() > 50 and mid.size() > 50 and mm - ml > 0.08, "grime in the lower third (%.2f against %.2f)" % [ml, mm])

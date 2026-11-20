@@ -380,6 +380,90 @@ def add_skirt(arm, mesh, img):
         f"{legs_cleaned} leg weights moved to their own leg")
     moved = cloth_moved
     log(f"skirt bones added; {moved} hem vertices moved off the legs")
+    return skin, top
+
+
+def tidy_hem(arm, mesh, skin, top):
+    """Two things in the gown below the crotch that the stride showed and nobody should see:
+      * small loose shreds: pieces of cloth not joined to anything (after welding the UV seams), which hung
+        in the air beside the knees once the skirt bones moved the gown round them;
+      * the dark panel at the front knee: the lower front of the gown left of the middle, with the lining
+        behind it. In the walk it swings forward with the left thigh and turns its dark inside to whoever
+        looks from the side; at rest it showed through the tear in the front. Without it the gown is torn
+        open above the left knee, the leg showing, like the rest of the ragged hem."""
+    import bmesh
+    me = mesh.data
+    n = len(me.vertices)
+    # Which vertices are skin rides along as an attribute while faces are deleted.
+    att = me.attributes.new("orderly_skin", "BOOLEAN", "POINT")
+    att.data.foreach_set("value", skin.astype(bool))
+
+    def state():
+        co = np.empty(len(me.vertices) * 3)
+        me.vertices.foreach_get("co", co)
+        sk = np.zeros(len(me.vertices), dtype=bool)
+        me.attributes["orderly_skin"].data.foreach_get("value", sk)
+        return co.reshape(-1, 3), sk
+
+    def delete(pick):
+        """Delete the faces pick(face vertex indices) chooses, and the vertices left with no face."""
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        gone = [f for f in bm.faces if pick([v.index for v in f.verts])]
+        bmesh.ops.delete(bm, geom=gone, context="FACES")
+        bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+        bm.to_mesh(me)
+        bm.free()
+        me.update()
+        return len(gone)
+
+    # The panel: the front gown left of the middle, from a hand above the knee to the hem (with the lining
+    # behind it), measured from the bones so it follows the figure's size.
+    co, sk = state()
+    hips = rest_head(arm, "hips")
+    knee = rest_head(arm, "shin.L").z
+    x0, x1 = hips.x - 0.03, hips.x + 0.21
+    y1 = hips.y + 0.05
+    z0, z1 = knee - 0.16, knee + 0.21
+
+    def in_panel(vs):
+        c = co[vs].mean(0)
+        return not sk[vs].any() and x0 < c[0] < x1 and c[1] < y1 and z0 < c[2] < z1
+    panel = delete(in_panel)
+    # Then every loose shred, including what the panel's removal cut off below it: a piece (after welding the
+    # UV seams, 0.5 mm) of fewer than 400 vertices, all of it below the crotch and above the feet.
+    co, sk = state()
+    m = len(co)
+    _, weld = np.unique(np.round(co / 0.0005).astype(np.int64), axis=0, return_inverse=True)
+    weld = weld.ravel()
+    root = np.arange(int(weld.max()) + 1)
+
+    def find(a):
+        while root[a] != a:
+            root[a] = root[root[a]]
+            a = root[a]
+        return a
+    pairs = np.empty(len(me.edges) * 2, dtype=np.int64)
+    me.edges.foreach_get("vertices", pairs)
+    for a, b in pairs.reshape(-1, 2):
+        ra, rb = find(weld[a]), find(weld[b])
+        if ra != rb:
+            root[ra] = rb
+    piece = np.array([find(weld[i]) for i in range(m)])
+    ids, counts = np.unique(piece, return_counts=True)
+    loose = set()
+    for i, c in zip(ids, counts):
+        mm = piece == i
+        if c < 400 and co[mm, 2].max() < top and co[mm, 2].min() > 0.25:  # (whatever its colour: the legs and
+            # feet are part of the body's one big piece, and nothing small hangs at the feet)
+            loose.add(int(i))
+            log(f"loose shred: {c} vertices, z {co[mm, 2].min():.2f}..{co[mm, 2].max():.2f}, "
+                f"x {co[mm, 0].min():.2f}..{co[mm, 0].max():.2f}")
+    shreds = delete(lambda vs: int(piece[vs[0]]) in loose)
+    me.attributes.remove(me.attributes["orderly_skin"])
+    log(f"hem tidied: the {panel}-face panel at the front left knee (x {x0:.2f}..{x1:.2f}, y < {y1:.2f}, "
+        f"z {z0:.2f}..{z1:.2f}) and {len(loose)} loose shreds ({shreds} faces) removed; "
+        f"{len(me.vertices)} vertices left (was {n})")
 
 
 # --- sampling the sources ----------------------------------------------------------------------------
@@ -699,6 +783,190 @@ def texture(mesh):
     return mat, img
 
 
+# The printed face. Head coordinates, from the head bone at rest: v is the distance up the head's axis from
+# the head joint, u the distance across the face along its surface (the angle round the axis from straight
+# ahead, times FACE_R; + is the figure's left). Measured on the Meshy figure's texture and renders: the cap
+# ends at v 0.30, Meshy's painted eyes sit at v 0.23..0.29, the surgical mask runs from about v 0.22 (its top
+# edge in the middle) down to 0.07 and round both sides of the face.
+FACE_R = 0.10
+FACE_U = -0.013                                  # the middle of the face
+EYES = ((-0.062, 0.257), (0.035, 0.257))         # Meshy's eyes: closed and sewn over, as the first Orderly's
+EYE_HALF = (0.036, 0.029)
+# The print on the mask: a whole face, bold enough to read at 480x270 from 3.5 m in the dark. The mask is
+# reprinted pale (PAPER, about 0.7 bright) up to MASK_TOP; on it, in near-black ink, the first Orderly's grin
+# (build_orderly.py SMILE: one huge thin-lipped curve, lowest in the middle, its ends lifting round the sides
+# of the face, jogging where the pleats fold it), here at a 2.5-3 cm stroke, and two printed oval eyes on the
+# mask's upper part (the first Orderly had none printed: its own eyes were sewn shut, as these still are,
+# above the mask). A dull red first pass lies off register, as on a cheap print.
+MASK_TOP = 0.235
+PAPER = (0.74, 0.73, 0.66)
+GRIN = dict(v=0.112, depth=0.040, half=0.118, lift=0.010, width=0.027)
+PRINT_EYES = ((-0.054, 0.182), (0.028, 0.182))
+PRINT_EYE_HALF = (0.019, 0.014)
+MISREGISTER = (0.005, -0.004)
+GHOST = (0.55, 0.20, 0.18)
+INK = (0.05, 0.05, 0.06)
+SUTURE = (0.22, 0.11, 0.10)
+
+
+def face_coords(arm, p):
+    """Head coordinates (u, v) and the angle round the head for world points p (n x 3)."""
+    h0 = np.array(wp(arm, arm.data.bones["head"].head_local))
+    h1 = np.array(wp(arm, arm.data.bones["head"].tail_local))
+    ax = (h1 - h0) / np.linalg.norm(h1 - h0)
+    v = (p - h0) @ ax
+    d = p - h0 - v[:, None] * ax
+    az = np.arctan2(d[:, 0], -d[:, 1])
+    return az * FACE_R, v, az, np.linalg.norm(d, axis=1)
+
+
+def texel_points(mesh, w, h, near):
+    """Every texel the mesh's triangles cover, with the point on the figure (at rest) it paints, for the
+    triangles near(centroid) picks. Texels just outside the picked triangles (up to a texel and a half) take
+    the nearest point too, so the seams do not show a line, unless another triangle is as near: that texel
+    may be what the other one draws."""
+    me = mesh.data
+    me.calc_loop_triangles()
+    mw = np.array(mesh.matrix_world)
+    co = np.empty(len(me.vertices) * 3)
+    me.vertices.foreach_get("co", co)
+    co = co.reshape(-1, 3) @ mw[:3, :3].T + mw[:3, 3]
+    uvl = me.uv_layers.active.data
+    inside = np.zeros((h, w), dtype=bool)       # inside a picked triangle
+    other = np.zeros((h, w), dtype=bool)        # inside, or within a texel and a half of, another triangle
+    tx, pts = [], []
+
+    def raster(U, margin):
+        x0, y0 = np.floor(U.min(0) - margin).astype(int)
+        x1, y1 = np.ceil(U.max(0) + margin).astype(int)
+        x0, y0, x1, y1 = max(x0, 0), max(y0, 0), min(x1, w - 1), min(y1, h - 1)
+        if x1 < x0 or y1 < y0:
+            return None, None
+        yy, xx = np.mgrid[y0:y1 + 1, x0:x1 + 1]
+        q = np.stack([xx.ravel() + 0.5, yy.ravel() + 0.5], -1)
+        a, b, c = U
+        den = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+        if abs(den) < 1e-12:
+            return None, None
+        l0 = ((b[1] - c[1]) * (q[:, 0] - c[0]) + (c[0] - b[0]) * (q[:, 1] - c[1])) / den
+        l1 = ((c[1] - a[1]) * (q[:, 0] - c[0]) + (a[0] - c[0]) * (q[:, 1] - c[1])) / den
+        return q.astype(int), np.stack([l0, l1, 1.0 - l0 - l1], -1)
+    def span(U):
+        return max(np.linalg.norm(U[0] - U[1]), np.linalg.norm(U[1] - U[2]), np.linalg.norm(U[2] - U[0]), 1.0)
+    picked = []
+    for t in me.loop_triangles:
+        U = np.array([tuple(uvl[l].uv) for l in t.loops]) * (w, h)
+        P = co[list(t.vertices)]
+        mine = near(P.mean(0))
+        q, L = raster(U, 0 if mine else 1.5)
+        if q is None:
+            continue
+        if mine:
+            ins = (L >= 0).all(1)
+            inside[q[ins, 1], q[ins, 0]] = True
+            picked.append((U, P))
+        else:
+            ins = (L >= -1.5 / span(U)).all(1)
+            other[q[ins, 1], q[ins, 0]] = True
+    own_tx, own_pts = [], []
+    for U, P in picked:
+        q, L = raster(U, 1.5)
+        if q is None:
+            continue
+        mine = (L >= 0).all(1)
+        pad = (L >= -1.5 / span(U)).all(1) & ~mine & ~inside[q[:, 1], q[:, 0]] & ~other[q[:, 1], q[:, 0]]
+        tx.append(q[pad])
+        pts.append(np.clip(L[pad], -0.2, 1.2) @ P)
+        own_tx.append(q[mine])
+        own_pts.append(L[mine] @ P)
+    # the margins first, then every texel's own triangle, so a margin never paints over a texel's own point
+    return np.concatenate(tx + own_tx), np.concatenate(pts + own_pts)
+
+
+def print_face(arm, mesh, img):
+    """Paint the first Orderly's face onto the Meshy figure's texture: its huge printed grin across the
+    surgical mask, and its eyes closed and sewn over (pale lids in a sunken bruised socket, a dark seam with
+    a few stitches), so nothing above the mask reads as a looking eye. Our own drawing, as the first model's.
+    Painted from where each texel sits on the head, so it runs on across the texture's seams."""
+    w, h = img.size
+    px = np.empty(w * h * 4, dtype=np.float32)
+    img.pixels.foreach_get(px)
+    px = px.reshape(h, w, 4)
+    h0 = np.array(wp(arm, arm.data.bones["head"].head_local))
+
+    def near(c):
+        u, v, az, r = face_coords(arm, c[None, :])
+        return -0.05 < v[0] < 0.45 and r[0] < 0.2
+    tx, p = texel_points(mesh, w, h, near)
+    u, v, az, r = face_coords(arm, p)
+    front = np.abs(az) < 1.55
+    rgb = px[tx[:, 1], tx[:, 0], :3].copy()
+    # The lids: the skin of the brow between the eyes, read off the texture.
+    brow = front & (np.abs(u - FACE_U) < 0.015) & (v > 0.262) & (v < 0.292)
+    skin = np.median(rgb[brow], axis=0) if brow.any() else np.array((0.55, 0.45, 0.40))
+    bruise = skin * np.array((0.50, 0.40, 0.48))
+    lid = skin * 0.88
+    eyes = np.zeros(len(u), dtype=bool)
+    for ex, ey in EYES:
+        lx, ly = (u - ex) / EYE_HALF[0], (v - ey) / EYE_HALF[1]
+        e = np.sqrt(lx ** 2 + ly ** 2)
+        inside = front & (e < 1.0)
+        eyes |= inside
+        # sunken: the rim of the socket bruised and dark, fading out into the face around it
+        k = np.clip((1.35 - e) / 0.35, 0.0, 1.0)[:, None] * (front & (e >= 1.0))[:, None]
+        rgb = rgb * (1 - 0.45 * k) + bruise * 0.45 * k
+        t = np.clip((e - 0.45) / 0.55, 0.0, 1.0)[:, None]  # 0 on the lid, 1 at the rim
+        col = lid * (1 - t) + bruise * t
+        # the seam: a thin line along the closed lid, curving down a little at the ends (the texture is
+        # about 4 mm a texel here, too coarse for the first model's single stitches: they read as blots)
+        seam = (np.abs(ly - 0.12 * lx * lx + 0.04) < 0.09) & (np.abs(lx) < 0.78)
+        col = np.where(seam[:, None], np.array(SUTURE), col)
+        rgb = np.where(inside[:, None], col, rgb)
+    # The mask: Meshy's blue-green surgical mask, below the sewn eyes. Reprinted as pale paper so the ink
+    # reads in the dark; the pleats stay, faintly, as the paper's own light and shade.
+    orig = px[tx[:, 1], tx[:, 0], :3]
+    lum = orig @ np.array((0.299, 0.587, 0.114))
+    # (the mask is whatever there is not skin: skin is warm, red well over blue)
+    mask = front & (v > 0.0) & (v < MASK_TOP) & (orig[:, 2] > orig[:, 0] - 0.03) & ~eyes
+    shade = np.clip(lum / max(float(np.median(lum[mask])), 1e-3), 0.85, 1.15) if mask.any() else 1.0
+    paper = np.array(PAPER)[None, :] * (0.85 + 0.15 * np.atleast_1d(shade))[:, None]
+    rgb = np.where(mask[:, None], paper, rgb)
+
+    def printed(du, dv):
+        """The print's shapes, the whole plate moved by (du, dv): the grin's band and the two printed eyes."""
+        g = GRIN
+        uu, vv = u - du, v - dv
+        qx = uu - FACE_U
+        qx = qx + np.select([vv < 0.085, vv < 0.130, vv < 0.170], [0.003, -0.002, 0.002], -0.003)  # pleats' jog
+        t = np.clip(qx / g["half"], -1.25, 1.25)
+        end = np.clip(np.abs(t) - 0.72, 0, None)
+        curve = g["v"] + g["depth"] * t ** 2 + g["lift"] * end ** 2 / 0.08
+        curve = curve + 0.0007 * np.sin(qx * 140.0) + 0.0012 * np.sin(qx * 41.0 + 1.0)
+        slope = (2 * g["depth"] * t + g["lift"] * 2 * end * np.sign(t) / 0.08) / g["half"]
+        dist = np.abs(vv - curve) / np.sqrt(1 + slope ** 2)
+        width = g["width"] * (1 + 0.15 * np.sin(qx * 33.0 + 0.5))
+        grin = (np.abs(t) <= 1.0) & (dist < width / 2)
+        grin &= ~((np.abs(t) > 0.93) & (np.floor(vv / 0.004) % 3 == 0))  # the ends trail off
+        dots = np.zeros(len(u), dtype=bool)
+        for ex, ey in PRINT_EYES:
+            dots |= ((uu - ex) / PRINT_EYE_HALF[0]) ** 2 + ((vv - ey) / PRINT_EYE_HALF[1]) ** 2 < 1.0
+        return grin, dots
+    # A cheap two-colour print: a dull red pass slightly off register, then the black.
+    ghost_g, ghost_e = printed(*MISREGISTER)
+    ghost = mask & (ghost_g | ghost_e)
+    rgb = np.where(ghost[:, None], rgb * 0.55 + np.array(GHOST) * 0.45, rgb)
+    grin, dots = printed(0.0, 0.0)
+    grin &= mask
+    dots &= mask
+    rgb = np.where((grin | dots)[:, None], np.array(INK), rgb)
+    px[tx[:, 1], tx[:, 0], :3] = np.clip(rgb, 0.0, 1.0)
+    img.pixels.foreach_set(px.ravel())
+    img.update()
+    log(f"printed face: mask {int(mask.sum())} texels reprinted pale, {int(grin.sum())} of grin, {int(dots.sum())} "
+        f"of printed eyes, {int(eyes.sum())} of sewn lids, lid skin {tuple(round(float(c), 3) for c in skin)}, "
+        f"head joint {tuple(round(float(c), 3) for c in h0)}")
+
+
 # --- review renders ----------------------------------------------------------------------------------------
 def render(arm, mesh, out):
     os.makedirs(out, exist_ok=True)
@@ -706,6 +974,7 @@ def render(arm, mesh, out):
     scn.render.engine = "BLENDER_WORKBENCH"
     scn.display.shading.light = "STUDIO"
     scn.display.shading.color_type = "TEXTURE"
+    scn.display.shading.show_backface_culling = True  # the material is one-sided in the game too
     scn.render.resolution_x, scn.render.resolution_y = 720, 960
     scn.render.film_transparent = False
     world = bpy.data.worlds.new("w") if not scn.world else scn.world
@@ -804,7 +1073,8 @@ def main():
             break
         place(arm, mesh, k, old_ankle_y)
 
-    add_skirt(arm, mesh, img)
+    skin, crotch = add_skirt(arm, mesh, img)
+    tidy_hem(arm, mesh, skin, crotch)
     if img.size[0] > TEX:
         img.scale(TEX, TEX)
     # Then the size that makes the idle the view plays exactly as tall as today's (the walk is printed to check
@@ -853,8 +1123,9 @@ def main():
         ob.name = ob.data.name = name
     reset_pose(arm)
     bpy.context.view_layer.update()
+    print_face(arm, mesh, img)
     top, low = mesh_top(mesh)
-    tris = sum(len(p.vertices) - 2 for p in mesh.data.polygons)
+    tris =sum(len(p.vertices) - 2 for p in mesh.data.polygons)
     log(f"verts={len(mesh.data.vertices)} tris={tris} bones={len(arm.data.bones)} rest top {top:.3f} low {low:.4f} "
         f"arm stretch {stretch:.3f} texture {tuple(img.size)}")
     scn.frame_start, scn.frame_end = 1, 97

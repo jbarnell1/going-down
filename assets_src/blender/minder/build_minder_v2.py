@@ -240,33 +240,99 @@ def grow_badge(ob, px):
     log(f"badge: {len(verts)} vertices grown x{BADGE_GROW} about {tuple(round(c, 3) for c in mid)}, was {hi.x - lo.x:.3f} x {hi.z - lo.z:.3f} m")
 
 
+def card_noise(n, cells, rng):
+    """Smooth value noise, 0..1, n x n: a (cells + 1)^2 grid of random values, blended bilinearly."""
+    g = rng.random((cells + 1, cells + 1)).astype(np.float32)
+    x = np.linspace(0, cells, n, endpoint=False, dtype=np.float32) + 0.5 * cells / n
+    i = np.minimum(x.astype(int), cells - 1)
+    f = x - i
+    f = f * f * (3 - 2 * f)
+    a = g[i][:, i] * (1 - f)[None, :] + g[i][:, i + 1] * f[None, :]
+    b = g[i + 1][:, i] * (1 - f)[None, :] + g[i + 1][:, i + 1] * f[None, :]
+    return a * (1 - f)[:, None] + b * f[:, None]
+
+
 def paint_face():
-    """The face plate's print (FACE_PX square, our own): worn card, two eye holes cut through (alpha 0), a
-    thin drawn smile, an oval outline; outside the oval is cut away. The glow map is the bare card: the
-    ink and the holes do not glow, so in the dark the face is drawn by what is dark."""
+    """The face plate's print (FACE_PX square, our own): a worn card, handled for years, with the same drawn
+    smiley the catch screen shows: two eye holes cut through (alpha 0), a thin smile, an oval outline, outside
+    the oval cut away. The wear: the edge is not quite round (cut by hand, with a few nicks), the line work
+    is marker pen (it thickens and thins, wobbles a little, the ink pools where the stroke starts and ends),
+    there is a crease across it, scuffs, and grime worked into the lower third where it is held. The glow map
+    is the bare card: the ink and the holes do not glow, the grime and the crease glow less, so in the dark
+    the face is drawn by what is dark."""
     n = FACE_PX
     v, u = np.mgrid[0:n, 0:n].astype(np.float32)
     u = (u + 0.5) / n
     v = (v + 0.5) / n                                   # Blender images: row 0 is the bottom (v = 0)
     rng = np.random.default_rng(2611)
     noise = rng.random((n // 8, n // 8)).repeat(8, 0).repeat(8, 1)[:n, :n].astype(np.float32)
-    oval = ((u - 0.5) / 0.5) ** 2 + ((v - 0.5) / 0.5) ** 2
+    soft = card_noise(n, 6, rng)                        # broad stains
+    fine = card_noise(n, 24, rng)                       # fibre and grit
+    ang = np.arctan2(v - 0.5, u - 0.5)
+    # The edge: an oval cut by hand, a little lopsided, with three nicks out of it.
+    wob = 1.0 + 0.018 * np.sin(3 * ang + 0.7) + 0.010 * np.sin(5 * ang + 2.1) + 0.005 * np.sin(11 * ang + 0.4)
+    wob = wob - 0.03 - 0.008 * fine                     # (the mesh is the round card: the cut lies inside it)
+    for a0, depth, width in ((2.6, 0.05, 0.06), (-0.9, 0.035, 0.045), (0.5, 0.03, 0.035)):
+        d = np.angle(np.exp(1j * (ang - a0)))
+        wob = wob - depth * np.clip(1 - np.abs(d) / width, 0, None)
+    oval = (((u - 0.5) / 0.5) ** 2 + ((v - 0.5) / 0.5) ** 2) / wob ** 2
     card = np.array((0.86, 0.84, 0.74), np.float32)
     col = np.ones((n, n, 4), np.float32)
-    col[:, :, :3] = card * (0.9 + 0.1 * noise[:, :, None])
+    col[:, :, :3] = card * (0.92 + 0.06 * noise[:, :, None] + 0.04 * (fine[:, :, None] - 0.5))
+    # Yellowed and grubby: broad stains everywhere, and grime worked into the lower third where it is held.
+    col[:, :, :3] *= (1.0 - 0.12 * soft[:, :, None])
+    col[:, :, 2] *= 0.94                                # yellowed
+    grime = np.clip((0.40 - v) / 0.26, 0, 1) ** 0.9 * (0.6 + 0.4 * soft) * (0.75 + 0.5 * fine)
+    dirt = np.array((0.30, 0.25, 0.19), np.float32)
+    col[:, :, :3] = col[:, :, :3] * (1 - 0.85 * np.minimum(grime, 1)[:, :, None]) + dirt * 0.85 * np.minimum(grime, 1)[:, :, None]
+    # Thumb-marks of grime where it is taken off and put on, at both sides.
+    for cx, cy, rr in ((0.12, 0.42, 0.10), (0.88, 0.46, 0.09), (0.30, 0.10, 0.12)):
+        m = np.clip(1 - np.hypot(u - cx, v - cy) / rr, 0, 1) * (0.5 + 0.5 * fine)
+        col[:, :, :3] = col[:, :, :3] * (1 - 0.45 * m[:, :, None]) + dirt * 0.45 * m[:, :, None]
+    # Scuffs: short pale and dark scratches in many directions.
+    for _ in range(24):
+        cx, cy = rng.uniform(0.12, 0.88, 2)
+        a = rng.uniform(0, math.pi)
+        ln = rng.uniform(0.03, 0.08)
+        dx, dy = math.cos(a), math.sin(a)
+        along = (u - cx) * dx + (v - cy) * dy
+        off = -(u - cx) * dy + (v - cy) * dx
+        sc = (np.abs(off) < 0.003) & (np.abs(along) < ln / 2)
+        tone = 1.07 if rng.random() < 0.4 else 0.84
+        col[sc, :3] = np.clip(col[sc, :3] * tone, 0, 1)
+    # The crease: folded once, corner to corner, a shadow on one side of the fold and a pale edge on the other.
+    fold = (v - 0.80) + 0.62 * (u - 0.12) + 0.05 * np.sin(u * 9.0)  # its line, upper left to lower right
+    crease = np.abs(fold) < 0.006
+    col[crease, :3] *= 0.70
+    col[(fold > 0.006) & (fold < 0.016), :3] *= 0.88
+    col[(fold < -0.006) & (fold > -0.013), :3] = np.clip(col[(fold < -0.006) & (fold > -0.013), :3] * 1.06, 0, 1)
     rim = (oval > 0.80) & (oval <= 1.0)
     col[rim, :3] *= 0.72
     ink = np.zeros((n, n), bool)
-    # The smile: a thin arc under the eyes.
+    # Marker pen: the stroke's half-width runs between thin and thick along its length.
+    # The smile: a thin arc under the eyes, drawn left to right, the ink pooling at both ends.
     r = np.hypot(u - 0.5, v - 0.56)
-    ink |= (np.abs(r - 0.25) < 0.017) & (v < 0.42) & (np.abs(u - 0.5) < 0.19)
-    ink |= rim & (oval > 0.93)
-    col[ink, :3] = (0.16, 0.14, 0.13)
+    s = np.clip((u - 0.31) / 0.38, 0, 1)                # 0 at the start of the stroke, 1 at its end
+    half = 0.014 + 0.006 * np.sin(s * 7.0 + 0.8) + 0.004 * np.sin(s * 19.0)
+    wav = 0.004 * np.sin(s * 11.0 + 0.3)
+    ink |= (np.abs(r - 0.25 - wav) < half) & (v < 0.42) & (np.abs(u - 0.5) < 0.19)
+    for ex, ey in ((0.31, 0.56 - 0.25 * math.cos(math.asin(0.19 / 0.25))), (0.69, 0.56 - 0.25 * math.cos(math.asin(0.19 / 0.25)))):
+        ink |= np.hypot(u - ex, v - ey) < 0.021
+    # The outline: one ring, not quite closed where the pen came back round, thick and thin.
+    line = oval > 0.93 - 0.025 * np.sin(ang * 4.0 + 1.3) - 0.015 * (fine - 0.5)
+    gap = np.abs(np.angle(np.exp(1j * (ang - 1.25)))) < 0.05
+    ink |= rim & line & ~gap
+    inkcol = np.array((0.15, 0.13, 0.13), np.float32)
+    col[ink, :3] = inkcol * (0.85 + 0.3 * fine[ink, None])   # marker is never one flat black
     holes = np.zeros((n, n), bool)
-    for ex in (0.33, 0.67):
-        holes |= ((u - ex) / 0.075) ** 2 + ((v - 0.62) / 0.095) ** 2 < 1.0
+    for ex, tilt in ((0.33, 0.06), (0.67, -0.04)):
+        # cut by hand: a little crooked, the edge not quite smooth
+        du, dv = u - ex, v - 0.62
+        hu, hv = du * math.cos(tilt) + dv * math.sin(tilt), -du * math.sin(tilt) + dv * math.cos(tilt)
+        holes |= (hu / 0.075) ** 2 + (hv / 0.095) ** 2 < 1.0 + 0.08 * (fine - 0.5)
     col[holes, 3] = 0.0
     col[oval > 1.0, 3] = 0.0
+    col[:, :, :3] = np.round(col[:, :, :3] * 64) / 64       # a coarse palette keeps the file small
     glow = np.zeros_like(col)
     bare = (col[:, :, 3] > 0.5) & ~ink & ~rim
     glow[bare, :3] = col[bare, :3]
@@ -411,6 +477,8 @@ def add_plate(ob, cc, px):
 
     def at(i, j, back):
         x, y = disc(i, j)
+        if back:  # a little smaller than the card, so it does not show round behind the card's worn edge
+            x, y = x * 0.88, y * 0.88
         a = x * PLATE_W / 2
         b = y * PLATE_H / 2
         th = a / PLATE_BEND
