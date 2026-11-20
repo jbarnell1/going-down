@@ -27,6 +27,7 @@ const Settings = preload("res://sim/settings.gd")
 const M = preload("res://sim/jsmath.gd")
 const HostRules = preload("res://net/host_rules.gd")
 const Host = preload("res://net/host.gd")
+const Protocol = preload("res://net/protocol.gd")
 const Client = preload("res://net/client.gd")
 const Session = preload("res://net/session.gd")
 const Transport = preload("res://net/transport.gd")
@@ -448,6 +449,60 @@ func test_the_words_on_screen(t: T) -> void:
 	t.eq(HideView.health_rates_text(false), HideView.HEALTH_RATES, "untuned, the old words")
 	t.eq(HideView.health_rates_text(true, Settings.make({&"health.walk": 4.5, &"health.sprint": 12.0, &"health.rest": 0.25})),
 		"WALK -4.5/S  SPRINT -12/S ONLY WHILE IT SEARCHES  STILL OR CREEP +0.25/S", "the host's numbers")
+
+## T22c: the table's words print the host's numbers (party.free_time, party.free_anger, party.reach), and a hold
+## already under way counts down the length the host fixed when it began, through the real seek block and the wire,
+## even after the host changes party.free_time mid-hold.
+func test_table_prompt_follows_the_host(t: T) -> void:
+	var names := {"a": "Ann"}
+	var block := {"anger": 0.0, "party": {"by": "", "from": -1.0}, "players": [{"id": "a", "status": "taken", "seat": 0}]}
+	var five := Settings.make({&"party.free_time": 5.0, &"party.free_anger": 20.0})
+	t.eq(HideView.fetch_note(2, -1.0, five), "HOLD F 5 S  FREE THE PARTY TABLE (2 SEATED)   ITS ANGER +20", "tuned: the prompt prints 5 s and +20")
+	t.eq(HideView.fetch_note(1, 1.24, five), "FREEING THE PARTY TABLE... 1.2 S   ITS ANGER +20", "tuned: the hold's cost")
+	t.eq(HideView.fetch_note(2, -1.0, Settings.make({&"party.free_time": 2.5})), "HOLD F 2.5 S  FREE THE PARTY TABLE (2 SEATED)   ITS ANGER +50", "a half second is printed as set")
+	t.eq(HideView.party_warning(block, names, true, five), "THE LIFT LEAVES WITHOUT YOU. A CREWMATE HOLDING F HERE FOR 5 S FREES YOU.", "tuned: the seated player's own")
+	t.eq(HideView.fetch_note(2, -1.0, Settings.make({})), HideView.fetch_note(2, -1.0), "an empty tuning: today's words")
+	# The near-table check is the rules' (Seek.at_table) at three reaches.
+	var k := sk(0, ["a", "c"] as Array[String], true)
+	var seat0 := seat_body(k.s, 0)
+	var found := false
+	for a in 16:
+		var cand := Move.Body.make(seat0.x + 2.0 * cos(a * PI / 8.0), seat0.z + 2.0 * sin(a * PI / 8.0), seat0.level, seat0.y)
+		var reaches := [null, Settings.make({&"party.reach": 2.5}), Settings.make({&"party.reach": 1.0})]
+		var same := true
+		var rules_in := []
+		for live: Variant in reaches:
+			var r_in := Seek.at_table(k.s, cand, live)
+			rules_in.append(r_in)
+			same = same and HideView.near_table(k.s.floor.seats, cand.x, cand.z, cand.level, live) == r_in
+		if rules_in == [false, true, false]:
+			found = true
+			t.check(same, "%d: the screen's near-table agrees with the rules at 1.5, 2.5 and 1.0 m" % a)
+	t.check(found, "a point at the table only with party.reach 2.5")
+	# A hold begun at 5 s, the setting changed to 1 s a few ticks in: the host's block keeps 5, the wire carries it,
+	# and the countdown on screen is 5 s from the hold's start.
+	var r := seated_run(t, "party-len", true)
+	r.st = Run.with_tuning(r.st, {&"party.free_time": 5.0})
+	r.bodies["p0"] = seat_body(r.st.seek, 7)
+	r.step()
+	r.use["p0"] = true
+	r.run(0.5)
+	r.st = Run.with_tuning(r.st, {&"party.free_time": 1.0})
+	r.run(1.0)
+	var blk: Dictionary = Host.seek_block(r.st)
+	var back := Protocol.dec_seek(Protocol._V.new(), JSON.parse_string(JSON.stringify(Protocol.enc_seek(blk))))
+	var pt: Dictionary = back.get("party", {})
+	var now := (r.st.seek as Seek.SeekState).t
+	t.check(str(pt.get("by", "")) == "p0" and absf(float(pt.get("len", 0.0)) - 5.0) < 1e-3, "the block over the wire: %s" % str(pt))
+	var left := float(pt.get("from", 0.0)) + HideView.hold_len(pt) - now
+	t.check(absf(left - (5.0 - (now - float(pt.get("from", 0.0))))) < 1e-3 and left > 3.0 and left < 4.0, "%.2f s left of the 5 s hold, after the change to 1 s" % left)
+	t.check(HideView.fetch_note(1, left, Settings.make({&"party.free_time": 1.0})).begins_with("FREEING THE PARTY TABLE... 3."), "the countdown on screen: %s" % HideView.fetch_note(1, left))
+	# A 2-element block from before T22c still decodes, as today's 3 s.
+	var old := Protocol.enc_seek(blk)
+	(old[13] as Array).resize(2)
+	var back2 := Protocol.dec_seek(Protocol._V.new(), JSON.parse_string(JSON.stringify(old)))
+	t.check(back2.has("party") and float(back2["party"]["len"]) == Seek.FETCH_TIME, "a block without the length: 3 s")
+	t.eq(Protocol.PARTY_HOLD_DEFAULT, Seek.FETCH_TIME, "the wire's default hold is the rules' today")
 
 func test_the_horn_carries_across_the_floor(t: T) -> void:
 	var last := 1.0

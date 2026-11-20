@@ -138,8 +138,8 @@ const ROWS: Array = [
 	[&"minder.anger_noise", &"minder", "ONE NOISE ADDS TO ITS ANGER", "a ball pit, a flap, a dropped tape or an emote", "in 100", 55.0, 5.0, 100.0, 1.0, &"now", &"LS4", W],
 	[&"minder.anger_cool", &"minder", "ITS ANGER COOLS FROM FULL IN", "seconds of quiet that empty a full anger bar. Does nothing with the party table on (the game's rooms): there the bar never cools by itself", "s", 50.0, 10.0, 300.0, 5.0, &"now", &"LS4", F],
 	# The party table (T15h, sim/seek.gd "Party table"): on in the game's rooms. Today's are Seek.FETCH_TIME, FETCH_ANGER
-	# and FETCH_REACH. The health the freed get back is heal.health. Read by the rules; shown on the panel once the
-	# client's table prompt (client/hide_view.gd) reads them too (see WIRED_IDS).
+	# and FETCH_REACH. The health the freed get back is heal.health. Read by the rules and by the client's table
+	# prompt (client/hide_view.gd), so the screen prints the number in force; on the panel since T22c.
 	[&"party.free_time", &"minder", "FREEING THE TABLE TAKES", "seconds of F held at the party table that free everyone seated", "s", 3.0, 1.0, 10.0, 0.5, &"next", &"T22b", F],
 	[&"party.free_anger", &"minder", "FREEING THE TABLE ANGERS IT BY", "added to its anger bar when the table is freed", "in 100", 50.0, 0.0, 100.0, 5.0, &"now", &"T22b", W],
 	[&"party.reach", &"minder", "FREE THE TABLE FROM WITHIN", "how near a seat F works", "m", 1.5, 0.8, 3.0, 0.1, &"floor", &"T22b", F],
@@ -275,11 +275,12 @@ const WIRED_IDS: Array[StringName] = [
 	# TT1: the Tenant clock.
 	&"tenant.minutes",
 	# T22b: the second Orderly's first floor, the flare and the lamp (already read by the rules), recording, the
-	# quota's growth and the Annex's pad. The party table's three rows (party.*) are read by the rules but wait here
-	# until client/hide_view.gd's table prompt reads them too, so the screen never says 3 S when it is 5.
+	# quota's growth and the Annex's pad.
 	&"orderly2.first_floor",
 	&"flare.throw", &"flare.reach", &"flare.stun", &"flare.blind", &"flare.noise", &"lamp.seconds", &"lamp.range",
 	&"record.reach", &"record.rate", &"quota.step", &"marks.pad",
+	# T22c: the party table, now that client/hide_view.gd's table prompt prints the tuned numbers too.
+	&"party.free_time", &"party.free_anger", &"party.reach",
 ]
 
 ## The least wait of a call is its start delay plus the floors: sim/run.gd CALL_START_DELAY_MIN (this file

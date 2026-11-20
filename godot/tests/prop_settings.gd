@@ -164,6 +164,10 @@ const PROOFS := {
 	&"record.rate": "test_recording_reach_and_rate",
 	&"quota.step": "test_quota_step",
 	&"marks.pad": "test_marks_pad",
+	# T22c: the party table.
+	&"party.free_time": "test_party_table_numbers",
+	&"party.free_anger": "test_party_table_numbers",
+	&"party.reach": "test_party_table_numbers",
 }
 
 ## The rows of later pieces wired so far (sim/settings.gd WIRED_IDS), in the registry's order.
@@ -178,7 +182,8 @@ const MORE: Array[StringName] = [
 	&"shop.price.marker", &"shop.price.glow", &"shop.price.flash", &"shop.price.speed", &"shop.price.toy", &"shop.price.salts", &"shop.glow", &"badge.chance", &"badge.depth_chance",
 	&"tenant.minutes",
 	&"orderly2.first_floor", &"flare.throw", &"flare.reach", &"flare.stun", &"flare.blind", &"flare.noise", &"lamp.seconds", &"lamp.range",
-	&"quota.step", &"record.reach", &"record.rate", &"marks.pad"]
+	&"quota.step", &"record.reach", &"record.rate", &"marks.pad",
+	&"party.free_time", &"party.free_anger", &"party.reach"]
 
 ## The game's value of every setting: the constant the game uses, with the rooms' switches on (paced, the long
 ## dark, the car waits: net/host_rules.gd). This table, not the registry, is the test's oracle.
@@ -1989,8 +1994,8 @@ func test_marks_pad(t: T) -> void:
 		s = Run.step_run(s, none, DT).state
 		t.check(s.annex != null and s.annex.marks.pad == pad and s.annex.marks.pad_size == pad, "pad %d on the Annex: %s" % [pad, "no Annex" if s.annex == null else "%d of %d" % [s.annex.marks.pad, s.annex.marks.pad_size]])
 
-## The party table's three numbers (party.free_time, party.free_anger, party.reach). Read by the rules; not yet on
-## the panel (sim/settings.gd WIRED_IDS) until the client's table prompt reads them too.
+## The party table's three numbers (party.free_time, party.free_anger, party.reach). Read by the rules and by the
+## client's table prompt (tests/prop_party_table.gd test_table_prompt_follows_the_host), so on the panel (T22c).
 func test_party_table_numbers(t: T) -> void:
 	var ids: Array[String] = ["a", "c"]
 	for row: Array in [[5.0, 20.0], [Seek.FETCH_TIME, Seek.FETCH_ANGER * 100.0], [1.0, 100.0]]:

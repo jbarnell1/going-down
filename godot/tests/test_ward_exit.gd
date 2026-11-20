@@ -234,10 +234,14 @@ func test_the_ward_shows_the_players_brightness(t: T) -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	tree.root.add_child(scene)
 	var want := Brightness.params(3)
-	var mat: ShaderMaterial = scene.get("bright_mat")
+	# WF3: on the tape itself, the same material every floor sets it on (client/main.gd brightness_on).
+	var mat: ShaderMaterial = scene.get("tape_mat")
+	var lift: Variant = mat.get_shader_parameter("bright_lift")
+	var gamma: Variant = mat.get_shader_parameter("bright_gamma")
 	t.check(float(want["lift"]) < 0.0, "level 3 lowers the black level (a real change to see)")
-	t.check(is_equal_approx(float(mat.get_shader_parameter("bright_lift")), float(want["lift"])) and is_equal_approx(float(mat.get_shader_parameter("bright_gamma")), float(want["gamma"])),
-		"the Ward's picture takes the saved level's lift and gamma (%s, %s)" % [mat.get_shader_parameter("bright_lift"), mat.get_shader_parameter("bright_gamma")])
+	t.check(mat.shader == load("res://client/tape.gdshader"), "the brightness is the tape look's last step")
+	t.check(lift != null and gamma != null and is_equal_approx(float(lift), float(want["lift"])) and is_equal_approx(float(gamma), float(want["gamma"])),
+		"the Ward's picture takes the saved level's lift and gamma (%s, %s)" % [lift, gamma])
 	scene.set("room", null)
 	tree.root.remove_child(scene)
 	scene.free()

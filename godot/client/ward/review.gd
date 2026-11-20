@@ -12,7 +12,7 @@ const View = preload("res://client/ward/view.gd")
 const Main = preload("res://client/main.gd")
 const Stamina = preload("res://sim/stamina.gd")
 const Brightness = preload("res://client/brightness.gd")
-const BrightShader = preload("res://client/ward/brightness.gdshader")
+const EyeHeight = preload("res://client/eye_height.gd")
 
 var room: Variant = null
 var view: View
@@ -45,11 +45,27 @@ var gait: StringName = &"walk"
 ## The player's brightness (client/brightness.gd, read from their settings file, never written here) on the picture,
 ## as tape.gdshader's last step does it on the other floors.
 var brightness := Brightness.new()
-var bright_mat := ShaderMaterial.new()
+## WF3: the same game on screen. The Ward is drawn at the picture every floor is drawn at, through the tape look
+## (client/main.gd make_picture, make_screen; the brightness is the tape's last step, as on every floor), with
+## the main game's HUD (client/hud.gd), its instrument (client/instrument_view.gd) and its crew figures with their
+## drawn faces and name tags (client/others_view.gd, main.gd name_tag), and its eyes (client/eye_height.gd: the
+## camera drops when you creep). The Ward's own lines (the lift's clock, STEP OUT OF THE LIFT, the prompts) are
+## the HUD's, in the HUD's words and places.
+var picture: SubViewport = Main.make_picture()
+var screen: TextureRect = Main.make_screen(picture)
+var tape_mat: ShaderMaterial = screen.material as ShaderMaterial
+var hud := Hud.new()
+var inst_view := InstrumentView.new()
+var others := OthersView.new()
+var eye := EyeHeight.new()
+var tick_acc := 0.0
+var walk_speed := 0.0
+## Tests: the window size the name tags are placed for (a headless window is 64 pixels square); zero: the real one.
+var tag_window := Vector2.ZERO
 
 func _ready() -> void:
 	Main._add_actions()
-	_build_brightness()
+	_build_screen()
 	_build_card()
 	if handed and room != null:
 		var overlay := CanvasLayer.new()
@@ -133,6 +149,8 @@ static func handback_due(latest: Variant) -> bool:
 	return depth == 0 or (depth > 0 and latest.get("reactor") is Dictionary)
 
 func _process(_delta: float) -> void:
+	if view == null:
+		hud.center_note = status.text
 	if room == null:
 		return
 	var now := Time.get_ticks_usec() / 1000000.0
@@ -163,8 +181,10 @@ func _process(_delta: float) -> void:
 		return
 	var local := Client.LocalFrame.new()
 	local.body = Move.Body.make(0.0, 0.0, 0, 0.0)
-	local.eye = 1.56
+	local.eye = EyeHeight.STAND
 	if view != null:
+		view.camera.position.y = eye.update(EyeHeight.target("ok", String(gait)), _delta)
+		local.eye = view.camera.position.y
 		var feet := view.player.position
 		local.body = Move.Body.make(feet.x, feet.z, 0, feet.y)
 		local.yaw = view.player.rotation.y
@@ -196,7 +216,10 @@ func _process(_delta: float) -> void:
 		if frame.placed != null:
 			spawn = Vector3(frame.placed.x, frame.placed.y, frame.placed.z)
 		view = View.new(int(snapshot.seed), spawn)
-		add_child(view)
+		view.own_hud = false
+		view.capsules = false
+		picture.add_child(view)
+		hud.set_seed(str(c.seed))
 		status.hide()
 		automated_start = now
 		print("WARD REVIEW READY id=%s seed=%s playing=%s" % [c.id, snapshot.seed, c.playing])
@@ -209,15 +232,11 @@ func _process(_delta: float) -> void:
 			if row.id == str(c.id):
 				view.reconcile(row.body)
 				break
-	for member: Dictionary in world.crew:
-		if member.id == str(c.id) and snapshot.phase != "departed":
-			var tape: Dictionary = member.tape
-			view.hud.text += "\nTAPE %d   %s" % [floori(tape.total), String(member.needle).to_upper()]
-			break
+	_show_hud(world, snapshot, c, frame, now, _delta)
 	if snapshot.phase == "departed" and world.summary is Dictionary:
 		var total := float(world.summary.total)
 		var share := float(world.summary.shares.get(str(c.id), 0.0))
-		view.hud.text += "\nBANK %d   YOUR SHARE %d" % [floori(total), floori(share)]
+		hud.note = "BANK %d   YOUR SHARE %d" % [floori(total), floori(share)]
 		if last_report != "departed":
 			print("WARD REVIEW BANK id=%s total=%s share=%s" % [c.id, total, share])
 	while event_index < c.events.size():
@@ -273,6 +292,7 @@ func _physics_process(delta: float) -> void:
 	var before := view.player.position
 	view._move(vector * speed, delta)
 	var after := view.player.position
+	walk_speed = Vector2(after.x - before.x, after.z - before.z).length() / delta if delta > 0.0 else 0.0
 	tank = Stamina.step_stamina(tank, gait, Vector2(after.x - before.x, after.z - before.z).length() / delta if delta > 0.0 else 0.0, delta)
 
 ## The main game's movement keys: x to the right, y backwards (client/main.gd _add_actions).
@@ -334,26 +354,97 @@ func _unhandled_input(event: InputEvent) -> void:
 	if view != null:
 		view.look_input(event)
 
-func _build_brightness() -> void:
-	var layer := CanvasLayer.new()
-	# Over the 3D picture, under the Ward's words and the Esc card (the other floors' HUD is outside the tape too).
-	layer.layer = -1
-	add_child(layer)
-	var cover := ColorRect.new()
-	cover.name = "Brightness"
-	cover.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bright_mat.shader = BrightShader
-	cover.material = bright_mat
-	layer.add_child(cover)
+## The picture and the screen showing it through the tape (under everything), the instrument drawn into the
+## picture (so the tape lies over it), the crew figures in the Ward's world, and the HUD crisp over the tape.
+func _build_screen() -> void:
+	add_child(picture)
+	var back := CanvasLayer.new()
+	back.layer = -1
+	add_child(back)
+	back.add_child(screen)
+	var in_picture := CanvasLayer.new()
+	picture.add_child(in_picture)
+	inst_view.size = Vector2(picture.size)
+	in_picture.add_child(inst_view)
+	others.name = "Others"
+	picture.add_child(others)
+	var front := CanvasLayer.new()
+	add_child(front)
+	front.add_child(hud)
+	status.visible = false
 	brightness.load_saved()
 	apply_brightness(brightness.level)
 
-## The two numbers the other floors give tape.gdshader (client/main.gd _apply_brightness).
+## The player's brightness on the tape, as on every floor (client/main.gd brightness_on).
 func apply_brightness(lv: int) -> void:
-	var p := Brightness.params(lv)
-	bright_mat.set_shader_parameter("bright_lift", p["lift"])
-	bright_mat.set_shader_parameter("bright_gamma", p["gamma"])
+	Main.brightness_on(tape_mat, lv)
+
+## The camera the screen is drawn from: the player's, or a caught player's watching camera.
+func view_camera() -> Camera3D:
+	return view.watch_camera if view.watching else view.camera
+
+## The HUD from the Ward's snapshot: the lift's clock under PLAY (the Tenant clock's place; the Ward has none of
+## its own), the prompt line, the tapes held on the counter, the instrument as the host reads it, the crew
+## figures and their name tags, and how out of breath the player is on the tape (the main game's sum).
+func _show_hud(world: Dictionary, ward: Dictionary, c: Client, frame: Client.Frame, now: float, delta: float) -> void:
+	var phase := str(ward.phase)
+	var line: String = view.hud.text
+	hud.tenant_line = "" if phase == "unloading" else line
+	hud.tenant_warn = phase == "boarding" or (phase == "away" and float(ward.collectionAt) - c.clock.host_time(now) <= 60.0)
+	hud.prompt = view.prompt.text if view.prompt.text != "" else (line if phase == "unloading" else "")
+	var count := 0
+	var value := 0.0
+	var me: Variant = c.me()
+	if me is Dictionary:
+		var md: Dictionary = me
+		var all: Array = [md["tape"]]
+		all.append_array(md.get("carrying", []))
+		for t: Dictionary in all:
+			if int(t["readings"]) > 0:
+				count += 1
+			value += float(t["total"])
+		var tick_hz := float(md.get("tickHz", 0.0))
+		tick_acc += tick_hz * delta
+		var ticks := int(floorf(tick_acc))
+		tick_acc -= ticks
+		inst_view.update_view(delta, _raised() and not view.caught, str(md.get("needle", "off")), float(md.get("open", 0.0)), null, tick_hz, ticks, walk_speed)
+	hud.set_tapes(count, value)
+	tape_mat.set_shader_parameter("tired", 0.85 * pow(Stamina.exertion(tank), 1.4))
+	var cam := view_camera()
+	var list := crew_rows(world, ward, frame, c, names_of(room.people))
+	others.update(delta, list, cam.global_position)
+	var tags: Array = []
+	var win := tag_window if tag_window != Vector2.ZERO else get_viewport().get_visible_rect().size
+	var space := view.get_world_3d().direct_space_state
+	var from := cam.global_position
+	var sees := func(at: Vector3, _level: int) -> bool:
+		return space.intersect_ray(PhysicsRayQueryParameters3D.create(from, at)).is_empty()
+	for o: Dictionary in list:
+		var tag := Main.name_tag(o, cam, win, false, sees)
+		if not tag.is_empty():
+			tags.append(tag)
+	hud.tags = tags
+
+## The other players as the main game's crew view takes them (client/play_link.gd _others): the frame's
+## interpolated bodies, their place in the crew (dress and number), raised or not, their drawn faces; a player
+## the hand caught lies as a caught player does on every floor.
+static func crew_rows(world: Dictionary, ward: Dictionary, frame: Client.Frame, c: Client, names: Dictionary) -> Array:
+	var order := {}
+	for i: int in world.players.size():
+		order[str(world.players[i].id)] = i
+	var raised := {}
+	for m: Dictionary in world.crew:
+		raised[str(m.id)] = bool(m.get("raised", false))
+	var caught: Array = ward.get("caught", [])
+	var out: Array = []
+	for p: Dictionary in frame.players:
+		var id := str(p["id"])
+		var b: Move.Body = p["body"]
+		out.append({"id": id, "name": str(names.get(id, id)), "index": int(order.get(id, 0)), "x": b.x, "y": b.y, "z": b.z, "level": b.level,
+			"yaw": float(p["yaw"]), "pitch": float(p.get("pitch", 0.0)), "gait": str(p.get("gait", "walk")),
+			"status": "caught" if caught.has(id) else str(p.get("status", "ok")), "active": bool(p.get("active", true)),
+			"raised": bool(raised.get(id, false)), "face": str(c.faces.get(id, ""))})
+	return out
 
 func _build_card() -> void:
 	var layer := CanvasLayer.new()

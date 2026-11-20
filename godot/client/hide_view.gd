@@ -132,11 +132,11 @@ static func seated_names(seek: Dictionary, names: Dictionary) -> Array[String]:
 ## The party table's warning, printed on every screen and on the lift while anyone is seated (with the party table
 ## on), so nobody loses a friend to a rule they were not told: "ANN IS AT THE PARTY TABLE. THE LIFT LEAVES WITHOUT
 ## THEM." "" when nobody is seated, or without the party table. `me_seated`: the seated player's own line.
-static func party_warning(seek: Dictionary, names: Dictionary, me_seated := false) -> String:
+static func party_warning(seek: Dictionary, names: Dictionary, me_seated := false, live: Settings.Values = null) -> String:
 	if not party_of(seek):
 		return ""
 	if me_seated:
-		return "THE LIFT LEAVES WITHOUT YOU. A CREWMATE HOLDING F HERE FOR %d S FREES YOU." % int(Seek.FETCH_TIME)
+		return "THE LIFT LEAVES WITHOUT YOU. A CREWMATE HOLDING F HERE FOR %s S FREES YOU." % secs_text(Seek.fetch_time(live))
 	var who := seated_names(seek, names)
 	if who.is_empty():
 		return ""
@@ -145,21 +145,32 @@ static func party_warning(seek: Dictionary, names: Dictionary, me_seated := fals
 		list = ", ".join(who.slice(0, who.size() - 1)) + " AND " + who[who.size() - 1]
 	return "%s %s AT THE PARTY TABLE. THE LIFT LEAVES WITHOUT THEM." % [list, "IS" if who.size() == 1 else "ARE"]
 
-## Whether a point stands at the party table as the rules judge it (Seek.at_table: within FETCH_REACH of a seat's
-## spot, on its level). `seats`: Playroom.seats of the floor.
-static func near_table(seats: Array, x: float, z: float, level: int) -> bool:
+## Whether a point stands at the party table as the rules judge it (Seek.at_table: within the host's party.reach,
+## Seek.fetch_reach, of a seat's spot, on its level). `seats`: Playroom.seats of the floor.
+static func near_table(seats: Array, x: float, z: float, level: int, live: Settings.Values = null) -> bool:
+	var reach := Seek.fetch_reach(live)
 	for st: Playroom.Seat in seats:
-		if st.level == level and Vector2(st.at.x / 100.0 - x, st.at.y / 100.0 - z).length() <= Seek.FETCH_REACH:
+		if st.level == level and Vector2(st.at.x / 100.0 - x, st.at.y / 100.0 - z).length() <= reach:
 			return true
 	return false
 
 ## The fetcher's line at the table: what holding F does and what it costs, then the hold's seconds left.
-## `left` < 0: not holding yet.
-static func fetch_note(n_seated: int, left: float) -> String:
-	var cost := "ITS ANGER +%d" % roundi(Seek.FETCH_ANGER * 100.0)
+## `left` < 0: not holding yet. `live`: the run's tuning (party.free_time, party.free_anger), so the numbers printed
+## are the ones the rules use.
+static func fetch_note(n_seated: int, left: float, live: Settings.Values = null) -> String:
+	var cost := "ITS ANGER +%d" % roundi(Seek.fetch_anger(live) * 100.0)
 	if left >= 0.0:
 		return "FREEING THE PARTY TABLE... %.1f S   %s" % [maxf(0.0, left), cost]
-	return "HOLD F %d S  FREE THE PARTY TABLE (%d SEATED)   %s" % [int(Seek.FETCH_TIME), n_seated, cost]
+	return "HOLD F %s S  FREE THE PARTY TABLE (%d SEATED)   %s" % [secs_text(Seek.fetch_time(live)), n_seated, cost]
+
+## Seconds as printed: whole seconds as "3", anything else to a tenth ("2.5"), so a tuned time is printed as set.
+static func secs_text(v: float) -> String:
+	return str(roundi(v)) if absf(v - roundf(v)) < 0.05 else "%.1f" % v
+
+## The length of a hold already under way: the host's, fixed when it started (the party block's "len", T22c), so
+## a change to party.free_time mid-hold does not move its countdown. A block without it: today's 3 s.
+static func hold_len(party: Dictionary) -> float:
+	return float(party.get("len", Seek.FETCH_TIME))
 
 ## Whether the health bar shows: once the first count has ended; with the hunt also from the first search on
 ## (health drains there). `phase`: this screen's count phase ("hide", "seek", "over" or "").
@@ -540,9 +551,9 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 			var n_seated := seated_names(seek, names).size()
 			var pt: Dictionary = seek["party"]
 			if str(pt.get("by", "")) == my_id and float(pt.get("from", -1.0)) >= 0.0:
-				note = fetch_note(n_seated, float(pt["from"]) + Seek.FETCH_TIME - host_now)
-			elif n_seated > 0 and pv != null and near_table(_seats_of(pv), float(me["x"]), float(me["z"]), int(me.get("level", 0))):
-				note = fetch_note(n_seated, -1.0)
+				note = fetch_note(n_seated, float(pt["from"]) + hold_len(pt) - host_now, tuning)
+			elif n_seated > 0 and pv != null and near_table(_seats_of(pv), float(me["x"]), float(me["z"]), int(me.get("level", 0)), tuning):
+				note = fetch_note(n_seated, -1.0, tuning)
 	elif status == "found":
 		hud.big_note = "FOUND"
 		if pose is Dictionary:
@@ -561,7 +572,7 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 		hud.center_note = "AT THE PARTY TABLE   [F] BLOW HORN" if seek.has("anger") else "TAKEN: AT THE PARTY TABLE. WATCH."
 	# The party table (T15h): told before it can happen, on every screen and on the lift.
 	party_line = party_warning(seek, names)
-	hud.party_note = party_warning(seek, names, status == "taken") if status == "taken" else party_line
+	hud.party_note = party_warning(seek, names, status == "taken", tuning) if status == "taken" else party_line
 	if status != "found":
 		catch_k = move_toward(catch_k, 0.0, dt * 4.0)
 	hud.seek_note = note

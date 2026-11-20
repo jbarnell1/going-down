@@ -38,6 +38,7 @@ const FILES: Array[String] = [
 	"prop_cycles",
 	"test_cycle_entry",
 	"test_ward_exit",
+	"test_ward_look",
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).

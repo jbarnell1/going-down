@@ -243,6 +243,15 @@ func late_floors_on() -> bool:
 ## memory; tests may set it).
 var late_archive_root := "user://reactor-campaigns"
 
+## The folder a run keeps its recovered Reactor tape in, or "" (in memory, for this run only). T22c: the Host
+## Playtest sandbox (the floor picker) always reuses the room's seed, so on disk one success would leave the tape
+## gone from every later visit; it keeps the tape in memory instead, and each fresh visit finds it on its table.
+## A solo campaign run keeps it on disk under its seed, as before.
+func late_archive_path(run_seed_: String) -> String:
+	if late_archive_root.is_empty() or _playtest_depth >= 0:
+		return ""
+	return late_archive_root.path_join(("solo:" + run_seed_).sha256_text())
+
 ## The fixed floors and any additional places available in the seeded deck; with the game's deck, the late floors
 ## too (place &"ward" at HostRules.WARD_DEPTH, &"reactor" at HostRules.REACTOR_DEPTH: overlays on that depth's plan),
 ## and the start of cycle 2 (FL2: CYCLE_TWO, floor 8, the Clinic again; floors 9 to 14 are not listed).
@@ -370,7 +379,7 @@ func start_run() -> void:
 		if p.id in roster:
 			host.place_player(p.id, p.body)
 	if rules.late_floors:
-		host.enable_late_floors("" if late_archive_root.is_empty() else late_archive_root.path_join(("solo:" + run_seed).sha256_text()))
+		host.enable_late_floors(late_archive_path(run_seed))
 	client = Client.new(human_link, "host", _name, _vt, Session.INTERP_DELAY, Session.INPUT_INTERVAL, _face)
 	client.floor_deck = rules.deck
 	client.garden_dense = host.state.garden_search

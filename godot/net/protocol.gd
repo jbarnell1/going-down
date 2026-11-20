@@ -128,8 +128,10 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    cause "grab" (outside a count, within 1 m), the Minder's modes "grab" and "drag" (appended to MODES),
 ##    and the hint events "playroomArrived" {depth} and "sprintDuringHunt" {playerId, n}.
 ##    With the party table (T15h, sim/seek.gd with_party, only together with the tuned Playroom) the seek block
-##    gains a 14th element, [fetcher id or "", host time their hold counts from or -1] ("party" decoded: {by,
-##    from}), and the events "fetchStart" {playerId, from, done, seated}, "fetchStop" {playerId} and "tableFreed"
+##    gains a 14th element, [fetcher id or "", host time their hold counts from or -1, the hold's length in s]
+##    ("party" decoded: {by, from, len}; T22c added len, the host's party.free_time fixed when the hold
+##    started, and a 2-element block decodes with len 3), and the events "fetchStart" {playerId, from, done,
+##    seated}, "fetchStop" {playerId} and "tableFreed"
 ##    {playerId (the fetcher), freed (ids), health}; "count" may be why "fetch".
 ## The floor quota (sim/run.gd quota; North Star C9). New in the Godot game, and only ever sent when the
 ## run has the quota on, so a run without it sends exactly what it did before:
@@ -291,6 +293,9 @@ const MAX_NAME := 32
 const MAX_SEEN := 8
 const MAX_COORD := 10000.0
 const MAX_CLOCK := 1e9
+## A party block without the hold's length (before T22c) means today's hold, sim/seek.gd FETCH_TIME
+## (tests/prop_party_table.gd test_table_prompt_follows_the_host checks they are equal).
+const PARTY_HOLD_DEFAULT := 3.0
 const MAX_COUNT := 2147483647
 ## The host takes at most one face change ("C") per player every FACE_GAP seconds (net/host.gd); the
 ## client holds back a newer face until the gap (and FACE_SEND_SLACK more, for the link) has passed.
@@ -848,7 +853,11 @@ static func enc_seek(k: Dictionary) -> Array:
 		# The party table (T15h): [fetcher id or "", host time their hold counts from or -1].
 		if k.has("party"):
 			var pt: Dictionary = k["party"]
-			out.append([str(pt["by"]), q3(pt["from"])])
+			var pa: Array = [str(pt["by"]), q3(pt["from"])]
+			# T22c: the hold's length, fixed by the host when the hold started (party.free_time).
+			if pt.has("len"):
+				pa.append(q3(pt["len"]))
+			out.append(pa)
 	return out
 
 static func dec_seek(c: _V, w: Variant) -> Dictionary:
@@ -872,10 +881,12 @@ static func dec_seek(c: _V, w: Variant) -> Dictionary:
 		out["anger"] = _f(c, a[11], 0.0, 1.0)
 		out["hide"] = _f(c, a[12], 0.0, MAX_CLOCK)
 		if a.size() == 14:
-			var pt := _a(c, a[13], 2, 2)
+			var pt := _a(c, a[13], 2, 3)
 			if c.bad:
 				return {}
 			out["party"] ={"by": _s(c, pt[0]), "from": _f(c, pt[1], -1.0, MAX_CLOCK)}
+			# T22c: the hold's length the host fixed when it started; a block without it means today's 3 s.
+			out["party"]["len"] = _f(c, pt[2], 0.0, MAX_CLOCK) if pt.size() == 3 else PARTY_HOLD_DEFAULT
 	elif a.size() != 11:
 		c.bad = true
 	return out

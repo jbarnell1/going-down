@@ -61,6 +61,10 @@ var watch_index := 0
 var watch_camera := Camera3D.new()
 ## Player names by id (the room's people list), set by the scene each frame.
 var names := {}
+## WF3: false when the scene draws the main game's HUD and crew figures instead (client/ward/review.gd): the
+## labels still hold the Ward's lines for it, unseen, and no grey capsules are drawn.
+var own_hud := true
+var capsules := true
 
 func _init(seed_: int, spawn_: Vector3) -> void:
 	seed_value = seed_
@@ -205,6 +209,8 @@ func _show_rigger(ward: Dictionary, host_now: float) -> void:
 func _show_crew(crew: Array, my_id: String) -> void:
 	for ghost: MeshInstance3D in peers.values():
 		ghost.hide()
+	if not capsules:
+		return
 	for row: Dictionary in crew:
 		var id: String = row.id
 		if id == my_id or not row.connected:
@@ -641,6 +647,7 @@ func _build_rigger() -> void:
 
 func _build_hud() -> void:
 	var canvas := CanvasLayer.new()
+	canvas.visible = own_hud
 	add_child(canvas)
 	add_child(cue_player)
 	for label: Label in [hud, prompt, subtitles]:

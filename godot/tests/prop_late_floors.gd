@@ -26,6 +26,7 @@ const Places = preload("res://sim/places.gd")
 const Run = preload("res://sim/run.gd")
 const Move = preload("res://sim/move.gd")
 const ReactorState = preload("res://sim/reactor.gd")
+const ReactorArchive = preload("res://sim/reactor_archive.gd")
 
 const SECRET := "late-floors-test-passphrase"
 const PORT := 4566
@@ -302,6 +303,45 @@ func test_solo_picker_starts_both(t: T) -> void:
 	for i in 4: room.poll(2.0 + i * 0.05)
 	t.check(room.host.state.depth == 6 and room.host.world().has("ward"), "arriving at floor 6 alone starts the Ward")
 	room.leave()
+	Session.deck = original
+
+## T22c: the floor picker's sandbox reuses the room's seed on every visit, so it keeps the Reactor's tape in memory:
+## after a recovery recorded on disk under that very seed, a fresh sandbox visit to floor 7 still has the cassette on
+## its table. A solo campaign run with the same seed still reads the recorded recovery.
+func test_sandbox_reactor_always_has_its_tape(t: T) -> void:
+	var original := Session.deck
+	Session.deck = Places.FULL
+	var root := "user://t22c-reactor-%d" % (Time.get_ticks_usec() % 1000000007)
+	var sandbox := LocalRoom.new()
+	sandbox.open_local("late-tape", "Tester", true)
+	sandbox.late_archive_root = root
+	# The campaign's folder for this seed, with a recovery recorded in it.
+	var campaign := LocalRoom.new()
+	campaign.open_local("late-tape", "Tester", true)
+	campaign.late_archive_root = root
+	var dir := campaign.late_archive_path("late-tape")
+	t.check(dir.begins_with(root + "/"), "the campaign keeps its tape on disk under its seed: %s" % dir)
+	var recorded := ReactorArchive.new(dir)
+	t.check(recorded.bank() and FileAccess.file_exists(dir.path_join("crew23.recovered")), "a recovery recorded under the sandbox's seed")
+	for visit in 2:
+		t.check(sandbox.start_playtest(HostRules.REACTOR_DEPTH), "visit %d: floor 7 starts" % visit)
+		var review: Host.ReactorReview = sandbox.host._reactor_review
+		t.eq(sandbox.host.late_archive_path, "", "visit %d: the sandbox keeps the tape in memory" % visit)
+		t.check(review != null and not review.archive.recovered and not review.rules.collected, "visit %d: the cassette is on its table" % visit)
+		for i in 4: sandbox.poll(visit * 2.0 + i * 0.05)
+		t.check(sandbox.client.latest != null and sandbox.client.latest.has("reactor") and not bool(sandbox.client.latest.reactor.get("archive", {}).get("recovered", false)),
+			"visit %d: the player's screen agrees, nothing recovered" % visit)
+	sandbox.leave()
+	# The campaign run: its first run uses the room's seed, and the host is given the folder with the recovery in it.
+	campaign.start_run()
+	t.eq(campaign.run_seed, "late-tape", "the campaign's first run has the same seed")
+	t.eq(campaign.host.late_archive_path, dir, "the campaign host keeps the tape on disk")
+	campaign.host.start_reactor_review(Host.late_seed(campaign.host.state), true, campaign.host.late_archive_path)
+	t.check(campaign.host._reactor_review.archive.recovered and campaign.host._reactor_review.rules.collected, "the campaign's Reactor remembers the tape as recovered")
+	campaign.leave()
+	DirAccess.remove_absolute(dir.path_join("crew23.recovered"))
+	DirAccess.remove_absolute(dir)
+	DirAccess.remove_absolute(root)
 	Session.deck = original
 
 # ---- the dedicated server room ----------------------------------------------------------------------

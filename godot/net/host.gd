@@ -1738,7 +1738,8 @@ static func seek_block(s: Run.RunState) -> Variant:
 		k["hide"] = ss.hide_len
 		# The party table (T15h, sim/seek.gd with_party): who is freeing it and the host time their hold counts from.
 		if ss.party:
-			k["party"] = {"by": ss.fetch_by, "from": ss.fetch_from}
+			# T22c: and the hold's length, fixed when it started (party.free_time), so a hold under way keeps its count.
+			k["party"] = {"by": ss.fetch_by, "from": ss.fetch_from, "len": ss.fetch_len}
 	return k
 
 ## Hiding off the Playroom (sim/hiding.gd, T19b) in the seek block's shape (Protocol.enc_seek, no new

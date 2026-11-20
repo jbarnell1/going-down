@@ -724,13 +724,38 @@ static func _add_actions() -> void:
 			ev.physical_keycode = k
 			InputMap.action_add_event(action, ev)
 
+## The tape picture every floor is drawn at (shared with the Hanging Ward's scene, client/ward/review.gd WF3).
+static func make_picture() -> SubViewport:
+	var picture := SubViewport.new()
+	picture.size = Vector2i(480, 270)
+	picture.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	picture.msaa_3d = Viewport.MSAA_DISABLED
+	picture.positional_shadow_atlas_size = 2048
+	picture.audio_listener_enable_3d = true
+	return picture
+
+## The screen that shows the picture through client/tape.gdshader (its material is the tape look's settings).
+static func make_screen(picture: SubViewport) -> TextureRect:
+	var shown := TextureRect.new()
+	shown.texture = picture.get_texture()
+	shown.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shown.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	shown.stretch_mode = TextureRect.STRETCH_SCALE
+	shown.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	var mat := ShaderMaterial.new()
+	mat.shader = load("res://client/tape.gdshader")
+	shown.material = mat
+	shown.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return shown
+
+## The player's brightness on a tape screen's material: the tape's last step (client/tape.gdshader).
+static func brightness_on(mat: ShaderMaterial, lv: int) -> void:
+	var p := Brightness.params(lv)
+	mat.set_shader_parameter("bright_lift", p["lift"])
+	mat.set_shader_parameter("bright_gamma", p["gamma"])
+
 func _build_view() -> void:
-	sub = SubViewport.new()
-	sub.size = Vector2i(480, 270)
-	sub.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	sub.msaa_3d = Viewport.MSAA_DISABLED
-	sub.positional_shadow_atlas_size = 2048
-	sub.audio_listener_enable_3d = true
+	sub = make_picture()
 	add_child(sub)
 	get_viewport().disable_3d = true
 	var we := WorldEnvironment.new()
@@ -780,16 +805,8 @@ func _build_view() -> void:
 	inst_view = InstrumentView.new()
 	inst_view.size = Vector2(480, 270)
 	layer.add_child(inst_view)
-	screen = TextureRect.new()
-	screen.texture = sub.get_texture()
-	screen.set_anchors_preset(Control.PRESET_FULL_RECT)
-	screen.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	screen.stretch_mode = TextureRect.STRETCH_SCALE
-	screen.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	tape_mat = ShaderMaterial.new()
-	tape_mat.shader = load("res://client/tape.gdshader")
-	screen.material = tape_mat
-	screen.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	screen = make_screen(sub)
+	tape_mat = screen.material as ShaderMaterial
 	add_child(screen)
 	hide_view = HideView.new()
 	hide_view.name = "HideView"
@@ -1578,9 +1595,7 @@ func _open_brightness() -> void:
 
 ## The player's brightness on the picture: the tape's last step (client/tape.gdshader).
 func _apply_brightness(lv: int) -> void:
-	var p := Brightness.params(lv)
-	tape_mat.set_shader_parameter("bright_lift", p["lift"])
-	tape_mat.set_shader_parameter("bright_gamma", p["gamma"])
+	brightness_on(tape_mat, lv)
 
 ## Tests: the window's mean brightness (every 4th pixel each way).
 func _window_luma() -> Dictionary:
@@ -2551,32 +2566,44 @@ func _reset_eye_stats() -> void:
 func _name_tags(s: Dictionary, dark: bool) -> void:
 	var tags: Array = []
 	var win := get_viewport().get_visible_rect().size
-	var k := Vector2(win.x / 480.0, win.y / 270.0)
 	var vb := link.view_body()
 	var open: bool = s["doorsOpen"]
+	var sees := func(at: Vector3, level: int) -> bool:
+		return link.can_see_point(vb, at, level, open)
 	for o: Dictionary in s["others"]:
-		# Over the head, wherever their eyes are: standing, creeping lower, down near the floor.
-		var eye_h := EyeHeight.target(str(o["status"]), str(o["gait"]))
-		var head := Vector3(float(o["x"]), float(o["y"]) + eye_h + 0.4, float(o["z"]))
-		var d := head.distance_to(cam.position)
-		# Full within the nearer 85 % of TAG_RANGE, fading out over the rest (no pop at the edge).
-		var near := Vector2(head.x - cam.position.x, head.z - cam.position.z).length()
-		var a := clampf((TAG_RANGE - near) / (0.15 * TAG_RANGE), 0.0, 1.0) if TAG_RANGE > 0.0 else 0.0
-		var shown := not dark and a > 0.0 and not cam.is_position_behind(head) and d > 0.4 and str(o["status"]) != "out"
-		if shown:
-			shown = link.can_see_point(vb, Vector3(head.x, float(o["y"]) + eye_h - 0.05, head.z), int(o["level"]), open)
-		var p := cam.unproject_position(head) * k if shown else Vector2.ZERO
-		# Whole tags only: one cut by the edge of the picture reads as a glitch.
-		var tag_size := 1.5   # half as big again as the HUD's text: it is only ever seen up close
-		var hp := maxf(2.0, floorf(win.y / 320.0)) * tag_size   # the tag's pixel (hud.gd _scale, _draw_tags)
-		var half := (PixelFont.width(str(o["name"]).to_upper()) * 0.5 + 2.0) * hp
-		if shown and (p.x < half or p.y < 11.0 * hp or p.x > win.x - half or p.y > win.y):
-			shown = false
-		o["tagAlpha"] = a if shown else 0.0
-		o["tagPos"] = [p.x, p.y]
-		if shown:
-			tags.append({"text": str(o["name"]).to_upper(), "pos": p, "alpha": a, "size": tag_size})
+		var tag := name_tag(o, cam, win, dark, sees)
+		if not tag.is_empty():
+			tags.append(tag)
 	hud.tags = tags
+
+## One name tag (or {}) for another player `o` (an `others` row) seen from `cam` (a camera in a 480x270
+## picture shown at window size `win`). `sees.call(point, level)` is the floor's line of sight to the head.
+## Shared with the Hanging Ward's scene (client/ward/review.gd), whose walls give its own line of sight.
+static func name_tag(o: Dictionary, cam: Camera3D, win: Vector2, dark: bool, sees: Callable) -> Dictionary:
+	var k := Vector2(win.x / 480.0, win.y / 270.0)
+	var at := cam.global_position
+	# Over the head, wherever their eyes are: standing, creeping lower, down near the floor.
+	var eye_h := EyeHeight.target(str(o["status"]), str(o["gait"]))
+	var head := Vector3(float(o["x"]), float(o["y"]) + eye_h + 0.4, float(o["z"]))
+	var d := head.distance_to(at)
+	# Full within the nearer 85 % of TAG_RANGE, fading out over the rest (no pop at the edge).
+	var near := Vector2(head.x - at.x, head.z - at.z).length()
+	var a := clampf((TAG_RANGE - near) / (0.15 * TAG_RANGE), 0.0, 1.0) if TAG_RANGE > 0.0 else 0.0
+	var shown := not dark and a > 0.0 and not cam.is_position_behind(head) and d > 0.4 and str(o["status"]) != "out"
+	if shown:
+		shown = sees.call(Vector3(head.x, float(o["y"]) + eye_h - 0.05, head.z), int(o["level"]))
+	var p := cam.unproject_position(head) * k if shown else Vector2.ZERO
+	# Whole tags only: one cut by the edge of the picture reads as a glitch.
+	var tag_size := 1.5   # half as big again as the HUD's text: it is only ever seen up close
+	var hp := maxf(2.0, floorf(win.y / 320.0)) * tag_size   # the tag's pixel (hud.gd _scale, _draw_tags)
+	var half := (PixelFont.width(str(o["name"]).to_upper()) * 0.5 + 2.0) * hp
+	if shown and (p.x < half or p.y < 11.0 * hp or p.x > win.x - half or p.y > win.y):
+		shown = false
+	o["tagAlpha"] = a if shown else 0.0
+	o["tagPos"] = [p.x, p.y]
+	if shown:
+		return {"text": str(o["name"]).to_upper(), "pos": p, "alpha": a, "size": tag_size}
+	return {}
 
 func _emergency_level(seconds: float) -> float:
 	if seconds < EMERGENCY_DELAY:
