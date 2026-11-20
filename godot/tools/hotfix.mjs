@@ -9,8 +9,8 @@
 //   play_down  the down-then-out check, two game processes, no windows (--headless=1)
 //   net_local  the network end to end: the server, three players, the probes, the night's log
 //   play_late  floors 6 and 7 with two players on the real server, quick (node godot/tools/play_late.mjs --quick=1): the Ward
-//              and the Reactor, then the old rooms' fallback; passes when the screens and the host agree. Skipped,
-//              said loudly, when the private floor packs are not there (a fresh clone)
+//              and the Reactor, then the old Ward room's fallback; passes when the screens and the host agree.
+//              Needs no floor packs: everything those floors use ships in the game (IP1, PL3)
 //   promote    npm run godot:promote -- "<note>"   (play/GoingDown.exe, play/web/)
 //   package    npm run godot:package               (play/GoingDown-<time>.zip for the friends)
 //   server     node godot/tools/godot.mjs export server  (godot/export/server/GoingDownServer.x86_64)
@@ -46,7 +46,6 @@ const downPort = Number(flag('down-port', 4466));
 const netPort = Number(flag('net-port', 4451));
 const exportedPort = Number(flag('exported-port', 4492));
 const latePort = Number(flag('late-port', 4770));
-const packsDir = process.env.GD_PACKS_DIR || join(root, '.local', 'floor-packs');
 const note = argv.filter((a) => !a.startsWith('--')).join(' ').trim();
 const node = process.execPath;
 const sshTarget = process.env.GD_LAB_SSH || 'USER@HOST';
@@ -78,13 +77,9 @@ async function playWeb() {
   }
 }
 
-/** PL2: floors 6 and 7 over the network, quick. The floor packs are private: on a fresh clone the step is skipped. */
-async function playLate() {
-  if (!existsSync(join(packsDir, 'WardGroundMedia.pck'))) {
-    console.log(`      SKIPPED play_late: no private floor packs at ${packsDir} (a fresh clone; set GD_PACKS_DIR to check floors 6 and 7)`);
-    return 0;
-  }
-  return run(node, [join(here, 'play_late.mjs'), '--quick=1', `--port=${latePort}`, `--packs=${packsDir}`]);
+/** PL2: floors 6 and 7 over the network, quick. PL3: on every checkout (no floor packs; nothing is skipped). */
+function playLate() {
+  return run(node, [join(here, 'play_late.mjs'), '--quick=1', `--port=${latePort}`]);
 }
 
 function changes() {
@@ -112,7 +107,7 @@ const steps = [
   ['play_web', `node godot/tools/serve.mjs godot/export/web ${webPort} & node godot/tools/play_web.mjs ${webPort}`, playWeb],
   ['play_down', `node godot/tools/play_down.mjs --headless=1 --port=${downPort}`, () => run(node, [join(here, 'play_down.mjs'), '--headless=1', `--port=${downPort}`])],
   ['net_local', `node godot/tools/net_local.mjs ${netPort}`, () => run(node, [join(here, 'net_local.mjs'), String(netPort)])],
-  ['play_late', `node godot/tools/play_late.mjs --quick=1 --port=${latePort} (packs: ${packsDir})`, playLate],
+  ['play_late', `node godot/tools/play_late.mjs --quick=1 --port=${latePort}`, playLate],
   ['promote', `npm run godot:promote -- "${note}"`, () => run(node, [join(root, 'scripts', 'promote-godot.mjs'), note])],
   ['package', 'npm run godot:package', () => run(node, [join(root, 'scripts', 'package-godot.mjs')])],
   ['server', 'node godot/tools/godot.mjs export server', () => run(node, [join(here, 'godot.mjs'), 'export', 'server'])],

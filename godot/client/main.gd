@@ -49,6 +49,8 @@ const AnnexNotesView = preload("res://client/annex_notes_view.gd")
 const EyeHeight = preload("res://client/eye_height.gd")
 ## WN1: the Hanging Ward as a normal level, hosted in this scene (client/ward/floor.gd).
 const WardFloor = preload("res://client/ward/floor.gd")
+## PL3: the test channel's route through the Ward (`wardroute`, tools/play_late.mjs).
+const WardRoute = preload("res://client/ward/route.gd")
 const RoomClient = preload("res://net/room_client.gd")
 const LocalRoom = preload("res://net/local_room.gd")
 const SoloDiagnostics = preload("res://client/solo_diagnostics.gd")
@@ -3607,42 +3609,15 @@ func _command(c: String) -> String:
 			# (the one this screen walks with), as waypoints [x, y, z]; empty when none within the search.
 			if not automated or _ward_floor == null or link == null or link.body == null:
 				return "[]"
-			var wm2: Variant = _ward_floor.model
 			var from := Vector3(link.body.x, link.body.y, link.body.z)
 			var goal := Vector2(float(p[1]), float(p[2]))
-			var stp := 0.3
-			var key := func(v: Vector3) -> Vector3i: return Vector3i(roundi(v.x / stp), roundi(v.z / stp), roundi(v.y / 0.5))
-			var came := {key.call(from): null}
-			var at := {key.call(from): from}
-			var queue: Array[Vector3] = [from]
-			var found: Variant = null
-			var head := 0
 			# PL2: at most 12 s of search: a longer one stalls this client's frames until the server's send queue for it fills
-			# (256 snapshots, net/ws_server.gd) and, at 20 s, the server drops it as idle.
+			# (256 snapshots, net/ws_server.gd) and, at 20 s, the server drops it as idle. PL3: nearest-first
+			# (client/ward/route.gd), so a long way home is found well inside that.
 			var give_up := Time.get_ticks_msec() + 12000
-			while head < queue.size() and head < 40000 and Time.get_ticks_msec() < give_up:
-				var q: Vector3 = queue[head]
-				head += 1
-				if Vector2(q.x, q.z).distance_to(goal) < (float(p[3]) if p.size() > 3 else 0.45):
-					found = q
-					break
-				for k in 8:
-					var dir := Vector2.from_angle(k * PI / 4.0) * stp
-					var nq: Vector3 = wm2.walk(q, dir)
-					if Vector2(nq.x - q.x, nq.z - q.z).length() < stp * 0.8:
-						continue
-					var nk: Vector3i = key.call(nq)
-					if came.has(nk):
-						continue
-					came[nk] = key.call(q)
-					at[nk] = nq
-					queue.append(nq)
 			var route: Array = []
-			if found != null:
-				var ck: Variant = key.call(found)
-				while ck != null:
-					route.push_front(_late_plain(at[ck]))
-					ck = came[ck]
+			for wp: Vector3 in WardRoute.find(_ward_floor.model, from, goal, float(p[3]) if p.size() > 3 else 0.45, 40000, give_up):
+				route.append(_late_plain(wp))
 			return JSON.stringify(route)
 		"split":
 			# PL2: this screen's own body against the host's row for it in the newest snapshot, small enough to poll

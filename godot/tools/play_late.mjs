@@ -11,10 +11,14 @@
 //   four, a catch puts Bob down, Ann heals him with F held (the host's panel first drops the four back to a crawl,
 //   so a two-player crew can survive the heal), power restored, the lift called, the tape carried out, both ride
 //   up and arrive in the prison. A third client (Cy) joins after the cut and is compared with Ann.
-//   Fallback A (server on P+6, `ward_place=0 reactor_place=0`): one client with the packs rides to floor 6 and
-//   must hand over to the old Ward scene ("FLOOR ENTERED ward").
-//   Fallback B (server on P+8, `reactor_place=0`): one client walks the native Ward, boards, and on floor 7 must
-//   hand over to the old Reactor scene ("FLOOR ENTERED reactor").
+//   Fallback A (server on P+6, `ward_place=0 reactor_place=0`): one client rides to floor 6 and must hand over to
+//   the old Ward scene ("FLOOR ENTERED ward"; client/ward/review.tscn, inside the game).
+//   Fallback B (server on P+8, `reactor_place=0`): one client walks the native Ward, boards, and rides to floor 7.
+//   PL3: the old Reactor room is no longer in the game (IP1, the owner: "We don't want the extra packs. It should be
+//   fully integrated into the game like everything else."; tests/test_floor_media.gd). A server started with
+//   `reactor_place=0` still runs floor 7 by the old overlay's rules, and the game's own answer is the one checked:
+//   the screen says the old room is not in this build ("FLOOR MEDIA MISSING reactor") and keeps the player in the
+//   room on floor 7. Nothing here reads or mounts a floor pack.
 // The two fallbacks run beside the main session (each is mostly waiting for the Ward's lift). Prints `N passed, M
 // failed`; exit code 1 on any failure. Headless only: no window opens.
 //
@@ -30,13 +34,11 @@
 //     moved off;
 //   - fallback A walks the old Ward room too (client/ward/review.gd's test walk, ward_handed_walk=1) and checks
 //     that the old room hands the run back to the main game;
-//   - --quick=1: the main session without the late joiner, and fallback A only (the hotfix chain's step). With no
-//     packs it prints SKIPPED and exits 0.
-//   node godot/tools/play_late.mjs [--port=4740] [--seed=late-1] [--packs=C:/new_game/.local/floor-packs]
+//   - --quick=1: the main session without the late joiner, and fallback A only (the hotfix chain's step).
+//   node godot/tools/play_late.mjs [--port=4740] [--seed=late-1]
 //        [--fallback=1] [--main=1] [--lift-minutes=1] [--quick=1] [--save-logs=DIR] [--break=clock|split]
 // Ports: P server, P+1..P+3 the main session's test channels, P+6 / P+7 fallback A, P+8 / P+9 fallback B; all
-// in 4740-4799. Packs: --packs, or GD_PACKS_DIR (the private floor packs; never committed). Stops every process
-// it starts, also on failure.
+// in 4740-4819. Stops every process it starts, also on failure.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
@@ -49,7 +51,6 @@ const root = resolve(project, '..');
 const arg = (k, d) => (process.argv.find((a) => a.startsWith(`--${k}=`)) ?? `--${k}=${d}`).split('=').slice(1).join('=');
 const port = Number(arg('port', 4740));
 const seed = arg('seed', 'late-1');
-const packs = arg('packs', process.env.GD_PACKS_DIR || 'C:/new_game/.local/floor-packs');
 const doMain = arg('main', '1') === '1';
 const doFallback = arg('fallback', '1') === '1';
 /** --save-logs=DIR: every line the main session's server and clients printed, for reading after a failure. */
@@ -65,10 +66,9 @@ const quick = arg('quick', '0') === '1';
 const godot = process.env.GODOT || join(root, 'tools', 'godot', 'Godot_v4.7.2-stable_win64_console.exe');
 if (!existsSync(godot)) throw new Error(`no engine at ${godot}: set GODOT`);
 const P = { server: port, A: port + 1, B: port + 2, C: port + 3, fa: port + 6, fa1: port + 7, fb: port + 8, fb1: port + 9 };
-for (const p of [...(doMain ? [P.server, P.A, P.B, P.C] : []), ...(doFallback ? [P.fa, P.fa1, P.fb, P.fb1] : [])]) if (!(p >= 4740 && p <= 4799)) throw new Error(`port ${p} is outside 4740-4799`);
+for (const p of [...(doMain ? [P.server, P.A, P.B, P.C] : []), ...(doFallback ? [P.fa, P.fa1, P.fb, P.fb1] : [])]) if (!(p >= 4740 && p <= 4819)) throw new Error(`port ${p} is outside 4740-4819`);
 if (!(liftMinutes >= 1 && liftMinutes <= 20 && Number.isInteger(liftMinutes))) throw new Error(`--lift-minutes=${liftMinutes}: a whole number from 1 to 20 (the setting's range)`);
 const SECRET = 'test-passphrase';
-const havePacks = existsSync(join(packs, 'WardGroundMedia.pck'));
 
 const procs = new Set();
 const cleanup = () => { for (const p of procs) { try { p.kill(); } catch { /* gone */ } } };
@@ -100,16 +100,19 @@ async function line(portN, label, isAlive) {
   let buf = '';
   const waiting = [];
   sock.on('data', (d) => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { const l = buf.slice(0, i); buf = buf.slice(i + 1); waiting.shift()?.(l); } });
-  sock.on('error', () => { while (waiting.length) waiting.shift()('{}'); });
-  sock.on('close', () => { while (waiting.length) waiting.shift()('{}'); });
+  // PL3: once the line is gone (an old Ward scene freed with its channel) a command answers {} at once: a write to a
+  // closed socket never calls back, and the command would wait for ever.
+  let gone = false;
+  sock.on('error', () => { gone = true; while (waiting.length) waiting.shift()('{}'); });
+  sock.on('close', () => { gone = true; while (waiting.length) waiting.shift()('{}'); });
   let chain = Promise.resolve();
-  const cmd = (c) => { const run = chain.then(() => new Promise((res) => { waiting.push(res); try { sock.write(c + '\n'); } catch { res('{}'); } })); chain = run.catch(() => {}); return run; };
+  const cmd = (c) => { const run = chain.then(() => new Promise((res) => { if (gone || sock.destroyed) { res('{}'); return; } waiting.push(res); try { sock.write(c + '\n'); } catch { res('{}'); } })); chain = run.catch(() => {}); return run; };
   return { sock, cmd };
 }
 
 const SHOW = /FLOOR |WARD REVIEW (READY|STATE|RESULT|CONTACT)|SCRIPT ERROR|test channel/;
 async function game(label, testport, args) {
-  const g = launch(['--headless', '--path', project, '--', 'auto=1', `testport=${testport}`, ...(havePacks ? [`packs=${packs}`] : []), ...args], { echo: SHOW, label });
+  const g = launch(['--headless', '--path', project, '--', 'auto=1', `testport=${testport}`, ...args], { echo: SHOW, label });
   let conn = await line(testport, label, () => !g.exited).catch((e) => { throw new Error(`${e.message} (${g.lines.slice(-5).join(' | ')})`); });
   const c = {
     label, g,
@@ -123,9 +126,11 @@ async function game(label, testport, args) {
   return c;
 }
 
+// PL3: `late_archive=memory`: the seed is fixed, and a tape carried out on one run is kept on disk for that seed
+// (server/server.gd late_archive_root), so every later run would arrive to an empty table.
 function server(p, label, extra) {
   return launch(['--headless', '--path', project, 'res://server/server.tscn', '--', 'server', `port=${p}`, 'bind=127.0.0.1', `seed=${seed}`, 'stats=30',
-    'quota=0', 'watchers=0', 'orientation_campaign=0', 'depth=5', ...extra], { env: { GD_JOIN_SECRET: SECRET }, echo: /TEST:|not started|listening/, label });
+    'quota=0', 'watchers=0', 'orientation_campaign=0', 'depth=5', 'late_archive=memory', ...extra], { env: { GD_JOIN_SECRET: SECRET }, echo: /TEST:|not started|listening/, label });
 }
 
 const results = [];
@@ -304,6 +309,11 @@ function splitChecks() {
 const longOn = (label, depth) => (splits[label]?.long ?? []).filter((o) => o.first.depth === depth);
 
 // ---- Ward helpers: routes through the Ward walk model the screen walks with (main.gd `wardroute`).
+// PL3: every waypoint of the route (0.3 m apart, each a step the walk model takes), at half a walk. A waypoint is
+// passed once within 0.2 m or once the walker is nearer the next one than it is to it. PL2 aimed at every second
+// waypoint at a full walk and dropped one once within 0.35 m: through the parlour's side door that cut the jamb and
+// the walker stuck there (an offline replay of the route on the walk model, seed 183025961, did the same).
+const PACE = 0.5;
 async function follow(c, route, ms = 60000, gait = '0') {
   const end = Date.now() + ms;
   let i = 0;
@@ -313,11 +323,11 @@ async function follow(c, route, ms = 60000, gait = '0') {
     const s = await c.state();
     if (!s.me) { await sleep(60); continue; }
     const at = [s.me.x, s.me.y, s.me.z];
-    while (i < route.length - 1 && flat(at, route[i]) < 0.35) i++;
+    while (i < route.length - 1 && (flat(at, route[i]) < 0.2 || flat(at, route[i + 1]) < flat(route[i], route[i + 1]))) i++;
     const w = route[i];
     if (i === route.length - 1 && flat(at, w) < 0.3) break;
     await c.cmd(`face ${w[0]} ${w[2]}`);
-    await c.cmd(`move 1 0 0 ${gait}`);
+    await c.cmd(`move ${PACE} 0 0 ${gait}`);
     if (last && flat(at, last) > 0.05) stuckSince = Date.now();
     if (Date.now() - stuckSince > 2500) break;
     last = at;
@@ -333,8 +343,7 @@ async function wardGo(c, x, z, ms = 60000, radius = 0.45) {
   for (let tries = 0; tries < 3; tries++) {
     const route = JSON.parse(await c.cmd(`wardroute ${x} ${z} ${radius}`));
     if (!route.length) return { ok: false, why: 'no route', reached: NaN };
-    const sub = route.filter((_, k) => k % 2 === 0 || k === route.length - 1);
-    res = await follow(c, sub, ms);
+    res = await follow(c, route, ms);
     if (Math.hypot(res.at[0] - x, res.at[2] - z) < radius + 0.4) return { ok: true, ...res, steps: route.length };
   }
   return { ok: false, why: 'stopped short', ...res };
@@ -381,14 +390,18 @@ async function drive(c, x, z, near, { creep = false, sprint = false, chased = 9,
   const [cx, cz] = cellOf(x, z);
   let gait = '';
   let s = await c.state();
+  // PL3: a walk that has not shown as walking yet is not a walk that gave up: allow a few polls (and one more ask)
+  // before the last stretch straight at the spot (a straight line from the lift to the tape's table meets walls).
+  let idle = 0;
   while (s.me && s.me.status === 'ok' && Math.hypot(s.me.x - x, s.me.z - z) > Math.max(near, 1.6) && Date.now() < end && !c.medic) {
     const l = await c.late();
     const want = creep ? 'creep' : sprint || nearRun(l, s.me.x, s.me.z) < chased ? 'sprint' : 'walk';
     // walkto's 4th number is the pace in m/s, capped by the gait (play_link.gd walk_to): a sprint needs 5.
-    if (want !== gait || s.auto !== 'walking') { await c.cmd(`walkto 0 ${cx} ${cz} ${want === 'sprint' ? 5 : want === 'creep' ? 1.2 : 3} ${want}`); gait = want; }
+    if (want !== gait || (s.auto !== 'walking' && idle % 3 === 0)) { await c.cmd(`walkto 0 ${cx} ${cz} ${want === 'sprint' ? 5 : want === 'creep' ? 1.2 : 3} ${want}`); gait = want; }
     await sleep(110);
     s = await c.state();
-    if (s.auto !== 'walking' && gait === want) {
+    if (s.auto === 'walking') idle = 0;
+    else if (gait === want && ++idle >= 6) {
       // walkto gave up (a cell it will not path to): the last stretch straight at the spot.
       break;
     }
@@ -663,15 +676,20 @@ async function mainSession() {
     const hz = Math.max(hall[1] + 1, land[1] - 3);
     // Bob takes the tape before anything moves.
     const bobTape = (async () => {
-      await drive(B, tape[0], tape[2], 1.4);
+      let s = await drive(B, tape[0], tape[2], 1.4);
+      for (let k = 0; k < 2 && s.me?.status === 'ok' && Math.hypot(s.me.x - tape[0], s.me.z - tape[2]) > 1.4; k++) s = await drive(B, tape[0], tape[2], 1.4);
+      log(`  Bob at the tape's table: ${r2(Math.hypot(s.me?.x - tape[0], s.me?.z - tape[2]))} m from it`);
       for (let k = 0; k < 4 && (await B.late()).reactor?.cassetteHolder !== (await B.late()).me; k++) await press(B, 300);
       return until(B.late, (x) => x.reactor?.cassetteHolder === x.me, 2000, 50);
     })();
     const annIn = drive(A, hx, hz, 0.8);
     const [lt] = await Promise.all([bobTape, annIn]);
     check('Reactor: Bob takes the tape from the table (the same holder on Ann\'s screen)', lt.reactor?.cassetteHolder === lt.me && (await until(A.late, (x) => x.reactor?.cassetteHolder === lt.me, 1500, 50)).reactor?.cassetteHolder === lt.me,
-      `holder ${lt.reactor?.cassetteHolder}, Bob ${lt.me}`);
-    [la, lb] = [await until(A.late, (x) => evOf(x, 'powerHold').length > 0, 10000, 100), await until(B.late, (x) => evOf(x, 'powerHold').length > 0, 3000, 100)];
+      `holder ${lt.reactor?.cassetteHolder}, Bob ${lt.me}; Bob's screen ${J(lt.localBody)}, the host's row for him ${J(lt.hostBody)} (${r2(Math.hypot((lt.hostBody?.x ?? NaN) - tape[0], (lt.hostBody?.z ?? NaN) - tape[2]))} m from the tape), prompt "${lt.prompt}", collected ${lt.reactor?.collected ?? lt.reactor?.cassette}`);
+    // The hold starts when the first player on their feet passes the landing (sim/station_floor.gd step: the event
+    // "powerHold" with t and len). PL3: Ann is on her way into the hall by now; should she not be on her feet here (left
+    // on the Ward, say) it is Bob's walk to the crawl that starts it, later: wait for it as long as a cut can take.
+    [la, lb] = [await until(A.late, (x) => evOf(x, 'powerHold').length > 0, 60000, 100), await until(B.late, (x) => evOf(x, 'powerHold').length > 0, 3000, 100)];
     const hold = [evOf(la, 'powerHold')[0], evOf(lb, 'powerHold')[0]];
     check('Reactor: the lights hold once someone passes the landing, the same host event on both', hold[0] && hold[1] && hold[0].t === hold[1].t && hold[0].len === hold[1].len,
       `A ${J(hold[0])} B ${J(hold[1])}`);
@@ -686,11 +704,19 @@ async function mainSession() {
     const cJoin = quick ? Promise.resolve(null) : joinRoom('C', P.C, url, 'Cy').catch((e) => { log(`  Cy could not join: ${e.message}`); return null; });
     if (quick) skip('late joiner (Cy)', '--quick=1 leaves the third client out');
     // Ann takes the fuse at once.
-    for (let k = 0; k < 6 && (await A.late()).reactor?.holder !== la.me; k++) await press(A, 250);
-    const fz = await until(A.late, (x) => x.reactor?.holder === x.me, 1500, 50);
-    const fzB = await until(B.late, (x) => x.reactor?.holder === fz.me, 1500, 50);
-    check('Reactor: Ann takes the fuse at the cut (the host\'s holder, the same on Bob\'s screen)', fz.reactor?.holder === fz.me && fzB.reactor?.holder === fz.me,
-      `holder A ${fz.reactor?.holder} B ${fzB.reactor?.holder}, Ann ${fz.me}, ${r2((fz.hostNow ?? 0) - (cut[0]?.t ?? 0))} s after the cut`);
+    const annAtCut = (await A.state()).me;
+    if (annAtCut?.status !== 'ok') {
+      // PL3: what the game did to her (left on the Ward, caught, down) is a finding; the screens still must agree.
+      finding('Ann was not on her feet at the cut, so she could not take the fuse', `Ann ${annAtCut?.status} at ${J([annAtCut?.x, annAtCut?.z].map(r2))}`);
+      const [ha, hb] = [await A.late(), await B.late()];
+      check('Reactor: the fuse holder at the cut is the same on both screens', ha.reactor?.holder === hb.reactor?.holder, `holder A ${ha.reactor?.holder} B ${hb.reactor?.holder}`);
+    } else {
+      for (let k = 0; k < 6 && (await A.late()).reactor?.holder !== la.me; k++) await press(A, 250);
+      const fz = await until(A.late, (x) => x.reactor?.holder === x.me, 1500, 50);
+      const fzB = await until(B.late, (x) => x.reactor?.holder === fz.me, 1500, 50);
+      check('Reactor: Ann takes the fuse at the cut (the host\'s holder, the same on Bob\'s screen)', fz.reactor?.holder === fz.me && fzB.reactor?.holder === fz.me,
+        `holder A ${fz.reactor?.holder} B ${fzB.reactor?.holder}, Ann ${fz.me}, ${r2((fz.hostNow ?? 0) - (cut[0]?.t ?? 0))} s after the cut`);
+    }
     [la, lb] = [await until(A.late, (x) => evOf(x, 'stationStir').length > 0, 8000, 50), await until(B.late, (x) => evOf(x, 'stationStir').length > 0, 3000, 50)];
     const stir = [evOf(la, 'stationStir')[0], evOf(lb, 'stationStir')[0]];
     const stands = evOf(la, 'bodyStands');
@@ -794,6 +820,21 @@ async function mainSession() {
 }
 
 // ======================================================================================================
+/** PL3: a `reactor_place=0` server's floor 7 on a build with no old Reactor room: the screen printed FLOOR MEDIA
+ * MISSING (never FLOOR ENTERED: no old room may be swapped in), the main scene is still on its game screen (with the
+ * line main.gd floor_media_line puts on it; the old overlay's floor has no level drawn) and this client's newest
+ * snapshot is the host's floor 7: it is still in the room. After the old Ward's hand back the main scene opens a new
+ * test channel, so the line is opened again when it answers {}. */
+async function stillInRoom(c, said) {
+  const missing = /FLOOR MEDIA MISSING reactor/.test(said ?? '');
+  const entered = c.g.lines.some((x) => /FLOOR ENTERED reactor/.test(x));
+  let l = await c.late();
+  if (l.depth === undefined) { await c.reconnect().catch(() => {}); l = await until(c.late, (x) => x.depth === 7, 15000, 200); }
+  const s = await c.state();
+  return { ok: missing && !entered && scr(s).screen === 'game' && l.depth === 7 && !c.g.exited,
+    detail: `media missing ${missing}, an old room swapped in ${entered}, screen ${scr(s).screen}, the client's snapshot at depth ${l.depth} phase ${l.phase} (reactor block ${l.reactor ? 'there' : 'none'}), process running ${!c.g.exited}` };
+}
+
 async function fallbackA() {
   const url = `ws://127.0.0.1:${P.fa}`;
   const srv = server(P.fa, 'fallbackA', ['ward_place=0', 'reactor_place=0']);
@@ -801,7 +842,6 @@ async function fallbackA() {
   if (!check('fallback A: the server starts with ward_place=0 reactor_place=0', srv.lines.join('\n').includes('listening on'))) return;
   let F = null;
   try {
-    if (!havePacks) { check('fallback A: the floor packs are there', false, `none in ${packs}`); return; }
     F = await joinRoom('F', P.fa1, url, 'Fay', ['ward_handed_walk=1']);
     await setLift(F, null, 'fallback A');
     await F.cmd('ready');
@@ -822,7 +862,8 @@ async function fallbackA() {
       `call ${J(called)}; "${entered ?? 'no FLOOR ENTERED'}"; "${ready ?? 'no WARD REVIEW READY'}"`);
     check('fallback A: no native Ward drawn in the main scene', !F.g.lines.some((x) => /FLOOR NATIVE ward/.test(x)), F.g.lines.filter((x) => /FLOOR NATIVE/.test(x)).join(' | '));
     // PL2: the old Ward's test walk (client/ward/review.gd, ward_handed_walk=1 with auto=1): out of the lift, back in
-    // when it returns; then the main game takes the room back and hands floor 7 to the old Reactor scene.
+    // when it returns; then the main game takes the room back. PL3: on floor 7 the old Reactor room is not in the game
+    // (IP1), so the main game says so and keeps her in the room (main.gd _enter_floor).
     const seen = (re, ms) => until(async () => F.g.lines.find((x) => re.test(x)) ?? null, (x) => x !== null, ms, 250);
     const walk = await seen(/WARD REVIEW TEST WALK/, 5000);
     const away = await seen(/WARD REVIEW STATE .*phase=away/, 30000);
@@ -832,8 +873,9 @@ async function fallbackA() {
     const reactor = await seen(/FLOOR ENTERED reactor|FLOOR MEDIA MISSING reactor/, 90000);
     check('fallback A: Fay walks out of the old Ward\'s lift, it leaves and returns on its clock, she boards',
       walk && away && boarding && /outcome=aboard/.test(result ?? ''), `"${walk}" / "${away}" / "${boarding}" / "${result}"`);
-    check('fallback A: the old Ward hands the room back to the main game, which hands floor 7 on to the old Reactor scene (FLOOR ENTERED reactor)',
-      /FLOOR ENTERED reactor/.test(reactor ?? ''), `"${reactor ?? F.g.lines.filter((x) => /FLOOR/.test(x)).join(' | ')}" (collectionAt ${m?.[1]})`);
+    const stay = await stillInRoom(F, reactor);
+    check('fallback A: the old Ward hands the room back to the main game; on floor 7 the old Reactor room is not in this build by design (no packs), so the game says so and keeps Fay in the room (FLOOR MEDIA MISSING reactor, still on floor 7)',
+      stay.ok, `"${reactor ?? F.g.lines.filter((x) => /FLOOR/.test(x)).join(' | ')}" (collectionAt ${m?.[1]}); ${stay.detail}`);
   } catch (e) {
     check('fallback A: ran to the end', false, String(e?.stack ?? e));
   } finally {
@@ -851,7 +893,6 @@ async function fallbackB() {
   if (!check('fallback B: the server starts with reactor_place=0', srv.lines.join('\n').includes('listening on'))) return;
   let G = null;
   try {
-    if (!havePacks) { check('fallback B: the floor packs are there', false, `none in ${packs}`); return; }
     G = await joinRoom('G', P.fb1, url, 'Gus');
     await setLift(G, null, 'fallback B');
     const l = await rideToWard([G], 'fallback B');
@@ -864,9 +905,10 @@ async function fallbackB() {
     const back = await wardGo(G, door[0], door[2] - 1.4, 30000);
     const t = Date.now();
     while (Date.now() - t < 150000 && !G.g.lines.some((x) => /FLOOR ENTERED reactor|FLOOR MEDIA MISSING reactor/.test(x))) await sleep(250);
-    const entered = G.g.lines.find((x) => /FLOOR ENTERED reactor/.test(x));
-    check('fallback B: floor 7 hands over to the old Reactor scene (FLOOR ENTERED reactor)', back.ok && entered, `boarded ${back.ok}; "${entered ?? G.g.lines.filter((x) => /FLOOR/.test(x)).join(' | ')}"`);
-    skip('fallback B: the old Reactor handing back', 'the old Reactor scene has no test channel; a headless client cannot fetch its fuse');
+    const said = G.g.lines.find((x) => /FLOOR ENTERED reactor|FLOOR MEDIA MISSING reactor/.test(x));
+    const stay = await stillInRoom(G, said);
+    check('fallback B: on floor 7 the old Reactor room is not in this build by design (no packs), so the game says so and keeps Gus in the room (FLOOR MEDIA MISSING reactor, still on floor 7)',
+      back.ok && stay.ok, `boarded ${back.ok}; "${said ?? G.g.lines.filter((x) => /FLOOR/.test(x)).join(' | ')}"; ${stay.detail}`);
   } catch (e) {
     check('fallback B: ran to the end', false, String(e?.stack ?? e));
   } finally {
@@ -877,11 +919,7 @@ async function fallbackB() {
   }
 }
 
-if (quick && !havePacks) {
-  console.log(`SKIPPED play_late --quick=1: no private floor packs in ${packs} (a fresh clone). 0 passed, 0 failed`);
-  process.exit(0);
-}
-log(`seed ${seed}, lift ${liftMinutes} min, ${quick ? 'quick' : 'full'}, packs ${havePacks ? packs : 'none (the Ward drawn without media)'}`);
+log(`seed ${seed}, lift ${liftMinutes} min, ${quick ? 'quick' : 'full'}, no floor packs (everything ships in the game)`);
 const jobs = [];
 if (doMain) jobs.push(mainSession());
 if (doFallback) { jobs.push(fallbackA()); if (!quick) jobs.push(fallbackB()); else skip('fallback B (reactor_place=0)', '--quick=1 runs the main session and fallback A only'); }

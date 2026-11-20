@@ -15,7 +15,8 @@
 # variable GD_SETTINGS_FILE; with neither, the changes last until the server stops and nothing is written),
 # `depth=N` (tests: every run starts on floor N, so tools/exported_server_check.mjs reaches the Annex without
 # riding down; printed as a TEST line), `test_unreadable=FILE` (tests: the data check treats data/FILE as
-# missing, so the refusal below can be proved).
+# missing, so the refusal below can be proved), `late_archive=memory` (tests: the Reactor's recovered tapes are not
+# written to the user data folder, so a fixed seed finds its tape on the table every run).
 # Before it listens it reads every data file the rules need (server/data_check.gd): `data: N files read`,
 # or `not started: the build is missing data/<file>`, a night-log line {"ev":"notStarted"} and exit code 4.
 # Beside the plain lines it writes the night's log, one JSON object per line (server/night_log.gd).
@@ -40,6 +41,12 @@ var _quit_after := -1.0
 var _stats_every := 60.0
 var _last_stats := 0.0
 var _night: NightLog
+
+## Where a normal room keeps each run seed's recovered Reactor tape: the user data folder, or nowhere (in memory, for
+## the length of this server) with `late_archive=memory`. PL3: tools/play_late.mjs runs the same seed every time; a
+## tape carried out on one run is recovered for that seed on disk, so the next run would find the table empty.
+static func late_archive_root(args: Dictionary) -> String:
+	return "" if str(args.get("late_archive", "")) == "memory" else "user://reactor-campaigns"
 
 static func say(text: String) -> void:
 	print("[%s] %s" % [Time.get_time_string_from_system(), text])
@@ -114,7 +121,9 @@ func _ready() -> void:
 		_room.reactor_archive_path = "user://reactor-campaigns/"+str(args.get("reactor_campaign","owner-review")).sha256_text()
 	else:
 		# The late floors' Reactor (FL1): the same private user data folder, one subfolder per run seed.
-		_room.late_archive_root = "user://reactor-campaigns"
+		_room.late_archive_root = late_archive_root(args)
+		if _room.late_archive_root.is_empty():
+			say("TEST: the Reactor's recovered tapes are kept in memory only (late_archive=memory)")
 	if args.has("depth"):
 		_room.first_depth = HostRules.start_depth_by_arg(true)
 		say("TEST: every run starts at depth %d (depth=; tools/exported_server_check.mjs only)" % _room.first_depth)
