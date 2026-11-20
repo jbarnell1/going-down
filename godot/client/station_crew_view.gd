@@ -11,9 +11,10 @@
 # snapshots every other resident is interpolated between (client/station_view.gd hands both blocks over), so a
 # late packet never shows one further on than the host has it. States: lying still while the station has power,
 # crawling, standing, pursuing. Clips: the crew rig's own "taken" (its last frame lies on the floor), "crawl",
-# "get_up" and "run"; when the private ReactorCampaign pack is mounted and its crew motion file carries
-# "zombie_crawl" and "zombie_run" for this same rig (every track resolves on this skeleton), those are played
-# instead, at the host's clock. Nothing is copied from the pack into the repository.
+# "get_up" and "run"; the two downloaded Mixamo takes "zombie_crawl" and "zombie_run", retargeted onto this same
+# rig and baked into the game model assets/station/crew_zombie.glb (assets_src/blender/convict/build_zombie_clips.py
+# and zombie_clips.mjs), are played instead, at the host's clock, when every track resolves on this skeleton.
+# Without that file the rig's own crawl and run are played.
 #
 # Heard before seen: the scrape (the library's bed roll, assets/sfx/clinic/bed_roll.ogg) plays from the four the
 # moment the power cuts, before any of them moves (the host starts the first crawl 1.1 s after the cut); a
@@ -24,8 +25,8 @@ extends Node3D
 
 const FaceImage = preload("res://client/station_faces.gd")
 const Point = preload("res://client/station_point.gd")
-const PACK_MOTION := "res://crew23_motion.glb"
-const PACK_CLIPS: Array[String] = ["zombie_crawl", "zombie_run"]
+const ZOMBIE_MOTION := "res://assets/station/crew_zombie.glb"
+const ZOMBIE_CLIPS: Array[String] = ["zombie_crawl", "zombie_run"]
 const SEATS := 4
 const HEARD_LEAD := 0.25
 const SCREEN_GLOW := 0.95
@@ -41,13 +42,13 @@ const CUE_SND := "res://assets/sfx/clinic/bed_roll.ogg"
 ## Tests only. "face": every seat wears seat 1's face; "smooth": draw the newer snapshot only (no interpolation);
 ## "state": every figure is drawn lying whatever the block says.
 static var test_break := ""
-## Off: never look for the pack's clips (tests that mount the pack: its motion file warns as it loads).
-static var borrow_clips := true
+## Off: play the rig's own crawl and run, as without assets/station/crew_zombie.glb (tests of that fallback).
+static var zombie_motion := true
 
 var figures: Array[CrewView] = []
 var sfx: Node = null
 var power := 0
-var pack_clips := false
+var zombie_clips := false
 ## Per seat: the state drawn, the clip, the seat number, how far it has gone (for the stride-matched clips).
 var states: Array[String] = []
 var seats: Array[int] = []
@@ -62,8 +63,8 @@ var _bodies: Array = []
 var _built := false
 
 static var _suits := {}
-static var _pack_lib: AnimationLibrary = null
-static var _pack_tried := false
+static var _zombie_lib: AnimationLibrary = null
+static var _zombie_tried := false
 
 func _ready() -> void:
 	_build()
@@ -89,7 +90,7 @@ func _build() -> void:
 		_dress(v, i + 1)
 	_cue = _audio(CUE_SND, &"Entity", 6.0, 45.0, false)
 	add_child(_cue)
-	pack_clips = _borrow_pack_clips()
+	zombie_clips = _add_zombie_clips()
 	set_bodies(_bodies)
 
 func _audio(path: String, bus: StringName, unit: float, far: float, loop: bool) -> AudioStreamPlayer3D:
@@ -131,8 +132,8 @@ func _dress(v: CrewView, n: int) -> void:
 	thin.head = v.skel.find_bone("Head")
 	v.skel.add_child(thin)
 
-## The face on seat n's screen: the pack's drawing for that seat when the pack is mounted (the same four the
-## recovered tape shows), else this repository's own drawing for the seat; cracked either way.
+## The face on seat n's screen: the game's drawing for that seat (assets/station/faces, the same four the
+## recovered tape shows), else station_faces.gd's own drawing for the seat; cracked either way.
 static func face_for(n: int) -> Texture2D:
 	if test_break == "face":
 		n = 1
@@ -171,25 +172,26 @@ static func bloodied_suit(base: Texture2D, n: int) -> Texture2D:
 	_suits[n] = t
 	return t
 
-## The pack's crawl and run for this rig, added to each figure's player as "station/zombie_crawl" and
+## The downloaded crawl and run for this rig, added to each figure's player as "station/zombie_crawl" and
 ## "station/zombie_run", only when every track of both resolves on the crew skeleton. False otherwise.
-func _borrow_pack_clips() -> bool:
-	if not borrow_clips or figures.is_empty():
+func _add_zombie_clips() -> bool:
+	if not zombie_motion or figures.is_empty():
 		return false
-	if not _pack_tried:
-		_pack_tried = true
-		_pack_lib = _pack_library(figures[0])
-	if _pack_lib == null:
+	if not _zombie_tried:
+		_zombie_tried = true
+		_zombie_lib = zombie_library(figures[0])
+	if _zombie_lib == null:
 		return false
 	for v in figures:
-		v.ap.add_animation_library(&"station", _pack_lib)
+		v.ap.add_animation_library(&"station", _zombie_lib)
 	return true
 
-## Read once per process (the pack's file warns as it loads: its texture UIDs are the pack build's).
-static func _pack_library(probe: CrewView) -> AnimationLibrary:
-	if not ResourceLoader.exists(PACK_MOTION):
+## The two clips from the game model at `path`, checked against a crew figure's skeleton: null when the file is
+## not there or any track would not resolve. Read once per process by the view.
+static func zombie_library(probe: CrewView, path := ZOMBIE_MOTION) -> AnimationLibrary:
+	if not ResourceLoader.exists(path):
 		return null
-	var scene := load(PACK_MOTION) as PackedScene
+	var scene := load(path) as PackedScene
 	if scene == null:
 		return null
 	var src := scene.instantiate()
@@ -197,7 +199,7 @@ static func _pack_library(probe: CrewView) -> AnimationLibrary:
 	var ok := sap != null
 	var lib := AnimationLibrary.new()
 	if ok:
-		for name: String in PACK_CLIPS:
+		for name: String in ZOMBIE_CLIPS:
 			if not sap.has_animation(name):
 				ok = false
 				break
@@ -207,15 +209,15 @@ static func _pack_library(probe: CrewView) -> AnimationLibrary:
 	if ok:
 		var ap := probe.ap
 		var root := ap.get_node(ap.root_node)
-		for name: String in PACK_CLIPS:
+		for name: String in ZOMBIE_CLIPS:
 			var a := lib.get_animation(name)
 			for tr in a.get_track_count():
-				var path := a.track_get_path(tr)
-				var node := root.get_node_or_null(NodePath(str(path.get_concatenated_names())))
+				var track := a.track_get_path(tr)
+				var node := root.get_node_or_null(NodePath(str(track.get_concatenated_names())))
 				if node == null:
 					ok = false
 					break
-				if node is Skeleton3D and path.get_subname_count() > 0 and (node as Skeleton3D).find_bone(str(path.get_subname(0))) < 0:
+				if node is Skeleton3D and track.get_subname_count() > 0 and (node as Skeleton3D).find_bone(str(track.get_subname(0))) < 0:
 					ok = false
 					break
 	src.free()
@@ -314,11 +316,11 @@ static func state_of(phase: String) -> String:
 func clip_for(state: String) -> String:
 	match state:
 		"crawling":
-			return "station/zombie_crawl" if pack_clips else "crawl"
+			return "station/zombie_crawl" if zombie_clips else "crawl"
 		"standing":
 			return "get_up"
 		"pursuing":
-			return "station/zombie_run" if pack_clips else "run"
+			return "station/zombie_run" if zombie_clips else "run"
 	return "taken"
 
 ## Draws the four between two blocks (the older, the newer, how far between: client/net/client.gd's bracket).
@@ -366,7 +368,7 @@ func _draw(i: int, p: Dictionary) -> void:
 		"standing":
 			t = clampf(float(p["clock"]), 0.0, length)
 		_:
-			if pack_clips:
+			if zombie_clips:
 				t = fposmod(float(p["clock"]), length)
 			else:
 				t = fposmod(_dist[i] / maxf(0.05, CrewView.stride(clip)), length)

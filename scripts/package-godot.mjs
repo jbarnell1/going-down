@@ -4,7 +4,7 @@
 // holding GoingDown.exe and READ ME FIRST.txt (made from scripts/friends-readme.txt).
 // GD_PLAY_DIR overrides the folder to read and write (default: play).
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,8 +39,6 @@ const zip = path.join(play, `GoingDown-${stamp}.zip`);
 const stage = mkdtempSync(path.join(os.tmpdir(), 'goingdown-pack-'));
 try {
   copyFileSync(exe, path.join(stage, 'GoingDown.exe'));
-  // The floor packs the promote step put beside the game (the Hanging Ward and the Reactor need them).
-  for (const f of readdirSync(play).filter((n) => n.endsWith('.pck'))) copyFileSync(path.join(play, f), path.join(stage, f));
   writeFileSync(path.join(stage, 'READ ME FIRST.txt'), text);
   const ps = '$ErrorActionPreference = "Stop"; Compress-Archive -Path (Join-Path $env:GD_STAGE "*") -DestinationPath $env:GD_ZIP -Force';
   execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], {

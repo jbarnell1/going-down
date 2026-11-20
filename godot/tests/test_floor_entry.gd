@@ -1,12 +1,12 @@
 # FL1 piece B: a normal run's snapshot with a `ward` or `reactor` block takes the main game's screen to that
 # floor's own scene with the room it already plays in (client/main.gd floor_handover, _enter_floor), and the
 # floor's end brings that same room back to the main game's prison (client/ward/review.gd handback_due,
-# prison_for; the Reactor's compiled scene hands back through client/reactor_screening.gd).
+# prison_for).
 #
-# The two floors' media live in private packs (WardGroundMedia.pck, ReactorCampaign.pck), never in the
-# repository. The tests that need them read the folder from GD_PACKS_DIR and SKIP (pass, printing
-# "skipped: pack not found") when it is unset or the file is not there, as on CI.
-# The missing-pack test runs first in this file: once a pack is mounted it stays mounted for the process.
+# IP1: the Ward's old room runs on the game's own files (godot/assets/ward), so every test here runs on a plain
+# checkout. The Reactor's old room was a compiled scene in a separate file that is no longer shipped: the Reactor
+# is always the place the main game draws itself, and a reactor block that still asks for the swap keeps the
+# player in the room with a plain line.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -22,12 +22,6 @@ const Marks = preload("res://client/reactor_marks.gd")
 
 const WARD_SEED := 8143
 const REACTOR_SEED := 23
-
-static func _packs(file: String) -> String:
-	var dir := OS.get_environment("GD_PACKS_DIR")
-	if dir.is_empty() or not FileAccess.file_exists(dir.path_join(file)):
-		return ""
-	return dir
 
 static func _ward_room() -> LocalRoom:
 	var room := LocalRoom.new()
@@ -49,10 +43,9 @@ static func _reactor_room() -> LocalRoom:
 		room.poll(0.05 * i)
 	return room
 
-static func _main_for(room: Variant, local: bool, packs: String) -> Main:
+static func _main_for(room: Variant, local: bool) -> Main:
 	var main := Main.new()
 	main.hud = Hud.new()
-	main.pack_dir = packs
 	main.link = PlayLink.new(room, local)
 	return main
 
@@ -62,33 +55,21 @@ static func _drop(main: Main) -> void:
 			main.hud.free()
 		main.free()
 
-func test_missing_pack_explains_the_file_and_keeps_the_room(t: T) -> void:
-	if ResourceLoader.exists("res://assets/ward/rigger.glb") or ResourceLoader.exists("res://reactor_campaign.tscn"):
-		t.note("skipped: a pack is already mounted in this process")
-		return
+func test_the_wards_old_room_is_in_the_game_and_the_reactors_keeps_the_room(t: T) -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	var before := tree.current_scene
-	var nowhere := OS.get_user_data_dir().path_join("fl1-no-packs-here")
-	# Alone, on the Ward.
-	var room := _ward_room()
-	t.eq(Main.floor_handover(room.client.latest), "ward", "the review start gives the same ward block")
-	var main := _main_for(room, true, nowhere)
-	var link := main.link
-	main._enter_floor("ward", room)
-	t.check(main.link == link, "the player keeps playing in the room (not sent to the title or Join)")
-	t.check(room.status != "closed", "the room is not left")
-	t.eq(main._floor_media_missing, "ward", "the missing floor is remembered, so the swap is not retried every frame")
-	t.check(main.hud.note.contains("WardGroundMedia.pck") and main.hud.note.contains("beside the game"), "the screen names the file to put beside the game: " + main.hud.note)
-	t.check(tree.current_scene == before, "no scene swap")
-	_drop(main)
-	room.leave()
-	# Joined, on the Reactor (a room client; its connection is not touched).
+	var main := Main.new()
+	t.check(main._floor_media("ward"), "the Ward's old room and everything it draws ship in the game")
+	t.check(not main._floor_media("reactor"), "the Reactor's old room is not in the game")
+	main.free()
+	# Joined, on a reactor block that still asks for the swap (a room client; its connection is not touched).
 	var joined := RoomClient.new()
-	main = _main_for(joined, false, nowhere)
-	link = main.link
+	main = _main_for(joined, false)
+	var link := main.link
 	main._enter_floor("reactor", joined)
-	t.check(main.link == link and joined.status != "closed", "a joined player without the Reactor pack stays in the room")
-	t.check(main.hud.note.contains("ReactorCampaign.pck"), "the screen names the Reactor's file: " + main.hud.note)
+	t.check(main.link == link and joined.status != "closed", "the player stays in the room (not sent to the title or Join)")
+	t.eq(main._floor_media_missing, "reactor", "remembered, so the swap is not retried every frame")
+	t.check(main.hud.note.contains("not in this build") and not main.hud.note.contains(".pck"), "the screen says so plainly, naming no file: " + main.hud.note)
 	t.check(tree.current_scene == before, "no scene swap")
 	_drop(main)
 
@@ -125,14 +106,10 @@ func test_ward_scene_holds_the_room_it_is_given(t: T) -> void:
 	main.free()
 
 func test_ward_block_enters_the_ward_and_returns_to_the_prison(t: T) -> void:
-	var packs := _packs("WardGroundMedia.pck")
-	if packs.is_empty():
-		t.note("skipped: pack not found (set GD_PACKS_DIR to the folder holding WardGroundMedia.pck)")
-		return
 	var tree := Engine.get_main_loop() as SceneTree
 	var before := tree.current_scene
 	var room := _ward_room()
-	var main := _main_for(room, true, packs)
+	var main := _main_for(room, true)
 	main._enter_floor("ward", room)
 	var scene := tree.current_scene
 	if not t.check(scene != before and scene != null and scene.scene_file_path == "res://client/ward/review.tscn", "the Ward's scene is on screen"):
@@ -175,65 +152,6 @@ func test_ward_block_enters_the_ward_and_returns_to_the_prison(t: T) -> void:
 	scene.set("room", null)
 	scene.get_parent().remove_child(scene)
 	scene.free()
-	_drop(main)
-	room.leave()
-
-func test_reactor_block_enters_the_pack_scene_with_the_same_room(t: T) -> void:
-	var packs := _packs("ReactorCampaign.pck")
-	if packs.is_empty():
-		t.note("skipped: pack not found (set GD_PACKS_DIR to the folder holding ReactorCampaign.pck)")
-		return
-	var tree := Engine.get_main_loop() as SceneTree
-	var before := tree.current_scene
-	var room := _reactor_room()
-	t.eq(Main.floor_handover(room.client.latest), "reactor", "the review start gives the same reactor block")
-	var main := _main_for(room, true, packs)
-	# The private pack's resources carry stale UIDs, and the engine warns once per load of each. Those warnings
-	# are the pack's: load them here, quietly and held for the whole test, so the cached copies are what the code
-	# under test uses and every error it raises still counts. Nothing but loads runs while quiet.
-	t.check(main._mount_floor_pack("reactor"), "the Reactor pack mounts")
-	var printing := Engine.print_error_messages
-	Engine.print_error_messages = false
-	var held: Array[Resource] = [load("res://reactor_campaign.tscn"), load("res://crew23_motion.glb")]
-	Engine.print_error_messages = printing
-	t.check(held.all(func(r: Resource) -> bool: return r != null), "the pack's scene and crew model load")
-	main._enter_floor("reactor", room)
-	var scene := tree.current_scene
-	if not t.check(scene != before and scene != null and scene.scene_file_path == "res://reactor_campaign.tscn", "the Reactor's scene is on screen"):
-		_drop(main)
-		room.leave()
-		return
-	t.check(scene.get("game") == room, "the compiled Reactor scene plays this LocalRoom (alone)")
-	t.check(str(scene.get("view_id")) == str(room.client.id), "as this player")
-	t.check(main.link == null, "the main game let go of the room")
-	for i in 30:
-		scene._physics_process(1.0 / 60.0)
-		OS.delay_usec(2000)
-	var frame: Variant = scene.get("frame")
-	t.check(frame is Dictionary and frame.has("power") and int(frame.get("seed", -1)) == REACTOR_SEED, "the scene draws this room's reactor block")
-	# The floor's end: the host takes the crew home and the scene asks to hand the room back.
-	room.host._reactor_review.rules.returned = true
-	var handing := false
-	for i in 200:
-		scene._physics_process(1.0 / 60.0)
-		if scene.has_method("_process"):
-			scene._process(1.0 / 60.0)
-		var screen: Variant = scene.get("screen")
-		if screen != null and screen.get("handing_off"):
-			handing = true
-			break
-		OS.delay_usec(2000)
-	t.check(room.client.latest.depth == 0, "the crew is home")
-	t.check(handing, "the Reactor scene hands the room back to the prison")
-	tree.current_scene = before
-	# Its queued hand-back (a deferred call on the screen) must not open a main game after this test.
-	var screen_node: Variant = scene.get("screen")
-	scene.set("game", null)
-	scene.get_parent().remove_child(scene)
-	scene.free()
-	if is_instance_valid(screen_node):
-		t.note("the Reactor screen outlived its scene; freeing it")
-		(screen_node as Node).free()
 	_drop(main)
 	room.leave()
 
@@ -287,13 +205,7 @@ func test_esc_card_and_leaving_carry_a_reason_to_the_title(t: T) -> void:
 		room.leave()
 
 func test_caught_player_watches_a_living_crewmate(t: T) -> void:
-	var packs := _packs("WardGroundMedia.pck")
-	if packs.is_empty():
-		t.note("skipped: pack not found (set GD_PACKS_DIR to the folder holding WardGroundMedia.pck)")
-		return
-	if not Review.media_ready():
-		ProjectSettings.load_resource_pack(packs.path_join("WardGroundMedia.pck"), false)
-	t.check(Review.media_ready(), "the Ward pack mounts")
+	t.check(Review.media_ready(), "the Ward's files are in the game")
 	var room := _ward_room()
 	var ward: Dictionary = (room.client.latest.ward as Dictionary).duplicate(true)
 	var tree := Engine.get_main_loop() as SceneTree
@@ -333,65 +245,4 @@ func test_caught_player_watches_a_living_crewmate(t: T) -> void:
 	t.check(view.hud.text.begins_with("LIFT") or view.hud.text == "STEP OUT OF THE LIFT", "the lift timer line stays: " + view.hud.text)
 	view.get_parent().remove_child(view)
 	view.free()
-	room.leave()
-
-# --- RX1: inside the real compiled Reactor (the private pack): the tape on its plinth, glowing, with its prompt;
-# the fuse where the host hid it. Skips without the pack, like the tests above.
-func test_rx1_reactor_pack_scene_shows_the_tape_and_the_hidden_fuse(t: T) -> void:
-	var packs := _packs("ReactorCampaign.pck")
-	if packs.is_empty():
-		t.note("skipped: pack not found (set GD_PACKS_DIR to the folder holding ReactorCampaign.pck)")
-		return
-	var tree := Engine.get_main_loop() as SceneTree
-	var before := tree.current_scene
-	var room := _reactor_room()
-	var main := _main_for(room, true, packs)
-	t.check(main._mount_floor_pack("reactor"), "the Reactor pack mounts")
-	var printing := Engine.print_error_messages
-	Engine.print_error_messages = false
-	var held: Array[Resource] = [load("res://reactor_campaign.tscn"), load("res://crew23_motion.glb")]
-	Engine.print_error_messages = printing
-	t.check(held.all(func(r: Resource) -> bool: return r != null), "the pack's scene loads")
-	main._enter_floor("reactor", room)
-	var scene := tree.current_scene
-	if not t.check(scene != before and scene != null and scene.scene_file_path == "res://reactor_campaign.tscn", "the Reactor's scene is on screen"):
-		_drop(main)
-		room.leave()
-		return
-	for i in 20:
-		scene._physics_process(1.0 / 60.0)
-		OS.delay_usec(2000)
-	var rules: Variant = room.host._reactor_review.rules
-	var marks: Variant = scene.get_node_or_null("ReactorMarks")
-	t.check(marks != null, "the repository's marks are in the compiled scene (added by client/reactor_screening.gd)")
-	var tape: Node3D = scene.get("cassette")
-	var body := tape.get_child(0) as Node3D
-	# The pack's plinth: the 0.66 x 0.84 x 0.5 box.
-	var plinth: MeshInstance3D = null
-	for c: Node in scene.get_children():
-		if c is MeshInstance3D and (c as MeshInstance3D).mesh is BoxMesh and ((c as MeshInstance3D).mesh as BoxMesh).size.is_equal_approx(Vector3(0.66, 0.84, 0.5)):
-			plinth = c
-	t.check(plinth != null, "the pack draws the tape's plinth")
-	if plinth != null:
-		var off := body.global_position - plinth.global_position
-		t.check(absf(off.x) < 0.1 and absf(off.z) < 0.1 and absf(off.y - 0.59) < 0.03, "the tape lies on the plinth top (offset %s)" % off)
-	t.check(tape.is_visible_in_tree(), "the tape is drawn")
-	t.check((scene.get("fuse") as Node3D).global_position.is_equal_approx(rules.fuse), "the fuse is drawn where the host hid it")
-	if marks != null:
-		marks._process(0.016)
-		t.check(marks.glow.visible and marks.glow.global_position.distance_to(body.global_position) < 0.5, "a warm light over the tape")
-		scene.walker.position = Vector3(rules.cassette_at.x, 0.04, rules.cassette_at.z + 0.8)
-		for i in 10:
-			scene._physics_process(1.0 / 60.0)
-			marks._process(0.016)
-			OS.delay_usec(2000)
-		t.check(str(scene.hud.text).ends_with(Marks.TAPE_PROMPT), "beside it the HUD says E picks it up: " + str(scene.hud.text).replace("\n", " / "))
-	tree.current_scene = before
-	var screen_node: Variant = scene.get("screen")
-	scene.set("game", null)
-	scene.get_parent().remove_child(scene)
-	scene.free()
-	if is_instance_valid(screen_node):
-		(screen_node as Node).free()
-	_drop(main)
 	room.leave()

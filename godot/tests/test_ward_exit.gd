@@ -4,8 +4,7 @@
 # the main game hands the room to client/ward/review.tscn (client/main.gd _enter_floor), and the real
 # controller (review.gd _physics_process reading the W key) is driven forward out of the car.
 #
-# Needs the private WardGroundMedia.pck: the folder comes from GD_PACKS_DIR. Without it the test SKIPS
-# (passes, printing "skipped: pack not found"), as on CI.
+# Runs everywhere: the Ward's figures and sounds ship in the game (IP1), so no extra file is needed.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -19,12 +18,6 @@ const HostRules = preload("res://net/host_rules.gd")
 const Stamina = preload("res://sim/stamina.gd")
 const Instrument = preload("res://sim/instrument.gd")
 const Brightness = preload("res://client/brightness.gd")
-
-static func _packs() -> String:
-	var dir := OS.get_environment("GD_PACKS_DIR")
-	if dir.is_empty() or not FileAccess.file_exists(dir.path_join("WardGroundMedia.pck")):
-		return ""
-	return dir
 
 static func _key(code: Key, down: bool) -> void:
 	var event := InputEventKey.new()
@@ -63,7 +56,7 @@ func test_the_shut_gate_never_holds_a_walker_the_lift_left(t: T) -> void:
 
 ## The Ward entered the way the game enters it: a solo run's floor picker at floor 6, the main game's hand-over.
 ## Returns {room, main, scene, view, before, deck, door} or {} (the failure already checked).
-func _enter(t: T, packs: String) -> Dictionary:
+func _enter(t: T) -> Dictionary:
 	var original := Session.deck
 	Session.deck = Places.FULL
 	var tree := Engine.get_main_loop() as SceneTree
@@ -84,7 +77,6 @@ func _enter(t: T, packs: String) -> Dictionary:
 	t.eq(Main.floor_handover(room.client.latest), "ward", "floor 6 of a solo run is the Ward")
 	var main := Main.new()
 	main.hud = Hud.new()
-	main.pack_dir = packs
 	main.link = PlayLink.new(room, true)
 	main._enter_floor("ward", room)
 	var scene := tree.current_scene
@@ -139,11 +131,7 @@ static func _walk_out(w: Dictionary, key: Key) -> float:
 	return out
 
 func test_a_player_walks_out_of_the_lift_on_the_ward(t: T) -> void:
-	var packs := _packs()
-	if packs.is_empty():
-		t.note("skipped: pack not found (set GD_PACKS_DIR to the folder holding WardGroundMedia.pck)")
-		return
-	var w := _enter(t, packs)
+	var w := _enter(t)
 	if w.is_empty():
 		return
 	var room: LocalRoom = w.room
@@ -182,11 +170,7 @@ static func _press(code: Key) -> InputEventKey:
 	return event
 
 func test_the_ward_walks_with_the_main_games_keys_and_pace(t: T) -> void:
-	var packs := _packs()
-	if packs.is_empty():
-		t.note("skipped: pack not found (set GD_PACKS_DIR to the folder holding WardGroundMedia.pck)")
-		return
-	var w := _enter(t, packs)
+	var w := _enter(t)
 	if w.is_empty():
 		return
 	var out := _walk_out(w, KEY_UP)

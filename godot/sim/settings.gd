@@ -47,6 +47,9 @@
 # outlines, sim/sight.gd), how many watchers hold a Stillness resident, the put-back and catch-confirm numbers
 # in net/session.gd, and any number a floor plan or a hide list is made from (every player builds the floor
 # from the seed: "identical for every player"). A setting never adds or removes a random draw.
+# One exception, on the lead's brief for DF1 (the owner approved the pressures, the numbers are Claude's proposals):
+# pressure.watchers sets how many watchers hold a Stillness resident from floor 8, only within what the crew on its
+# feet can field. The host alone counts watchers (Run.pressure_watch_need), so no screen predicts it.
 #
 # The rule for every new number from now on: it goes in ROWS in the piece that adds its reader, with `wired`
 # true only once the rules read it and tests/prop_settings.gd has its proof.
@@ -62,6 +65,7 @@ const GROUPS: Array = [
 	[&"players", "PLAYERS"],
 	[&"earning", "EARNING"],
 	[&"hiding", "HIDING"],
+	[&"deeper", "FLOOR 8 AND DEEPER"],
 	# The owner, 17 Nov: player speeds come last.
 	[&"speeds", "PLAYER SPEEDS"],
 ]
@@ -83,6 +87,7 @@ const SECTIONS: Array = [
 	[&"shop", &"players", "THE SHOP AND THE CABINET"],
 	[&"earning", &"earning", "EARNING"],
 	[&"hiding", &"hiding", "HIDING"],
+	[&"pressure", &"deeper", "FLOOR 8 AND DEEPER"],
 	[&"moving", &"speeds", "MOVING"],
 ]
 
@@ -247,6 +252,19 @@ const ROWS: Array = [
 	[&"hide.in_slow", &"hiding", "GETTING IN, QUIETLY", "seconds to get into a hide quietly", "s", 1.5, 0.5, 4.0, 0.1, &"next", &"LS6", F],
 	[&"hide.in_fast", &"hiding", "GETTING IN, FAST AND LOUD", "seconds to get into a hide fast", "s", 0.5, 0.2, 2.0, 0.1, &"next", &"LS6", F],
 	[&"hide.reach", &"hiding", "HIDE FROM WITHIN", "how near a hide F works", "m", 1.2, 0.8, 2.5, 0.1, &"floor", &"LS6", F],
+	# The pressures of cycle 2 and deeper (DF1, sim/run.gd "Pressures"; docs/floors/difficulty.md section 2): on in the
+	# game's rooms with cycles, from floor 8. Each "CYCLE 2" row is floors 8 to 14, each "CYCLE 3 ON" row floor 15 and
+	# deeper. Today's are Run.PRESSURE_*; each row has a value that switches it off, named in what it changes.
+	[&"pressure.quota", &"pressure", "QUOTAS, CYCLE 2", "floor and day quotas times this (1 is off)", "times", 1.5, 1.0, 4.0, 0.05, &"floor", &"DF1", F],
+	[&"pressure.quota3", &"pressure", "QUOTAS, CYCLE 3 ON", "floor and day quotas times this (1 is off)", "times", 2.25, 1.0, 6.0, 0.05, &"floor", &"DF1", F],
+	[&"pressure.heals", &"pressure", "HEALS A FLOOR, CYCLE 2", "times the crew can be helped up on one floor, salts included (0 is no limit)", "heals", 2.0, 0.0, 9.0, 1.0, &"floor", &"DF1", W],
+	[&"pressure.heals3", &"pressure", "HEALS A FLOOR, CYCLE 3 ON", "times the crew can be helped up on one floor, salts included (0 is no limit)", "heals", 1.0, 0.0, 9.0, 1.0, &"floor", &"DF1", W],
+	[&"pressure.watchers", &"pressure", "WATCHERS NEEDED, CYCLE 2", "eyes that hold a watched resident; never more than the crew on its feet less one (2 is off)", "watchers", 3.0, 2.0, 7.0, 1.0, &"floor", &"DF1", W],
+	[&"pressure.watchers3", &"pressure", "WATCHERS NEEDED, CYCLE 3 ON", "eyes that hold a watched resident; never more than the crew on its feet less one (2 is off)", "watchers", 3.0, 2.0, 7.0, 1.0, &"floor", &"DF1", W],
+	[&"pressure.near_light", &"pressure", "NEAR LIGHT REACH, CYCLE 2", "the light around you on your own screen (4 is off, 0 is none)", "m", 1.5, 0.0, 4.0, 0.5, &"floor", &"DF1", F],
+	[&"pressure.near_light3", &"pressure", "NEAR LIGHT REACH, CYCLE 3 ON", "the light around you on your own screen (4 is off, 0 is none)", "m", 0.0, 0.0, 4.0, 0.5, &"floor", &"DF1", F],
+	[&"pressure.tenant_minutes", &"pressure", "TENANT ARRIVES AFTER, CYCLE 2", "minutes on a floor, when sooner than ARRIVES AFTER (0 is off)", "min", 8.0, 0.0, 30.0, 1.0, &"next", &"DF1", W],
+	[&"pressure.tenant_minutes3", &"pressure", "TENANT ARRIVES AFTER, CYCLE 3 ON", "minutes on a floor, when sooner than ARRIVES AFTER (0 is off)", "min", 6.0, 0.0, 30.0, 1.0, &"next", &"DF1", W],
 	# Player speeds, last (the owner: "player speeds come last").
 	[&"player.walk", &"moving", "WALK", "a player's walking speed", "m/s", 3.0, 2.0, 4.0, 0.1, &"floor", &"LS6", F],
 	[&"player.sprint", &"moving", "SPRINT", "a player's sprinting speed", "m/s", 5.0, 3.5, 7.0, 0.1, &"floor", &"LS6", F],
@@ -255,7 +273,7 @@ const ROWS: Array = [
 ]
 
 ## The pieces whose rows the rules read today (`wired`). LS4, LS5 and LS6 add theirs as they wire them.
-const WIRED_PIECES: Array[StringName] = [&"LS1", &"AR5"]
+const WIRED_PIECES: Array[StringName] = [&"LS1", &"AR5", &"DF1"]
 ## Rows of later pieces the rules already read (wired one group at a time, each with its proof).
 const WIRED_IDS: Array[StringName] = [
 	&"groundskeeper.tilt", &"groundskeeper.beat", &"groundskeeper.sweep", &"groundskeeper.turn",

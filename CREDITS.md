@@ -42,3 +42,7 @@ each prop came from.
   Hop Dance, Waving. Mixamo's terms allow its animations in games, but not handing on the raw files
   by themselves: those stay on the owner's machine (`assets_src/inbox/`, ignored by git), and only the
   baked game model, made by `assets_src/blender/convict/build_crewmate.py`, is published.
+- The Reactor's four (`godot/assets/station/crew_zombie.glb`) are the same crewmate figure with two more
+  **Adobe Mixamo** clips baked in: Zombie Crawl and Zombie Running, downloaded by the owner and retargeted
+  onto the crew rig by `assets_src/blender/convict/build_zombie_clips.py` and `zombie_clips.mjs`. The same
+  rule: the raw files stay in `assets_src/inbox/`, only the baked model is published.

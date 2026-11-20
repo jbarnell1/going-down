@@ -100,7 +100,8 @@ func test_the_flag_is_the_last_parameter_and_off_by_default(t: T) -> void:
 	var at := names.find("late_floors_")
 	# FL2 added the agreed four after it (party_table_, tenant_timer_, second_orderly_, cycles_: tests/prop_cycles.gd).
 	# RN1 added ward_place_ and reactor_place_ after cycles_, in the order agreed for the three workers.
-	t.eq(names.slice(at), ["late_floors_", "party_table_", "tenant_timer_", "second_orderly_", "cycles_", "ward_place_", "reactor_place_"] as Array[String], "late_floors_ is followed only by the six agreed flags")
+	# DF1 added pressures_ after reactor_place_ (the order the lead set: ..., cycles_, ward_place_, reactor_place_, pressures_).
+	t.eq(names.slice(at), ["late_floors_", "party_table_", "tenant_timer_", "second_orderly_", "cycles_", "ward_place_", "reactor_place_", "pressures_"] as Array[String], "late_floors_ is followed only by the seven agreed flags")
 	t.eq(names[at - 1], "minder_hunt_", "minder_hunt_ comes just before it")
 	t.eq(names[at - 2], "annex_drag_", "after annex_drag_")
 	var plain := HostRules.new(true, 1, Places.FULL, true)

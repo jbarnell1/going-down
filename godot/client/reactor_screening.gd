@@ -1,8 +1,13 @@
 extends Control
-## Private staged packages supply the original Ogg Theora film. Only the local decoder emits natural end.
+## The recovered tape, an Ogg Theora film shipped in the game (assets/station/tape): the full 960 x 540 copy in the
+## desktop build, a lighter 480 x 270 copy of the same length in the browser build (assets_src/station/tape_web.mjs;
+## export_presets.cfg keeps each out of the other build). Only the local decoder emits natural end.
 signal request(operation: String, ticket: int)
-const FILM_SHA256 := "f8750e67bcf117187b19ad036078a9489d5feaa50bcbea47ba84a8c68cfcbcbd"
-const SOURCE := "res://reactor_media/crew23.ogv"
+## Each copy with its checksum: the first one present and intact plays.
+const FILMS := {
+	"res://assets/station/tape/crew23.ogv": "f8750e67bcf117187b19ad036078a9489d5feaa50bcbea47ba84a8c68cfcbcbd",
+	"res://assets/station/tape/crew23_web.ogv": "4119dbf31322da63f646d5761a06e32d0771d2a505dcf70046c4abbc353ec805",
+}
 const Marks = preload("res://client/reactor_marks.gd")
 var video := VideoStreamPlayer.new()
 var title := Label.new()
@@ -39,10 +44,16 @@ func _ready() -> void:
 	panel.add_child(status)
 	panel.add_child(button)
 	button.pressed.connect(press)
-	if ResourceLoader.exists(SOURCE) and FileAccess.get_sha256(SOURCE) == FILM_SHA256:
-		film = load(SOURCE) as VideoStream
+	film = tape()
 	_mark_floor()
 	_mark_floor.call_deferred() # and once more after this frame, should the scene not hold the HUD layer yet
+
+## The tape this build carries (the first copy in FILMS that is present and intact), or null.
+static func tape() -> VideoStream:
+	for path: String in FILMS:
+		if FileAccess.file_exists(path) and FileAccess.get_sha256(path) == FILMS[path]:
+			return load(path) as VideoStream
+	return null
 
 ## RX1: inside the Reactor's compiled scene (the pack's game_client.gd puts this screen on its HUD layer) add the
 ## repository's marks (client/reactor_marks.gd: the glowing tape and the E prompts). Not in the prison.
@@ -88,7 +99,7 @@ func show_archive(value: Dictionary, player_id: String) -> void:
 		else:
 			status.text = "Cassette stored. Play it now or leave it here."
 	if ticket!=0: status.text = "Playing recovered cassette."
-	if film==null and value.recovered: status.text = "Install the matching ReactorCampaign.pck to play the recovered film."
+	if film==null and value.recovered: status.text = "The recovered film is missing from this build."
 
 func _open_prison(source: Node, room: Variant) -> void:
 	var tree := get_tree()

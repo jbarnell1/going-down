@@ -33,6 +33,7 @@ const REFUSED := {
 	"window": "BUY AT SHOP WINDOW 1 OR 2.",
 	"closed": "THE SHOP IS SHUT TILL TONIGHT.",
 	"nobody": "NOBODY DOWN IN REACH. FACE THEM.",
+	"noHeals": "NO HEALS LEFT ON THIS FLOOR.",
 	"annexOnly": "MARKS ONLY STICK IN THE ANNEX.",
 	"unusable": "THAT IS NOT SOMETHING YOU USE.",
 }

@@ -137,7 +137,8 @@ func test_the_flag_is_last_off_by_default_and_needs_the_late_floors(t: T) -> voi
 	for a: Dictionary in init["args"]:
 		names.append(str(a["name"]))
 	# RN1 added ward_place_ and reactor_place_ after cycles_, in the order agreed for the three workers.
-	t.eq(names.slice(names.size() - 7), ["late_floors_", "party_table_", "tenant_timer_", "second_orderly_", "cycles_", "ward_place_", "reactor_place_"] as Array[String], "the last seven parameters, in the agreed order")
+	# DF1 added pressures_ after reactor_place_.
+	t.eq(names.slice(names.size() - 8), ["late_floors_", "party_table_", "tenant_timer_", "second_orderly_", "cycles_", "ward_place_", "reactor_place_", "pressures_"] as Array[String], "the last eight parameters, in the agreed order")
 	var plain := HostRules.new(true, 1, Places.FULL, true)
 	t.check(not plain.cycles and not plain.party_table and not plain.tenant_timer and not plain.second_orderly, "all off by default")
 	t.eq(plain.deck, Places.FULL, "the deck without the flag is the deck given")

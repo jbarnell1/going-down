@@ -11,14 +11,18 @@ const Main = preload("res://client/main.gd")
 const RIGGER_PATH := "res://assets/ward/rigger.glb"
 const HAND_PATH := "res://assets/ward/search-hand.glb"
 const Surfaces = preload("res://client/ward/surfaces.gdshader")
-const WARNING_PATH := "res://assets/ward/loaded-net.ogg"
-## The private rig is authored around the abdomen. The forward wrist sits 3.82 m
+## The loaded line: the library's net creak (assets/sfx/playroom/net_flap.ogg, the owner's; SOURCES.md).
+const WARNING_PATH := "res://assets/sfx/playroom/net_flap.ogg"
+## The rig (assets_src/blender/rigger/build_rigger.py) is authored around the abdomen. The forward wrist sits 3.82 m
 ## ahead of that origin; the host supplies the contact at the sill, not the abdomen.
 const RIGGER_WRIST := Vector3(1.81, 0.88, 3.82)
 const LIFT_DEPTH := 3.0
 
 var seed_value: int
 var walk_model: Ward
+## WN4: the walk's wire rounding and the refused-step check (client/ward/net_walk.gd).
+const NetWalk = preload("res://client/ward/net_walk.gd")
+var net_walk := NetWalk.new()
 var spawn: Vector3
 var houses: Array[Dictionary] = []
 var walkways: Array[Node3D] = []
@@ -246,7 +250,7 @@ func play_event(event: Dictionary) -> void:
 	var cue := str(cues.get(event.type, ""))
 	if cue.is_empty():
 		return
-	var path := "res://assets/ward/voice/bella/%s.ogg" % cue
+	var path := "res://assets/ward/voice/bella/%s.mp3" % cue
 	if ResourceLoader.exists(path):
 		cue_player.stream = load(path)
 		cue_player.play()
@@ -715,17 +719,22 @@ func _by_door() -> int:
 			return i
 	return -1
 
-## Correct a predicted step when a newer door or deck state disagrees with the host.
-func reconcile(body: Move.Body) -> void:
+## Correct a predicted step when a newer door or deck state disagrees with the host. WN4: with the input numbers
+## (`sent_seq` the newest sent, `ack_seq` the newest the host had taken, client/ward/net_walk.gd), also when the
+## host refused a step: back to where the host has the player.
+func reconcile(body: Move.Body, sent_seq := -1, ack_seq := -1, placed := false) -> void:
 	var accepted := Vector3(body.x, body.y, body.z)
 	var predicted := player.position
+	if sent_seq >= 0 and net_walk.refused(predicted, accepted, sent_seq, ack_seq, placed) != null:
+		player.position = accepted
+		return
 	if not walk_model.walk_clear(accepted, accepted):
 		return
 	if not walk_model.walk_clear(predicted, predicted) or (accepted.distance_to(predicted) > 0.24 and not walk_model.walk_clear(accepted, predicted)):
 		player.position = accepted
 
 func _move(motion: Vector3, delta: float) -> void:
-	player.position = walk_model.walk(player.position, Vector2(motion.x, motion.z) * delta)
+	player.position = NetWalk.step(walk_model, player.position, Vector2(motion.x, motion.z) * delta)
 
 func _draw_arm(fixture: House, local_points: PackedVector3Array) -> void:
 	if local_points == previous_arm:

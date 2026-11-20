@@ -6,8 +6,7 @@
 #      prompt), the tapes on the counter, the instrument drawn into the picture (client/instrument_view.gd);
 #   3. crewmates: client/others_view.gd crew figures with faces and name tags (client/main.gd name_tag);
 #   4. the camera drops when you creep (client/eye_height.gd).
-# The Ward is entered as the game enters it (test_ward_exit.gd _enter). Needs the private WardGroundMedia.pck
-# (GD_PACKS_DIR); without it each test SKIPS, as on CI.
+# The Ward is entered as the game enters it (test_ward_exit.gd _enter), from the game's own files.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -18,11 +17,7 @@ const Move = preload("res://sim/move.gd")
 const EyeHeight = preload("res://client/eye_height.gd")
 
 func _ward(t: T) -> Dictionary:
-	var packs := Exit._packs()
-	if packs.is_empty():
-		t.note("skipped: pack not found (set GD_PACKS_DIR to the folder holding WardGroundMedia.pck)")
-		return {}
-	return Exit.new()._enter(t, packs)
+	return Exit.new()._enter(t)
 
 func test_the_ward_is_drawn_through_the_tape(t: T) -> void:
 	var w := _ward(t)

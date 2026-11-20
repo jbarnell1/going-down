@@ -258,7 +258,7 @@ func test_off_the_ward_is_as_it_was(t: T) -> void:
 	quiet.room.leave()
 	Session.deck = keep[0]
 
-# --- In the real game scene (needs the private WardGroundMedia.pck in GD_PACKS_DIR; SKIPS without it, as on CI). ---
+# --- In the real game scene (the Ward's files ship in the game, IP1). ---
 
 static func _frames(game: Node, n: int) -> void:
 	for i in n:
@@ -268,15 +268,10 @@ static func _frames(game: Node, n: int) -> void:
 ## The lamp's beam and a flare's light hang in the Ward's world (the floor plan's level is hidden there), and an item
 ## on the floor in reach keeps the main game's F prompt.
 func test_the_main_scene_shows_the_lamp_and_the_take_prompt_on_the_ward(t: T) -> void:
-	var dir := OS.get_environment("GD_PACKS_DIR")
-	if dir.is_empty() or not FileAccess.file_exists(dir.path_join("WardGroundMedia.pck")):
-		t.note("skipped: pack not found (set GD_PACKS_DIR to the folder holding WardGroundMedia.pck)")
-		return
 	var keep := _deck_on()
 	var tree := Engine.get_main_loop() as SceneTree
 	var game := (load("res://main.tscn") as PackedScene).instantiate()
 	game.automated = true
-	game.pack_dir = dir
 	tree.root.add_child(game)
 	game.start.playtest_available = true
 	_frames(game, 30)

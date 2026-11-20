@@ -196,6 +196,8 @@ var late_floors := true
 ## return settles the day, and once it is done the days start at floor 8). Only with the late floors; the game's;
 ## `cycles=0` or tests turn it off.
 var cycles := true
+## DF1: the pressures of floor 8 and deeper (net/host_rules.gd pressures), with cycles; `pressures=0` or tests turn it off.
+var pressures := true
 ## WN1: the Hanging Ward as a normal level (net/host_rules.gd ward_place), with the late floors; `ward_place=0` falls
 ## back to the scene swap.
 var ward_place := true
@@ -456,7 +458,8 @@ func _start(now: float) -> void:
 		nerve_passive and not (ward_review or reactor_review or orientation_review),
 		HostRules.annex_drag_on_by_arg() and not (ward_review or reactor_review or orientation_review),
 		playroom_tuned, late_floors and not (ward_review or reactor_review or orientation_review), playroom_tuned, true, not (ward_review or reactor_review or orientation_review), cycles and late_floors and not (ward_review or reactor_review or orientation_review),
-		ward_place and late_floors and not (ward_review or reactor_review or orientation_review), reactor_place and late_floors and not (ward_review or reactor_review or orientation_review))
+		ward_place and late_floors and not (ward_review or reactor_review or orientation_review), reactor_place and late_floors and not (ward_review or reactor_review or orientation_review),
+		cycles and late_floors and not (ward_review or reactor_review or orientation_review) and pressures and HostRules.pressures_by_arg())
 	if orientation_review:
 		rules.enable_orientation()
 	elif orientation_campaign:

@@ -8,7 +8,7 @@
 #      camera; the main game's own keys walk the player out of the lift, the host accepting every step; the HUD shows
 #      STEP OUT OF THE LIFT and then LIFT RETURNS IN; F works the winch; F6 opens the picker over the Ward; Esc shows
 #      the menu; caught, the screen watches; when the lift has gone the main scene's own level and lift come back.
-# Part 2 needs the private WardGroundMedia.pck (GD_PACKS_DIR) and SKIPS without it, as on CI.
+# Part 2 runs everywhere: the Ward's figures and sounds ship in the game (IP1).
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -38,7 +38,7 @@ func test_the_flag_is_the_last_parameter_and_off_by_default(t: T) -> void:
 			for a: Dictionary in m["args"]:
 				names.append(a["name"])
 	t.eq(names[names.find("cycles_") + 1], "ward_place_", "ward_place_ comes right after cycles_ (reactor_place_ follows it)")
-	t.eq(names.back(), "reactor_place_", "and only reactor_place_ comes after it")
+	t.eq(names[names.find("cycles_") + 2], "reactor_place_", "reactor_place_ follows it (later flags such as pressures_ come after)")
 	t.check(not HostRules.new(true, 1).ward_place, "off by default")
 	var args: Array = []
 	for i in names.size():
@@ -122,12 +122,6 @@ static func _plain(v: Variant) -> Variant:
 
 # --- 2. In the real game scene. ---
 
-static func _packs() -> String:
-	var dir := OS.get_environment("GD_PACKS_DIR")
-	if dir.is_empty() or not FileAccess.file_exists(dir.path_join("WardGroundMedia.pck")):
-		return ""
-	return dir
-
 static func _key(_game: Node, code: Key, down: bool) -> void:
 	var k := InputEventKey.new()
 	k.pressed = down
@@ -148,15 +142,10 @@ static func _ward_of(game: Node) -> Dictionary:
 	return lc.latest.get("ward", {}) if lc != null and lc.latest is Dictionary else {}
 
 func test_the_main_scene_plays_the_ward(t: T) -> void:
-	var packs := _packs()
-	if packs.is_empty():
-		t.note("skipped: pack not found (set GD_PACKS_DIR to the folder holding WardGroundMedia.pck)")
-		return
 	var original := Session.deck
 	var tree := Engine.get_main_loop() as SceneTree
 	var game := GameScene.instantiate() as Game
 	game.automated = true
-	game.pack_dir = packs
 	tree.root.add_child(game)
 	game.start.playtest_available = true
 	# Four seconds on the title first, as a player would: the room's clock then starts behind the game's, which is

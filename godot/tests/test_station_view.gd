@@ -15,9 +15,6 @@ const Main = preload("res://client/main.gd")
 const Floor = preload("res://sim/floor.gd")
 
 static func _level(plan: RefCounted) -> Level:
-	# Earlier files in the run may have mounted the private pack; its motion file warns as it loads (counted as
-	# errors by the runner), so these tests keep to the crew rig's own clips.
-	Crew.borrow_clips = false
 	var level := Level.new()
 	(Engine.get_main_loop() as SceneTree).root.add_child(level)
 	var fp: Floor.FloorPlan = plan
@@ -172,24 +169,18 @@ func test_the_crawl_creeps_a_standing_player(t: T) -> void:
 	t.check(not bool(view.call(&"crouch_at", hall.get_center().x, hall.get_center().y)), "the hall does not")
 	level.free()
 
-# With the private ReactorCampaign pack (GD_PACKS_DIR), the four wear its four faces (the tape's); without it, this
-# repository's drawings (checked above). Last in this file and in the suite's order: once mounted, the pack stays
-# mounted for the process. The pack's crawl and run are not loaded here: its motion file warns as it loads (its
-# texture UIDs are the pack build's), which the runner counts as errors; that they resolve on the crew rig was
-# checked by hand (the RN2 report).
-func test_with_the_pack_the_four_wear_its_faces(t: T) -> void:
-	var dir := OS.get_environment("GD_PACKS_DIR")
-	if dir.is_empty() or not FileAccess.file_exists(dir.path_join("ReactorCampaign.pck")):
-		t.note("skipped: pack not found (set GD_PACKS_DIR to the folder holding ReactorCampaign.pck)")
-		return
-	t.check(ProjectSettings.load_resource_pack(dir.path_join("ReactorCampaign.pck"), false), "the pack mounts")
+# IP1: the four wear the tape's four faces from the game's own files (assets/station/faces), not the fallback
+# drawings, and crawl and run with the downloaded clips (assets/station/crew_zombie.glb).
+func test_the_four_wear_the_tapes_faces_and_its_crawl_from_the_game(t: T) -> void:
 	Faces._cache.clear()
 	var level := _level(Station.generate_station("rn2-pack", 7))
 	var crew: Node3D = _view(level).get("crew")
-	if ResourceLoader.exists("res://faces/seat-1.png"):
-		t.check(CrewView.image_hash(Faces.drawing(1)) != CrewView.image_hash(Faces.own_drawing(1)), "seat 1 wears the pack's drawing")
-		t.eq(str(crew.call(&"describe", 0)["faceHash"]), CrewView.texture_hash(Faces.damaged(1)), "and it is on the screen")
-	else:
-		t.note("the pack has no res://faces/seat-1.png")
+	for n in range(1, 5):
+		t.check(ResourceLoader.exists(Faces.FACE % n), "seat %d's drawing ships in the game" % n)
+		t.check(CrewView.image_hash(Faces.drawing(n)) != CrewView.image_hash(Faces.own_drawing(n)), "seat %d wears the tape's drawing" % n)
+		t.eq(str(crew.call(&"describe", n - 1)["faceHash"]), CrewView.texture_hash(Faces.damaged(n)), "and it is on seat %d's screen" % n)
+	t.check(bool(crew.get("zombie_clips")), "the four have the downloaded crawl and run")
+	t.eq(str(crew.call(&"clip_for", "crawling")), "station/zombie_crawl", "crawling plays the downloaded crawl")
+	t.eq(str(crew.call(&"clip_for", "pursuing")), "station/zombie_run", "pursuing plays the downloaded run")
 	Faces._cache.clear()
 	level.free()

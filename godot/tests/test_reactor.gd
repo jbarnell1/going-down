@@ -223,10 +223,9 @@ func test_ordinary_client_receives_cassette_and_missing_film_is_optional(t:T) ->
 	var tree := Engine.get_main_loop() as SceneTree
 	tree.root.add_child(screen)
 	screen.show_archive({"recovered":true,"discovered":false,"playing":{}}, "me")
-	if screen.film==null:
-		t.check(screen.button.disabled and screen.status.text.contains("ReactorCampaign.pck"),"public source checkout shows private media requirement")
-	else:
-		t.check(not screen.button.disabled,"matching private media enables playback")
+	# IP1: the tape ships in the game; a plain checkout plays it.
+	t.check(screen.film != null and not screen.button.disabled, "the game's own tape enables playback")
+	t.check(not screen.status.text.contains(".pck"), "no file to install is named: " + screen.status.text)
 	screen.free()
 	room.leave()
 

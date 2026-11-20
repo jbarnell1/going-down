@@ -3,10 +3,8 @@
 #   - Always: alone with the game's deck (cycles on), the Ward at floor 6 departs with the player aboard, the room
 #     arrives at floor 7 with a Reactor block and no Ward block, the Ward's screen is due to hand back, and the main
 #     game it hands to picks the Reactor's scene.
-#   - With the private packs (GD_PACKS_DIR holding WardGroundMedia.pck and ReactorCampaign.pck): the same through the
-#     real scenes, the Ward's scene on screen first and the Reactor's compiled scene after it, with the same room.
-#     SKIPPED (passes, printing why) when a pack is not there, as on CI.
-# Run after test_floor_entry (its first test needs no pack mounted in the process).
+#   - The same through the real scenes: the Ward's scene (on the game's own files, IP1) on screen first; the
+#     Reactor's old compiled room is not in the game, so the main game it hands to keeps the same room and says so.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -18,12 +16,6 @@ const Session = preload("res://net/session.gd")
 const Client = preload("res://net/client.gd")
 const Move = preload("res://sim/move.gd")
 const Places = preload("res://sim/places.gd")
-
-static func _packs(file: String) -> String:
-	var dir := OS.get_environment("GD_PACKS_DIR")
-	if dir.is_empty() or not FileAccess.file_exists(dir.path_join(file)):
-		return ""
-	return dir
 
 ## A solo room with the game's deck, on the Ward at floor 6, the player standing where the Ward put them (its lift).
 static func _ward_room() -> LocalRoom:
@@ -38,10 +30,9 @@ static func _ward_room() -> LocalRoom:
 		room.poll(0.05 * i)
 	return room
 
-static func _main_for(room: Variant, packs: String) -> Main:
+static func _main_for(room: Variant) -> Main:
 	var main := Main.new()
 	main.hud = Hud.new()
-	main.pack_dir = packs
 	main.link = PlayLink.new(room, true)
 	return main
 
@@ -100,18 +91,13 @@ func test_handback_rules(t: T) -> void:
 	t.check(not Review.handback_due({"depth": 6, "ward": {"phase": "departed"}, "reactor": {"lift": false}}), "never while the Ward's block is sent")
 	t.check(Review.handback_due({"depth": 0}), "home, as before")
 
-func test_ward_scene_then_reactor_scene_with_the_same_room(t: T) -> void:
-	var ward_packs := _packs("WardGroundMedia.pck")
-	var reactor_packs := _packs("ReactorCampaign.pck")
-	if ward_packs.is_empty() or reactor_packs.is_empty():
-		t.note("skipped: pack not found (set GD_PACKS_DIR to the folder holding WardGroundMedia.pck and ReactorCampaign.pck)")
-		return
+func test_ward_scene_then_the_same_room_on_the_reactor(t: T) -> void:
 	var original := Session.deck
 	Session.deck = Places.FULL
 	var tree := Engine.get_main_loop() as SceneTree
 	var before := tree.current_scene
 	var room := _ward_room()
-	var main := _main_for(room, ward_packs)
+	var main := _main_for(room)
 	main._enter_floor("ward", room)
 	var scene := tree.current_scene
 	if not t.check(scene != before and scene != null and scene.scene_file_path == "res://client/ward/review.tscn", "the Ward's scene is on screen"):
@@ -145,29 +131,14 @@ func test_ward_scene_then_reactor_scene_with_the_same_room(t: T) -> void:
 	scene.free()
 	_drop(main)
 	room.time_scale = 1.0
-	var next := _main_for(room, reactor_packs)
-	t.check(next._mount_floor_pack("reactor"), "the Reactor pack mounts")
-	var printing := Engine.print_error_messages
-	Engine.print_error_messages = false
-	var held: Array[Resource] = [load("res://reactor_campaign.tscn"), load("res://crew23_motion.glb")]
-	Engine.print_error_messages = printing
-	t.check(held.all(func(r: Resource) -> bool: return r != null), "the pack's scene loads")
+	# IP1: the Reactor's old compiled room is not in the game. The main game the Ward hands to keeps the same room
+	# and says so, instead of a blank screen.
+	var next := _main_for(room)
+	var link := next.link
 	next._enter_floor("reactor", room)
-	var reactor := tree.current_scene
-	if t.check(reactor != before and reactor != null and reactor.scene_file_path == "res://reactor_campaign.tscn", "the Reactor's scene is on screen"):
-		t.check(reactor.get("game") == room, "playing the same room the Ward played")
-		for i in 20:
-			reactor._physics_process(1.0 / 60.0)
-			OS.delay_usec(2000)
-		var frame: Variant = reactor.get("frame")
-		t.check(frame is Dictionary and frame.has("power"), "drawing the room's Reactor block")
-		var screen_node: Variant = reactor.get("screen")
-		tree.current_scene = before
-		reactor.set("game", null)
-		reactor.get_parent().remove_child(reactor)
-		reactor.free()
-		if is_instance_valid(screen_node):
-			(screen_node as Node).free()
+	t.check(tree.current_scene == before, "no swap to a Reactor scene that is not in the game")
+	t.check(next.link == link and room.status != "closed", "the main game keeps playing the same room the Ward played")
+	t.check(next.hud.note.contains("not in this build"), "with a plain line: " + next.hud.note)
 	_drop(next)
 	room.leave()
 	Session.deck = original

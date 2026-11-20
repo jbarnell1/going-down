@@ -11,16 +11,17 @@
 #   - gives the main HUD the Ward's lines: the lift's clock (LIFT RETURNS IN m:ss, DOORS CLOSE IN n, as the design
 #     names them) and the prompt (STEP OUT OF THE LIFT, the winch, the doors, being caught and watching);
 #   - the line of sight for name tags (the Ward's walls), and a caught player's watching camera.
-# Without the Ward's media pack the walk and the lines still work; only the pictures are missing (the main scene
-# says which file to put beside the game).
+# Everything the Ward draws ships in the game (godot/assets/ward, built by assets_src/blender/rigger/). Were it
+# missing, the walk and the lines would still work; only the pictures would be.
 extends Node3D
 
 const View = preload("res://client/ward/view.gd")
 const Ward = preload("res://sim/ward/state.gd")
 const Move = preload("res://sim/move.gd")
+const Protocol = preload("res://net/protocol.gd")
 
 var seed_value := 0
-## The Ward's world on screen, or null without the media pack.
+## The Ward's world on screen, or null without its files.
 var view: View = null
 ## The walk model the player is moved through: the view's own (kept in step by show_host), or one of this node's.
 var model: Ward
@@ -46,9 +47,66 @@ func setup(seed_: int, media: bool, events_seen: int) -> void:
 		model = Ward.new(seed_)
 
 ## One step of the main game's own player, through the Ward's footing and walls: the body after moving (dx, dz).
+## WN3: the wire carries a body to the centimetre (net/protocol.gd q_body), and the host checks what it receives. A
+## walker sliding along a jamb stands right at the edge of its clearance, and the rounded feet can fall just inside
+## it, where the host can walk nobody on from. Then the step ends on the nearest centimetre point that is clear (the
+## free side of the jamb), so every body the host is sent is one it can walk on from; with none, it is not taken.
 func walk(body: Move.Body, dx: float, dz: float) -> Move.Body:
-	var to := model.walk(Vector3(body.x, body.y, body.z), Vector2(dx, dz))
-	return Move.Body.make(to.x, to.z, body.level, to.y)
+	var from := Vector3(body.x, body.y, body.z)
+	var to := model.walk(from, Vector2(dx, dz))
+	if to == from:
+		return body
+	var y := snappedf(to.y, 0.01)
+	var exact := Vector3(snappedf(to.x, 0.01), y, snappedf(to.z, 0.01))
+	if model.walk_clear(exact, exact):
+		return Move.Body.make(to.x, to.z, body.level, to.y)
+	var best := Vector3.INF
+	for gx: float in [floorf(to.x * 100.0) / 100.0, ceilf(to.x * 100.0) / 100.0]:
+		for gz: float in [floorf(to.z * 100.0) / 100.0, ceilf(to.z * 100.0) / 100.0]:
+			var c := Vector3(gx, y, gz)
+			if c.distance_to(to) < best.distance_to(to) and model.walk_clear(c, c) and model.walk_clear(from, c):
+				best = c
+	if best == Vector3.INF:
+		return body
+	return Move.Body.make(best.x, best.z, body.level, best.y)
+
+## WN3: the bodies this screen sent with each input (by input number), until the host has answered for them.
+var _sent := {}
+var _last_seq := -1
+
+## client/main.gd _ward_frame, every frame after the player's own step: the body this screen walks on from.
+## `predicted` the screen's body, `accepted` the host's newest row for this player, `sent_seq` the newest input sent,
+## `ack_seq` the newest input the host had taken when it sent that row, `placed` whether the host placed the player
+## this frame. When the host's body is not the one this screen sent with input `ack_seq` (the host refused a step),
+## the player is put where the host has them, so the screen never walks a world the host does not see (and the
+## Rigger's hand reaches for where they stand). Also when the screen's own feet are where the model says nobody stands
+## (a door or deck changed under them).
+func reconcile(predicted: Move.Body, accepted: Move.Body, sent_seq: int, ack_seq: int, placed: bool) -> Move.Body:
+	if placed:
+		_sent.clear()
+		_last_seq = sent_seq
+		return predicted
+	if sent_seq != _last_seq:
+		_last_seq = sent_seq
+		_sent[sent_seq] = Protocol.q_body(predicted)
+	var at := Vector3(accepted.x, accepted.y, accepted.z)
+	var own := Vector3(predicted.x, predicted.y, predicted.z)
+	if _sent.has(ack_seq):
+		var was: Move.Body = _sent[ack_seq]
+		for k: int in _sent.keys():
+			if k < ack_seq:
+				_sent.erase(k)
+		if Vector3(was.x, was.y, was.z).distance_to(at) > SNAP_GAP:
+			# Refused: later inputs were walked from a body the host never had. Start again from the host's.
+			_sent.clear()
+			return accepted
+	if model.walk_clear(at, at) and not model.walk_clear(own, own):
+		return accepted
+	return predicted
+
+## How far the host's body may be from the one sent before the screen goes back to the host's (the wire's rounding is
+## a centimetre).
+const SNAP_GAP := 0.03
 
 ## Whether a point is in view from `from` past the Ward's walls (name tags).
 func sees(from: Vector3, at: Vector3) -> bool:

@@ -46,3 +46,38 @@ func test_the_data_files_the_rules_name_exist(t: T) -> void:
 				at = src.find("\"res://data/", end)
 	t.check(n >= 2, "the rules name at least two data files (%d found)" % n)
 	t.note("%d data file references checked" % n)
+
+## IP1: the Hanging Ward's and the Reactor's files ship in the game builds like every other floor's (no extra file
+## beside the game): each is in the project, and neither the web nor the Windows preset leaves it out. The tape is
+## the one split: the full copy in the Windows build, the lighter one in the browser build.
+const FLOOR_FILES: Array[String] = [
+	"assets/ward/rigger.glb", "assets/ward/search-hand.glb",
+	"assets/ward/voice/bella/ward_lift_departed.mp3", "assets/ward/voice/bella/ward_lift_last_minute.mp3",
+	"assets/ward/voice/bella/ward_lift_returned.mp3", "assets/ward/voice/bella/ward_lift_final_call.mp3",
+	"assets/ward/voice/bella/ward_lift_closed.mp3", "assets/sfx/playroom/net_flap.ogg",
+	"assets/station/crew_zombie.glb", "assets/station/faces/seat-1.png", "assets/station/faces/seat-2.png",
+	"assets/station/faces/seat-3.png", "assets/station/faces/seat-4.png",
+]
+const TAPE := {"Web": "assets/station/tape/crew23_web.ogv", "Windows": "assets/station/tape/crew23.ogv"}
+
+func test_the_late_floors_files_ship_in_every_game_build(t: T) -> void:
+	for f: String in FLOOR_FILES + TAPE.values():
+		t.check(FileAccess.file_exists("res://" + f), "res://%s is in the project" % f)
+	var text := FileAccess.get_file_as_string("res://export_presets.cfg")
+	var name := ""
+	var include := ""
+	var seen := 0
+	for raw: String in text.split("\n"):
+		var line := raw.strip_edges()
+		if line.begins_with("name="):
+			name = line.trim_prefix("name=").trim_prefix("\"").trim_suffix("\"")
+		elif line.begins_with("include_filter="):
+			include = line
+		elif line.begins_with("exclude_filter=") and TAPE.has(name):
+			seen += 1
+			for dir: String in ["assets/*", "assets/ward", "assets/station/*", "assets/station/faces", "assets/sfx", ".glb", ".mp3", ".png"]:
+				t.check(not line.contains(dir), "%s: exclude_filter does not name %s (%s)" % [name, dir, line])
+			var other: String = TAPE["Web" if name == "Windows" else "Windows"]
+			t.check(include.contains(TAPE[name]), "%s: include_filter carries its tape %s" % [name, TAPE[name]])
+			t.check(line.contains(other) and not line.contains(TAPE[name] + "\"") and not line.contains(TAPE[name] + ","), "%s: exclude_filter leaves out only the other build's tape %s" % [name, other])
+	t.eq(seen, 2, "the web and Windows presets were read")

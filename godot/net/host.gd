@@ -712,7 +712,10 @@ func _on_input(p: HostPlayer, m: Dictionary, ht: float) -> void:
 	if _ward_review != null and _ward_review.phase == &"departed":
 		return
 	if _ward_review != null and not _trusted.has(p.id):
-		if p.body != null and not _ward_review.walk_clear(Vector3(p.body.x, p.body.y, p.body.z), Vector3(mb.x, mb.y, mb.z)):
+		var held := Vector3(p.body.x, p.body.y, p.body.z) if p.body != null else Vector3.INF
+		var to := Vector3(mb.x, mb.y, mb.z)
+		# WN3: the walk is judged as the screen walks it (WN4: the old swapped-in Ward's screen too).
+		if p.body != null and not _ward_reach(held, to):
 			stats.clamped_inputs += 1
 			return
 	# RN3: the Reactor's crawl is creep-only; a standing step into it is refused here as the client stops it.
@@ -732,6 +735,26 @@ func _on_input(p: HostPlayer, m: Dictionary, ht: float) -> void:
 		p.allowance = Session.JUMP_SLACK
 	p.body = mb
 	p.body_ct = m["ct"]
+
+## WN3: whether a networked walker's new body is a walk the Ward's own model (sim/ward/state.gd walk, what the screen
+## walks with) could have taken from the held one. The screen walks in 7 cm pieces that slide along walls, three
+## frames to an input, so the straight line between two inputs can cut the inside of a jamb's clearance that the walk
+## went round (the first refusal seen, seed late-5: held (0.46, 0, -6.08), sent (0.53, 0, -5.97), both clear, the
+## line between them not). Tried in turn: the straight line, the two ways round one corner, the walk replayed.
+func _ward_reach(from: Vector3, to: Vector3) -> bool:
+	var w := _ward_review
+	if w.walk_clear(from, to):
+		return true
+	if not w.walk_clear(to, to):
+		return false
+	for corner: Vector2 in [Vector2(to.x, from.z), Vector2(from.x, to.z)]:
+		var y := w.footing.walking_height(corner, from.y, w.bridge_lowered)
+		if is_finite(y):
+			var c := Vector3(corner.x, y, corner.y)
+			if w.walk_clear(from, c) and w.walk_clear(c, to):
+				return true
+	var replay := w.walk(from, Vector2(to.x - from.x, to.z - from.z))
+	return replay.distance_to(to) <= 0.12 and w.walk_clear(replay, to)
 
 ## The tank, stepped on a new input over the client time since the previous one.
 func _step_gait(p: HostPlayer, m: Dictionary) -> void:
@@ -1635,7 +1658,22 @@ func world(full: bool = false) -> Dictionary:
 	# Cycles (FL2; Protocol "cycle"): the cycle of this floor, or of the next descent in the prison; absent in cycle 1.
 	if Run.cycles_on(s) and Run.cycle_now(s) >= 2:
 		out["cycle"] = Run.cycle_now(s)
+	# DF1 (Protocol "pressure"): what the pressures change on screens, from floor 8; absent in cycle 1 and with them off.
+	var pressure: Variant = pressure_block(s)
+	if pressure != null:
+		out["pressure"] = pressure
 	return out
+
+## DF1 (sim/run.gd "Pressures"): the near light every screen draws, the heals left to the crew on this floor (-1: no
+## limit) and who still has a free Field Dressing help here. Null with the pressures off, in cycle 1 and in the prison.
+static func pressure_block(s: Run.RunState) -> Variant:
+	if not s.pressures or Run.pressure_cycle(s) < 2 or s.depth < 1:
+		return null
+	var free: Array = []
+	for p in s.players:
+		if Run.pressure_free_help(s, p.id):
+			free.append(p.id)
+	return {"light": Run.pressure_near_light(s), "heals": Run.pressure_heals_left(s), "free": free}
 
 ## WN1: whether the rules stepping this run play the Ward as a normal level (net/host_rules.gd ward_place).
 func ward_native() -> bool:
@@ -1823,7 +1861,7 @@ static func day_block(s: Run.RunState) -> Dictionary:
 		var at := Day.lights_out_at(b)
 		if not is_inf(at):
 			lights = at
-	var out := {"index": s.day_index, "day": s.day_state.day, "quota": Day.day_quota(s.day_state, Run.DAY_FLOOR_QUOTA), "streak": s.day_state.streak,
+	var out := {"index": s.day_index, "day": s.day_state.day, "quota": Day.day_quota(s.day_state, Run.day_floor_quota(s)), "streak": s.day_state.streak,
 		"misses": s.day_state.misses, "inBed": in_bed, "countFrom": count_from, "lightsOutAt": lights,
 		"result": Protocol.plain(s.day_result) if s.day_result != null else null, "crew": crew}
 	if s.reel_day > 0:

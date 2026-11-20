@@ -99,6 +99,10 @@
 #    and only with the late floors. `ward_place` is another worker's flag, stored only. With `reactor_place` the deck
 #    carries Places.REACTOR: floor 7 (and 14, 21 with cycles) is the generated station (sim/station.gd), its rules
 #    stepped by the run itself (sim/run.gd "The Reactor", sim/station_floor.gd), and net/host.gd starts no overlay there.
+#  - The pressures (DF1, `pressures`, the last parameter after `reactor_place`; docs/floors/difficulty.md section 2): off
+#    unless asked, and only with cycles; the game's rooms ask for it with them (`pressures=0` switches it off). From
+#    floor 8 the quotas grow, heals are counted, a Stillness resident needs a third watcher, the near light shrinks
+#    and the Tenant comes sooner (sim/run.gd "Pressures"). Cycle 1 is unchanged.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -194,6 +198,9 @@ var ward_place: bool
 ## with the late floors; the game's rooms ask for it with them. The deck then carries Places.REACTOR, so floor 7 (14,
 ## 21 with cycles) is the generated station with its rules in the run, and the host starts no Reactor overlay there.
 var reactor_place: bool
+## The pressures of floor 8 and deeper (DF1, the last parameter; sim/run.gd "Pressures"): off unless asked, and only
+## with cycles. The game's rooms ask for it with the late floors unless started with `pressures=0`.
+var pressures: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -220,8 +227,9 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		deep_pockets_: bool = false, second_wind_: bool = false, soft_shoes_: bool = false, flare_: bool = false, lamp_: bool = false, badge_search_: bool = false, quick_fingers_: bool = false, long_burn_: bool = false, field_dressing_: bool = false, doorway_shadow_: bool = false, steady_gaze_: bool = false, throwing_arm_: bool = false,
 		nerve_passive_: bool = false, annex_drag_: bool = false, minder_hunt_: bool = false, late_floors_: bool = false,
 		party_table_: bool = false, tenant_timer_: bool = false, second_orderly_: bool = false, cycles_: bool = false,
-		ward_place_: bool = false, reactor_place_: bool = false) -> void:
+		ward_place_: bool = false, reactor_place_: bool = false, pressures_: bool = false) -> void:
 	ward_place = ward_place_ and late_floors_
+	pressures = pressures_ and cycles_ and late_floors_
 	tenant_timer = tenant_timer_
 	reactor_place = reactor_place_ and late_floors_
 	minder_hunt = minder_hunt_
@@ -347,6 +355,9 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s.orderly = parked_orderly(s)
 		# The Playroom's Minder too: no count, no search (sim/run.gd seek_off).
 		s.seek_off = true
+	# DF1: before the quota, so a run made to start below floor 7 has its first floor's quota with the pressure.
+	if pressures and not s.pressures:
+		s = Run.with_pressures(s)
 	if quota and _entity_on and not s.quota:
 		s = Run.with_quota(s)
 	if downs and not s.downs:
@@ -439,13 +450,27 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 static func doorway_shadow_on_by_arg() -> bool:
 	return not OS.get_cmdline_user_args().has("doorway_shadow=0")
 
-## RN1: the Reactor as a place unless `reactor_place=0` (an argument after `--`, or the web page's ?reactor_place=0).
+## RN1: the Reactor as a place. IP1: always. `reactor_place=0` (an argument after `--`, or the web page's
+## ?reactor_place=0) once swapped in the old compiled room, which is no longer in the game; asked for, it is
+## refused with a log line and the Reactor stays the place the main game draws (never a blank screen).
 static func reactor_place_by_arg() -> bool:
+	var asked := false
 	for raw in OS.get_cmdline_user_args():
 		if raw.trim_prefix("--") == "reactor_place=0":
+			asked = true
+	if not asked and OS.has_feature("web"):
+		asked = str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('reactor_place') ?? ''", true)) == "0"
+	if asked:
+		print("reactor_place=0 ignored: the old Reactor room is not in this build; the Reactor is drawn by the main game")
+	return true
+
+## DF1: the pressures unless `pressures=0` (an argument after `--`, or the web page's ?pressures=0).
+static func pressures_by_arg() -> bool:
+	for raw in OS.get_cmdline_user_args():
+		if raw.trim_prefix("--") == "pressures=0":
 			return false
 	if OS.has_feature("web"):
-		return str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('reactor_place') ?? ''", true)) != "0"
+		return str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('pressures') ?? ''", true)) != "0"
 	return true
 
 static func garden_admission_by_arg() -> bool:
@@ -666,7 +691,7 @@ func _step_tenant(s: Run.RunState, events: Array[Dictionary]) -> void:
 	for e in events:
 		if e["type"] == "doorsOpened" and str(e.get("reason", "")) == "arrival" and tenant_floor(s):
 			# The length is stamped now: a change to the setting mid-floor waits for the next floor.
-			tenant_len = 60.0 * Settings.i(s.tuning, &"tenant.minutes", TENANT_MINUTES)
+			tenant_len = 60.0 * Run.pressure_tenant_minutes(s, Settings.i(s.tuning, &"tenant.minutes", TENANT_MINUTES))
 			tenant_at = s.t + tenant_len
 			tenant_depth = s.depth
 			tenant_day = s.day_index

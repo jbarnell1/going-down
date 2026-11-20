@@ -351,7 +351,8 @@ func start_run() -> void:
 		HostRules.nerve_passive_on_by_arg() and not _orientation_playtest,
 		HostRules.annex_drag_on_by_arg() and not _orientation_playtest,
 		playroom_tuned_on(), late_floors_on() and not _orientation_playtest, playroom_tuned_on(), Session.deck == Places.FULL, Session.deck == Places.FULL, late_floors_on() and not _orientation_playtest,
-		late_floors_on() and not _orientation_playtest and not HostRules.ward_place_off_by_arg() and ward_place, reactor_place and late_floors_on() and not _orientation_playtest)
+		late_floors_on() and not _orientation_playtest and not HostRules.ward_place_off_by_arg() and ward_place, reactor_place and late_floors_on() and not _orientation_playtest,
+		late_floors_on() and not _orientation_playtest and HostRules.pressures_by_arg())
 	if _orientation_playtest:
 		rules.enable_orientation()
 	elif orientation_campaign and _playtest_depth < 0:

@@ -177,6 +177,17 @@ const PROOFS := {
 	&"party.free_time": "test_party_table_numbers",
 	&"party.free_anger": "test_party_table_numbers",
 	&"party.reach": "test_party_table_numbers",
+	# DF1: the pressures of floor 8 and deeper.
+	&"pressure.quota": "test_pressure_settings",
+	&"pressure.quota3": "test_pressure_settings",
+	&"pressure.heals": "test_pressure_settings",
+	&"pressure.heals3": "test_pressure_settings",
+	&"pressure.watchers": "test_pressure_settings",
+	&"pressure.watchers3": "test_pressure_settings",
+	&"pressure.near_light": "test_pressure_settings",
+	&"pressure.near_light3": "test_pressure_settings",
+	&"pressure.tenant_minutes": "test_pressure_settings",
+	&"pressure.tenant_minutes3": "test_pressure_settings",
 }
 
 ## The rows of later pieces wired so far (sim/settings.gd WIRED_IDS), in the registry's order.
@@ -193,7 +204,8 @@ const MORE: Array[StringName] = [
 	&"reactor.power_hold", &"reactor.wake_after", &"reactor.wake_gap", &"reactor.crawl_time", &"reactor.crawl_speed", &"reactor.run_speed",
 	&"orderly2.first_floor", &"flare.throw", &"flare.reach", &"flare.stun", &"flare.blind", &"flare.noise", &"lamp.seconds", &"lamp.range",
 	&"quota.step", &"record.reach", &"record.rate", &"marks.pad",
-	&"party.free_time", &"party.free_anger", &"party.reach"]
+	&"party.free_time", &"party.free_anger", &"party.reach",
+	&"pressure.quota", &"pressure.quota3", &"pressure.heals", &"pressure.heals3", &"pressure.watchers", &"pressure.watchers3", &"pressure.near_light", &"pressure.near_light3", &"pressure.tenant_minutes", &"pressure.tenant_minutes3"]
 
 ## The game's value of every setting: the constant the game uses, with the rooms' switches on (paced, the long
 ## dark, the car waits: net/host_rules.gd). This table, not the registry, is the test's oracle.
@@ -318,6 +330,11 @@ static func game_values() -> Dictionary:
 		&"hide.in_slow": Seek.IN_SLOW,
 		&"hide.in_fast": Seek.IN_FAST,
 		&"hide.reach": Seek.HIDE_REACH,
+		&"pressure.quota": Run.PRESSURE_QUOTA, &"pressure.quota3": Run.PRESSURE_QUOTA3,
+		&"pressure.heals": float(Run.PRESSURE_HEALS), &"pressure.heals3": float(Run.PRESSURE_HEALS3),
+		&"pressure.watchers": float(Run.PRESSURE_WATCHERS), &"pressure.watchers3": float(Run.PRESSURE_WATCHERS3),
+		&"pressure.near_light": Run.PRESSURE_NEAR_LIGHT, &"pressure.near_light3": Run.PRESSURE_NEAR_LIGHT3,
+		&"pressure.tenant_minutes": float(Run.PRESSURE_TENANT), &"pressure.tenant_minutes3": float(Run.PRESSURE_TENANT3),
 	}
 
 ## Every wired setting at today's value (the "all at today's" tuning).
@@ -339,7 +356,8 @@ func test_catch_dance_setting(t: T) -> void:
 func test_registry_rows(t: T) -> void:
 	var game := game_values()
 	var rows := Settings.list()
-	t.eq(rows.size(), 120, "rows in the registry")
+	# DF1 added the ten pressure rows (floor 8 and deeper, their own group before the player speeds).
+	t.eq(rows.size(), 130, "rows in the registry")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -392,6 +410,7 @@ func test_registry_rows(t: T) -> void:
 	t.eq(by_group.get(&"players", 0), 30, "players")
 	t.eq(by_group.get(&"earning", 0), 10, "earning")
 	t.eq(by_group.get(&"hiding", 0), 3, "hiding")
+	t.eq(by_group.get(&"deeper", 0), 10, "floor 8 and deeper")
 	t.eq(by_group.get(&"speeds", 0), 4, "player speeds, the last group")
 	t.eq(group_order[group_order.size() - 1], &"speeds", "player speeds come last")
 	t.eq(Settings.LIFT_DELAY_MIN, Run.CALL_START_DELAY_MIN, "the pair rule's start delay is the run's")
@@ -2116,3 +2135,45 @@ func test_party_table_numbers(t: T) -> void:
 		t.check(not Seek.at_table(k2.s, off) and Seek.at_table(k2.s, off, Settings.make({&"party.reach": 2.5})) and not Seek.at_table(k2.s, off, Settings.make({&"party.reach": 1.0})),
 			"%.2f m from the nearest seat: at the table only with party.reach 2.5" % nearest)
 	t.eq([Seek.fetch_time(), Seek.fetch_anger(), Seek.fetch_reach()], [Seek.FETCH_TIME, Seek.FETCH_ANGER, Seek.FETCH_REACH], "untuned, today's constants")
+
+# DF1: the pressures of floor 8 and deeper (sim/run.gd "Pressures"). Each setting moves its number on the floors it is
+# for, its "off" value gives the number without the pressure, and cycle 1 never reads it.
+static func _pressure_state(depth: int, crew: int, given: Dictionary) -> Run.RunState:
+	var ids: Array[String] = []
+	for i in crew:
+		ids.append("p%d" % i)
+	var s := Run.create_run("ls-pressure", ids)
+	s.deck = Places.with_cycles(Places.FULL)
+	s.depth = depth
+	s.downs = true
+	s = Run.with_pressures(s)
+	return Run.with_tuning(s, given) if not given.is_empty() else s
+
+func test_pressure_settings(t: T) -> void:
+	var q := func(depth: int, given: Dictionary) -> float:
+		var st := _pressure_state(depth, 2, given)
+		return float(Run.floor_quota(depth, 2, st.tuning, Run.pressure_quota_mult(st, st.tuning)))
+	t.eq(q.call(8, {}), float(Run.floor_quota(8, 2, null, 1.5)), "floor 8's quota at today's x1.5")
+	t.eq(q.call(8, {&"pressure.quota": 1.0}), float(Run.floor_quota(8, 2)), "pressure.quota 1 is off")
+	t.eq(q.call(8, {&"pressure.quota": 3.0}), float(Run.floor_quota(8, 2, null, 3.0)), "pressure.quota 3 is x3")
+	t.eq(q.call(15, {}), float(Run.floor_quota(15, 2, null, 2.25)), "floor 15's at today's x2.25")
+	t.eq(q.call(15, {&"pressure.quota3": 1.0}), float(Run.floor_quota(15, 2)), "pressure.quota3 1 is off")
+	t.eq(q.call(1, {&"pressure.quota": 3.0}), float(Run.floor_quota(1, 2)), "floor 1 never reads it")
+	var heals := func(depth: int, given: Dictionary) -> int:
+		return Run.pressure_heals_left(_pressure_state(depth, 3, given))
+	t.eq([heals.call(8, {}), heals.call(15, {}), heals.call(1, {})], [2, 1, -1], "heals: 2 in cycle 2, 1 in cycle 3, no limit in cycle 1")
+	t.eq([heals.call(8, {&"pressure.heals": 5.0}), heals.call(8, {&"pressure.heals": 0.0}), heals.call(15, {&"pressure.heals3": 3.0}), heals.call(15, {&"pressure.heals3": 0.0})], [5, -1, 3, -1], "heals: set, and 0 is no limit")
+	var need := func(depth: int, up: int, given: Dictionary) -> int:
+		return Run.pressure_watch_need(_pressure_state(depth, up, given), up, Entity.watch_need(up))
+	t.eq([need.call(8, 4, {}), need.call(15, 4, {}), need.call(1, 4, {})], [3, 3, 2], "watchers with four up: 3, 3, and cycle 1's 2")
+	t.eq([need.call(8, 6, {&"pressure.watchers": 5.0}), need.call(8, 4, {&"pressure.watchers": 2.0}), need.call(15, 6, {&"pressure.watchers3": 4.0}), need.call(15, 4, {&"pressure.watchers3": 2.0})], [5, 2, 4, 2], "watchers: set, and 2 is off")
+	var light := func(depth: int, given: Dictionary) -> float:
+		return Run.pressure_near_light(_pressure_state(depth, 1, given))
+	t.eq([light.call(8, {}), light.call(15, {}), light.call(1, {})], [1.5, 0.0, -1.0], "near light: 1.5 m, none, and cycle 1's own")
+	t.eq([light.call(8, {&"pressure.near_light": 3.0}), light.call(15, {&"pressure.near_light3": 2.5})], [3.0, 2.5], "near light: set")
+	var tenant := func(depth: int, given: Dictionary) -> int:
+		var st := _pressure_state(depth, 1, given)
+		return Run.pressure_tenant_minutes(st, Settings.i(st.tuning, &"tenant.minutes", HostRules.TENANT_MINUTES))
+	t.eq([tenant.call(8, {}), tenant.call(15, {}), tenant.call(1, {})], [8, 6, 10], "the Tenant: 8, 6, and cycle 1's 10 minutes")
+	t.eq([tenant.call(8, {&"pressure.tenant_minutes": 4.0}), tenant.call(8, {&"pressure.tenant_minutes": 0.0}), tenant.call(15, {&"pressure.tenant_minutes3": 3.0}), tenant.call(15, {&"pressure.tenant_minutes3": 0.0})], [4, 10, 3, 10], "the Tenant: set, and 0 is off")
+	t.eq(tenant.call(8, {&"tenant.minutes": 5.0}), 5, "never later than ARRIVES AFTER")

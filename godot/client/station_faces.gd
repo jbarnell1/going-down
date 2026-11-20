@@ -1,12 +1,12 @@
 # The four drawn faces of the crew on the Reactor's floor, on damaged TV screens (the-intact-crew.md: "Their
 # screen masks carry faces drawn by people like Crew 41"; "Preserve the seat numbers and the exact four face
-# drawings seen on the zombies"). The drawings themselves: the private pack's res://faces/seat-N.png when the
-# pack is mounted (the same four its recovered tape shows), else this file's own four marker drawings, one per
-# seat, so the floor still has four told-apart faces without the pack. Either way the screen is cracked from one
-# knock, has a dead band across it, and stays pale so the drawing reads in the dark through the tape filter.
+# drawings seen on the zombies"). The drawings themselves: assets/station/faces/seat-N.png (drawn by
+# assets_src/station/draw_faces.py, the same four the recovered tape shows), else this file's own four marker
+# drawings, one per seat, were that file ever missing. Either way the screen is cracked from one knock, has a dead
+# band across it, and stays pale so the drawing reads in the dark through the tape filter.
 extends RefCounted
 
-const PACK_FACE := "res://faces/seat-%d.png"
+const FACE := "res://assets/station/faces/seat-%d.png"
 const N := 64
 const SCREEN := Color(0.80, 0.85, 0.79)
 const INK := Color(0.08, 0.08, 0.07)
@@ -14,9 +14,9 @@ const CRACK := Color(0.2, 0.22, 0.2)
 
 static var _cache := {}
 
-## The drawing for seat n (1 to 4), undamaged: the pack's, or this repository's.
+## The drawing for seat n (1 to 4), undamaged: the game's file for the seat, or this file's own.
 static func drawing(n: int) -> Image:
-	var path := PACK_FACE % n
+	var path := FACE % n
 	if ResourceLoader.exists(path):
 		var t: Texture2D = load(path)
 		if t != null:
@@ -44,7 +44,7 @@ static func _line(img: Image, a: Vector2, b: Vector2, col: Color, w := 1) -> voi
 		var p := a.lerp(b, float(i) / steps)
 		_dot(img, Vector2i(roundi(p.x), roundi(p.y)), w, col)
 
-## This repository's four: seat 1 the crooked mouth, seat 2 wide eyes over a row of teeth, seat 3 crossed-out eyes
+## This file's own four: seat 1 the crooked mouth, seat 2 wide eyes over a row of teeth, seat 3 crossed-out eyes
 ## and a flat mouth, seat 4 a spiral cheek and a too-wide smile.
 static func own_drawing(n: int) -> Image:
 	var img := Image.create(N, N, false, Image.FORMAT_RGB8)

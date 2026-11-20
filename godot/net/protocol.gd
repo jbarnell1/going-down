@@ -270,6 +270,12 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##  - the world's floor extensions (its last element, the dictionary after the shop block) gain "cycle": the cycle
 ##    number, a whole number from 2 (1 + (depth - 1) / 7 on a floor; in the prison, the next descent's). Decoded as
 ##    "cycle" (an int); absent means cycle 1.
+## The pressures (DF1; sim/run.gd "Pressures", net/host.gd pressure_block). Only in a run with them, on a floor of cycle
+## 2 or deeper, so cycle 1 and a run without them send exactly what they did before:
+##  - the world's floor extensions gain "pressure": [near light (metres, the reach every screen draws), heals left to
+##    the crew on this floor (-1: no limit), [ids of players whose Field Dressing help here is still free]], decoded as
+##    "pressure" {light, heals, free};
+##  - the inventory's refusal "invRefused" gains why "noHeals" (smelling salts with no heals left on the floor).
 ## Nightly reels (T24). With a reel in progress, the day block can end in [day, started, crew, votes, skipped].
 ## An input with a skip vote extends its 27-element form by a host-clock timestamp (the reel's start).
 const INV_OPS: Array[String] = ["", "drop", "take", "give", "stash", "fetch", "buy", "use", "throw", "skill", "lamp"]
@@ -497,7 +503,7 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < WORLD_SHOP_INDEX:
 			out.append(null)
 		out.append(enc_shop(w["shop"]))
-	if w.get("orderly2") != null or w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null or w.get("nerve") != null or w.get("tenant") != null or w.get("cycle") != null:
+	if w.get("orderly2") != null or w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null or w.get("nerve") != null or w.get("tenant") != null or w.get("cycle") != null or w.get("pressure") != null:
 		var extensions := {}
 		if w.get("orderly2") != null:
 			extensions["o2"] = [_enc_orderly(w["orderly2"]), int(w.get("reloc2", 0)), enc_watch(w["watch2"]) if w.get("watch2") != null else 0]
@@ -505,6 +511,9 @@ static func enc_world(w: Dictionary) -> Array:
 			extensions["tenant"] = [q3(w["tenant"]["at"]), q3(w["tenant"]["len"])]
 		if w.get("cycle") != null:
 			extensions["cycle"] = int(w["cycle"])
+		if w.get("pressure") != null:
+			var pr: Dictionary = w["pressure"]
+			extensions["pressure"] = [q3(pr["light"]), int(pr["heals"]), (pr["free"] as Array).duplicate()]
 		if w.get("nerve") != null:
 			var nerve: Array = w["nerve"].duplicate()
 			nerve[0] = q3(nerve[0])
@@ -1230,6 +1239,16 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 				return {}
 		if extensions.has("cycle"):
 			out["cycle"] = _i(c, extensions["cycle"], 2, 100000)
+		if extensions.has("pressure"):
+			var pr := _a(c, extensions["pressure"], 3, 3)
+			if c.bad:
+				return {}
+			var free: Array = []
+			for fid: Variant in _a(c, pr[2], 0, 8):
+				free.append(_s(c, fid))
+			out["pressure"] = {"light": _f(c, pr[0], -1.0, 10.0), "heals": _i(c, pr[1], -1, 100), "free": free}
+			if c.bad:
+				return {}
 		if extensions.has("nerve"):
 			var nerve := _a(c, extensions["nerve"], 5, 7)
 			if c.bad or nerve.size() == 6:

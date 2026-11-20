@@ -14,6 +14,8 @@
 #    reach, as the rules do (they start the count again).
 #  - Out (your own status "out", with the down rule on): the screen goes dark: "OUT", "YOU REJOIN WHEN THE
 #    CAR NEXT MOVES". (The cameras on F3 are a later task.)
+#  - The pressures (DF1, from floor 8): with heals counted, the prompt says how many the crew has left on the floor;
+#    with none, "NO HEALS LEFT ON THIS FLOOR" for the helper and the downed (who can still crawl).
 #  - Red spots: one stain on the floor where each player who went out lay, for everyone, this floor only.
 extends RefCounted
 
@@ -22,6 +24,21 @@ const Run = preload("res://sim/run.gd")
 ## A crewmate this close (metres, feet to feet, same level) can be helped: the rules' reach, a little
 ## inside it so the prompt never shows where the host would not count the hold.
 const HELP_REACH := Run.HEAL_REACH - 0.05
+## DF1: the words when the crew has no heals left on this floor.
+const NO_HEALS := "NO HEALS LEFT ON THIS FLOOR"
+
+## DF1: whether the host's pressure block says no help can start: no heals left, and `my` has no free Field Dressing
+## help here (`downed`: nobody but `my` has one).
+static func no_heals(pressure: Variant, my: String, downed := false) -> bool:
+	if not pressure is Dictionary or int((pressure as Dictionary)["heals"]) != 0:
+		return false
+	var free: Array = (pressure as Dictionary)["free"]
+	if downed:
+		for id: Variant in free:
+			if str(id) != my:
+				return false
+		return true
+	return not free.has(my)
 
 # The HUD's words and bars this frame (see hud.gd).
 var head := ""
@@ -64,7 +81,9 @@ func reset() -> void:
 	_root = null
 
 ## This frame. `s` the snapshot (play_link.gd), `my` this player's id, `names` by id, `holding` F held.
-func update(s: Dictionary, my: String, names: Dictionary, holding: bool, place := "") -> void:
+## `pressure` (DF1): the host's "pressure" block ({light, heals, free}) from floor 8, else null. With heals counted the
+## helper's prompt says how many are left, and with none left (and no free Field Dressing) why there is no help.
+func update(s: Dictionary, my: String, names: Dictionary, holding: bool, place := "", pressure: Variant = null) -> void:
 	head = ""
 	left = -1.0
 	line = ""
@@ -106,6 +125,8 @@ func update(s: Dictionary, my: String, names: Dictionary, holding: bool, place :
 		if healer != "" and dd["healFrom"] != null:
 			line = "%s IS HELPING YOU UP" % _name(names, healer)
 			heal = clampf((hn - float(dd["healFrom"])) / float(dd.get("healFor", Run.HEAL_TIME)), 0.0, 1.0)
+		elif no_heals(pressure, my, true):
+			line = NO_HEALS
 		elif _anyone_standing(s):
 			line = "A CREWMATE CAN HOLD F BESIDE YOU"
 		else:
@@ -135,7 +156,12 @@ func update(s: Dictionary, my: String, names: Dictionary, holding: bool, place :
 	if healer != "" and healer != my:
 		prompt = "%s IS HELPING" % _name(names, healer)
 		return
+	if no_heals(pressure, my):
+		prompt = NO_HEALS
+		return
 	prompt = "HOLD F TO HELP"
+	if pressure is Dictionary and int(pressure["heals"]) > 0:
+		prompt = "HOLD F TO HELP  (%d %s LEFT ON THIS FLOOR)" % [int(pressure["heals"]), "HEAL" if int(pressure["heals"]) == 1 else "HEALS"]
 	fill = 0.0
 	if holding and healer == my and rd["healFrom"] != null:
 		fill = clampf((hn - float(rd["healFrom"])) / float(rd.get("healFor", Run.HEAL_TIME)), 0.0, 1.0)

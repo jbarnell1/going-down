@@ -1,6 +1,6 @@
 extends Node3D
-## RX1: what the repository adds to the Reactor's compiled scene (res://reactor_campaign.tscn, from the private
-## ReactorCampaign.pck), so the old pack needs no rebuild:
+## RX1: what the repository added to the Reactor's old compiled scene (res://reactor_campaign.tscn, shipped
+## separately until IP1 and no longer in the game; kept for a build that still has it):
 ##  - the cassette glows (the design: "A glowing VHS cassette lies near the elevator door"): its pieces get an
 ##    emissive amber material and a small warm light sits over it while it lies there;
 ##  - the HUD says when E will take the tape or the fuse. The pack's joined-mode HUD only ever prompted the

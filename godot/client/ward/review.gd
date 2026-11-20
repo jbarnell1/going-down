@@ -74,8 +74,8 @@ func _ready() -> void:
 		status.position = Vector2(30, 40)
 		status.text = "THE LIFT OPENS ON THE HANGING WARD"
 		if not media_ready():
-			# The main game checks the pack before handing over; this stays a message, never a crash.
-			status.text = "Install WardGroundMedia.pck beside the game to open the Ward."
+			# Everything the Ward draws ships in the game (godot/assets/ward); a message, never a crash.
+			status.text = "THE WARD'S FILES ARE MISSING FROM THIS BUILD."
 		return
 	var address := ""
 	var who := "Ward reviewer"
@@ -95,11 +95,8 @@ func _ready() -> void:
 	layer.add_child(status)
 	status.position = Vector2(30, 40)
 	status.text = "CONNECTING TO THE WARD REVIEW"
-	if not ResourceLoader.exists(View.RIGGER_PATH):
-		var media := OS.get_executable_path().get_base_dir().path_join("WardGroundMedia.pck")
-		if FileAccess.file_exists(media): ProjectSettings.load_resource_pack(media,false)
 	if not media_ready():
-		status.text = "Install WardGroundMedia.pck beside the game to open the Ward."
+		status.text = "THE WARD'S FILES ARE MISSING FROM THIS BUILD."
 		set_process(false)
 		return
 	if address.is_empty() and OS.get_cmdline_user_args().has("owner_review=ward_ground"):
@@ -230,7 +227,8 @@ func _process(_delta: float) -> void:
 	if c.playing and snapshot.phase != "departed":
 		for row: Dictionary in world.players:
 			if row.id == str(c.id):
-				view.reconcile(row.body)
+				# WN4: by input number, so a step the host refused brings this screen back to the host.
+				view.reconcile(row.body, c._seq, c._host_tank_seq, frame.placed != null)
 				break
 	_show_hud(world, snapshot, c, frame, now, _delta)
 	if snapshot.phase == "departed" and world.summary is Dictionary:

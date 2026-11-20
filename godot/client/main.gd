@@ -55,18 +55,12 @@ const SoloDiagnostics = preload("res://client/solo_diagnostics.gd")
 ## The two floors drawn by their own scenes (FL1): the snapshot block that marks each, and the picker's name for it.
 const FLOOR_PLACE_LABELS := {"ward": "HANGING WARD", "reactor": "REACTOR"}
 const FLOOR_NAMES := {"ward": "the Hanging Ward", "reactor": "the Reactor"}
-const FLOOR_REVIEWS := {"ward": "ward_ground", "reactor": "reactor"}
+## IP1: the old swapped-in room each floor has in this build (`ward_place=0`). The Ward's is the repository's own
+## scene on the game's own assets; the Reactor's old room is not in the game, so the Reactor is always the place the
+## main game draws itself (net/host_rules.gd reactor_place_by_arg).
+const FLOOR_SCENES := {"ward": "res://client/ward/review.tscn"}
+## Two earlier prototypes, still opened from the picker when their file is beside the game.
 const PLAYTEST_REVIEWS := {
-	"ward_ground": {
-		"pack":"WardGroundMedia.pck", "scene":"res://client/ward/review.tscn",
-		"label":"HANGING WARD / GROUND FLOOR", "title":"Going Down - Hanging Ward",
-		"size":Vector2i(1280,720),
-	},
-	"reactor": {
-		"pack": "ReactorCampaign.pck", "scene": "res://reactor_campaign.tscn",
-		"label": "REACTOR / RECOVERED CASSETTE", "title": "Going Down - Reactor Campaign Review",
-		"size": Vector2i(1280,720),
-	},
 	"ward": {
 		"pack": "WardReview.pck", "scene": "res://ward_review.tscn",
 		"label": "HANGING WARD (PROTOTYPE)", "title": "Going Down - Hanging Ward Prototype",
@@ -150,17 +144,16 @@ const CONNECT_TIMEOUT := 10.0
 const WELCOME_HOLD := 2.0
 
 var link: PlayLink = null
-var reactor_entry_pending := false
 var reactor_prison := false
 var ward_room: Variant = null
 var _ward_prison_pending := false
-## FL1: a scene swap to the Ward or the Reactor is queued; the floor whose media pack is missing (the player
-## stays in the room and this screen says which file to install); a directory that overrides where the two
-## optional packs are looked for (tests and `-- packs=<dir>`; otherwise beside the executable).
+## FL1: a scene swap to the Ward (`ward_place=0`) is queued; the floor whose old room is not in this build (the
+## player stays in the room and this screen says so).
 var _floor_entry_pending := false
 var _floor_media_missing := ""
 ## WN1: the Ward played as a normal level (net/host_rules.gd ward_place): its world in this scene's picture, or null.
 var _ward_floor: WardFloor = null
+## Where the two earlier prototypes' files are looked for (`-- packs=<dir>`; otherwise beside the executable).
 var pack_dir := ""
 var sub: SubViewport
 var env: Environment
@@ -172,6 +165,9 @@ var cam: Camera3D
 var near_light: OmniLight3D
 const NEAR_LIGHT_ENERGY := 1.1
 const NEAR_LIGHT_REACH := 4.0
+## DF1: the line on the first floor of cycle 2 (no recorded voice line fits; a HUD line only), and how long it shows.
+const PRESSURE_NOTICE := "CONTINUANCE: LOWER LEVELS ARE LESS STABLE."
+const PRESSURE_NOTICE_MS := 6000
 var world: Node3D
 var level: Level
 var lift: Lift
@@ -395,9 +391,6 @@ func _owner_review_requested() -> bool:
 		return false
 	for id: String in PLAYTEST_REVIEWS:
 		if args.has("owner_review=" + id):
-			if id in ["reactor","ward_ground"] and not FileAccess.file_exists(_review_pack_path(PLAYTEST_REVIEWS[id])):
-				# Keep the normal title available when the optional owner media is absent.
-				return false
 			process_mode = Node.PROCESS_MODE_DISABLED
 			_start_owner_review.call_deferred(id)
 			return true
@@ -422,57 +415,39 @@ static func floor_handover(latest: Variant) -> String:
 static func playtest_area(place: Variant) -> String:
 	return str(FLOOR_PLACE_LABELS.get(str(place), str(place).replace("_", " ").to_upper()))
 
-## The line shown while a floor's optional media pack is missing: the file to put beside the game.
+## The line shown when a floor's old swapped-in room is not in this build (only the Reactor's; a host built
+## before the Reactor became a place can still send one). The player stays in the room.
 static func floor_media_line(into: String) -> String:
-	return "Put %s beside the game to see %s. You are still in the room." % [PLAYTEST_REVIEWS[FLOOR_REVIEWS[into]].pack, FLOOR_NAMES[into]]
+	return "%s's old room is not in this build. You are still in the room." % str(FLOOR_NAMES[into]).capitalize()
 
-## Mounts the floor's pack (once per process); false when it is not there or does not hold the floor's scene.
-func _mount_floor_pack(into: String) -> bool:
-	var review: Dictionary = PLAYTEST_REVIEWS[FLOOR_REVIEWS[into]]
-	var probe := "res://assets/ward/rigger.glb" if into == "ward" else str(review.scene)
-	if ResourceLoader.exists(probe):
-		return true
-	var pack := _review_pack_path(review)
-	return FileAccess.file_exists(pack) and ProjectSettings.load_resource_pack(pack, false) and ResourceLoader.exists(probe)
+## IP1: whether the floor's old swapped-in room is in this build (everything it needs ships in the game).
+func _floor_media(into: String) -> bool:
+	return FLOOR_SCENES.has(into) and ResourceLoader.exists(str(FLOOR_SCENES[into]))
 
 ## The floor's scene, holding the room this screen already plays in (no second room is opened).
-## The Ward: client/ward/review.tscn, given the room before it enters the tree. The Reactor: the pack's
-## compiled scene; its own _ready opens a room of its own, so the room is handed over after add_child
-## (`_hand_reactor_room`), the way the joined route always did it.
+## The Ward: client/ward/review.tscn, given the room before it enters the tree.
 func _floor_scene(into: String, room: Variant) -> Node:
-	var review: Dictionary = PLAYTEST_REVIEWS[FLOOR_REVIEWS[into]]
-	var scene := (load(str(review.scene)) as PackedScene).instantiate()
-	if into == "ward":
-		scene.set("room", room)
-		scene.set("handed", true)
+	var scene := (load(str(FLOOR_SCENES[into])) as PackedScene).instantiate()
+	scene.set("room", room)
+	scene.set("handed", true)
 	return scene
 
-static func _hand_reactor_room(station: Node, room: Variant) -> void:
-	var own: Variant = station.get("game")
-	if own != null and own != room:
-		own.leave()
-	station.set("game", room)
-	station.set("remote_url", "joined")
-	station.set("view_id", str(room.client.id))
 
 func _enter_floor(into: String, room: Variant) -> void:
 	_floor_entry_pending = false
 	if link == null or link.rc != room:
 		return
-	if not _mount_floor_pack(into):
+	if not _floor_media(into):
 		# Stay in the room: the run carries on (the floor's rules run on the host) and the ride home brings this
 		# player back to the prison with everyone else. Only the floor's own pictures are missing.
 		_floor_media_missing = into
 		_show_floor_media_line()
-		print("FLOOR MEDIA MISSING %s" % into)
+		print("FLOOR MEDIA MISSING %s: its old room is not in this build" % into)
 		return
 	var scene := _floor_scene(into, room)
 	var tree := Engine.get_main_loop() as SceneTree
 	link = null
 	tree.root.add_child(scene)
-	if into == "reactor":
-		reactor_entry_pending = true
-		_hand_reactor_room(scene, room)
 	tree.current_scene = scene
 	print("FLOOR ENTERED %s local=%s" % [into, room is LocalRoom])
 	if is_inside_tree():
@@ -965,8 +940,7 @@ func _open_playtest() -> void:
 	if not OS.has_feature("editor"):
 		for id: String in PLAYTEST_REVIEWS:
 			var review: Dictionary = PLAYTEST_REVIEWS[id]
-			# The Ward and the Reactor are FLOOR 6 and FLOOR 7 above; their old stand-alone buttons were the same rooms twice.
-			if id not in ["reactor","ward_ground"] and FileAccess.file_exists(_review_pack_path(review)):
+			if FileAccess.file_exists(_review_pack_path(review)):
 				start.playtest_choices.append({"id": id, "label": review["label"]})
 	var exit_label := "END SANDBOX" if _playtest_active else "BACK TO TITLE"
 	start.playtest_choices.append({"id": "title", "label": exit_label})
@@ -998,9 +972,6 @@ func _select_playtest(id: String) -> void:
 			return
 		var exe := OS.get_executable_path()
 		var review: Dictionary = PLAYTEST_REVIEWS[id]
-		if id in ["reactor","ward_ground"] and not FileAccess.file_exists(_review_pack_path(review)):
-			start.error = "Install %s beside the game to open this review." % review["pack"]
-			return
 		start.error = ""
 		if FileAccess.file_exists(_review_pack_path(review)):
 			_playtest_review_pid = OS.create_process(exe, PackedStringArray(["--", "owner_review=" + id]))
@@ -1317,8 +1288,6 @@ func _build_floor(plan: Dictionary) -> void:
 	level.shadows = quality == "full"
 	level.props_on = props_on
 	world.add_child(level)
-	if str(plan.get("place", "")) == "reactor":
-		_mount_floor_pack("reactor")   # RN2: the four's faces and crawl from the private pack when it is there (optional)
 	level.build(plan, str(snap.get("seed", seed)), link.plan, link.hides)
 	if level.has_meta(&"station"):
 		level.get_meta(&"station").call(&"follow", link, sfx)
@@ -1986,6 +1955,13 @@ func _game_input(dt: float) -> Dictionary:
 		"search": search_view.want_search and not hide and not call, "searchFast": search_view.want_fast,
 		"invSel": inv_sel, "invOp": inv_op, "invArg": inv_arg, "skipReelAt": _reel_skip_at}
 
+## DF1: the host's "pressure" block of the newest snapshot (Protocol "pressure"), or null (cycle 1, the pressures off).
+func _pressure() -> Variant:
+	if link == null:
+		return null
+	var lc := link.client()
+	return (lc.latest as Dictionary).get("pressure") if lc != null and lc.latest is Dictionary else null
+
 func _game_frame(s: Dictionary, dt: float) -> void:
 	var now := Time.get_ticks_msec()
 	snap = s
@@ -2098,6 +2074,14 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	var steady: Dictionary = s.get("steady", {})
 	var light_trade := int(steady.get(link.my_id(), Upgrades.TradeOffer.AVAILABLE))
 	near_light.omni_range = NEAR_LIGHT_REACH + (0.5 if light_trade in [Upgrades.TradeOffer.LEARNED, Upgrades.TradeOffer.UNDO] else 0.0)
+	# Dead lamps (DF1, the host's "pressure" block from floor 8): the near light reaches only so far, or not at all.
+	var pressure: Variant = _pressure()
+	if pressure is Dictionary and float(pressure["light"]) >= 0.0:
+		var reach := minf(NEAR_LIGHT_REACH, float(pressure["light"]))
+		if reach <= 0.0:
+			near_light.visible = false
+		else:
+			near_light.omni_range = reach + (near_light.omni_range - NEAR_LIGHT_REACH)
 	env.background_color = Color(0.02, 0.025, 0.025) * light
 
 	# The lift: doors, indicator, votes, buttons.
@@ -2223,7 +2207,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	hud.prompt_fill = -1.0
 	# Down first, then out (client/down_view.gd): your own timer or the out screen, or a crewmate to help.
 	var holding: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and not settings_panel.is_open() and Input.is_action_pressed("use"))
-	down_view.update(s, link.my_id(), link.names(), holding, announcer.place)
+	down_view.update(s, link.my_id(), link.names(), holding, announcer.place, _pressure())
 	var me_down := str(me["status"]) == "down" or str(me["status"]) == "out" or _left_out(s)
 	# The four-slot inventory (S1): the squares and what F would take or give here, from the host's block.
 	var lc0 := link.client()
@@ -2388,14 +2372,11 @@ func _ward_frame(_dt: float) -> void:
 	var watch: Variant = _ward_floor.watch_transform()
 	if watch is Transform3D:
 		cam.global_transform = watch
-	# A step the host refused (a door or deck that changed under the player): back to where the host has them.
+	# A step the host refused, or a door or deck that changed under the player: back to where the host has them
+	# (WN3, client/ward/floor.gd reconcile: by the input the host last answered for).
 	for row: Dictionary in latest["players"]:
 		if str(row["id"]) == link.my_id() and link.body != null:
-			var accepted: Move.Body = row["body"]
-			var at := Vector3(accepted.x, accepted.y, accepted.z)
-			var predicted := Vector3(link.body.x, link.body.y, link.body.z)
-			if _ward_floor.model.walk_clear(at, at) and not _ward_floor.model.walk_clear(predicted, predicted):
-				link.body = accepted
+			link.body = _ward_floor.reconcile(link.body, row["body"], c._seq, c._host_tank_seq, link.frame != null and link.frame.placed != null)
 			break
 
 ## WN1: whether a snapshot is on a Ward the host plays as a normal level, its lift not yet gone.
@@ -2408,7 +2389,7 @@ static func ward_native_on(latest: Variant) -> bool:
 func _enter_ward_floor(seed_value: int, c: Variant) -> void:
 	if _ward_floor != null and is_instance_valid(_ward_floor):
 		_ward_floor.queue_free()
-	var media := _mount_floor_pack("ward")
+	var media := ResourceLoader.exists(WardFloor.View.RIGGER_PATH)
 	_ward_floor = WardFloor.new()
 	_ward_floor.name = "WardFloor"
 	_ward_floor.setup(seed_value, media, c.events.size())
@@ -2806,6 +2787,10 @@ func _present(events: Array, now: int) -> void:
 					sfx.play_at("second_wind", Vector3(float(e.x), float(e.y) + 1.45, float(e.z)))
 			"doorsOpened", "doorsClosed":
 				sfx.play("doors")
+				# DF1: the first floor of cycle 2 with the pressures on says, once on arrival, that the floors below are harder.
+				if ty == "doorsOpened" and str(e.get("reason", "")) == "arrival" and int(e.get("depth", 0)) == Places.cycle_start(1) and _pressure() != null:
+					inv_view.say(PRESSURE_NOTICE, now)
+					inv_view.message_until = now + PRESSURE_NOTICE_MS
 			"carLeft":
 				if str(e["reason"]) == "ride" or str(e["reason"]) == "up":
 					ride_started = now
@@ -3589,9 +3574,99 @@ func _command(c: String) -> String:
 			return JSON.stringify({"width": pl["width"], "height": pl["height"], "landing": pl["landing"], "entityStart": pl["entityStart"],
 				"sightlines": pl["sightlines"], "car": pl["car"], "elevatorWall": pl["elevatorWall"], "landingFacing": pl["landingFacing"],
 				"cells": pl["cells"], "liftDist": pl["liftDist"], "rooms": pl["rooms"], "doors": pl["doors"], "depth": pl["depth"], "edges": pl["edges"]})
+		"late":
+			# PL1 (tools/play_late.mjs): the Ward's and the Reactor's blocks as this client has them, the drawn lines,
+			# the station's anchors, the Ward walk model's fixtures, and the late floors' events with host times.
+			if not automated:
+				return "{}"
+			var lc: Variant = link.client() if link != null else null
+			var lw: Variant = lc.latest if lc != null else null
+			if not lw is Dictionary:
+				return JSON.stringify({"error": "no snapshot"})
+			var evs: Array = []
+			for e: Dictionary in lc.events:
+				var ty := str(e.get("type", ""))
+				if ty.begins_with("ward_") or ty in ["powerHold", "powerCut", "stationStir", "bodyStands", "fuseTaken", "fuseDropped", "powerRestored",
+						"tapeTaken", "tapeDropped", "tapeExtracted", "caught", "down", "downed", "healed", "out", "readingClosed", "rodeDown", "rodeUp", "wokeUp", "newDay"]:
+					evs.append(_late_plain(e))
+			var out := {"tick": int(lw.get("tick", -1)), "hostNow": snap.get("hostNow"), "depth": lw.get("depth"), "phase": str(lw.get("phase", "")),
+				"place": link.plan_dict.get("place", ""), "seed": lw.get("seed"), "me": link.my_id(), "ward": _late_plain(lw.get("ward")), "reactor": _late_plain(lw.get("reactor")),
+				"clockLine": hud.tenant_line, "prompt": hud.prompt, "wardDrawn": _ward_floor != null, "events": evs,
+				"station": _late_plain(link.plan.station) if link.plan != null and link.plan.get("station") is Dictionary else null,
+				"localBody": _late_plain(link.body), "hostBody": null}
+			for row: Dictionary in lw.get("players", []):
+				if str(row.get("id", "")) == link.my_id():
+					out["hostBody"] = _late_plain(row.get("body"))
+			if _ward_floor != null:
+				var wm: Variant = _ward_floor.model
+				out["wardModel"] = {"seed": _ward_floor.seed_value, "liftDoor": _late_plain(wm.lift_door()), "switches": _late_plain(wm.switches),
+					"bridgeLowered": wm.bridge_lowered, "houses": wm.houses.size(), "layoutHouses": _late_plain(wm.layout.houses), "media": _ward_floor.view != null}
+			return JSON.stringify(out)
+		"wardroute":
+			# PL1: wardroute x z [radius]: a walkable route from this player's feet to within radius (0.45 m) of (x, z) through the Ward's walk model
+			# (the one this screen walks with), as waypoints [x, y, z]; empty when none within the search.
+			if not automated or _ward_floor == null or link == null or link.body == null:
+				return "[]"
+			var wm2: Variant = _ward_floor.model
+			var from := Vector3(link.body.x, link.body.y, link.body.z)
+			var goal := Vector2(float(p[1]), float(p[2]))
+			var stp := 0.3
+			var key := func(v: Vector3) -> Vector3i: return Vector3i(roundi(v.x / stp), roundi(v.z / stp), roundi(v.y / 0.5))
+			var came := {key.call(from): null}
+			var at := {key.call(from): from}
+			var queue: Array[Vector3] = [from]
+			var found: Variant = null
+			var head := 0
+			while head < queue.size() and head < 40000:
+				var q: Vector3 = queue[head]
+				head += 1
+				if Vector2(q.x, q.z).distance_to(goal) < (float(p[3]) if p.size() > 3 else 0.45):
+					found = q
+					break
+				for k in 8:
+					var dir := Vector2.from_angle(k * PI / 4.0) * stp
+					var nq: Vector3 = wm2.walk(q, dir)
+					if Vector2(nq.x - q.x, nq.z - q.z).length() < stp * 0.8:
+						continue
+					var nk: Vector3i = key.call(nq)
+					if came.has(nk):
+						continue
+					came[nk] = key.call(q)
+					at[nk] = nq
+					queue.append(nq)
+			var route: Array = []
+			if found != null:
+				var ck: Variant = key.call(found)
+				while ck != null:
+					route.push_front(_late_plain(at[ck]))
+					ck = came[ck]
+			return JSON.stringify(route)
 		_:
 			return "unknown command"
 	return "ok"
+
+## PL1: a value as plain JSON (vectors and rects as number arrays, a body by its numbers).
+static func _late_plain(v: Variant) -> Variant:
+	if v is Dictionary:
+		var o := {}
+		for k: Variant in v:
+			o[str(k)] = _late_plain(v[k])
+		return o
+	if v is Array:
+		return (v as Array).map(func(x: Variant) -> Variant: return _late_plain(x))
+	if v is Vector3:
+		return [snappedf(v.x, 0.001), snappedf(v.y, 0.001), snappedf(v.z, 0.001)]
+	if v is Vector2 or v is Vector2i:
+		return [v.x, v.y]
+	if v is Rect2:
+		return [v.position.x, v.position.y, v.size.x, v.size.y]
+	if v is Move.Body:
+		return {"x": v.x, "y": v.y, "z": v.z, "level": v.level}
+	if v is Object:
+		return str(v)
+	if v is StringName:
+		return str(v)
+	return v
 
 static func _enter_key() -> InputEventKey:
 	var k := InputEventKey.new()

@@ -32,7 +32,6 @@ const DT := 1.0 / 60.0
 const AMBIENT_ENERGY := 0.12
 
 static func _level(plan: RefCounted) -> Level:
-	Crew.borrow_clips = false
 	var level := Level.new()
 	(Engine.get_main_loop() as SceneTree).root.add_child(level)
 	var fp: Floor.FloorPlan = plan

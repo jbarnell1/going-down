@@ -5,8 +5,7 @@
 // Run it only after the playthroughs passed on godot/export/ (npm run godot:export writes there):
 //   npm run godot:promote -- "one line about what is new"
 import { execSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -44,21 +43,12 @@ cpSync(web, webNext, { recursive: true, preserveTimestamps: true });
 rmSync(path.join(play, 'web'), { recursive: true, force: true });
 renameSync(webNext, path.join(play, 'web'));
 
-// The floor packs (the Hanging Ward's media, the Reactor): private files that are never in git. When the folder
-// named by GD_FLOOR_PACKS (default .local/floor-packs) holds .pck files they are copied beside the game, where it
-// looks for them; without the folder the build is promoted as before and those two floors say which file is missing.
-const packDir = process.env.GD_FLOOR_PACKS ? path.resolve(process.env.GD_FLOOR_PACKS) : path.join(root, '.local', 'floor-packs');
+// Every floor ships inside the game (IP1): nothing goes beside it. Extra .pck files an older promote put here are
+// removed, so the folder and the friends' zip hold only the game.
 for (const old of readdirSync(play).filter((f) => f.endsWith('.pck'))) rmSync(path.join(play, old), { force: true });
-const packs = [];
-if (existsSync(packDir)) {
-  for (const f of readdirSync(packDir).filter((n) => n.endsWith('.pck')).sort()) {
-    cpSync(path.join(packDir, f), path.join(play, f));
-    packs.push({ file: f, sha256: createHash('sha256').update(readFileSync(path.join(play, f))).digest('hex') });
-  }
-}
 
 const builtAt = statSync(exe).mtime;
-const info = { builtAt: builtAt.toISOString(), promotedAt: new Date().toISOString(), commit, uncommittedChanges: dirty, note, packs };
+const info = { builtAt: builtAt.toISOString(), promotedAt: new Date().toISOString(), commit, uncommittedChanges: dirty, note };
 writeFileSync(path.join(play, 'build.json'), JSON.stringify(info, null, 2) + '\n');
 writeFileSync(path.join(play, 'BUILD.txt'), [
   'Going Down, Windows build',
@@ -67,7 +57,6 @@ writeFileSync(path.join(play, 'BUILD.txt'), [
   note ? `New in this build: ${note}` : '',
   '',
   'Run GoingDown.exe. Esc shows the controls.',
-  packs.length ? `Keep these beside GoingDown.exe: ${packs.map((k) => k.file).join(', ')}` : '',
   '',
 ].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\r\n'));
-console.log(`promoted to play/ (${commit}${dirty ? ', with uncommitted changes' : ''}), built ${builtAt.toISOString()}, ${packs.length} floor pack(s)`);
+console.log(`promoted to play/ (${commit}${dirty ? ', with uncommitted changes' : ''}), built ${builtAt.toISOString()}`);

@@ -134,6 +134,25 @@
 #    A game over (the third missed day) sets cycles_done back to 0 with the day number.
 #  - Floors past 7 repeat the places of cycle one (sim/places.gd local_depth); everything else reads the real depth.
 #
+# Pressures (DF1; docs/floors/difficulty.md section 2, the first cut), on only for a run made with them
+# (with_pressures: net/host_rules.gd pressures, only with cycles; tests and every stored result leave it off) and then
+# only on floors of cycle 2 or deeper (pressure_cycle: floor 8 on; in the prison, the next descent's). Cycle 1, and a
+# run without the flag, is exactly what it was. Each number is a live setting (sim/settings.gd "pressure.*", the
+# cycle-3 value "pressure.*3", also used deeper), and each has a value that switches it off:
+#  - Quota outgrows pockets: the floor quota (floor_quota's `mult`, pressure_quota_mult) and the day quota
+#    (day_floor_quota) are x pressure.quota (1.5; cycle 3 pressure.quota3, 2.25; 1 is off). The floor quota already
+#    grows by the real depth (floor 8 asks QUOTA_DEPTH_STEP^7 of floor 1's): it does not restart each cycle. The
+#    findables' fill (find_base) keeps the quota without the pressure. The host sends the numbers it uses.
+#  - One heal per floor: the crew can be helped up pressure.heals (2; cycle 3 pressure.heals3, 1; 0 is off) times on
+#    a floor, smelling salts included. Field Dressing's first help on a floor does not count, as on the Arboretum.
+#    With none left a hold never starts (and one still going stops before it heals); the screen says why from the
+#    world's "pressure" block (net/host.gd pressure_block). The downed still crawl.
+#  - Three watchers: with two-watcher Stillness on, a Stillness resident needs pressure.watchers (3; cycle 3
+#    pressure.watchers3, 3; 2 is off), but never more than the up players less one, and never fewer than
+#    Entity.watch_need: so a crew of one or two still needs one, three still two, four or more three.
+#  - Dead lamps and the Tenant: net/host.gd and net/host_rules.gd read pressure_near_light and
+#    pressure_tenant_minutes; the run itself does not change.
+#
 # The Annex (docs/floors/annex.md sections 2 and 4; loop/NIGHT-PLAN.md A6, T16h). On a floor whose place is
 # the Annex the run holds `annex` (an AnnexFloor: the crew's marks and the Temp's sticky notes), made when
 # the crew reaches the floor and dropped on the next; on any other floor it is null and nothing below
@@ -1204,9 +1223,20 @@ class RunState:
 	## campaign has finished (the crew came back up from the Reactor of floor 7, 14, ...). Every morning starts at
 	## Places.cycle_start of it. Kept for the whole run, as the day number is; never read without the marker.
 	var cycles_done := 0
+	## The pressures of cycle 2 on (DF1, with_pressures; see "Pressures" in the header). Off: nothing below is read.
+	var pressures := false
+	## One heal per floor (DF1): the floor the counts are for ("day:depth"), the heals the crew has used there, and the
+	## Field Dressing helps already given there (by trained profile, as the Arboretum's dressing_used).
+	var pressure_heals_key := ""
+	var pressure_heals_used := 0
+	var pressure_dressing: Dictionary = {}
 
 	func copy() -> RunState:
 		var s := RunState.new()
+		s.pressures = pressures
+		s.pressure_heals_key = pressure_heals_key
+		s.pressure_heals_used = pressure_heals_used
+		s.pressure_dressing = pressure_dressing
 		s.second_orderly = second_orderly
 		s.orderly2 = orderly2
 		s.entity_id2 = entity_id2
@@ -1450,10 +1480,13 @@ static func at_home(s: RunState) -> bool:
 
 ## What floor `depth` asks a crew of `crew` to record before the call button works (see QUOTA_PER_PLAYER).
 ## 0 at home (depth 0 or less). `tuning` (live settings; null: none): the host's quota.step.
-static func floor_quota(depth: int, crew: int, tuning: Settings.Values = null) -> int:
+## `mult` (DF1's pressure_quota_mult; 1 for none): the quota x this before it is rounded.
+static func floor_quota(depth: int, crew: int, tuning: Settings.Values = null, mult := 1.0) -> int:
 	if depth <= 0:
 		return 0
 	var raw := float(QUOTA_PER_PLAYER * maxi(1, crew)) * M.pow_js(Settings.f(tuning, &"quota.step", QUOTA_DEPTH_STEP), float(depth - 1))
+	if mult != 1.0:
+		raw *= mult
 	return maxi(QUOTA_ROUND, roundi(raw / QUOTA_ROUND) * QUOTA_ROUND)
 
 ## The crew a floor quota is for: everyone in the run who has not left the game (the host marks those
@@ -1487,7 +1520,7 @@ static func with_quota(s0: RunState) -> RunState:
 	s.quota = true
 	s.floor_earned = 0.0
 	s.floor_by = {}
-	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(s.players), s.tuning)
+	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(s.players), s.tuning, pressure_quota_mult(s, s.tuning))
 	s.quota_tuning = s.tuning
 	s.quota_met = false
 	return s
@@ -1498,7 +1531,7 @@ static func _new_quota_floor(s: RunState, players: Array[RunPlayer]) -> void:
 		return
 	s.floor_earned = 0.0
 	s.floor_by = {}
-	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(players), s.tuning)
+	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(players), s.tuning, pressure_quota_mult(s, s.tuning))
 	s.quota_tuning = s.tuning
 	s.quota_met = false
 
@@ -1588,7 +1621,7 @@ static func with_day_lock(s0: RunState) -> RunState:
 
 ## Today's day quota (Day.day_quota for the morning's crew), 0 without days.
 static func day_quota_now(s: RunState) -> int:
-	return Day.day_quota(s.day_state, DAY_FLOOR_QUOTA) if s.days and s.day_state != null else 0
+	return Day.day_quota(s.day_state, day_floor_quota(s)) if s.days and s.day_state != null else 0
 
 ## Whether BANK is locked now: the lock is on and today's earned (whole credits) is under the day quota.
 static func day_locked(s: RunState) -> bool:
@@ -1621,7 +1654,7 @@ static func day_preview(s: RunState) -> Variant:
 		return null
 	var aboard := day_aboard(s)
 	var earned := floori(s.day_earned) if s.day_lock else aboard
-	return Day.bank_preview(s.day_state, aboard, earned, day_crew(s), s.wallets, DAY_FLOOR_QUOTA, s.quick_fingers or s.field_dressing or s.steady_gaze or s.throwing_arm)
+	return Day.bank_preview(s.day_state, aboard, earned, day_crew(s), s.wallets, day_floor_quota(s), s.quick_fingers or s.field_dressing or s.steady_gaze or s.throwing_arm)
 ## Turns the tuned Playroom on (T15m, see the header): every Playroom from now on (and one already reached)
 ## has the long hiding time, the anger bar, the grab at 1 m and the hint events (sim/seek.gd "T15m").
 static func with_playroom_tuned(s0: RunState) -> RunState:
@@ -3425,6 +3458,9 @@ static func _step_downs(s: RunState, players: Array[RunPlayer], input_of: Dictio
 			for q in players:
 				if q.id == p.id or busy.has(q.id):
 					continue
+				# One heal per floor (DF1): with none left (and no free Field Dressing) a hold never starts.
+				if s.pressures and pressure_heal_refused(s, q.id):
+					continue
 				var r := _heal_reach(players, input_of, q.id, p.body)
 				if r >= 0.0 and r < best - EPS:
 					best = r
@@ -3443,8 +3479,18 @@ static func _step_downs(s: RunState, players: Array[RunPlayer], input_of: Dictio
 				if has_field_dressing(s, healer):
 					nd.heal_len *= 0.5
 				events.append({"type": "healStart", "t": t, "playerId": healer, "target": p.id, "from": nd.heal_from, "done": nd.heal_from + nd.heal_len})
+		if s.pressures and healer != "" and pressure_heal_refused(s, healer):
+			# One heal per floor (DF1): the last heal went to another hold; one still going stops before it heals.
+			events.append({"type": "healStop", "t": t, "playerId": healer, "target": p.id})
+			busy.erase(healer)
+			nd = nd.copy() if nd == d else nd
+			nd.healer = ""
+			nd.heal_from = -1.0
+			healer = ""
 		if healer != "" and t - nd.heal_from >= nd.heal_len - EPS:
 			# Healed: back on their feet where they lie.
+			if s.pressures:
+				_pressure_count_heal(s, healer)
 			down.erase(p.id)
 			var np := p.copy()
 			np.status = &"ok"
@@ -3663,6 +3709,9 @@ static func _step_stillness(s: RunState, prev: RunState, players: Array[RunPlaye
 	# and nobody can see to time a turn in the dark), at BLACKOUT_HUNT_SPEED.
 	var er: Entity.StepResult
 	var need := Entity.watch_need(stillness_up_count(players, input_of)) if s.two_watchers else 1
+	# Three watchers (DF1): from floor 8 one more, within what the crew on its feet can field.
+	if s.two_watchers and s.pressures:
+		need = pressure_watch_need(s, stillness_up_count(players, input_of), need)
 	var resident_solids := _resident_solids(s)
 	# Paced (see the header): both Stillness residents hunt at HUNT_SPEED, so both at the paced speeds.
 	# Live settings: the host's speeds for this body (_tuned_hunt), else these.
@@ -3776,7 +3825,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		if setting:
 			s.quota_tuning = s.tuning
 		# The Reactor (RN1): nothing here gives a reading, so it asks no quota; its lift waits for the power instead.
-		var want := 0 if s.station != null else floor_quota(s.depth, quota_crew(players), s.quota_tuning)
+		var want := 0 if s.station != null else floor_quota(s.depth, quota_crew(players), s.quota_tuning, pressure_quota_mult(s, s.quota_tuning))
 		s.floor_needed = want if setting else mini(s.floor_needed, want)
 
 	# ---- 1. Run rules.
@@ -4018,6 +4067,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			var over := s.day_result is Dictionary and str((s.day_result as Dictionary).get("kind", "")) == "game_over"
 			if not over:
 				s.cycles_done = maxi(s.cycles_done, Places.cycle_of(s.depth))
+				# DF1: tomorrow starts the next cycle, so its quota is that cycle's.
+				if s.pressures and s.day_result is Dictionary and s.day_next != null:
+					(s.day_result as Dictionary)["next_quota"] = Day.day_quota(s.day_next, _tomorrow_floor_quota(s, ""))
 		return res
 
 	if departing == &"ride":
@@ -4319,6 +4371,123 @@ static func cycles_on(s: RunState) -> bool:
 static func cycle_now(s: RunState) -> int:
 	return Places.cycle_of(s.depth) if s.depth >= 1 else s.cycles_done + 1
 
+# ---------------------------------------------------------------------------------------------
+# Pressures (DF1, see the header). The table's values (docs/floors/difficulty.md section 2), the live settings' today.
+const PRESSURE_QUOTA := 1.5
+const PRESSURE_QUOTA3 := 2.25
+const PRESSURE_HEALS := 2
+const PRESSURE_HEALS3 := 1
+const PRESSURE_WATCHERS := 3
+const PRESSURE_WATCHERS3 := 3
+## Metres of the near light on your own screen (client/main.gd NEAR_LIGHT_REACH is 4 today; 4 is off).
+const PRESSURE_NEAR_LIGHT := 1.5
+const PRESSURE_NEAR_LIGHT3 := 0.0
+const PRESSURE_TENANT := 8
+const PRESSURE_TENANT3 := 6
+
+## The run with the pressures on (DF1). Only with cycles; on floors of cycle 2 or deeper.
+static func with_pressures(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.pressures = true
+	return s
+
+## The cycle the pressures read: cycle_now with them on, else 1 (nothing changes).
+static func pressure_cycle(s: RunState) -> int:
+	if not s.pressures or not cycles_on(s):
+		return 1
+	return cycle_now(s)
+
+## The setting for the cycle in force: `id` in cycle 2, `id3` in cycle 3 and deeper.
+static func _pressure_f(s: RunState, tuning: Settings.Values, id: StringName, id3: StringName, v: float, v3: float) -> float:
+	return Settings.f(tuning, id3, v3) if pressure_cycle(s) >= 3 else Settings.f(tuning, id, v)
+
+## The quota multiplier now (1 in cycle 1 or with the pressures off). `tuning`: the one the quota is set with.
+static func pressure_quota_mult(s: RunState, tuning: Settings.Values) -> float:
+	if pressure_cycle(s) < 2:
+		return 1.0
+	return maxf(1.0, _pressure_f(s, tuning, &"pressure.quota", &"pressure.quota3", PRESSURE_QUOTA, PRESSURE_QUOTA3))
+
+## Each player's share of the day quota (Day's floor_quota_per_player): DAY_FLOOR_QUOTA, x the pressure.
+static func day_floor_quota(s: RunState) -> int:
+	var mult := pressure_quota_mult(s, s.tuning)
+	return DAY_FLOOR_QUOTA if mult == 1.0 else roundi(float(DAY_FLOOR_QUOTA) * mult)
+
+## The same for tomorrow's descent (the prison's board): its cycle is cycles_done + 1, or 1 after a game over.
+static func _tomorrow_floor_quota(s: RunState, kind: String) -> int:
+	if not s.pressures or not cycles_on(s):
+		return DAY_FLOOR_QUOTA
+	var t := s.copy()
+	t.depth = 0
+	if kind == "game_over":
+		t.cycles_done = 0
+	return day_floor_quota(t)
+
+## Heals the crew may have on this floor (0: no limit).
+static func pressure_heal_limit(s: RunState) -> int:
+	if pressure_cycle(s) < 2 or s.depth < 1 or not s.downs:
+		return 0
+	return maxi(0, roundi(_pressure_f(s, s.tuning, &"pressure.heals", &"pressure.heals3", PRESSURE_HEALS, PRESSURE_HEALS3)))
+
+static func _pressure_key(s: RunState) -> String:
+	return "%d:%d" % [s.day_index, s.depth]
+
+## Heals left to the crew on this floor, or -1 with no limit.
+static func pressure_heals_left(s: RunState) -> int:
+	var limit := pressure_heal_limit(s)
+	if limit <= 0:
+		return -1
+	var used := s.pressure_heals_used if s.pressure_heals_key == _pressure_key(s) else 0
+	return maxi(0, limit - used)
+
+## Whether `helper` still has Field Dressing's free help on this floor (with a heal limit, it does not count).
+static func pressure_free_help(s: RunState, helper: String) -> bool:
+	if not has_field_dressing(s, helper):
+		return false
+	var key := str(s.wind_profiles.get(helper, helper))
+	return not (s.pressure_heals_key == _pressure_key(s) and s.pressure_dressing.has(key))
+
+## Whether a heal by `helper` is refused now: no heals left and no free help (`salts`: smelling salts, never free).
+static func pressure_heal_refused(s: RunState, helper: String, salts := false) -> bool:
+	return pressure_heals_left(s) == 0 and (salts or not pressure_free_help(s, helper))
+
+## A heal by `helper` has been given: counted against the floor's limit (or Field Dressing's free help used).
+static func _pressure_count_heal(s: RunState, helper: String, salts := false) -> void:
+	if pressure_heal_limit(s) <= 0:
+		return
+	var key := _pressure_key(s)
+	if s.pressure_heals_key != key:
+		s.pressure_heals_key = key
+		s.pressure_heals_used = 0
+		s.pressure_dressing = {}
+	if not salts and pressure_free_help(s, helper):
+		var d := s.pressure_dressing.duplicate()
+		d[str(s.wind_profiles.get(helper, helper))] = true
+		s.pressure_dressing = d
+		return
+	s.pressure_heals_used += 1
+
+## Watchers needed to hold a Stillness resident with `up` up players (two-watcher Stillness on): `base` (watch_need),
+## or with the pressure the setting's count, at most `up - 1` and never under `base`.
+static func pressure_watch_need(s: RunState, up: int, base: int) -> int:
+	if pressure_cycle(s) < 2 or s.depth < 1:
+		return base
+	var want := roundi(_pressure_f(s, s.tuning, &"pressure.watchers", &"pressure.watchers3", PRESSURE_WATCHERS, PRESSURE_WATCHERS3))
+	return maxi(base, mini(want, up - 1))
+
+## The near light's reach on every screen (metres), or -1: the screen's own (cycle 1, the pressures off).
+static func pressure_near_light(s: RunState) -> float:
+	if pressure_cycle(s) < 2 or s.depth < 1:
+		return -1.0
+	return maxf(0.0, _pressure_f(s, s.tuning, &"pressure.near_light", &"pressure.near_light3", PRESSURE_NEAR_LIGHT, PRESSURE_NEAR_LIGHT3))
+
+## The Tenant's minutes on this floor: `base` (tenant.minutes), or with the pressure its own when that is sooner (0
+## there keeps `base`: off).
+static func pressure_tenant_minutes(s: RunState, base: int) -> int:
+	if pressure_cycle(s) < 2 or s.depth < 1:
+		return base
+	var m := roundi(_pressure_f(s, s.tuning, &"pressure.tenant_minutes", &"pressure.tenant_minutes3", PRESSURE_TENANT, PRESSURE_TENANT3))
+	return base if m <= 0 else mini(base, m)
+
 ## Cycles (FL2, see the header): the Reactor's lift has gone up with the crew. What is carried is banked and the
 ## day settled exactly as a BANK settles it (Day.end_day; with the lock, on today's earned), and the cycle counts
 ## as finished unless that settlement was the game over. Everyone in the run on their feet is aboard (the Reactor
@@ -4362,6 +4531,9 @@ static func bank_reactor(s: RunState, t: float, events: Array[Dictionary]) -> vo
 	var over := s.day_result is Dictionary and str((s.day_result as Dictionary).get("kind", "")) == "game_over"
 	if not over:
 		s.cycles_done = maxi(s.cycles_done, Places.cycle_of(s.depth))
+		# DF1: tomorrow starts the next cycle, so its quota is that cycle's.
+		if s.pressures and s.day_result is Dictionary and s.day_next != null:
+			(s.day_result as Dictionary)["next_quota"] = Day.day_quota(s.day_next, _tomorrow_floor_quota(s, ""))
 
 ## F near a tape on the floor (pick_up): the nearest within reach, or the one asked for, back on its holder.
 static func _step_tape_pickups(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, events: Array[Dictionary]) -> void:
@@ -4587,13 +4759,14 @@ static func _settle_day(s: RunState, t: float, banked: int, events: Array[Dictio
 	# The car waits: whoever it left out today is paid nothing today (see the header).
 	var crew := day_crew(s)
 	var earned := floori(s.day_earned) if s.day_lock else banked
-	var r := Day.end_day(s.day_state, banked, earned, crew, s.wallets, DAY_FLOOR_QUOTA, s.seed, wiped, s.quick_fingers or s.field_dressing or s.steady_gaze or s.throwing_arm)
+	var r := Day.end_day(s.day_state, banked, earned, crew, s.wallets, day_floor_quota(s), s.seed, wiped, s.quick_fingers or s.field_dressing or s.steady_gaze or s.throwing_arm)
 	s.wallets = r.wallets
 	s.day_next = r.state
 	var result: Dictionary = r.facts.duplicate(true)
 	result["shares"] = r.shares.duplicate()
 	# Tomorrow's quota for today's crew (the prison's day board; the morning sizes it for whoever rides down).
-	result["next_quota"] = Day.day_quota(r.state, DAY_FLOOR_QUOTA)
+	# DF1: at tomorrow's cycle (bank_reactor sets it again once the cycle is done).
+	result["next_quota"] = Day.day_quota(r.state, _tomorrow_floor_quota(s, str(r.facts.get("kind", ""))))
 	var credits := {}
 	for id: String in _sorted_keys(r.wallets):
 		credits[id] = (r.wallets[id] as Upgrades.UpgradeState).credits
@@ -5030,6 +5203,9 @@ static func searching(s: RunState, id: String) -> bool:
 
 ## The floor's quota as set on arrival, for the fill's credit units: the quota's own number, else what it would be.
 static func find_base(s: RunState, players: Array[RunPlayer]) -> int:
+	# DF1: the fill is the quota without the pressure (more to find would answer the pressure for the crew).
+	if pressure_quota_mult(s, s.quota_tuning) != 1.0:
+		return floor_quota(s.depth, quota_crew(players), s.quota_tuning)
 	return s.floor_needed if s.quota and s.floor_needed > 0 else floor_quota(s.depth, quota_crew(players), s.tuning)
 
 ## Whether a player is in, getting into or getting out of a hide.
@@ -5777,6 +5953,9 @@ static func _use_item(s: RunState, sh: Shop.ShopState, sh0: Shop.ShopState, play
 			var k := _salts_target(s, players, p, i)
 			if k < 0:
 				return ["nobody", sh]
+			# One heal per floor (DF1): salts count as a heal, and are refused with none left.
+			if s.pressures and pressure_heal_refused(s, p.id, true):
+				return ["noHeals", sh]
 			used["target"] = players[k].id
 			events.append(used)
 			_salts_heal(s, players, k, p.id, t, events)
@@ -5845,6 +6024,8 @@ static func _salts_heal(s: RunState, players: Array[RunPlayer], k: int, by: Stri
 	np.side = null
 	players[k] = np
 	events.append({"type": "healed", "t": t, "playerId": p.id, "by": by, "at": np.body, "salts": true})
+	if s.pressures:
+		_pressure_count_heal(s, by, true)
 	if s.orderly.mode == &"bending" and str(s.orderly.bend_target) == p.id:
 		s.orderly = Entity.stand_off(s.orderly, Settings.f(s.tuning, &"heal.quiet", HEAL_QUIET))
 	if s.orderly2 != null and s.orderly2.mode == &"bending" and str(s.orderly2.bend_target) == p.id:
