@@ -10,12 +10,16 @@ Optional arguments after `--`:
 
 Writes godot/assets/ward/rigger_v2.glb: one skinned mesh, one skeleton, a 1024 px albedo, a `Lamp` marker on the
 helmet, and the clips "Rigger Climb" (the clip the Ward's view plays: the same name and length as rigger.glb's),
-climb, hang, reach, search and withdraw. Everything is measured from the mesh and nothing is random: the same source
-gives the same file.
+climb, hang, reach, search and withdraw. The view also plays "hang" (looping) while he searches a house, so it keeps
+his body, arm and wrist at rest like "Rigger Climb" (RW1). The other four are not played by the game yet. Everything is
+measured from the mesh and nothing is random: the same source gives the same file.
+
+Review the figure where the game shows him with godot/tools/rigger_views.gd and render_rigger_views.py (RW1).
 
 The source has two arms and six legs. The owner wants one arm ("I really like the rigger only having one arm"), so
 the figure's right arm (Blender -X) is cut at the shoulder and the hole closed with a sunken stump; the concept sheet
-has eight legs, so each middle leg is copied once, turned forward and shortened a little, making four a side.
+has eight legs, so each middle leg is copied once, turned forward and shortened a little, making four a side (its cut
+root closed flat).
 
 Axes: Blender +Z up, the figure faces -Y (glTF/Godot +Z), its left (the kept arm) is +X. The origin is the centre of
 the abdomen (the spider body).
@@ -177,20 +181,28 @@ bmesh.ops.delete(bm, geom=doomed, context="VERTS")
 refresh()
 rim = [e for e in bm.edges if e.is_boundary and frozenset(v.co.to_tuple(6) for v in e.verts) not in already_open]
 uv = bm.loops.layers.uv.active
-rim_uv = {v: v.link_loops[0][uv].uv.copy() for e in rim for v in e.verts}
-filled = bmesh.ops.holes_fill(bm, edges=rim, sides=0)["faces"]
-stump = bmesh.ops.poke(bm, faces=filled)
-bm.normal_update()
-for v in stump["verts"]:
-    ring = [e.other_vert(v) for e in v.link_edges]
-    v.co -= sum((r.normal for r in ring), Vector()).normalized() * 0.02
-for f in stump["faces"]:
-    for loop in f.loops:
-        source = loop.vert if loop.vert in rim_uv else next(
-            (e.other_vert(loop.vert) for e in loop.vert.link_edges if e.other_vert(loop.vert) in rim_uv), None)
-        if source is not None:
-            loop[uv].uv = rim_uv[source]
-refresh()
+
+
+def cap(rim, sink=0.02):
+    """Closes the open loops `rim` with a fan sunk `sink` units into the limb, coloured from the rim."""
+    rim_uv = {v: v.link_loops[0][uv].uv.copy() for e in rim for v in e.verts}
+    filled = bmesh.ops.holes_fill(bm, edges=rim, sides=0)["faces"]
+    fan = bmesh.ops.poke(bm, faces=filled)
+    bm.normal_update()
+    for v in fan["verts"]:
+        ring = [e.other_vert(v) for e in v.link_edges]
+        v.co -= sum((r.normal for r in ring), Vector()).normalized() * sink
+    for f in fan["faces"]:
+        for loop in f.loops:
+            source = loop.vert if loop.vert in rim_uv else next(
+                (e.other_vert(loop.vert) for e in loop.vert.link_edges if e.other_vert(loop.vert) in rim_uv), None)
+            if source is not None:
+                loop[uv].uv = rim_uv[source]
+    refresh()
+    return filled
+
+
+filled = cap(rim)
 log("stump", len(filled), "cap faces,", len(rim), "rim edges")
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -219,8 +231,13 @@ for tip in [f for f in feet if abs(f.co.x) > 0.62]:
     for v in new_verts:
         v.co = place @ v.co
     copies.append(place @ tip.co)
-    refresh()
-    log("copied leg", "+X" if side > 0 else "-X", len(new_verts), "vertices; hip", tuple(round(c, 3) for c in hip))
+    # RW1: the copy was cut where its leg met the body, so its root was an open tube (part of it outside the abdomen,
+    # seen from below and from the side). It is closed like the stump.
+    new_set = set(new_verts)
+    root_rim = [e for e in bm.edges if e.is_boundary and all(v in new_set for v in e.verts)]
+    root_cap = cap(root_rim, sink=0.0)  # flat: a tube's rim normals cancel, so there is no inward to sink along
+    log("copied leg", "+X" if side > 0 else "-X", len(new_verts), "vertices; hip", tuple(round(c, 3) for c in hip),
+        "; root closed with", len(root_cap), "cap faces,", len(root_rim), "rim edges")
 refresh()
 feet_at += copies
 
@@ -823,12 +840,19 @@ def climb(t):
 
 
 def hang(t):
+    """RW1: how he hangs outside a house while his arm searches it. The Ward's view plays this, looping, while he
+    searches, and draws the paying-out arm and the search hand (search-hand.glb) from his wrist on. So, as in Rigger
+    Climb, the body and the arm stay at rest (the wrist stays exactly at RIGGER_WRIST_V2, where the drawn arm leaves
+    it) and his own hand is folded away; every leg holds and one at a time re-takes its hold, the long legs waver, the
+    abdomen breathes and the head turns under the lamp. 4 s, a loop."""
     pose = Pose()
-    breathe(pose, t, 4.0)
     w = 2 * math.pi * t / 4.0
-    rest = {n: (p * 0.25 + 0.03 * math.sin(w + i * 0.3), y * 0.3) for i, (n, (p, y)) in enumerate(FOLD.items())}
-    rest["arm_upper_1"] = (0.22 + 0.04 * math.sin(w), 0.05)
-    arm_fk(pose, rest, fingers_curl=0.45 + 0.1 * math.sin(2 * w))
+    b = 0.035 * math.sin(2 * w)
+    pose.scale["abdomen"] = Vector((1 + b, 1 + b * 0.5, 1 + b))
+    pose.rot["head"] = axis_rot("head", YAW, 0.12 * math.sin(w + 1.1)) @ axis_rot("head", PITCH, 0.06 * math.sin(w))
+    body_still(pose)
+    arm_fk(pose, {})
+    pose.scale["hand"] = Vector((0.04, 0.04, 0.04))
     hold_legs(pose, t, 4.0)
     return pose
 

@@ -58,11 +58,34 @@ const FLOOR_STILL_NEEDED := " FLOOR QUOTA STILL NEEDED TO CALL."
 const SAVE_PATH := "user://hints.cfg"
 ## Lines dealt only on some places: id -> the places it may be dealt on ("only") or never ("never").
 const PLACE_ONLY := {"doors_1": ["clinic"], "slip_2": ["clinic"]}
-const PLACE_NEVER := {"arrived_5": ["playroom"], "blackout_3": ["playroom"]}
+const PLACE_NEVER := {"arrived_5": ["playroom"], "blackout_3": ["playroom"], "bell_3": ["reactor"]}
 ## The Tenant clock's line comes this long after the door slam, and its words when no line is recorded.
 const TENANT_DELAY_MS := 1000
 const TENANT_CAPTIONS := {"tenant": "Time's up! Your crew has failed to reach quota in time. The Tenant will see you now.",
 	"tenant_met": "Time's up! Your quota was met, well done. The Tenant is here all the same."}
+## IV1 (game night fixes; the review in .local/reviews, items 2 to 7). Danger lines: a player taken, a player down.
+## They wait in the queue DANGER_LIFE_MS (not 3 or 4 s), go ahead of every other line of their priority, and a
+## danger hint refused only for spacing is queued anyway (the gate's spacing is checked again when it starts). They
+## never cut a line the old rules would not cut (announcer-hints.md 4: hints never cut): they outlive it.
+const DANGER := ["taken", "hint_down_crew", "hint_down_you"]
+const DANGER_LIFE_MS := 30000
+## While the ride-up reel or the prison's cassette plays (hold_chatter), only these may speak.
+const HOLD_EXEMPT := ["taken", "hint_down_crew", "hint_down_you", "wipe"]
+## The Ward's lift lines (assets/ward/voice/<voice>/; their words as recorded, assets_src/voice/ward_lines.mjs),
+## through this queue like every other line: subtitled, on the Voice bus at this player's level, one at a time.
+const WARD_LINES := {
+	"ward_lift_departed": "Your lift returns in ten minutes. Do enjoy the neighbourhood.",
+	"ward_lift_last_minute": "One minute until collection. Perhaps finish the viewing another day.",
+	"ward_lift_returned": "Your lift is here. Step aboard, please.",
+	"ward_lift_final_call": "Ten seconds to departure. Mind the doors.",
+	"ward_lift_closed": "Doors closed.",
+}
+const WARD_PRIORITY := 3
+## Lines whose words are no longer true anywhere: "Welcome back to the surface" (the prison is under the lid) and
+## "storage halls" (there are none). Kept as recordings, never dealt.
+const RETIRED := ["banked_3", "ride_2"]
+## "Call any time" and "press the button": never where the call is locked (the floor quota, or the Reactor's power).
+const CALL_ANY_TIME := ["left_1", "left_5"]
 
 var voice := "bella"
 var lines := {}          # id -> {moment, plain}
@@ -94,6 +117,16 @@ var playroom_call_ready := false
 ## The newest world on this screen (client/main.gd sets it before on_events): the Tenant's line only for the floor
 ## shown, never beside the Ward's or the Reactor's clock (TenantClock.arrived_here). Null: no such check (tests).
 var tenant_latest: Variant = null
+## The late floor shown ("ward", "reactor" or ""; client/main.gd sets it from the snapshot's blocks each frame): the
+## Ward's and the Reactor's plan may carry another place's name.
+var late_floor := ""
+## The ride-up reel or the prison's cassette is playing on this screen (client/main.gd, each frame): chatter waits.
+var hold_chatter := false
+## The floor quota still locks the call (from on_events' quota block).
+var call_locked := false
+var _held_last := -1
+## The places arrived at today (hint_reroll only on a place met before today).
+var _places_today := {}
 
 ## The hints' gate (client/hints.gd) and what it needs from the game: this screen's player id, the place
 ## of the floor ("clinic", "annex", "playroom", "prison"), whether the run has days, and the Playroom
@@ -190,6 +223,7 @@ func start_run(new_night := true, night_key := "") -> void:
 	_marks_floor = 0
 	_wiped_day = false
 	_day_took = false
+	_places_today = {}
 	request("board", EXPIRE_BOARD_MS)
 
 ## The run's events from a frame.
@@ -204,6 +238,7 @@ func on_events(events: Array, first_depth := 1, floor_quota: Variant = null) -> 
 	# The day quota met (FD3) says more than the floor's quota line of the same tick: it stands in for it.
 	var day_met_ticks := {}
 	var floor_met_ticks := {}
+	call_locked = floor_quota is Dictionary and int((floor_quota as Dictionary).get("needed", 0)) > 0 and not FloorQuota.floor_met(floor_quota)
 	for e: Dictionary in events:
 		if e.type == "wiped":
 			wiped = true
@@ -237,7 +272,8 @@ func on_events(events: Array, first_depth := 1, floor_quota: Variant = null) -> 
 				request("bank_refused", EXPIRE_LONG_MS, DayCaption.caption(e))
 			"dayMet":
 				var matching: Variant = floor_met_ticks.get(e.get("t", 0.0))
-				if not day_lock_on:
+				if not day_lock_on or late_floor == "ward":
+					# The Ward's lift comes on its clock: no "CALL READY" and no call still needed under the day's line.
 					request("day_met", EXPIRE_BOARD_MS, DayCaption.caption(e))
 				elif matching is Dictionary:
 					request("day_met", EXPIRE_BOARD_MS, DayCaption.caption(e) + "\n" + _floor_caption(matching), "day_met_1")
@@ -253,7 +289,8 @@ func on_events(events: Array, first_depth := 1, floor_quota: Variant = null) -> 
 				if not bool(e.get("last", false)):
 					request("called", EXPIRE_LONG_MS)
 			"callRefused":
-				if not FloorQuota.floor_met(floor_quota):
+				# Refused for the Reactor's power, not the quota: no quota line (the panel's buzz is the answer).
+				if str(e.get("reason", "")) != "power" and not FloorQuota.floor_met(floor_quota):
 					hint("hint_call_dead")
 			"blinkStart":
 				if e.blackout:
@@ -309,6 +346,8 @@ func on_events(events: Array, first_depth := 1, floor_quota: Variant = null) -> 
 				# The floor quota (North Star C9): the call button now works. Without a recording, a caption.
 				if day_met_ticks.has(e.get("t", 0.0)):
 					pass   # the paired day line captions both facts
+				elif late_floor == "ward":
+					pass   # the Ward's lift comes on its clock: "you may now call the car" would be false
 				elif by_moment.has("quota"):
 					request("quota", EXPIRE_LONG_MS, _floor_caption(e) if day_lock_on else "")
 				else:
@@ -329,6 +368,11 @@ func _arrival(depth: int, first_depth: int, now: int) -> void:
 		_bed_seen = false
 		later("hint_bed", 30000, "bed")
 		return
+	# "You may recognise the staff here" only on a place already met today (the Arboretum, the Ward and the Reactor
+	# are new the first time; with cycles, floor 8 on is a place met before).
+	var where := _where()
+	var met_before := _places_today.has(where)
+	_places_today[where] = true
 	if depth > first_depth:
 		var asked := false
 		if place == "playroom":
@@ -336,7 +380,7 @@ func _arrival(depth: int, first_depth: int, now: int) -> void:
 		elif depth == 3:
 			asked = hint("hint_new_floor")
 		elif depth >= 5:
-			asked = hint("hint_reroll")
+			asked = hint("hint_reroll" if met_before else "hint_new_floor")
 		if not asked:
 			request("doors")
 	if depth == first_depth and _day_n == 0:
@@ -360,6 +404,9 @@ func _new_floor() -> void:
 func hint(id: String) -> bool:
 	var now := _ms()
 	var why := hints.may_request(id, now, place)
+	# A danger hint is queued over the gate's spacing (checked again when it starts: it waits, it is not lost).
+	if DANGER.has(id) and why == "spacing":
+		why = ""
 	if why == "" and not by_moment.has(id):
 		why = "no recording"
 	if why != "":
@@ -369,8 +416,8 @@ func hint(id: String) -> bool:
 	if line == "":
 		return false
 	queue = queue.filter(func(q: Dictionary) -> bool: return q.moment != id)
-	queue.append({"id": line, "moment": id, "priority": Hints.priority(id), "expires": now + Hints.life_ms(id), "hint": true})
-	queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.priority > b.priority)
+	queue.append({"id": line, "moment": id, "priority": Hints.priority(id), "expires": now + (DANGER_LIFE_MS if DANGER.has(id) else Hints.life_ms(id)), "hint": true})
+	_sort_queue()
 	_log({"what": "requested", "id": line, "moment": id, "at": now, "place": place})
 	if Hints.test_break == "heard_on_request":
 		hints.started(id, now)
@@ -501,6 +548,28 @@ func _busy(which: String) -> bool:
 func bell_soon() -> void:
 	request("bell", 7000)
 
+## One of the Ward's lift lines (WARD_LINES; client/ward/view.gd play_event): queued like any other line, with its
+## words as the subtitle, its recording from the Ward's folder.
+func ward_line(cue: String) -> void:
+	if not WARD_LINES.has(cue):
+		return
+	if not lines.has(cue):
+		lines[cue] = {"id": cue, "moment": cue, "plain": WARD_LINES[cue], "path": "res://assets/ward/voice/%s/%s.mp3" % [voice, cue]}
+		by_moment[cue] = [cue]
+		priority[cue] = WARD_PRIORITY
+	request(cue, EXPIRE_LONG_MS)
+
+## The place for the lines a place makes wrong: the late floor shown, else the plan's place.
+func _where() -> String:
+	return late_floor if late_floor != "" else place
+
+## Priority first; among equals a danger line first.
+func _sort_queue() -> void:
+	queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if int(a.priority) != int(b.priority):
+			return int(a.priority) > int(b.priority)
+		return DANGER.has(a.moment) and not DANGER.has(b.moment))
+
 ## Asks for a line of `moment`. `caption2`: a second caption line under it (the waiting car's names).
 func request(moment: String, expire_ms := EXPIRE_MS, caption2 := "", only_id := "") -> void:
 	var id := _deal(moment) if only_id == "" else only_id
@@ -514,8 +583,10 @@ func request(moment: String, expire_ms := EXPIRE_MS, caption2 := "", only_id := 
 	if request_log.size() > 300:
 		request_log = request_log.slice(request_log.size() - 200)
 	queue = queue.filter(func(q: Dictionary) -> bool: return q.moment != moment)
+	if DANGER.has(moment):
+		expire_ms = maxi(expire_ms, DANGER_LIFE_MS)
 	queue.append({"id": id, "moment": moment, "priority": priority.get(moment, 1), "expires": now + expire_ms, "hint": false, "caption2": caption2})
-	queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.priority > b.priority)
+	_sort_queue()
 	# A more urgent line cuts a less urgent one short. Hints never cut.
 	if not current.is_empty() and int(priority.get(moment, 1)) > int(current.priority) + 1:
 		_cut()
@@ -538,9 +609,14 @@ func line_ok(id: String) -> bool:
 	# The fifth BANK refusal says only "the quota", just after floor quota let the crew call.
 	if day_lock_on and id == "bank_refused_5":
 		return false
-	if PLACE_ONLY.has(id) and not (PLACE_ONLY[id] as Array).has(place):
+	if RETIRED.has(id):
 		return false
-	return not (PLACE_NEVER.has(id) and (PLACE_NEVER[id] as Array).has(place))
+	var where := _where()
+	if CALL_ANY_TIME.has(id) and (call_locked or where == "reactor"):
+		return false
+	if PLACE_ONLY.has(id) and not (PLACE_ONLY[id] as Array).has(where):
+		return false
+	return not (PLACE_NEVER.has(id) and (PLACE_NEVER[id] as Array).has(where))
 
 func _deal(moment: String) -> String:
 	if not by_moment.has(moment):
@@ -637,6 +713,23 @@ func update() -> void:
 			var followup: Callable = _search_followups.pop_front()
 			followup.call()
 		return
+	# The reel or the cassette is playing: chatter waits for it (its life stands still meanwhile), and a chatter
+	# line already speaking stops and waits again. Danger lines and the wipe still speak.
+	if hold_chatter:
+		if _held_last >= 0:
+			for q: Dictionary in queue:
+				if not HOLD_EXEMPT.has(q.moment):
+					q["expires"] = int(q.expires) + (now - _held_last)
+		_held_last = now
+		if not current.is_empty() and not HOLD_EXEMPT.has(str(current.moment)):
+			var again := current.duplicate()
+			again.erase("undo")
+			again["expires"] = now + EXPIRE_LONG_MS
+			_cut()
+			queue.append(again)
+			_sort_queue()
+	else:
+		_held_last = -1
 	if not current.is_empty() or now < _gap_until or queue.is_empty():
 		return
 	# The first line in priority order that may start now: a hint only when nothing else is playing and
@@ -645,6 +738,8 @@ func update() -> void:
 	var pick := -1
 	for i in queue.size():
 		var q: Dictionary = queue[i]
+		if hold_chatter and not HOLD_EXEMPT.has(q.moment):
+			continue
 		if bool(q.get("after_search", false)) and busy:
 			continue
 		if bool(q.get("hint", false)) and hints.may_start(str(q.moment), now, place, busy, count_ctx) != "":
@@ -658,7 +753,7 @@ func update() -> void:
 	if fake:
 		_fake_until["main"] = now + _length_ms(str(next.id), 2000)
 	else:
-		var path := "res://assets/voice/%s/%s.mp3" % [voice, next.id]
+		var path := str(lines.get(next.id, {}).get("path", "res://assets/voice/%s/%s.mp3" % [voice, next.id]))
 		var stream: Resource = load(path) if ResourceLoader.exists(path) else null
 		if stream == null:
 			return

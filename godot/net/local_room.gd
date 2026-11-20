@@ -475,6 +475,12 @@ func place(body: Move.Body) -> void:
 	if host != null:
 		host.place_player(ME, body)
 
+## RW1, test hook (client/main.gd `wardbring`, behind testport= only): a noise at `at` (feet), heard by the Ward at
+## its next tick as a flare's burst is (net/host.gd test_ward_noise). Only this room, the player's own, has it: a
+## network room has no such door. False with no Ward running.
+func test_ward_noise(at: Vector3) -> bool:
+	return host != null and host.test_ward_noise(at)
+
 # ---------------------------------------------------------------------------------------------
 # Live settings: the player is the host, and the desk is this room's.
 

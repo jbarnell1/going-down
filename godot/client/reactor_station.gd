@@ -1,5 +1,7 @@
 extends Node
-## Mounted only when the reactor room brings its crew home.
+## The prison's cassette deck. IV1: mounted in every game (client/main.gd _ready); it shows nothing unless the level is
+## the prison and the snapshot carries the Reactor's block with its lift gone (the old review room or the native
+## station's last block, net/host.gd _station_block).
 const Review = preload("res://net/reactor_review.gd")
 const Screen = preload("res://client/reactor_screening.gd")
 
@@ -26,16 +28,19 @@ func _process(_dt: float) -> void:
 	if game.link == null:
 		overlay.hide()
 		return
+	overlay.show()
 	var client: Variant = game.link.client()
 	if client == null or client.latest == null or game.level == null or not game.level.has_meta("prison"):
 		hint.hide()
 		screen.hide()
 		open = false
+		nearby = false
 		return
 	var reactor: Variant = client.latest.get("reactor")
 	if reactor == null or not reactor.lift:
 		hint.hide()
 		screen.hide()
+		nearby = false
 		return
 	if not is_instance_valid(station):
 		_mount()
@@ -62,6 +67,10 @@ func _input(event: InputEvent) -> void:
 	else:
 		return
 	get_viewport().set_input_as_handled()
+
+## The recovered film is playing on this screen (the announcer's chatter waits for it).
+func playing() -> bool:
+	return open and screen.ticket != 0
 
 func close_screen() -> void:
 	if screen.ticket != 0:

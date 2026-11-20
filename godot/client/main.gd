@@ -553,6 +553,11 @@ func _ready() -> void:
 	brightness.persist = not automated
 	brightness.load_saved()
 	_apply_brightness(brightness.level)
+	# IV1: the prison's cassette deck in every game (it shows nothing unless this is the prison and the Reactor's tape
+	# came home), not only after the old swapped-in Reactor scene: the native Reactor brings the crew home here too.
+	var station := preload("res://client/reactor_station.gd").new()
+	station.name = "ReactorStation"
+	add_child(station)
 	if ward_room != null:
 		link = PlayLink.new(ward_room, ward_room is LocalRoom)
 		link.continue_joined_run()
@@ -566,9 +571,6 @@ func _ready() -> void:
 				if row.id == client.id:
 					link.body = row.body
 					break
-			var station := preload("res://client/reactor_station.gd").new()
-			station.name = "ReactorStation"
-			add_child(station)
 		_enter_game()
 		return
 	if not join_arg.is_empty():
@@ -1985,6 +1987,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		print("WARD REVIEW PRISON id=%s rendered=true" % link.my_id())
 	announcer.place = str(link.plan_dict.get("place", ""))
 	var quota_client := link.client()
+	announcer.late_floor = late_floor_of(quota_client.latest if quota_client != null else null)
 	announcer.playroom_call_ready = announcer.place == "playroom" and str(s.get("phase", "")) == "away" \
 		and quota_client != null and QuotaView.floor_met(quota_client.quota())
 	announcer.days_on = s.get("day") != null
@@ -2157,6 +2160,9 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		_welcome_due = -1.0
 		_entry["welcomeUnix"] = Time.get_unix_time_from_system() * 1000.0
 		announcer.start_run()
+	# IV1: while the ride-up reel or the prison's cassette plays, the voice's chatter waits for it.
+	var deck := get_node_or_null("ReactorStation")
+	announcer.hold_chatter = reel != null or (deck != null and deck.has_method("playing") and deck.playing())
 	# Nothing is said before the welcome (findables-and-day.md section 2: the car and the crew come first).
 	if not _welcome_armed:
 		announcer.update()
@@ -2190,6 +2196,9 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		hud.subtitle = view.status_text
 		if bool(me.get("aboard", false)) and view.caption() != "":
 			hud.subtitle = view.caption() + "\n" + hud.subtitle
+		# A danger line spoken over the reel keeps its words on screen, above the reel's.
+		if announcer.subtitle != "":
+			hud.subtitle = announcer.subtitle + "\n" + hud.subtitle
 	hud.center_note = error_text if error_text != "" else ("WATCHING: YOU JOIN AT THE NEXT STOP" if not bool(s.get("playing", true)) else "")
 	hud.wheel_on = wheel_open
 	hud.wheel_labels = EMOTE_LABELS
@@ -2381,6 +2390,17 @@ func _ward_frame(_dt: float) -> void:
 			link.body = _ward_floor.reconcile(link.body, row["body"], c._seq, c._host_tank_seq, link.frame != null and link.frame.placed != null)
 			break
 
+## IV1: the late floor a snapshot shows ("ward", "reactor", or "" elsewhere and at home): the announcer's lines that
+## the Ward's clock or the Reactor's power make wrong.
+static func late_floor_of(latest: Variant) -> String:
+	if not latest is Dictionary or int(latest.get("depth", 0)) <= 0:
+		return ""
+	if latest.get("ward") is Dictionary:
+		return "ward"
+	if latest.get("reactor") is Dictionary:
+		return "reactor"
+	return ""
+
 ## WN1: whether a snapshot is on a Ward the host plays as a normal level, its lift not yet gone.
 static func ward_native_on(latest: Variant) -> bool:
 	if not latest is Dictionary or int(latest.get("depth", 0)) <= 0:
@@ -2395,6 +2415,9 @@ func _enter_ward_floor(seed_value: int, c: Variant) -> void:
 	_ward_floor = WardFloor.new()
 	_ward_floor.name = "WardFloor"
 	_ward_floor.setup(seed_value, media, c.events.size())
+	if _ward_floor.view != null:
+		# IV1: the Ward's lift lines through the announcer's queue, not a speaker of their own.
+		_ward_floor.view.say = announcer.ward_line
 	world.add_child(_ward_floor)
 	link.walker = _ward_floor.walk
 	_floor_media_missing = "" if media else "ward"
@@ -3643,9 +3666,71 @@ func _command(c: String) -> String:
 					mine["status"] = str(row.get("status", ""))
 					mine["aboard"] = row.get("aboard", false)
 			return JSON.stringify(mine)
+		"wardhouse", "wardbring", "wardlook":
+			return _ward_test_command(p)
 		_:
 			return "unknown command"
 	return "ok"
+
+## RW1: the Hanging Ward's test commands, for looking at the Rigger (`state` reports him under "rigger"). Desktop,
+## testport= only, and only on the Ward played as a normal level:
+##   wardhouse <house 0-7 | style> [corner | entry | middle | rear]: alone only: the player stands in that house, at
+##     its entry corner (where a careful crew hides by the door) or in one of its rooms; the lift leaves once nobody is
+##     in it.
+##   wardbring [house]: alone only: a noise at the player's feet (or in that house's entry), heard by the Ward's rules
+##     at their next tick exactly as a flare's burst is, so he comes to the house the player is in or nearest to.
+##   wardlook [head | hand | wrist | body]: the camera on him (the head by default), as `face x z y` would aim it.
+func _ward_test_command(p: PackedStringArray) -> String:
+	if _test_port <= 0:
+		return "unknown command"
+	if _ward_floor == null or not is_instance_valid(_ward_floor) or link == null or link.body == null:
+		return JSON.stringify({"ok": false, "error": "not on the Hanging Ward"})
+	var model: Variant = _ward_floor.model
+	if p[0] == "wardlook":
+		if _ward_floor.view == null:
+			return JSON.stringify({"ok": false, "error": "the Ward's pictures are missing"})
+		var rigger: Dictionary = _ward_floor.view.describe_rigger()
+		var part := p[1] if p.size() > 1 else "head"
+		var key: String = {"head": "head", "hand": "hand", "wrist": "wrist", "body": "at"}.get(part, "")
+		if key == "" or (rigger[key] as Array).is_empty():
+			return JSON.stringify({"ok": false, "error": "no %s to look at" % part, "rigger": rigger})
+		var at: Array = rigger[key]
+		yaw = atan2(-(float(at[0]) - cam.position.x), -(float(at[2]) - cam.position.z))
+		pitch = atan2(float(at[1]) - cam.position.y, Vector2(float(at[0]) - cam.position.x, float(at[2]) - cam.position.z).length())
+		return JSON.stringify({"ok": true, "at": at, "drawn": rigger.drawn, "yaw": yaw, "pitch": pitch})
+	if not link.local or not link.rc is LocalRoom:
+		return JSON.stringify({"ok": false, "error": "%s is for playing alone" % p[0]})
+	var room := link.rc as LocalRoom
+	var house := -1
+	if p.size() > 1:
+		house = int(p[1]) if p[1].is_valid_int() else -1
+		for site: Dictionary in model.layout.houses:
+			if str(site.style) == p[1]:
+				house = int(site.id)
+		if house < 0 or house >= model.houses.size():
+			return JSON.stringify({"ok": false, "error": "no house %s (0-%d or a style)" % [p[1], model.houses.size() - 1]})
+	if p[0] == "wardhouse":
+		if house < 0:
+			return JSON.stringify({"ok": false, "error": "wardhouse <house> [corner|entry|middle|rear]"})
+		var spot := p[2] if p.size() > 2 else "corner"
+		var feet: Vector3 = WardFloor.View.house_spot(model.houses[house], spot)
+		if not feet.is_finite():
+			return JSON.stringify({"ok": false, "error": "no spot %s" % spot})
+		var body := Move.Body.make(feet.x, feet.z, link.body.level, feet.y)
+		room.place(body)
+		link.body = body
+		return JSON.stringify({"ok": true, "house": house, "style": str(model.layout.houses[house].style), "spot": spot,
+			"feet": [feet.x, feet.y, feet.z], "clear": model.walk_clear(feet, feet)})
+	# wardbring: the same noise a flare's burst makes, where the player stands or in the named house's entry.
+	var at := Vector3(link.body.x, link.body.y, link.body.z)
+	if house >= 0:
+		at = WardFloor.View.house_spot(model.houses[house], "entry")
+	var ward: Variant = (link.client().latest as Dictionary).get("ward") if link.client() != null and link.client().latest is Dictionary else null
+	var phase := str(ward.get("phase", "")) if ward is Dictionary else ""
+	var queued := room.test_ward_noise(at)
+	return JSON.stringify({"ok": queued and phase in ["away", "boarding"], "queued": queued, "phase": phase,
+		"encounter": str(ward.get("encounter", "")) if ward is Dictionary else "", "at": [at.x, at.y, at.z],
+		"note": "" if phase in ["away", "boarding"] else "the Ward hears nothing until the lift has left"})
 
 ## PL1: a value as plain JSON (vectors and rects as number arrays, a body by its numbers).
 static func _late_plain(v: Variant) -> Variant:
@@ -3822,6 +3907,8 @@ func _test_state() -> Dictionary:
 	}
 	if _solo_diagnostics != null:
 		state["soloDiagnostics"] = _solo_diagnostics.describe()
+	# RW1: the Rigger as this screen draws him on the Ward (client/ward/view.gd describe_rigger), else null.
+	state["rigger"] = _ward_floor.view.describe_rigger() if _ward_floor != null and is_instance_valid(_ward_floor) and _ward_floor.view != null else null
 	return state
 
 # --- live settings (LS3) ------------------------------------------------------------------------

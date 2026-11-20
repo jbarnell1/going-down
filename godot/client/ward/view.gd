@@ -26,10 +26,33 @@ const RIGGER_WRIST_V2 := Vector3(0.788, 2.484, 4.965)
 ## exists while he is drawn (climbing or searching), and lights about 3 m around his head.
 const LAMP_ENERGY := 0.6
 const LAMP_RANGE := 3.0
+## RW1: the new figure's clip while he hangs outside a house searching it (the build's "hang": legs holding, body and
+## arm at rest, wrist at RIGGER_WRIST_V2, his own hand folded), played looping. Today's figure has none and holds its
+## climb clip as before.
+const HOLD_CLIP := &"hang"
+## RW1: the new figure's own clips and how each plays (glTF carries no loop flag; set here rather than in the
+## .import file, which the editor would rewrite at length). "Rigger Climb" is sought, never played on its own.
+const V2_LOOPS := {&"climb": Animation.LOOP_LINEAR, &"hang": Animation.LOOP_LINEAR, &"search": Animation.LOOP_LINEAR,
+	&"reach": Animation.LOOP_NONE, &"withdraw": Animation.LOOP_NONE}
+
+## Sets V2_LOOPS on a player's clips (the imported resources, shared by every instance).
+static func set_v2_loops(player: AnimationPlayer) -> void:
+	for clip: StringName in V2_LOOPS:
+		if player.has_animation(clip):
+			player.get_animation(clip).loop_mode = V2_LOOPS[clip]
+## RW1: the drawn arm's thickness (radius at the wrist, at the hand) and colour. The new figure's forearm is about
+## 0.13 m thick at the wrist and the colour of its skin there (measured from rigger_v2.glb's albedo), so the paid-out
+## arm continues it; today's figure keeps its own.
+const ARM_RADII := Vector2(0.085, 0.055)
+const ARM_RADII_V2 := Vector2(0.13, 0.055)
+const ARM_COLOR_V2 := "#847076"
 ## True when this run asked for the new figures (read once, in _init; tests may set it before the view is added).
 var figures_new := false
 var rigger_wrist := RIGGER_WRIST
 var lamp_light: OmniLight3D
+var hold_animation: StringName = &""
+var arm_radii := ARM_RADII
+var arm_material := "arm"
 
 ## The shared choice (client/figures.gd): the new figures unless started with `figures=old`.
 static func new_figures() -> bool:
@@ -60,6 +83,10 @@ var hand: Node3D
 var rope := MeshInstance3D.new()
 var ribbon := ImmediateMesh.new()
 var cue_player := AudioStreamPlayer.new()
+## IV1: the game's announcer (client/announcer.gd ward_line) when this view is drawn inside the main game: the lift's
+## lines then go through its one queue (subtitled, on the Voice bus, never over another line). Unset: this view's
+## own player, as before.
+var say: Callable
 var load_sound := AudioStreamPlayer3D.new()
 var hud := Label.new()
 var prompt := Label.new()
@@ -205,7 +232,58 @@ func _watch(targets: Array[String], crew: Array) -> String:
 func next_watch() -> void:
 	watch_index += 1
 
+## RW1: what the screen shows of the Rigger (the test channel's `state`, client/main.gd; tools/rigger_views.gd): the
+## host's encounter and house as last shown, whether he is drawn, where (his place, head and wrist; the search hand),
+## the clip and its time, and whether his helmet lamp is lit.
+func describe_rigger() -> Dictionary:
+	var out := {"encounter": str(shown_ward.get("encounter", "")), "house": int(shown_ward.get("house", -1)),
+		"phase": str(shown_ward.get("phase", "")), "startedAt": float(shown_ward.get("startedAt", -1.0)),
+		"drawn": rigger != null and rigger.visible, "figure": rigger.scene_file_path if rigger != null else "",
+		"at": [], "head": [], "wrist": [], "hand": [], "handDrawn": hand != null and hand.visible,
+		"clip": "", "clipTime": 0.0, "lamp": lamp_light != null and lamp_light.is_visible_in_tree()}
+	if rigger == null:
+		return out
+	out.at = _plain(rigger.global_position)
+	out.wrist = _plain(rigger.global_transform * rigger_wrist)
+	out.head = _plain(rigger_head())
+	if hand != null:
+		out.hand = _plain(hand.global_position)
+	if animation != null and animation.assigned_animation != &"":
+		out.clip = str(animation.assigned_animation)
+		out.clipTime = animation.current_animation_position
+	return out
+
+static func _plain(p: Vector3) -> Array:
+	return [snappedf(p.x, 0.001), snappedf(p.y, 0.001), snappedf(p.z, 0.001)]
+
+## The figure's head (its skeleton's head bone, posed), or a metre above his place without one.
+func rigger_head() -> Vector3:
+	var found := rigger.find_children("*", "Skeleton3D", true, false)
+	if not found.is_empty():
+		var skeleton := found[0] as Skeleton3D
+		var bone := skeleton.find_bone("head")
+		if bone >= 0:
+			return skeleton.global_transform * skeleton.get_bone_global_pose(bone).origin
+	return rigger.global_position + Vector3.UP
+
+## RW1: where a player stands in a house for the test channel's `wardhouse` (client/main.gd), feet in world space:
+## "corner" the entry corner away from the first room door (where sim/ward/bots.gd's careful recorder hides), or one of
+## the house's own rooms ("entry", "middle", "rear": the probe points the hand searches, at floor level).
+static func house_spot(fixture: House, spot: String) -> Vector3:
+	if spot == "corner":
+		var half := fixture.floor_bounds.size.x * 0.5
+		var side := -signf(fixture.room_doors[0].x) if fixture.room_doors[0].x != 0.0 else 1.0
+		return fixture.to_world(Vector3(side * (half - 0.42), 0, 0.5))
+	if not fixture.areas.has(StringName(spot)):
+		return Vector3.INF
+	var at: Vector3 = fixture.areas[StringName(spot)]
+	return fixture.to_world(Vector3(at.x, 0, at.z))
+
+## The Ward block last shown (show_host), for describe_rigger.
+var shown_ward := {}
+
 func _show_rigger(ward: Dictionary, host_now: float) -> void:
+	shown_ward = ward
 	_show_loaded_support(ward, host_now)
 	var active: bool = ward.encounter == "climbing" or ward.encounter == "searching"
 	rigger.visible = active
@@ -225,11 +303,20 @@ func _show_rigger(ward: Dictionary, host_now: float) -> void:
 	rigger.position = rigger.position.lerp(shoulder, smoothstep(0.78, 1.0, progress))
 	rigger.rotation.y = (room.root as Node3D).rotation.y - fixture.window_side * PI * 0.5
 	rigger.position -= rigger.basis * rigger_wrist
-	if animation != null and climb_animation != &"":
+	if animation != null and hold_animation != &"" and ward.encounter == "searching":
+		# RW1: hanging outside while the arm searches; the clip loops on its own.
+		if animation.assigned_animation != hold_animation or not animation.is_playing():
+			animation.play(hold_animation)
+			animation.advance(0.0)  # posed this frame, not the next
+	elif animation != null and climb_animation != &"":
 		animation.play(climb_animation)
 		animation.pause()
 		animation.seek(fmod(progress * Ward.CLIMB_SECONDS, 1.75), true)
 	var packed := PackedVector3Array()
+	if figures_new and hold_animation != &"" and ward.encounter == "climbing" and not (ward.armPoints as Array).is_empty():
+		# RW1: on the line, the host's limb (his grip above, sim/ward/state.gd posed_limb) is drawn on from the
+		# figure's own wrist, so his arm runs up to the hand on the line instead of stopping short at the wrist.
+		packed.append(fixture.to_local(rigger.position + rigger.basis * rigger_wrist))
 	for raw: Array in ward.armPoints:
 		packed.append(fixture.to_local(Vector3(raw[0], raw[1], raw[2])))
 	_draw_arm(fixture, packed)
@@ -269,15 +356,18 @@ func play_event(event: Dictionary) -> void:
 	var cue := str(cues.get(event.type, ""))
 	if cue.is_empty():
 		return
+	if say.is_valid():
+		say.call(cue)
+		return
 	var path := "res://assets/ward/voice/bella/%s.mp3" % cue
 	if ResourceLoader.exists(path):
 		cue_player.stream = load(path)
 		cue_player.play()
 func _setup_world() -> void:
-	for key: String in ["plaster", "brick", "wood", "rope", "iron", "light", "glass", "arm"]:
+	for key: String in ["plaster", "brick", "wood", "rope", "iron", "light", "glass", "arm", "arm_v2"]:
 		var material := StandardMaterial3D.new()
 		var shades := {"plaster":"#978377", "brick":"#553f37", "wood":"#735341", "rope":"#9d806a",
-			"iron":"#33383a", "light":"#ffd09a", "glass":"#456575", "arm":"#81665c"}
+			"iron":"#33383a", "light":"#ffd09a", "glass":"#456575", "arm":"#81665c", "arm_v2":ARM_COLOR_V2}
 		material.albedo_color = Color(shades[key])
 		if key == "glass":
 			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -674,6 +764,13 @@ func _build_rigger() -> void:
 		# The v2 figure has more clips; the view plays the one with today's name.
 		if path == RIGGER_V2_PATH and animation.has_animation(&"Rigger Climb"):
 			climb_animation = &"Rigger Climb"
+		if path == RIGGER_V2_PATH:
+			set_v2_loops(animation)
+			if animation.has_animation(HOLD_CLIP):
+				hold_animation = HOLD_CLIP
+	if path == RIGGER_V2_PATH:
+		arm_radii = ARM_RADII_V2
+		arm_material = "arm_v2"
 	var lamp := rigger.find_child("Lamp", true, false) as Node3D
 	if path == RIGGER_V2_PATH and lamp != null:
 		lamp_light = OmniLight3D.new()
@@ -785,6 +882,9 @@ func _draw_arm(fixture: House, local_points: PackedVector3Array) -> void:
 	var final := (points[-1] - points[-2]).normalized()
 	if absf(final.dot(Vector3.UP)) < 0.98 and not final.is_zero_approx():
 		hand.look_at(hand.position + final, Vector3.UP, true)
+	elif figures_new and not final.is_zero_approx():
+		# RW1: straight up the line (his grip while he climbs): the palm faces the house, not a stale way.
+		hand.look_at(hand.position + final, rigger.basis.z, true)
 	var rings: Array[PackedVector3Array] = []
 	const SIDES := 8
 	for i in points.size():
@@ -796,9 +896,9 @@ func _draw_arm(fixture: House, local_points: PackedVector3Array) -> void:
 		var ring := PackedVector3Array()
 		for j in SIDES:
 			var angle := TAU * j / SIDES
-			ring.append(points[i] + lerpf(0.085, 0.055, float(i) / (points.size() - 1)) * (side * cos(angle) + up * sin(angle)))
+			ring.append(points[i] + lerpf(arm_radii.x, arm_radii.y, float(i) / (points.size() - 1)) * (side * cos(angle) + up * sin(angle)))
 		rings.append(ring)
-	ribbon.surface_begin(Mesh.PRIMITIVE_TRIANGLES, colors.arm)
+	ribbon.surface_begin(Mesh.PRIMITIVE_TRIANGLES, colors[arm_material])
 	for i in range(points.size() - 1):
 		for j in SIDES:
 			var k := (j + 1) % SIDES

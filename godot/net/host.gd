@@ -851,7 +851,28 @@ func _step_ward_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> Run.R
 		maxf(0.0, _ward_review.depart_at - next_time), _ward_review.boarded, TICK, cues, _ward_review.recorders(crew))
 	if ward_native() and _ward_review.phase != &"departed":
 		_step_ward_kit(r, inputs, next_time)
+	_hear_test_noises(r, next_time)
 	return r
+
+## RW1, tests only: noises a test asked for (net/local_room.gd test_ward_noise, the solo room's; never the server's),
+## heard at the next Ward tick exactly as a flare's burst is (_step_ward_kit: Ward.hear_at, its cues as events).
+## Empty in every real game, so nothing here runs.
+var _test_noises: Array[Vector3] = []
+
+func test_ward_noise(at: Vector3) -> bool:
+	if _ward_review == null:
+		return false
+	_test_noises.append(at)
+	return true
+
+func _hear_test_noises(r: Run.RunStep, now: float) -> void:
+	for at in _test_noises:
+		for cue in _ward_review.hear_at(at, now):
+			var event := cue.duplicate()
+			event["type"] = "ward_" + str(event["kind"])
+			event["t"] = event["at"]
+			r.events.append(event)
+	_test_noises.clear()
 
 ## WD1: whether this player's instrument is up and recording (its reading open), as the last tick left it.
 static func _ward_recording(s: Run.RunState, id: String) -> bool:

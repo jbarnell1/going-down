@@ -53,11 +53,14 @@ const FILES: Array[String] = [
 	"test_station_view",
 	"test_floor_media",
 	"test_rigger_v2",
+	"test_rigger_look",
 	"test_orderly_v2",
 	"test_ward_route",
 	"test_late_archive",
 	"test_figures",
 	"prop_late_admit",
+	"test_prison_deck",
+	"test_intercom",
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).
