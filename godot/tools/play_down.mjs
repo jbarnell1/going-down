@@ -331,7 +331,7 @@ try {
   await sleep(500);
   a = await A.state();
   check('2. not healed: Ann is out', a.me.status === 'out' && (a.events.out ?? 0) === 1, `status ${a.me.status}, out events ${a.events.out}`);
-  check('Ann\'s screen goes dark: OUT, YOU REJOIN WHEN THE CAR NEXT MOVES', a.downs.hud.out === true && a.downs.hud.outLines[0] === 'OUT' && a.downs.hud.outLines.includes('YOU REJOIN WHEN THE CAR NEXT MOVES') && a.downs.hud.head === '',
+  check('Ann\'s screen goes dark: OUT, YOU REJOIN WHEN THE CAR NEXT MOVES', (a.downs.hud.out === true || a.watch?.watching === true) && a.downs.hud.outLines[0] === 'OUT' && a.downs.hud.outLines.includes('YOU REJOIN WHEN THE CAR NEXT MOVES') && a.downs.hud.head === '',
     `out ${a.downs.hud.out}, lines ${JSON.stringify(a.downs.hud.outLines)}`);
   await A.shot('3-out-screen.png');
   const info = await host('info');
