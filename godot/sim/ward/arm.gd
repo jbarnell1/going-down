@@ -14,6 +14,12 @@ const EPSILON := 0.0001
 const CORNER_TRIM := 0.38
 const CURVE_STEPS := 6
 
+## WD1: the host's live settings (sim/ward/state.gd make_arm sets them; today's are the constants above).
+var warning_seconds := WARNING_SECONDS
+var probe_seconds := PROBE_SECONDS
+var out_speed := OUT_SPEED
+var in_speed := IN_SPEED
+
 var points := PackedVector3Array()
 var phase: StringName = &"idle"
 var search_area: StringName = &""
@@ -94,23 +100,23 @@ func step(delta: float, player_contacts: Dictionary, requested_door_open: bool =
 							_distances.append(_distances[-1] + _route[i - 1].distance_to(_route[i]))
 						phase = &"extending"
 			&"extending":
-				var used := minf((_distances[-1] - _travel) / OUT_SPEED, remaining)
+				var used := minf((_distances[-1] - _travel) / out_speed, remaining)
 				var old_travel := _travel
-				_travel = minf(_travel + used * OUT_SPEED, _distances[-1])
+				_travel = minf(_travel + used * out_speed, _distances[-1])
 				_check_sweep(old_travel, _travel, player_contacts)
 				_update_points()
 				remaining -= used
 				if _distances[-1] - _travel <= EPSILON:
 					phase = &"probing"
-					_timer = PROBE_SECONDS
+					_timer = probe_seconds
 			&"probing":
 				_check_sweep(_travel, _travel, player_contacts)
 				remaining = _consume_timer(remaining)
 				if _timer <= EPSILON:
 					phase = &"retracting"
 			&"retracting":
-				var used := minf(_travel / IN_SPEED, remaining)
-				_travel = maxf(_travel - used * IN_SPEED, 0.0)
+				var used := minf(_travel / in_speed, remaining)
+				_travel = maxf(_travel - used * in_speed, 0.0)
 				_update_points()
 				remaining -= used
 				if not requested_door_open:
@@ -130,7 +136,7 @@ func _begin_next() -> void:
 		return
 	search_area = _pending.pop_front()
 	phase = &"warning"
-	_timer = WARNING_SECONDS
+	_timer = warning_seconds
 	warned.emit(search_area)
 
 func _consume_timer(remaining: float) -> float:

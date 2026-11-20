@@ -68,6 +68,12 @@ func _ready() -> void:
 	_build_screen()
 	_build_card()
 	if handed and room != null:
+		# PL2, tests only (tools/play_late.mjs fallback A): a headless client handed a room walks as the review's
+		# "boarder" (out of the lift, back in when it returns) when automated (auto=1) and asked to.
+		var user_args := OS.get_cmdline_user_args()
+		if user_args.has("auto=1") and user_args.has("ward_handed_walk=1"):
+			test_role = "boarder"
+			print("WARD REVIEW TEST WALK boarder")
 		var overlay := CanvasLayer.new()
 		add_child(overlay)
 		overlay.add_child(status)

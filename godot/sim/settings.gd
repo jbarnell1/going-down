@@ -79,7 +79,9 @@ const SECTIONS: Array = [
 	[&"groundskeeper", &"residents", "THE GROUNDSKEEPER (THE ARBORETUM)"],
 	[&"tenant", &"residents", "THE TENANT (EVERY FLOOR)"],
 	[&"reactor", &"residents", "THE FOUR (THE REACTOR)"],
+	[&"rigger", &"residents", "THE RIGGER (THE WARD)"],
 	[&"lift", &"lift", "THE LIFT AND THE DARK"],
+	[&"ward", &"lift", "THE WARD"],
 	[&"stamina", &"players", "STAMINA"],
 	[&"down", &"players", "DOWN AND HEALING"],
 	[&"health", &"players", "HEALTH (THE PLAYROOM)"],
@@ -185,7 +187,47 @@ const ROWS: Array = [
 	[&"reactor.wake_gap", &"reactor", "EACH NEXT STIRS AFTER", "seconds between one of the four stirring and the next", "s", 0.62, 0.0, 10.0, 0.01, &"now", &"RN1", F],
 	[&"reactor.crawl_time", &"reactor", "CRAWLS FOR", "seconds each crawls before it stands and pursues (a crawler catches nobody)", "s", 4.2, 0.0, 30.0, 0.1, &"now", &"RN1", F],
 	[&"reactor.crawl_speed", &"reactor", "CRAWL SPEED", "how fast they crawl", "m/s", 0.43, 0.1, 2.0, 0.01, &"now", &"RN1", F],
-	[&"reactor.run_speed", &"reactor", "PURSUIT SPEED", "how fast they pursue once standing (walk 3, sprint 5)", "m/s", 3.4, 1.5, 6.0, 0.1, &"now", &"RN1", F],
+	[&"reactor.run_speed", &"reactor", "PURSUIT SPEED", "how fast they pursue once standing (walk 3, sprint 5)", "m/s", 2.6, 1.5, 6.0, 0.1, &"now", &"RN1", F],
+	# RX2 (tools/station_crews.gd measured these; sim/station_floor.gd ALONE_SCALE, PAIR_SCALE, CRAWL_KEEP, FEED, STAND_OFF).
+	[&"reactor.alone_scale", &"reactor", "PURSUIT ALONE", "the pursuit speed for a crew of one, in 100 of the pursuit speed", "in 100", 100.0, 40.0, 150.0, 5.0, &"now", &"RX2", F],
+	[&"reactor.pair_scale", &"reactor", "PURSUIT IN TWOS", "the pursuit speed for a crew of two, in 100 of the pursuit speed", "in 100", 100.0, 40.0, 150.0, 5.0, &"now", &"RX2", F],
+	[&"reactor.crawl_keep", &"reactor", "CRAWLERS KEEP OFF", "how near a crawling body may come to anyone on their feet (0: right up to them)", "m", 3.0, 0.0, 8.0, 0.5, &"now", &"RX2", F],
+	[&"reactor.feed", &"reactor", "CATCHER STAYS OVER ITS CATCH", "1: a body that puts someone down goes after nobody else while they lie there; 0: it hunts on", "", 1.0, 0.0, 1.0, 1.0, &"now", &"RX2", F],
+	[&"reactor.stand_off", &"reactor", "STANDS OFF AFTER A HEAL", "seconds the catcher stays still after its catch is healed", "s", 5.0, 0.0, 15.0, 0.5, &"now", &"RX2", F],
+	# RX3: the four hunt by what they see and hear (sim/station_floor.gd SENSES ... NOISE_DRAWS).
+	[&"reactor.senses", &"reactor", "THEY HUNT BY SIGHT AND SOUND", "1: only whom they see or hear; 0: they always know where everyone is", "", 1.0, 0.0, 1.0, 1.0, &"now", &"RX3", F],
+	[&"reactor.sight_dark", &"reactor", "SEE IN THE DARK", "how far they see a player in the emergency light", "m", 6.0, 2.0, 30.0, 0.5, &"now", &"RX3", F],
+	[&"reactor.sight_lit", &"reactor", "SEE IN THE LIGHT", "how far they see a player once the power is back", "m", 16.0, 2.0, 40.0, 0.5, &"now", &"RX3", F],
+	[&"reactor.sight_glow", &"reactor", "SEE A LIGHT", "how far they see a player with a lamp on, the glowing tape, or under an emergency lamp", "m", 10.0, 2.0, 40.0, 0.5, &"now", &"RX3", F],
+	[&"reactor.sight_creep", &"reactor", "SEE A CREEP", "the furthest they see a creeping player", "m", 2.5, 0.0, 10.0, 0.5, &"now", &"RX3", F],
+	[&"reactor.lamp_glow", &"reactor", "EMERGENCY LAMP'S POOL", "how near an emergency lamp a player stands lit", "m", 2.0, 0.0, 6.0, 0.5, &"now", &"RX3", F],
+	[&"reactor.hear_walk", &"reactor", "HEAR A WALK", "how far they hear a walking player, through walls", "m", 6.0, 0.0, 20.0, 0.5, &"now", &"RX3", F],
+	[&"reactor.hear_sprint", &"reactor", "HEAR A SPRINT", "how far they hear a sprinting player, through walls", "m", 10.0, 0.0, 30.0, 0.5, &"now", &"RX3", F],
+	[&"reactor.hear_socket", &"reactor", "HEAR THE SOCKET", "how far they hear the fuse going into the cabinet", "m", 0.0, 0.0, 60.0, 1.0, &"now", &"RX3", F],
+	[&"reactor.search_time", &"reactor", "SEARCH FOR", "seconds they search where they lost someone before drifting back to the hall", "s", 8.0, 0.0, 60.0, 1.0, &"now", &"RX3", F],
+	[&"reactor.search_speed", &"reactor", "SEARCH PACE", "how fast they walk while searching", "m/s", 1.2, 0.5, 4.0, 0.1, &"now", &"RX3", F],
+	[&"reactor.noise_draws", &"reactor", "ONE NOISE DRAWS", "how many of the four one noise (a whistle, a flare, a dropped fuse) pulls to it", "", 2.0, 0.0, 4.0, 1.0, &"now", &"RX3", W],
+	[&"reactor.hear_wall", &"reactor", "HEAR A WALK THROUGH A WALL", "how near they hear a walk with no clear line (further, only in sight)", "m", 3.0, 0.0, 20.0, 0.5, &"now", &"RX3", F],
+	[&"reactor.lunge_range", &"reactor", "LUNGE FROM", "how near the player it hunts before a body lunges", "m", 2.0, 0.0, 6.0, 0.5, &"now", &"RX3", F],
+	[&"reactor.lunge_speed", &"reactor", "LUNGE SPEED", "how fast the lunge (walk 3, sprint 5)", "m/s", 4.5, 1.5, 8.0, 0.1, &"now", &"RX3", F],
+	[&"reactor.wake_alone", &"reactor", "WAKE FOR ONE PLAYER", "how many of the four wake at the cut for a crew of one", "", 2.0, 1.0, 4.0, 1.0, &"next", &"RX3", W],
+	[&"reactor.wake_pair", &"reactor", "WAKE FOR TWO", "how many of the four wake at the cut for a crew of two", "", 3.0, 1.0, 4.0, 1.0, &"next", &"RX3", W],
+	[&"reactor.flinch", &"reactor", "FLINCH AT THE LIGHTS", "seconds every awake body holds still when the power comes back", "s", 3.5, 0.0, 15.0, 0.5, &"now", &"RX3", F],
+	[&"reactor.board", &"reactor", "REACTOR'S CAR WAITS", "seconds the car stands open after the power comes back, before the bell", "s", 60.0, 10.0, 180.0, 5.0, &"now", &"RX3", F],
+	[&"reactor.wake_late", &"reactor", "THE REST WAKE AFTER", "seconds after the cut that the ones a small crew did not wake stir", "s", 90.0, 0.0, 600.0, 5.0, &"now", &"RX3", F],
+	# The Rigger (the Ward, WD1: sim/ward/state.gd and arm.gd). Today's are their constants, set by bot crews
+	# (tools/ward_hunt.gd). A sprint is heard on any house floor; these say what else he hears and how he searches.
+	[&"rigger.steps_reach", &"rigger", "HEARS A WALK WITHIN", "walking (not creeping) this near the house he is at; 0 is never", "m", 9.0, 0.0, 30.0, 0.5, &"now", &"WD1", F],
+	[&"rigger.click_reach", &"rigger", "HEARS AN INSTRUMENT WITHIN", "an instrument recording this near his hand turns it to that room; 0 is never", "m", 2.5, 0.0, 8.0, 0.5, &"now", &"WD1", F],
+	[&"rigger.open_heard", &"rigger", "HEARS SPRINTS OUT OF DOORS", "sprints upstairs, on galleries and on walkways", "on/off", 1.0, 0.0, 1.0, 1.0, &"now", &"WD1", W],
+	[&"rigger.door_heard", &"rigger", "HEARS A DOOR", "a house door opened or shut", "on/off", 1.0, 0.0, 1.0, 1.0, &"now", &"WD1", W],
+	[&"rigger.move_on", &"rigger", "MOVES ON TO A SECOND NOISE", "a noise at another house while he searches brings him there next", "on/off", 1.0, 0.0, 1.0, 1.0, &"now", &"WD1", W],
+	[&"rigger.record_inside", &"rigger", "SEARCH RECORDS ONLY INSIDE", "his search records only from that house's ground floor; his climb from anywhere near", "on/off", 1.0, 0.0, 1.0, 1.0, &"now", &"WD1", W],
+	[&"rigger.room_warn", &"rigger", "WAITS BEFORE EACH ROOM", "the hand's pause at the sill before it reaches into a room", "s", 0.9, 0.3, 4.0, 0.05, &"now", &"WD1", F],
+	[&"rigger.probe", &"rigger", "FEELS EACH ROOM FOR", "how long the hand stays at the end of its reach", "s", 1.0, 0.0, 4.0, 0.1, &"now", &"WD1", F],
+	[&"rigger.arm_speed", &"rigger", "HAND REACHES AT", "how fast the hand pays out into a house (walk 3, creep 1.2)", "m/s", 2.2, 0.5, 4.0, 0.05, &"now", &"WD1", F],
+	[&"rigger.alone_arm_speed", &"rigger", "HAND REACHES AT, PLAYING ALONE", "the same with a crew of one", "m/s", 1.8, 0.5, 4.0, 0.05, &"now", &"WD1", F],
+	[&"rigger.arm_back", &"rigger", "HAND DRAWS BACK AT", "how fast the hand comes back out", "m/s", 2.6, 0.5, 6.0, 0.1, &"now", &"WD1", F],
 	# The lift and the dark. "Time for the elevator to return" is the first three rows.
 	[&"lift.floors_min", &"lift", "CAR STARTS, FEWEST FLOORS AWAY", "the shortest the indicator can start from", "floors", 6.0, 2.0, 19.0, 1.0, &"next", &"LS1", W],
 	[&"lift.floors_max", &"lift", "CAR STARTS, MOST FLOORS AWAY", "the longest", "floors", 12.0, 3.0, 20.0, 1.0, &"next", &"LS1", W],
@@ -199,6 +241,10 @@ const ROWS: Array = [
 	[&"dark.first_min", &"lift", "FIRST FLOOR'S BLACKOUT, SHORTEST", "the same on the first floor of a day", "s", 14.0, 5.0, 40.0, 1.0, &"next", &"LS4", F],
 	[&"dark.first_max", &"lift", "FIRST FLOOR'S BLACKOUT, LONGEST", "the same on the first floor of a day", "s", 16.0, 5.0, 40.0, 1.0, &"next", &"LS4", F],
 	[&"dark.warning", &"lift", "BLACKOUT WARNING", "the long flicker before it", "s", 3.0, 1.0, 6.0, 0.5, &"next", &"LS4", F],
+	# The Ward (PL2, net/host.gd _step_ward_review): LIFT RETURNS IN m:ss, stamped as the lift leaves the crew in the
+	# Hanging Ward. Today's is sim/ward/state.gd RETURN_SECONDS (the design's ten minutes). At one minute there is no
+	# separate one-minute reminder.
+	[&"ward.lift_minutes", &"ward", "LIFT RETURNS AFTER", "minutes from the lift leaving the crew in the Ward to its return", "min", 10.0, 1.0, 20.0, 1.0, &"next", &"PL2", W],
 	# Players: stamina.
 	[&"stamina.tank", &"stamina", "A FULL TANK SPRINTS FOR", "seconds of sprinting in a full tank", "s", 7.0, 3.0, 15.0, 0.5, &"now", &"LS5", F],
 	[&"stamina.refill_walk", &"stamina", "REFILL, WALKING", "empty to full", "s", 8.0, 3.0, 20.0, 0.5, &"now", &"LS5", F],
@@ -273,7 +319,7 @@ const ROWS: Array = [
 ]
 
 ## The pieces whose rows the rules read today (`wired`). LS4, LS5 and LS6 add theirs as they wire them.
-const WIRED_PIECES: Array[StringName] = [&"LS1", &"AR5", &"DF1"]
+const WIRED_PIECES: Array[StringName] = [&"LS1", &"AR5", &"DF1", &"WD1"]
 ## Rows of later pieces the rules already read (wired one group at a time, each with its proof).
 const WIRED_IDS: Array[StringName] = [
 	&"groundskeeper.tilt", &"groundskeeper.beat", &"groundskeeper.sweep", &"groundskeeper.turn",
@@ -284,6 +330,8 @@ const WIRED_IDS: Array[StringName] = [
 	# LS4: the lift and the dark.
 	&"lift.false_stop", &"lift.board", &"lift.hold", &"lift.ride",
 	&"dark.min", &"dark.max", &"dark.first_min", &"dark.first_max", &"dark.warning",
+	# PL2: the Ward's lift.
+	&"ward.lift_minutes",
 	# LS4: the Minder (the tuned Playroom).
 	&"minder.stroll", &"minder.hide_time", &"minder.hide_more", &"minder.last_hide", &"minder.search",
 	&"minder.anger_sprint", &"minder.anger_noise", &"minder.anger_cool",
@@ -304,7 +352,10 @@ const WIRED_IDS: Array[StringName] = [
 	&"tenant.minutes",
 	# RN1: the Reactor's power and its four.
 	&"reactor.power_hold", &"reactor.wake_after", &"reactor.wake_gap", &"reactor.crawl_time", &"reactor.crawl_speed",
-	&"reactor.run_speed",
+	&"reactor.run_speed", &"reactor.alone_scale", &"reactor.pair_scale", &"reactor.crawl_keep", &"reactor.feed", &"reactor.stand_off",
+	&"reactor.senses", &"reactor.sight_dark", &"reactor.sight_lit", &"reactor.sight_glow", &"reactor.sight_creep", &"reactor.lamp_glow",
+	&"reactor.hear_walk", &"reactor.hear_sprint", &"reactor.hear_socket", &"reactor.search_time", &"reactor.search_speed", &"reactor.noise_draws",
+	&"reactor.hear_wall", &"reactor.lunge_range", &"reactor.lunge_speed", &"reactor.wake_alone", &"reactor.wake_pair", &"reactor.wake_late", &"reactor.flinch", &"reactor.board",
 	# T22b: the second Orderly's first floor, the flare and the lamp (already read by the rules), recording, the
 	# quota's growth and the Annex's pad.
 	&"orderly2.first_floor",

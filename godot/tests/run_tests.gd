@@ -39,6 +39,7 @@ const FILES: Array[String] = [
 	"prop_pressures",
 	"test_cycle_entry",
 	"prop_station",
+	"prop_station_crews",
 	"test_ward_exit",
 	"test_ward_look",
 	"test_ward_native",
@@ -46,6 +47,8 @@ const FILES: Array[String] = [
 	"test_station_look",
 	"prop_ward_walk_net",
 	"prop_ward_same",
+	"test_ward_rigger",
+	"prop_ward_reach",
 	"test_station_view",
 	"test_floor_media",
 ]

@@ -63,6 +63,10 @@ class Exercise:
 
 func test_two_clients_see_the_host_ward(t: T) -> void:
 	var ex := Exercise.new(true)
+	# WD1: this test banks a reading "one" takes from the winch, outside the searched house. Since WD1 his search is
+	# recorded only from inside that house (tests/test_ward_rigger.gd proves it), so here, where the subject is the
+	# bank and the crew split, the host's SEARCH RECORDS ONLY INSIDE is off as a host could set it.
+	ex.host.state = Run.with_tuning(ex.host.state, {&"rigger.record_inside": 0.0})
 	ex.tick_for(6.5)
 	var ward := ex.host._ward_review
 	t.check(ward.phase == &"away", "host starts collection after its real lift leaves")

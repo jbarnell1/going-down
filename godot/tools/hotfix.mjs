@@ -8,6 +8,9 @@
 //   play_web   the browser playthrough on the new web build (a local static server, headless Chromium)
 //   play_down  the down-then-out check, two game processes, no windows (--headless=1)
 //   net_local  the network end to end: the server, three players, the probes, the night's log
+//   play_late  floors 6 and 7 with two players on the real server, quick (node godot/tools/play_late.mjs --quick=1): the Ward
+//              and the Reactor, then the old rooms' fallback; passes when the screens and the host agree. Skipped,
+//              said loudly, when the private floor packs are not there (a fresh clone)
 //   promote    npm run godot:promote -- "<note>"   (play/GoingDown.exe, play/web/)
 //   package    npm run godot:package               (play/GoingDown-<time>.zip for the friends)
 //   server     node godot/tools/godot.mjs export server  (godot/export/server/GoingDownServer.x86_64)
@@ -17,7 +20,8 @@
 // Then it PRINTS the commands that put the new server on the lab box. It never runs them: deploying is
 // done by hand. The box is named by the environment variable GD_LAB_SSH (USER@HOST) and the folder there
 // by GD_LAB_DIR (default going-down); neither is ever written into the repository.
-// Options: --web-port=4440 --down-port=4466 --net-port=4451 --exported-port=4492 (the playthroughs' ports), --skip=a,b (leave
+// Options: --web-port=4440 --down-port=4466 --net-port=4451 --late-port=4770 --exported-port=4492 (the playthroughs' ports;
+// play_late takes the ten from --late-port), --skip=a,b (leave
 // steps out, said loudly), and for checking this script itself: --stub=a,b|all (a step prints instead of
 // running), --fail-at=STEP (that stub fails).
 import { spawn, spawnSync } from 'node:child_process';
@@ -41,6 +45,8 @@ const webPort = Number(flag('web-port', 4440));
 const downPort = Number(flag('down-port', 4466));
 const netPort = Number(flag('net-port', 4451));
 const exportedPort = Number(flag('exported-port', 4492));
+const latePort = Number(flag('late-port', 4770));
+const packsDir = process.env.GD_PACKS_DIR || join(root, '.local', 'floor-packs');
 const note = argv.filter((a) => !a.startsWith('--')).join(' ').trim();
 const node = process.execPath;
 const sshTarget = process.env.GD_LAB_SSH || 'USER@HOST';
@@ -72,6 +78,15 @@ async function playWeb() {
   }
 }
 
+/** PL2: floors 6 and 7 over the network, quick. The floor packs are private: on a fresh clone the step is skipped. */
+async function playLate() {
+  if (!existsSync(join(packsDir, 'WardGroundMedia.pck'))) {
+    console.log(`      SKIPPED play_late: no private floor packs at ${packsDir} (a fresh clone; set GD_PACKS_DIR to check floors 6 and 7)`);
+    return 0;
+  }
+  return run(node, [join(here, 'play_late.mjs'), '--quick=1', `--port=${latePort}`, `--packs=${packsDir}`]);
+}
+
 function changes() {
   const st = spawnSync('git', ['status', '--porcelain', '--', 'godot', 'scripts'], { cwd: root, encoding: 'utf8' });
   if (st.status !== 0) return ['(not a git checkout)'];
@@ -97,6 +112,7 @@ const steps = [
   ['play_web', `node godot/tools/serve.mjs godot/export/web ${webPort} & node godot/tools/play_web.mjs ${webPort}`, playWeb],
   ['play_down', `node godot/tools/play_down.mjs --headless=1 --port=${downPort}`, () => run(node, [join(here, 'play_down.mjs'), '--headless=1', `--port=${downPort}`])],
   ['net_local', `node godot/tools/net_local.mjs ${netPort}`, () => run(node, [join(here, 'net_local.mjs'), String(netPort)])],
+  ['play_late', `node godot/tools/play_late.mjs --quick=1 --port=${latePort} (packs: ${packsDir})`, playLate],
   ['promote', `npm run godot:promote -- "${note}"`, () => run(node, [join(root, 'scripts', 'promote-godot.mjs'), note])],
   ['package', 'npm run godot:package', () => run(node, [join(root, 'scripts', 'package-godot.mjs')])],
   ['server', 'node godot/tools/godot.mjs export server', () => run(node, [join(here, 'godot.mjs'), 'export', 'server'])],

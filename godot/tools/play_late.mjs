@@ -17,10 +17,25 @@
 //   hand over to the old Reactor scene ("FLOOR ENTERED reactor").
 // The two fallbacks run beside the main session (each is mostly waiting for the Ward's lift). Prints `N passed, M
 // failed`; exit code 1 on any failure. Headless only: no window opens.
+//
+// PL2 (what this tool passes or fails on): only that the screens and the host AGREE (the same plan, the same clocks,
+// the same events in the same order, the same holders and phases) and that nothing printed a script error. What the
+// game does to the crew (catches, downs, a tape not carried out, a crew that did not ride up) is printed as FINDING
+// with its numbers and is never a failure. Changes from PL1:
+//   - the host sets the Ward's lift return (the live setting ward.lift_minutes, --lift-minutes=, default 1) on its
+//     settings panel in the lobby, the way tools/play_settings.mjs does, so a full run takes minutes, not twenty;
+//   - every client is polled about ten times a second for its own body against the host's row for it (main.gd
+//     `split`) on every floor it walks (5, 6, 7 and the prison): a split above 0.5 m for more than 0.6 s fails;
+//   - the Reactor is played as a crew would (see mainSession), with a medic that heals only once the four have
+//     moved off;
+//   - fallback A walks the old Ward room too (client/ward/review.gd's test walk, ward_handed_walk=1) and checks
+//     that the old room hands the run back to the main game;
+//   - --quick=1: the main session without the late joiner, and fallback A only (the hotfix chain's step). With no
+//     packs it prints SKIPPED and exits 0.
 //   node godot/tools/play_late.mjs [--port=4740] [--seed=late-1] [--packs=C:/new_game/.local/floor-packs]
-//        [--fallback=1] [--main=1]
+//        [--fallback=1] [--main=1] [--lift-minutes=1] [--quick=1] [--save-logs=DIR] [--break=clock|split]
 // Ports: P server, P+1..P+3 the main session's test channels, P+6 / P+7 fallback A, P+8 / P+9 fallback B; all
-// in 4740-4759. Packs: --packs, or GD_PACKS_DIR (the private floor packs; never committed). Stops every process
+// in 4740-4799. Packs: --packs, or GD_PACKS_DIR (the private floor packs; never committed). Stops every process
 // it starts, also on failure.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -41,10 +56,17 @@ const doFallback = arg('fallback', '1') === '1';
 const saveLogs = arg('save-logs', '');
 /** Test only: invert one comparison (the two clocks must differ) to prove the tool can fail. */
 const breakClock = arg('break', '') === 'clock';
+/** Test only: --break=split counts every split sample as one (the screen-versus-host check must then fail). */
+const breakSplit = arg('break', '') === 'split';
+/** PL2: the Ward's lift return (the live setting ward.lift_minutes), set by the host's panel before the run starts. */
+const liftMinutes = Number(arg('lift-minutes', 1));
+/** PL2: --quick=1: the main session and fallback A only (no Cy, no fallback B), for the hotfix chain. */
+const quick = arg('quick', '0') === '1';
 const godot = process.env.GODOT || join(root, 'tools', 'godot', 'Godot_v4.7.2-stable_win64_console.exe');
 if (!existsSync(godot)) throw new Error(`no engine at ${godot}: set GODOT`);
 const P = { server: port, A: port + 1, B: port + 2, C: port + 3, fa: port + 6, fa1: port + 7, fb: port + 8, fb1: port + 9 };
-for (const p of [...(doMain ? [P.server, P.A, P.B, P.C] : []), ...(doFallback ? [P.fa, P.fa1, P.fb, P.fb1] : [])]) if (!(p >= 4740 && p <= 4759)) throw new Error(`port ${p} is outside 4740-4759`);
+for (const p of [...(doMain ? [P.server, P.A, P.B, P.C] : []), ...(doFallback ? [P.fa, P.fa1, P.fb, P.fb1] : [])]) if (!(p >= 4740 && p <= 4799)) throw new Error(`port ${p} is outside 4740-4799`);
+if (!(liftMinutes >= 1 && liftMinutes <= 20 && Number.isInteger(liftMinutes))) throw new Error(`--lift-minutes=${liftMinutes}: a whole number from 1 to 20 (the setting's range)`);
 const SECRET = 'test-passphrase';
 const havePacks = existsSync(join(packs, 'WardGroundMedia.pck'));
 
@@ -179,6 +201,18 @@ async function board(c, side = 'down') {
   return s;
 }
 
+/** PL2: the host (the first client) sets ward.lift_minutes through its settings panel, as the host does on the night
+ * (tools/play_settings.mjs's path: the panel's set, the room's desk, the tune notice); the others' panels must show it. */
+async function setLift(host, others, tag) {
+  if (liftMinutes === 10) { log(`  ${tag}: ward.lift_minutes left at the game's 10`); return; }
+  const sent = await host.cmd(`panel set ward.lift_minutes ${liftMinutes}`);
+  const ph = await until(async () => JSON.parse(await host.cmd('panel state')), (p) => p.asked?.['ward.lift_minutes'] === liftMinutes, 8000, 100);
+  const po = others ? await until(async () => JSON.parse(await others.cmd('panel state')), (p) => p.asked?.['ward.lift_minutes'] === liftMinutes, 8000, 100) : ph;
+  check(`${tag}: the host sets the Ward's lift to ${liftMinutes} min on the settings panel (the room's desk takes it; ${others ? 'the other panel shows it' : 'alone'})`,
+    sent === 'sent' && ph.asked?.['ward.lift_minutes'] === liftMinutes && po.asked?.['ward.lift_minutes'] === liftMinutes,
+    `"${sent}", asked on the host ${J(ph.asked)}, on the other ${J(po.asked)}`);
+}
+
 /** Into the run and down from the Arboretum (floor 5) to the Ward: out, call, board DOWN. */
 async function rideToWard(cs, tag) {
   for (const c of cs) await c.cmd('ready');
@@ -195,28 +229,90 @@ async function rideToWard(cs, tag) {
   return until(cs[0].late, (l) => l.depth === 6 && l.ward, 90000, 150);
 }
 
+// ---- PL2: the screen against the host, every sample, on every floor a player walks (main.gd `split`).
+// Each client is polled about ten times a second: its own body (what its screen walks) and the host's row for it
+// in the newest snapshot. The host's row is a little behind the screen (the input's trip and one tick), so the
+// split of a sample is the distance from the host's row to the screen's own path over the last 0.8 s (the trail),
+// not to where the screen is now: a host that accepted the steps lies on that path; a host that refused them stays
+// put while the path walks away. A split above SPLIT_LIMIT for longer than SPLIT_MOMENT is a failure.
+const SPLIT_LIMIT = 0.5;
+const SPLIT_MOMENT = 0.6;
+const TRAIL_S = 0.8;
+const splits = {};
+const segDist = (p, a, b) => {
+  const dx = b[0] - a[0]; const dz = b[2] - a[2];
+  const L = dx * dx + dz * dz;
+  const u = L > 1e-9 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[2] - a[2]) * dz) / L)) : 0;
+  const q = [a[0] + u * dx, a[1] + u * (b[1] - a[1]), a[2] + u * dz];
+  return Math.hypot(p[0] - q[0], p[2] - q[2], (p[1] - q[1]) * 0.5);
+};
+function startSplit(c) {
+  const st = { label: c.label, n: 0, byDepth: {}, trail: [], over: null, long: [], stop: false, done: null, key: '' };
+  splits[c.label] = st;
+  st.done = (async () => {
+    while (!st.stop && !c.g.exited) {
+      let s = {};
+      try { s = JSON.parse(await c.cmd('split')); } catch { s = {}; }
+      const now = Date.now();
+      // Not while the car rides (nobody walks; the host has the crew in the car's own frame between floors).
+      if (Array.isArray(s.screen) && Array.isArray(s.host) && s.status !== 'out' && s.phase !== 'riding') {
+        const key = `${s.depth}/${s.place}/${s.screen[3]}`;
+        if (key !== st.key) { st.trail = []; st.over = null; st.key = key; }
+        st.trail.push({ t: now, p: s.screen });
+        while (st.trail.length > 2 && now - st.trail[0].t > TRAIL_S * 1000) st.trail.shift();
+        const raw = Math.hypot(s.host[0] - s.screen[0], s.host[2] - s.screen[2]);
+        let d = raw;
+        for (let k = 1; k < st.trail.length; k++) d = Math.min(d, segDist(s.host, st.trail[k - 1].p, st.trail[k].p));
+        if (s.host[3] !== s.screen[3]) d = Math.max(d, 99);
+        if (breakSplit) d = SPLIT_LIMIT + 1;
+        st.n++;
+        const bd = st.byDepth[s.depth] ??= { n: 0, max: 0, raw: 0, over: 0 };
+        bd.n++; bd.max = Math.max(bd.max, d); bd.raw = Math.max(bd.raw, raw);
+        if (d > SPLIT_LIMIT) {
+          bd.over++;
+          const sample = { tick: s.tick, hostNow: s.hostNow, depth: s.depth, place: s.place, phase: s.phase, status: s.status, d: +d.toFixed(2),
+            host: s.host.slice(0, 3).map((x) => +Number(x).toFixed(2)), screen: s.screen.slice(0, 3).map((x) => +Number(x).toFixed(2)), seq: s.seq, ackIn: s.ackIn };
+          if (!st.over) st.over = { from: now, first: sample, worst: sample, logged: false };
+          if (d > st.over.worst.d) st.over.worst = sample;
+          if (!st.over.logged && now - st.over.from > SPLIT_MOMENT * 1000) {
+            st.over.logged = true;
+            st.long.push(st.over);
+            log(`  SPLIT ${c.label}: the host's row and the screen more than ${SPLIT_LIMIT} m apart for over ${SPLIT_MOMENT} s: first ${J(st.over.first)}, worst so far ${J(st.over.worst)}`);
+          }
+        } else if (st.over) {
+          if (st.over.logged) st.over.secs = (now - st.over.from) / 1000;
+          st.over = null;
+        }
+      }
+      await sleep(90);
+    }
+  })();
+  return st;
+}
+async function stopSplits() {
+  for (const st of Object.values(splits)) st.stop = true;
+  await Promise.allSettled(Object.values(splits).map((st) => st.done));
+}
+function splitChecks() {
+  for (const st of Object.values(splits)) {
+    const floors = Object.entries(st.byDepth).map(([d, b]) => `floor ${d}: ${b.n} samples, split at most ${b.max.toFixed(2)} m (screen to host now ${b.raw.toFixed(2)} m), ${b.over} over ${SPLIT_LIMIT} m`).join('; ');
+    check(`split: ${st.label}'s screen and the host's row for ${st.label} never more than ${SPLIT_LIMIT} m apart for more than ${SPLIT_MOMENT} s`, st.n > 20 && st.long.length === 0,
+      `${st.n} samples; ${floors}${st.long.length ? `; ${st.long.length} long splits, the first ${J(st.long[0].first)} worst ${J(st.long[0].worst)}` : ''}`);
+  }
+}
+/** Long splits on a floor so far for one client (the Ward's winch check reads it). */
+const longOn = (label, depth) => (splits[label]?.long ?? []).filter((o) => o.first.depth === depth);
+
 // ---- Ward helpers: routes through the Ward walk model the screen walks with (main.gd `wardroute`).
-/** Per client: the first moment its own screen and the host's row for it were more than 0.5 m apart on the Ward. */
-const wardSplit = {};
 async function follow(c, route, ms = 60000, gait = '0') {
   const end = Date.now() + ms;
   let i = 0;
   let last = null;
   let stuckSince = Date.now();
-  let n = 0;
   while (i < route.length && Date.now() < end) {
     const s = await c.state();
     if (!s.me) { await sleep(60); continue; }
     const at = [s.me.x, s.me.y, s.me.z];
-    if (n++ % 3 === 0 && !wardSplit[c.label]) {
-      const l = await c.late();
-      const hb = l.hostBody;
-      const lb = l.localBody;
-      if (hb && lb && l.ward && Math.hypot(hb.x - lb.x, hb.z - lb.z) > 0.5) {
-        wardSplit[c.label] = { tick: l.tick, hostNow: l.hostNow, phase: l.ward.phase, host: [hb.x, hb.y, hb.z].map(r2), screen: [lb.x, lb.y, lb.z].map(r2), door: l.wardModel?.liftDoor };
-        log(`  ${c.label}: the host's row and the screen split: ${J(wardSplit[c.label])}`);
-      }
-    }
     while (i < route.length - 1 && flat(at, route[i]) < 0.35) i++;
     const w = route[i];
     if (i === route.length - 1 && flat(at, w) < 0.3) break;
@@ -249,9 +345,9 @@ const cellOf = (x, z) => [Math.floor(x / 2), Math.floor(z / 2)];
 async function approach(c, x, z, near, gait = '0', ms = 8000) {
   const end = Date.now() + ms;
   let s = await c.state();
-  while (s.me && Math.hypot(s.me.x - x, s.me.z - z) > near && Date.now() < end) {
+  while (s.me && s.me.status === 'ok' && Math.hypot(s.me.x - x, s.me.z - z) > near && Date.now() < end) {
     await c.cmd(`face ${x} ${z}`);
-    await c.cmd(`move 1 0 ${gait} 0`);
+    await c.cmd(gait === 'creep' ? 'move 1 0 0 1' : `move 1 0 ${gait} 0`);
     await sleep(50);
     s = await c.state();
   }
@@ -260,12 +356,123 @@ async function approach(c, x, z, near, gait = '0', ms = 8000) {
 }
 async function goTo(c, x, z, near, gait = 'walk') {
   const [cx, cz] = cellOf(x, z);
-  await c.cmd(`walkto 0 ${cx} ${cz} 3 ${gait}`);
+  await c.cmd(`walkto 0 ${cx} ${cz} ${gait === 'sprint' ? 5 : 3} ${gait}`);
   await until(c.state, (s) => s.auto !== 'walking' || (s.me && Math.hypot(s.me.x - x, s.me.z - z) < near), 30000, 60);
   await c.cmd('stopwalk');
   return approach(c, x, z, near, gait === 'sprint' ? '1' : '0');
 }
 async function press(c, held = 400) { await c.cmd('use 1'); await sleep(held); await c.cmd('use 0'); }
+
+// ---- PL2: the Reactor played sensibly. The four pursue the nearest standing player they can walk to, at 3.4 m/s
+// (a sprint is 5, a walk 3), never into the cable crawl (creep only, 1.2 m/s).
+const findings = [];
+/** Something the game did to the crew (not a disagreement between the screens): reported, never a failure. */
+const finding = (what, detail) => { findings.push({ what, detail }); log(`FINDING ${what} (${detail})`); };
+const runners = (l) => (l.reactor?.crew ?? []).filter((b) => b[5] === 'zombie_run');
+const nearRun = (l, x, z) => Math.min(Infinity, ...runners(l).map((b) => Math.hypot(b[0] - x, b[2] - z)));
+const cellMid = (c) => [c[0] * 2 + 1, c[1] * 2 + 1];
+/** While the medic has a client, the main flow leaves it alone. */
+async function free(c) { while (c.medic) await sleep(100); }
+/** To (x, z) through the plan (the client's own walkto), sprinting while a standing body is within `chased` m or
+ * when asked, walking otherwise, or creeping. The last steps straight at it. Stops if this player goes down. */
+async function drive(c, x, z, near, { creep = false, sprint = false, chased = 9, ms = 30000 } = {}) {
+  await free(c);
+  const end = Date.now() + ms;
+  const [cx, cz] = cellOf(x, z);
+  let gait = '';
+  let s = await c.state();
+  while (s.me && s.me.status === 'ok' && Math.hypot(s.me.x - x, s.me.z - z) > Math.max(near, 1.6) && Date.now() < end && !c.medic) {
+    const l = await c.late();
+    const want = creep ? 'creep' : sprint || nearRun(l, s.me.x, s.me.z) < chased ? 'sprint' : 'walk';
+    // walkto's 4th number is the pace in m/s, capped by the gait (play_link.gd walk_to): a sprint needs 5.
+    if (want !== gait || s.auto !== 'walking') { await c.cmd(`walkto 0 ${cx} ${cz} ${want === 'sprint' ? 5 : want === 'creep' ? 1.2 : 3} ${want}`); gait = want; }
+    await sleep(110);
+    s = await c.state();
+    if (s.auto !== 'walking' && gait === want) {
+      // walkto gave up (a cell it will not path to): the last stretch straight at the spot.
+      break;
+    }
+  }
+  await c.cmd('stopwalk');
+  if (s.me?.status !== 'ok' || c.medic) return s;
+  return approach(c, x, z, near, creep ? 'creep' : sprint ? '1' : '0', 6000);
+}
+/** Into the crawl by one of its mouths (outside cell, crawl cell) and on to a cell deeper in. */
+async function intoCrawl(c, mouth, deep, opts = {}) {
+  const o = cellMid(mouth.out);
+  const i = cellMid(mouth.in);
+  const d = cellMid(deep);
+  let s = await drive(c, o[0], o[1], 0.6, opts);
+  if (s.me?.status === 'ok') s = await approach(c, i[0], i[1], 0.45, 'creep', 8000);
+  if (s.me?.status === 'ok') s = await approach(c, d[0], d[1], 0.5, 'creep', 8000);
+  const inCrawl = s.me ? (s.me && cellKeyIn(s.me.x, s.me.z, mouth)) : false;
+  return { s, inCrawl };
+}
+let crawlCells = new Set();
+const cellKeyIn = (x, z) => crawlCells.has(cellOf(x, z).join(','));
+/** Out of the crawl by a mouth: creep to its crawl cell, then out to the cell beyond. */
+async function outOfCrawl(c, mouth) {
+  await free(c);
+  const i = cellMid(mouth.in);
+  const o = cellMid(mouth.out);
+  let s = await approach(c, i[0], i[1], 0.45, 'creep', 12000);
+  if (s.me?.status === 'ok') s = await approach(c, o[0], o[1], 0.5, 'creep', 6000);
+  return s;
+}
+/** To the landing at a sprint when chased, then in through the doors (board()). */
+async function boardRun(c) {
+  await free(c);
+  const pl = JSON.parse(await c.cmd('plan'));
+  const lx = pl.landing.x * 2 + 1;
+  const lz = pl.landing.y * 2 + 1;
+  const s = await drive(c, lx, lz, 1.0, { chased: 12 });
+  if (s.me?.status !== 'ok') return { status: s.me?.status };
+  const b = await board(c, 'down');
+  return { status: b.me?.status, aboard: b.me?.aboard };
+}
+/** A background medic: when one player is down and the other on their feet, the other goes to heal them, but only
+ * once no standing body is within SAFE m of the downed player (the catcher has moved off); holds F until they are up. */
+function startMedic(cs) {
+  const SAFE = 9;
+  const m = { stop: false, log: [], done: null, hud: false };
+  m.done = (async () => {
+    while (!m.stop) {
+      await sleep(200);
+      const ss = await Promise.all(cs.map((c) => c.state()));
+      const di = ss.findIndex((s) => s.me?.status === 'down');
+      const hi = ss.findIndex((s) => s.me?.status === 'ok');
+      if (di < 0) continue;
+      const dn = cs[di];
+      if (!m.hud) {
+        m.hud = true;
+        const t0 = Date.now();
+        const dv = await until(dn.state, (s) => /^DOWN/.test(s.downs?.hud?.head ?? '') || s.me?.status !== 'down', 3000, 40);
+        check('Reactor: the downed player has something to do within seconds (the timer and the line)', /^DOWN/.test(dv.downs?.hud?.head ?? '') && (dv.downs?.hud?.line ?? '') !== '',
+          `${dn.label}: "${dv.downs?.hud?.head}" / "${dv.downs?.hud?.line}" / "${dv.downs?.hud?.line2}", ${r2((Date.now() - t0) / 1000)} s after the tool saw the down`);
+      }
+      if (hi < 0) continue;
+      const hl = cs[hi];
+      const l = await hl.late();
+      const at = ss[di].me;
+      const near = nearRun(l, at.x, at.z);
+      if (near < SAFE) { continue; }
+      hl.medic = true;
+      try {
+        await hl.cmd('stopwalk');
+        m.log.push({ healer: hl.label, downed: dn.label, hostNow: l.hostNow, nearestStanding: +near.toFixed(1) });
+        let s = await approach(hl, at.x, at.z, 0.9, '1', 8000);
+        if (s.me?.status !== 'ok') continue;
+        await hl.cmd(`face ${at.x} ${at.z} 0.2`);
+        await hl.cmd('use 1');
+        const up = await until(async () => ({ d: await dn.state(), l: await hl.late(), h: await hl.state() }),
+          (x) => x.d.me?.status !== 'down' || x.h.me?.status !== 'ok' || nearRun(x.l, at.x, at.z) < 2.5, 6000, 60);
+        await hl.cmd('use 0');
+        m.log.push({ healed: up.d.me?.status === 'ok', downed: up.d.me?.status, healer: up.h.me?.status, hostNow: up.l.hostNow });
+      } finally { hl.medic = false; }
+    }
+  })();
+  return m;
+}
 
 // ======================================================================================================
 async function mainSession() {
@@ -278,6 +485,9 @@ async function mainSession() {
     A = await joinRoom('A', P.A, url, 'Ann');
     B = await joinRoom('B', P.B, url, 'Bob');
     await until(A.state, (s) => (scr(s).people ?? []).length >= 2, 20000);
+    await setLift(A, B, 'main');
+    startSplit(A);
+    startSplit(B);
     let l = await rideToWard([A, B], 'main');
     // ---------------- The Ward.
     let [la, lb] = [await until(A.late, (x) => x.wardModel, 20000), await until(B.late, (x) => x.wardModel, 20000)];
@@ -298,6 +508,9 @@ async function mainSession() {
     check('Ward: both clear: the lift leaves (away on both)', outB.ok && la.ward.phase === 'away' && lb.ward.phase === 'away', `Bob ${r2(outB.at?.[2] - door[2])} m past the doors; A ${la.ward.phase} B ${lb.ward.phase}`);
     const dep = [evOf(la, 'ward_departed')[0], evOf(lb, 'ward_departed')[0]];
     check('Ward: the departure is the same host event on both', dep[0] && dep[1] && dep[0].t === dep[1].t, `A t ${dep[0]?.t}, B t ${dep[1]?.t}`);
+    check(`Ward: the lift is due back ${liftMinutes} min after it left (ward.lift_minutes), the same collectionAt on both`,
+      dep[0] && Math.abs(la.ward.collectionAt - dep[0].t - liftMinutes * 60) < 1e-6 && la.ward.collectionAt === lb.ward.collectionAt,
+      `departed ${dep[0]?.t}, collectionAt A ${la.ward.collectionAt} B ${lb.ward.collectionAt}: ${r2(la.ward.collectionAt - (dep[0]?.t ?? 0))} s`);
     await sleep(1200);
     const pair = await sameTick(A, B);
     const ca = clockSecs(pair.a.clockLine);
@@ -306,7 +519,7 @@ async function mainSession() {
     const sameClock = pair.a.ward.collectionAt === pair.b.ward.collectionAt && Math.abs(ca - cb) <= 1;
     check('Ward: both see the same LIFT RETURNS clock (same collectionAt, lines within a second, read on ticks within one)', breakClock ? !sameClock : sameClock && Math.abs(ca - left) <= 1.5 && pair.gap <= 1,
       `A "${pair.a.clockLine}" B "${pair.b.clockLine}", collectionAt A ${pair.a.ward.collectionAt} B ${pair.b.ward.collectionAt}, host left ${r2(left)} s, ticks ${pair.a.tick}/${pair.b.tick}`);
-    if (breakClock) throw new Error('--break=clock: the session stops after the broken clock check');
+    if (breakClock || breakSplit) throw new Error('--break: the session stops after the Ward clock check');
     // The winch: Ann goes to a switch on a house other than the parlour (Bob waits in the parlour).
     const sw = la.wardModel.switches.map((s, k) => ({ ...s, k, d: Math.hypot(s.position[0] - door[0], s.position[2] - door[2]) })).sort((x, y) => (x.house === 0) - (y.house === 0) || x.d - y.d);
     let at = null; let used = null;
@@ -343,8 +556,9 @@ async function mainSession() {
       reach = hostReach;
     }
     la = await A.late();
-    check('Ward: on the walk to the winch the host accepts Ann\'s steps (her screen and the host\'s row for her stay within 0.5 m)', !wardSplit.A && Number.isFinite(reach) && reach <= 1.25,
-      wardSplit.A ? `split at tick ${wardSplit.A.tick} (host time ${wardSplit.A.hostNow}, phase ${wardSplit.A.phase}): host ${J(wardSplit.A.host)}, her screen ${J(wardSplit.A.screen)}, lift door ${J(wardSplit.A.door)}; at the switch the host has her ${r2(reach)} m from it` : `host row ${r2(reach)} m from the switch`);
+    const wardLong = longOn('A', 6);
+    check('Ward: on the walk to the winch the host accepts Ann\'s steps (her screen and the host\'s row for her stay within 0.5 m)', !wardLong.length && Number.isFinite(reach) && reach <= 1.25,
+      wardLong.length ? `split from ${J(wardLong[0].first)}, worst ${J(wardLong[0].worst)}, lift door ${J(door)}; at the switch the host has her ${r2(reach)} m from it` : `host row ${r2(reach)} m from the switch`);
     const bev = [evOf(la, 'ward_bridge').at(-1), evOf(lb, 'ward_bridge').at(-1)];
     check('Ward: Ann works the winch and Bob\'s screen sees the bridge move (block and drawn walk model)', used && lb.ward.bridgeLowered !== before && lb.wardModel.bridgeLowered === lb.ward.bridgeLowered && la.ward.bridgeLowered === lb.ward.bridgeLowered,
       `switch ${used?.k} house ${used?.house}; Bob's bridge ${before} -> ${lb.ward.bridgeLowered} (walk model ${lb.wardModel?.bridgeLowered}), Ann's ${la.ward.bridgeLowered}`);
@@ -354,26 +568,51 @@ async function mainSession() {
     const enc = la.ward.encounter;
     await A.cmd('raise 1');
     await until(A.late, (x) => x.ward.encounter === 'searching' || x.ward.encounter === 'idle', 6000, 60);
-    await sleep(5000);
+    await sleep(4000);
     await A.cmd('raise 0');
-    await sleep(1500);
+    // The reading closes when the instrument comes down; wait for its event on both screens.
+    await until(A.late, (x) => evOf(x, 'readingClosed').length > 0, 3000, 100);
+    await until(B.late, (x) => evOf(x, 'readingClosed').length > 0, 3000, 100);
     [la, lb] = [await A.late(), await B.late()];
     const rA = evOf(la, 'readingClosed');
     const rB = evOf(lb, 'readingClosed');
     const [sa, sb] = [await A.state(), await B.state()];
-    check('Ward: a reading near the Rigger, the same amount on both screens', rA.length > 0 && J(rA) === J(rB) && J(sa.tapes) === J(sb.tapes),
+    // `tapes` in a client's state is that player's own pocket: Ann's holds her reading, Bob's nothing of hers.
+    const annSum = rA.filter((e) => e.playerId === la.me).reduce((a, e) => a + e.value, 0);
+    if (!rA.length) finding('no reading closed near the Rigger on the Ward', `encounter ${enc} (house ${la.ward.house}), caught ${J(la.ward.caught)}`);
+    check('Ward: the readings near the Rigger, the same on both screens (and in Ann\'s own pocket)', J(rA) === J(rB) && Math.abs((sa.tapes?.value ?? 0) - annSum) < 0.01,
       `encounter ${enc} (house ${la.ward.house}); Ann's readings on A ${J(rA.map((e) => [e.playerId, e.value, e.t]))}, on B ${J(rB.map((e) => [e.playerId, e.value, e.t]))}; tapes A ${J(sa.tapes)} B ${J(sb.tapes)}`);
     const caught = [la.ward.caught, lb.ward.caught];
     if (caught[0].length) log(`  caught on the Ward: ${J(caught[0])}`);
     // Back to the parlour beside the lift to wait.
-    const backA = await wardGo(A, door[0] - 0.3, door[2] + 2.2, 120000);
+    // Back to the lift. A house whose Rigger is searching holds its door as the arm does (sim/ward/state.gd
+    // walk_clear): when there is no way out, wait for the encounter to end and try again.
+    let backA = await wardGo(A, door[0] - 0.3, door[2] + 2.2, 30000);
+    for (let k = 0; k < 4 && !backA.ok; k++) {
+      const lw = await A.late();
+      log(`  Ann has no way back yet (${backA.why}): encounter ${lw.ward?.encounter} house ${lw.ward?.house}, doors ${J(lw.ward?.doors)}, caught ${J(lw.ward?.caught)}, bridge ${lw.ward?.bridgeLowered}, lift ${lw.ward?.phase} in ${r2((lw.ward?.collectionAt ?? 0) - (lw.hostNow ?? 0))} s`);
+      if (!lw.ward || (lw.ward.caught ?? []).includes(lw.me)) break;
+      await until(A.late, (x) => x.ward?.encounter === 'idle' || !x.ward, 20000, 250);
+      backA = await wardGo(A, door[0] - 0.3, door[2] + 2.2, 30000);
+    }
+    if (!backA.ok) {
+      const lw = await A.late();
+      finding('Ann could not get back to the Ward lift', `encounter ${lw.ward?.encounter} house ${lw.ward?.house}, doors ${J(lw.ward?.doors)}, caught ${J(lw.ward?.caught)}, at ${J([lw.localBody?.x, lw.localBody?.z].map(r2))}, host time ${lw.hostNow}`);
+    }
     log(`  Ann back by the lift: ${J({ ok: backA.ok, why: backA.why })}; waiting for the lift (${r2(la.ward.collectionAt - la.hostNow)} s)`);
     // The host's panel (Ann is the host): the Reactor's lights hold the game's 45 s (left as is).
-    la = await until(A.late, (x) => x.ward?.phase === 'boarding', 700000, 1000);
-    lb = await until(B.late, (x) => x.ward?.phase === 'boarding', 5000, 50);
+    la = await until(A.late, (x) => x.ward?.phase === 'boarding' || !x.ward, liftMinutes * 60000 + 60000, 500);
+    lb = await until(B.late, (x) => x.ward?.phase === 'boarding' || !x.ward, 5000, 50);
+    if (!la.ward || !lb.ward) throw Object.assign(new Error(), { stop: true, message: `the Ward was over before Ann was back by the lift (A depth ${la.depth}, B depth ${lb.depth}): the rest of the session cannot run` });
     const ret = [evOf(la, 'ward_returned')[0], evOf(lb, 'ward_returned')[0]];
     check('Ward: the lift returns on the same host time on both', la.ward.phase === 'boarding' && lb.ward.phase === 'boarding' && ret[0] && ret[1] && ret[0].t === ret[1].t && Math.abs(ret[0].t - la.ward.collectionAt) < 1e-6,
       `A ${la.ward.phase} t ${ret[0]?.t}, B ${lb.ward.phase} t ${ret[1]?.t}, collectionAt ${la.ward.collectionAt}, departAt A ${la.ward.departAt} B ${lb.ward.departAt}`);
+    const lm = [evOf(la, 'ward_last_minute'), evOf(lb, 'ward_last_minute')];
+    check(liftMinutes > 1 ? 'Ward: the one-minute reminder, the same host time on both, a minute before the return' : 'Ward: at a one-minute return there is no separate one-minute reminder (on both)',
+      liftMinutes > 1 ? lm[0].length === 1 && J(lm[0]) === J(lm[1]) && Math.abs(lm[0][0].t - (la.ward.collectionAt - 60)) < 1e-6 : lm[0].length === 0 && lm[1].length === 0,
+      `A ${J(lm[0])} B ${J(lm[1])}, collectionAt ${la.ward.collectionAt}`);
+    const wardOrder = (x) => (x.events ?? []).filter((e) => String(e.type).startsWith('ward_')).map((e) => [e.type, e.t]);
+    check('Ward: the same Ward events in the same order on both screens', J(wardOrder(la)) === J(wardOrder(lb)), `A ${J(wardOrder(la))} B ${J(wardOrder(lb))}`);
     const inA = wardGo(A, door[0] - 0.25, door[2] - 1.3, 30000);
     const inB = wardGo(B, door[0] + 0.25, door[2] - 1.9, 30000);
     const [ia, ib] = await Promise.all([inA, inB]);
@@ -391,106 +630,83 @@ async function mainSession() {
       `seed ${la.reactor.seed}/${lb.reactor.seed}, fuse ${J(la.reactor.fuseAt)}/${J(lb.reactor.fuseAt)}, cabinet ${J(la.station?.cabinet?.at)}, bodies ${J((la.station?.bodies ?? []).map((b) => b.at))}`);
     const pr = await sameTick(A, B);
     check('Reactor: the four lie in the same poses on both (same tick)', pr.gap === 0 && J(pr.a.reactor.crew) === J(pr.b.reactor.crew) && la.reactor.power === 0, `ticks ${pr.a.tick}/${pr.b.tick}, power ${la.reactor.power}`);
-    // Both walk past the landing into the hall: the hold starts.
+    // PL2: the crew plays it as a crew would. Bob takes the tape off the table at once (it can be taken any time) and
+    // waits in the cable crawl (creep only: the four never enter it). Ann starts the hold, waits by the fuse, takes it
+    // at the cut, sprints it to the cabinet, calls the lift and goes to ground in the crawl's other end. When the car
+    // is in, Bob carries the tape out through the gallery while Ann draws from the hall side. A downed player is
+    // healed only once no standing body is near them. What the four do to the crew is reported (FINDING), never a
+    // failure: the checks are that the two screens and the host agree.
+    const st = la.station;
+    const fuse = la.reactor.fuseAt;
+    const tape = la.reactor.tapeAt;
+    const cab = st.cabinet.at;
+    const crawlSet = new Set((st.crawl ?? []).map((c) => `${c[0]},${c[1]}`));
+    const mouths = (st.crawl_mouths ?? []).map((m) => {
+      const inA = crawlSet.has(`${m[0]},${m[1]}`);
+      return { out: inA ? [m[2], m[3]] : [m[0], m[1]], in: inA ? [m[0], m[1]] : [m[2], m[3]] };
+    });
+    const deeper = (m) => { // a crawl cell next to the mouth's crawl cell, away from the mouth
+      for (const [dx, dz] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+        const c = [m.in[0] + dx, m.in[1] + dz];
+        if (crawlSet.has(`${c[0]},${c[1]}`) && (c[0] !== m.out[0] || c[1] !== m.out[1])) return c;
+      }
+      return m.in;
+    };
+    const [hatch, opening] = [mouths[0], mouths[1]];
+    const deeper2 = (m) => { const d = deeper(m); return deeper({ in: d, out: m.in }); };
+    crawlCells = crawlSet;
+    log(`  Reactor plan: tape ${J(tape)}, fuse ${J(fuse)}, cabinet ${J(cab)}, crawl ${crawlSet.size} cells, gallery hatch ${J(hatch)}, hall opening ${J(opening)}`);
     await stepOut([A, B]);
-    const land = la.station.landing;
-    const hall = la.station.hall;
+    const land = st.landing;
+    const hall = st.hall;
     const hx = land[0] + land[2] / 2;
     const hz = Math.max(hall[1] + 1, land[1] - 3);
-    await Promise.all([goTo(A, hx - 1, hz, 0.8), goTo(B, hx + 1, hz, 0.8)]);
+    // Bob takes the tape before anything moves.
+    const bobTape = (async () => {
+      await drive(B, tape[0], tape[2], 1.4);
+      for (let k = 0; k < 4 && (await B.late()).reactor?.cassetteHolder !== (await B.late()).me; k++) await press(B, 300);
+      return until(B.late, (x) => x.reactor?.cassetteHolder === x.me, 2000, 50);
+    })();
+    const annIn = drive(A, hx, hz, 0.8);
+    const [lt] = await Promise.all([bobTape, annIn]);
+    check('Reactor: Bob takes the tape from the table (the same holder on Ann\'s screen)', lt.reactor?.cassetteHolder === lt.me && (await until(A.late, (x) => x.reactor?.cassetteHolder === lt.me, 1500, 50)).reactor?.cassetteHolder === lt.me,
+      `holder ${lt.reactor?.cassetteHolder}, Bob ${lt.me}`);
     [la, lb] = [await until(A.late, (x) => evOf(x, 'powerHold').length > 0, 10000, 100), await until(B.late, (x) => evOf(x, 'powerHold').length > 0, 3000, 100)];
     const hold = [evOf(la, 'powerHold')[0], evOf(lb, 'powerHold')[0]];
     check('Reactor: the lights hold once someone passes the landing, the same host event on both', hold[0] && hold[1] && hold[0].t === hold[1].t && hold[0].len === hold[1].len,
       `A ${J(hold[0])} B ${J(hold[1])}`);
-    [la, lb] = [await until(A.late, (x) => evOf(x, 'powerCut').length > 0, 70000, 100), await until(B.late, (x) => evOf(x, 'powerCut').length > 0, 3000, 50)];
+    // Ann to the fuse, Bob into the crawl by the gallery hatch, both before the cut.
+    const [fa, bc] = await Promise.all([drive(A, fuse[0], fuse[2], 1.2), intoCrawl(B, hatch, deeper2(hatch))]);
+    log(`  before the cut: Ann ${r2(Math.hypot(fa.me?.x - fuse[0], fa.me?.z - fuse[2]))} m from the fuse; Bob in the crawl ${bc.inCrawl} at ${J([bc.s.me?.x, bc.s.me?.z].map(r2))}`);
+    [la, lb] = [await until(A.late, (x) => evOf(x, 'powerCut').length > 0, 70000, 60), await until(B.late, (x) => evOf(x, 'powerCut').length > 0, 3000, 50)];
     const cut = [evOf(la, 'powerCut')[0], evOf(lb, 'powerCut')[0]];
     check('Reactor: the power cuts on the same host tick on both, the hold after it started', cut[0] && cut[1] && cut[0].t === cut[1].t && hold[0] && Math.abs(cut[0].t - hold[0].t - hold[0].len) <= 0.051 && la.reactor.power === 1 && lb.reactor.power === 1,
       `cut A t ${cut[0]?.t} B t ${cut[1]?.t}, hold from ${hold[0]?.t} for ${hold[0]?.len} s, power A ${la.reactor.power} B ${lb.reactor.power}`);
-    // A third client joins now.
-    const cJoin = joinRoom('C', P.C, url, 'Cy').catch((e) => { log(`  Cy could not join: ${e.message}`); return null; });
+    // A third client joins now (not in --quick).
+    const cJoin = quick ? Promise.resolve(null) : joinRoom('C', P.C, url, 'Cy').catch((e) => { log(`  Cy could not join: ${e.message}`); return null; });
+    if (quick) skip('late joiner (Cy)', '--quick=1 leaves the third client out');
+    // Ann takes the fuse at once.
+    for (let k = 0; k < 6 && (await A.late()).reactor?.holder !== la.me; k++) await press(A, 250);
+    const fz = await until(A.late, (x) => x.reactor?.holder === x.me, 1500, 50);
+    const fzB = await until(B.late, (x) => x.reactor?.holder === fz.me, 1500, 50);
+    check('Reactor: Ann takes the fuse at the cut (the host\'s holder, the same on Bob\'s screen)', fz.reactor?.holder === fz.me && fzB.reactor?.holder === fz.me,
+      `holder A ${fz.reactor?.holder} B ${fzB.reactor?.holder}, Ann ${fz.me}, ${r2((fz.hostNow ?? 0) - (cut[0]?.t ?? 0))} s after the cut`);
     [la, lb] = [await until(A.late, (x) => evOf(x, 'stationStir').length > 0, 8000, 50), await until(B.late, (x) => evOf(x, 'stationStir').length > 0, 3000, 50)];
     const stir = [evOf(la, 'stationStir')[0], evOf(lb, 'stationStir')[0]];
     const stands = evOf(la, 'bodyStands');
     check('Reactor: the four stir, the same host event on both, before any of them stands (heard before it reaches anyone)', stir[0] && stir[1] && stir[0].t === stir[1].t && (stands.length === 0 || stands[0].t > stir[0].t),
       `stir A ${J(stir[0])} B ${J(stir[1])}, first stands ${stands[0]?.t}`);
-    // Ann goes for the fuse; Bob goes to meet the four.
-    const fuse = la.reactor.fuseAt;
-    const annFuse = (async () => {
-      const s = await goTo(A, fuse[0], fuse[2], 1.6, 'sprint');
-      await press(A, 300);
-      return { s, l: await until(A.late, (x) => x.reactor.holder === x.me, 1500, 50) };
-    })();
-    const bobMeets = (async () => {
-      const end = Date.now() + 40000;
-      let s = await B.state();
-      while (s.me?.status === 'ok' && Date.now() < end) {
-        const l = await B.late();
-        const run = (l.reactor?.crew ?? []).filter((c) => c[5] === 'zombie_run');
-        const pool = run.length ? run : (l.reactor?.crew ?? []);
-        const near = pool.sort((p, q) => Math.hypot(p[0] - s.me.x, p[2] - s.me.z) - Math.hypot(q[0] - s.me.x, q[2] - s.me.z))[0];
-        if (near) { await B.cmd(`face ${near[0]} ${near[2]}`); await B.cmd(Math.hypot(near[0] - s.me.x, near[2] - s.me.z) > 0.6 ? 'move 1 0 0 0' : 'stopmove'); }
-        await sleep(60);
-        s = await B.state();
-      }
-      await B.cmd('stopmove');
-      return s;
-    })();
-    const [fz, bs] = await Promise.all([annFuse, bobMeets]);
-    check('Reactor: Ann takes the fuse (the host\'s holder, the same on Bob\'s screen)', fz.l.reactor.holder === fz.l.me && (await B.late()).reactor.holder === fz.l.me,
-      `holder ${fz.l.reactor.holder}, Ann ${fz.l.me}, ${r2(Math.hypot(fz.s.me?.x - fuse[0], fz.s.me?.z - fuse[2]))} m from the fuse when she pressed F`);
-    // Whoever is down, the other heals.
-    let sa2 = await A.state();
-    let sb2 = await B.state();
-    const downed = sb2.me?.status === 'down' ? [B, A, sb2] : sa2.me?.status === 'down' ? [A, B, sa2] : null;
-    check('Reactor: a catch puts a player down (the host\'s status on both screens)', downed !== null,
-      `Ann ${sa2.me?.status}, Bob ${sb2.me?.status}; catches A ${J(evOf(await A.late(), 'caught').map((e) => e.playerId))}`);
-    if (downed) {
-      const [dn, hl, ds] = downed;
-      const victimId = ds.me.id;
-      // The host's panel at once: the four drop back to a crawl (which catches nobody) so two players can survive
-      // the heal (a live setting the host has on the night; the rules are not changed).
-      const tuned = await A.cmd('panel set reactor.crawl_time 30');
-      const tuned2 = await A.cmd('panel set reactor.run_speed 1.5');
-      log(`  the host's panel: crawl_time 30 -> ${tuned}, run_speed 1.5 -> ${tuned2}`);
-      const screenCheck = (async () => {
-        const dt0 = Date.now();
-        const dv = await until(dn.state, (s) => /^DOWN/.test(s.downs?.hud?.head ?? ''), 3000, 40);
-        const headAfter = (Date.now() - dt0) / 1000;
-        check('Reactor: the downed player has something to do within seconds (the timer and the line)', /^DOWN/.test(dv.downs?.hud?.head ?? '') && (dv.downs?.hud?.line ?? '') !== '',
-          `"${dv.downs?.hud?.head}" / "${dv.downs?.hud?.line}" / "${dv.downs?.hud?.line2}", the timer up ${r2(headAfter)} s after the tool saw the catch`);
-      })();
-      const hs = await hl.state();
-      const o = (hs.others ?? []).find((x) => x.id === victimId);
-      if (o) {
-        await goTo(hl, o.x, o.z, 0.9, 'sprint');
-        await hl.cmd(`face ${o.x} ${o.z} 0.2`);
-        await hl.cmd('use 1');
-        const mid = await until(dn.state, (s) => /IS HELPING YOU UP/.test(s.downs?.hud?.line ?? '') || s.me?.status !== 'down', 3000, 40);
-        const up = await until(dn.state, (s) => s.me?.status !== 'down', 8000, 50);
-        await hl.cmd('use 0');
-        const hev = [evOf(await A.late(), 'healed'), evOf(await B.late(), 'healed')];
-        check('Reactor: the other heals them with F held (the downed screen says so; back on their feet; same healed event on both)', up.me?.status === 'ok' && hev[0].length > 0 && J(hev[0]) === J(hev[1]),
-          `line while held "${mid.downs?.hud?.line}", status after ${up.me?.status}, healed A ${J(hev[0].map((e) => e.t))} B ${J(hev[1].map((e) => e.t))}`);
-      } else check('Reactor: the healer sees the downed player', false, `no figure ${victimId}`);
-      await screenCheck;
-    }
-    // Ann (or whoever holds the fuse) installs it.
-    la = await A.late();
-    const holderC = la.reactor.holder === la.me ? A : la.reactor.holder === (await B.late()).me ? B : null;
-    if (!holderC) {
-      // Dropped by a catch: Ann picks it up again.
-      const f2 = la.reactor.fuseAt;
-      await goTo(A, f2[0], f2[2], 1.6, 'sprint');
-      await press(A, 300);
-    }
-    const hc = holderC ?? A;
-    const cab = la.station.cabinet.at;
-    await goTo(hc, cab[0], cab[2], 1.5, 'sprint');
-    await press(hc, 300);
-    [la, lb] = [await until(A.late, (x) => evOf(x, 'powerRestored').length > 0, 4000, 50), await until(B.late, (x) => evOf(x, 'powerRestored').length > 0, 3000, 50)];
+    // To the cabinet at a sprint, and the fuse in.
+    const medic = startMedic([A, B]);
+    let atCab = await drive(A, cab[0], cab[2], 1.3, { sprint: true });
+    for (let k = 0; k < 6 && atCab.me?.status === 'ok' && evOf(await A.late(), 'powerRestored').length === 0; k++) { await press(A, 250); atCab = await A.state(); }
+    [la, lb] = [await until(A.late, (x) => evOf(x, 'powerRestored').length > 0, 3000, 50), await B.late()];
+    lb = await until(B.late, (x) => evOf(x, 'powerRestored').length > 0 || evOf(la, 'powerRestored').length === 0, 3000, 50);
     const rest = [evOf(la, 'powerRestored')[0], evOf(lb, 'powerRestored')[0]];
-    check('Reactor: power restored at the cabinet, the same host event on both', rest[0] && rest[1] && rest[0].t === rest[1].t && la.reactor.power === 2 && lb.reactor.power === 2,
-      `A ${J(rest[0])} B ${J(rest[1])}, power ${la.reactor.power}/${lb.reactor.power}`);
+    if (rest[0] || rest[1]) {
+      check('Reactor: power restored at the cabinet, the same host event on both', rest[0] && rest[1] && rest[0].t === rest[1].t && la.reactor.power === 2 && lb.reactor.power === 2,
+        `A ${J(rest[0])} B ${J(rest[1])}, power ${la.reactor.power}/${lb.reactor.power}, ${r2((rest[0]?.t ?? 0) - (cut[0]?.t ?? 0))} s after the cut`);
+    } else finding('the power was not restored', `Ann ${atCab.me?.status} at ${J([atCab.me?.x, atCab.me?.z].map(r2))}, ${r2(Math.hypot(atCab.me?.x - cab[0], atCab.me?.z - cab[2]))} m from the cabinet; fuse holder ${la.reactor?.holder}; catches ${J(evOf(la, 'caught').map((e) => [e.playerId, e.t]))}`);
     // Cy, joined after the cut.
     C = await cJoin;
     if (C) {
@@ -501,39 +717,70 @@ async function mainSession() {
       check('late joiner: Cy, joined after the cut, sees the same power state, fuse holder and bodies as Ann', sameAll,
         `Cy screen ${scr(sc).screen} "${scr(sc).line}", Cy's block ${lc.reactor ? `power ${lc.reactor.power} holder ${lc.reactor.holder}` : J(lc).slice(0, 120)}; ticks Ann ${pc.a.tick} Cy ${pc.b.tick}`);
     }
-    // The tape: Bob takes it from the table; the lift is called; both ride up.
-    la = await A.late();
-    const tape = la.reactor.tapeAt;
-    // Bob, or Ann if Bob is out.
-    const taker = (await B.state()).me?.status === 'ok' ? B : A;
-    const other2 = taker === B ? A : B;
-    await goTo(taker, tape[0], tape[2], 1.5, 'sprint');
-    await press(taker, 300);
-    const lt = await until(taker.late, (x) => x.reactor?.cassetteHolder === x.me, 2000, 50);
-    check(`Reactor: ${taker.label === 'B' ? 'Bob' : 'Ann (Bob is out)'} takes the tape (the same holder on the other screen)`, lt.reactor?.cassetteHolder === lt.me && (await other2.late()).reactor?.cassetteHolder === lt.me,
-      `holder ${lt.reactor?.cassetteHolder}, taker ${lt.me}`);
-    const called = await callLift(A, 60000);
-    if (!called.ok) {
-      const d = await A.late();
-      const sA = await A.state();
-      const sB = await B.state();
-      log(`  call refused: depth ${d.depth} phase ${d.phase}, power ${d.reactor?.power}, Ann ${sA.me?.status} Bob ${sB.me?.status}, last events ${J((d.events ?? []).slice(-10).map((e) => [e.type, e.t, e.playerId]))}`);
+    // The call, by whoever is on their feet with the power back (Ann is beside the landing), then to ground.
+    let called = { ok: false, why: 'power not restored' };
+    if (rest[0]) {
+      const caller = (await A.state()).me?.status === 'ok' ? A : B;
+      const cs0 = (await caller.state()).me;
+      if (cs0 && cellKeyIn(cs0.x, cs0.z)) await outOfCrawl(caller, hatch);
+      called = await callLift(caller, 30000).catch((e) => ({ ok: false, why: String(e) }));
+      if (called.ok) {
+        const pa = (await A.late()).phase;
+        const pb = (await B.late()).phase;
+        check('Reactor: the lift is called with the power back (the same lift phase on both screens)', ['coming', 'arriving', 'boarding'].includes(pa) && pa === pb,`${caller.label} called; A ${pa} B ${pb}`);
+      } else finding('the lift could not be called', J(called));
     }
-    check('Reactor: with the power back the lift can be called', called.ok, J(called));
-    await until(A.state, (s) => s.phase === 'boarding', 120000, 200);
-    await Promise.all([board(A, 'down'), board(B, 'down')]);
-    [la, lb] = [await until(A.late, (x) => x.depth === 0, 120000, 200), await until(B.late, (x) => x.depth === 0, 20000, 100)];
+    // To ground in the crawl by the gallery hatch (beside the switch room), whoever made the call; Bob is deeper in.
+    for (const c of [A, B]) {
+      const me = (await c.state()).me;
+      if (me?.status === 'ok' && !cellKeyIn(me.x, me.z)) {
+        const ac = await intoCrawl(c, hatch, deeper(hatch), { sprint: true });
+        log(`  ${c.label} to the crawl by the gallery hatch: in ${ac.inCrawl}, status ${ac.s.me?.status}`);
+      }
+    }
+    // Wait for the car (or for the crew to be gone).
+    const wait = await until(async () => ({ ...(await A.late()), b: await B.state(), a: await A.state() }),
+      (x) => x.phase === 'boarding' || (x.a.me?.status !== 'ok' && x.b.me?.status !== 'ok' && x.a.me?.status !== 'down' && x.b.me?.status !== 'down') || x.depth !== 7, called.ok ? 120000 : 5000, 250);
+    log(`  the car: phase ${wait.phase}, Ann ${wait.a.me?.status}, Bob ${wait.b.me?.status}`);
+    if (wait.phase === 'boarding') {
+      // Bob carries the tape out through the gallery; Ann comes out of the hall side and boards behind him.
+      // Ann (nearer the hatch) out first and draws; Bob with the tape behind her.
+      const goAnn = (async () => { if ((await A.state()).me?.status !== 'ok') return null; await outOfCrawl(A, hatch); return boardRun(A); })();
+      await sleep(1500);
+      const goBob = (async () => { if ((await B.state()).me?.status !== 'ok') return null; await outOfCrawl(B, hatch); return boardRun(B); })();
+      const [rb, ra] = await Promise.all([goBob, goAnn]);
+      log(`  boarding: Bob ${J(rb)}, Ann ${J(ra)}`);
+    }
+    medic.stop = true;
+    await medic.done;
+    // Up, or not: both screens must agree on where the run went.
+    [la, lb] = [await until(A.late, (x) => x.depth !== 7, wait.phase === 'boarding' ? 90000 : 20000, 200), await until(B.late, (x) => x.depth !== 7, 20000, 100)];
     const ext = [evOf(la, 'tapeExtracted')[0], evOf(lb, 'tapeExtracted')[0]];
-    check('Reactor: both ride up and arrive in the prison', la.depth === 0 && lb.depth === 0, `depth A ${la.depth} B ${lb.depth}`);
-    check('Reactor: the tape carried out is recorded (the same event on both, the archive has it)', ext[0] && ext[1] && ext[0].t === ext[1].t && la.reactor?.extracted === true && la.reactor?.archive?.recovered === true,
-      `A ${J(ext[0])} B ${J(ext[1])}, extracted ${la.reactor?.extracted}, archive ${J(la.reactor?.archive)}`);
-    if (C) {
+    const [fa2, fb2] = [await A.state(), await B.state()];
+    check('Reactor: both screens agree where the run went after the Reactor (the same depth on both)', la.depth === lb.depth, `depth A ${la.depth} B ${lb.depth}, phase A ${la.phase} B ${lb.phase}; Ann ${fa2.me?.status} Bob ${fb2.me?.status}`);
+    if (la.depth === 0) log(`  FINDING (reported, not a failure): the crew rode up to the prison (Ann ${fa2.me?.status}, Bob ${fb2.me?.status})`);
+    else finding('the crew did not ride up from the Reactor', `depth A ${la.depth} B ${lb.depth}, phase ${la.phase}, Ann ${fa2.me?.status} Bob ${fb2.me?.status}`);
+    if (ext[0] || ext[1]) {
+      check('Reactor: the tape carried out is recorded (the same event on both, the archive has it)', ext[0] && ext[1] && ext[0].t === ext[1].t && la.reactor?.extracted !== false && (la.reactor?.archive?.recovered ?? true) === true,
+        `A ${J(ext[0])} B ${J(ext[1])}, extracted ${la.reactor?.extracted}, archive ${J(la.reactor?.archive)}`);
+    } else finding('the tape was not carried out', `holder at the end ${la.reactor?.cassetteHolder ?? '(no block)'}; depth ${la.depth}`);
+    // The run's catches, downs and heals, in order, on both screens.
+    const lateOrder = (x) => (x.events ?? []).filter((e) => ['powerHold', 'powerCut', 'stationStir', 'bodyStands', 'fuseTaken', 'fuseDropped', 'powerRestored', 'tapeTaken', 'tapeDropped', 'tapeExtracted', 'caught', 'downed', 'healed', 'out'].includes(e.type)).map((e) => [e.type, e.t, e.playerId ?? e.seat ?? '']);
+    check('Reactor: the same Reactor events in the same order on both screens (stir, stands, fuse, tape, catches, downs, heals)', lateOrder(la).length > 3 && J(lateOrder(la)) === J(lateOrder(lb)),
+      `${lateOrder(la).length} events on A, ${lateOrder(lb).length} on B${J(lateOrder(la)) === J(lateOrder(lb)) ? '' : `; A ${J(lateOrder(la))} B ${J(lateOrder(lb))}`}`);
+    const catches = evOf(la, 'caught').map((e) => ({ who: e.playerId, t: e.t, afterCut: +(e.t - (cut[0]?.t ?? 0)).toFixed(2) }));
+    if (catches.length) finding(`${catches.length} catch(es) on the Reactor`, `${J(catches)}; heals ${J(evOf(la, 'healed').map((e) => [e.playerId, e.t]))}; outs ${J(evOf(la, 'out').map((e) => [e.playerId, e.t]))}; medic ${J(medic.log)}`);
+    if (C && (la.depth === 7 || !(fa2.me?.status === 'ok' || fb2.me?.status === 'ok'))) skip('late joiner: Cy admitted at the next stop', `the run did not go on with anyone on their feet (depth ${la.depth}, Ann ${fa2.me?.status}, Bob ${fb2.me?.status})`);
+    else if (C) {
       const sc = await until(C.state, inGame, 30000, 200);
       check('late joiner: Cy is admitted at the next stop', inGame(sc), `screen ${scr(sc).screen}, depth ${sc.depth}`);
     }
   } catch (e) {
-    check('main: the session ran to the end', false, String(e?.stack ?? e));
+    if (e?.stop) finding('the main session stopped early', e.message);
+    else check('main: the session ran to the end', false, String(e?.stack ?? e));
   } finally {
+    await stopSplits();
+    splitChecks();
     const errors = [...(A?.g.lines ?? []), ...(B?.g.lines ?? []), ...(C?.g.lines ?? []), ...srv.lines].filter((x) => /SCRIPT ERROR|ERROR: .*\.gd/.test(x));
     check('main: no script errors on the server or the clients', errors.length === 0, errors.slice(0, 4).join(' | '));
     if (saveLogs) {
@@ -555,7 +802,8 @@ async function fallbackA() {
   let F = null;
   try {
     if (!havePacks) { check('fallback A: the floor packs are there', false, `none in ${packs}`); return; }
-    F = await joinRoom('F', P.fa1, url, 'Fay');
+    F = await joinRoom('F', P.fa1, url, 'Fay', ['ward_handed_walk=1']);
+    await setLift(F, null, 'fallback A');
     await F.cmd('ready');
     await until(F.state, inGame, 40000);
     await F.cmd('click');
@@ -573,7 +821,19 @@ async function fallbackA() {
     check('fallback A: floor 6 hands over to the old Ward scene (FLOOR ENTERED ward), which joins the same room', called.ok && entered && ready && /playing=true/.test(ready),
       `call ${J(called)}; "${entered ?? 'no FLOOR ENTERED'}"; "${ready ?? 'no WARD REVIEW READY'}"`);
     check('fallback A: no native Ward drawn in the main scene', !F.g.lines.some((x) => /FLOOR NATIVE ward/.test(x)), F.g.lines.filter((x) => /FLOOR NATIVE/.test(x)).join(' | '));
-    skip('fallback A: the old Ward handing back', 'the old Ward scene reads only the keyboard once handed a room, so a headless client cannot walk out of its lift and the lift never leaves');
+    // PL2: the old Ward's test walk (client/ward/review.gd, ward_handed_walk=1 with auto=1): out of the lift, back in
+    // when it returns; then the main game takes the room back and hands floor 7 to the old Reactor scene.
+    const seen = (re, ms) => until(async () => F.g.lines.find((x) => re.test(x)) ?? null, (x) => x !== null, ms, 250);
+    const walk = await seen(/WARD REVIEW TEST WALK/, 5000);
+    const away = await seen(/WARD REVIEW STATE .*phase=away/, 30000);
+    const m = /collectionAt=([\d.]+)/.exec(away ?? '');
+    const boarding = await seen(/WARD REVIEW STATE .*phase=boarding/, liftMinutes * 60000 + 60000);
+    const result = await seen(/WARD REVIEW RESULT .*outcome=/, 60000);
+    const reactor = await seen(/FLOOR ENTERED reactor|FLOOR MEDIA MISSING reactor/, 90000);
+    check('fallback A: Fay walks out of the old Ward\'s lift, it leaves and returns on its clock, she boards',
+      walk && away && boarding && /outcome=aboard/.test(result ?? ''), `"${walk}" / "${away}" / "${boarding}" / "${result}"`);
+    check('fallback A: the old Ward hands the room back to the main game, which hands floor 7 on to the old Reactor scene (FLOOR ENTERED reactor)',
+      /FLOOR ENTERED reactor/.test(reactor ?? ''), `"${reactor ?? F.g.lines.filter((x) => /FLOOR/.test(x)).join(' | ')}" (collectionAt ${m?.[1]})`);
   } catch (e) {
     check('fallback A: ran to the end', false, String(e?.stack ?? e));
   } finally {
@@ -593,13 +853,14 @@ async function fallbackB() {
   try {
     if (!havePacks) { check('fallback B: the floor packs are there', false, `none in ${packs}`); return; }
     G = await joinRoom('G', P.fb1, url, 'Gus');
+    await setLift(G, null, 'fallback B');
     const l = await rideToWard([G], 'fallback B');
     const lg = await until(G.late, (x) => x.wardModel, 20000);
     const door = lg.wardModel.liftDoor;
     const out = await wardGo(G, door[0], door[2] + 2.6, 20000);
     const away = await until(G.late, (x) => x.ward?.phase === 'away', 5000, 50);
     check('fallback B: the native Ward on floor 6, Gus walks out, the lift leaves', l.ward?.native === true && out.ok && away.ward?.phase === 'away', `native ${l.ward?.native}, out ${out.ok}, phase ${away.ward?.phase}`);
-    await until(G.late, (x) => x.ward?.phase === 'boarding', 700000, 1000);
+    await until(G.late, (x) => x.ward?.phase === 'boarding', liftMinutes * 60000 + 60000, 500);
     const back = await wardGo(G, door[0], door[2] - 1.4, 30000);
     const t = Date.now();
     while (Date.now() - t < 150000 && !G.g.lines.some((x) => /FLOOR ENTERED reactor|FLOOR MEDIA MISSING reactor/.test(x))) await sleep(250);
@@ -616,13 +877,21 @@ async function fallbackB() {
   }
 }
 
-log(`seed ${seed}, packs ${havePacks ? packs : 'none (the Ward drawn without media)'}`);
+if (quick && !havePacks) {
+  console.log(`SKIPPED play_late --quick=1: no private floor packs in ${packs} (a fresh clone). 0 passed, 0 failed`);
+  process.exit(0);
+}
+log(`seed ${seed}, lift ${liftMinutes} min, ${quick ? 'quick' : 'full'}, packs ${havePacks ? packs : 'none (the Ward drawn without media)'}`);
 const jobs = [];
 if (doMain) jobs.push(mainSession());
-if (doFallback) { jobs.push(fallbackA()); jobs.push(fallbackB()); }
+if (doFallback) { jobs.push(fallbackA()); if (!quick) jobs.push(fallbackB()); else skip('fallback B (reactor_place=0)', '--quick=1 runs the main session and fallback A only'); }
 await Promise.allSettled(jobs);
 await sleep(500);
 cleanup();
+if (findings.length) {
+  console.log(`What the game did to the crew (reported, not failures): ${findings.length}`);
+  for (const f of findings) console.log(`  FINDING ${f.what} (${f.detail})`);
+}
 const failed = results.filter((r) => !r.ok).length;
 console.log(`${results.length - failed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

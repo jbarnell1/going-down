@@ -2,8 +2,8 @@ extends RefCounted
 ## World's optional slot 28 (after shop at 27) is a dictionary. This codec owns only envelope["reactor"].
 ## Fields are version, seed, tick, revision, power, awake time, fuse holder/install count,
 ## cassette and lift bits, fuse and cassette positions, four seat poses, then the connected crew.
-## Each seat pose stores xyz, facing and roll, phase index and animation time.
-const PHASES := ["still","zombie_crawl","zombie_run"]
+## Each seat pose stores xyz, facing and roll, phase index and animation time (RX3 added "zombie_walk": searching).
+const PHASES := ["still","zombie_crawl","zombie_run","zombie_walk"]
 
 static func encode(s: Dictionary) -> Array:
 	var actors := []
@@ -49,7 +49,7 @@ static func decode(raw: Variant) -> Variant:
 	for pose: Variant in raw[12]:
 		if not pose is Array or pose.size()!=7 or not point(pose.slice(0,3)):
 			return null
-		if not number(pose[3],-TAU,TAU) or not number(pose[4],-PI,PI) or not integer(pose[5],0,2) or not number(pose[6],0,32):
+		if not number(pose[3],-TAU,TAU) or not number(pose[4],-PI,PI) or not integer(pose[5],0,PHASES.size()-1) or not number(pose[6],0,32):
 			return null
 		actors.append([pose[0],pose[1],pose[2],pose[3],pose[4],PHASES[int(pose[5])],pose[6]])
 	var players := {}

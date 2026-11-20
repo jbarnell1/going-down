@@ -120,6 +120,7 @@ extends RefCounted
 
 const ReactorReview := preload("res://net/reactor_review.gd")
 const Ward = preload("res://sim/ward/state.gd")
+const WardSettings = preload("res://sim/settings.gd")
 const HostRules = preload("res://net/host_rules.gd")
 
 const Run = preload("res://sim/run.gd")
@@ -819,8 +820,13 @@ func _step_ward_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> Run.R
 		row.active = not _ward_review.caught.has(i.id)
 		row.use = i.use and not _ward_use.get(i.id, false)
 		row.sprint = i.gait == &"sprint"
+		# WD1: a creeping walker is never heard; an instrument recording (ticking) may be (sim/ward/state.gd).
+		row.creep = i.gait == &"creep"
+		row.recording = _ward_recording(s, i.id)
 		_ward_use[i.id] = i.use
 	var next_time := s.t + TICK
+	_ward_review.tuning = s.tuning
+	_ward_review.crew_size = s.players.size()
 	var any_out := false
 	var any_in := false
 	for row: Dictionary in crew.values():
@@ -831,7 +837,9 @@ func _step_ward_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> Run.R
 			else:
 				any_out = true
 	if any_out and not any_in:
-		ward_events.append_array(_ward_review.leave(next_time))
+		# PL2: the lift's return time is the live setting ward.lift_minutes, stamped as it leaves (today's 10).
+		var minutes := WardSettings.i(s.tuning, &"ward.lift_minutes", int(Ward.RETURN_SECONDS / 60.0))
+		ward_events.append_array(_ward_review.leave(next_time, 60.0 * minutes))
 	ward_events.append_array(_ward_review.step(next_time, TICK, Run.board_time(s), crew))
 	var cues: Array[Dictionary] = []
 	for cue in ward_events:
@@ -840,10 +848,17 @@ func _step_ward_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> Run.R
 		event["t"] = event["at"]
 		cues.append(event)
 	var r := Run.step_ward(s, inputs, crew, _ward_review.posed_limb(next_time), _ward_review.phase,
-		maxf(0.0, _ward_review.depart_at - next_time), _ward_review.boarded, TICK, cues)
+		maxf(0.0, _ward_review.depart_at - next_time), _ward_review.boarded, TICK, cues, _ward_review.recorders(crew))
 	if ward_native() and _ward_review.phase != &"departed":
 		_step_ward_kit(r, inputs, next_time)
 	return r
+
+## WD1: whether this player's instrument is up and recording (its reading open), as the last tick left it.
+static func _ward_recording(s: Run.RunState, id: String) -> bool:
+	for m in s.crew.members:
+		if m.id == id:
+			return m.instrument.raised and m.instrument.current != null
+	return false
 
 ## WN2: the Ward as a normal level (ward_place): what the crew carries works here as on any floor (Run.step_ward_kit),
 ## thrown through the Ward's own walls, and a flare's burst or a toy's rattle is a noise the Ward hears where it is.

@@ -14,6 +14,7 @@ extends RefCounted
 const T = preload("res://tests/t.gd")
 const Host = preload("res://net/host.gd")
 const HostRules = preload("res://net/host_rules.gd")
+const Run = preload("res://sim/run.gd")
 const Client = preload("res://net/client.gd")
 const RoomClient = preload("res://net/room_client.gd")
 const LocalRoom = preload("res://net/local_room.gd")
@@ -86,6 +87,9 @@ class Rig:
 		for p in host.state.players:
 			host.place_player(p.id, p.body)
 		host.enable_late_floors("")
+		# WD1: this file is about walking with the host, not about the Rigger: a walk and a door do not bring him here
+		# (tests/test_ward_rigger.gd holds his senses).
+		host.state = Run.with_tuning(host.state, {&"rigger.steps_reach": 0.0, &"rigger.door_heard": 0.0, &"rigger.open_heard": 0.0})
 		for id in roster:
 			var c := Client.new(net.connect_peer(id), "host", id, now, Session.INTERP_DELAY, Session.INPUT_INTERVAL)
 			c.floor_deck = rules.deck

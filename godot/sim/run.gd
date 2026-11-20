@@ -2829,8 +2829,12 @@ static func _step_station(s: RunState, players: Array[RunPlayer], input_of: Dict
 	var crew: Array[StationRules.Crew] = []
 	for p in players:
 		var inp: PlayerInput = input_of.get(p.id)
-		crew.append(StationRules.Crew.make(p.id, p.body, p.status, inp.gait if inp != null else &"walk",
-			inp != null and inp.use, _is_active(p, input_of)))
+		var sc := StationRules.Crew.make(p.id, p.body, p.status, inp.gait if inp != null else &"walk",
+			inp != null and inp.use, _is_active(p, input_of))
+		# RX3: the four see a lit lamp further and hear a sound emote.
+		sc.lit = bool((s.lamps.get(str(s.flare_profiles.get(p.id, p.id)), {}) as Dictionary).get("on", false))
+		sc.shout = inp != null and inp.emote_sound
+		crew.append(sc)
 	var from := events.size()
 	var caught := StationRules.step(st, crew, t, dt, s.tuning, events)
 	s.station = st
@@ -2841,7 +2845,8 @@ static func _step_station(s: RunState, players: Array[RunPlayer], input_of: Dict
 			s.phase = &"boarding"
 			s.call = null
 			s.blink = null
-			s.bell_left = board_time(s)
+			# RX3: the Reactor's own boarding (reactor.board), long enough to heal a crewmate and still ride up.
+			s.bell_left = Settings.f(s.tuning, &"reactor.board", StationRules.BOARD)
 			s.hold_left = hold_limit(s)
 			s.held = false
 			events.append({"type": "carArrived", "t": t, "wait": 0.0})
@@ -4586,13 +4591,13 @@ static func step_ward_kit(s: RunState, inputs: Array[PlayerInput], dt: float, ev
 
 ## Ward review uses the same instrument, departure, wallet and day records.
 static func step_ward(prev: RunState, inputs: Array[PlayerInput], crew_rows: Dictionary, limb: PackedVector3Array,
-		phase: StringName, bell_left: float, aboard: Array[String], dt: float, cues: Array[Dictionary]) -> RunStep:
+		phase: StringName, bell_left: float, aboard: Array[String], dt: float, cues: Array[Dictionary], holders: Variant = null) -> RunStep:
 	var out := RunStep.new()
 	var s := prev.copy()
 	out.state = s
 	s.t += dt
 	var players: Array[RunPlayer] = []
-	var holders: Array[Instr.CrewPlayer] = []
+	var crew_holders: Array[Instr.CrewPlayer] = []
 	var by_id := {}
 	for inp in inputs:
 		by_id[inp.id] = inp
@@ -4616,7 +4621,7 @@ static func step_ward(prev: RunState, inputs: Array[PlayerInput], crew_rows: Dic
 			p.status = &"caught"
 		var active := bool(row.active) and p.status == &"ok" and not p.aboard
 		s.crew = Instr.set_raised(s.crew, p.id, active and given != null and bool(given.raised))
-		holders.append(Instr.CrewPlayer.make(p.id, p.body, active))
+		crew_holders.append(Instr.CrewPlayer.make(p.id, p.body, active))
 		players.append(p)
 	s.players = players
 	var entities: Array[Instr.EntityTick] = []
@@ -4624,13 +4629,24 @@ static func step_ward(prev: RunState, inputs: Array[PlayerInput], crew_rows: Dic
 		var resident := Instr.EntityTick.make("rigger-%d" % s.depth, &"rigger", s.orderly, s.orderly, caught_events)
 		resident.acting = limb.size() > 1
 		resident.limb = limb
+		# WD1: while he searches a house, only those on its ground floor may record his arm (sim/ward/state.gd recorders).
+		resident.holders = holders
 		entities.append(resident)
-	var reading := _crew_tick(s, holders, entities, dt)
+	var reading := _crew_tick(s, crew_holders, entities, dt)
 	s.crew = reading.crew
 	for event in reading.events:
 		out.events.append(_with_t(event, s.t))
+		# WD1: the floor quota counts the Ward's readings as on every floor (step_run).
+		if s.quota and event["type"] == "readingClosed":
+			s.floor_earned += float(event["value"])
+			var by := s.floor_by.duplicate()
+			by[event["playerId"]] = float(by.get(event["playerId"], 0.0)) + float(event["value"])
+			s.floor_by = by
 		if s.day_lock and event["type"] == "readingClosed":
 			s.day_earned += float(event.value)
+	if s.quota and not s.quota_met and not at_home(s) and s.floor_needed > 0 and quota_reached(s):
+		s.quota_met = true
+		out.events.append({"type": "quotaMet", "t": s.t, "depth": s.depth, "earned": floori(s.floor_earned), "needed": s.floor_needed, "top": quota_top(s)})
 	if phase != &"departed":
 		s.phase = phase
 		s.bell_left = bell_left

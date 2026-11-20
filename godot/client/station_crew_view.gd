@@ -309,8 +309,11 @@ static func state_of(phase: String) -> String:
 			return "crawling"
 		"stand", "standing", "rise", "rising", "zombie_stand", "get_up":
 			return "standing"
-		"zombie_run", "run", "pursue", "pursuing", "chase", "zombie_walk", "hunt":
+		"zombie_run", "run", "pursue", "pursuing", "chase", "hunt":
 			return "pursuing"
+		# RX3: a body that has lost everyone walks and looks (the host's "zombie_walk"): told apart from the run.
+		"zombie_walk", "search", "searching":
+			return "searching"
 	return "lying"
 
 func clip_for(state: String) -> String:
@@ -321,6 +324,8 @@ func clip_for(state: String) -> String:
 			return "get_up"
 		"pursuing":
 			return "station/zombie_run" if zombie_clips else "run"
+		"searching":
+			return "walk"
 	return "taken"
 
 ## Draws the four between two blocks (the older, the newer, how far between: client/net/client.gd's bracket).
@@ -383,7 +388,8 @@ func _sound(i: int, state: String, d: float, at: Vector3) -> void:
 	var crawl := _crawl[i]
 	var breath := _breath[i]
 	var crawling := state == "crawling"
-	var up := state == "standing" or state == "pursuing"
+	# RX3: a searching body breathes too (it is always heard), but only a pursuing one runs on loud steps.
+	var up := state == "standing" or state == "pursuing" or state == "searching"
 	if crawl.stream != null and crawl.is_inside_tree():
 		if crawling and not crawl.playing:
 			crawl.play()

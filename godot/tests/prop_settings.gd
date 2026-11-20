@@ -35,6 +35,7 @@ const Day = preload("res://sim/day.gd")
 const Marks = preload("res://sim/marks.gd")
 const Places = preload("res://sim/places.gd")
 const Floor = preload("res://sim/floor.gd")
+const Sight = preload("res://sim/sight.gd")
 const Move = preload("res://sim/move.gd")
 const Rng = preload("res://sim/rng.gd")
 const Bot = preload("res://sim/bot.gd")
@@ -58,10 +59,15 @@ const Upgrades = preload("res://sim/upgrades.gd")
 const Prison = preload("res://sim/prison.gd")
 const StationRules = preload("res://sim/station_floor.gd")
 const StationPlan = preload("res://sim/station.gd")
+const WardState = preload("res://sim/ward/state.gd")
+const WardArm = preload("res://sim/ward/arm.gd")
+const RiggerTest = preload("res://tests/test_ward_rigger.gd")
+const StationCrews = preload("res://tests/prop_station_crews.gd")
 const Flare = preload("res://sim/flare.gd")
 const Lamp = preload("res://sim/lamp.gd")
 const PropO2 = preload("res://tests/prop_second_orderly.gd")
 const PropParty = preload("res://tests/prop_party_table.gd")
+const PropWardNetRig = preload("res://tests/prop_ward_net.gd")
 
 const DT := 0.05
 const EPS := 1e-9
@@ -153,6 +159,8 @@ const PROOFS := {
 	&"badge.depth_chance": "test_badge_search_odds",
 	# TT1: the Tenant clock.
 	&"tenant.minutes": "test_tenant_minutes",
+	# PL2: the Ward's lift.
+	&"ward.lift_minutes": "test_ward_lift_minutes",
 	# RN1: the Reactor.
 	&"reactor.power_hold": "test_reactor_numbers",
 	&"reactor.wake_after": "test_reactor_numbers",
@@ -160,6 +168,44 @@ const PROOFS := {
 	&"reactor.crawl_time": "test_reactor_numbers",
 	&"reactor.crawl_speed": "test_reactor_numbers",
 	&"reactor.run_speed": "test_reactor_numbers",
+	&"rigger.steps_reach": "test_rigger_numbers",
+	&"rigger.click_reach": "test_rigger_numbers",
+	&"rigger.open_heard": "test_rigger_numbers",
+	&"rigger.door_heard": "test_rigger_numbers",
+	&"rigger.move_on": "test_rigger_numbers",
+	&"rigger.record_inside": "test_rigger_numbers",
+	&"rigger.room_warn": "test_rigger_numbers",
+	&"rigger.probe": "test_rigger_numbers",
+	&"rigger.arm_speed": "test_rigger_numbers",
+	&"rigger.alone_arm_speed": "test_rigger_numbers",
+	&"rigger.arm_back": "test_rigger_numbers",
+	# RX2: the Reactor by crew size, the crawlers' distance, the catcher over its catch.
+	&"reactor.alone_scale": "test_reactor_crew_numbers",
+	&"reactor.pair_scale": "test_reactor_crew_numbers",
+	&"reactor.crawl_keep": "test_reactor_crew_numbers",
+	&"reactor.feed": "test_reactor_crew_numbers",
+	&"reactor.stand_off": "test_reactor_crew_numbers",
+	# RX3: the four's senses.
+	&"reactor.senses": "test_reactor_senses_numbers",
+	&"reactor.sight_dark": "test_reactor_senses_numbers",
+	&"reactor.sight_lit": "test_reactor_senses_numbers",
+	&"reactor.sight_glow": "test_reactor_senses_numbers",
+	&"reactor.sight_creep": "test_reactor_senses_numbers",
+	&"reactor.lamp_glow": "test_reactor_senses_numbers",
+	&"reactor.hear_walk": "test_reactor_senses_numbers",
+	&"reactor.hear_sprint": "test_reactor_senses_numbers",
+	&"reactor.hear_socket": "test_reactor_senses_numbers",
+	&"reactor.search_time": "test_reactor_senses_numbers",
+	&"reactor.search_speed": "test_reactor_senses_numbers",
+	&"reactor.noise_draws": "test_reactor_senses_numbers",
+	&"reactor.hear_wall": "test_reactor_senses_numbers",
+	&"reactor.lunge_range": "test_reactor_senses_numbers",
+	&"reactor.lunge_speed": "test_reactor_senses_numbers",
+	&"reactor.wake_alone": "test_reactor_senses_numbers",
+	&"reactor.wake_pair": "test_reactor_senses_numbers",
+	&"reactor.wake_late": "test_reactor_senses_numbers",
+	&"reactor.flinch": "test_reactor_senses_numbers",
+	&"reactor.board": "test_reactor_senses_numbers",
 	# T22b.
 	&"orderly2.first_floor": "test_second_orderly_first_floor",
 	&"flare.throw": "test_flare_settings",
@@ -202,6 +248,11 @@ const MORE: Array[StringName] = [
 	&"shop.price.marker", &"shop.price.glow", &"shop.price.flash", &"shop.price.speed", &"shop.price.toy", &"shop.price.salts", &"shop.glow", &"badge.chance", &"badge.depth_chance",
 	&"tenant.minutes",
 	&"reactor.power_hold", &"reactor.wake_after", &"reactor.wake_gap", &"reactor.crawl_time", &"reactor.crawl_speed", &"reactor.run_speed",
+	&"ward.lift_minutes",
+	&"rigger.steps_reach", &"rigger.click_reach", &"rigger.open_heard", &"rigger.door_heard", &"rigger.move_on", &"rigger.record_inside", &"rigger.room_warn", &"rigger.probe", &"rigger.arm_speed", &"rigger.alone_arm_speed", &"rigger.arm_back",
+	&"reactor.alone_scale", &"reactor.pair_scale", &"reactor.crawl_keep", &"reactor.feed", &"reactor.stand_off",
+	&"reactor.senses", &"reactor.sight_dark", &"reactor.sight_lit", &"reactor.sight_glow", &"reactor.sight_creep", &"reactor.lamp_glow", &"reactor.hear_walk", &"reactor.hear_sprint", &"reactor.hear_socket", &"reactor.search_time", &"reactor.search_speed", &"reactor.noise_draws",
+	&"reactor.hear_wall", &"reactor.lunge_range", &"reactor.lunge_speed", &"reactor.wake_alone", &"reactor.wake_pair", &"reactor.wake_late", &"reactor.flinch", &"reactor.board",
 	&"orderly2.first_floor", &"flare.throw", &"flare.reach", &"flare.stun", &"flare.blind", &"flare.noise", &"lamp.seconds", &"lamp.range",
 	&"quota.step", &"record.reach", &"record.rate", &"marks.pad",
 	&"party.free_time", &"party.free_anger", &"party.reach",
@@ -272,12 +323,49 @@ static func game_values() -> Dictionary:
 		&"noise.search_rush": Noises.SEARCH_RUSH,
 		&"noise.emote": Noises.EMOTE,
 		&"tenant.minutes": float(HostRules.TENANT_MINUTES),
+		&"ward.lift_minutes": WardState.RETURN_SECONDS / 60.0,
 		&"reactor.power_hold": StationRules.POWER_HOLD,
 		&"reactor.wake_after": StationRules.WAKE_AFTER,
 		&"reactor.wake_gap": StationRules.WAKE_GAP,
 		&"reactor.crawl_time": StationRules.CRAWL_TIME,
 		&"reactor.crawl_speed": StationRules.CRAWL_SPEED,
 		&"reactor.run_speed": StationRules.RUN_SPEED,
+		&"rigger.steps_reach": WardState.STEPS_REACH,
+		&"rigger.click_reach": WardState.CLICK_REACH,
+		&"rigger.open_heard": float(WardState.OPEN_HEARD),
+		&"rigger.door_heard": float(WardState.DOOR_HEARD),
+		&"rigger.move_on": float(WardState.MOVE_ON),
+		&"rigger.record_inside": float(WardState.RECORD_INSIDE),
+		&"rigger.room_warn": WardState.ROOM_WARN,
+		&"rigger.probe": WardState.PROBE,
+		&"rigger.arm_speed": WardState.ARM_SPEED,
+		&"rigger.alone_arm_speed": WardState.ALONE_ARM_SPEED,
+		&"rigger.arm_back": WardState.ARM_BACK,
+		&"reactor.alone_scale": StationRules.ALONE_SCALE,
+		&"reactor.pair_scale": StationRules.PAIR_SCALE,
+		&"reactor.crawl_keep": StationRules.CRAWL_KEEP,
+		&"reactor.feed": StationRules.FEED,
+		&"reactor.stand_off": StationRules.STAND_OFF,
+		&"reactor.senses": StationRules.SENSES,
+		&"reactor.sight_dark": StationRules.SIGHT_DARK,
+		&"reactor.sight_lit": StationRules.SIGHT_LIT,
+		&"reactor.sight_glow": StationRules.SIGHT_GLOW,
+		&"reactor.sight_creep": StationRules.SIGHT_CREEP,
+		&"reactor.lamp_glow": StationRules.LAMP_GLOW,
+		&"reactor.hear_walk": StationRules.HEAR_WALK,
+		&"reactor.hear_sprint": StationRules.HEAR_SPRINT,
+		&"reactor.hear_socket": StationRules.HEAR_SOCKET,
+		&"reactor.search_time": StationRules.SEARCH_TIME,
+		&"reactor.search_speed": StationRules.SEARCH_SPEED,
+		&"reactor.noise_draws": float(StationRules.NOISE_DRAWS),
+		&"reactor.hear_wall": StationRules.HEAR_WALL,
+		&"reactor.lunge_range": StationRules.LUNGE_RANGE,
+		&"reactor.lunge_speed": StationRules.LUNGE_SPEED,
+		&"reactor.wake_alone": float(StationRules.WAKE_ALONE),
+		&"reactor.wake_pair": float(StationRules.WAKE_PAIR),
+		&"reactor.wake_late": StationRules.WAKE_LATE,
+		&"reactor.flinch": StationRules.FLINCH,
+		&"reactor.board": StationRules.BOARD,
 		&"lift.floors_min": float(Run.CALL_FLOORS_MIN),
 		&"lift.floors_max": float(Run.CALL_FLOORS_MAX),
 		&"lift.floor_time": Run.FLOOR_TIME,
@@ -357,7 +445,7 @@ func test_registry_rows(t: T) -> void:
 	var game := game_values()
 	var rows := Settings.list()
 	# DF1 added the ten pressure rows (floor 8 and deeper, their own group before the player speeds).
-	t.eq(rows.size(), 130, "rows in the registry")
+	t.eq(rows.size(), 167, "rows in the registry")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -405,8 +493,8 @@ func test_registry_rows(t: T) -> void:
 		if TEN.has(s.id) or MORE.has(s.id) or KEEPER_SIX.has(s.id):
 			want.append(s.id)
 	t.check(wired == want and want.size() == TEN.size() + MORE.size() + KEEPER_SIX.size(), "the wired rows are exactly those of LS1 and the groups wired since, in order: %s" % str(wired))
-	t.eq(by_group.get(&"residents", 0), 61, "residents")
-	t.eq(by_group.get(&"lift", 0), 12, "the lift and the dark")
+	t.eq(by_group.get(&"residents", 0), 97, "residents")
+	t.eq(by_group.get(&"lift", 0), 13, "the lift and the dark (and the Ward's lift, PL2)")
 	t.eq(by_group.get(&"players", 0), 30, "players")
 	t.eq(by_group.get(&"earning", 0), 10, "earning")
 	t.eq(by_group.get(&"hiding", 0), 3, "hiding")
@@ -1546,14 +1634,180 @@ func test_reactor_numbers(t: T) -> void:
 			&"reactor.crawl_speed", &"reactor.run_speed"]:
 		var row := Settings.row(id)
 		for v: float in [row.lo, row.today, row.hi]:
-			var tuning: Settings.Values = null if v == row.today else Settings.make({id: v})
+			# RX3: measured on the all-knowing chase (reactor.senses 0), which goes for the one player at once.
+			var tuning: Settings.Values = Settings.make({&"reactor.senses": 0.0} if v == row.today else {id: v, &"reactor.senses": 0.0})
 			var r := _reactor_clock(plan, tuning, land, hall)
 			var want := {&"reactor.power_hold": float(r["cut"]) - float(r["hold"]), &"reactor.wake_after": float(r["stir"]) - float(r["cut"]),
 				&"reactor.wake_gap": float(r["second"]) - float(r["stir"]), &"reactor.crawl_time": float(r["stand"]) - float(r["stir"]),
 				&"reactor.crawl_speed": float(r["crawl_m"]) / maxf(1e-9, float(r["crawl_s"])), &"reactor.run_speed": float(r["run_m"]) / maxf(1e-9, float(r["run_s"]))}
 			var got := float(want[id])
-			var ok := absf(got - v) <= DT + 1e-6 if not String(id).ends_with("speed") else (got <= v + 1e-6 and got >= 0.85 * v)
+			# RX2: the clock's crew is one player, who is pursued at reactor.alone_scale of the speed.
+			var aim := StationRules.pursuit_speed(1, Settings.make({id: v})) if id == &"reactor.run_speed" else v
+			var ok := absf(got - aim) <= DT + 1e-6 if not String(id).ends_with("speed") else (got <= aim + 1e-6 and got >= 0.85 * aim)
 			t.check(ok, "%s at %s: measured %.3f" % [id, str(v), got])
+
+## RX2: the Reactor's crew numbers (sim/station_floor.gd): each at its least, today's and its most does what its row says.
+## RX3: the four's senses (sim/station_floor.gd), each setting at its least, today's and its most.
+func test_reactor_senses_numbers(t: T) -> void:
+	var plan := StationPlan.generate_station("ls-senses", 7)
+	var door: Vector3 = plan.station["lift_door"]
+	var base := StationRules.make(plan)
+	base.power = StationRules.Power.EMERGENCY
+	var b := base.bodies[0]
+	b.body = Move.Body.make(door.x, door.z - 1.0, 0, 0.0)
+	# [id, gait, moving, lit, restored]: sensed just inside the setting's metres, not just beyond (down the clear hall).
+	for row_spec: Array in [[&"reactor.sight_dark", &"walk", false, false, false], [&"reactor.sight_lit", &"walk", false, false, true],
+			[&"reactor.sight_glow", &"walk", false, true, false], [&"reactor.sight_creep", &"creep", false, false, false],
+			[&"reactor.hear_walk", &"walk", true, false, false], [&"reactor.hear_sprint", &"sprint", true, false, false]]:
+		var id: StringName = row_spec[0]
+		var row := Settings.row(id)
+		for v: float in [row.lo, row.today, row.hi]:
+			var m := minf(v, 20.0)
+			var g := {id: v, &"reactor.sight_dark": 0.0, &"reactor.sight_lit": 0.0, &"reactor.sight_glow": 0.0, &"reactor.hear_walk": 0.0, &"reactor.hear_sprint": 0.0}
+			if id == &"reactor.sight_creep":
+				g[&"reactor.sight_dark"] = 40.0
+			if id == &"reactor.sight_glow":
+				g[&"reactor.sight_dark"] = 0.0
+			g[id] = v
+			var tuning := Settings.make(g)
+			base.power = StationRules.Power.RESTORED if bool(row_spec[4]) else StationRules.Power.EMERGENCY
+			for dd: float in [m - 0.3, m + 0.3]:
+				if dd <= 0.0 or (dd > v and v > 20.0):
+					continue
+				var c := StationRules.Crew.make("p", Move.Body.make(door.x, door.z - 1.0 - dd, 0, 0.0), &"ok", row_spec[1], false, true)
+				c.lit = bool(row_spec[3])
+				t.eq(StationRules.senses_player(base, b, false, c, bool(row_spec[2]), tuning), dd <= v, "%s %s: at %.1f m" % [id, v, dd])
+	base.power = StationRules.Power.EMERGENCY
+	var lamp_at := Vector3.INF
+	for l: Dictionary in plan.station["lamps"]:
+		if bool(l["emergency"]) and lamp_at == Vector3.INF:
+			lamp_at = l["at"]
+	for v: float in [Settings.row(&"reactor.lamp_glow").today, Settings.row(&"reactor.lamp_glow").hi]:
+		t.check(StationRules._under_lamp(base, Move.Body.make(lamp_at.x + v - 0.1, lamp_at.z, 0, 0.0), v)
+			and not StationRules._under_lamp(base, Move.Body.make(lamp_at.x + v + 0.1, lamp_at.z, 0, 0.0), v), "lamp_glow %s" % v)
+	t.check(not StationRules._under_lamp(base, Move.Body.make(lamp_at.x, lamp_at.z, 0, 0.0), 0.0), "lamp_glow 0: no pool")
+	for v: float in [5.0, StationRules.HEAR_SOCKET, 60.0]:
+		var st := StationRules.make(plan)
+		st.power = StationRules.Power.EMERGENCY
+		st.awake = 30.0
+		var near := Vector2(st.cabinet.x, st.cabinet.z)
+		var d0 := Vector2(st.bodies[0].body.x, st.bodies[0].body.z).distance_to(near)
+		var ev: Array[Dictionary] = [{"type": "powerRestored", "t": 1.0}]
+		var drawn := StationRules._noises_drawn(st, [] as Array[StationRules.Crew], 1.0, Settings.make({&"reactor.hear_socket": v, &"reactor.noise_draws": 4.0}), ev)
+		t.eq(drawn.has(0), d0 <= v, "hear_socket %s: seat 1 %.1f m off drawn" % [v, d0])
+	for v: float in [0.0, StationRules.SEARCH_TIME, 60.0]:
+		var bb := StationRules.Body4.new()
+		bb.body = Move.Body.make(0.0, 0.0, 0, 0.0)
+		StationRules._start_search(bb, Settings.make({&"reactor.search_time": v}))
+		t.eq(bb.left, v, "search_time %s" % v)
+	for v: float in [0.5, StationRules.SEARCH_SPEED, 4.0]:
+		var st2 := StationRules.make(plan)
+		st2.power = StationRules.Power.EMERGENCY
+		var tuning2 := Settings.make({&"reactor.search_speed": v, &"reactor.crawl_time": 0.0})
+		var fastest := 0.0
+		var tt := 0.0
+		var ev2: Array[Dictionary] = []
+		for k in 200:
+			tt += DT
+			var before := st2.bodies[0].body
+			StationRules.step(st2, [] as Array[StationRules.Crew], tt, DT, tuning2, ev2)
+			if st2.bodies[0].phase == "zombie_walk":
+				fastest = maxf(fastest, M.hypot2(st2.bodies[0].body.x - before.x, st2.bodies[0].body.z - before.z) / DT)
+		t.check(fastest <= v + 1e-6 and fastest >= 0.85 * v, "search_speed %s: walked at %.2f m/s" % [v, fastest])
+	for n: float in [0.0, 2.0, 4.0]:
+		t.eq(int(StationCrews._corner_case("ls-draw", {&"reactor.noise_draws": n, &"noise.emote": 60.0}, true)["drawn"]), int(n), "noise_draws %s" % n)
+	# hear_wall: a walk one cell away through a wall (no clear line) is heard only within it.
+	var wall_pair := []
+	for cy in plan.height:
+		for cx in plan.width - 1:
+			if wall_pair.is_empty() and Floor.is_walkable(plan, 0, cx, cy) and Floor.is_walkable(plan, 0, cx + 1, cy) \
+					and not Sight.has_line_of_sight(plan, Sight.Point3.make(StationPlan.wc(cx), 1.6, StationPlan.wc(cy), 0), Sight.Point3.make(StationPlan.wc(cx + 1), 1.2, StationPlan.wc(cy), 0)):
+				wall_pair = [cx, cy]
+	t.check(not wall_pair.is_empty(), "a wall between two cells")
+	if not wall_pair.is_empty():
+		var wb := StationRules.Body4.new()
+		wb.body = Move.Body.make(StationPlan.wc(wall_pair[0]), StationPlan.wc(wall_pair[1]), 0, 0.0)
+		var wc := StationRules.Crew.make("p", Move.Body.make(StationPlan.wc(wall_pair[0] + 1), StationPlan.wc(wall_pair[1]), 0, 0.0), &"ok", &"walk", false, true)
+		for v: float in [0.0, StationRules.HEAR_WALL, 20.0]:
+			t.eq(StationRules.senses_player(base, wb, false, wc, true, Settings.make({&"reactor.hear_wall": v})), v >= 2.0, "hear_wall %s: a walk 2 m off through a wall" % v)
+	# lunge: within lunge_range of the player it hunts, the first step is at the lunge speed; beyond it, the pursuit.
+	for spec: Array in [[1.8, 2.0, 4.5, 4.5], [2.6, 2.0, 4.5, StationRules.RUN_SPEED], [2.6, 3.0, 6.0, 6.0], [1.8, 0.0, 4.5, StationRules.RUN_SPEED]]:
+		var st4 := StationRules.make(plan)
+		st4.power = StationRules.Power.EMERGENCY
+		st4.awake = 30.0
+		st4.bodies[0].body = Move.Body.make(door.x, door.z - 3.0, 0, 0.0)
+		st4.bodies = [st4.bodies[0]]
+		var me := StationRules.Crew.make("p", Move.Body.make(door.x, door.z - 3.0 - float(spec[0]), 0, 0.0), &"ok", &"walk", false, true)
+		var b0 := st4.bodies[0].body
+		var ev4: Array[Dictionary] = []
+		StationRules.step(st4, [me] as Array[StationRules.Crew], 31.0, DT, Settings.make({&"reactor.lunge_range": spec[1], &"reactor.lunge_speed": spec[2], &"reactor.crawl_time": 0.0}), ev4)
+		var moved := M.hypot2(st4.bodies[0].body.x - b0.x, st4.bodies[0].body.z - b0.z) / DT
+		t.check(absf(moved - float(spec[3])) < 0.05, "lunge %s m off, range %s, speed %s: %.2f m/s" % [spec[0], spec[1], spec[2], moved])
+	# wake_alone, wake_pair, wake_late: how many wake at the cut by crew size, and when the rest do.
+	var sw := StationRules.make(plan)
+	for spec2: Array in [[1, &"reactor.wake_alone", 1.0], [1, &"reactor.wake_alone", 2.0], [1, &"reactor.wake_alone", 4.0], [2, &"reactor.wake_pair", 1.0],
+			[2, &"reactor.wake_pair", 3.0], [2, &"reactor.wake_pair", 4.0], [4, &"reactor.wake_pair", 1.0]]:
+		sw.crew_n = int(spec2[0])
+		for late: float in [0.0, StationRules.WAKE_LATE, 600.0]:
+			var tw := Settings.make({spec2[1]: spec2[2], &"reactor.wake_late": late})
+			for i in 4:
+				var woke := 4 if sw.crew_n > 2 else int(spec2[2])
+				var want := StationRules.wake_at(i, tw) + (late if i >= woke else 0.0)
+				t.check(absf(StationRules.wake_time(sw, i, tw) - want) < 1e-9, "crew %d, %s %s, late %s: body %d" % [sw.crew_n, spec2[1], spec2[2], late, i])
+	# flinch: the mains back, every awake body holds still that long.
+	for v: float in [0.0, StationRules.FLINCH, 15.0]:
+		var sf := StationRules.make(plan)
+		sf.power = StationRules.Power.EMERGENCY
+		sf.awake = 30.0
+		sf.holder = "p"
+		var cab := sf.cabinet
+		var holder := StationRules.Crew.make("p", Move.Body.make(cab.x - 0.6, cab.z, 0, 0.0), &"ok", &"walk", true, true)
+		var evf: Array[Dictionary] = []
+		var tf := Settings.make({&"reactor.flinch": v, &"reactor.crawl_time": 0.0})
+		StationRules.step(sf, [holder] as Array[StationRules.Crew], 1.0, DT, tf, evf)
+		t.check(sf.power == StationRules.Power.RESTORED, "flinch %s: restored" % v)
+		var still := -1.0
+		var tt3 := 1.0
+		var at0: Array = []
+		for bd in sf.bodies:
+			at0.append(bd.body)
+		while tt3 < 1.0 + v + 2.0 and still < 0.0:
+			tt3 += DT
+			holder.use = false
+			StationRules.step(sf, [holder] as Array[StationRules.Crew], tt3, DT, tf, evf)
+			for j in sf.bodies.size():
+				if not sf.bodies[j].body.same(at0[j]) and still < 0.0:
+					still = tt3 - DT - 1.0
+		t.check(still >= v - DT - 1e-6 and still <= v + DT + 1e-6, "flinch %s: the first body moved %.2f s after the mains" % [v, still])
+	# board: the Reactor's car stands open that long after the power is back.
+	for v: float in [10.0, StationRules.BOARD]:
+		var rb := StationCrews.measure("crew-1000", 1, &"expert", {&"reactor.board": v})
+		if float(rb["opened"]) >= 0.0:
+			t.check(absf(float(rb["closed"]) - float(rb["opened"]) - v) <= DT + 1e-6, "board %s: open %.2f s" % [v, float(rb["closed"]) - float(rb["opened"])])
+		else:
+			t.check(false, "board %s: the expert restored the power (seed crew-1000)" % v)
+	for v: float in [0.0, 1.0]:
+		var hunted := bool(StationCrews._corner_case("ls-sense", {&"reactor.senses": v}, false)["caught"])
+		t.check(hunted == (v < 0.5), "senses %s: the still creeper caught %s" % [v, hunted])
+
+func test_reactor_crew_numbers(t: T) -> void:
+	for id: StringName in [&"reactor.alone_scale", &"reactor.pair_scale"]:
+		var row := Settings.row(id)
+		for v: float in [row.lo, row.today, row.hi]:
+			var tuning := Settings.make({id: v})
+			var size := 1 if id == &"reactor.alone_scale" else 2
+			t.check(absf(StationRules.pursuit_speed(size, tuning) - StationRules.RUN_SPEED * v / 100.0) < 1e-6, "%s at %s" % [id, v])
+			t.check(absf(StationRules.pursuit_speed(4, tuning) - StationRules.RUN_SPEED) < 1e-6, "%s at %s leaves a four alone" % [id, v])
+	for v: float in [0.0, StationRules.CRAWL_KEEP, 8.0]:
+		var r := StationCrews.standing_still("ls-keep", 12.0, {&"reactor.crawl_keep": v, &"reactor.crawl_time": 30.0}, 35.0)
+		var gap := float(r["gap_at_stand"])
+		t.check(gap >= minf(v, float(r["start_gap"])) - 0.2 and (v > 0.0 or gap < 1.0), "crawl_keep %s: seat 1 stood %.2f m off" % [v, gap])
+	for v: float in [0.0, 1.0]:
+		var r2 := StationCrews.feeding_case("ls-feed", {&"reactor.feed": v})
+		t.check(bool(r2["healer_caught"]) == (v < 0.5), "feed %s: the healer beside the catch caught %s" % [v, r2["healer_caught"]])
+	for v: float in [0.0, StationRules.STAND_OFF, 15.0]:
+		var r3 := StationCrews.feeding_case("ls-stand", {&"reactor.stand_off": v})
+		t.check(absf(float(r3["still_after_heal"]) - v) <= 0.11, "stand_off %s: still %.2f s after the heal" % [v, float(r3["still_after_heal"])])
 
 ## One player passes into the hall then stands on the landing; the times of the hold, the cut, the first and second
 ## stir and seat 1 standing, and seat 1's metres crawling and in its first second standing.
@@ -1620,6 +1874,64 @@ func test_tenant_minutes(t: T) -> void:
 			t.check(opened >= 0.0 and absf(arrived - opened - m * 60.0) < DT + 1e-6, "%d minutes: the doors opened at %.2f, the Tenant arrived at %.2f" % [int(m), opened, arrived])
 		t.check(b is Dictionary and absf(float(b["at"]) - opened - m * 60.0) < 1e-6 and absf(float(b["len"]) - m * 60.0) < 1e-9,
 			"%d minutes: the clock the doors started is %s (opened %.2f)" % [int(m), str(b), opened])
+
+## PL2: ward.lift_minutes. Two real clients and the real host in the Ward (tests/prop_ward_net.gd's rig). The lift's
+## return is stamped as it leaves: collectionAt - departed is the setting's minutes at least (1), 2, today's (untuned)
+## and most (20). At 1 the lift returns on that time and there is no one-minute reminder; at 2 the reminder comes a
+## minute before the return. A change after the lift has left keeps the running clock. And untuned against tuned to
+## today's 10: the same Ward and the same Ward events on every frame.
+func test_ward_lift_minutes(t: T) -> void:
+	var row := Settings.row(&"ward.lift_minutes")
+	t.check(row != null and row.wired and row.section == &"ward" and row.holds == &"next" and row.whole, "the row is wired, in THE WARD, held to the next departure")
+	t.eq(Settings.text(&"ward.lift_minutes", 10.0), "10 MIN", "the panel's words")
+	for m: float in [row.lo, 2.0, row.today, row.hi]:
+		var ex: Variant = PropWardNetRig.Exercise.new(true)
+		if m != row.today:
+			ex.host.set_tuning({&"ward.lift_minutes": m}, 1)
+		ex.tick_for(6.5)
+		var ward: WardState = ex.host._ward_review
+		var left := _ward_cue(ex, "departed")
+		t.check(ward.phase == &"away" and left.size() == 1, "%d min: the lift has left the crew (%s)" % [int(m), ward.phase])
+		if left.is_empty():
+			continue
+		var at := float(left[0]["t"])
+		t.check(absf(ward.collection_at - at - m * 60.0) < 1e-6, "%d min: LIFT RETURNS IN is stamped %.3f s after it left" % [int(m), ward.collection_at - at])
+		for c: Variant in ex.clients:
+			t.check(c.latest.ward.collectionAt == ward.collection_at, "%d min: the client has the host's return" % int(m))
+		if m == row.hi:
+			ex.host.set_tuning({&"ward.lift_minutes": row.lo}, 2)
+			ex.tick_for(0.5)
+			t.check(absf(ward.collection_at - at - m * 60.0) < 1e-6, "a change after the lift left keeps the running clock")
+		if m <= 2.0:
+			ex.tick_for(m * 60.0 - 5.5)
+			var back := _ward_cue(ex, "returned")
+			var once := _ward_cue(ex, "last_minute")
+			t.check(back.size() == 1 and absf(float(back[0]["t"]) - ward.collection_at) < 1e-6 and ward.phase == &"boarding", "%d min: the lift returns on its clock (%s)" % [int(m), str(back)])
+			if m == 1.0:
+				t.eq(once.size(), 0, "1 min: no separate one-minute reminder")
+			else:
+				t.check(once.size() == 1 and absf(float(once[0]["t"]) - (ward.collection_at - 60.0)) < 1e-6, "2 min: the reminder a minute before (%s)" % str(once))
+	# Untuned against today's set: the same Ward, frame for frame.
+	var plain: Variant = PropWardNetRig.Exercise.new(true)
+	var tuned: Variant = PropWardNetRig.Exercise.new(true)
+	tuned.host.set_tuning({&"ward.lift_minutes": row.today}, 1)
+	var same := true
+	for k in 80:
+		plain.tick_for(0.1)
+		tuned.tick_for(0.1)
+		if JSON.stringify(plain.host.world().get("ward")) != JSON.stringify(tuned.host.world().get("ward")):
+			same = false
+			break
+	t.check(same and _ward_cue(plain, "departed") == _ward_cue(tuned, "departed") and not _ward_cue(plain, "departed").is_empty(),
+		"untuned and today's 10 give the same Ward on every frame")
+
+func _ward_cue(ex: Variant, kind: String) -> Array:
+	var out := []
+	for row: Variant in ex.host.event_log:
+		var e: Variant = JSON.parse_string(row.text)
+		if e is Dictionary and e.get("type", "") == "ward_" + kind:
+			out.append(e)
+	return out
 
 func test_badge_search_odds(t: T) -> void:
 	var ids: Array[String] = ["crew"]
@@ -2177,3 +2489,7 @@ func test_pressure_settings(t: T) -> void:
 	t.eq([tenant.call(8, {}), tenant.call(15, {}), tenant.call(1, {})], [8, 6, 10], "the Tenant: 8, 6, and cycle 1's 10 minutes")
 	t.eq([tenant.call(8, {&"pressure.tenant_minutes": 4.0}), tenant.call(8, {&"pressure.tenant_minutes": 0.0}), tenant.call(15, {&"pressure.tenant_minutes3": 3.0}), tenant.call(15, {&"pressure.tenant_minutes3": 0.0})], [4, 10, 3, 10], "the Tenant: set, and 0 is off")
 	t.eq(tenant.call(8, {&"tenant.minutes": 5.0}), 5, "never later than ARRIVES AFTER")
+## WD1: the Rigger's eleven (sim/ward/state.gd, arm.gd): each moves what it names in the Ward's own rules, and an
+## unset row is today's constant (tests/test_ward_rigger.gd holds the scenes).
+func test_rigger_numbers(t: T) -> void:
+	RiggerTest.settings_proof(t)

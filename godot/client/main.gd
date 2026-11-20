@@ -3617,7 +3617,10 @@ func _command(c: String) -> String:
 			var queue: Array[Vector3] = [from]
 			var found: Variant = null
 			var head := 0
-			while head < queue.size() and head < 40000:
+			# PL2: at most 12 s of search: a longer one stalls this client's frames until the server's send queue for it fills
+			# (256 snapshots, net/ws_server.gd) and, at 20 s, the server drops it as idle.
+			var give_up := Time.get_ticks_msec() + 12000
+			while head < queue.size() and head < 40000 and Time.get_ticks_msec() < give_up:
 				var q: Vector3 = queue[head]
 				head += 1
 				if Vector2(q.x, q.z).distance_to(goal) < (float(p[3]) if p.size() > 3 else 0.45):
@@ -3641,6 +3644,30 @@ func _command(c: String) -> String:
 					route.push_front(_late_plain(at[ck]))
 					ck = came[ck]
 			return JSON.stringify(route)
+		"split":
+			# PL2: this screen's own body against the host's row for it in the newest snapshot, small enough to poll
+			# every tenth of a second (tools/play_late.mjs): tick, host time, depth, place, the host's status for us,
+			# both bodies [x, y, z, level], and the last input sent against the last the host applied.
+			if not automated:
+				return "{}"
+			var sc: Variant = link.client() if link != null else null
+			var sw: Variant = sc.latest if sc != null else null
+			if not sw is Dictionary or link.body == null:
+				return JSON.stringify({"error": "no snapshot"})
+			var mine := {"tick": int(sw.get("tick", -1)), "hostNow": snap.get("hostNow"), "depth": sw.get("depth"), "phase": str(sw.get("phase", "")),
+				"place": link.plan_dict.get("place", ""), "ward": _ward_floor != null, "me": link.my_id(),
+				"screen": [link.body.x, link.body.y, link.body.z, link.body.level], "host": null, "status": "",
+				"seq": int(sc.get("_seq")), "ackIn": int(sw.get("ackIn", -1))}
+			for row: Dictionary in sw.get("players", []):
+				if str(row.get("id", "")) == link.my_id():
+					var hb: Variant = row.get("body")
+					if hb is Move.Body:
+						mine["host"] = [hb.x, hb.y, hb.z, hb.level]
+					elif hb is Dictionary:
+						mine["host"] = [hb.get("x"), hb.get("y", 0.0), hb.get("z"), hb.get("level", 0)]
+					mine["status"] = str(row.get("status", ""))
+					mine["aboard"] = row.get("aboard", false)
+			return JSON.stringify(mine)
 		_:
 			return "unknown command"
 	return "ok"

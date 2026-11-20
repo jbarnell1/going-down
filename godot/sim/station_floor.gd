@@ -12,7 +12,11 @@
 #    reactor.run_speed (compare the player's 3 m/s walk and 5 m/s sprint) the nearest player on their feet it can
 #    walk to, routed through the plan (Floor cells, Follow.step_path_walk as the Orderly walks), never through the
 #    crawl. Standing within REACH of its prey for WIND seconds is a catch: the run puts the player down by its
-#    normal down rules (or out without them). A player just healed is not caught again for GRACE. Awake bodies
+#    normal down rules (or out without them). A player just healed is not caught again for GRACE. RX2: a crawler
+#    comes no nearer than reactor.crawl_keep to anyone on their feet (it never stands up within reach of them);
+#    the catcher stays over its catch (goes after nobody else) while they lie down, as the run's resident bends over
+#    its catch, and stands off reactor.stand_off seconds once they are healed (reactor.feed 0: it hunts on); the
+#    pursuit is scaled by reactor.alone_scale alone and reactor.pair_scale in twos (pursuit_speed). Awake bodies
 #    stay awake and dangerous through boarding, after the power is back.
 #  - The fuse: at one of the plan's fuse spots, chosen from the seed. F held (PlayerInput.use, a fresh press)
 #    within USE_REACH picks it up once the power is out; the holder installs it at the cabinet the same way:
@@ -26,6 +30,8 @@
 extends RefCounted
 
 const Floor = preload("res://sim/floor.gd")
+const Sight = preload("res://sim/sight.gd")
+const Noises = preload("res://sim/noise.gd")
 const Move = preload("res://sim/move.gd")
 const Follow = preload("res://sim/follow.gd")
 const Settings = preload("res://sim/settings.gd")
@@ -42,7 +48,49 @@ const WAKE_AFTER := 1.1
 const WAKE_GAP := 0.62
 const CRAWL_TIME := 4.2
 const CRAWL_SPEED := 0.43
-const RUN_SPEED := 3.4
+const RUN_SPEED := 2.6
+## RX2 (tools/station_crews.gd measured these): the pursuit alone and in twos, how near a crawler may come to
+## anyone on their feet, whether a catcher stays over its victim (1) and how long it stands off after a heal.
+const ALONE_SCALE := 100.0
+const PAIR_SCALE := 100.0
+const CRAWL_KEEP := 3.0
+const FEED := 1.0
+const STAND_OFF := 5.0
+## RX3, the senses (live settings reactor.*; tools/station_crews.gd measured these): on (1) or today's all-knowing
+## chase (0); sight in the emergency light, once the power is back, for a lit or glowing player, for a creeping one;
+## an emergency lamp's glow; hearing a walk and a sprint; the socket's clunk; how long a search lasts and its pace;
+## how many of the four one noise draws.
+const SENSES := 1.0
+const SIGHT_DARK := 6.0
+const SIGHT_LIT := 16.0
+const SIGHT_GLOW := 10.0
+const SIGHT_CREEP := 2.5
+const LAMP_GLOW := 2.0
+const HEAR_WALK := 6.0
+const HEAR_SPRINT := 10.0
+const HEAR_SOCKET := 0.0
+## RX3: seconds every awake body holds still when the mains come back; the Reactor's boarding, doors open to the bell.
+const FLINCH := 3.5
+const BOARD := 60.0
+const SEARCH_TIME := 8.0
+const SEARCH_SPEED := 1.2
+const NOISE_DRAWS := 2
+## The game's own noise radii (sim/noise.gd), read through the same settings (noise.emote, noise.drop).
+const NOISE_EMOTE := Noises.EMOTE
+const NOISE_DROP := Noises.DROP
+const MOVING := 0.2
+## RX3 (the design lead's direction, 20 Nov): through a wall a walk is heard only this near; within this of its
+## hunted player a body lunges at this speed (a burst the player sees and hears coming); with a crew of one or two
+## only this many of the four wake at the cut, the others WAKE_LATE seconds after it.
+const HEAR_WALL := 3.0
+const LUNGE_RANGE := 2.0
+const LUNGE_SPEED := 4.5
+const WAKE_ALONE := 2
+const WAKE_PAIR := 3
+const WAKE_LATE := 90.0
+const ARRIVE := 1.0
+const WANDER := 2
+const WANDER_HOLD := 3.0
 const REACH := 0.72
 const WIND := 0.43
 const USE_REACH := 2.0
@@ -68,6 +116,20 @@ class Body4:
 	var path: Array[Floor.Pos] = []
 	var path_next: int = 0
 	var replan_in: float = 0.0
+	## RX2: the player this body has put down and stays over while they lie there ("" none).
+	var feeding: String = ""
+	## RX2: host time until which it stands off after its victim was healed.
+	var quiet_until: float = -INF
+	## RX3, the senses: "search" (wanders round `goal` for `left` seconds), "hunt" (goes for `target`, sensed this
+	## tick), "seek" (goes to `goal`, where it last sensed someone or heard a noise), "drift" (back to the hall's
+	## middle). `wander` counts the wander points picked (the next one is a hash of the seed, the seat and it).
+	var mode: String = "search"
+	var target: String = ""
+	var goal: Vector2 = Vector2.INF
+	var left: float = 0.0
+	var wander: int = 0
+	var wander_to: Vector2 = Vector2.INF
+	var wander_left: float = 0.0
 
 	func copy() -> Body4:
 		var b := Body4.new()
@@ -81,6 +143,15 @@ class Body4:
 		b.path = path
 		b.path_next = path_next
 		b.replan_in = replan_in
+		b.feeding = feeding
+		b.quiet_until = quiet_until
+		b.mode = mode
+		b.target = target
+		b.goal = goal
+		b.left = left
+		b.wander = wander
+		b.wander_to = wander_to
+		b.wander_left = wander_left
 		return b
 
 class StationFloor:
@@ -109,6 +180,13 @@ class StationFloor:
 	var low: Dictionary = {}
 	var rev: int = 0
 	var seq: int = 0
+	## RX3: where each player stood last tick ({id: Vector2}): a walk is heard only when they moved.
+	var moved: Dictionary = {}
+	## RX3: the crew's size the last tick (how many of the four wake at the cut); host time the power came back
+	## (-INF before); this tick's host time.
+	var crew_n: int = 4
+	var restored_at: float = -INF
+	var seq_t: float = 0.0
 
 	func copy() -> StationFloor:
 		var c := StationFloor.new()
@@ -134,6 +212,10 @@ class StationFloor:
 		c.low = low.duplicate()
 		c.rev = rev
 		c.seq = seq
+		c.moved = moved.duplicate()
+		c.crew_n = crew_n
+		c.restored_at = restored_at
+		c.seq_t = seq_t
 		return c
 
 ## One player as the rules see them this tick.
@@ -145,6 +227,9 @@ class Crew:
 	var gait: StringName = &"walk"
 	var use: bool = false
 	var active: bool = false
+	## RX3: their lamp is on (seen further); they made a sound emote this tick (heard as a point noise).
+	var lit: bool = false
+	var shout: bool = false
 
 	static func make(id_: String, body_: Move.Body, status_: StringName, gait_: StringName, use_: bool, active_: bool) -> Crew:
 		var c := Crew.new()
@@ -188,6 +273,17 @@ static func _flat(a: Vector3, b: Move.Body) -> float:
 ## Seconds after the cut that body `i` (0-based) stirs.
 static func wake_at(i: int, tuning: Settings.Values) -> float:
 	return Settings.f(tuning, &"reactor.wake_after", WAKE_AFTER) + float(i) * Settings.f(tuning, &"reactor.wake_gap", WAKE_GAP)
+
+## RX3: seconds after the cut that body `i` stirs on this floor: wake_at, and reactor.wake_late more for the bodies a
+## small crew does not wake at the cut (reactor.wake_alone of the four for one player, reactor.wake_pair for two).
+static func wake_time(st: StationFloor, i: int, tuning: Settings.Values) -> float:
+	var n := st.crew_n
+	var woken := 4
+	if n == 1:
+		woken = Settings.i(tuning, &"reactor.wake_alone", WAKE_ALONE)
+	elif n == 2:
+		woken = Settings.i(tuning, &"reactor.wake_pair", WAKE_PAIR)
+	return wake_at(i, tuning) + (Settings.f(tuning, &"reactor.wake_late", WAKE_LATE) if i >= woken else 0.0)
 
 ## Whether a body is in the hall proper (past the landing): the hold starts then.
 static func passed_landing(plan: Floor.FloorPlan, b: Move.Body) -> bool:
@@ -244,7 +340,13 @@ static func step(st: StationFloor, crew: Array[Crew], t: float, dt: float, tunin
 			st.power = Power.RESTORED
 			st.holder = ""
 			st.fuse_uses += 1
+			st.restored_at = t
 			action = "powerRestored"
+			# RX3: the mains come back: every awake body flinches and holds still reactor.flinch seconds.
+			var flinch := Settings.f(tuning, &"reactor.flinch", FLINCH)
+			for i in st.bodies.size():
+				if st.awake - wake_time(st, i, tuning) >= 0.0:
+					st.bodies[i].quiet_until = maxf(st.bodies[i].quiet_until, t + flinch)
 		elif not st.collected and _flat(st.tape, c.body) < TAPE_REACH:
 			st.collected = true
 			st.cassette_holder = c.id
@@ -263,41 +365,92 @@ static func step(st: StationFloor, crew: Array[Crew], t: float, dt: float, tunin
 
 	# The four.
 	var caught: Array[String] = []
+	# RX3: who moved since last tick (a walk is heard only while it moves).
+	var moving := {}
+	st.crew_n = crew.size()
+	st.seq_t = t
+	for c in crew:
+		var prev: Variant = st.moved.get(c.id)
+		moving[c.id] = prev is Vector2 and Vector2(c.body.x, c.body.z).distance_to(prev) > MOVING * dt
+		st.moved[c.id] = Vector2(c.body.x, c.body.z)
 	if st.power == Power.NORMAL:
 		return caught
 	var crawl_time := Settings.f(tuning, &"reactor.crawl_time", CRAWL_TIME)
 	var crawl_speed := Settings.f(tuning, &"reactor.crawl_speed", CRAWL_SPEED)
-	var run_speed := Settings.f(tuning, &"reactor.run_speed", RUN_SPEED)
+	var run_speed := pursuit_speed(crew.size(), tuning)
+	var keep := Settings.f(tuning, &"reactor.crawl_keep", CRAWL_KEEP)
+	var feed := Settings.f(tuning, &"reactor.feed", FEED) > 0.5
+	var stand_off := Settings.f(tuning, &"reactor.stand_off", STAND_OFF)
 	var prey: Array[Crew] = []
 	for c in crew:
 		if c.status == &"ok" and c.active and t >= float(st.grace.get(c.id, -INF)):
 			prey.append(c)
+	var senses := Settings.f(tuning, &"reactor.senses", SENSES) > 0.5
+	var search_speed := Settings.f(tuning, &"reactor.search_speed", SEARCH_SPEED)
+	var drawn := _noises_drawn(st, crew, t, tuning, events) if senses else {}
 	for i in st.bodies.size():
 		var b := st.bodies[i]
-		var age := st.awake - wake_at(i, tuning)
+		var age := st.awake - wake_time(st, i, tuning)
 		if age < 0.0:
+			continue
+		# RX2: a body that has put someone down stays over them (goes after nobody else) while they lie there; healed,
+		# it stands off for reactor.stand_off seconds; out or gone, it hunts again at once.
+		if not b.feeding.is_empty():
+			var v: Crew = by_id.get(b.feeding)
+			if v != null and v.status == &"down":
+				b.wind = 0.0
+				b.victim = ""
+				b.clock = fmod(b.clock + dt * RUN_CLIP_RATE, RUN_CLIP)
+				continue
+			if v != null and v.status == &"ok":
+				b.quiet_until = t + stand_off
+			b.feeding = ""
+		if t < b.quiet_until - 1e-9:
+			b.wind = 0.0
+			b.victim = ""
 			continue
 		if not st.stirred:
 			st.stirred = true
 			st.rev += 1
 			events.append({"type": "stationStir", "t": t, "seat": b.seat, "x": b.body.x, "z": b.body.z})
 		var crawl := age < crawl_time
-		var clip := "zombie_crawl" if crawl else "zombie_run"
+		# RX3: with the senses it goes only for whom it senses (else where it last sensed someone or heard a noise).
+		var sensed: Array[Crew] = prey
+		var slow := false
+		if senses:
+			sensed = _sense(st, b, crawl, prey, moving, drawn.get(i, Vector2.INF), tuning, dt)
+			slow = b.mode == "search" or b.mode == "drift"
+		var clip := "zombie_crawl" if crawl else ("zombie_walk" if slow else "zombie_run")
 		if b.phase != clip:
+			var before_phase := b.phase
 			b.clock = 0.0
 			b.phase = clip
 			b.replan_in = 0.0
-			if not crawl:
+			if not crawl and (before_phase == "zombie_crawl" or before_phase == "still"):
 				events.append({"type": "bodyStands", "t": t, "seat": b.seat})
-		b.clock = fmod(b.clock + dt * (1.0 if crawl else RUN_CLIP_RATE), CRAWL_CLIP if crawl else RUN_CLIP)
-		_move(st, b, prey, (crawl_speed if crawl else run_speed) * dt, dt)
+		var rate := 1.0 if crawl else (RUN_CLIP_RATE * search_speed / run_speed if slow else RUN_CLIP_RATE)
+		b.clock = fmod(b.clock + dt * rate, CRAWL_CLIP if crawl else RUN_CLIP)
+		var was := b.body
+		if senses:
+			var pace := crawl_speed if crawl else (search_speed if slow else run_speed)
+			if not crawl and b.mode == "hunt" and by_id.has(b.target):
+				var tc: Crew = by_id[b.target]
+				if M.hypot2(tc.body.x - b.body.x, tc.body.z - b.body.z) <= Settings.f(tuning, &"reactor.lunge_range", LUNGE_RANGE):
+					pace = maxf(pace, Settings.f(tuning, &"reactor.lunge_speed", LUNGE_SPEED))
+			_move(st, b, _aim(b, by_id), pace * dt, dt)
+		else:
+			_move(st, b, prey, (crawl_speed if crawl else run_speed) * dt, dt)
 		if crawl:
+			# RX2: a crawler comes no nearer than reactor.crawl_keep to anyone on their feet, so it never stands up
+			# already within reach of them.
+			if keep > 0.0 and _nearest(prey, b.body) < keep and _nearest(prey, b.body) < _nearest(prey, was):
+				b.body = was
 			b.wind = 0.0
 			continue
-		# A catch: within reach of its prey long enough.
+		# A catch: within reach of its prey long enough (with the senses, only someone it senses).
 		var target: Crew = null
 		var gap := INF
-		for c in prey:
+		for c in sensed:
 			var d := M.hypot2(c.body.x - b.body.x, c.body.z - b.body.z)
 			if c.body.level == b.body.level and d < gap:
 				gap = d
@@ -313,12 +466,204 @@ static func step(st: StationFloor, crew: Array[Crew], t: float, dt: float, tunin
 		if b.wind >= WIND - 1e-9 and not caught.has(target.id):
 			caught.append(target.id)
 			b.wind = 0.0
+			if feed:
+				b.feeding = target.id
+				b.victim = ""
 	for id in caught:
 		for k in prey.size():
 			if prey[k].id == id:
 				prey.remove_at(k)
 				break
 	return caught
+
+## RX3: the point noises of this tick, as [x, z, radius]: a sound emote by anyone on their feet (noise.emote), a
+## flare's burst (its own noise), a dropped fuse or tape (noise.drop), the cabinet's socket taking the fuse
+## (reactor.hear_socket). Then, for each noise, the reactor.noise_draws nearest of the four that hear it (inside its
+## radius, awake, not feeding, standing off or hunting) go to it; a body that hears two goes to the nearer.
+## Returns {body index: Vector2 where to go}.
+static func _noises_drawn(st: StationFloor, crew: Array[Crew], t: float, tuning: Settings.Values, events: Array[Dictionary]) -> Dictionary:
+	var noises: Array = []
+	for c in crew:
+		if c.shout and c.status == &"ok" and c.active:
+			noises.append([c.body.x, c.body.z, Settings.f(tuning, &"noise.emote", NOISE_EMOTE)])
+	for e in events:
+		if absf(float(e.get("t", -INF)) - t) > 1e-9:
+			continue
+		match str(e.get("type", "")):
+			"flareUsed": noises.append([float(e["x"]), float(e["z"]), float(e.get("noise", 12.0))])
+			"fuseDropped", "tapeDropped": noises.append([float(e["x"]), float(e["z"]), Settings.f(tuning, &"noise.drop", NOISE_DROP)])
+			"powerRestored": noises.append([st.cabinet.x, st.cabinet.z, Settings.f(tuning, &"reactor.hear_socket", HEAR_SOCKET)])
+	var out := {}
+	if noises.is_empty():
+		return out
+	var draws := Settings.i(tuning, &"reactor.noise_draws", NOISE_DRAWS)
+	var best := {}
+	for n: Array in noises:
+		var near: Array = []
+		for i in st.bodies.size():
+			var b := st.bodies[i]
+			if st.awake - wake_time(st, i, tuning) < 0.0 or not b.feeding.is_empty() or t < b.quiet_until - 1e-9 or b.mode == "hunt":
+				continue
+			var d := M.hypot2(float(n[0]) - b.body.x, float(n[1]) - b.body.z)
+			if d <= float(n[2]) + 1e-9:
+				near.append([d, i])
+		near.sort_custom(func(a: Array, c: Array) -> bool: return a[0] < c[0] or (a[0] == c[0] and a[1] < c[1]))
+		for k in mini(draws, near.size()):
+			var i: int = near[k][1]
+			if not best.has(i) or float(near[k][0]) < float(best[i]) - 1e-9:
+				best[i] = near[k][0]
+				out[i] = Vector2(float(n[0]), float(n[1]))
+	return out
+
+## RX3: whether body `b` senses player `c` this tick. It hears a sprint within reactor.hear_sprint and a walk within
+## reactor.hear_walk (straight distance, through walls: only while they move); a creep, never. It sees them with a
+## clear line (eye to chest) within reactor.sight_dark in the emergency light (reactor.sight_lit once the power is
+## back), at least reactor.sight_glow when their lamp is on, they carry the glowing tape or stand within
+## reactor.lamp_glow of an emergency lamp, and no further than reactor.sight_creep while they creep.
+static func senses_player(st: StationFloor, b: Body4, crawl: bool, c: Crew, moving: bool, tuning: Settings.Values) -> bool:
+	if c.body.level != b.body.level:
+		return false
+	# Down among the cable trays a player is out of their sight and too low to hear (the crawl loses them).
+	var cc := Move.cell_of(st.plan, c.body)
+	if Station.creep_only(st.plan, cc.x, cc.y):
+		return false
+	var d := M.hypot2(c.body.x - b.body.x, c.body.z - b.body.z)
+	if moving and c.gait == &"sprint" and d <= Settings.f(tuning, &"reactor.hear_sprint", HEAR_SPRINT):
+		return true
+	var walk_heard := moving and c.gait == &"walk" and d <= Settings.f(tuning, &"reactor.hear_walk", HEAR_WALK)
+	if walk_heard and d <= Settings.f(tuning, &"reactor.hear_wall", HEAR_WALL):
+		return true
+	# The lit sight only once their flinch at the mains coming back is over.
+	var lit_now := st.power == Power.RESTORED and st.seq_t >= st.restored_at + Settings.f(tuning, &"reactor.flinch", FLINCH) - 1e-9
+	var see := Settings.f(tuning, &"reactor.sight_lit", SIGHT_LIT) if lit_now else Settings.f(tuning, &"reactor.sight_dark", SIGHT_DARK)
+	if c.lit or st.cassette_holder == c.id or _under_lamp(st, c.body, Settings.f(tuning, &"reactor.lamp_glow", LAMP_GLOW)):
+		see = maxf(see, Settings.f(tuning, &"reactor.sight_glow", SIGHT_GLOW))
+	var creep := c.gait == &"creep"
+	if creep:
+		see = minf(see, Settings.f(tuning, &"reactor.sight_creep", SIGHT_CREEP))
+	if d > see and not walk_heard:
+		return false
+	# A walk beyond the wall's reach is heard only with a clear line (round a corner it is lost).
+	return Sight.has_line_of_sight(st.plan, Sight.Point3.make(b.body.x, 0.4 if crawl else 1.6, b.body.z, b.body.level),
+		Sight.Point3.make(c.body.x, 0.6 if creep else 1.2, c.body.z, c.body.level))
+
+static func _under_lamp(st: StationFloor, at: Move.Body, r: float) -> bool:
+	if r <= 0.0:
+		return false
+	for l: Dictionary in st.plan.station.get("lamps", []):
+		if bool(l.get("emergency", false)):
+			var p: Vector3 = l["at"]
+			if M.hypot2(p.x - at.x, p.z - at.z) <= r:
+				return true
+	return false
+
+## RX3: one body's knowledge for this tick (see the header); returns whom it senses.
+static func _sense(st: StationFloor, b: Body4, crawl: bool, prey: Array[Crew], moving: Dictionary, noise: Vector2, tuning: Settings.Values, dt: float) -> Array[Crew]:
+	var found: Array[Crew] = []
+	var nearest: Crew = null
+	var best := INF
+	for c in prey:
+		if senses_player(st, b, crawl, c, bool(moving.get(c.id, false)), tuning):
+			found.append(c)
+			var d := M.hypot2(c.body.x - b.body.x, c.body.z - b.body.z)
+			if d < best - 1e-9:
+				best = d
+				nearest = c
+	if nearest != null:
+		if b.mode != "hunt" or b.target != nearest.id:
+			b.replan_in = 0.0
+		b.mode = "hunt"
+		b.target = nearest.id
+		b.goal = Vector2(nearest.body.x, nearest.body.z)
+		return found
+	if b.mode == "hunt":
+		# Lost them: to the last place it sensed them.
+		b.mode = "seek"
+		b.target = ""
+		b.replan_in = 0.0
+	if noise != Vector2.INF:
+		b.mode = "seek"
+		b.goal = noise
+		b.replan_in = 0.0
+	var here := Vector2(b.body.x, b.body.z)
+	match b.mode:
+		"seek":
+			if b.goal == Vector2.INF or here.distance_to(b.goal) <= ARRIVE:
+				_start_search(b, tuning)
+		"drift":
+			var hall: Rect2 = st.plan.station["hall"]
+			b.goal = hall.get_center()
+			if here.distance_to(b.goal) <= 2.0:
+				_start_search(b, tuning)
+		_:
+			if b.goal == Vector2.INF:
+				_start_search(b, tuning)
+			b.left -= dt
+			b.wander_left -= dt
+			if b.left <= 0.0:
+				b.mode = "drift"
+				b.replan_in = 0.0
+			elif b.wander_to == Vector2.INF or here.distance_to(b.wander_to) <= ARRIVE or b.wander_left <= 0.0:
+				b.wander_to = _wander_point(st, b)
+				b.wander_left = WANDER_HOLD
+				b.replan_in = 0.0
+	return found
+
+static func _start_search(b: Body4, tuning: Settings.Values) -> void:
+	b.mode = "search"
+	b.left = Settings.f(tuning, &"reactor.search_time", SEARCH_TIME)
+	b.wander_to = Vector2.INF
+	b.wander_left = 0.0
+	b.goal = Vector2(b.body.x, b.body.z) if b.goal == Vector2.INF else b.goal
+
+## The next place a searching body looks: a walkable cell (not the crawl) within WANDER cells of where it searches,
+## picked by a hash of the floor's seed, its seat and how many it has picked.
+static func _wander_point(st: StationFloor, b: Body4) -> Vector2:
+	var plan := st.plan
+	var g := b.goal if b.goal != Vector2.INF else Vector2(b.body.x, b.body.z)
+	var centre := Station.cell_of(g.x, g.y)
+	var cells: Array[Vector2i] = []
+	for dy in range(-WANDER, WANDER + 1):
+		for dx in range(-WANDER, WANDER + 1):
+			var cx := centre.x + dx
+			var cy := centre.y + dy
+			if cx >= 0 and cy >= 0 and cx < plan.width and cy < plan.height and Floor.is_walkable(plan, 0, cx, cy) and not Station.creep_only(plan, cx, cy):
+				cells.append(Vector2i(cx, cy))
+	b.wander += 1
+	if cells.is_empty():
+		return g
+	var h := ("station-wander:%d:%d:%d" % [st.seed_value, b.seat, b.wander]).hash() & 0x7fffffff
+	var c := cells[h % cells.size()]
+	return Vector2(Station.wc(c.x), Station.wc(c.y))
+
+## Whom `_move` walks to: its hunted player, or a stand-in at the place it goes.
+static func _aim(b: Body4, by_id: Dictionary) -> Array[Crew]:
+	var out: Array[Crew] = []
+	if b.mode == "hunt" and by_id.has(b.target):
+		out.append(by_id[b.target])
+		return out
+	var to := b.wander_to if b.mode == "search" and b.wander_to != Vector2.INF else b.goal
+	if to == Vector2.INF:
+		return out
+	out.append(Crew.make("", Move.Body.make(to.x, to.y, b.body.level, 0.0), &"ok", &"walk", false, true))
+	return out
+
+## RX2: the pursuit speed for a crew of `size` (the run's players): reactor.run_speed, times reactor.alone_scale
+## (in 100) alone and reactor.pair_scale in twos, as the Temp chases a lone player slower (sim/lonely.gd).
+static func pursuit_speed(size: int, tuning: Settings.Values) -> float:
+	var full := Settings.f(tuning, &"reactor.run_speed", RUN_SPEED)
+	if size <= 1:
+		return full * Settings.f(tuning, &"reactor.alone_scale", ALONE_SCALE) / 100.0
+	if size == 2:
+		return full * Settings.f(tuning, &"reactor.pair_scale", PAIR_SCALE) / 100.0
+	return full
+
+static func _nearest(prey: Array[Crew], at: Move.Body) -> float:
+	var best := INF
+	for c in prey:
+		if c.body.level == at.level:
+			best = minf(best, M.hypot2(c.body.x - at.x, c.body.z - at.z))
+	return best
 
 ## Moves one body up to `dist` metres toward the nearest prey it can walk to (never through the crawl).
 static func _move(st: StationFloor, b: Body4, prey: Array[Crew], dist: float, dt: float) -> void:
@@ -462,7 +807,7 @@ static func seat_poses(st: StationFloor, tuning: Settings.Values) -> Array:
 	var poses := []
 	for i in st.bodies.size():
 		var b := st.bodies[i]
-		var age := st.awake - wake_at(i, tuning) if st.power != Power.NORMAL else -1.0
+		var age := st.awake - wake_time(st, i, tuning) if st.power != Power.NORMAL else -1.0
 		var rest := 1.0 - smoothstep(0.0, REST_FADE, age)
 		poses.append([b.body.x, b.body.y + (0.23 if i % 2 == 0 else 0.27) * rest, b.body.z, b.yaw,
 			(-1.29 if i % 2 == 0 else 1.32) * rest, b.phase, b.clock])

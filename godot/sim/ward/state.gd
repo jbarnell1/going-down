@@ -5,6 +5,7 @@ const Footing = preload("res://sim/ward/footing.gd")
 const Layout = preload("res://sim/ward/layout.gd")
 const House = preload("res://sim/ward/house.gd")
 const Arm = preload("res://sim/ward/arm.gd")
+const Settings = preload("res://sim/settings.gd")
 const RETURN_SECONDS := 600.0
 const WARN_SECONDS := 0.85
 const CLIMB_SECONDS := 2.5
@@ -31,11 +32,58 @@ var caught: Array[String] = []
 var left_behind: Array[String] = []
 var _sprint_at := {}
 
+# WD1: what the Rigger senses and how he searches, each a live setting ("THE RIGGER (THE WARD)", sim/settings.gd). The
+# host hands over the run's tuning and the crew's size every tick (net/host.gd _step_ward_review); null is today's.
+#   - Sprinting is heard on a house's floors as before, and now upstairs, on its gallery and on the walkways too (the
+#     lines carry it): a gallery is its house's, a walkway the nearer house's (rigger.open_heard).
+#   - Walking (not creeping) is heard within rigger.steps_reach metres (flat) of where he is: under the lowest house
+#     until he first climbs, then at the house he last went to. Inside the house he is searching it turns the arm to
+#     that room, as a sprint does. Creeping is never heard.
+#   - The instrument ticking while it records within rigger.click_reach of the hand turns the arm to that room.
+#   - A door worked is heard at its house's entry (rigger.door_heard).
+#   - A noise at another house while he is busy is kept; when this search ends he moves on to it, with the loaded line
+#     again (rigger.move_on).
+#   - While he searches a house, only those on its ground floor record his arm (rigger.record_inside); his climb is
+#     recorded from anywhere near as before. Every catch still follows a loaded line.
+var tuning: Settings.Values = null
+var crew_size := 4
+var lair := -1
+var _step_at := {}
+var _last_pos := {}
+var _queued_house := -1
+var _queued_area := &""
+const STEP_EVERY := 0.65
+const MOVING_SPEED := 0.6
+## Today's values of the settings above (tests/prop_settings.gd names them).
+const STEPS_REACH := 9.0
+const CLICK_REACH := 2.5
+const OPEN_HEARD := 1
+const DOOR_HEARD := 1
+const MOVE_ON := 1
+const RECORD_INSIDE := 1
+## The hand, as tuned by bot crews (tools/ward_hunt.gd, WD1): it pays out at ARM_SPEED (a walk is 3 m/s, a creep
+## 1.2), ALONE_ARM_SPEED with a crew of one (a lone player has nobody to watch the doorway), waits ROOM_WARN at the
+## sill before each room and feels the end of its reach for PROBE. The old numbers are arm.gd's constants.
+const ARM_SPEED := 2.2
+const ALONE_ARM_SPEED := 1.8
+const ROOM_WARN := 0.9
+const PROBE := 1.0
+const ARM_BACK := 2.6
+
+func _f(id: StringName, fallback: float) -> float:
+	return Settings.f(tuning, id, fallback)
+
 func _init(seed_value: int) -> void:
 	layout = Layout.generate(seed_value)
 	for site: Dictionary in layout.houses:
 		houses.append(House.new(site, seed_value))
 	footing = Footing.new(layout, lift_door(), houses)
+	# He lives below the lowest house.
+	var low := INF
+	for i in houses.size():
+		if float(layout.houses[i].z) < low:
+			low = float(layout.houses[i].z)
+			lair = i
 	for edge: Dictionary in layout.bridges:
 		if edge.kind != "winch":
 			continue
@@ -71,12 +119,16 @@ func clear_of_lift(feet: Vector3) -> bool:
 	var in_mouth := absf(offset.x) <= GATE.x * 0.5 + reach and offset.z <= GATE.z * 0.5 + reach and offset.z >= -3.1
 	return not (in_mouth and absf(offset.y) <= 0.45)
 
-## Begin collection once the normal lift has left the crew in the Ward.
-func leave(now: float) -> Array[Dictionary]:
+## Begin collection once the normal lift has left the crew in the Ward. `return_seconds` is the lift's return time,
+## the live setting ward.lift_minutes (PL2) stamped here as the lift leaves; today's is RETURN_SECONDS. A return of a
+## minute or less has no "one minute" reminder: the departure's own announcement is the schedule then.
+func leave(now: float, return_seconds := RETURN_SECONDS) -> Array[Dictionary]:
 	if phase != &"unloading":
 		return []
 	phase = &"away"
-	collection_at = now + RETURN_SECONDS
+	collection_at = now + return_seconds
+	if return_seconds <= 60.0:
+		last_minute_sent = true
 	return [{"kind": &"departed", "at": now}]
 
 ## Each accepted crew row has position (feet), aboard and optional use (rising edge) and sprint.
@@ -115,19 +167,59 @@ func step(now: float, delta: float, boarding_seconds: float, crew: Dictionary) -
 		var at: Vector3 = member.position
 		if member.get("use", false):
 			_use_near(at, now, crew, events)
+		var was: Vector3 = _last_pos.get(id, at)
+		_last_pos[id] = at
+		var moving := delta > 0.0 and Vector2(at.x - was.x, at.z - was.z).length() / delta >= MOVING_SPEED
 		if member.get("sprint", false) and now >= float(_sprint_at.get(id, -INF)):
 			_sprint_at[id] = now + 0.65
-			_hear_point(at, now, events)
+			_hear_point(at, now, events, true)
+		elif moving and not member.get("creep", false) and not member.get("sprint", false) and now >= float(_step_at.get(id, -INF)):
+			_step_at[id] = now + STEP_EVERY
+			var reach := _f(&"rigger.steps_reach", STEPS_REACH)
+			if reach > 0.0 and _flat(at, lair) <= reach:
+				_hear_point(at, now, events, false)
+		if member.get("recording", false) and encounter == &"searching" and arm != null and arm.points.size() > 1:
+			var reach := _f(&"rigger.click_reach", CLICK_REACH)
+			if reach > 0.0 and (at + Vector3.UP * 1.25).distance_to(houses[resident_house].to_world(arm.points[-1])) <= reach:
+				var room := houses[resident_house].area_at(houses[resident_house].to_local(at + Vector3.UP * 1.25))
+				if room != &"":
+					arm.hear(room)
+	if encounter == &"idle" and _queued_house >= 0:
+		var house := _queued_house
+		_queued_house = -1
+		_hear(house, _queued_area, now, events)
 	_pursue(now, delta, crew, events)
 	return events
 
+## Flat distance from a point to a house's middle.
+func _flat(at: Vector3, house: int) -> float:
+	if house < 0:
+		return INF
+	var site: Dictionary = layout.houses[house]
+	return Vector2(at.x - float(site.x), at.z - float(site.y)).length()
+
 ## A disturbance at a point (feet): the room of the house it is in, if any, is heard as a sprint there is.
-func _hear_point(at: Vector3, now: float, events: Array[Dictionary]) -> void:
+func _hear_point(at: Vector3, now: float, events: Array[Dictionary], _loud := true) -> void:
 	for i in houses.size():
 		var area := houses[i].area_at(houses[i].to_local(at + Vector3.UP * 1.25))
 		if area != &"":
 			_hear(i, area, now, events)
 			return
+	# WD1: upstairs, on a gallery or on a walkway: the nearest house (its own, for upstairs and a gallery).
+	if _f(&"rigger.open_heard", OPEN_HEARD) < 0.5:
+		return
+	var best := -1
+	var near := INF
+	for i in houses.size():
+		var site: Dictionary = layout.houses[i]
+		var off := Vector2(absf(at.x - float(site.x)), absf(at.z - float(site.y)))
+		var half := Vector2(float(site.w), float(site.d)) * 0.5 + Vector2.ONE * Layout.GALLERY
+		var gap := (off - half).max(Vector2.ZERO).length()
+		if gap < near:
+			near = gap
+			best = i
+	if best >= 0:
+		_hear(best, &"entry", now, events)
 
 ## WN2: a noise the run made at a point (a flare's burst, a toy's rattle; sim/run.gd step_ward_kit) is heard the same
 ## way, at the same times step hears a sprint (the lift gone and not yet left again). Returns the cues it raised.
@@ -155,6 +247,8 @@ func _use_near(at: Vector3, now: float, crew: Dictionary, events: Array[Dictiona
 		var near := houses[i].to_local(at)
 		if Vector2(near.x, near.z).length() < 1.12 and absf(near.y) < 0.6:
 			requested_doors[i] = not bool(requested_doors.get(i, true))
+			if _f(&"rigger.door_heard", DOOR_HEARD) >= 0.5:
+				_hear(i, &"entry", now, events)
 			return
 
 func _shortcut_occupied(crew: Dictionary) -> bool:
@@ -170,12 +264,17 @@ func _shortcut_occupied(crew: Dictionary) -> bool:
 func _hear(house: int, area: StringName, now: float, events: Array[Dictionary]) -> void:
 	if encounter == &"idle":
 		resident_house = house
+		lair = house
 		encounter = &"warning"
 		encounter_at = now
 		alert_area = area
 		events.append({"kind": &"line_loaded", "at": now, "house": house})
 	elif resident_house == house and encounter == &"searching":
 		arm.hear(area)
+	elif resident_house != house and _f(&"rigger.move_on", MOVE_ON) >= 0.5:
+		# WD1: busy elsewhere; he comes here next.
+		_queued_house = house
+		_queued_area = area
 
 func _pursue(now: float, delta: float, crew: Dictionary, events: Array[Dictionary]) -> void:
 	if encounter == &"idle":
@@ -186,6 +285,10 @@ func _pursue(now: float, delta: float, crew: Dictionary, events: Array[Dictionar
 	if encounter == &"climbing" and elapsed >= WARN_SECONDS + CLIMB_SECONDS:
 		encounter = &"searching"
 		arm = houses[resident_house].make_arm()
+		arm.warning_seconds = _f(&"rigger.room_warn", ROOM_WARN)
+		arm.probe_seconds = _f(&"rigger.probe", PROBE)
+		arm.out_speed = _f(&"rigger.arm_speed", ARM_SPEED) if crew_size > 1 else _f(&"rigger.alone_arm_speed", ALONE_ARM_SPEED)
+		arm.in_speed = _f(&"rigger.arm_back", ARM_BACK)
 		arm.hear(alert_area)
 	if encounter != &"searching":
 		return
@@ -208,6 +311,18 @@ func _pursue(now: float, delta: float, crew: Dictionary, events: Array[Dictionar
 		resident_house = -1
 		encounter_at = -1.0
 		arm = null
+
+## WD1: who may record his arm this tick: while he searches a house, those on its ground floor; else everyone (null).
+func recorders(crew: Dictionary, _now := 0.0) -> Variant:
+	if encounter != &"searching" or resident_house < 0 or _f(&"rigger.record_inside", RECORD_INSIDE) < 0.5:
+		return null
+	var out := {}
+	var house := houses[resident_house]
+	for id: String in crew:
+		var p: Vector3 = crew[id].position
+		if house.area_at(house.to_local(p + Vector3.UP * 1.25)) != &"":
+			out[id] = true
+	return out
 
 ## The same support and grip that the view draws. Empty outside an active physical reach.
 func posed_limb(now: float) -> PackedVector3Array:

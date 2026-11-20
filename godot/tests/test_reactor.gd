@@ -30,7 +30,7 @@ func test_reactor_round_trip_and_malformed_blocks(t: T) -> void:
 	missing_pose[12].pop_back()
 	t.check(Wire.decode(missing_pose)==null,"exactly four poses required")
 	var bad_phase := encoded.duplicate(true)
-	bad_phase[12][2][5]=3
+	bad_phase[12][2][5]=99
 	t.check(Wire.decode(bad_phase)==null,"unknown animation refused")
 	var bad_clock := encoded.duplicate(true)
 	bad_clock[5]=INF
