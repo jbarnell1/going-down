@@ -231,11 +231,25 @@ static func storey_of_eye(eye_y: float) -> int:
 ## True when the camera is on another storey than feet at `feet_y`. The Orderly's breath and rattle stop at
 ## floors and ceilings (the owner's playtest, 19 Nov: heard through the floor above).
 func _other_storey(feet_y: float) -> bool:
-	var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
+	var cam := ear_camera()
 	return cam != null and storey_of_eye(cam.global_position.y) != storey_of_feet(feet_y)
 
+## BR1: the ear is the camera of the world the 3D players are in. The game draws its 3D in a SubViewport
+## (main.gd make_picture) while this node sits in the root viewport, whose 3D is off and has no camera: asking our
+## own viewport found none, every distance read 0 m, and the Orderly's slow breath and rattle played at full level
+## everywhere on the Clinic and through its floors (the owner, 21 Nov: "just as loud by the elevator as I do by
+## the entity").
+var _world_parent: Node3D = null
+
+func ear_camera() -> Camera3D:
+	if _world_parent != null and is_instance_valid(_world_parent) and _world_parent.is_inside_tree():
+		var c := _world_parent.get_viewport().get_camera_3d()
+		if c != null:
+			return c
+	return get_viewport().get_camera_3d() if is_inside_tree() else null
+
 func _ear_distance(pos: Vector3) -> float:
-	var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
+	var cam := ear_camera()
 	return cam.global_position.distance_to(pos) if cam != null else 0.0
 
 ## The far-off phone on the Annex: from every direction at once, quieter than a near room tone.
@@ -334,6 +348,7 @@ var _shop_toy_loop: AudioStream
 
 func setup(world_parent: Node3D) -> void:
 	_shop_toy_loop = _rec("shop/toy_run", true)
+	_world_parent = world_parent
 	_rng.seed = 7
 	# The Master limiter holds sample peaks; true peaks between samples run up to about 0.8 dB over them
 	# (mix_check measured -0.7 dBTP once with the layout's -1.0 ceiling), so it holds MASTER_CEILING.

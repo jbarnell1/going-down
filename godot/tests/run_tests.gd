@@ -33,7 +33,7 @@ const FILES: Array[String] = [
 	"test_crew_motion", "test_orderly_motion", "test_temp_animation", "test_temp_motion",
 	"test_temp_v2",
 	"prop_furniture_layout",
-	"prop_resident_navigation", "test_floor_materials", "test_action_sfx", "prop_host_playtest", "test_host_tools",
+	"prop_resident_navigation", "test_floor_materials", "test_action_sfx", "test_sfx_ear", "prop_host_playtest", "test_host_tools",
 	"prop_cabinet", "prop_shop", "prop_shop_net", "prop_deep_pockets", "prop_second_wind", "prop_soft_shoes", "prop_quick_fingers", "prop_long_burn", "prop_field_dressing", "prop_steady_gaze", "prop_throwing_arm", "test_reactor",
 	"prop_late_floors",
 	"test_floor_entry",
