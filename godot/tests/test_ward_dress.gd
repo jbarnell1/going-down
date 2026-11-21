@@ -196,6 +196,11 @@ static func _drawn_meshes(view: View) -> Array:
 		var mesh := node as MeshInstance3D
 		if mesh.mesh == null or not mesh.is_visible_in_tree() or view.lift_car.is_ancestor_of(mesh):
 			continue
+		if mesh.has_meta(&"parts"):
+			# AW1: a batch of the skin's boxes (client/ward/skin.gd Batch) is checked box by box, not by its whole extent.
+			for part: Array in mesh.get_meta(&"parts"):
+				out.append([mesh, mesh.global_transform * (part[0] as Transform3D), part[1]])
+			continue
 		out.append([mesh, mesh.global_transform, mesh.mesh.get_aabb()])
 	return out
 

@@ -16,6 +16,7 @@ extends RefCounted
 const Layout = preload("res://sim/ward/layout.gd")
 const House = preload("res://sim/ward/house.gd")
 const Footing = preload("res://sim/ward/footing.gd")
+const WardSkin = preload("res://client/ward/skin.gd")
 
 ## How far above the highest deck the cavern's roof is (the deck lines' length up, view.gd).
 const ROOF_ABOVE := 25.0
@@ -23,8 +24,13 @@ const ROOF_ABOVE := 25.0
 const POST_EVERY := 1.6
 const RAIL_TOP := 0.95
 const RAIL_MID := 0.52
-## Hangers along a walkway: one pair every HANG_EVERY metres.
-const HANG_EVERY := 3.2
+## Hangers along a walkway: one pair every HANG_EVERY metres. AW1: fewer, heavier cables (the judge: "From a distance it
+## looks like rain on a black screen"), dark iron cable, so the Rigger's pale lines stand out among them.
+const HANG_EVERY := 7.5
+const HANGER := 0.045
+## AW1: the railings' ropes, thin (they were 5 to 7 cm beams), and the gallery's posts.
+const RAIL_ROPE := 0.03
+const RAIL_POST := 0.05
 ## The house door's swing when open (into the entry room) and how fast it moves (radians a second).
 const DOOR_SWING := -PI * 0.5
 const DOOR_SPEED := 3.0
@@ -97,7 +103,7 @@ static func lift_lintel(view: Node3D, root: Node3D, wall: AABB) -> Node3D:
 	var bottom := CAR_FLOOR + Lift.DOOR_H
 	var middle := wall.get_center()
 	var node := view.call("_box", root, Vector3(middle.x, (bottom + wall.end.y) * 0.5, middle.z),
-		Vector3(wall.size.x, wall.end.y - bottom, 1.24), "brick") as Node3D
+		Vector3(wall.size.x, wall.end.y - bottom, 1.24), "house") as Node3D
 	node.name = "LiftLintel"
 	return node
 
@@ -188,9 +194,9 @@ static func _rail_run(view: Node3D, root: Node3D, a: Vector3, b: Vector3, gaps: 
 		var q := a + along * piece.y
 		var posts := maxi(1, ceili((piece.y - piece.x) / POST_EVERY))
 		for k in posts + 1:
-			view.call("_box", root, p.lerp(q, float(k) / posts) + Vector3.UP * RAIL_TOP * 0.5, Vector3(0.07, RAIL_TOP, 0.07), "iron")
+			view.call("_box", root, p.lerp(q, float(k) / posts) + Vector3.UP * RAIL_TOP * 0.5, Vector3(RAIL_POST, RAIL_TOP, RAIL_POST), "iron")
 		for h: float in [RAIL_TOP, RAIL_MID]:
-			view.call("_beam", root, p + Vector3.UP * h, q + Vector3.UP * h, 0.05, 0.05, "rope")
+			view.call("_beam", root, p + Vector3.UP * h, q + Vector3.UP * h, RAIL_ROPE, RAIL_ROPE, "rope")
 
 ## Under a walkway: stringers along both edges of every span, a threshold plate at each end where it meets a gallery,
 ## posts along its rails and a pair of hangers every HANG_EVERY metres up to the roof at `roof`.
@@ -203,14 +209,9 @@ static func walkway(view: Node3D, root: Node3D, path: Array, roof: float) -> voi
 		for flip: float in [-1.0, 1.0]:
 			var edge := side * flip * (Footing.DECK_WIDTH * 0.5 - 0.05)
 			view.call("_beam", root, from + edge - Vector3.UP * 0.27, to + edge - Vector3.UP * 0.27, 0.1, 0.12, "iron")
-		var length := from.distance_to(to)
-		var count := maxi(1, floori(length / HANG_EVERY))
-		for k in count + 1:
-			var at := from.lerp(to, (float(k) + 0.5) / (count + 1))
-			for flip: float in [-1.0, 1.0]:
-				var post := at + side * flip * 0.73
-				view.call("_box", root, post + Vector3.UP * 0.47, Vector3(0.06, 0.94, 0.06), "iron")
-				view.call("_beam", root, post + Vector3.UP * 0.94, Vector3(post.x, roof, post.z), 0.035, 0.035, "rope")
+		for post: Vector3 in _hanger_feet(from, to):
+			view.call("_box", root, post + Vector3.UP * 0.47, Vector3(RAIL_POST, 0.94, RAIL_POST), "iron")
+			view.call("_beam", root, post + Vector3.UP * 0.94, Vector3(post.x, roof, post.z), HANGER, HANGER, "cable")
 	for end: int in [0, path.size() - 1]:
 		var at := Footing.path_point(path[end])
 		var other := Footing.path_point(path[1 if end == 0 else path.size() - 2])
@@ -219,7 +220,21 @@ static func walkway(view: Node3D, root: Node3D, path: Array, roof: float) -> voi
 			Footing.DECK_WIDTH + 0.06, 0.03, "iron") as Node3D
 		plate.name = "Threshold"
 
-## The cavern's roof over the layout, at `roof`, rough rock, with an iron plate where each line of each deck is fixed.
+## Where a span's hangers stand on its deck (both sides): a pair every HANG_EVERY metres, at least one.
+static func _hanger_feet(from: Vector3, to: Vector3) -> Array[Vector3]:
+	var side := (to - from).normalized().cross(Vector3.UP).normalized()
+	var count := maxi(1, floori(from.distance_to(to) / HANG_EVERY))
+	var out: Array[Vector3] = []
+	for k in count:
+		var at := from.lerp(to, (float(k) + 0.5) / count)
+		for flip: float in [-1.0, 1.0]:
+			out.append(at + side * flip * 0.73)
+	return out
+
+## The cavern's roof over the layout, at `roof`: AW1 rock with an iron plate where each line of each deck is fixed
+## (client/ward/skin.gd rock_ceiling: flat where anything is fixed, lumpy between, curving down into walls at its
+## edges), lamps hung from it, and the depths below the decks (WardSkin.depths). The lift's car must be built first: its
+## cables and shaft are fixed to the rock too.
 static func cavern_roof(view: Node3D, layout: Dictionary, roof: float) -> Node3D:
 	var lo := Vector2(INF, INF)
 	var hi := Vector2(-INF, -INF)
@@ -231,12 +246,23 @@ static func cavern_roof(view: Node3D, layout: Dictionary, roof: float) -> Node3D
 	var node := Node3D.new()
 	node.name = "CavernRoof"
 	view.add_child(node)
-	var middle := (lo + hi) * 0.5
-	view.call("_box", node, Vector3(middle.x, roof + 1.5, middle.y), Vector3(hi.x - lo.x, 3.0, hi.y - lo.y), "rock")
+	var anchors: Array[Vector2] = []
 	for site: Dictionary in layout.houses:
 		for x: float in [-1.0, 1.0]:
 			for z: float in [-1.0, 1.0]:
 				var at := Vector3(float(site.x) + x * (float(site.w) * 0.5 + Layout.GALLERY - 0.13), roof - 0.05,
 					float(site.y) + z * (float(site.d) * 0.5 + Layout.GALLERY - 0.13))
 				view.call("_box", node, at, Vector3(0.4, 0.1, 0.4), "iron")
+				anchors.append(Vector2(at.x, at.z))
+	for edge: Dictionary in layout.bridges:
+		for i in range(1, (edge.path as Array).size()):
+			for foot: Vector3 in _hanger_feet(Footing.path_point(edge.path[i - 1]), Footing.path_point(edge.path[i])):
+				anchors.append(Vector2(foot.x, foot.z))
+	var car: Lift = view.get("lift_car")
+	if car != null:
+		anchors.append(Vector2(car.global_position.x, car.global_position.z))
+		for corner: Vector3 in WardSkin.shaft_corners(car):
+			anchors.append(Vector2(corner.x, corner.z))
+	WardSkin.rock_ceiling(view, node, roof, lo, hi, anchors)
+	WardSkin.depths(view, layout, roof, lo, hi, anchors)
 	return node

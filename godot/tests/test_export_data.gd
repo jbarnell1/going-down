@@ -70,6 +70,10 @@ const FLOOR_FILES: Array[String] = [
 	"assets/reactor/wall_concrete.webp", "assets/reactor/wall_paint.webp", "assets/reactor/floor_concrete.webp",
 	"assets/reactor/ceiling_concrete.webp", "assets/reactor/steel_plate.webp", "assets/arboretum/painted_iron.webp",
 	"assets/reactor/growth_c.glb", "assets/reactor/growth_c_Image_0.webp", "assets/reactor/rotor_b.glb", "assets/reactor/rotor_b_Image_0.webp",
+	# AW1: the Hanging Ward's CC0 photographs (client/ward/skin.gd loads them by name).
+	"assets/ward/surfaces/brick.webp", "assets/ward/surfaces/plaster.webp", "assets/ward/surfaces/planks.webp",
+	"assets/ward/surfaces/floorboards.webp", "assets/ward/surfaces/slates.webp", "assets/ward/surfaces/rock.webp",
+	"assets/ward/surfaces/iron.webp", "assets/ward/surfaces/doorwood.webp", "assets/ward/surfaces/paper.webp",
 ]
 const TAPE := {"Web": "assets/station/tape/crew23_web.ogv", "Windows": "assets/station/tape/crew23.ogv"}
 ## MU1: the owner's five music tracks (client/music.gd), loaded by name rather than preloaded, so named here.

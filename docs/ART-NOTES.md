@@ -841,3 +841,23 @@ Rules learned:
     world position at the photograph's own size, one wall reads like the next.
 45. **Growth sits on something that goes somewhere.** A lump on a pipe stub reads as a prop; the same lump on a run
     that comes out of one wall and goes into another reads as something that grew there.
+## Outside assets: the Hanging Ward's photographs (AW1, 2026-11-21)
+
+Nine CC0 1.0 colour maps from Poly Haven, each licence confirmed on the asset's own page on 2026-11-21, downloaded
+as image files only (1k jpg) and reduced by `assets_src/ward_textures.py` into `godot/assets/ward/surfaces/`
+(list and sizes in its `SOURCES.md`):
+
+| Name | Library | Page | Licence | Date |
+| --- | --- | --- | --- | --- |
+| Red Brick 03 | Poly Haven | https://polyhaven.com/a/red_brick_03 | CC0 | 2026-11-21 |
+| White Plaster Rough 02 | Poly Haven | https://polyhaven.com/a/white_plaster_rough_02 | CC0 | 2026-11-21 |
+| Weathered Planks | Poly Haven | https://polyhaven.com/a/weathered_planks | CC0 | 2026-11-21 |
+| Wood Floor Worn | Poly Haven | https://polyhaven.com/a/wood_floor_worn | CC0 | 2026-11-21 |
+| Roof Slates 02 | Poly Haven | https://polyhaven.com/a/roof_slates_02 | CC0 | 2026-11-21 |
+| Rock Wall 10 | Poly Haven | https://polyhaven.com/a/rock_wall_10 | CC0 | 2026-11-21 |
+| Rusty Metal 02 | Poly Haven | https://polyhaven.com/a/rusty_metal_02 | CC0 | 2026-11-21 |
+| Wood Cabinet Worn Long | Poly Haven | https://polyhaven.com/a/wood_cabinet_worn_long | CC0 | 2026-11-21 |
+| Decrepit Wallpaper | Poly Haven | https://polyhaven.com/a/decrepit_wallpaper | CC0 | 2026-11-21 |
+
+Rule learned: lay a photograph in world metres at its own real size (Poly Haven lists it), never per box, so one
+brick is one size on every wall.

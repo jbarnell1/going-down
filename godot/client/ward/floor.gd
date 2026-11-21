@@ -208,6 +208,17 @@ func apply_environment(env: Environment) -> void:
 	env.fog_enabled = own.fog_enabled
 	env.fog_light_color = own.fog_light_color
 	env.fog_density = own.fog_density
+	# AW1: the haze under the decks (client/ward/view.gd FOG_HEIGHT), taken off again when the Ward is left.
+	env.fog_height = own.fog_height
+	env.fog_height_density = own.fog_height_density
+	_env = env
+
+## AW1: the main scene's environment the Ward's height fog was put on (no other floor uses height fog).
+var _env: Environment = null
+
+func _exit_tree() -> void:
+	if _env != null:
+		_env.fog_height_density = 0.0
 
 ## WC1: this player's web sequence (client/ward/web_view.gd) from their row of the host's web, the arm as the host posed
 ## it and their hang point; in the grab, the search hand closes just under the camera.

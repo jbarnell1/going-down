@@ -10,7 +10,11 @@ const Ward = preload("res://sim/ward/state.gd")
 const Main = preload("res://client/main.gd")
 const RIGGER_PATH := "res://assets/ward/rigger.glb"
 const HAND_PATH := "res://assets/ward/search-hand.glb"
-const Surfaces = preload("res://client/ward/surfaces.gdshader")
+## AW1: the Ward's surfaces and sky (CC0 photographs at one world scale, the lift's shaft, the cavern's roof, the mist).
+const WardSkin = preload("res://client/ward/skin.gd")
+## AW1: the height fog under the decks (world y, density): the drop reads as haze, not a black void.
+const FOG_HEIGHT := -4.0
+const FOG_HEIGHT_DENSITY := 0.08
 ## The loaded line: the library's net creak (assets/sfx/playroom/net_flap.ogg, the owner's; SOURCES.md).
 const WARNING_PATH := "res://assets/sfx/playroom/net_flap.ogg"
 ## The rig (assets_src/blender/rigger/build_rigger.py) is authored around the abdomen. The forward wrist sits 3.82 m
@@ -808,19 +812,9 @@ func _setup_world() -> void:
 			material.emission_enabled = true
 			material.emission = Color(shades[key])
 		colors[key] = material
-	# WL1: the door's leaf, its raised panels and casing, the knob, and the cavern's rock (the prison's concrete, as
-	# the game's other rough surfaces).
-	colors["door"] = Level.prop_material(Color("#5a3a28"))
-	colors["panel"] = Level.prop_material(Color("#6e4a33"))
-	colors["trim"] = Level.prop_material(Color("#3e2a1e"))
-	colors["brass"] = Level.prop_material(Color("#b08a3c"))
-	colors["rock"] = Level.prop_material(Color("#4a4440"), load("res://assets/textures/prison_concrete.png") as Texture2D, false, 0.0, 0.0, true)
-	for key: String in ["plaster", "brick", "wood"]:
-		var material := ShaderMaterial.new()
-		material.shader = Surfaces
-		material.set_shader_parameter("base_color", (colors[key] as StandardMaterial3D).albedo_color)
-		material.set_shader_parameter("surface_kind", ["plaster", "wood", "brick"].find(key))
-		colors[key] = material
+	# AW1: every other surface is a CC0 photograph at one world scale (client/ward/skin.gd): the houses' walls, slabs and
+	# partitions one material ("house"), planks, rope, iron, the doors' wood, slates, the cavern's rock.
+	WardSkin.materials(colors)
 	var world := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
@@ -831,6 +825,9 @@ func _setup_world() -> void:
 	env.fog_enabled = true
 	env.fog_light_color = Color("#0d151d")
 	env.fog_density = 0.022
+	# AW1: under the decks the air thickens into a haze the lamps light a little (the mist, WardSkin.depths).
+	env.fog_height = FOG_HEIGHT
+	env.fog_height_density = FOG_HEIGHT_DENSITY
 	world.environment = env
 	environment = env
 	if own_environment:
@@ -843,9 +840,13 @@ func _box(parent: Node3D, at: Vector3, dims: Vector3, color: String, solid := fa
 	parent.add_child(anchor)
 	anchor.position = at
 	var picture := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = dims
-	picture.mesh = mesh
+	if color == "house":
+		# AW1: a house's wall, slab or partition: brick outside, the room's plaster inside (client/ward/skin.gd).
+		picture.mesh = WardSkin.house_box(parent, at, dims)
+	else:
+		var mesh := BoxMesh.new()
+		mesh.size = dims
+		picture.mesh = mesh
 	picture.material_override = colors[color]
 	anchor.add_child(picture)
 	if solid:
@@ -922,6 +923,8 @@ func _build_house(site: Dictionary) -> void:
 	root.position = fixture.to_world(Vector3.ZERO)
 	# WG1: the house's own facing (today's: the parlour -PI/2, the rest 0).
 	root.rotation.y = fixture.yaw()
+	# AW1: what the house's own boxes need to know to draw their faces (client/ward/skin.gd house_box).
+	root.set_meta(&"ward_house", WardSkin.house_info(fixture, site, seed_value))
 	var deck := Node3D.new()
 	add_child(deck)
 	deck.position = Vector3(site.x, site.z + 0.15, site.y)
@@ -934,15 +937,16 @@ func _build_house(site: Dictionary) -> void:
 		_box(deck, Vector3(0, -0.12, side * (half_d + Layout.GALLERY * 0.5)), Vector3(float(site.w), 0.24, Layout.GALLERY), "wood", true)
 	var bounds := fixture.floor_bounds
 	for wall: AABB in fixture.walls:
-		var shade := "brick" if wall.size.y > 0.5 and (wall.position.x < bounds.position.x or absf(wall.position.x - bounds.end.x) < 0.01) else "plaster"
 		var outside := wall.size.y > 2.9 and wall.size.z >= bounds.size.y - 0.01 and wall.size.x < 0.2
 		if outside and site.id == 0 and wall.position.x < bounds.position.x:
 			_lift_wall(root, wall)
 		elif outside:
 			_window_wall(root, wall, fixture.search_window.has_volume() and is_equal_approx(wall.position.x, fixture.search_window.position.x))
 		else:
-			_box(root, wall.get_center(), wall.size, "wood" if wall.size.y < 0.18 else shade, true)
+			# AW1: one material for every wall and slab: each face brick or the room's plaster (client/ward/skin.gd).
+			_box(root, wall.get_center(), wall.size, "house", true)
 	_dress_house(root, site, fixture)
+	WardSkin.dress_house(self, root, site, fixture, seed_value)
 	var door := fixture.door
 	var leaf := _box(root, door.get_center(), door.size, "wood", true) as StaticBody3D
 	door_houses.append(leaf)
@@ -1020,8 +1024,8 @@ func _lift_wall(root: Node3D, wall: AABB) -> void:
 	var side_width := (wall.size.z - 1.24) * 0.5
 	for flip: float in [-1.0, 1.0]:
 		_box(root, middle + Vector3(0, 0, flip * (side_width + 1.24) * 0.5),
-			Vector3(wall.size.x, wall.size.y, side_width), "brick", true)
-	var lintel := _box(root, Vector3(middle.x, 2.615, middle.z), Vector3(wall.size.x, 0.87, 1.24), "brick", true)
+			Vector3(wall.size.x, wall.size.y, side_width), "house", true)
+	var lintel := _box(root, Vector3(middle.x, 2.615, middle.z), Vector3(wall.size.x, 0.87, 1.24), "house", true)
 	# FX2: the body stays for sight lines; the brick seen starts over the car's doors, not across them.
 	(lintel.get_child(0) as Node3D).visible = false
 	Dress.lift_lintel(self, root, wall)
@@ -1031,12 +1035,12 @@ func _window_wall(root: Node3D, wall: AABB, open_sash := false) -> void:
 	var center := wall.get_center()
 	var sill := 0.82
 	var top := sill + pane.y
-	_box(root, Vector3(center.x, sill * 0.5, center.z), Vector3(wall.size.x, sill, wall.size.z), "brick", true)
-	_box(root, Vector3(center.x, (top + wall.end.y) * 0.5, center.z), Vector3(wall.size.x, wall.end.y - top, wall.size.z), "brick", true)
+	_box(root, Vector3(center.x, sill * 0.5, center.z), Vector3(wall.size.x, sill, wall.size.z), "house", true)
+	_box(root, Vector3(center.x, (top + wall.end.y) * 0.5, center.z), Vector3(wall.size.x, wall.end.y - top, wall.size.z), "house", true)
 	var side_width := (wall.size.z - pane.z) * 0.5
 	for side: float in [-1.0, 1.0]:
 		_box(root, Vector3(center.x, sill + pane.y * 0.5, center.z + side * (side_width + pane.z) * 0.5),
-			Vector3(wall.size.x, pane.y, side_width), "brick", true)
+			Vector3(wall.size.x, pane.y, side_width), "house", true)
 	if not open_sash:
 		_box(root, Vector3(center.x, sill + pane.y * 0.5, center.z), pane, "glass", true)
 		_box(root, Vector3(center.x, sill + pane.y * 0.5, center.z), Vector3(wall.size.x + 0.05, pane.y, 0.045), "wood")
@@ -1061,14 +1065,14 @@ func _dress_house(root: Node3D, site: Dictionary, fixture: House) -> void:
 			wall_root.position.y = base
 			_window_wall(wall_root, AABB(Vector3(side * width * 0.5 - 0.07, 0, 0), Vector3(0.14, House.HEIGHT, depth)))
 			_box(root, Vector3(0, base + House.HEIGHT * 0.50, center.y + side * depth * 0.50),
-				Vector3(width, House.HEIGHT, 0.15), "brick")
+				Vector3(width, House.HEIGHT, 0.15), "house")
 			_box(root, Vector3(side * width * 0.5, base + 1.27, center.y),
 				Vector3(0.04, 0.94, 1.1), "light")
 	for storey: House.Storey in fixture.storeys:
 		for slab: AABB in storey.slab:
-			_box(root, slab.get_center(), slab.size, "wood", true)
+			_box(root, slab.get_center(), slab.size, "house", true)
 		for jamb: AABB in storey.partitions:
-			_box(root, jamb.get_center(), jamb.size, "plaster", true)
+			_box(root, jamb.get_center(), jamb.size, "house", true)
 		if storey.incoming != null:
 			_dress_stairs(root, storey.incoming)
 		if storey.height > 0 and storey.height < House.HEIGHT * floors:
@@ -1078,12 +1082,12 @@ func _dress_house(root: Node3D, site: Dictionary, fixture: House) -> void:
 	_box(root, Vector3(0, roof_y, center.y), Vector3(width + 0.4, 0.18, depth + 0.48), "iron")
 	for side: float in [-1.0, 1.0]:
 		var roof := _box(root, Vector3(side * width * 0.26, roof_y + 0.24, center.y),
-			Vector3(width * 0.56, 0.13, depth + 0.5), "iron")
+			Vector3(width * 0.56, 0.13, depth + 0.5), "slate")
 		roof.rotation.z = -side * deg_to_rad(11.0 if floors == 1 else 7.0)
 		# FX2: the skirting along the lift's wall leaves the car's doorway clear (it lay across it as a kerb).
 		Dress.skirting(self, root, Vector3(side * (width * 0.5 - 0.035), 0.125, center.y), depth,
 			Dress.LIFT_GAP if int(site.id) == 0 and side < 0.0 else 0.0)
-	_box(root, Vector3(-width * 0.28, roof_y + 0.61, center.y - 0.61), Vector3(0.35, 0.88, 0.39), "brick")
+	_box(root, Vector3(-width * 0.28, roof_y + 0.61, center.y - 0.61), Vector3(0.35, 0.88, 0.39), "house")
 	_box(root, Vector3(-width * 0.28, roof_y + 1.03, center.y - 0.61), Vector3(0.48, 0.15, 0.49), "iron")
 	for opening: Vector3 in fixture.room_doors:
 		for side: float in [-1.0, 1.0]:
@@ -1127,6 +1131,11 @@ func _build_bridge(edge: Dictionary) -> void:
 	var root := Node3D.new()
 	add_child(root)
 	var path: Array = edge.path
+	# WL1: stringers, threshold plates, posts and hangers (client/ward/dress.gd), in a node of their own: the bridge's
+	# root holds only its solid parts (_set_bridge).
+	var dressing := Node3D.new()
+	dressing.name = "WalkwayDress"
+	add_child(dressing)
 	for i in range(1, path.size()):
 		var from := _path_point(path[i - 1])
 		var to := _path_point(path[i])
@@ -1140,13 +1149,14 @@ func _build_bridge(edge: Dictionary) -> void:
 		if i < path.size() - 1:
 			_box(root, to - Vector3.UP * 0.11, Vector3(Footing.JOINT_WIDTH, 0.21, Footing.JOINT_WIDTH), "wood", true)
 		for flip: float in [-1.0, 1.0]:
-			_beam(root, rail_from + side * flip + Vector3.UP * 0.9, rail_to + side * flip + Vector3.UP * 0.9, 0.07, 0.07, "rope", true)
-			_beam(root, rail_from + side * flip + Vector3.UP * 0.52, rail_to + side * flip + Vector3.UP * 0.52, 0.07, 0.08, "rope", true)
-	# WL1: stringers, threshold plates, posts and hangers (client/ward/dress.gd), in a node of their own: the bridge's
-	# root holds only its solid parts (_set_bridge).
-	var dressing := Node3D.new()
-	dressing.name = "WalkwayDress"
-	add_child(dressing)
+			for rail: Array in [[0.9, 0.07, 0.07], [0.52, 0.07, 0.08]]:
+				var a := rail_from + side * flip + Vector3.UP * float(rail[0])
+				var b := rail_to + side * flip + Vector3.UP * float(rail[0])
+				var body := _beam(root, a, b, float(rail[1]), float(rail[2]), "rope", true)
+				# AW1: the rail's body stays as it was; the rail seen is a thin rope on the same line (Dress.RAIL_ROPE).
+				(body.get_child(0) as Node3D).visible = false
+				# On a fixed walkway it dips with the deck under his weight; the drawbridge's root holds bodies only.
+				_beam(dressing if edge.kind == "winch" else root, a, b, Dress.RAIL_ROPE, Dress.RAIL_ROPE, "rope").add_to_group(WardSkin.GROUP)
 	Dress.walkway(self, dressing, path, roof_y)
 	if edge.kind == "winch":
 		bridge = root
@@ -1192,6 +1202,8 @@ func _build_lift() -> void:
 	for part: Node3D in shell:
 		(part.get_child(0) as Node3D).visible = false
 	lift_car = Dress.build_lift(self, walk_model.lift_door(), roof_y)
+	# AW1: the timber-and-iron shaft the car runs in, from far below up to its head frame under the roof.
+	WardSkin.lift_shaft(self, lift_car, roof_y)
 
 func _build_crew() -> void:
 	player.floor_snap_length = 0.27
