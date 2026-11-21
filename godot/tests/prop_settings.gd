@@ -309,6 +309,10 @@ const PROOFS := {
 	&"split.every": "test_split_numbers",
 	&"split.chance": "test_split_numbers",
 	&"split.lasts": "test_split_numbers",
+	# PY1: pay and quota by the cycle.
+	&"pay.cycle1": "test_pay_cycle_settings",
+	&"pay.cycle2": "test_pay_cycle_settings",
+	&"pay.cycle3": "test_pay_cycle_settings",
 }
 
 ## The rows of later pieces wired so far (sim/settings.gd WIRED_IDS), in the registry's order.
@@ -337,7 +341,8 @@ const MORE: Array[StringName] = [
 	&"split.calm_at", &"split.every", &"split.chance", &"split.lasts",
 	&"pressure.quota", &"pressure.quota3", &"pressure.heals", &"pressure.heals3", &"pressure.watchers", &"pressure.watchers3", &"pressure.near_light", &"pressure.near_light3", &"pressure.tenant_minutes", &"pressure.tenant_minutes3",
 	&"orderly.reach_walk", &"orderly.dirty_from", &"last_stand.bonus",
-	&"deal.ride", &"deal.squeak_in", &"deal.squeak", &"deal.torch_in", &"deal.torch", &"deal.second_in", &"deal.second", &"deal.dark_in", &"deal.dark", &"deal.express_in", &"deal.express", &"deal.double_in", &"deal.double_drop", &"deal.hazard_pay", &"deal.dark_pay", &"deal.express_pay", &"deal.squeak_loud", &"deal.torch_dim", &"deal.second_time"]
+	&"deal.ride", &"deal.squeak_in", &"deal.squeak", &"deal.torch_in", &"deal.torch", &"deal.second_in", &"deal.second", &"deal.dark_in", &"deal.dark", &"deal.express_in", &"deal.express", &"deal.double_in", &"deal.double_drop", &"deal.hazard_pay", &"deal.dark_pay", &"deal.express_pay", &"deal.squeak_loud", &"deal.torch_dim", &"deal.second_time",
+	&"pay.cycle1", &"pay.cycle2", &"pay.cycle3"]
 
 ## The game's value of every setting: the constant the game uses, with the rooms' switches on (paced, the long
 ## dark, the car waits: net/host_rules.gd). This table, not the registry, is the test's oracle.
@@ -533,6 +538,7 @@ static func game_values() -> Dictionary:
 		&"quota.each": float(Run.QUOTA_PER_PLAYER),
 		&"quota.step": Run.QUOTA_DEPTH_STEP,
 		&"pay.step": Run.DEPTH_PAY_STEP,
+		&"pay.cycle1": Run.ECONOMY_CYCLE1, &"pay.cycle2": Run.ECONOMY_CYCLE2, &"pay.cycle3": Run.ECONOMY_CYCLE3,
 		&"record.reach": Instr.RECORD_RANGE,
 		&"record.rate": Instr.RATE_NEAR,
 		&"last_stand.bonus": LastStand.BONUS,
@@ -583,7 +589,8 @@ func test_registry_rows(t: T) -> void:
 	# LS1 added the sole survivor's bonus (EARNING).
 	# ED1 added the deal's nineteen (THE DEAL, its own group before the player speeds).
 	# SR1 added split reality's ten (players).
-	t.eq(rows.size(), 224, "rows in the registry")
+	# PY1 added the three cycle rows of pay and quota (earning).
+	t.eq(rows.size(), 227, "rows in the registry")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -634,7 +641,7 @@ func test_registry_rows(t: T) -> void:
 	t.eq(by_group.get(&"residents", 0), 118, "residents (WC1 added two Rigger rows, OR2 two Orderly rows, MA1 four Minder rows, RR1 thirteen Rigger rows)")
 	t.eq(by_group.get(&"lift", 0), 18, "the lift and the dark (and the Ward's lift, PL2, its call and web, WC1, and its layout, WG1)")
 	t.eq(by_group.get(&"players", 0), 41, "players (DR1 added the ring's down time, SR1 split reality's ten)")
-	t.eq(by_group.get(&"earning", 0), 11, "earning (LS1 added the sole survivor's bonus)")
+	t.eq(by_group.get(&"earning", 0), 14, "earning (LS1 added the sole survivor's bonus, PY1 the three cycle rows)")
 	t.eq(by_group.get(&"hiding", 0), 3, "hiding")
 	t.eq(by_group.get(&"deeper", 0), 10, "floor 8 and deeper")
 	t.eq(by_group.get(&"deal", 0), 19, "the deal (ED1)")
@@ -2718,6 +2725,22 @@ func test_recording_reach_and_rate(t: T) -> void:
 	t.eq(_rate_at_distance(5.0, {}), Instr.rate_at(5.0), "untuned, the same number by the same path")
 
 ## quota.step: the floor quota grows by it a floor; a quota already shown never moves, the next floor takes the new.
+## PY1's pay.cycle1/2/3: the floor quota and a reading's worth on a floor of each cycle follow the row; without the
+## fix the rows are never read.
+func test_pay_cycle_settings(t: T) -> void:
+	for row: Array in [[&"pay.cycle1", 3, 1.0], [&"pay.cycle2", 10, 2.0], [&"pay.cycle3", 17, 4.0], [&"pay.cycle3", 24, 4.0]]:
+		var id: StringName = row[0]
+		var depth: int = row[1]
+		var today: float = row[2]
+		for v: float in [0.5, today, 3.0]:
+			var tun: Settings.Values = Settings.make({id: v})
+			var local := 1 + (depth - 1) % 7
+			var want := maxi(Run.QUOTA_ROUND, roundi(float(Run.QUOTA_PER_PLAYER * 2) * M.pow_js(Run.QUOTA_DEPTH_STEP, float(local - 1)) * v / Run.QUOTA_ROUND) * Run.QUOTA_ROUND)
+			t.eq(Run.floor_quota(depth, 2, tun, 1.0, true), want, "%s %.2f: floor %d asks a crew of two for %d" % [id, v, depth, want])
+			t.check(absf(Run.pay_multiplier_at(depth, true, tun) - Run.depth_multiplier(local) * v) < 1e-9, "%s %.2f: floor %d pays %.3f" % [id, v, depth, Run.depth_multiplier(local) * v])
+			t.eq(Run.floor_quota(depth, 2, tun), Run.floor_quota(depth, 2), "%s %.2f: without the fix floor %d is the old quota" % [id, v, depth])
+			t.eq(Run.pay_multiplier_at(depth, false, tun), Run.depth_multiplier(depth), "%s %.2f: without the fix floor %d pays the old rate" % [id, v, depth])
+
 func test_quota_step(t: T) -> void:
 	for step: float in [1.0, Run.QUOTA_DEPTH_STEP, 2.0]:
 		var tun: Settings.Values = null if step == Run.QUOTA_DEPTH_STEP else Settings.make({&"quota.step": step})

@@ -192,15 +192,44 @@ try {
   b = await approach(B, pb.x, pb.z, 0.15);
   a = await until(A.state, (s) => s.phase === 'away', 30000, 200);
 
+  /**
+   * FX3: the resident goes behind `name` only once the host has them facing `to` (the server puts it behind the way
+   * the host's last input faces: with an input still in flight it was put at their side, in their view, held there and
+   * never caught them), then waits on the host's state for it to be hunting (sent again once, said loudly, if not).
+   */
+  async function sendBehind(name, to) {
+    const me = (i) => (i.players ?? []).find((q) => q.name === name);
+    const turned = (i) => {
+      const p = me(i);
+      if (!to) return true;
+      if (!p || p.yaw == null) return false;
+      const want = Math.atan2(-(to.x - p.x), -(to.z - p.z));
+      return Math.abs(Math.atan2(Math.sin(p.yaw - want), Math.cos(p.yaw - want))) < 0.15;
+    };
+    let info = await until(() => host('info'), turned, 5000, 50);
+    if (!turned(info)) console.log(`  the host never had ${name} facing the way asked: ${JSON.stringify(me(info))}`);
+    let r = null;
+    const going = (i) => ['hunting', 'windUp', 'bending'].includes(i.orderly?.mode) || me(i)?.status === 'down';
+    for (let tries = 0; tries < 2; tries++) {
+      r = await host(`behind ${name}`);
+      if (!r.ok) throw new Error(`the server could not send the resident: ${JSON.stringify(r)}`);
+      info = await until(() => host('info'), going, 2000, 40);
+      if (going(info)) {
+        if (info.orderly?.held) console.log(`  the resident behind ${name} is held (seen) as it starts: ${JSON.stringify(info.orderly)}`);
+        return r;
+      }
+      console.log(`RETRY the resident behind ${name}: not hunting on the host after 2 s (${JSON.stringify(info.orderly)}), sending it again`);
+    }
+    return r;
+  }
+
   /** Ann faces Bob, Bob faces away from her; then the resident is sent after Ann from just behind her. */
   async function catchAnn() {
     let s = await A.state();
     const t = await B.state();
     await A.cmd(`face ${t.me.x} ${t.me.z}`);
     await B.cmd(`face ${2 * t.me.x - s.me.x} ${2 * t.me.z - s.me.z}`);
-    await sleep(400);
-    const r = await host(`behind Ann`);
-    if (!r.ok) throw new Error(`the server could not send the resident: ${JSON.stringify(r)}`);
+    await sendBehind('Ann', { x: t.me.x, z: t.me.z });
     s = await until(A.state, (x) => x.me.status === 'down', 12000, 40);
     return s;
   }
@@ -377,9 +406,7 @@ try {
   // standee of Bob, the last one caught.
   b = await B.state();
   if (spot) await B.cmd(`face ${2 * b.me.x - spot.x} ${2 * b.me.z - spot.z}`);
-  await sleep(600);
-  const r3 = await host('behind Bob');
-  if (!r3.ok) throw new Error(`the server could not send the resident: ${JSON.stringify(r3)}`);
+  const r3 = await sendBehind('Bob', spot ? { x: 2 * b.me.x - spot.x, z: 2 * b.me.z - spot.z } : null);
   b = await until(B.state, (s) => s.me.status === 'down', 20000, 40);
   if (b.me.status !== 'down') console.log(`  Bob not caught: host ${JSON.stringify(await host('info'))}, sent ${JSON.stringify(r3)}`);
   a = await A.state();

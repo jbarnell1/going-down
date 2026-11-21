@@ -48,6 +48,9 @@
 // time on both; both stand on DOWN and ride to the Reactor (the same bell on both). If anyone is caught on the Ward,
 // both screens must agree on the web (the hang point and times) and the other cuts them down with F held (the same cut
 // on both, then "healed"); nobody caught is NOT COVERED, never a failure.
+// PY1: the car boards for the game's 30 s. A hung crewmate is cut down before the call; the caller walks straight out of
+// the station's house as the call is sent. After the main session, a short scenario on P+10..P+12 (--hung=0 leaves it
+// out; --main=0 --fallback=0 --hung=1 runs it alone) has one player hung when the car leaves and checks that she is left behind (hungScenario).
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
@@ -74,8 +77,10 @@ const liftMinutes = Number(arg('lift-minutes', 1));
 const quick = arg('quick', '0') === '1';
 const godot = process.env.GODOT || join(root, 'tools', 'godot', 'Godot_v4.7.2-stable_win64_console.exe');
 if (!existsSync(godot)) throw new Error(`no engine at ${godot}: set GODOT`);
-const P = { server: port, A: port + 1, B: port + 2, C: port + 3, fa: port + 6, fa1: port + 7, fb: port + 8, fb1: port + 9 };
-for (const p of [...(doMain ? [P.server, P.A, P.B, P.C] : []), ...(doFallback ? [P.fa, P.fa1, P.fb, P.fb1] : [])]) if (!(p >= 4740 && p <= 4879)) throw new Error(`port ${p} is outside 4740-4879`);
+/** PY1: --hung=0 leaves out the hung-crewmate scenario that runs after the main session. */
+const doHung = arg('hung', doMain ? '1' : '0') === '1';
+const P = { server: port, A: port + 1, B: port + 2, C: port + 3, fa: port + 6, fa1: port + 7, fb: port + 8, fb1: port + 9, hs: port + 10, hs1: port + 11, hs2: port + 12 };
+for (const p of [...(doMain ? [P.server, P.A, P.B, P.C] : []), ...(doHung ? [P.hs, P.hs1, P.hs2] : []), ...(doFallback ? [P.fa, P.fa1, P.fb, P.fb1] : [])]) if (!(p >= 4740 && p <= 4879)) throw new Error(`port ${p} is outside 4740-4879`);
 if (!(liftMinutes >= 1 && liftMinutes <= 20 && Number.isInteger(liftMinutes))) throw new Error(`--lift-minutes=${liftMinutes}: a whole number from 1 to 20 (the setting's range)`);
 const SECRET = 'test-passphrase';
 
@@ -366,6 +371,21 @@ async function wardGo(c, x, z, ms = 60000, radius = 0.45) {
   return { ok: false, why: 'stopped short', ...res };
 }
 
+/** PY1: the caller's way out, asked BEFORE the press (while he is idle somewhere else), then walked the moment the
+ * call is sent: the route search from inside a house he is about to search can come back empty, and a second lost
+ * asking again is a second inside his reach. Falls back to wardGo when no route was found beforehand. */
+async function routeOut(c, x, z) {
+  const r = JSON.parse(await c.cmd(`wardroute ${x} ${z} 0.45`));
+  return r.length ? r : null;
+}
+function leaveBy(c, route, x, z, ms = 60000) {
+  if (!route) return wardGo(c, x, z, ms);
+  return follow(c, route, ms).then((res) => {
+    const ok = Math.hypot(res.at[0] - x, res.at[2] - z) < 0.85;
+    return ok ? { ok, ...res, steps: route.length } : { ok, why: 'stopped short', ...res, steps: route.length };
+  });
+}
+
 // ---- Reactor helpers: the station is a plan floor (2 m cells).
 const cellOf = (x, z) => [Math.floor(x / 2), Math.floor(z / 2)];
 async function approach(c, x, z, near, gait = '0', ms = 8000) {
@@ -547,14 +567,9 @@ async function mainSession() {
     B = await joinRoom('B', P.B, url, 'Bob');
     await until(A.state, (s) => (scr(s).people ?? []).length >= 2, 20000);
     await setLift(A, B, 'main');
-    // FX1: since the Ward's call station moved to a far house (WC1) on the larger generated Ward (WG1), the web rescue
-    // there and the half-walk back (PL3's pace, the walk model's) take longer than the game's 30 s of boarding; the
-    // host gives the car 90 s (the live setting lift.board, the same panel), so the boarding check is of the car.
-    {
-      const sent = await A.cmd('panel set lift.board 90');
-      const ph = await until(async () => JSON.parse(await A.cmd('panel state')), (p) => p.asked?.['lift.board'] === 90, 8000, 100);
-      check('main: the host sets the car\'s boarding to 90 s on the settings panel', sent === 'sent' && ph.asked?.['lift.board'] === 90, `"${sent}", asked ${J(ph.asked)}`);
-    }
+    // PY1: the car boards for the game's 30 s (no lift.board allowance). The crew cuts a hung crewmate down BEFORE Ann
+    // calls the car, and the rescuer walks back while the car comes; a crewmate still hung when it leaves is left behind
+    // (the owner, 21 Nov: "Act as if they didn't make it to the elevator car which is what happened"), and that is checked.
     startSplit(A);
     startSplit(B);
     let l = await rideToWard([A, B], 'main');
@@ -674,19 +689,40 @@ async function mainSession() {
       `encounter ${enc} (house ${la.ward.house}); Ann's readings on A ${J(rA.map((e) => [e.playerId, e.value, e.t]))}, on B ${J(rB.map((e) => [e.playerId, e.value, e.t]))}; tapes A ${J(sa.tapes)} B ${J(sb.tapes)}`);
     const caught = [la.ward.caught, lb.ward.caught];
     if (caught[0].length) log(`  caught on the Ward: ${J(caught[0])}`);
-    // WC1: Ann calls the car at the station, then everyone goes back to the lift (a web on the way is cut down).
-    let calledAt = null;
+    // PY1: anyone hung so far is cut down first (webRescue), then Ann calls the car at the station while the rescuer
+    // walks back to the parlour beside the lift.
+    let rescuerBack = null;
     if (wardCalled) {
+      await webRescue(A, B);
+      const lw = await B.late();
+      if (lw.ward && !(lw.ward.caught ?? []).includes(lw.me) && Math.hypot((lw.localBody?.x ?? 0) - door[0], (lw.localBody?.z ?? 0) - door[2]) > 8) {
+        rescuerBack = wardGo(B, door[0] + 0.3, door[2] + 2.2, 60000);
+      }
+    }
+    // WC1: Ann calls the car at the station, then everyone goes back to the lift.
+    let calledAt = null;
+    // PY1: the press loads the Rigger's line at the station's house (rigger.call_heard); he warns, climbs and then
+    // searches that house with its doors held. A sensible caller presses and walks straight out of the house: the walk
+    // back starts the moment the call is sent, and the checks below read the screens while she goes.
+    let leaving = null;
+    if (wardCalled) {
+      la = await A.late();
+      // Still hung after the rescue (it failed), Ann watches a crewmate and her screen has no Ward block: the rest needs her.
+      if (!la.ward || ((await B.late()).ward?.caught ?? []).includes(la.me)) throw Object.assign(new Error(), { stop: true, message: `Ann is still hung in the web (the rescue did not cut her down), so she cannot call the car` });
       const st = la.ward.extras.station;
-      let go = await wardGo(A, st[0], st[2], 90000, 1.2);
+      // PY1: on the button's own spot (a walker's spot, sim/ward/state.gd), not 1.2 m short of it: from some of those
+      // spots the route out came back empty and the escape lost a second asking again.
+      let go = await wardGo(A, st[0], st[2], 90000, 0.45);
       for (let k = 0; k < 4 && !go.ok; k++) {
         await until(A.late, (x) => x.ward?.encounter === 'idle' || !x.ward, 20000, 250);
-        go = await wardGo(A, st[0], st[2], 90000, 1.2);
+        go = await wardGo(A, st[0], st[2], 90000, 0.45);
       }
       const s1 = await until(A.state, (x) => x.me?.canCall === true, 6000, 100);
       const lp = await A.late();
-      log(`  Ann at the station (house ${la.ward.extras.stationHouse}): ${J({ ok: go.ok, why: go.why })}, canCall ${s1.me?.canCall}, prompt "${lp.prompt}"`);
+      const outA = await routeOut(A, door[0] - 0.3, door[2] + 2.2);
+      log(`  Ann at the station (house ${la.ward.extras.stationHouse}): ${J({ ok: go.ok, why: go.why })}, canCall ${s1.me?.canCall}, prompt "${lp.prompt}", her way out ${outA ? outA.length + ' steps' : 'not found yet'}`);
       await A.cmd('call');
+      leaving = leaveBy(A, outA, door[0] - 0.3, door[2] + 2.2);
       [la, lb] = [await until(A.late, (x) => evW(x, 'called').length > 0, 5000, 50), await until(B.late, (x) => evW(x, 'called').length > 0, 5000, 50)];
       const cA = evW(la, 'called')[0];
       const cB = evW(lb, 'called')[0];
@@ -702,7 +738,12 @@ async function mainSession() {
     // Back to the parlour beside the lift to wait.
     // Back to the lift. A house whose Rigger is searching holds its door as the arm does (sim/ward/state.gd
     // walk_clear): when there is no way out, wait for the encounter to end and try again.
-    let backA = await wardGo(A, door[0] - 0.3, door[2] + 2.2, 30000);
+    let backA = leaving ? await leaving : await wardGo(A, door[0] - 0.3, door[2] + 2.2, 30000);
+    if (leaving) {
+      // Where she was when he started searching the station's house (his encounter and her row, read from Bob's screen).
+      const lw = await B.late();
+      log(`  Ann left the station's house as the line loaded: ${J({ ok: backA.ok, why: backA.why })}; encounter now ${lw.ward?.encounter} house ${lw.ward?.house}, caught ${J(lw.ward?.caught)}`);
+    }
     for (let k = 0; k < 4 && !backA.ok; k++) {
       const lw = await A.late();
       log(`  Ann has no way back yet (${backA.why}): encounter ${lw.ward?.encounter} house ${lw.ward?.house}, doors ${J(lw.ward?.doors)}, caught ${J(lw.ward?.caught)}, bridge ${lw.ward?.bridgeLowered}, lift ${lw.ward?.phase} in ${r2((lw.ward?.collectionAt ?? 0) - (lw.hostNow ?? 0))} s`);
@@ -715,7 +756,7 @@ async function mainSession() {
       finding('Ann could not get back to the Ward lift', `encounter ${lw.ward?.encounter} house ${lw.ward?.house}, doors ${J(lw.ward?.doors)}, caught ${J(lw.ward?.caught)}, at ${J([lw.localBody?.x, lw.localBody?.z].map(r2))}, host time ${lw.hostNow}`);
     }
     log(`  Ann back by the lift: ${J({ ok: backA.ok, why: backA.why })}; waiting for the lift (${wardCalled ? 'called' : r2(la.ward.collectionAt - la.hostNow) + ' s'})`);
-    if (wardCalled) await webRescue(A, B);
+    if (rescuerBack) { const bb = await rescuerBack; log(`  Bob back by the lift from the rescue: ${J({ ok: bb.ok, why: bb.why })}`); }
     // The host's panel (Ann is the host): the Reactor's lights hold the game's 45 s (left as is).
     la = await until(A.late, (x) => x.ward?.phase === 'boarding' || !x.ward, liftMinutes * 60000 + 60000, 500);
     lb = await until(B.late, (x) => x.ward?.phase === 'boarding' || !x.ward, 5000, 50);
@@ -725,6 +766,32 @@ async function mainSession() {
       check('Ward (called): the car arrives on the same host time on both, as on every floor (no clock line)',
         la.ward.phase === 'boarding' && lb.ward.phase === 'boarding' && arr[0] && arr[1] && arr[0].t === arr[1].t && !evOf(la, 'ward_returned').length,
         `A ${la.ward.phase} ${J(arr[0])}, B ${lb.ward.phase} ${J(arr[1])}, called at ${calledAt}`);
+      // PY1: hung after the call (on the way back): the car does not wait. The other boards; the car leaves after the
+      // game's 30 s with them alone, and the hung player is left behind: not brought on to the Reactor.
+      const hung = la.ward.caught ?? [];
+      if (hung.length === 1) {
+        const free = hung[0] === la.me ? B : A;
+        const freeL = free === A ? la : lb;
+        await wardGo(free, door[0] + 0.3, door[2] - 1.3, 30000);
+        // On DOWN (the right half walking in), as board() stands: a step right until the screen says so.
+        await free.cmd('move 0 1 0 0');
+        await until(free.state, (x) => x.me?.side === 'down', 3000, 30);
+        await free.cmd('stopmove');
+        const gone = await until(free.late, (x) => evW(x, 'bell').length > 0 || x.depth === 7, 40000, 100);
+        const bell = evW(gone, 'bell')[0];
+        const shut = evW(gone, 'doorsClosed').at(-1);
+        check('Ward (PY1): a crewmate still hung when the car leaves is left: the bell 30 s after the car came, without them',
+          bell && arr[0] && Math.abs(bell.t - arr[0].t - 30) < 1.0 && shut && !(shut.aboard ?? []).includes(hung[0]) && (shut.aboard ?? []).includes(freeL.me),
+          `hung ${hung[0]}; arrived ${arr[0]?.t}, bell ${J(bell)}, doors ${J(shut)}`);
+        // (The screens' event lists do not keep "leftBehind"; the hung player's own status on floor 7 is the check.)
+        const down = await until(free.late, (x) => x.depth === 7, 30000, 150);
+        const hungC = free === A ? B : A;
+        const hs = await until(hungC.state, (x) => x.depth === 7, 15000, 150);
+        check('Ward (PY1): the hung crewmate is left behind as anyone not aboard (not brought on to the Reactor: left behind on their own screen there)',
+          down.depth === 7 && hs.me?.status === 'leftBehind',
+          `rider at depth ${down.depth}, the hung player's own status on floor 7: ${hs.me?.status}`);
+        throw Object.assign(new Error(), { stop: true, message: `a crewmate (${hung[0]}) was caught on the way back and left in the web, so the Reactor part (which needs both) does not run` });
+      }
     } else {
       const ret = [evOf(la, 'ward_returned')[0], evOf(lb, 'ward_returned')[0]];
       check('Ward: the lift returns on the same host time on both', la.ward.phase === 'boarding' && lb.ward.phase === 'boarding' && ret[0] && ret[1] && ret[0].t === ret[1].t && Math.abs(ret[0].t - la.ward.collectionAt) < 1e-6,
@@ -1056,9 +1123,108 @@ async function fallbackB() {
   }
 }
 
+// ======================================================================================================
+/** PY1, its own short scenario (server on P+10, clients on P+11 and P+12): the owner, 21 Nov, "Car can come back while
+ * some are still strung up. Act as if they didn't make it to the elevator car which is what happened." Ivy works a winch
+ * in a house that is neither the parlour nor the station's and stays there until his hand takes her; once she hangs,
+ * Hal calls the car at the station (and walks straight out), boards on DOWN, and the car leaves after the game's 30 s of
+ * boarding without her; on floor 7 her own screen has her left behind. Every wait is on the screens' state. */
+async function hungScenario() {
+  const url = `ws://127.0.0.1:${P.hs}`;
+  const srv = server(P.hs, 'hung', []);
+  await until(async () => srv.lines.join('\n'), (t) => t.includes('listening on') || srv.exited, 40000);
+  if (!check('hung: the server starts', srv.lines.join('\n').includes('listening on'))) return;
+  let H = null; let I = null;
+  try {
+    H = await joinRoom('H', P.hs1, url, 'Hal');
+    I = await joinRoom('I', P.hs2, url, 'Ivy');
+    await until(H.state, (s) => (scr(s).people ?? []).length >= 2, 20000);
+    await rideToWard([H, I], 'hung');
+    let [lh, li] = [await until(H.late, (x) => x.wardModel, 20000), await until(I.late, (x) => x.wardModel, 20000)];
+    if (lh.ward?.extras?.called !== true) { skip('hung: a crewmate still hung when the car leaves', 'the Ward lift is on its clock'); return; }
+    const door = lh.wardModel.liftDoor;
+    const hal = lh.me; const ivy = li.me;
+    await Promise.all([wardGo(H, door[0] - 0.3, door[2] + 2.6, 20000), wardGo(I, door[0] + 0.5, door[2] + 2.6, 20000)]);
+    await until(H.late, (x) => x.ward?.phase === 'away', 8000, 50);
+    const stationHouse = lh.ward.extras.stationHouse;
+    const isHung = (x) => (x.ward?.caught ?? []).includes(ivy);
+    // Ivy goes into the ground floor of a far house (a hang point stands in each one's entry, sim/ward/state.gd), away
+    // from the station and the lift, and runs on the spot there: a sprint is heard on a house's floors. Once his hand
+    // is searching she stands still in that room until it takes her.
+    const st0 = lh.ward.extras.station;
+    const pts = (lh.ward.extras.hangPoints ?? []).map((q) => ({ q, d: Math.min(flat(q, st0), flat(q, door)) })).sort((a, b) => b.d - a.d);
+    for (const { q } of pts) {
+      if (isHung(await H.late())) break;
+      const go = await wardGo(I, q[0], q[2], 90000, 0.6);
+      log(`  hung: Ivy to the entry at ${J(q)}: ${J({ ok: go.ok, why: go.why })}`);
+      if (!go.ok) continue;
+      for (let k = 0; k < 3 && !isHung(await H.late()); k++) {
+        const t0 = Date.now();
+        while (Date.now() - t0 < 6000 && !['searching'].includes((await H.late()).ward?.encounter) && !isHung(await H.late())) {
+          await approach(I, q[0] + 0.8, q[2], 0.3, '1', 600);
+          await approach(I, q[0], q[2], 0.3, '1', 600);
+        }
+        const lw = await until(H.late, (x) => isHung(x) || x.ward?.encounter === 'searching', 8000, 100);
+        log(`  hung: Ivy ran on the spot (${k + 1}): encounter ${lw.ward?.encounter} house ${lw.ward?.house}, caught ${J(lw.ward?.caught)}`);
+        await until(H.late, (x) => isHung(x) || x.ward?.encounter === 'idle', 40000, 150);
+      }
+    }
+    lh = await H.late();
+    if (!check('hung: Ivy, running on the spot in a far house, is taken by his hand (the scenario needs a hung crewmate)', isHung(lh), `encounter ${lh.ward?.encounter}, caught ${J(lh.ward?.caught)}`)) return;
+    const web = await until(H.late, (x) => (x.ward?.extras?.web?.[ivy]?.hangAt ?? Infinity) <= (x.hostNow ?? 0) && x.ward?.encounter === 'idle', 60000, 200);
+    check('hung: Ivy hangs in the web and his hand has gone', isHung(web) && web.ward?.extras?.web?.[ivy] != null, `web ${J(web.ward?.extras?.web)}, encounter ${web.ward?.encounter}`);
+    // Hal calls from the station and walks straight out of its house.
+    const sp = lh.ward.extras.station;
+    let go = await wardGo(H, sp[0], sp[2], 90000, 0.45);
+    for (let k = 0; k < 3 && !go.ok; k++) {
+      await until(H.late, (x) => x.ward?.encounter === 'idle', 20000, 250);
+      go = await wardGo(H, sp[0], sp[2], 90000, 0.45);
+    }
+    const s1 = await until(H.state, (x) => x.me?.canCall === true, 6000, 100);
+    const outH = await routeOut(H, door[0] - 0.3, door[2] + 2.2);
+    await H.cmd('call');
+    let back = await leaveBy(H, outH, door[0] - 0.3, door[2] + 2.2);
+    for (let k = 0; k < 4 && !back.ok; k++) {
+      const lw = await H.late();
+      log(`  hung: Hal has no way back yet (${back.why}): encounter ${lw.ward?.encounter} house ${lw.ward?.house}, caught ${J(lw.ward?.caught)}, at ${J([lw.localBody?.x, lw.localBody?.z].map(r2))}`);
+      if (!lw.ward || (lw.ward.caught ?? []).includes(hal)) break;
+      await until(H.late, (x) => x.ward?.encounter === 'idle' || !x.ward, 20000, 250);
+      back = await wardGo(H, door[0] - 0.3, door[2] + 2.2, 60000);
+    }
+    const called = evOf(await H.late(), 'called').at(-1);
+    check('hung: Hal calls the car at the station and gets back to the parlour', s1.me?.canCall === true && called && back.ok, `canCall ${s1.me?.canCall}, called ${J(called)}, back ${J({ ok: back.ok, why: back.why })}`);
+    const boarding = await until(H.late, (x) => x.ward?.phase === 'boarding', 120000, 200);
+    const arrived = evOf(boarding, 'carArrived').filter((e) => e.t >= (called?.t ?? 0)).at(0);
+    await wardGo(H, door[0] + 0.3, door[2] - 1.3, 30000);
+        // On DOWN (the right half walking in), as board() stands: a step right until the screen says so.
+        await H.cmd('move 0 1 0 0');
+        await until(H.state, (x) => x.me?.side === 'down', 3000, 30);
+        await H.cmd('stopmove');
+    const gone = await until(H.late, (x) => evOf(x, 'bell').some((e) => e.t > (arrived?.t ?? 0)) || x.depth === 7, 45000, 100);
+    const bell = evOf(gone, 'bell').filter((e) => e.t > (arrived?.t ?? 0))[0];
+    const shut = evOf(gone, 'doorsClosed').filter((e) => e.t > (arrived?.t ?? 0)).at(-1);
+    check('hung (PY1): Ivy still hangs when the car leaves: the bell 30 s after the car came, with Hal alone aboard',
+      bell && arrived && Math.abs(bell.t - arrived.t - 30) < 1.0 && bell.outcome === 'ride' && shut && J(shut.aboard ?? []) === J([hal]),
+      `arrived ${J(arrived)}, bell ${J(bell)}, doors ${J(shut)}`);
+    const down = await until(H.late, (x) => x.depth === 7, 30000, 150);
+    const is = await until(I.state, (x) => x.depth === 7, 15000, 150);
+    check('hung (PY1): on floor 7 Hal rides on and Ivy is left behind as anyone not aboard (her own screen)',
+      down.depth === 7 && is.depth === 7 && is.me?.status === 'leftBehind', `Hal at depth ${down.depth}; Ivy at depth ${is.depth}, status ${is.me?.status}`);
+  } catch (e) {
+    check('hung: the scenario ran to the end', false, String(e?.stack ?? e));
+  } finally {
+    const errors = [...(H?.g.lines ?? []), ...(I?.g.lines ?? []), ...srv.lines].filter((x) => /SCRIPT ERROR|ERROR: .*\.gd/.test(x));
+    check('hung: no script errors', errors.length === 0, errors.slice(0, 4).join(' | '));
+    for (const c of [H, I]) if (c) await c.close();
+    srv.p.kill();
+  }
+}
+
 log(`seed ${seed}, lift ${liftMinutes} min, ${quick ? 'quick' : 'full'}, no floor packs (everything ships in the game)`);
 const jobs = [];
-if (doMain) jobs.push(mainSession());
+// PY1: the hung scenario runs after the main session, never beside it (both are timing-sensitive).
+if (doMain) jobs.push(doHung ? mainSession().then(() => hungScenario()) : mainSession());
+else if (doHung) jobs.push(hungScenario());
 if (doFallback) { jobs.push(fallbackA()); if (!quick) jobs.push(fallbackB()); else skip('fallback B (reactor_place=0)', '--quick=1 runs the main session and fallback A only'); }
 await Promise.allSettled(jobs);
 await sleep(500);

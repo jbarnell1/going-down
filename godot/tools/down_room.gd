@@ -88,6 +88,9 @@ func info() -> Dictionary:
 	var o := st.orderly
 	var players: Array = []
 	for p in st.players:
-		players.append({"id": p.id, "name": str(people.get(p.id, "")), "status": String(p.status), "x": p.body.x, "z": p.body.z, "level": p.body.level})
-	return {"run": true, "phase": String(st.phase), "t": st.t, "armed": armed, "orderly": {"mode": String(o.mode), "x": o.body.x, "z": o.body.z, "anim": String(o.anim)},
+		# FX3: the way they face as the host has it (the last input's yaw), which behind() puts the resident behind.
+		var hp: Variant = host._players.get(p.id)
+		var yaw: Variant = float(hp.input["yaw"]) if hp != null and hp.input != null else null
+		players.append({"id": p.id, "name": str(people.get(p.id, "")), "status": String(p.status), "x": p.body.x, "z": p.body.z, "level": p.body.level, "yaw": yaw})
+	return {"run": true, "phase": String(st.phase), "t": st.t, "armed": armed, "orderly": {"mode": String(o.mode), "x": o.body.x, "z": o.body.z, "anim": String(o.anim), "held": o.held, "frozen": o.frozen},
 		"players": players, "spots": st.spots.duplicate()}

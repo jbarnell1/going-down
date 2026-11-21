@@ -64,6 +64,9 @@ const CONE := 12.0
 const SEARCH_OPEN := 4.0
 const SEARCH_RUSH := 8.0
 const EMOTE := 18.0
+## Soft Shoes (Ear 1): a walk or a creep carries this share as far (a sprint, as far as ever). PY1 applies the same
+## share to the Rigger's and the Reactor's hearing of a walk.
+const SOFT_SHOES := 0.75
 ## A body is moving when it covers more than this, metres a second.
 const MOVING := 0.2
 
@@ -207,7 +210,7 @@ static func of(ground: Ground, a: Act, dt: float, cracked: Dictionary, tuning: S
 	elif moving:
 		r = gait_radius(a.gait, s, tuning) * a.footstep_scale
 		if a.soft_shoes and a.gait != &"sprint":
-			r *= 0.75
+			r *= SOFT_SHOES
 		kind = a.gait
 	# The twig fall under them: a crack, once per crossing, under a walk or a sprint.
 	var fall := ground.fall_at(a.body.x, a.body.z) if ground != null else -1

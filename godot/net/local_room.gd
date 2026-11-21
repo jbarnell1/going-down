@@ -371,7 +371,8 @@ func start_run() -> void:
 		playroom_tuned_on(), downs_on(), Session.deck == Places.FULL,
 		Session.deck == Places.FULL and not _orientation_playtest,
 		Session.deck == Places.FULL and not _orientation_playtest and HostRules.deal_by_arg(),
-		HostRules.split_on_by_arg() and Session.deck == Places.FULL and not _orientation_playtest)
+		HostRules.split_on_by_arg() and Session.deck == Places.FULL and not _orientation_playtest,
+		Session.deck == Places.FULL and not _orientation_playtest and HostRules.economy_fix_by_arg())
 	if _orientation_playtest:
 		rules.enable_orientation()
 	elif orientation_campaign and _playtest_depth < 0:

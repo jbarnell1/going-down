@@ -8,6 +8,8 @@
 #  - In reach of the call button the panel's words are also printed crisp under the prompt (hud.gd
 #    quota_line), since the panel itself is small in the 480x270 picture.
 #  - "quotaMet": the announcer's quota line (announcer.gd on_events, moment "quota").
+#  - PY1: a refusal that carries its own words ("line": the Reactor's call without power, sim/run.gd
+#    POWER_REFUSED_LINE) flashes those words, quota or none.
 extends RefCounted
 
 const CALL_PROMPT := "F  \u25bc CALL"
@@ -22,6 +24,8 @@ var tone := ""
 var flash_text := ""
 var flash_until := -1
 var flashing := false
+## PY1: the refusal being flashed carries its own words (shown even where the floor asks no quota).
+var flash_own := false
 ## Tests: how many refusals this screen showed.
 var refusals := 0
 
@@ -54,6 +58,7 @@ func reset() -> void:
 	text = ""
 	tone = ""
 	flash_text = ""
+	flash_own = false
 	flash_until = -1
 	flashing = false
 
@@ -61,7 +66,8 @@ func reset() -> void:
 func on_events(events: Array, my_id: String, sfx: Sfx, now: int) -> void:
 	for e: Dictionary in events:
 		if str(e["type"]) == "callRefused" and str(e.get("playerId", "")) == my_id:
-			flash_text = refused_text(int(e["earned"]), int(e["needed"]))
+			flash_own = str(e.get("line", "")) != ""
+			flash_text = str(e["line"]) if flash_own else refused_text(int(e["earned"]), int(e["needed"]))
 			flash_until = now + FLASH_MS
 			refusals += 1
 			sfx.play("refused")
@@ -69,7 +75,7 @@ func on_events(events: Array, my_id: String, sfx: Sfx, now: int) -> void:
 ## The panel and the line under the prompt for this frame. `q` the host's quota block; `prompt` is the current line shown on the HUD. Returns the line to print under the prompt ("" for none).
 func update(q: Variant, lift: Lift, prompt: String, now: int) -> String:
 	var base := panel_text(q)
-	flashing = now < flash_until and base != "" and not floor_met(q)
+	flashing = now < flash_until and (flash_own or (base != "" and not floor_met(q)))
 	text = flash_text if flashing else base
 	tone = "refused" if flashing else ("" if base == "" else ("met" if base.begins_with("QUOTA MET") else "count"))
 	# The flash blinks: off for a beat every other BLINK_MS.

@@ -20,7 +20,8 @@
 #     one roll over the pooled upgrades) is kept as the other reading: change the constant to switch.
 #   - Missed days count within one game night (start_night() clears them).
 #   - Game over resets credits, upgrades, the day number, the streak and the quota level. It deletes
-#     nothing: the caller keeps the save, records and days served.
+#     nothing: the caller keeps the save, records and days served. PY1 (end_day's keep_credits, the run's
+#     economy_fix): the credits are kept; everything else is reset as before, and the monitor's row 3 says so.
 #   - On the game-over day no roll is made: everything is reset anyway.
 #   - The floor quota grows with the crew: first_floor_quota() = per player x crew size.
 #
@@ -144,6 +145,8 @@ class Preview:
 	var misses_after: int
 	## True when missing the day now would be the third miss.
 	var game_over: bool
+	## PY1 (keep_credits): game over keeps every player's credits (the upgrades still go).
+	var credits_kept: bool = false
 	## How many upgrades a missed day would take now: one per owner (EACH_PLAYER_ONE), or the pool size
 	## under CREW_ONE (0 when it would be game over).
 	var at_stake: int
@@ -174,6 +177,8 @@ class DayResult:
 	var earned: int
 	## The day ended in a wipe (nobody came back).
 	var wiped: bool
+	## PY1 (keep_credits): a game over that kept every player's credits.
+	var credits_kept: bool = false
 	## quota - earned when missed, else 0.
 	var short_by: int
 	## {player: int}, summing to banked.
@@ -337,8 +342,9 @@ static func take_by_roll(seed_text: String, day: int, wallets: Dictionary, trade
 static func is_locked(earned: int, quota: int) -> bool:
 	return earned < quota
 
-static func bank_preview(s: DayState, banked: int, earned: int, crew: Array[String], wallets: Dictionary, floor_quota_per_player: int, trade_losses: bool = false) -> Preview:
+static func bank_preview(s: DayState, banked: int, earned: int, crew: Array[String], wallets: Dictionary, floor_quota_per_player: int, trade_losses: bool = false, keep_credits: bool = false) -> Preview:
 	var p := Preview.new()
+	p.credits_kept = keep_credits
 	p.day = s.day
 	p.quota = day_quota(s, floor_quota_per_player)
 	p.banked = maxi(0, banked)
@@ -379,7 +385,7 @@ static func monitor_rows(day: int, earned: int, quota: int, aboard: int, each: i
 static func stakes_row(p: Preview, player_count: int) -> String:
 	var line := "IF NOBODY COMES BACK: "
 	if p.game_over:
-		return line + "THIRD MISS: GAME OVER."
+		return line + ("THIRD MISS: GAME OVER. UPGRADES RESET, CREDITS KEPT." if p.credits_kept else "THIRD MISS: GAME OVER.")
 	if p.at_stake == 0:
 		line += "NOTHING TO TAKE."
 	else:
@@ -397,9 +403,9 @@ static func _stake_text(p: Preview, player_count: int) -> String:
 		return "%s: %s." % [text, p.odds.to_upper()]
 	return text + "."
 
-static func end_day(s: DayState, banked: int, earned: int, crew: Array[String], wallets: Dictionary, floor_quota_per_player: int, seed_text: String, wiped: bool = false, trade_losses: bool = false) -> DayResult:
+static func end_day(s: DayState, banked: int, earned: int, crew: Array[String], wallets: Dictionary, floor_quota_per_player: int, seed_text: String, wiped: bool = false, trade_losses: bool = false, keep_credits: bool = false) -> DayResult:
 	# A wipe banks nothing: nothing came back.
-	var pv := bank_preview(s, 0 if wiped else banked, earned, crew, wallets, floor_quota_per_player, trade_losses)
+	var pv := bank_preview(s, 0 if wiped else banked, earned, crew, wallets, floor_quota_per_player, trade_losses, keep_credits)
 	var r := DayResult.new()
 	r.day = s.day
 	r.quota = pv.quota
@@ -436,8 +442,10 @@ static func end_day(s: DayState, banked: int, earned: int, crew: Array[String], 
 		t = start_night()
 		var reset := {}
 		for id in ids:
-			reset[id] = Upgrades.UpgradeState.make(0)
+			# PY1 (keep_credits): the owner, 21 Nov, "Credits can survive the third wipe": the credits stay, the upgrades go.
+			reset[id] = Upgrades.UpgradeState.make((paid[id] as Upgrades.UpgradeState).credits if keep_credits else 0)
 		r.wallets = reset
+		r.credits_kept = keep_credits
 	else:
 		r.outcome = &"missed"
 		t.day += 1
@@ -470,6 +478,8 @@ static func _facts(s: DayState, r: DayResult) -> Dictionary:
 		"odds": r.odds,
 		"taken": [],
 	}
+	if r.credits_kept:
+		f["credits_kept"] = true
 	var taken: Array = []
 	for k: Dictionary in r.taken:
 		var n := Upgrades.node(String(k["node"]))

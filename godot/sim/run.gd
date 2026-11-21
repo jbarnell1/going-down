@@ -232,6 +232,24 @@
 # Clinic floor the waiting Orderlies start in the dirty part, from the seed, apart (sim/orderly_fix.gd; _fix_starts,
 # after _spawn_second, as each floor is made).
 #
+# PY1, the owner's pay and stakes fixes of 20-21 Nov, on only for a run made with it (with_economy_fix():
+# net/host_rules.gd economy_fix turns it on for the game's rooms; tests and every stored result leave it off, and then
+# nothing below happens). The owner: "I'm good with your intercom and pay fixes too."; "Credits can survive the third
+# wipe I guess?"; "Reactor lift needs power"; on the Ward, "Car can come back while some are still strung up. Act as
+# if they didn't make it to the elevator car which is what happened." With it on:
+#  - Pay and quota by the floor's place in its cycle (economy_depth, 1 to 7) times the cycle's multiplier (live
+#    settings pay.cycle1 1, pay.cycle2 2, pay.cycle3 4 for cycle 3 and deeper): a reading closed on floor 8 is worth
+#    1 x 2 what floor 1's is (pay_multiplier), and floor 8's quota is floor 1's x 2 (floor_quota `economy`), not
+#    QUOTA_DEPTH_STEP^7 of it. The day quota's unit (day_floor_quota) is x the cycle's multiplier too. The
+#    pressures' quota (DF1) still multiplies on top.
+#  - The third missed day keeps every player's credits (Day.end_day keep_credits); the upgrades, the day number and
+#    the rest still reset. The lift monitor's row 3 and the prison's report say so.
+#  - The Reactor's refusal for want of power carries the call panel's words ("line", POWER_REFUSED_LINE).
+#  - The Ward's lift with its call leaving: anyone still hung in the web is left out for the day (_leave_hung), as
+#    anyone else not aboard is.
+#  - Soft Shoes shortens the Reactor's four's hearing of a walk (StationRules.Crew.soft) and the Rigger's (net/host.gd
+#    sets the Ward row's "soft"), by Noises.SOFT_SHOES as for the Groundskeeper.
+#
 # Down first, then out (North Star B6; loop/NIGHT-PLAN.md A5, T8a), on only for a run made with it
 # (create_run's `downs`, with_downs(): net/host_rules.gd turns it on for the game's rooms; tests and every
 # stored result leave it off, and then nothing below happens and a catch is "caught" as before). With it on:
@@ -813,6 +831,41 @@ static func dark_schedule(seed: String, index: int, wait: float, depth: int, lon
 static func depth_multiplier(depth: int) -> float:
 	return M.pow_js(DEPTH_PAY_STEP, float(maxi(0, depth - 1)))
 
+## PY1: what the Reactor's call panel says when the call is refused for want of power (the design: "the lift needs
+## power to return").
+const POWER_REFUSED_LINE := "NO POWER. THE CAR RETURNS WHEN POWER IS RESTORED."
+## PY1 (see the header): the cycle multipliers' game values (live settings pay.cycle1, pay.cycle2, pay.cycle3).
+const ECONOMY_CYCLE1 := 1.0
+const ECONOMY_CYCLE2 := 2.0
+const ECONOMY_CYCLE3 := 4.0
+
+## PY1: the floor's place in its cycle of seven (1 to 7): floor 8 is 1, floor 14 is 7.
+static func economy_depth(depth: int) -> int:
+	return 1 + (maxi(depth, 1) - 1) % Places.CYCLE_FLOORS
+
+## PY1: the cycle multiplier of floor `depth` (cycle 1 pay.cycle1, cycle 2 pay.cycle2, cycle 3 and deeper pay.cycle3).
+static func economy_cycle_mult(depth: int, tuning: Settings.Values = null) -> float:
+	return cycle_mult_of(Places.cycle_of(depth), tuning)
+
+## PY1: the multiplier of cycle `cycle` (1, 2, 3 and deeper).
+static func cycle_mult_of(cycle: int, tuning: Settings.Values = null) -> float:
+	if cycle >= 3:
+		return Settings.f(tuning, &"pay.cycle3", ECONOMY_CYCLE3)
+	if cycle == 2:
+		return Settings.f(tuning, &"pay.cycle2", ECONOMY_CYCLE2)
+	return Settings.f(tuning, &"pay.cycle1", ECONOMY_CYCLE1)
+
+## What a reading closed at `depth` is worth times its recorded value: depth_multiplier(depth), or with PY1 on
+## (`economy`) the growth by the floor's place in its cycle times the cycle's multiplier.
+static func pay_multiplier_at(depth: int, economy: bool, tuning: Settings.Values = null) -> float:
+	if not economy or depth < 1:
+		return depth_multiplier(depth)
+	return depth_multiplier(economy_depth(depth)) * economy_cycle_mult(depth, tuning)
+
+## The pay multiplier of the floor the run is on (what _crew_tick scales closed readings by).
+static func pay_multiplier(s: RunState) -> float:
+	return pay_multiplier_at(s.depth, s.economy_fix, s.tuning)
+
 # ---------------------------------------------------------------------------------------------
 # Types.
 
@@ -1268,6 +1321,9 @@ class RunState:
 	## ED1, the elevator deal (with_deal; sim/deal.gd): this run's cards (a Deal.DealState), or null with the deal off,
 	## when nothing reads it. Replaced, never edited.
 	var deal: RefCounted = null
+	## PY1, the owner's pay and stakes fixes of 20-21 Nov (with_economy_fix; see "PY1" in the header). Off: nothing
+	## below reads it.
+	var economy_fix := false
 
 	func copy() -> RunState:
 		var s := RunState.new()
@@ -1275,6 +1331,7 @@ class RunState:
 		s.stand = stand
 		s.orderly_fix = orderly_fix
 		s.deal = deal
+		s.economy_fix = economy_fix
 		s.pressures = pressures
 		s.pressure_heals_key = pressure_heals_key
 		s.pressure_heals_used = pressure_heals_used
@@ -1527,10 +1584,14 @@ static func at_home(s: RunState) -> bool:
 ## What floor `depth` asks a crew of `crew` to record before the call button works (see QUOTA_PER_PLAYER).
 ## 0 at home (depth 0 or less). `tuning` (live settings; null: none): the host's quota.step.
 ## `mult` (DF1's pressure_quota_mult; 1 for none): the quota x this before it is rounded.
-static func floor_quota(depth: int, crew: int, tuning: Settings.Values = null, mult := 1.0) -> int:
+## `economy` (PY1): the growth by the floor's place in its cycle (1 to 7), times the cycle's multiplier.
+static func floor_quota(depth: int, crew: int, tuning: Settings.Values = null, mult := 1.0, economy := false) -> int:
 	if depth <= 0:
 		return 0
-	var raw := float(QUOTA_PER_PLAYER * maxi(1, crew)) * M.pow_js(Settings.f(tuning, &"quota.step", QUOTA_DEPTH_STEP), float(depth - 1))
+	var steps := (economy_depth(depth) if economy else depth) - 1
+	var raw := float(QUOTA_PER_PLAYER * maxi(1, crew)) * M.pow_js(Settings.f(tuning, &"quota.step", QUOTA_DEPTH_STEP), float(steps))
+	if economy:
+		raw *= economy_cycle_mult(depth, tuning)
 	if mult != 1.0:
 		raw *= mult
 	return maxi(QUOTA_ROUND, roundi(raw / QUOTA_ROUND) * QUOTA_ROUND)
@@ -1566,7 +1627,7 @@ static func with_quota(s0: RunState) -> RunState:
 	s.quota = true
 	s.floor_earned = 0.0
 	s.floor_by = {}
-	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(s.players), s.tuning, pressure_quota_mult(s, s.tuning))
+	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(s.players), s.tuning, pressure_quota_mult(s, s.tuning), s.economy_fix)
 	s.quota_tuning = s.tuning
 	s.quota_met = false
 	return s
@@ -1577,7 +1638,7 @@ static func _new_quota_floor(s: RunState, players: Array[RunPlayer]) -> void:
 		return
 	s.floor_earned = 0.0
 	s.floor_by = {}
-	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(players), s.tuning, pressure_quota_mult(s, s.tuning))
+	s.floor_needed = floor_quota(0 if at_home(s) else s.depth, quota_crew(players), s.tuning, pressure_quota_mult(s, s.tuning), s.economy_fix)
 	s.quota_tuning = s.tuning
 	s.quota_met = false
 
@@ -1700,7 +1761,7 @@ static func day_preview(s: RunState) -> Variant:
 		return null
 	var aboard := day_aboard(s)
 	var earned := floori(s.day_earned) if s.day_lock else aboard
-	return Day.bank_preview(s.day_state, aboard, earned, day_crew(s), s.wallets, day_floor_quota(s), s.quick_fingers or s.field_dressing or s.steady_gaze or s.throwing_arm)
+	return Day.bank_preview(s.day_state, aboard, earned, day_crew(s), s.wallets, day_floor_quota(s), s.quick_fingers or s.field_dressing or s.steady_gaze or s.throwing_arm, s.economy_fix)
 ## Turns the tuned Playroom on (T15m, see the header): every Playroom from now on (and one already reached)
 ## has the long hiding time, the anger bar, the grab at 1 m and the hint events (sim/seek.gd "T15m").
 static func with_playroom_tuned(s0: RunState) -> RunState:
@@ -1736,6 +1797,14 @@ static func with_down_ring(s0: RunState) -> RunState:
 	return s
 
 ## Turns PN2 and PN3 on (see pn_fixes): a carried tape can be put down, and the Annex's hides work under Lonely.
+## Turns PY1 on (see "PY1" in the header). A floor quota already set is set again by the new rule.
+static func with_economy_fix(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.economy_fix = true
+	if s.quota and not s.orientation and s.floor_needed > 0 and not at_home(s):
+		s.floor_needed = 0 if s.station != null else floor_quota(s.depth, quota_crew(s.players), s.quota_tuning, pressure_quota_mult(s, s.quota_tuning), true)
+	return s
+
 static func with_pn_fixes(s0: RunState) -> RunState:
 	var s := s0.copy()
 	s.pn_fixes = true
@@ -1964,6 +2033,13 @@ static func flare_blinded(s: RunState, id: String, t: float) -> bool:
 			if burst.blind == id and t < float(burst.blindUntil):
 				return true
 	return false
+
+## PY1: whether player `id` owns Soft Shoes in a run that sells them (the Groundskeeper's test, _hearing_people).
+static func owns_soft_shoes(s: RunState, id: String) -> bool:
+	if not s.soft_shoes:
+		return false
+	var wallet: Upgrades.UpgradeState = s.wallets.get(id)
+	return wallet != null and wallet.owned.has("soft_shoes")
 
 static func with_soft_shoes(s0: RunState) -> RunState:
 	var s := s0.copy()
@@ -2473,7 +2549,8 @@ static func _crew_tick(s: RunState, players: Array[Instr.CrewPlayer], entities: 
 	if s.last_stand and s.stand != null and s.stand.id != "":
 		paid = LastStand.with_bonus(entities, s.stand.id, s.stand.mult)
 	var out := Instr.step_crew(s.plan, s.crew, players, paid, dt, s.tuning)
-	var mult := depth_multiplier(s.depth)
+	# PY1: the cycle's pay (pay_multiplier: the old depth multiplier with economy_fix off), then the deal's card on top.
+	var mult := pay_multiplier(s)
 	if s.deal != null:
 		return _deal_crew_tick(s, out, mult)
 	var ids := {}
@@ -3119,6 +3196,8 @@ static func _step_station(s: RunState, players: Array[RunPlayer], input_of: Dict
 		# RX3: the four see a lit lamp further and hear a sound emote.
 		sc.lit = bool((s.lamps.get(str(s.flare_profiles.get(p.id, p.id)), {}) as Dictionary).get("on", false))
 		sc.shout = inp != null and inp.emote_sound
+		# PY1: Soft Shoes against the four as against the Groundskeeper.
+		sc.soft = s.economy_fix and owns_soft_shoes(s, p.id)
 		crew.append(sc)
 	var from := events.size()
 	var caught := StationRules.step(st, crew, t, dt, s.tuning, events)
@@ -4126,7 +4205,11 @@ static func _step_lift(s: RunState, players: Array[RunPlayer], input_of: Diction
 				caller = null
 			if caller != null and s.station != null and (s.station as StationRules.StationFloor).power != StationRules.Power.RESTORED:
 				# The Reactor (RN1): the lift needs power to return.
-				events.append({"type": "callRefused", "t": t, "playerId": caller.id, "earned": 0, "needed": 0, "reason": "power"})
+				var refusal := {"type": "callRefused", "t": t, "playerId": caller.id, "earned": 0, "needed": 0, "reason": "power"}
+				if s.economy_fix:
+					# PY1: the call panel says why, in the Company's words (client/quota_view.gd prints "line").
+					refusal["line"] = POWER_REFUSED_LINE
+				events.append(refusal)
 				caller = null
 			if caller != null and ward.is_empty() and s.seek != null and not (s.seek as Seek.SeekState).done:
 				# The Playroom: the call starts the last count; the car comes when it ends (see the header).
@@ -4313,6 +4396,8 @@ static func _step_lift(s: RunState, players: Array[RunPlayer], input_of: Diction
 			var stf := (s.station as StationRules.StationFloor).copy()
 			StationRules.board(stf, aboard_ids, t, events)
 			s.station = stf
+		if s.economy_fix and not ward.is_empty():
+			_leave_hung(s, players, aboard_ids)
 		_bank(s, players, aboard_ids, t, events)
 		if station_floor and cycles_on(s):
 			# Cycles: the Reactor's return finishes the cycle, as bank_reactor does, unless that was the game over.
@@ -4320,7 +4405,7 @@ static func _step_lift(s: RunState, players: Array[RunPlayer], input_of: Diction
 			if not over:
 				s.cycles_done = maxi(s.cycles_done, Places.cycle_of(s.depth))
 				# DF1: tomorrow starts the next cycle, so its quota is that cycle's.
-				if s.pressures and s.day_result is Dictionary and s.day_next != null:
+				if (s.pressures or s.economy_fix) and s.day_result is Dictionary and s.day_next != null:
 					(s.day_result as Dictionary)["next_quota"] = Day.day_quota(s.day_next, _tomorrow_floor_quota(s, ""))
 		return [seek_call_by, true]
 
@@ -4328,8 +4413,22 @@ static func _step_lift(s: RunState, players: Array[RunPlayer], input_of: Diction
 		var aboard_ids := {}
 		for p in _active_aboard(players, input_of):
 			aboard_ids[p.id] = true
+		if s.economy_fix and not ward.is_empty():
+			_leave_hung(s, players, aboard_ids.keys())
 		_ride_down(s, players, aboard_ids, t, events)
 	return [seek_call_by, false]
+
+## PY1 (see the header): the Ward's lift leaving. Whoever still hangs in the web (status "caught") did not make it to
+## the car: left out for the day exactly as anyone the car leaves on the floor (_leave_out): no share, not brought back
+## on the next floor, awake in the prison with the crew. The car never waits for them (its boarding is every floor's).
+static func _leave_hung(s: RunState, players: Array[RunPlayer], aboard: Array) -> void:
+	if not s.car_waits or s.orientation:
+		return
+	var out := s.left_out.duplicate()
+	for p in players:
+		if p.status == &"caught" and not aboard.has(p.id):
+			out[p.id] = true
+	s.left_out = out
 
 ## Whether a body is at the call button: the car's doors, or on the Ward with its call the station (_step_lift).
 static func _at_call(b: Move.Body, car: CarGeometry, ward: Dictionary) -> bool:
@@ -4405,7 +4504,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		if setting:
 			s.quota_tuning = s.tuning
 		# The Reactor (RN1): nothing here gives a reading, so it asks no quota; its lift waits for the power instead.
-		var want := 0 if s.station != null else floor_quota(s.depth, quota_crew(players), s.quota_tuning, pressure_quota_mult(s, s.quota_tuning))
+		var want := 0 if s.station != null else floor_quota(s.depth, quota_crew(players), s.quota_tuning, pressure_quota_mult(s, s.quota_tuning), s.economy_fix)
 		s.floor_needed = want if setting else mini(s.floor_needed, want)
 
 	# ---- 1. Run rules (the lift: _step_lift).
@@ -4763,13 +4862,22 @@ static func pressure_quota_mult(s: RunState, tuning: Settings.Values) -> float:
 	return maxf(1.0, _pressure_f(s, tuning, &"pressure.quota", &"pressure.quota3", PRESSURE_QUOTA, PRESSURE_QUOTA3))
 
 ## Each player's share of the day quota (Day's floor_quota_per_player): DAY_FLOOR_QUOTA, x the pressure.
+## PY1: x the cycle's multiplier too (economy_day_mult), so a cycle-2 day owes what a cycle-1 day does, times it.
 static func day_floor_quota(s: RunState) -> int:
 	var mult := pressure_quota_mult(s, s.tuning)
+	if s.economy_fix:
+		mult *= economy_day_mult(s)
 	return DAY_FLOOR_QUOTA if mult == 1.0 else roundi(float(DAY_FLOOR_QUOTA) * mult)
+
+## PY1: the day quota's cycle multiplier: the cycle the crew is in (cycle_now), with cycles on; else 1.
+static func economy_day_mult(s: RunState) -> float:
+	if not s.economy_fix or not cycles_on(s):
+		return 1.0
+	return cycle_mult_of(cycle_now(s), s.tuning)
 
 ## The same for tomorrow's descent (the prison's board): its cycle is cycles_done + 1, or 1 after a game over.
 static func _tomorrow_floor_quota(s: RunState, kind: String) -> int:
-	if not s.pressures or not cycles_on(s):
+	if not (s.pressures or s.economy_fix) or not cycles_on(s):
 		return DAY_FLOOR_QUOTA
 	var t := s.copy()
 	t.depth = 0
@@ -4887,7 +4995,7 @@ static func bank_reactor(s: RunState, t: float, events: Array[Dictionary]) -> vo
 	if not over:
 		s.cycles_done = maxi(s.cycles_done, Places.cycle_of(s.depth))
 		# DF1: tomorrow starts the next cycle, so its quota is that cycle's.
-		if s.pressures and s.day_result is Dictionary and s.day_next != null:
+		if (s.pressures or s.economy_fix) and s.day_result is Dictionary and s.day_next != null:
 			(s.day_result as Dictionary)["next_quota"] = Day.day_quota(s.day_next, _tomorrow_floor_quota(s, ""))
 
 ## F near a tape on the floor (pick_up): the nearest within reach, or the one asked for, back on its holder.
@@ -5193,7 +5301,7 @@ static func _settle_day(s: RunState, t: float, banked: int, events: Array[Dictio
 	# The car waits: whoever it left out today is paid nothing today (see the header).
 	var crew := day_crew(s)
 	var earned := floori(s.day_earned) if s.day_lock else banked
-	var r := Day.end_day(s.day_state, banked, earned, crew, s.wallets, day_floor_quota(s), s.seed, wiped, s.quick_fingers or s.field_dressing or s.steady_gaze or s.throwing_arm)
+	var r := Day.end_day(s.day_state, banked, earned, crew, s.wallets, day_floor_quota(s), s.seed, wiped, s.quick_fingers or s.field_dressing or s.steady_gaze or s.throwing_arm, s.economy_fix)
 	s.wallets = r.wallets
 	s.day_next = r.state
 	var result: Dictionary = r.facts.duplicate(true)
@@ -5642,8 +5750,8 @@ static func searching(s: RunState, id: String) -> bool:
 static func find_base(s: RunState, players: Array[RunPlayer]) -> int:
 	# DF1: the fill is the quota without the pressure (more to find would answer the pressure for the crew).
 	if pressure_quota_mult(s, s.quota_tuning) != 1.0:
-		return floor_quota(s.depth, quota_crew(players), s.quota_tuning)
-	return s.floor_needed if s.quota and s.floor_needed > 0 else floor_quota(s.depth, quota_crew(players), s.tuning)
+		return floor_quota(s.depth, quota_crew(players), s.quota_tuning, 1.0, s.economy_fix)
+	return s.floor_needed if s.quota and s.floor_needed > 0 else floor_quota(s.depth, quota_crew(players), s.tuning, 1.0, s.economy_fix)
 
 ## Whether a player is in, getting into or getting out of a hide.
 ## PN3: inside a hide (not getting in or out, which is out in the open).

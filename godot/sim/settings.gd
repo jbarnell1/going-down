@@ -343,6 +343,10 @@ const ROWS: Array = [
 	[&"quota.each", &"earning", "FLOOR QUOTA, EACH PLAYER", "floor 1's quota for one player", "credits", 400.0, 100.0, 1000.0, 25.0, &"floor", &"LS5", W],
 	[&"quota.step", &"earning", "QUOTA GROWS, A FLOOR", "times this for every floor deeper", "times", 1.45, 1.0, 2.0, 0.05, &"floor", &"LS5", F],
 	[&"pay.step", &"earning", "PAY GROWS, A FLOOR", "a reading is worth this much more a floor", "times", 1.35, 1.0, 2.0, 0.05, &"floor", &"LS5", F],
+	# PY1 (sim/run.gd "PY1"): pay and quota grow by the floor's place in its cycle (1 to 7), times its cycle's row.
+	[&"pay.cycle1", &"earning", "PAY AND QUOTA, CYCLE 1", "floors 1 to 7: pay and quotas times this", "times", 1.0, 0.5, 4.0, 0.25, &"floor", &"PY1", F],
+	[&"pay.cycle2", &"earning", "PAY AND QUOTA, CYCLE 2", "floors 8 to 14: pay and quotas times this", "times", 2.0, 0.5, 8.0, 0.25, &"floor", &"PY1", F],
+	[&"pay.cycle3", &"earning", "PAY AND QUOTA, CYCLE 3 ON", "floor 15 and deeper: pay and quotas times this", "times", 4.0, 0.5, 16.0, 0.25, &"floor", &"PY1", F],
 	[&"record.reach", &"earning", "RECORDING REACH", "how near the resident the needle writes", "m", 9.0, 4.0, 16.0, 0.5, &"now", &"LS5", F],
 	[&"record.rate", &"earning", "PAY RATE UP CLOSE", "credits a second at the nearest", "a second", 140.0, 40.0, 400.0, 10.0, &"now", &"LS5", F],
 	# LS1 (North Star B7, sim/last_stand.gd): on in the game's rooms. The last player up in a crew of two or more earns this
@@ -460,6 +464,8 @@ const WIRED_IDS: Array[StringName] = [
 	# SR1: split reality.
 	&"split.read_rise", &"split.alone_rise", &"split.alone_m", &"split.dark_rise", &"split.lift_fall", &"split.first_at",
 	&"split.calm_at", &"split.every", &"split.chance", &"split.lasts",
+	# PY1: pay and quota by the cycle.
+	&"pay.cycle1", &"pay.cycle2", &"pay.cycle3",
 ]
 
 ## The least wait of a call is its start delay plus the floors: sim/run.gd CALL_START_DELAY_MIN (this file

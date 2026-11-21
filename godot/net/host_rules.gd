@@ -127,10 +127,14 @@
 #    deal_, split_): off unless asked; the game's rooms ask for it (`deal=0` switches it off). On each ride down to the
 #    2nd to 5th floor of a cycle the host deals one card from the seed; the crew takes or passes it (sim/deal.gd,
 #    sim/run.gd "The elevator deal"). prepare() turns it on before the first tick.
-#  - Split reality (SR1, sim/split.gd, North Star E1 to E5; `split_`, the last parameter): off unless asked; the game's
+#  - Split reality (SR1, sim/split.gd, North Star E1 to E5; `split_`, after `deal`): off unless asked; the game's
 #    rooms ask for it (`split=0` switches it off). prepare() gives the run its exposure state; step() steps it after
 #    everything else, on the tick's own new state, so nothing the run decides (residents, catches, the instrument,
 #    tapes, the quota) can see it. net/host.gd sends each player only their own exposure and false sights.
+#  - PY1, `economy_fix`, the last parameter, after `split` (off unless asked; the game's rooms ask for it): pay and
+#    quota by the floor's place in its cycle times the cycle's multiplier, credits kept at game over, the Reactor's
+#    call panel says why it is refused, a player still hung in the Ward's web when its car leaves is left out for the
+#    day, and Soft Shoes against the Rigger and the Reactor's four (sim/run.gd "PY1").
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -258,6 +262,8 @@ var last_stand: bool
 var deal: bool
 ## Split reality (SR1; see the header). Off unless asked.
 var split: bool
+## PY1 (the last parameter, after `split_`): see the header.
+var economy_fix: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -287,11 +293,12 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		ward_place_: bool = false, reactor_place_: bool = false, pressures_: bool = false, ward_call_: bool = false,
 		ward_web_: bool = false, rigger_roam_: bool = false, ward_layout_: bool = false, orderly_fix_: bool = false,
 		minder_calm_: bool = false, down_ring_: bool = false, pn_fixes_: bool = false, last_stand_: bool = false,
-		deal_: bool = false, split_: bool = false) -> void:
+		deal_: bool = false, split_: bool = false, economy_fix_: bool = false) -> void:
 	last_stand = last_stand_
 	deal = deal_
 	split = split_
 	orderly_fix = orderly_fix_
+	economy_fix = economy_fix_
 	minder_calm = minder_calm_
 	down_ring = down_ring_ and downs_
 	pn_fixes = pn_fixes_
@@ -430,6 +437,9 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 	# DF1: before the quota, so a run made to start below floor 7 has its first floor's quota with the pressure.
 	if pressures and not s.pressures:
 		s = Run.with_pressures(s)
+	# PY1: before the quota too, so the first floor's quota is the new rule's.
+	if economy_fix and not s.economy_fix:
+		s = Run.with_economy_fix(s)
 	if quota and _entity_on and not s.quota:
 		s = Run.with_quota(s)
 	if downs and not s.downs:
@@ -589,6 +599,10 @@ static func ward_web_by_arg() -> bool:
 ## ED1: the elevator deal is on in the game's rooms unless started with `deal=0`.
 static func deal_by_arg() -> bool:
 	return not _arg_off("deal")
+
+## PY1: on unless the game was started with `economy_fix=0` (or `?economy_fix=0` on the web page).
+static func economy_fix_by_arg() -> bool:
+	return not _arg_off("economy_fix")
 
 static func _arg_off(name: String) -> bool:
 	for raw in OS.get_cmdline_user_args():

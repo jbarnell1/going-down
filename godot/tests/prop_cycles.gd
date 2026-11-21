@@ -139,7 +139,7 @@ func test_the_flag_is_last_off_by_default_and_needs_the_late_floors(t: T) -> voi
 		names.append(str(a["name"]))
 	# RN1 added ward_place_ and reactor_place_ after cycles_, in the order agreed for the three workers.
 	# DF1 added pressures_ after reactor_place_.
-	t.eq(names.slice(names.size() - 19), ["late_floors_", "party_table_", "tenant_timer_", "second_orderly_", "cycles_", "ward_place_", "reactor_place_", "pressures_", "ward_call_", "ward_web_", "rigger_roam_", "ward_layout_", "orderly_fix_", "minder_calm_", "down_ring_", "pn_fixes_", "last_stand_", "deal_", "split_"] as Array[String], "the last nineteen parameters, in the agreed order (WC1 added ward_call_ and ward_web_, RR1 rigger_roam_, WG1 ward_layout_, OR2 orderly_fix_, MA1 minder_calm_, down_ring_ and pn_fixes_, LS1 last_stand_, ED1 deal_, SR1 split_)")
+	t.eq(names.slice(names.size() - 20), ["late_floors_", "party_table_", "tenant_timer_", "second_orderly_", "cycles_", "ward_place_", "reactor_place_", "pressures_", "ward_call_", "ward_web_", "rigger_roam_", "ward_layout_", "orderly_fix_", "minder_calm_", "down_ring_", "pn_fixes_", "last_stand_", "deal_", "split_", "economy_fix_"] as Array[String], "the last twenty parameters, in the agreed order (WC1 added ward_call_ and ward_web_, RR1 rigger_roam_, WG1 ward_layout_, OR2 orderly_fix_, MA1 minder_calm_, down_ring_ and pn_fixes_, LS1 last_stand_, ED1 deal_, SR1 split_, PY1 economy_fix_)")
 	var plain := HostRules.new(true, 1, Places.FULL, true)
 	t.check(not plain.cycles and not plain.party_table and not plain.tenant_timer and not plain.second_orderly, "all off by default")
 	t.eq(plain.deck, Places.FULL, "the deck without the flag is the deck given")

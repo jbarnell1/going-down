@@ -370,6 +370,90 @@ func test_they_start_in_the_dirty_part_apart_and_by_the_seed(t: T) -> void:
 	t.note("%d floors, %d different first starts" % [n, firsts.size()])
 
 # ---------------------------------------------------------------------------------------------
+# FX3: a waiting Orderly with a player beside it. However they got there (here: put there, as a test's teleport, a
+# late join or a heal would), a standing player within WAKE_DISTANCE by the floor's walk wakes it on the host's
+# tick, their back to it or not; and after a heal beside it, the stand-off runs out and it hunts again.
+
+## The run as the rooms make it (the fix on), one player put on the walkable cell `cell` facing away from the first
+## Orderly, standing still; the ticks until the first Orderly hunts (-1 within `limit`), and its mode then.
+static func woken_after(seed: String, depth: int, cell_of_player: Callable, limit: int, setup: Callable = Callable()) -> Dictionary:
+	var ids: Array[String] = ["p0"]
+	var r := rules(depth, true)
+	var s: Run.RunState = r.prepare(Run.create_run(seed, ids))
+	var c: Variant = cell_of_player.call(s)
+	if c == null:
+		return {"skip": true}
+	var body := Move.body_at_cell(s.plan, c)
+	s = s.copy()
+	var players: Array[Run.RunPlayer] = []
+	for p in s.players:
+		var np := p.copy()
+		np.body = body
+		np.aboard = false
+		players.append(np)
+	s.players = players
+	if setup.is_valid():
+		s = setup.call(s)
+	var o := s.orderly
+	var yaw := Entity.yaw_toward(-(o.body.x - body.x), -(o.body.z - body.z))
+	var start_mode := String(s.orderly.mode)
+	for k in limit:
+		var inp: Array[Run.PlayerInput] = [PropO2.input("p0", body, yaw)]
+		s = r.step(s, inp, DT).state
+		if s.orderly.mode in [&"hunting", &"windUp", &"bending"]:
+			return {"ticks": k + 1, "mode": String(s.orderly.mode), "from": start_mode, "walk": _walk_cells(s.plan, o.body, body)}
+	return {"ticks": -1, "mode": String(s.orderly.mode), "from": start_mode, "walk": _walk_cells(s.plan, o.body, body), "t": s.t}
+
+static func _walk_cells(plan: Floor.FloorPlan, a: Move.Body, b: Move.Body) -> int:
+	return Floor.distances_from(plan, Move.cell_of(plan, a))[Floor.pos_index(plan, Move.cell_of(plan, b))]
+
+## A walkable cell `steps` cells' walk from the first Orderly (the nearest such in a straight line), or null.
+static func cell_by_walk(s: Run.RunState, steps: int) -> Variant:
+	var from := Move.cell_of(s.plan, s.orderly.body)
+	var dist := Floor.distances_from(s.plan, from)
+	var best: Variant = null
+	var best_d := INF
+	for i in dist.size():
+		if dist[i] != steps:
+			continue
+		var p := Floor.pos_from_index(s.plan, i)
+		if not Floor.is_walkable(s.plan, p.level, p.x, p.y):
+			continue
+		var d := Vector2(p.x - from.x, p.y - from.y).length() + absf(p.level - from.level) * 10.0
+		if d < best_d:
+			best_d = d
+			best = p
+	return best
+
+func test_a_waiting_orderly_wakes_for_a_player_put_beside_it_and_hunts_again_after_a_heal(t: T) -> void:
+	var tried := 0
+	for depth: int in [1, 2, 3]:
+		for i in (3 if t.quick else 8):
+			var seed := "wake-%d" % i
+			var beside := woken_after(seed, depth, func(s: Run.RunState) -> Variant: return cell_by_walk(s, 1), 20)
+			if beside.get("skip", false):
+				continue
+			tried += 1
+			t.check(beside["from"] == "waiting" and int(beside["ticks"]) >= 1 and int(beside["ticks"]) <= 20, "%s/%d: put beside a waiting Orderly, back turned, it hunts within a second (%s)" % [seed, depth, str(beside)])
+			# At the edge of its wake distance by walking (one cell under it) it wakes too; well past it, it waits.
+			var edge_cells := ceili(Entity.WAKE_DISTANCE / 2.0) - 1
+			var edge := woken_after(seed, depth, func(s: Run.RunState) -> Variant: return cell_by_walk(s, edge_cells), 20)
+			if not edge.get("skip", false):
+				t.check(int(edge["ticks"]) >= 1, "%s/%d: %d cells' walk away it wakes within a second (%s)" % [seed, depth, edge_cells, str(edge)])
+			var far := woken_after(seed, depth, func(s: Run.RunState) -> Variant: return cell_by_walk(s, edge_cells + 6), 20)
+			if not far.get("skip", false):
+				t.check(int(far["ticks"]) == -1 and far["mode"] == "waiting", "%s/%d: %d cells' walk away it waits (%s)" % [seed, depth, edge_cells + 6, str(far)])
+			# After a heal beside it: the stand-off it is given runs out, and it hunts the player beside it again.
+			var healed := woken_after(seed, depth, func(s: Run.RunState) -> Variant: return cell_by_walk(s, 1),
+				roundi((Run.HEAL_QUIET + 1.0) / DT),
+				func(s: Run.RunState) -> Run.RunState:
+					var out := s.copy()
+					out.orderly = Entity.stand_off(s.orderly, Run.HEAL_QUIET)
+					return out)
+			t.check(healed["from"] == "dormant" and int(healed["ticks"]) >= roundi(Run.HEAL_QUIET / DT) - 1, "%s/%d: after a heal's stand-off beside the player it hunts again (%s)" % [seed, depth, str(healed)])
+	t.check(tried >= 6, "enough floors (%d)" % tried)
+
+# ---------------------------------------------------------------------------------------------
 # 5. Off changes nothing.
 
 func _play(rules_of: Callable, seed: String, ticks: int) -> Array[String]:

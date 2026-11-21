@@ -847,6 +847,9 @@ func _step_ward_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> Run.R
 		row.sprint = i.gait == &"sprint"
 		# WD1: a creeping walker is never heard; an instrument recording (ticking) may be (sim/ward/state.gd).
 		row.creep = i.gait == &"creep"
+		# PY1 (the run's economy_fix): Soft Shoes shortens how far he hears a walk (sim/ward/state.gd rigger.steps_reach).
+		if s.economy_fix and Run.owns_soft_shoes(s, i.id):
+			row.soft = true
 		row.recording = _ward_recording(s, i.id)
 		_ward_use[i.id] = i.use
 	var next_time := s.t + TICK
@@ -1815,6 +1818,10 @@ func world(full: bool = false) -> Dictionary:
 	# Cycles (FL2; Protocol "cycle"): the cycle of this floor, or of the next descent in the prison; absent in cycle 1.
 	if Run.cycles_on(s) and Run.cycle_now(s) >= 2:
 		out["cycle"] = Run.cycle_now(s)
+		# PY1 (Protocol "economy"): pay and quota by the cycle, so a screen that works out a quota (the ride's sheet)
+		# works it out the host's way. Absent in cycle 1, where both rules agree, and with the fix off.
+		if s.economy_fix:
+			out["economy"] = 1
 	# DF1 (Protocol "pressure"): what the pressures change on screens, from floor 8; absent in cycle 1 and with them off.
 	var pressure: Variant = pressure_block(s)
 	if pressure != null:

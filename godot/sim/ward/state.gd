@@ -57,6 +57,8 @@ const STEP_EVERY := 0.65
 const MOVING_SPEED := 0.6
 ## Today's values of the settings above (tests/prop_settings.gd names them).
 const STEPS_REACH := 9.0
+## PY1: Soft Shoes' share of a walk's reach: sim/noise.gd SOFT_SHOES, the Groundskeeper's (tests/prop_economy_fix.gd checks they agree).
+const SOFT_SHOES := 0.75
 const CLICK_REACH := 2.5
 const OPEN_HEARD := 1
 const DOOR_HEARD := 1
@@ -442,6 +444,9 @@ func step(now: float, delta: float, boarding_seconds: float, crew: Dictionary) -
 		elif moving and not member.get("creep", false) and not member.get("sprint", false) and now >= float(_step_at.get(id, -INF)):
 			_step_at[id] = now + STEP_EVERY
 			var reach := _f(&"rigger.steps_reach", STEPS_REACH)
+			# PY1: a walker in Soft Shoes is heard Noises.SOFT_SHOES as far (the host sets "soft" only with the fix on).
+			if member.get("soft", false):
+				reach *= SOFT_SHOES
 			if reach > 0.0 and _flat(at, lair) <= reach:
 				_hear_point(at, now, events, false)
 		if member.get("recording", false) and encounter == &"searching" and arm != null and arm.points.size() > 1:

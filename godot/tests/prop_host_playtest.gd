@@ -34,7 +34,7 @@ func test_start_and_restart(t: T) -> void:
 		if depth == 0:
 			t.check(Run.at_home(state) and state.bed != null, "prison has real bedtime state")
 		else:
-			t.eq(state.floor_needed, Run.floor_quota(depth, 1, state.tuning, Run.pressure_quota_mult(state, state.tuning)), "quota computed for selected floor (with floor 8 onward's pressure, DF1)")
+			t.eq(state.floor_needed, Run.floor_quota(depth, 1, state.tuning, Run.pressure_quota_mult(state, state.tuning), state.economy_fix), "quota computed for selected floor (with floor 8 onward's pressure, DF1, and PY1's cycle rule when the room has it)")
 		t.eq(room.run_seed, room.seed, "switching and restarting reproduce the run seed")
 		state.floor_earned = 5.0
 		t.check(room.start_playtest(depth), "restart selected depth")

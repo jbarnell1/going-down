@@ -467,7 +467,7 @@ func _snapshot(events: Array, yaw: float, pitch: float, hfov: float, vfov: float
 		"t": s.t,
 		"seed": _seed,
 		"depth": s.depth,
-		"multiplier": Run.depth_multiplier(s.depth),
+		"multiplier": Run.pay_multiplier(s),
 		"phase": String(s.phase),
 		"timer": s.timer,
 		"bellLeft": s.bell_left,

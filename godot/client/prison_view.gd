@@ -780,7 +780,8 @@ static func report_text(result: Variant, names: Dictionary) -> Array[String]:
 	if kind == "made":
 		out.append("NO ROLL: THE DAY WAS MADE")
 	elif kind == "game_over":
-		out.append("THIRD MISS: ALL RESET")
+		# PY1: the third miss keeps the credits (sim/day.gd keep_credits); the facts say so.
+		out.append("THIRD MISS: UPGRADES RESET, CREDITS KEPT" if bool(r.get("credits_kept", false)) else "THIRD MISS: ALL RESET")
 	else:
 		out.append("ROLL ODDS " + _named(odds, names).to_upper())
 	var taken: Array = r.get("taken", [])

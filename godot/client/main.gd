@@ -3066,7 +3066,9 @@ func _ride_rows(s: Dictionary, rows: PackedStringArray) -> PackedStringArray:
 	for p: Dictionary in (c.latest as Dictionary)["players"]:
 		if str(p["status"]) != "leftBehind":
 			crew += 1
-	return PackedStringArray([rows[0], rows[1], SearchView.sheet_for(plan, plan.seed, Run.floor_quota(next, maxi(1, crew), c.tuning))])
+	# PY1: the host's rule for the quota the fill is made from (Protocol "economy"; sim/run.gd find_base).
+	var economy := (c.latest as Dictionary).get("economy") != null
+	return PackedStringArray([rows[0], rows[1], SearchView.sheet_for(plan, plan.seed, Run.floor_quota(next, maxi(1, crew), c.tuning, 1.0, economy))])
 
 ## Down first, then out (client/down_view.gd, already updated this frame): your timer and its lines (once
 ## the catch's noise has passed), the out screen, the red spots for everyone. Caught and down, the camera

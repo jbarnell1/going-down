@@ -280,6 +280,8 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##  - the world's floor extensions (its last element, the dictionary after the shop block) gain "cycle": the cycle
 ##    number, a whole number from 2 (1 + (depth - 1) / 7 on a floor; in the prison, the next descent's). Decoded as
 ##    "cycle" (an int); absent means cycle 1.
+## PY1 (sim/run.gd "PY1"): with the fix on, from cycle 2, the floor extensions gain "economy": 1 (pay and quota grow by
+##    the floor's place in its cycle times the cycle's multiplier). Decoded as "economy" (1); absent means the old rule.
 ## The pressures (DF1; sim/run.gd "Pressures", net/host.gd pressure_block). Only in a run with them, on a floor of cycle
 ## 2 or deeper, so cycle 1 and a run without them send exactly what they did before:
 ##  - the world's floor extensions gain "pressure": [near light (metres, the reach every screen draws), heals left to
@@ -524,7 +526,7 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < WORLD_SHOP_INDEX:
 			out.append(null)
 		out.append(enc_shop(w["shop"]))
-	if w.get("orderly2") != null or w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null or w.get("nerve") != null or w.get("tenant") != null or w.get("cycle") != null or w.get("pressure") != null or w.get("stand") != null or w.get("wipe") != null or w.get("standee") != null or w.get("deal") != null or w.get("split") != null:
+	if w.get("orderly2") != null or w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null or w.get("nerve") != null or w.get("tenant") != null or w.get("cycle") != null or w.get("pressure") != null or w.get("stand") != null or w.get("wipe") != null or w.get("standee") != null or w.get("deal") != null or w.get("split") != null or w.get("economy") != null:
 		var extensions := {}
 		# LS1 (sim/last_stand.gd): the spotlight, the wipe's scene, the prison's standee.
 		if w.get("stand") != null:
@@ -550,6 +552,8 @@ static func enc_world(w: Dictionary) -> Array:
 			extensions["tenant"] = [q3(w["tenant"]["at"]), q3(w["tenant"]["len"])]
 		if w.get("cycle") != null:
 			extensions["cycle"] = int(w["cycle"])
+		if w.get("economy") != null:
+			extensions["economy"] = 1
 		if w.get("pressure") != null:
 			var pr: Dictionary = w["pressure"]
 			extensions["pressure"] = [q3(pr["light"]), int(pr["heals"]), (pr["free"] as Array).duplicate()]
@@ -1295,6 +1299,8 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 				"by": _s(c, wd[3]), "n": _i(c, wd[4], 1, 2), "last": _s(c, wd[5])}
 		if extensions.has("standee"):
 			out["standee"] = _s(c, extensions["standee"])
+		if extensions.has("economy"):
+			out["economy"] = _i(c, extensions["economy"], 1, 1)
 		if extensions.has("pressure"):
 			var pr := _a(c, extensions["pressure"], 3, 3)
 			if c.bad:

@@ -230,6 +230,8 @@ class Crew:
 	## RX3: their lamp is on (seen further); they made a sound emote this tick (heard as a point noise).
 	var lit: bool = false
 	var shout: bool = false
+	## PY1 (the run's economy_fix): they own Soft Shoes, so a walk is heard Noises.SOFT_SHOES as far.
+	var soft: bool = false
 
 	static func make(id_: String, body_: Move.Body, status_: StringName, gait_: StringName, use_: bool, active_: bool) -> Crew:
 		var c := Crew.new()
@@ -530,8 +532,14 @@ static func senses_player(st: StationFloor, b: Body4, crawl: bool, c: Crew, movi
 	var d := M.hypot2(c.body.x - b.body.x, c.body.z - b.body.z)
 	if moving and c.gait == &"sprint" and d <= Settings.f(tuning, &"reactor.hear_sprint", HEAR_SPRINT):
 		return true
-	var walk_heard := moving and c.gait == &"walk" and d <= Settings.f(tuning, &"reactor.hear_walk", HEAR_WALK)
-	if walk_heard and d <= Settings.f(tuning, &"reactor.hear_wall", HEAR_WALL):
+	# PY1: Soft Shoes (c.soft) shortens both a walk's reaches, round the open and through walls, by Noises.SOFT_SHOES.
+	var walk_reach := Settings.f(tuning, &"reactor.hear_walk", HEAR_WALK)
+	var wall_reach := Settings.f(tuning, &"reactor.hear_wall", HEAR_WALL)
+	if c.soft:
+		walk_reach *= Noises.SOFT_SHOES
+		wall_reach *= Noises.SOFT_SHOES
+	var walk_heard := moving and c.gait == &"walk" and d <= walk_reach
+	if walk_heard and d <= wall_reach:
 		return true
 	# The lit sight only once their flinch at the mains coming back is over.
 	var lit_now := st.power == Power.RESTORED and st.seq_t >= st.restored_at + Settings.f(tuning, &"reactor.flinch", FLINCH) - 1e-9
