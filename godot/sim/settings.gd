@@ -151,7 +151,7 @@ const ROWS: Array = [
 	[&"minder.anger_cool", &"minder", "ITS ANGER COOLS FROM FULL IN", "seconds of quiet that empty a full anger bar. Does nothing with the party table on (the game's rooms): there the bar never cools by itself", "s", 50.0, 10.0, 300.0, 5.0, &"now", &"LS4", F],
 	# MA1, the owner's playtest of 20 Nov (sim/seek.gd "MA1"): on in the game's rooms. Today's are Seek.CALM_AFTER_HUNT,
 	# CALM_HIDE_ANGER, CALM_OPEN_ANGER (in 100) and CALM_STALK_SPEED.
-	[&"minder.after_hunt", &"minder", "EACH HUNT LEAVES ITS ANGER AT", "where the anger bar restarts as a count ends, this much more for each count so far (never over 60)", "in 100", 15.0, 0.0, 45.0, 5.0, &"now", &"MA1", W],
+	[&"minder.after_hunt", &"minder", "EACH HUNT LEAVES ITS ANGER AT", "where the anger bar restarts as a count ends. 0 (the game's): empty after every hunt. Raised, this much more for each count so far (never over 60)", "in 100", 0.0, 0.0, 45.0, 5.0, &"now", &"MA1", W],
 	[&"minder.anger_hide", &"minder", "HIDING ANGERS IT BY", "getting into a hide adds this to its anger bar", "in 100", 10.0, 0.0, 50.0, 1.0, &"now", &"MA1", W],
 	[&"minder.anger_open", &"minder", "OPENING SOMETHING ANGERS IT BY", "opening a drawer or a box adds this to its anger bar", "in 100", 10.0, 0.0, 50.0, 1.0, &"now", &"MA1", W],
 	[&"minder.stalk", &"minder", "WALKS TO A PLAYER IT SEES AT", "between counts, toward a player in its view (walk 3, creep 1.2)", "m/s", 1.5, 0.5, 2.9, 0.1, &"now", &"MA1", F],

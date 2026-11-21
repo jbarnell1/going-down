@@ -154,16 +154,31 @@ func _run() -> void:
 	_cmd("stopmove")
 	await _wait(5.0)
 	# The Orderly: watch it from down its corridor, then turn away and let it come on unseen.
-	var es: Dictionary = plan["entityStart"]
+	# Where it really waits (since the Orderly fix, sim/orderly_fix.gd, a seeded cell in the dirty part, not the
+	# plan's entityStart): the rules' body now.
+	var o0: Dictionary = _state()["orderly"]
+	var es := {"level": int(o0["level"]), "x": floori(float(o0["x"]) / 2.0), "y": floori(float(o0["z"]) / 2.0)}
+	var spots: Array[Dictionary] = []
 	var spot := _watch_spot(plan, es)
 	if not spot.is_empty():
-		_cmd("teleport %d %d %d" % [int(es["level"]), int(spot["x"]), int(spot["y"])])
-	await _wait(0.3)
-	var ex := (float(es["x"]) + 0.5) * 2.0
-	var ez := (float(es["y"]) + 0.5) * 2.0
-	_cmd("face %f %f %f" % [ex, ez, float(es["level"]) * 3.2 + 1.4])
+		spots.append(spot)
+	spots.append_array(_near_spots(plan, es))
+	var ex := float(o0["x"])
+	var ez := float(o0["z"])
+	for i in mini(spots.size(), 12):
+		_cmd("teleport %d %d %d" % [int(es["level"]), int(spots[i]["x"]), int(spots[i]["y"])])
+		await _wait(0.3)
+		var on: Dictionary = _state()["orderly"]
+		ex = float(on["x"])
+		ez = float(on["z"])
+		_cmd("face %f %f %f" % [ex, ez, (float((on["pose"] as Dictionary)["y"]) if on["pose"] is Dictionary else float(es["level"]) * 3.2) + 1.4])
+		var seen := await _until(func(st: Dictionary) -> bool: return bool((st["orderly"] as Dictionary)["seeing"]), 1.5)
+		if bool((seen["orderly"] as Dictionary)["seeing"]):
+			break
 	await _wait(3.0)
 	var s := _state()
+	ex = float((s["orderly"] as Dictionary)["x"])
+	ez = float((s["orderly"] as Dictionary)["z"])
 	var me: Dictionary = s["me"]
 	_cmd("face %f %f" % [2.0 * float(me["x"]) - ex, 2.0 * float(me["z"]) - ez])
 	s = await _until(func(st: Dictionary) -> bool: return float((st["orderly"] as Dictionary)["distance"]) < 3.0, 14.0)
@@ -201,6 +216,35 @@ func _watch_spot(plan: Dictionary, es: Dictionary) -> Dictionary:
 				if d <= 12.0 and (best.is_empty() or d > float(best["d"])):
 					best = {"x": x, "y": y, "d": d}
 	return best
+
+## The far start is not always on a listed sightline: the walkable cells of its level 4 to 10 m off with an open
+## straight line of cells to it, those in its row or column first, the farthest first.
+func _near_spots(plan: Dictionary, es: Dictionary) -> Array[Dictionary]:
+	var w := int(plan["width"])
+	var h := int(plan["height"])
+	var lv := int(es["level"])
+	var cells: Array = (plan["cells"] as Array)[lv]
+	var dist: Array = plan["liftDist"]
+	var walk := func(x: int, y: int) -> bool:
+		return x >= 0 and y >= 0 and x < w and y < h and str(cells[y * w + x]) in ["corridor", "room", "landing", "atriumOpen"] and float(dist[lv * w * h + y * w + x]) >= 0.0
+	var out: Array[Dictionary] = []
+	var sx := int(es["x"])
+	var sy := int(es["y"])
+	for y in h:
+		for x in w:
+			var d := Vector2(x - sx, y - sy).length() * 2.0
+			if d < 4.0 or d > 10.0 or not walk.call(x, y):
+				continue
+			var n := int(ceil(d / 2.0)) * 2
+			var clear := true
+			for i in range(1, n):
+				if not walk.call(floori(sx + 0.5 + float((x - sx) * i) / n), floori(sy + 0.5 + float((y - sy) * i) / n)):
+					clear = false
+					break
+			if clear:
+				out.append({"x": x, "y": y, "d": d, "line": 1 if x == sx or y == sy else 0})
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["line"] > b["line"] if a["line"] != b["line"] else float(a["d"]) > float(b["d"]))
+	return out
 
 func _save() -> void:
 	_drain()

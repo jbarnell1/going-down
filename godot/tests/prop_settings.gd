@@ -1061,7 +1061,7 @@ func test_minder_calm_numbers(t: T) -> void:
 	var ids: Array[String] = ["q"]
 	for given: Dictionary in [{}, {&"minder.after_hunt": 30.0, &"minder.anger_hide": 25.0, &"minder.anger_open": 40.0, &"minder.stalk": 1.0}]:
 		var tuning := Settings.make(given)
-		var after := Settings.f(tuning, &"minder.after_hunt", 15.0) / 100.0
+		var after := Settings.f(tuning, &"minder.after_hunt", 0.0) / 100.0
 		var hide := Settings.f(tuning, &"minder.anger_hide", 10.0) / 100.0
 		var open := Settings.f(tuning, &"minder.anger_open", 10.0) / 100.0
 		var stalk := Settings.f(tuning, &"minder.stalk", 1.5)

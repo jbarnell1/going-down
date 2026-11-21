@@ -1013,7 +1013,7 @@ static func _end_count(s: SeekState, t: float, events: Array[Dictionary]) -> voi
 	s.ended += 1
 	s.calm_until = t + CALM_TIME
 	if s.calm and s.tuned:
-		# MA1: the one place the bar comes down: a hunt over, it restarts from a floor that rises each hunt.
+		# MA1: the one place the bar comes down: a hunt over, it resets (to empty by default; see calm_after_hunt).
 		s.anger = calm_after_hunt(_live, s.ended)
 	if s.last:
 		s.done = true
@@ -1801,15 +1801,17 @@ static func _fetch_step(s: SeekState, input_of: Dictionary, t: float, dt: float,
 # when not aggrod. It shouldn't be fast, and if it loses eyesight of a player, it should go back to wandering."
 #   - the anger bar never cools and never drains over the calm after a count. The one time it comes down is the
 #     tick a count ends: it restarts from calm_after_hunt (CALM_AFTER_HUNT in 100 for each count ended so far, at
-#     most CALM_AFTER_MAX), so it never sits full and starts the next count at once, and each hunt leaves it angrier;
+#     most CALM_AFTER_MAX). The owner, 20 Nov: "Minder's bar resets after a count. But it can only ever creep up
+#     until the next hunt is over, when it resets again and the cycle starts over." So CALM_AFTER_HUNT is 0: empty
+#     after every hunt (the live setting minder.after_hunt can still raise it);
 #   - getting into a hide adds CALM_HIDE_ANGER, and opening something (the run's "searchStart") CALM_OPEN_ANGER;
 #     either can start a count, as a noise can ("why" "hide" or "open");
 #   - between counts, a player out of a hide and in its view (in_view: SIGHT_RANGE, the cone, a clear line) is walked
 #     to at CALM_STALK_SPEED, slower than a walking player, its face on them (the goal "stalk"; its mode stays
 #     "wander"). Within GRAB_RANGE the T15m grab takes them. Out of its view, it goes back to its round.
 
-## Each count ended leaves the bar at this much more (0 to 1), up to CALM_AFTER_MAX (never full).
-const CALM_AFTER_HUNT := 0.15
+## Each count ended leaves the bar at this much more (0 to 1), up to CALM_AFTER_MAX (never full). 0: empty every time.
+const CALM_AFTER_HUNT := 0.0
 const CALM_AFTER_MAX := 0.6
 ## Getting into a hide, and opening something: what each adds to the bar (0 to 1).
 const CALM_HIDE_ANGER := 0.1

@@ -350,7 +350,15 @@ async function follow(c, route, ms = 60000, gait = '0') {
 async function wardGo(c, x, z, ms = 60000, radius = 0.45) {
   let res = null;
   for (let tries = 0; tries < 3; tries++) {
-    const route = JSON.parse(await c.cmd(`wardroute ${x} ${z} ${radius}`));
+    const asked = Date.now();
+    let route = JSON.parse(await c.cmd(`wardroute ${x} ${z} ${radius}`));
+    // Under load the route sometimes comes back empty and is there when asked again: one retry, said loudly.
+    if (!route.length) {
+      const lw = await c.late();
+      console.log(`RETRY ward route to (${Number(x).toFixed(2)}, ${Number(z).toFixed(2)}) from ${J([lw.localBody?.x, lw.localBody?.y, lw.localBody?.z].map(r2))}: no route on the first ask (${Date.now() - asked} ms; encounter ${lw.ward?.encounter} house ${lw.ward?.house}, doors ${J(lw.ward?.doors)}, caught ${J(lw.ward?.caught)}, bridge ${lw.ward?.bridgeLowered}), asking once more in 1 s`);
+      await sleep(1000);
+      route = JSON.parse(await c.cmd(`wardroute ${x} ${z} ${radius}`));
+    }
     if (!route.length) return { ok: false, why: 'no route', reached: NaN };
     res = await follow(c, route, ms);
     if (Math.hypot(res.at[0] - x, res.at[2] - z) < radius + 0.4) return { ok: true, ...res, steps: route.length };
@@ -539,6 +547,14 @@ async function mainSession() {
     B = await joinRoom('B', P.B, url, 'Bob');
     await until(A.state, (s) => (scr(s).people ?? []).length >= 2, 20000);
     await setLift(A, B, 'main');
+    // FX1: since the Ward's call station moved to a far house (WC1) on the larger generated Ward (WG1), the web rescue
+    // there and the half-walk back (PL3's pace, the walk model's) take longer than the game's 30 s of boarding; the
+    // host gives the car 90 s (the live setting lift.board, the same panel), so the boarding check is of the car.
+    {
+      const sent = await A.cmd('panel set lift.board 90');
+      const ph = await until(async () => JSON.parse(await A.cmd('panel state')), (p) => p.asked?.['lift.board'] === 90, 8000, 100);
+      check('main: the host sets the car\'s boarding to 90 s on the settings panel', sent === 'sent' && ph.asked?.['lift.board'] === 90, `"${sent}", asked ${J(ph.asked)}`);
+    }
     startSplit(A);
     startSplit(B);
     let l = await rideToWard([A, B], 'main');
@@ -720,6 +736,16 @@ async function mainSession() {
     }
     const wardOrder = (x) => (x.events ?? []).filter((e) => String(e.type).startsWith('ward_')).map((e) => [e.type, e.t]);
     check('Ward: the same Ward events in the same order on both screens', J(wardOrder(la)) === J(wardOrder(lb)), `A ${J(wardOrder(la))} B ${J(wardOrder(lb))}`);
+    // FX1: after a cut-down in the far house, back to the parlour beside the lift first (the route straight from the
+    // house into the car ran past the route search's 12 s), then in.
+    if (wardCalled) {
+      const [la0, lb0] = [await A.late(), await B.late()];
+      const far = (lw) => Math.hypot((lw.localBody?.x ?? 0) - door[0], (lw.localBody?.z ?? 0) - door[2]) > 8;
+      if (far(la0) || far(lb0)) {
+        const back = await Promise.all([far(la0) ? wardGo(A, door[0] - 0.3, door[2] + 2.2, 60000) : { ok: true, near: true }, far(lb0) ? wardGo(B, door[0] + 0.3, door[2] + 2.2, 60000) : { ok: true, near: true }]);
+        log(`  back to the parlour from the far house: Ann ${J({ ok: back[0].ok, why: back[0].why })} from ${J([la0.localBody?.x, la0.localBody?.z].map(r2))}, Bob ${J({ ok: back[1].ok, why: back[1].why })} from ${J([lb0.localBody?.x, lb0.localBody?.z].map(r2))}`);
+      }
+    }
     // WC1: called, the car is every floor's: DOWN is the right half walking in (x past the doors' middle).
     const inA = wardGo(A, door[0] + (wardCalled ? 0.3 : -0.25), door[2] - 1.3, 30000);
     const inB = wardGo(B, door[0] + (wardCalled ? 0.3 : 0.25), door[2] - (wardCalled ? 2.1 : 1.9), 30000);

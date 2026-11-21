@@ -148,6 +148,59 @@ func test_a_walker_is_caught_and_a_sprinter_and_a_watcher_are_not(t: T) -> void:
 	t.check(tried >= 4, "enough long routes (%d)" % tried)
 	t.note("%d chases; %s" % [tried, ", ".join(lines.slice(0, 6))])
 
+## FX1 (found by tools/play_down.mjs on the merge of 20 Nov): a player standing still with their back to it, the
+## Orderly put 1.3 m behind them hunting (as tools/down_room.gd does). Its reach walk must stop APPROACH_STOP short:
+## on the residents' walk round solids it walked on to the player's own spot, into their view, so the reach was
+## cancelled and it stood held in their face, never catching them. Returns {caught, closest (metres during the
+## reach), cancels}.
+static func behind_still(plan: Floor.FloorPlan, route: Array[Floor.Pos], reach: float, solids: Move.Solids) -> Dictionary:
+	var body := Move.body_at_cell(plan, route[AHEAD])
+	var from := Move.body_at_cell(plan, route[AHEAD - 1])
+	var dx := from.x - body.x
+	var dz := from.z - body.z
+	var d := M.hypot2(dx, dz)
+	var o := hunter(plan, route[AHEAD])
+	o.body = Move.move_with_collision(plan, body, dx / d * 1.3, dz / d * 1.3, Entity.ORDERLY_RADIUS, solids)
+	var yaw := Entity.yaw_toward(-(o.body.x - body.x), -(o.body.z - body.z))
+	var out := {"caught": -1.0, "closest": INF, "cancels": 0, "start": M.hypot2(o.body.x - body.x, o.body.z - body.z)}
+	var t := 0.0
+	while t < 5.0 - EPS:
+		t += DT
+		var players: Array[Entity.PlayerView] = [view("p0", body, yaw, false)]
+		var r := Entity.step_entity(plan, o, players, DT, HUNT, true, 1, solids, false, reach)
+		o = r.state
+		if o.mode == &"windUp":
+			out["closest"] = minf(float(out["closest"]), M.hypot2(o.body.x - body.x, o.body.z - body.z))
+		for e in r.events:
+			if str(e["type"]) == "windUpCancelled":
+				out["cancels"] = int(out["cancels"]) + 1
+			if str(e["type"]) == "caught":
+				out["caught"] = t
+		if float(out["caught"]) >= 0.0:
+			break
+	return out
+
+func test_a_still_player_with_their_back_to_it_is_caught_and_it_never_walks_into_them(t: T) -> void:
+	var tried := 0
+	for pr: Array in routes(t.quick, 8):
+		var plan: Floor.FloorPlan = pr[0]
+		var route: Array[Floor.Pos] = []
+		route.assign(pr[1])
+		var furn := Furniture.solids_of(plan, true)
+		for solids: Move.Solids in [null, furn]:
+			if solids == null and furn == null:
+				continue
+			var tag := "%s/%d%s" % [plan.seed, plan.depth, " solids" if solids != null else ""]
+			var on := behind_still(plan, route, 1.0, solids)
+			if float(on["start"]) < 1.0:
+				continue  # no room behind them on this route
+			tried += 1
+			t.check(float(on["caught"]) >= 0.0 and int(on["cancels"]) == 0, "%s: with the fix, a still player with their back to it is caught, never a cancelled reach (%s)" % [tag, str(on)])
+			t.check(float(on["closest"]) >= Entity.APPROACH_STOP - 1e-6, "%s: its reach walk stops %.2f m short, never nearer (%s)" % [tag, Entity.APPROACH_STOP, str(on)])
+			var off := behind_still(plan, route, 0.0, solids)
+			t.check(float(off["caught"]) >= 0.0, "%s: off, the standing swipe catches them too (%s)" % [tag, str(off)])
+	t.check(tried >= 4, "enough spots with room behind (%d)" % tried)
+
 # ---------------------------------------------------------------------------------------------
 # 2. The trolley through the air (computed numbers only: nobody listens in a headless test).
 

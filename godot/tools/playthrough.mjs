@@ -13,6 +13,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chooseHide, getIn, getOut, hideForTheWait, hidesOf, safeHide } from './careful.mjs';
+import { orderlyCell, watchSpots } from './orderly_spot.mjs';
 
 export async function playthrough(driver, opts) {
 const shots = opts.shots;
@@ -135,7 +136,13 @@ const mean = (sl) => {
     }
   return n ? sum / n / maxDist : 0;
 };
-const es = plan.entityStart;
+// Where the Orderly really starts: the rules' body at the first state (it waits where the floor began). Since the
+// Orderly fix (OR2, sim/orderly_fix.gd, the owner's 20 Nov playtest) that is a seeded cell deep in the dirty part,
+// not the plan's entityStart, which the script used before.
+const es = orderlyCell(s, S);
+console.log(`the Orderly waits at ${JSON.stringify(es)} (the plan's old start ${JSON.stringify(plan.entityStart)}), mode ${s.orderly.mode}`);
+check('the Orderly starts in the dirty part, waiting', s.orderly.mode === 'waiting' && dist(es.level, es.x, es.y) >= 0.6 * maxDist - 1e-9,
+  `walk ${dist(es.level, es.x, es.y)} of ${maxDist} cells from the lift`);
 const farFromOrderly = (sl) => Math.hypot((sl.x1 + sl.x2) / 2 - es.x, (sl.y1 + sl.y2) / 2 - es.y) * S > 26 || sl.level !== es.level;
 const lines = plan.sightlines.map((sl) => ({ ...sl, c: mean(sl) }));
 const clean = lines.filter((l) => l.level === 0 && l.length >= 6).sort((a, b) => a.c - b.c)[0];
@@ -161,26 +168,22 @@ check('corrupted side: far from the lift', corrupt.c > 0.6, `mean corruption ${c
 await shot('corrupted-corridor');
 if (only === 'first') { await finish(); }
 
-// ---- 4. The Orderly's corridor: stand down its sightline, about 16 m off, and watch it.
-const ePos = centre(es.x, es.y);
-const along = plan.sightlines
-  .filter((sl) => sl.level === es.level && ((sl.x1 === sl.x2 && sl.x1 === es.x && es.y >= Math.min(sl.y1, sl.y2) && es.y <= Math.max(sl.y1, sl.y2)) || (sl.y1 === sl.y2 && sl.y1 === es.y && es.x >= Math.min(sl.x1, sl.x2) && es.x <= Math.max(sl.x1, sl.x2))))
-  .sort((a, b) => b.length - a.length)[0];
-let spot = null;
-if (along) {
-  const cellsOn = [];
-  for (let x = Math.min(along.x1, along.x2); x <= Math.max(along.x1, along.x2); x++)
-    for (let y = Math.min(along.y1, along.y2); y <= Math.max(along.y1, along.y2); y++) cellsOn.push({ x, y, d: Math.hypot(x - es.x, y - es.y) * S });
-  spot = cellsOn.filter((c) => c.d <= 10).sort((a, b) => b.d - a.d)[0];
+// ---- 4. The Orderly: stand down its sightline (or, off any listed one, an open line), up to 10 m off, and
+// watch it. The far start is not always on a listed sightline (tools/orderly_spot.mjs); the rules say whether
+// it is seen from a spot, and the first that sees it is used.
+const watchFrom = watchSpots(plan, es);
+console.log('watch the Orderly from', JSON.stringify(watchFrom.slice(0, 3)), `(${watchFrom.length} spots)`);
+for (const [i, p] of watchFrom.slice(0, 12).entries()) {
+  await cmd(`teleport ${es.level} ${p.x} ${p.y}`);
+  await wait(200);
+  const now = (await state()).orderly; // it may have woken and come on since the last try
+  await cmd(`face ${now.x} ${now.z} ${(now.pose?.y ?? es.level * 3.2) + 1.4}`);
+  s = await until((s) => s.orderly.seeing === true, i === 0 ? 4000 : 1500, 50);
+  if (s.orderly.seeing === true) {
+    console.log(`  watching from (${p.x},${p.y}), ${p.d.toFixed(1)} m (${p.how}), try ${i + 1}`);
+    break;
+  }
 }
-console.log('Orderly sightline', JSON.stringify(along), 'watch from', JSON.stringify(spot));
-// Walk most of the way there (the rules' path and collision), then the last stretch.
-if (spot) {
-  await cmd(`teleport ${es.level} ${spot.x} ${spot.y}`);
-}
-await wait(200);
-await cmd(`face ${ePos.x} ${ePos.z} ${es.level * 3.2 + 1.4}`);
-s = await until((s) => s.orderly.seeing === true, 4000, 50);
 const o0 = { x: s.orderly.x, z: s.orderly.z };
 check('the Orderly is in view and seen', s.orderly.seeing === true && s.orderly.drawn === true, `mode ${s.orderly.mode}, ${s.orderly.distance.toFixed(1)} m`);
 // How it is drawn in the light (client/orderly_view.gd look): the blackout's frames are held to it (step 7).
@@ -197,7 +200,7 @@ for (let i = 0; i < 25; i++) {
 check('watched, it does not move', moved < 1e-6 && s.orderly.held === true, `moved ${moved.toFixed(3)} m, mode ${s.orderly.mode}`);
 
 // ---- 5. Turn away with the instrument up: it moves (and squeaks), the needle records; look back.
-await cmd(`face ${2 * s.me.x - ePos.x} ${2 * s.me.z - ePos.z}`);
+await cmd(`face ${2 * s.me.x - s.orderly.x} ${2 * s.me.z - s.orderly.z}`);
 await cmd('raise 1');
 s = await until((s) => s.orderly.moving === true, 4000, 50);
 const sq = s.orderly.squeak;

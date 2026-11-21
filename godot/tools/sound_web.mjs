@@ -13,10 +13,12 @@ import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hideForTheWait } from './careful.mjs';
+import { orderlyCell, watchSpots } from './orderly_spot.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
-const { chromium } = require(resolve(here, '../../node_modules/playwright'));
+// As tools/play_web.mjs: found up the folders, so it also runs from a worktree (no node_modules of its own).
+const { chromium } = require('playwright');
 const port = Number(process.argv[2] ?? 4440);
 const query = (process.argv.find((a) => a.startsWith('--query=')) ?? '--query=').slice(8);
 const SILENCE_DB = -60;
@@ -117,19 +119,22 @@ let st = (await sample()).s;
 if (audible && st.orderly) {
   await cmd('sfx solo approach');
   const plan = JSON.parse(await cmd('plan'));
-  const es = plan.entityStart;
-  // Down the Orderly's own sightline, about 10 m off (as tools/playthrough.mjs does).
-  const along = plan.sightlines.filter((sl) => sl.level === es.level && ((sl.x1 === sl.x2 && sl.x1 === es.x && es.y >= Math.min(sl.y1, sl.y2) && es.y <= Math.max(sl.y1, sl.y2)) || (sl.y1 === sl.y2 && sl.y1 === es.y && es.x >= Math.min(sl.x1, sl.x2) && es.x <= Math.max(sl.x1, sl.x2)))).sort((a, b) => b.length - a.length)[0];
-  let spot = null;
-  if (along) {
-    const cells = [];
-    for (let x = Math.min(along.x1, along.x2); x <= Math.max(along.x1, along.x2); x++) for (let y = Math.min(along.y1, along.y2); y <= Math.max(along.y1, along.y2); y++) cells.push({ x, y, d: Math.hypot(x - es.x, y - es.y) * 2 });
-    spot = cells.filter((c) => c.d <= 10).sort((a, b) => b.d - a.d)[0];
+  // Where it really waits (since the Orderly fix, a seeded cell in the dirty part, not the plan's entityStart), and
+  // a spot up to 10 m off that the rules say sees it (tools/orderly_spot.mjs, as tools/playthrough.mjs does).
+  const es = orderlyCell(st);
+  let ex = st.orderly.x;
+  let ez = st.orderly.z;
+  for (const p of watchSpots(plan, es).slice(0, 12)) {
+    await cmd(`teleport ${es.level} ${p.x} ${p.y}`);
+    await page.waitForTimeout(200);
+    const o = (await sample()).s.orderly;
+    ex = o.x;
+    ez = o.z;
+    await cmd(`face ${ex} ${ez} ${(o.pose?.y ?? es.level * 3.2) + 1.4}`);
+    let seen = false;
+    for (let i = 0; i < 15 && !seen; i++) { await page.waitForTimeout(100); seen = (await sample()).s.orderly.seeing === true; }
+    if (seen) { console.log(`  watching the Orderly from (${p.x},${p.y}), ${p.d.toFixed(1)} m (${p.how})`); break; }
   }
-  if (spot) await cmd(`teleport ${es.level} ${spot.x} ${spot.y}`);
-  const ex = (es.x + 0.5) * 2;
-  const ez = (es.y + 0.5) * 2;
-  await cmd(`face ${ex} ${ez} ${es.level * 3.2 + 1.4}`);
   const trace = [];
   const take = async (n) => { for (let i = 0; i < n; i++) { const p = await sample(); trace.push({ db: p.db, moving: p.s.orderly.moving && !p.s.orderly.held && !p.s.orderly.seeing, held: p.s.orderly.held || p.s.orderly.seeing, d: p.s.orderly.distance, g: p.s.orderly.squeak.gain }); await page.waitForTimeout(100); } };
   await take(25);                       // watched: frozen, and silent

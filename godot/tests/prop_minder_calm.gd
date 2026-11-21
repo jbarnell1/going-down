@@ -3,8 +3,10 @@
 # the same. Any time hiding takes place, a drawer is opened, etc it should aggro a bit. If it sees a user it should
 # start walking towards them, and if close enough should take them down when not aggrod. It shouldn't be fast, and if
 # it loses eyesight of a player, it should go back to wandering." Each with the flag on and, as the control, off:
-#   1. The bar never goes down over a long calm with counts in it, except the tick a count ends, when it restarts
-#      from a floor below full that rises each count (15, 30 ... in 100, at most 60). Off: the calm drains it to 0.
+#   1. The bar never goes down over a long calm with counts in it, except the tick a count ends, when it resets to
+#      empty (the owner, 20 Nov: "Minder's bar resets after a count. But it can only ever creep up until the next
+#      hunt is over, when it resets again and the cycle starts over."; the live setting minder.after_hunt, 0, can
+#      still raise where it restarts). Off: the calm drains it to 0.
 #   2. Getting into a hide adds 10 in 100, opening something 10 (the live settings minder.anger_hide and
 #      minder.anger_open); off neither adds anything.
 #   3. Between counts it walks to a player in its view, slower than a walk, and grabs them within 1 m; out of its
@@ -30,8 +32,11 @@ const DT := 0.05
 const TEPS := 1e-6
 
 # The owner's words, as numbers chosen for them (the live settings' game values), restated, not imported.
-const O_AFTER := 0.15
+## "resets after a count ... resets again": empty after every hunt.
+const O_AFTER := 0.0
 const O_AFTER_MAX := 0.6
+## What hiding and opening add between counts, set by hand: the bar has crept up before the next hunt ends.
+const O_CREPT := 0.35
 const O_HIDE := 0.1
 const O_OPEN := 0.1
 ## "It shouldn't be fast": slower than a player's walk (3 m/s).
@@ -74,21 +79,24 @@ func test_the_bar_never_goes_down_but_at_a_counts_end(t: T) -> void:
 						var want := minf(O_AFTER * float(ends), O_AFTER_MAX)
 						if calm and absf(k.s.anger - want) > TEPS:
 							bad = "count %d ended: the bar restarts at %.3f, not %.3f" % [ends, k.s.anger, want]
+						# It creeps up again before the next hunt (hides, drawers), so the next end has something to reset.
+						if calm:
+							k.s.anger = O_CREPT
 					elif k.s.anger < prev - TEPS:
 						drops += 1
 					prev = k.s.anger
 			var held := k.s.anger
 			k.run(quiet, 120.0)
 			if calm:
-				t.check(drops == 0 and bad == "" and ends == 3, "floor %d: the bar never went down but at the 3 counts' ends (%d drops) %s" % [i, drops, bad])
-				t.check(held >= 0.45 - TEPS and held < 1.0 and k.s.anger == held, "floor %d: after 3 counts it sits at %.3f, and 120 quiet seconds leave it there (%.3f)" % [i, held, k.s.anger])
+				t.check(drops == 0 and bad == "" and ends == 3, "floor %d: the bar never went down but at the 3 counts' ends, each to empty (%d drops) %s" % [i, drops, bad])
+				t.check(absf(held - O_CREPT) < TEPS and k.s.anger == held, "floor %d: crept up to %.3f after the last count, and 120 quiet seconds leave it there (%.3f)" % [i, held, k.s.anger])
 			else:
 				t.check(drops > 0 and k.s.anger == 0.0, "floor %d off: the calm drains it as before (%d drops, %.3f)" % [i, drops, k.s.anger])
 
 func test_the_floor_after_a_hunt_is_capped_and_never_full(t: T) -> void:
 	for n in 12:
 		var f := Seek.calm_after_hunt(null, n)
-		t.check(absf(f - minf(O_AFTER * n, O_AFTER_MAX)) < TEPS and f < 1.0, "after %d counts: %.3f" % [n, f])
+		t.check(absf(f - minf(O_AFTER * n, O_AFTER_MAX)) < TEPS and f < 1.0, "after %d counts it restarts at %.3f (empty)" % [n, f])
 	var tuning := Settings.make({&"minder.after_hunt": 30.0})
 	t.check(absf(Seek.calm_after_hunt(tuning, 1) - 0.3) < TEPS, "the live setting minder.after_hunt moves it")
 

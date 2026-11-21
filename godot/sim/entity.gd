@@ -902,7 +902,12 @@ static func flank_path(plan: Floor.FloorPlan, from: Floor.Pos, to: Floor.Pos, fi
 static func _reach_walk(plan: Floor.FloorPlan, s: OrderlyState, goal: Move.Body, pace: float, dt: float, k: BodySettings, solids: Move.Solids) -> void:
 	var before := s.body
 	if solids != null:
-		_resident_walk(plan, s, goal, pace * dt, k.radius, solids, APPROACH_STOP)
+		# FX1: the residents' walk keeps to a route it already has, whose last point is the player's own spot, and
+		# only honours `stop` on a fresh direct finish: so no step longer than the straight gap less APPROACH_STOP. It
+		# walked into a still player's view and stood held in their face, never catching them (tools/play_down.mjs).
+		var room := M.hypot2(goal.x - before.x, goal.z - before.z) - APPROACH_STOP
+		if room > 1e-6:
+			_resident_walk(plan, s, goal, minf(pace * dt, room), k.radius, solids, APPROACH_STOP)
 	else:
 		var dx := goal.x - before.x
 		var dz := goal.z - before.z
