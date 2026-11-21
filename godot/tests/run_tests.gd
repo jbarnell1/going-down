@@ -74,6 +74,7 @@ const FILES: Array[String] = [
 	"prop_minder_calm",
 	"prop_down_ring",
 	"prop_pn_fixes",
+	"test_annex_lookalikes",
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).

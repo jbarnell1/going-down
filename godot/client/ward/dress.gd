@@ -81,6 +81,36 @@ static func build_lift(parent: Node3D, door: Vector3, roof := INF) -> Lift:
 			half.visible = false
 	return car
 
+## FX2: the owner saw a dark beam across the lift's doorway at head height (and a brick strip and a kerb across it):
+## the lift's house's interior tie (view.gd _interior_ties) at 2.12 m, the lift wall's brick lintel hanging to 2.18 m
+## over doors 2.25 m high, and the wall's skirting running under the doors. The doorway and the car stay clear:
+##   - the tie in the lift's house runs at LIFT_HOUSE_TIE, under the ceiling, over the doorway's top;
+##   - the lintel seen starts at the car's door height (its body for sight lines is unchanged);
+##   - the skirting along the lift's wall leaves LIFT_GAP open round the doorway.
+const LIFT_HOUSE_TIE := 2.66
+const LIFT_GAP := 1.24 + 0.3
+## The lift car's floor in the lift house's frame (the walk model's door is 0.15 up; the car 0.01 under it).
+const CAR_FLOOR := 0.14
+
+## The brick seen over the lift's doorway in the lift wall `wall` (the house's local box), from the car's door top up.
+static func lift_lintel(view: Node3D, root: Node3D, wall: AABB) -> Node3D:
+	var bottom := CAR_FLOOR + Lift.DOOR_H
+	var middle := wall.get_center()
+	var node := view.call("_box", root, Vector3(middle.x, (bottom + wall.end.y) * 0.5, middle.z),
+		Vector3(wall.size.x, wall.end.y - bottom, 1.24), "brick") as Node3D
+	node.name = "LiftLintel"
+	return node
+
+## A skirting board at `at` (its middle) running `length` along z, leaving `gap` open round its middle (0: whole).
+static func skirting(view: Node3D, root: Node3D, at: Vector3, length: float, gap := 0.0) -> void:
+	const SIZE := Vector2(0.085, 0.23)
+	if gap <= 0.0:
+		view.call("_box", root, at, Vector3(SIZE.x, SIZE.y, length), "wood")
+		return
+	var piece := (length - gap) * 0.5
+	for flip: float in [-1.0, 1.0]:
+		view.call("_box", root, at + Vector3(0, 0, flip * (gap + piece) * 0.5), Vector3(SIZE.x, SIZE.y, piece), "wood")
+
 # ------------------------------------------------------------------------------------------------
 # A house's door.
 

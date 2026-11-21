@@ -844,15 +844,20 @@ static func catalogue() -> Dictionary:
 	pod.append_array(_turned(_workstation(), 0.0, Vector3(0, 0, -0.71)))
 	pod.append_array(_turned(_workstation(), PI, Vector3(0, 0, 0.71)))
 	c["pod"] = {"hw": 0.8, "zb": 1.4, "zf": -1.4, "tall": false, "boxes": pod}
-	var cab: Array = [_b(0.46, 1.32, 0.62, 0, 0, 0, CABINET)]
+	# FX2: what is not a hide must not look like one (looks_enterable). The filing cabinet: narrow, steel grey (the
+	# hide's cabinet is cream and twice as wide), all drawers.
+	var cab: Array = [_b(0.46, 1.32, 0.62, 0, 0, 0, METAL)]
 	for i in 4:
-		cab.append(_b(0.4, 0.27, 0.012, 0, 0.05 + i * 0.315, -0.316, CABINET_DARK))
+		cab.append(_b(0.4, 0.27, 0.012, 0, 0.05 + i * 0.315, -0.316, GREY_MID))
 		cab.append(_b(0.12, 0.025, 0.02, 0, 0.25 + i * 0.315, -0.327, METAL_DARK))
 	c["cabinet"] = {"hw": 0.23, "zb": 0.31, "zf": -0.34, "tall": true, "boxes": cab}
-	var low: Array = [_b(0.9, 0.72, 0.5, 0, 0, 0, CABINET)]
-	for i in 2:
-		low.append(_b(0.84, 0.3, 0.012, 0, 0.05 + i * 0.34, -0.256, CABINET_DARK))
-		low.append(_b(0.2, 0.025, 0.02, 0, 0.27 + i * 0.34, -0.267, METAL_DARK))
+	# FX2: the low cupboard is open shelving, binders on two shelves: nothing to get into.
+	var low: Array = [_b(0.9, 0.03, 0.5, 0, 0.69, 0, WOOD_DARK), _b(0.03, 0.69, 0.5, -0.435, 0, 0, WOOD_DARK),
+		_b(0.03, 0.69, 0.5, 0.435, 0, 0, WOOD_DARK), _b(0.84, 0.69, 0.02, 0, 0, 0.24, WOOD_DARK),
+		_b(0.84, 0.05, 0.48, 0, 0, 0, WOOD_DARK), _b(0.84, 0.03, 0.48, 0, 0.35, 0, WOOD_DARK)]
+	for shelf_y: float in [0.05, 0.38]:
+		for i in 9:
+			low.append(_b(0.07, 0.25 - 0.02 * (i % 3), 0.3, -0.36 + i * 0.09, shelf_y, 0.05, CARD if i % 2 == 0 else FABRIC))
 	c["cabinet_low"] = {"hw": 0.45, "zb": 0.25, "zf": -0.28, "tall": false, "boxes": low}
 	c["plant"] = {"hw": 0.26, "zb": 0.26, "zf": -0.26, "tall": false, "boxes": [
 		_b(0.34, 0.34, 0.34, 0, 0, 0, POT), _b(0.38, 0.04, 0.38, 0, 0.32, 0, GREY_DARK),
@@ -879,18 +884,26 @@ static func catalogue() -> Dictionary:
 	small.append_array(_turned(_chair(), -PI * 0.5, Vector3(-0.72, 0, 0)))
 	c["table_small"] = {"hw": 0.97, "zb": 0.97, "zf": -0.97, "tall": false, "boxes": small}
 	# The wall table is shallow. Its chairs are separate pieces with their own footprints.
+	# FX2: a solid modesty panel to the floor at its front and ends: not a desk to crawl under (only the hides are).
 	c["break_table"] = {"boxes": [
 		_b(1.2, 0.04, 0.56, 0, 0.7, 0, LAMINATE), _b(0.06, 0.7, 0.06, -0.45, 0, 0.13, METAL_DARK),
 		_b(0.06, 0.7, 0.06, 0.45, 0, 0.13, METAL_DARK), _b(0.06, 0.7, 0.06, -0.45, 0, -0.18, METAL_DARK),
-		_b(0.06, 0.7, 0.06, 0.45, 0, -0.18, METAL_DARK)]}
+		_b(0.06, 0.7, 0.06, 0.45, 0, -0.18, METAL_DARK), _b(1.14, 0.68, 0.02, 0, 0.02, -0.26, DESK_EDGE),
+		_b(0.02, 0.68, 0.52, -0.57, 0.02, 0, DESK_EDGE), _b(0.02, 0.68, 0.52, 0.57, 0.02, 0, DESK_EDGE)]}
 	c["fridge"] = {"hw": 0.36, "zb": 0.34, "zf": -0.37, "tall": true, "boxes": [
 		_b(0.7, 1.75, 0.68, 0, 0, 0, WHITE), _b(0.704, 0.015, 0.684, 0, 1.15, 0, GREY_MID),
 		_b(0.03, 0.3, 0.03, 0.28, 1.25, -0.355, GREY_DARK)]}
 	var counter: Array = [_b(1.8, 0.86, 0.6, 0, 0, 0, WOOD), _b(1.84, 0.04, 0.64, 0, 0.86, 0, BEIGE),
 		_b(0.5, 0.3, 0.36, -0.5, 0.9, 0.08, WHITE), _b(0.28, 0.18, 0.01, -0.55, 0.96, -0.105, GREY_DARK),
 		_b(0.16, 0.24, 0.16, 0.4, 0.9, 0.05, WHITE)]
-	for x: float in [-0.45, 0.0, 0.45]:
-		counter.append(_b(0.012, 0.7, 0.01, x, 0.08, -0.305, WOOD_DARK))
+	# FX2: drawers under the counter (three rows of three), not cupboard doors: nothing to get into.
+	for row in 3:
+		var y := 0.08 + row * 0.26
+		counter.append(_b(1.76, 0.012, 0.01, 0, y, -0.305, WOOD_DARK))
+		for x: float in [-0.3, 0.3]:
+			counter.append(_b(0.012, 0.24, 0.01, x, y + 0.012, -0.305, WOOD_DARK))
+		for x: float in [-0.6, 0.0, 0.6]:
+			counter.append(_b(0.16, 0.02, 0.02, x, y + 0.17, -0.31, METAL_DARK))
 	c["counter"] = {"hw": 0.92, "zb": 0.32, "zf": -0.32, "tall": false, "boxes": counter}
 	var shelf: Array = []
 	for x: float in [-0.88, 0.88]:
@@ -1142,18 +1155,16 @@ static func _outward(l: Layout, m: Vector2) -> Vector2:
 ## (the meeting table at its full 4.4 m), the plain pieces from the catalogue, each centred on its footprint and
 ## turned to its facing.
 func _furniture(floor_plan: FloorLib.FloorPlan) -> void:
-	var cat := catalogue()
 	var list := Furniture.pieces_for(floor_plan, str(lv.plan.seed), int(lv.plan.depth),
 		bool(lv.plan.get("furnitureLayout", false)), hides)
 	lv.pieces = list
 	for pc: Furniture.Piece in list:
 		var xf: Transform3D
-		var boxes: Array
+		var boxes := piece_boxes(pc, hides)
 		var type := String(pc.kind)
 		if pc.hide >= 0:
 			var h: Playroom.Hide = hides[pc.hide]
 			xf = hide_xf(h)
-			boxes = meeting_table_boxes() if h.kind == &"table" else hide_boxes(h.kind, false)
 			draw_hide_into_boxes(lv, h.level, xf, boxes, "aprops")
 			hide_pieces.append({"hide": h.id, "kind": String(h.kind), "level": h.level, "xf": xf})
 			type = "hide:" + type
@@ -1161,7 +1172,6 @@ func _furniture(floor_plan: FloorLib.FloorPlan) -> void:
 		else:
 			var f := Vector2(FloorLib.dir_dx(pc.facing), FloorLib.dir_dy(pc.facing))
 			var centre := Vector2(pc.x / 100.0, pc.y / 100.0)
-			boxes = _chair() if pc.kind == &"chair" else (cat[catalogue_name(pc.kind)] as Dictionary).boxes
 			var basis := Basis(Vector3.UP, atan2(-f.x, -f.y))
 			# The record is the piece itself (its centre and facing), as the rules have it.
 			xf = Transform3D(basis, Vector3(centre.x, pc.level * LH, centre.y))
@@ -1182,6 +1192,16 @@ func _furniture(floor_plan: FloorLib.FloorPlan) -> void:
 			lv.prop_spots.append({"room": pc.room, "level": pc.level, "type": type, "pos": [xf.origin.x, xf.origin.z]})
 			lv.props_placed += 1
 		records.append({"room": pc.room, "type": type, "xf": xf})
+
+## The boxes drawn for a piece of the rules' list, in its own frame (its front towards -z): a hide's furniture
+## (hide_boxes, the meeting table's own), a chair, or the catalogue's piece.
+static func piece_boxes(pc: Furniture.Piece, floor_hides: Array[Playroom.Hide]) -> Array:
+	if pc.hide >= 0:
+		var h: Playroom.Hide = floor_hides[pc.hide]
+		return meeting_table_boxes() if h.kind == &"table" else hide_boxes(h.kind, false)
+	if pc.kind == &"chair":
+		return _chair()
+	return (catalogue()[catalogue_name(pc.kind)] as Dictionary).boxes
 
 ## The catalogue's name for a piece's kind.
 static func catalogue_name(kind: StringName) -> String:

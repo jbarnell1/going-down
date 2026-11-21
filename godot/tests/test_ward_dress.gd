@@ -150,6 +150,86 @@ func test_a_house_door_is_seen_shut_and_open(t: T) -> void:
 			t.check(right, "seed %d: every door is drawn %s (a leaf with its panels and knob, on its hinge)" % [case[0], "open" if open else "shut"])
 		view.free()
 
+## FX2: generated Wards (WG1, today's live options) on this many seeds, and today's Ward, for the lift's doorway.
+const DOORWAY_SEEDS := 20
+
+## Whether the box `box` under `xf` (a mesh's world transform and its local box) overlaps `region` (a box in the
+## frame `frame`) by more than a few millimetres, by separating axes: the region's three, the box's three, and the
+## nine crossings.
+static func _overlaps(xf: Transform3D, box: AABB, frame: Transform3D, region: AABB) -> bool:
+	var rel := frame.affine_inverse() * xf
+	var corners: Array[Vector3] = []
+	for i in 8:
+		corners.append(rel * box.get_endpoint(i))
+	var mine: Array[Vector3] = []
+	for i in 8:
+		mine.append(region.get_endpoint(i))
+	var axes: Array[Vector3] = [Vector3.RIGHT, Vector3.UP, Vector3.BACK]
+	var own: Array[Vector3] = [rel.basis.x, rel.basis.y, rel.basis.z]
+	for a: Vector3 in own:
+		if a.length() > 1e-6:
+			axes.append(a.normalized())
+	for a: Vector3 in [Vector3.RIGHT, Vector3.UP, Vector3.BACK]:
+		for b: Vector3 in own:
+			var c := a.cross(b)
+			if c.length() > 1e-4:
+				axes.append(c.normalized())
+	for axis: Vector3 in axes:
+		var lo_a := INF
+		var hi_a := -INF
+		var lo_b := INF
+		var hi_b := -INF
+		for p: Vector3 in corners:
+			lo_a = minf(lo_a, p.dot(axis))
+			hi_a = maxf(hi_a, p.dot(axis))
+		for p: Vector3 in mine:
+			lo_b = minf(lo_b, p.dot(axis))
+			hi_b = maxf(hi_b, p.dot(axis))
+		if minf(hi_a, hi_b) - maxf(lo_a, lo_b) < 0.005:
+			return false
+	return true
+
+## Every drawn mesh of the view that is not part of the lift car, with its world transform and box: [node, xf, box].
+static func _drawn_meshes(view: View) -> Array:
+	var out := []
+	for node: Node in view.find_children("*", "MeshInstance3D", true, false):
+		var mesh := node as MeshInstance3D
+		if mesh.mesh == null or not mesh.is_visible_in_tree() or view.lift_car.is_ancestor_of(mesh):
+			continue
+		out.append([mesh, mesh.global_transform, mesh.mesh.get_aabb()])
+	return out
+
+## FX2: the owner, 20 Nov, on floor 6: a dark beam ran across the lift's doorway at head height. In the car's frame
+## (client/lift.gd: x right walking in, z out of the car), the car's inside and its door opening out to a step past
+## the landing's wall face must hold nothing drawn but the car's own parts, on today's Ward and generated ones.
+func test_nothing_crosses_the_lifts_doorway_or_car(t: T) -> void:
+	var cases: Array = [[8143, []]]
+	for k in DOORWAY_SEEDS:
+		cases.append([1000 + k * 7919, Layout.to_wire({"version": 2, "spread": Layout.SPREAD, "rise": Layout.RISE})])
+	for case: Array in cases:
+		var view := _view(int(case[0]), case[1])
+		var car: Lift = view.lift_car
+		var frame := car.global_transform
+		var inside := AABB(Vector3(-car.half + 0.04, 0.04, -car.depth + 0.06), Vector3(car.half * 2.0 - 0.08, Lift.CAR_H - 0.1, car.depth - 0.06 - Lift.FRONT - 0.03))
+		var doorway := AABB(Vector3(-car.door_half + 0.02, 0.04, -Lift.FRONT), Vector3(car.door_half * 2.0 - 0.04, Lift.DOOR_H - 0.06, Lift.FRONT + Lift.LAND + 0.4))
+		var crossing: Array[String] = []
+		for part: Array in _drawn_meshes(view):
+			if _overlaps(part[1], part[2], frame, inside) or _overlaps(part[1], part[2], frame, doorway):
+				var middle := frame.affine_inverse() * (part[1] as Transform3D) * (part[2] as AABB).get_center()
+				crossing.append("a part %s big at %s" % [str((part[2] as AABB).size.snappedf(0.01)), str(middle.snappedf(0.01))])
+		t.check(crossing.is_empty(), "seed %d: nothing but the car crosses its doorway or stands in it (%d: %s)" % [case[0], crossing.size(), ", ".join(crossing.slice(0, 4))])
+		# The call button and the indicator are on the landing's wall beside and over the door: a drawn wall stands
+		# right behind each, within 2 cm of its back.
+		var walls := _drawn_meshes(view)
+		for spot: Array in [["call button", car.call_at - Vector3(0, 0, 0.04)], ["indicator", Vector3(0, Lift.DOOR_H + 0.38, Lift.LAND + 0.02)]]:
+			var behind: Vector3 = spot[1] - Vector3(0, 0, 0.03)
+			var backed := false
+			for part: Array in walls:
+				var local: Vector3 = (part[1] as Transform3D).affine_inverse() * (frame * behind)
+				backed = backed or (part[2] as AABB).grow(0.001).has_point(local)
+			t.check(backed, "seed %d: the lift's %s is on the wall, not floating" % [case[0], spot[0]])
+		view.free()
+
 func test_galleries_have_railings_and_the_lines_reach_the_roof(t: T) -> void:
 	for case: Array in CASES:
 		var view := _view(int(case[0]), case[1])

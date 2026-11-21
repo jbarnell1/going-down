@@ -835,16 +835,17 @@ func _build_house(site: Dictionary) -> void:
 				# WL1: up to the cavern's roof, where each line is fixed.
 				lines.append(_beam(deck, edge - Vector3.UP * 18.0, Vector3(edge.x, roof_y - deck.position.y, edge.z), 0.07, 0.07, "rope"))
 	var support := lines[fixture.loaded_support_index()]
-	var ties := _interior_ties(root, fixture, root.to_local(support.global_position))
+	var ties := _interior_ties(root, fixture, root.to_local(support.global_position), int(site.id) == 0)
 	houses.append({"fixture": fixture, "lines": lines, "support": support, "root": root, "ties": ties, "deck": deck})
 
 ## The suspension shoe feeds a tie through the frame of each storey to the rear wall.
 ## The weighted take-up lever swings on its iron pin when the line bears weight.
-func _interior_ties(root: Node3D, fixture: House, shoe: Vector3) -> Array[Node3D]:
+func _interior_ties(root: Node3D, fixture: House, shoe: Vector3, lift_house := false) -> Array[Node3D]:
 	var ties: Array[Node3D] = []
 	var rear: Vector3 = fixture.areas[&"rear"]
 	for floor: House.Storey in fixture.storeys:
-		var height := float(floor.height) + 2.12
+		# FX2: in the lift's house the tie runs under the ceiling, over the lift's doorway (it crossed it at head height).
+		var height := float(floor.height) + (Dress.LIFT_HOUSE_TIE if lift_house else 2.12)
 		var front := Vector3(shoe.x, height, shoe.z)
 		var rear_eye := Vector3(rear.x, height, rear.z)
 		var inward := front.direction_to(rear_eye)
@@ -889,7 +890,10 @@ func _lift_wall(root: Node3D, wall: AABB) -> void:
 	for flip: float in [-1.0, 1.0]:
 		_box(root, middle + Vector3(0, 0, flip * (side_width + 1.24) * 0.5),
 			Vector3(wall.size.x, wall.size.y, side_width), "brick", true)
-	_box(root, Vector3(middle.x, 2.615, middle.z), Vector3(wall.size.x, 0.87, 1.24), "brick", true)
+	var lintel := _box(root, Vector3(middle.x, 2.615, middle.z), Vector3(wall.size.x, 0.87, 1.24), "brick", true)
+	# FX2: the body stays for sight lines; the brick seen starts over the car's doors, not across them.
+	(lintel.get_child(0) as Node3D).visible = false
+	Dress.lift_lintel(self, root, wall)
 
 func _window_wall(root: Node3D, wall: AABB, open_sash := false) -> void:
 	var pane := Vector3(wall.size.x, 1.25, 1.42)
@@ -945,7 +949,9 @@ func _dress_house(root: Node3D, site: Dictionary, fixture: House) -> void:
 		var roof := _box(root, Vector3(side * width * 0.26, roof_y + 0.24, center.y),
 			Vector3(width * 0.56, 0.13, depth + 0.5), "iron")
 		roof.rotation.z = -side * deg_to_rad(11.0 if floors == 1 else 7.0)
-		_box(root, Vector3(side * (width * 0.5 - 0.035), 0.125, center.y), Vector3(0.085, 0.23, depth), "wood")
+		# FX2: the skirting along the lift's wall leaves the car's doorway clear (it lay across it as a kerb).
+		Dress.skirting(self, root, Vector3(side * (width * 0.5 - 0.035), 0.125, center.y), depth,
+			Dress.LIFT_GAP if int(site.id) == 0 and side < 0.0 else 0.0)
 	_box(root, Vector3(-width * 0.28, roof_y + 0.61, center.y - 0.61), Vector3(0.35, 0.88, 0.39), "brick")
 	_box(root, Vector3(-width * 0.28, roof_y + 1.03, center.y - 0.61), Vector3(0.48, 0.15, 0.49), "iron")
 	for opening: Vector3 in fixture.room_doors:
