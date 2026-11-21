@@ -65,6 +65,11 @@ const FLOOR_FILES: Array[String] = [
 	"assets/entities/minder_v2.glb",
 	# MO1: the Orderly's second model (drawn with figures=new) and the texture Godot takes out of it.
 	"assets/entities/orderly_v2.glb", "assets/entities/orderly_v2_Orderly_v2_albedo.webp",
+	# AR1: the Reactor's photo maps (loaded by name, client/station_dress.gd tex) and its two Meshy pieces with the
+	# colour maps Godot takes out of them.
+	"assets/reactor/wall_concrete.webp", "assets/reactor/wall_paint.webp", "assets/reactor/floor_concrete.webp",
+	"assets/reactor/ceiling_concrete.webp", "assets/reactor/steel_plate.webp", "assets/arboretum/painted_iron.webp",
+	"assets/reactor/growth_c.glb", "assets/reactor/growth_c_Image_0.webp", "assets/reactor/rotor_b.glb", "assets/reactor/rotor_b_Image_0.webp",
 ]
 const TAPE := {"Web": "assets/station/tape/crew23_web.ogv", "Windows": "assets/station/tape/crew23.ogv"}
 ## MU1: the owner's five music tracks (client/music.gd), loaded by name rather than preloaded, so named here.
@@ -104,7 +109,7 @@ func test_the_late_floors_files_ship_in_every_game_build(t: T) -> void:
 			include = line
 		elif line.begins_with("exclude_filter=") and TAPE.has(name):
 			seen += 1
-			for dir: String in ["assets/*", "assets/ward", "assets/station/*", "assets/station/faces", "assets/sfx", ".glb", ".mp3", ".png"]:
+			for dir: String in ["assets/*", "assets/ward", "assets/station/*", "assets/station/faces", "assets/sfx", "assets/reactor", ".glb", ".mp3", ".png", ".webp"]:
 				t.check(not line.contains(dir), "%s: exclude_filter does not name %s (%s)" % [name, dir, line])
 			var other: String = TAPE["Web" if name == "Windows" else "Windows"]
 			t.check(include.contains(TAPE[name]), "%s: include_filter carries its tape %s" % [name, TAPE[name]])

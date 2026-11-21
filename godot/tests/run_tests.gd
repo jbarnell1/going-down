@@ -85,6 +85,7 @@ const FILES: Array[String] = [
 	"prop_split",
 	"test_split_view",
 	"prop_economy_fix",
+	"test_reactor_look",
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).

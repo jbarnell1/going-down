@@ -50,7 +50,10 @@ func test_the_station_builds_for_many_seeds_and_puts_each_anchor_where_it_says(t
 			t.eq(got.size(), list.size(), "seed %d: one %s drawn per anchor" % [i, kind])
 			for k in mini(got.size(), list.size()):
 				var d := _flat(got[k]["at"]).distance_to(_flat(View.v3(list[k])))
-				t.check(d < 0.01, "seed %d: %s %d drawn at its anchor (%.2f m off)" % [i, kind, k, d])
+				# AR1: a growth roots on the pipe run of its kind on the anchor's wall, slid along it clear of doorways
+				# and lamps (client/station_dress.gd), so it is drawn near its anchor rather than on it; the rest exactly.
+				var reach := 2.5 if kind == "growth" else 0.01
+				t.check(d < reach, "seed %d: %s %d drawn at its anchor (%.2f m off)" % [i, kind, k, d])
 		var check: Dictionary = view.call(&"check")
 		t.check(int(check["drawn"].get("glass", 0)) == (a["glass"] as Array).size(), "seed %d: every wired-glass edge is glass (%s)" % [i, check["drawn"]])
 		t.check(int(check["drawn"].get("crawl", 0)) == (a["crawl"] as Array).size(), "seed %d: cable trays over every crawl cell" % i)

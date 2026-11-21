@@ -809,3 +809,35 @@ Rules learned:
     curved spine, a dropped shoulder and a head held past comfortable read at 10 m; stains do not.
 43. **What shows round a mask must belong to it.** Skin or an ear at the edge says "a man wearing a
     sheet"; hair grown over, and a string tied at the back, say the sheet is part of him.
+
+## The Reactor's surfaces, growths and rotor (AR1, 2026-11-21)
+
+The owner, 21 Nov: "Reactor specifically is pretty weak ... The growths in reactor look terrible ... Textures will
+help, meshy AI will help and free resources for packs that are cc0 will help". Every outside asset on the floor:
+
+| Game file | Source | Licence | Fetched |
+| --- | --- | --- | --- |
+| `godot/assets/reactor/wall_concrete.webp` | Concrete Slab Wall, Poly Haven, https://polyhaven.com/a/concrete_slab_wall | CC0 (stated on the asset's page) | 2026-11-21 |
+| `godot/assets/reactor/wall_paint.webp` | Painted Concrete, Poly Haven, https://polyhaven.com/a/painted_concrete | CC0 (stated on the asset's page) | 2026-11-21 |
+| `godot/assets/reactor/floor_concrete.webp` | Concrete Floor Worn 001, Poly Haven, https://polyhaven.com/a/concrete_floor_worn_001 | CC0 (stated on the asset's page) | 2026-11-21 |
+| `godot/assets/reactor/ceiling_concrete.webp` | Concrete Wall 006, Poly Haven, https://polyhaven.com/a/concrete_wall_006 | CC0 (stated on the asset's page) | 2026-11-21 |
+| `godot/assets/reactor/steel_plate.webp` | Metal Plate 02, Poly Haven, https://polyhaven.com/a/metal_plate_02 | CC0 (stated on the asset's page) | 2026-11-21 |
+| `godot/assets/reactor/growth_c.glb` | Generated with Meshy on the owner's paid plan, 21 Nov 2026, from `assets_src/meshy/reactor/reactor_growth_c_concept.jpg` | the owner's (paid plan) | 2026-11-21 |
+| `godot/assets/reactor/rotor_b.glb` | Generated with Meshy on the owner's paid plan, 21 Nov 2026, from `assets_src/meshy/reactor/reactor_rotor_b_concept.jpg` | the owner's (paid plan) | 2026-11-21 |
+
+The pipes also reuse the Arboretum's `painted_iron.webp` (Green Metal Rust, Poly Haven, CC0).
+
+How they were made small: the five photo maps were downloaded as 1k colour JPGs only (no accounts, plain HTTPS) into
+`assets_src/inbox/reactor/` (not in git) and cut to 512 px WebP by `assets_src/reactor_textures.py`, which also
+sets each map's mean brightness to the station's old painted greys and quietens the paint's chips. The two Meshy
+pieces were decimated to about 7,500 and 9,500 triangles with 1024 px colour by
+`assets_src/blender/reactor/build_reactor_meshy.py`. Three other Meshy pieces were made and not used: growth A
+(faceted lumps and floating fragments), growth B (a fungus shelf, not this floor's growth) and the first rotor (a
+closed drum that shows no blades).
+
+Rules learned:
+
+44. **Lay photo maps in world metres.** A map stretched per cell repeats at a different size on every wall; laid by
+    world position at the photograph's own size, one wall reads like the next.
+45. **Growth sits on something that goes somewhere.** A lump on a pipe stub reads as a prop; the same lump on a run
+    that comes out of one wall and goes into another reads as something that grew there.

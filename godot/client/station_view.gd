@@ -27,6 +27,7 @@ const AnnexView = preload("res://client/annex_view.gd")
 const Marks = preload("res://client/reactor_marks.gd")
 const CrewFour = preload("res://client/station_crew_view.gd")
 const Point = preload("res://client/station_point.gd")
+const Dress = preload("res://client/station_dress.gd")
 
 const S := 2.0
 const LH := 3.2
@@ -104,6 +105,8 @@ var power := 0
 ## What F would do now: "" or one of the prompts above.
 var prompt := ""
 var crew: Node3D
+## AR1: the pipes, growths, frames, signs and rotor (client/station_dress.gd).
+var dresser: Dress
 var sfx: Node = null
 var link: Object = null
 
@@ -186,7 +189,11 @@ func _dress(level: Level, source_plan: RefCounted) -> void:
 	lv._build_stairs()
 	_battens()
 	_lamps()
+	dresser = Dress.new()
+	add_child(dresser)
+	dresser.prepare(lv, self, anchors)
 	_rotor()
+	dresser.build()
 	_landing()
 	_plinth_table()
 	_crawl_trays()
@@ -282,59 +289,17 @@ static func _finish(key: String, img: Image) -> Texture2D:
 	_tex[key] = t
 	return t
 
-## Board-marked concrete: 2 m of wall across, the storey high; shutter boards every 20 cm, tie holes.
-## `green`: old green paint to dado height (1.2 m) with a dark line on top and chips showing grey.
+## AR1: the station's surfaces are CC0 photo maps (godot/assets/reactor, SOURCES.md there; made by
+## assets_src/reactor_textures.py at the old greys' brightness), laid in world metres by station_surface.gdshader.
+## Board-marked poured concrete above, old green paint worn to the concrete below (`green`: the paint map).
 static func wall_tex(green: bool) -> Texture2D:
-	var key := "wall_g" if green else "wall_c"
-	if _tex.has(key):
-		return _tex[key]
-	var w := 128
-	var h := 204
-	var img := Image.create(w, h, false, Image.FORMAT_RGB8)
-	var dado := int(h * (1.0 - 1.2 / LH))
-	for y in h:
-		var board := y / 13
-		for x in w:
-			var n := _hash01(x / 2, y / 2, 3) * 0.5 + _hash01(x / 9, y / 7, 4) * 0.5
-			var g := WALL_GREY + 0.09 * (n - 0.5) + 0.03 * (_hash01(board, 0, 5) - 0.5)
-			var col := Color(g, g * 0.985, g * 0.95)
-			if y % 13 == 0:
-				col *= 0.86
-			if (x % 64 == 20 or x % 64 == 44) and (y % 52 == 26) :
-				col = Color(0.2, 0.2, 0.19)
-			if green and y >= dado:
-				var chip := _hash01(x / 3, y / 3, 9) > 0.93
-				col = C_GREEN * (0.92 + 0.12 * n) if not chip else col
-				if y < dado + 3:
-					col = C_GREEN_DARK * 0.6
-			img.set_pixel(x, y, col)
-	return _finish(key, img)
+	return Dress.tex("wall_paint.webp" if green else "wall_concrete.webp")
 
 static func floor_tex() -> Texture2D:
-	if _tex.has("floor"):
-		return _tex["floor"]
-	var n := 64
-	var img := Image.create(n, n, false, Image.FORMAT_RGB8)
-	for y in n:
-		for x in n:
-			var k := FLOOR_GREY + 0.08 * (_hash01(x, y, 11) - 0.5) + 0.05 * (_hash01(x / 8, y / 8, 12) - 0.5)
-			if x == 0 or y == 0:
-				k *= 0.8
-			img.set_pixel(x, y, Color(k, k * 0.98, k * 0.93))
-	return _finish("floor", img)
+	return Dress.tex("floor_concrete.webp")
 
 static func ceil_tex() -> Texture2D:
-	if _tex.has("ceil"):
-		return _tex["ceil"]
-	var n := 64
-	var img := Image.create(n, n, false, Image.FORMAT_RGB8)
-	for y in n:
-		for x in n:
-			var k := CEIL_GREY + 0.06 * (_hash01(x / 2, y / 2, 21) - 0.5)
-			if y % 32 < 2:
-				k *= 0.7
-			img.set_pixel(x, y, Color(k, k, k * 0.96))
-	return _finish("ceil", img)
+	return Dress.tex("ceiling_concrete.webp")
 
 ## Yellow and black hazard stripes on the lift sill and the cabinet.
 static func stripe_tex() -> Texture2D:
@@ -351,20 +316,32 @@ static func stripe_tex() -> Texture2D:
 
 # --- materials -----------------------------------------------------------------------------------------
 
-func _surface(tex: Texture2D, stain: float) -> ShaderMaterial:
+## Metres one copy of each map covers (the photographs' own sizes, near enough: Poly Haven gives 2 to 3 m).
+const WALL_TILE := 2.3
+const PAINT_TILE := 2.0
+const FLOOR_TILE := 3.0
+const CEIL_TILE := 2.0
+const DADO := 1.2
+
+func _surface(tex: Texture2D, stain: float, tile: float) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
-	m.shader = Level._shader("res://client/surface.gdshader")
+	m.shader = Level._shader("res://client/station_surface.gdshader")
 	m.set_shader_parameter("albedo_tex", tex)
 	m.set_shader_parameter("stain_tex", load("res://assets/textures/decal_rust_stain.png"))
 	m.set_shader_parameter("stain_amount", stain)
 	m.set_shader_parameter("self_light", SELF_LIT)
+	m.set_shader_parameter("tile_m", tile)
+	m.set_shader_parameter("storey", LH)
 	return m
 
 func _materials() -> void:
-	mat_wall_c = _surface(wall_tex(false), 0.8)
-	mat_wall_g = _surface(wall_tex(true), 0.8)
-	mat_floor = _surface(floor_tex(), 0.7)
-	mat_ceil = _surface(ceil_tex(), 0.5)
+	mat_wall_c = _surface(wall_tex(false), 0.8, WALL_TILE)
+	mat_wall_g = _surface(wall_tex(false), 0.8, WALL_TILE)
+	mat_wall_g.set_shader_parameter("paint_tex", wall_tex(true))
+	mat_wall_g.set_shader_parameter("paint_tile_m", PAINT_TILE)
+	mat_wall_g.set_shader_parameter("dado", DADO)
+	mat_floor = _surface(floor_tex(), 0.7, FLOOR_TILE)
+	mat_ceil = _surface(ceil_tex(), 0.5, CEIL_TILE)
 	mat_props = Level.prop_material(Color.WHITE, null, true)
 	mat_sill = Level.prop_material(Color.WHITE, stripe_tex())
 	mat_glass = ShaderMaterial.new()
@@ -594,6 +571,8 @@ func _apply() -> void:
 		(d["globe"] as ShaderMaterial).set_shader_parameter("energy", 1.4 if on else (0.7 if em else 0.06))
 	for m: ShaderMaterial in [mat_wall_c, mat_wall_g, mat_floor, mat_ceil]:
 		m.set_shader_parameter("self_light", SELF_LIT if on else SELF_CUT)
+	if dresser != null:
+		dresser.set_lit(on)
 	lv.ambient_lit = AMBIENT_LIT if on else AMBIENT_CUT
 	lv.set_meta(&"near_light", 0.0 if on else NEAR_CUT)
 	if socket_lamp != null:
@@ -639,40 +618,19 @@ static func _cyl(r_top: float, r_bot: float, h: float, seg := 16) -> CylinderMes
 	c.rings = 1
 	return c
 
-## The stopped rotor at the hall's far end: a drum on its shaft, stilled blades, a green bedplate and casing
-## ribs, its axis down the hall's long side so the sightline from the landing ends on its face.
+## The stopped rotor at the hall's far end, its axis down the hall's long side so the sightline from the landing
+## ends on its face (AR1: client/station_dress.gd rotor(): bedplate, pedestals, the open casing, five stages of
+## pitched blades, inside the old rotor's box).
 func _rotor() -> void:
 	var at := _anchor_at(anchors.get("rotor"))
 	if at == Vector3.INF:
 		return
 	at.y = floorf((at.y + 0.5) / LH) * LH
 	var along_x := _hall.has_area() and _hall.size.x >= _hall.size.y
-	var axis := Basis(Vector3.FORWARD, PI * 0.5) if along_x else Basis(Vector3.RIGHT, PI * 0.5)
-	var yaw := PI * 0.5 if along_x else 0.0
 	var ra: Variant = anchors.get("rotor")
 	var r := minf(float((ra as Dictionary).get("radius", 1.05)) if ra is Dictionary else 1.05, 1.15)
-	var length := 2.6
-	var lvl := _lvl(at)
-	_box(lvl, at, Vector3(2.6, 0.5, length + 1.2), yaw, Vector3(0, 0.25, 0), C_GREEN_DARK)
-	_box(lvl, at, Vector3(0.5, 1.2, 0.5), yaw, Vector3(0, 0.6, length * 0.5 + 0.4), C_GREEN)
-	_box(lvl, at, Vector3(0.5, 1.2, 0.5), yaw, Vector3(0, 0.6, -length * 0.5 - 0.4), C_GREEN)
-	var centre := at + Vector3(0, 0.45 + r, 0)
-	_prim(_cyl(0.18, 0.18, length + 1.6, 12), Transform3D(axis, centre), C_STEEL)
-	_prim(_cyl(r, r, length * 0.55, 28), Transform3D(axis, centre), C_STEEL.darkened(0.15))
-	var blade := BoxMesh.new()
-	blade.size = Vector3(0.06, r * 0.9, length * 0.18)
-	var dirv := Vector3.RIGHT if along_x else Vector3.BACK
-	for ring in 3:
-		var off := dirv * ((ring - 1) * length * 0.36)
-		for i in 14:
-			var ang := TAU * i / 14.0 + ring * 0.11
-			var spin := Basis(dirv, ang)
-			var xf := Transform3D(spin * Basis(Vector3.UP, yaw), centre + off + spin * Vector3(0, r * 0.95, 0))
-			_prim(blade, xf, C_RUST.lerp(C_STEEL, 0.4))
-	# Casing ribs over the top half.
-	for k in 5:
-		var off2 := dirv * ((k - 2) * length * 0.25)
-		_prim(_cyl(r + 0.2, r + 0.2, 0.08, 28), Transform3D(axis, centre + off2), C_GREEN)
+	var wall_z := _hall.position.y if _hall.has_area() and not along_x else -INF
+	dresser.rotor(at, along_x, r, wall_z)
 	_place("rotor", at)
 
 ## The landing at shift change: the striped sill at the lift door, a board of four locker hooks over four
@@ -773,52 +731,15 @@ func _crawl_trays() -> void:
 				_box(level, base, cable, 0.0, off + Vector3(0, 0.05, 0), Color(0.08, 0.08, 0.09))
 		_place("crawl", base)
 
-## A cluster of lobes rooted at a point: small and irregular, from the floor seed through the anchor itself.
-func _lobes(at: Vector3, n: int, rng: RandomNumberGenerator) -> void:
-	for i in n:
-		var r := rng.randf_range(0.04, 0.15)
-		var s := SphereMesh.new()
-		s.radius = r
-		s.height = r * rng.randf_range(1.4, 2.0)
-		s.radial_segments = 10
-		s.rings = 6
-		var off := Vector3(rng.randf_range(-0.16, 0.16), rng.randf_range(-0.1, 0.12), rng.randf_range(-0.16, 0.16))
-		_prim(s, Transform3D(Basis.from_euler(Vector3(rng.randf(), rng.randf() * TAU, rng.randf())), at + off), C_GROWTH.lerp(C_GROWTH_DARK, rng.randf()))
-
-## The growths from the anchors: each {at, kind}: a warm pipe collar split open, cracked lagging on a pipe, or a
-## split cable tray, with the lobes rooted in the break.
+## The growths from the anchors (each {at, kind}: a warm pipe collar split open, cracked lagging, a split cable
+## tray): AR1, client/station_dress.gd roots each on the run of its kind on the nearest wall. One placed record per
+## anchor, at the root it was drawn on.
 func _growths() -> void:
-	var i := 0
-	for g: Variant in anchors.get("growths", []):
-		var at := _anchor_at(g)
-		if at == Vector3.INF:
+	for c: Dictionary in dresser.clusters:
+		if c["anchor"] == Vector3.INF:
 			continue
-		var kind := str((g as Dictionary).get("kind", "pipe_collar")) if g is Dictionary else "pipe_collar"
-		var rng := RandomNumberGenerator.new()
-		rng.seed = hash("%s:%d:growth:%d" % [lv.plan.get("seed", ""), int(lv.plan.get("depth", 0)), i])
-		var lvl := _lvl(at)
-		var r := _facing(g, at)
-		var run := Basis(Vector3.UP, r) * Basis(Vector3.FORWARD, PI * 0.5)   # along the wall it is fixed to
-		if at.y - lvl * LH < 0.2:
-			at.y = lvl * LH + 1.5
-		var k := kind.to_lower()
-		if k.contains("collar") or k.contains("pipe"):
-			_prim(_cyl(0.09, 0.09, 1.6, 12), Transform3D(run, at), C_RUST.lerp(C_STEEL, 0.3))
-			_prim(_cyl(0.14, 0.14, 0.16, 12), Transform3D(run, at), C_GREEN_DARK)
-			kind = "pipe_collar"
-		elif k.contains("insul") or k.contains("lag"):
-			_prim(_cyl(0.17, 0.17, 1.8, 12), Transform3D(run, at), Color(0.72, 0.7, 0.6))
-			_box(lvl, at, Vector3(0.36, 0.06, 0.05), r, Vector3(0, 0, 0.17), Color(0.15, 0.12, 0.1))
-			kind = "cracked_insulation"
-		else:
-			_box(lvl, at, Vector3(1.6, 0.05, 0.34), r, Vector3.ZERO, C_STEEL.darkened(0.2))
-			_box(lvl, at, Vector3(0.7, 0.05, 0.34), r + 0.25, Vector3(0.5, -0.04, 0), C_STEEL.darkened(0.25))
-			kind = "split_cable_tray"
-		_lobes(at, rng.randi_range(5, 9), rng)
-		placed.append({"kind": "growth", "at": at, "growth": kind})
+		placed.append({"kind": "growth", "at": c["at"], "growth": c["kind"], "anchor": c["anchor"]})
 		drawn["growth"] = int(drawn.get("growth", 0)) + 1
-		i += 1
-
 ## The marked service cabinet against its wall: grey steel, hazard stripes, a stencilled label, the fuse socket
 ## and its lamp (red while the socket is empty and the power is cut, green once restored).
 func _cabinet() -> void:
