@@ -665,12 +665,21 @@ check('creeping drops the camera (same spot, same look)', crept.me.gait === 'cre
 check('standing up raises it again', Math.abs(eyeOf(upAgain) - 1.65) < 0.005 && upAgain.me.gait !== 'creep', `eye ${eyeOf(upAgain).toFixed(3)} m`);
 
 // ---- 13. Down (the caught status stands for it until the downed-and-healed rules): the camera near the
-// floor. Playing alone that is a wipe, so it comes last.
+// floor. Playing alone that is a wipe, so it comes last. Since LS1 and CS1 the caught scene keeps the first 1.1 s
+// and the wipe's scene takes the camera 1.2 s after the catch (client/main.gd CATCH_KEEP_MS), so the floor-level
+// view is only a moment: it is proved from the frame record (every frame drawn while down, client/main.gd
+// _eye_check, which the wipe's own camera at wipe_scene.gd CAM_Y 1.55 m never brings near the floor), read once the
+// wipe's scene has started; then the scene itself.
 const downOk = JSON.parse(await cmd('down 1')).ok === true;
-const downed = await until((st) => st.me.status === 'caught' && eyeOf(st) < 0.5, 3000, 50);
-await wait(250);
+const wiping = await until((st) => st.me.status === 'caught' && st.lastStand?.sceneOn === true, 6000, 50);
+const downEyes = JSON.parse(await cmd('eyestats')).down;
 await shot('eye-down');
-check('down: the camera near the floor', downOk && downed.me.status === 'caught' && eyeOf(downed) < 0.5, `status ${downed.me.status}, eye ${eyeOf(downed).toFixed(3)} m`);
+// Alone, the wipe's scene takes the camera before the drop finishes, so this proves only that the drop began; the full
+// floor-level view and the ring are proved with two players in play_down.mjs.
+check('down: caught, and the camera began to drop before the wipe scene', downOk && wiping.me.status === 'caught' && downEyes.frames >= 1 && downEyes.min < 1.6,
+  `status ${wiping.me.status}, ${downEyes.frames} frames down, lowest eye ${downEyes.min.toFixed(3)} m`);
+check('then the wipe scene plays (letterbox, its camera at the landing eye height)', wiping.lastStand?.sceneOn === true && wiping.lastStand?.letterbox === true && Math.abs(eyeOf(wiping) - 1.55) < 0.15,
+  `scene ${wiping.lastStand?.sceneOn}, letterbox ${wiping.lastStand?.letterbox}, camera ${eyeOf(wiping).toFixed(3)} m above the feet`);
 await wait(300);
 // Every frame of the whole playthrough: the camera drawn against the camera the client judged sight
 // from on that frame, and on every frame an input went, the eye in that input as sent.

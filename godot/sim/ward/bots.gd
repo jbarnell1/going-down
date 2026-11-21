@@ -51,6 +51,7 @@ class Graph:
 	var door_in: Array[int] = []
 	var rooms: Array = []        # per house: {area: node}
 	var corner: Array = []       # per house: [entry corner node]
+	var rings: Array = []        # per house: {"sw".."nw": gallery node}
 	var upstairs: Array[int] = [] # per house: node or -1
 	var lift_car := -1
 	var lift_mouth := -1
@@ -145,6 +146,7 @@ static func build_graph(w: Ward) -> Graph:
 		for k in order.size():
 			g.link(ring[order[k]], ring[order[(k + 1) % order.size()]])
 		mids.append({"south": ring["s"], "north": ring["n"], "east": ring["e"], "west": ring["w"]})
+		g.rings.append(ring)
 		# The front door: outside on the gallery, just inside, then the three ground-floor rooms in a line.
 		var out_p := h.to_world(Vector3(0, 0, -0.75))
 		out_p.y = gy
@@ -255,6 +257,9 @@ static func stay(seed_value: int, crew_n: int, skill: StringName, opts: Dictiona
 	# WG1: opts.layout, a generated layout's options (sim/ward/layout.gd options); absent, today's Ward.
 	var w := Ward.new(seed_value, opts.get("layout", {}))
 	w.tuning = tuning
+	# RR1: the solid, crawling Rigger (sim/ward/roam.gd; opts.roam), his chase included.
+	if opts.get("roam", false):
+		w.enable_roam()
 	w.crew_size = crew_n
 	var trace: bool = opts.get("trace", false)
 	var clock0 := Time.get_ticks_msec()
@@ -277,7 +282,8 @@ static func stay(seed_value: int, crew_n: int, skill: StringName, opts: Dictiona
 	var needed := floori(roundf(400.0 * crew_n * pow(Settings.f(tuning, &"quota.step", 1.45), DEPTH - 1) / 5.0) * 5.0)
 	var res := {"seed": seed_value, "crew": crew_n, "skill": String(skill), "comes": 0, "caught": [], "earned": 0.0,
 		"banked": 0.0, "left": 0, "home": 0, "needed": needed, "danger": false, "near": INF, "searched_in": 0,
-		"warn_min": INF, "met_at": -1.0, "heals": 0}
+		"warn_min": INF, "met_at": -1.0, "heals": 0,
+		"climb_s": 0.0, "search_s": 0.0, "rec_climb_s": 0.0, "rec_search_s": 0.0}
 	if heal:
 		res["heal_on"] = true
 	var plan := {"house": -1, "stage": &"", "lurer": 0, "hunts": 0, "since": 0.0}
@@ -344,6 +350,9 @@ static func stay(seed_value: int, crew_n: int, skill: StringName, opts: Dictiona
 		evs.append_array(w.step(now, dt, BOARD_SECONDS, rows))
 		var caught_now: Array[Dictionary] = []
 		for e in evs:
+			if e.kind == &"weight" and e.surface == &"line":
+				# RR1: the line taking his weight is heard where it is: which corner of which house.
+				plan["line"] = [int(e.house), int(e.corner)]
 			if e.kind == &"line_loaded":
 				res.comes += 1
 				encounter_started[int(e.house)] = float(e.at)
@@ -355,13 +364,37 @@ static func stay(seed_value: int, crew_n: int, skill: StringName, opts: Dictiona
 				who.path.clear()
 				var warn := now - (w.encounter_at if w.encounter_at >= 0.0 else enc_before)
 				res.warn_min = minf(res.warn_min, warn)
-				var room := w.houses[int(e.house)].area_at(w.houses[int(e.house)].to_local(who.pos + Vector3.UP * 1.25))
-				res.caught.append({"id": who.id, "t": snappedf(now, 0.1), "phase": String(w.phase), "house": int(e.house),
-					"room": String(room), "warn": snappedf(warn, 0.01), "style": String(w.layout.houses[int(e.house)].style),
-					"local": str(w.houses[int(e.house)].to_local(who.pos).snappedf(0.01)), "fled": who.fled, "role": String(plan.stage)})
+				if int(e.house) < 0:
+					# RR1: taken out of doors at the end of a chase.
+					res.caught.append({"id": who.id, "t": snappedf(now, 0.1), "phase": String(w.phase), "house": -1,
+						"room": "chase", "warn": snappedf(warn, 0.01), "style": "", "local": "", "fled": who.fled, "role": String(plan.stage)})
+				else:
+					var room := w.houses[int(e.house)].area_at(w.houses[int(e.house)].to_local(who.pos + Vector3.UP * 1.25))
+					res.caught.append({"id": who.id, "t": snappedf(now, 0.1), "phase": String(w.phase), "house": int(e.house),
+						"room": String(room), "warn": snappedf(warn, 0.01), "style": String(w.layout.houses[int(e.house)].style),
+						"local": str(w.houses[int(e.house)].to_local(who.pos).snappedf(0.01)), "fled": who.fled, "role": String(plan.stage)})
 				caught_now.append({"type": "caught", "t": now, "playerId": who.id})
 				if heal:
 					who.down = true
+		if opts.get("trace_search", false) and w.encounter != res.get("_last_enc", ""):
+			var who_in := []
+			for b in bots:
+				who_in.append("%s:%s%s%s" % [b.id, str(_house_of(w, b.pos)), "R" if b.raised else "", "F" if b.fled else ""])
+			print("t=%.1f %s -> %s house %d opening %d plan %s/%s  bots %s" % [now, res.get("_last_enc", ""), w.encounter, w.resident_house, w.roam.opening if w.roam != null else -1, str(plan.house), plan.stage, " ".join(who_in)])
+			res["_last_enc"] = w.encounter
+		# Where the time goes (tools/ward_hunt.gd prints it): his climb and his search, and bot-seconds recording each.
+		var limb_now := w.posed_limb(now)
+		var phase_key := "climb" if w.encounter == &"climbing" else ("search" if w.encounter == &"searching" else "")
+		if phase_key != "":
+			res[phase_key + "_s"] += dt
+			var who_may: Variant = w.recorders(rows, now)
+			for b in bots:
+				if phase_key == "search" and not b.caught and _house_of(w, b.pos) == w.resident_house:
+					res["inside_s"] = float(res.get("inside_s", 0.0)) + dt
+					if b.raised:
+						res["inside_raised_s"] = float(res.get("inside_raised_s", 0.0)) + dt
+				if b.raised and not b.caught and limb_now.size() > 1 and _limb_distance(limb_now, b.pos) <= Instr.RECORD_RANGE and (who_may == null or (who_may as Dictionary).has(b.id)):
+					res["rec_" + phase_key + "_s"] += dt
 		# Danger: the hand near a free bot in the searched house.
 		if w.encounter == &"searching":
 			limb = w.posed_limb(now)
@@ -404,6 +437,12 @@ static func stay(seed_value: int, crew_n: int, skill: StringName, opts: Dictiona
 		for e in step.events:
 			if e["type"] == "readingClosed":
 				res.earned += float(e["value"]) * DEPTH_PAY
+				var key := "earn_" + String(w.encounter)
+				res[key] = float(res.get(key, 0.0)) + float(e["value"]) * DEPTH_PAY
+				res["readings"] = int(res.get("readings", 0)) + 1
+				if opts.get("trace_search", false):
+					var rd: TapeLib.Reading = e["reading"]
+					print("  reading %s closed t=%.1f value %.0f dur %.1f peak %.1f (%s)" % [rd.player_id, now, float(e["value"]) * DEPTH_PAY, rd.duration, rd.peak_rate, w.encounter])
 				if res.met_at < 0.0 and res.earned >= needed:
 					res.met_at = snappedf(now, 0.1)
 	# Departure: the open readings close (sim/run.gd _bank's flush), aboard tapes ride.
@@ -587,7 +626,7 @@ static func _careful(b: Bot, bots: Array[Bot], w: Ward, g: Graph, rng: RandomNum
 			free.append(o)
 	if free.is_empty():
 		return
-	if plan.house < 0 or (plan.stage == &"done" and w.encounter == &"idle"):
+	if plan.house < 0 or (plan.stage == &"done" and _calm(w)):
 		# The next house: any but the one just done.
 		var next := rng.randi_range(1, w.houses.size() - 1)
 		if next == plan.house:
@@ -603,7 +642,13 @@ static func _careful(b: Bot, bots: Array[Bot], w: Ward, g: Graph, rng: RandomNum
 	var lurer: bool = plan.lurer == b.id
 	match plan.stage:
 		&"gather":
-			if w.encounter != &"idle":
+			if not _calm(w) and w.roam != null and w.resident_house >= 1:
+				# RR1: he is already at a house (the crew's own steps brought him): go and record him there.
+				plan.house = w.resident_house
+				plan.stage = &"hunt"
+				plan.since = now
+				return
+			if not _calm(w):
 				# Someone else brought him: wait it out where we are, out of houses.
 				return
 			if b.path.is_empty() and b.pos.distance_to(g.pts[g.door_out[house]]) > 1.5:
@@ -618,18 +663,18 @@ static func _careful(b: Bot, bots: Array[Bot], w: Ward, g: Graph, rng: RandomNum
 				plan.since = now
 		&"lure":
 			if lurer:
-				if w.encounter == &"idle":
+				if _calm(w):
 					if here != house or b.path.is_empty():
 						_go(b, g, w, g.rooms[house][&"entry"] if b.pos.distance_to(g.pts[g.rooms[house][&"entry"]]) > 0.5 else g.door_in[house])
 					b.gait = &"sprint" if here == house else &"walk"
 				else:
 					plan.stage = &"hunt"
-			elif w.encounter != &"idle":
+			elif not _calm(w):
 				plan.stage = &"hunt"
 			if now - plan.since > 40.0:
 				plan.stage = &"done"
 		&"hunt":
-			if w.encounter == &"idle":
+			if _calm(w):
 				plan.stage = &"done"
 				b.raised = false
 				b.fled = false
@@ -649,6 +694,11 @@ static func _careful(b: Bot, bots: Array[Bot], w: Ward, g: Graph, rng: RandomNum
 				var goes_in := inside and w.resident_house == house and (b.skill == &"expert" or idx % 2 == 0 or crew_n == 1)
 				if goes_in and b.path.is_empty() and b.pos.distance_to(g.pts[g.corner[house]]) > 0.4 and not b.fled:
 					_go(b, g, w, g.corner[house])
+				elif not goes_in and plan.has("line") and int(plan.line[0]) == house:
+					# RR1: to the gallery corner where his line takes the weight, to record the climb beside it.
+					var at_line: int = g.rings[house][["sw", "nw", "se", "ne"][int(plan.line[1])]]
+					if b.path.is_empty() and b.pos.distance_to(g.pts[at_line]) > 0.4 and not b.fled:
+						_go(b, g, w, at_line)
 				b.gait = &"creep"
 				b.raised = limb.size() > 1 and _limb_distance(limb, b.pos) <= 9.0
 			elif w.encounter == &"searching" and w.resident_house == house:
@@ -659,6 +709,10 @@ static func _careful(b: Bot, bots: Array[Bot], w: Ward, g: Graph, rng: RandomNum
 		&"done":
 			b.raised = false
 			b.fled = false
+
+## He is not hunting: in his lair, staying after a search or going home (RR1's last two).
+static func _calm(w: Ward) -> bool:
+	return w.encounter == &"idle" or w.encounter == &"lingering" or w.encounter == &"returning"
 
 static func _move(b: Bot, w: Ward, g: Graph, dt: float) -> void:
 	if b.path.is_empty():

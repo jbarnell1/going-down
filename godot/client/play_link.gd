@@ -354,6 +354,9 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	var reel: Variant = (day as Dictionary).get("reel") if day is Dictionary else null
 	if reel != null and inp.get("skipReelAt") == reel["started"] and not reel["skipped"]:
 		lf.skip_reel_at = reel["started"]
+	# ED1: the deal's answer, as client/main.gd keeps it (client/deal_view.gd), while there is something to answer.
+	if inp.get("deal") is Array:
+		lf.deal = inp["deal"]
 	lf.stamina = tank if body != null else null
 	# The Playroom: F for a hide (into the one in reach, or out of the one you are in), quick and loud
 	# with sprint held; W held inside is a peek. The body waits for the host's answer before it moves.
@@ -447,6 +450,10 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	# Down first, then out (null in a run without it): the host's downs block, as client.gd downs() and
 	# spots() read it; its times are host times, counted against "hostNow" (client/down_view.gd).
 	snap["downs"] = latest.get("downs")
+	# LS1 (null in a run without it): the spotlight, the wipe's scene and the prison's standee (net/host.gd, Protocol).
+	snap["stand"] = latest.get("stand")
+	snap["wipe"] = latest.get("wipe")
+	snap["standee"] = latest.get("standee")
 	# Findables (FD10, null in a run without them): the host's find block (client.gd findables()).
 	snap["find"] = latest.get("find")
 	# The inventory (S1, null in a run without it): the host's inv block (client.gd inventory()).
@@ -825,6 +832,13 @@ func crew_faces() -> Array[String]:
 		var id := str(p["id"])
 		out.append(c.face if id == str(c.id) else str(c.faces.get(id, "")))
 	return out
+
+## The face one player drew (FaceCodec text, "" for none or unknown): this player's own, or the one the host passed on.
+func face_of(id: String) -> String:
+	var c := rc.client
+	if c == null:
+		return ""
+	return c.face if id == str(c.id) else str(c.faces.get(id, ""))
 
 # --- the Playroom ---------------------------------------------------------------------------------
 

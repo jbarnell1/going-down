@@ -38,6 +38,7 @@ const Findables = preload("res://sim/findables.gd")
 const Settings = preload("res://sim/settings.gd")
 const Inventory = preload("res://sim/inventory.gd")
 const Shop = preload("res://sim/shop.gd")
+const Deal = preload("res://sim/deal.gd")
 
 const PROTOCOL_VERSION := 1
 const SOLID_BASELINE := 1
@@ -265,6 +266,15 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    Absent on the prison, Practice, during a ride, and beside a "ward" or "reactor" block;
 ##  - the event "tenantArrived" {depth, quotaMet} at the host time the clock reached zero, once a floor: a door
 ##    slams and the announcer says the time is up (client/main.gd, client/announcer.gd).
+## The elevator deal (ED1; sim/deal.gd, net/host_rules.gd deal). New in the Godot game, and only ever sent in a run with
+## it, so a run without it sends exactly what it did before:
+##  - the world's floor extensions gain "deal": sim/deal.gd enc of its block (the ride's card, its answers, its roll and
+##    double, and what holds on the floor reached); Deal.dec checks it and a malformed one refuses the snapshot;
+##  - an input gains a 29th element, the answer [offer seq, choice 0/1 take/2 pass, picked player id or "", double
+##    0/1 draw/2 keep, second opinion seq or -1], after the reel's skip (then sent as -1 when there is none);
+##  - events "dealOffered" {seq, card, closes}, "dealTaken" {seq, card, carrier, roll, outcome}, "dealPassed" {seq,
+##    card}, "dealDoubled" {seq, card, carrier, roll, outcome}, "dealLanded" {seq, depth, faces} and "dealSecondUsed"
+##    {playerId}.
 ## Cycles (FL2; sim/places.gd, sim/run.gd "Cycles"). Only in a run with them, and only from cycle 2 on, so cycle 1 and a
 ## run without them send exactly what they did before:
 ##  - the world's floor extensions (its last element, the dictionary after the shop block) gain "cycle": the cycle
@@ -276,6 +286,15 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    the crew on this floor (-1: no limit), [ids of players whose Field Dressing help here is still free]], decoded as
 ##    "pressure" {light, heals, free};
 ##  - the inventory's refusal "invRefused" gains why "noHeals" (smelling salts with no heals left on the floor).
+## The last one standing and the wipe (sim/last_stand.gd; LS1, North Star B7). Only in a run with it, so a run without it
+## sends exactly what it did before:
+##  - the world's floor extensions gain "stand": [player id, since, mult] while one player of a crew of two or more is the
+##    last one up on a floor (decoded "stand" {id, since, mult}; mult the bonus their tape earns from the next tick on);
+##  - "wipe": [at, depth, day, by, n, last] from the tick a crew was wiped until the morning (decoded "wipe" {at, depth,
+##    day, by (the resident: orderly, temp, minder, groundskeeper, four, rigger), n (which Orderly), last (the last
+##    player caught, or "")}): every screen plays the same scene from host time `at` (client/wipe_scene.gd);
+##  - "standee": the id of the last player caught at the night's latest wipe (the prison's standee wears their face);
+##  - events "lastStand" {playerId, mult} and "lastStandEnd" {playerId, why: healed, caught, left}.
 ## Nightly reels (T24). With a reel in progress, the day block can end in [day, started, crew, votes, skipped].
 ## An input with a skip vote extends its 27-element form by a host-clock timestamp (the reel's start).
 const INV_OPS: Array[String] = ["", "drop", "take", "give", "stash", "fetch", "buy", "use", "throw", "skill", "lamp"]
@@ -299,6 +318,8 @@ const MAX_NAME := 32
 const MAX_SEEN := 8
 const MAX_COORD := 10000.0
 const MAX_CLOCK := 1e9
+## SR1: the kinds of false sight, as the "split" block numbers them (sim/split.gd KINDS).
+const SPLIT_KINDS: Array[String] = ["phantom", "exit", "face"]
 ## A party block without the hold's length (before T22c) means today's hold, sim/seek.gd FETCH_TIME
 ## (tests/prop_party_table.gd test_table_prompt_follows_the_host checks they are equal).
 const PARTY_HOLD_DEFAULT := 3.0
@@ -503,8 +524,26 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < WORLD_SHOP_INDEX:
 			out.append(null)
 		out.append(enc_shop(w["shop"]))
-	if w.get("orderly2") != null or w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null or w.get("nerve") != null or w.get("tenant") != null or w.get("cycle") != null or w.get("pressure") != null:
+	if w.get("orderly2") != null or w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null or w.get("nerve") != null or w.get("tenant") != null or w.get("cycle") != null or w.get("pressure") != null or w.get("stand") != null or w.get("wipe") != null or w.get("standee") != null or w.get("deal") != null or w.get("split") != null:
 		var extensions := {}
+		# LS1 (sim/last_stand.gd): the spotlight, the wipe's scene, the prison's standee.
+		if w.get("stand") != null:
+			extensions["stand"] = [w["stand"]["id"], q3(w["stand"]["since"]), q3(w["stand"]["mult"])]
+		if w.get("wipe") != null:
+			var wp: Dictionary = w["wipe"]
+			extensions["wipe"] = [q3(wp["at"]), int(wp["depth"]), int(wp["day"]), str(wp["by"]), int(wp["n"]), str(wp["last"])]
+		if w.get("standee") != null:
+			extensions["standee"] = str(w["standee"])
+		if w.get("deal") != null:
+			extensions["deal"] = Deal.enc(w["deal"])
+		# SR1 (sim/split.gd view): one player's own exposure, false calm and false sights; only in that player's world.
+		if w.get("split") != null:
+			var sp: Dictionary = w["split"]
+			var rows := []
+			for g: Dictionary in sp["sights"]:
+				rows.append([SPLIT_KINDS.find(str(g["kind"])), int(g["id"]), str(g["who"]), q3(g["x"]), q3(g["y"]), q3(g["z"]),
+					int(g["level"]), q3(g["yaw"]), q3(g["from"]), q3(g["until"]), q3(g["gone"])])
+			extensions["split"] = [q3(sp["e"]), 1 if sp["calm"] else 0, rows]
 		if w.get("orderly2") != null:
 			extensions["o2"] = [_enc_orderly(w["orderly2"]), int(w.get("reloc2", 0)), enc_watch(w["watch2"]) if w.get("watch2") != null else 0]
 		if w.get("tenant") != null:
@@ -1020,7 +1059,8 @@ static func encode(m: Dictionary) -> String:
 			var peels := int(m.get("peels", 0))
 			# The inventory (see the header): its four after the Annex's, which are then sent even when unused.
 			var skip_at: Variant = m.get("skipReelAt")
-			var inv := m.get("invSel") != null or int(m.get("invs", 0)) > 0 or skip_at != null
+			var deal_in: Variant = m.get("deal")
+			var inv := m.get("invSel") != null or int(m.get("invs", 0)) > 0 or skip_at != null or deal_in != null
 			if int(m.get("hides", 0)) > 0 or marks > 0 or peels > 0 or inv:
 				inp.append(int(m.get("hides", 0)))
 				inp.append(int(m.get("fastHides", 0)))
@@ -1034,8 +1074,11 @@ static func encode(m: Dictionary) -> String:
 				inp.append(int(m.get("invs", 0)))
 				inp.append(INV_OPS.find(op))
 				inp.append(str(m["invArg"]) if op == "give" else (int(m["invArg"]) if op in ["take", "stash", "fetch", "buy", "skill", "lamp"] else 0))
-			if skip_at != null:
-				inp.append(q3(float(skip_at)))
+			if skip_at != null or deal_in != null:
+				inp.append(q3(float(skip_at)) if skip_at != null else -1.0)
+			if deal_in != null:
+				var da: Array = deal_in
+				inp.append([int(da[0]), int(da[1]), str(da[2]), int(da[3]), int(da[4])])
 			return JsJson.stringify(inp)
 		"join":
 			var j: Array = [PROTOCOL_VERSION, "J", m["name"], m["ct"]]
@@ -1239,6 +1282,19 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 				return {}
 		if extensions.has("cycle"):
 			out["cycle"] = _i(c, extensions["cycle"], 2, 100000)
+		if extensions.has("stand"):
+			var sd := _a(c, extensions["stand"], 3, 3)
+			if c.bad:
+				return {}
+			out["stand"] = {"id": _s(c, sd[0]), "since": _f(c, sd[1], 0.0, MAX_CLOCK), "mult": _f(c, sd[2], 0.0, 10.0)}
+		if extensions.has("wipe"):
+			var wd := _a(c, extensions["wipe"], 6, 6)
+			if c.bad:
+				return {}
+			out["wipe"] = {"at": _f(c, wd[0], 0.0, MAX_CLOCK), "depth": _i(c, wd[1], 0, 100000), "day": _i(c, wd[2], 0, 100000),
+				"by": _s(c, wd[3]), "n": _i(c, wd[4], 1, 2), "last": _s(c, wd[5])}
+		if extensions.has("standee"):
+			out["standee"] = _s(c, extensions["standee"])
 		if extensions.has("pressure"):
 			var pr := _a(c, extensions["pressure"], 3, 3)
 			if c.bad:
@@ -1247,6 +1303,22 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 			for fid: Variant in _a(c, pr[2], 0, 8):
 				free.append(_s(c, fid))
 			out["pressure"] = {"light": _f(c, pr[0], -1.0, 10.0), "heals": _i(c, pr[1], -1, 100), "free": free}
+			if c.bad:
+				return {}
+		if extensions.has("split"):
+			var sp := _a(c, extensions["split"], 3, 3)
+			if c.bad:
+				return {}
+			var sights: Array = []
+			for entry: Variant in _a(c, sp[2], 0, 8):
+				var g := _a(c, entry, 11, 11)
+				if c.bad:
+					return {}
+				sights.append({"kind": SPLIT_KINDS[_i(c, g[0], 0, SPLIT_KINDS.size() - 1)], "id": _i(c, g[1], 0, 1 << 30), "who": _s(c, g[2]),
+					"x": _f(c, g[3], -MAX_COORD, MAX_COORD), "y": _f(c, g[4], -MAX_COORD, MAX_COORD), "z": _f(c, g[5], -MAX_COORD, MAX_COORD),
+					"level": _i(c, g[6], 0, 1), "yaw": _f(c, g[7], -10.0, 10.0), "from": _f(c, g[8], 0.0, MAX_CLOCK),
+					"until": _f(c, g[9], 0.0, MAX_CLOCK), "gone": _f(c, g[10], -1.0, MAX_CLOCK)})
+			out["split"] = {"e": _f(c, sp[0], 0.0, 1.0), "calm": _i(c, sp[1], 0, 1) == 1, "sights": sights}
 			if c.bad:
 				return {}
 		if extensions.has("nerve"):
@@ -1260,6 +1332,12 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 			if nerve.size() == 7:
 				out["nerve"].append(_f(c, nerve[5], -Run.Nerve.FULL, 0.0))
 				out["nerve"].append(float(_i(c, nerve[6], 0, 1)))
+		if extensions.has("deal"):
+			var deal: Variant = Deal.dec(extensions["deal"])
+			if deal == null:
+				c.bad = true
+				return {}
+			out["deal"] = deal
 		if extensions.has("tenant"):
 			var tenant := _a(c, extensions["tenant"], 2, 2)
 			if c.bad:
@@ -1387,7 +1465,7 @@ static func decode(text: String) -> Variant:
 						st.tank = _f(c, sa[2], 1.0, 60.0)
 					out["stamina"] = st
 		"I":
-			if a.size() != 18 and a.size() != 20 and a.size() != 23 and a.size() != 27 and a.size() != 28:
+			if a.size() != 18 and a.size() != 20 and a.size() != 23 and a.size() != 27 and a.size() != 28 and a.size() != 29:
 				return null
 			var f := _i(c, a[10], 0, 1023)
 			var gait := (f >> 3) & 3
@@ -1425,6 +1503,15 @@ static func decode(text: String) -> Variant:
 				out["peelId"] = _i(c, a[22], -1, MAX_COUNT)
 			if a.size() == 28:
 				out["skipReelAt"] = _f(c, a[27])
+			elif a.size() == 29:
+				# ED1: the deal's answer [seq, choice, pick, double, use]; the reel's skip before it (-1 for none).
+				var skip := _f(c, a[27], -1.0)
+				if skip >= 0.0:
+					out["skipReelAt"] = skip
+				var da := _a(c, a[28], 5, 5)
+				if c.bad:
+					return null
+				out["deal"] = [_i(c, da[0], 0, MAX_COUNT), _i(c, da[1], 0, 2), _s(c, da[2]), _i(c, da[3], 0, 2), _i(c, da[4], -1, MAX_COUNT)]
 			if a.size() >= 27:
 				# The inventory (see the header).
 				out["invSel"] = _i(c, a[23], -1, Inventory.SLOTS - 1)

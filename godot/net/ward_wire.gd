@@ -2,7 +2,9 @@
 extends RefCounted
 
 const LIFT_PHASES := ["unloading", "away", "boarding", "departed"]
-const RIGGER_PHASES := ["idle", "warning", "climbing", "searching"]
+const RIGGER_PHASES := ["idle", "warning", "climbing", "searching", "lingering", "returning", "chasing", "rearing"]
+## RR1: what the crawling Rigger is on (sim/ward/rigger_graph.gd KIND_NAMES).
+const ON := ["lair", "line", "wall", "roof", "under", "deck", "reach"]
 
 static func encode(s: Dictionary) -> Array:
 	var out := [s.collectionAt, s.departAt, s.bridgeLowered, LIFT_PHASES.find(s.phase),
@@ -18,10 +20,16 @@ static func encode(s: Dictionary) -> Array:
 		out.append(true)
 	# WC1: one more field after those, the call's station and the web (sim/ward/state.gd extras), only with either flag
 	# on: the fifteenth, or the sixteenth after WG1's layout.
-	if s.has("extras"):
+	# RR1: the crawling Rigger's pose rides in the extras (with the run flag rigger_roam only), as "rigger".
+	var extras: Variant = s.get("extras")
+	if s.has("rigger"):
+		var r: Dictionary = s.rigger
+		extras = (extras as Dictionary).duplicate() if extras is Dictionary else {}
+		extras["rigger"] = [r.at, r.rot, ON.find(r.on), r.out, r.opening, r.chase, r.reachAt, r.rearAt]
+	if extras != null:
 		if out.size() == 13:
 			out.append(false)
-		out.append(s["extras"])
+		out.append(extras)
 	return out
 
 static func decode(raw: Variant) -> Dictionary:
@@ -78,7 +86,12 @@ static func decode(raw: Variant) -> Dictionary:
 	if layout_at >= 0:
 		out["layout"] = [int(s[layout_at][0]), int(s[layout_at][1]), int(s[layout_at][2])]
 	if extras_at >= 0:
-		out["extras"] = s[extras_at]
+		var extras: Dictionary = (s[extras_at] as Dictionary).duplicate()
+		if extras.has("rigger"):
+			out["rigger"] = _rigger(extras["rigger"])
+			extras.erase("rigger")
+		if not extras.is_empty():
+			out["extras"] = extras
 	return out
 
 ## WC1: the extras as sim/ward/state.gd extras writes them, and nothing else.
@@ -86,8 +99,10 @@ static func _extras_ok(e: Variant) -> bool:
 	if not e is Dictionary:
 		return false
 	for key: Variant in e:
-		if not key in ["called", "station", "stationHouse", "hangPoints", "web", "cuts"]:
+		if not key in ["called", "station", "stationHouse", "hangPoints", "web", "cuts", "rigger"]:
 			return false
+	if e.has("rigger") and _rigger(e["rigger"]).is_empty():
+		return false
 	if e.has("called") and not e["called"] is bool:
 		return false
 	if e.has("station") and not _point(e["station"]):
@@ -122,6 +137,24 @@ static func _point(p: Variant) -> bool:
 		if not _numeric(axis) or absf(float(axis)) > 1024.0:
 			return false
 	return true
+
+static func _rigger(raw: Variant) -> Dictionary:
+	if not raw is Array or raw.size() != 8:
+		return {}
+	var r: Array = raw
+	if not r[0] is Array or r[0].size() != 3 or not r[1] is Array or r[1].size() != 4:
+		return {}
+	for axis: Variant in r[0]:
+		if not _numeric(axis) or absf(float(axis)) > 1024.0:
+			return {}
+	for part: Variant in r[1]:
+		if not _numeric(part) or absf(float(part)) > 1.01:
+			return {}
+	if not _integer(r[2], 0, ON.size() - 1) or not r[3] is bool or not _integer(r[4], -1, 7) or not r[5] is String or r[5].length() > 64:
+		return {}
+	if not _time(r[6]) or not _time(r[7]):
+		return {}
+	return {"at": r[0], "rot": r[1], "on": ON[int(r[2])], "out": r[3], "opening": int(r[4]), "chase": r[5], "reachAt": float(r[6]), "rearAt": float(r[7])}
 
 static func _numeric(value: Variant) -> bool:
 	return (value is int or value is float) and is_finite(float(value))

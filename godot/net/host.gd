@@ -120,11 +120,13 @@ extends RefCounted
 
 const ReactorReview := preload("res://net/reactor_review.gd")
 const Ward = preload("res://sim/ward/state.gd")
+const RiggerRoam = preload("res://sim/ward/roam.gd")
 const WardSettings = preload("res://sim/settings.gd")
 const WardLayout = preload("res://sim/ward/layout.gd")
 const HostRules = preload("res://net/host_rules.gd")
 
 const Run = preload("res://sim/run.gd")
+const Split = preload("res://sim/split.gd")
 const Entity = preload("res://sim/entity.gd")
 const Floor = preload("res://sim/floor.gd")
 const Instr = preload("res://sim/instrument.gd")
@@ -444,6 +446,8 @@ func update(now: float) -> void:
 		_on_message(m["from"], m["data"], now)
 	while next_tick_at() <= now + 1e-9:
 		_step(now)
+	# RR1: a piece of the crawling Rigger's graph, between ticks (_prebuild_roam).
+	_advance_roam_build()
 
 ## Applies the seen reports that have arrived since the last tick now, between ticks.
 func flush_reports(now: float) -> void:
@@ -806,6 +810,11 @@ func start_ward_review(review_seed: int, place_crew := false) -> void:
 	# settings in force now (ward.spread, ward.rise); the snapshot carries them so every screen builds the same.
 	var options := WardLayout.options(state.tuning if state != null else null) if ward_layout() else {}
 	_ward_review = Ward.new(review_seed, options)
+	# RR1: the solid, crawling Rigger (net/host_rules.gd rigger_roam); off, the Ward is exactly as before. His graph
+	# was started on a worker thread with the late floors (_prebuild_roam); wait for it rather than build it twice.
+	if rigger_roam():
+		_finish_roam_build()
+		_ward_review.enable_roam()
 	_ward_plan = state.plan
 	_ward_use.clear()
 	# WC1: the lift called from its station, unless the host has the clock back (ward.lift_clock, read now), and the web.
@@ -1046,6 +1055,19 @@ func _step(now: float) -> void:
 				if voter.input != null and voter.input.get("skipReelAt") == Protocol.q3(s.reel_started):
 					reel_pressed.append(rp.id)
 		s = Run.with_reel_votes(s, reel_crew, reel_pressed)
+
+	# ED1, the elevator deal (sim/deal.gd; Protocol input "deal"): each connected player's answer to the ride's card,
+	# and a second opinion asked for, before the tick, as the reel's votes are.
+	if s.deal != null:
+		var deal_on := {}
+		var answers := {}
+		for rp in s.players:
+			var dp: HostPlayer = _players.get(rp.id)
+			if dp != null and dp.in_run and dp.connected and not dp.left:
+				deal_on[rp.id] = true
+				if dp.input != null and dp.input.get("deal") is Array:
+					answers[rp.id] = dp.input["deal"]
+		s = Run.with_deal_answers(s, Run.deal_crew(s, deal_on), answers, extra)
 
 	# 4. Inputs.
 	var inputs: Array[Run.PlayerInput] = []
@@ -1797,6 +1819,20 @@ func world(full: bool = false) -> Dictionary:
 	var pressure: Variant = pressure_block(s)
 	if pressure != null:
 		out["pressure"] = pressure
+	# LS1 (sim/last_stand.gd; Protocol "stand", "wipe", "standee"): only with the flag on.
+	if s.last_stand and s.stand != null:
+		var stand: Variant = Run.LastStand.stand_block(s.stand)
+		if stand != null:
+			out["stand"] = stand
+		if not s.stand.wipe.is_empty() and int(s.stand.wipe["day"]) == s.day_index:
+			out["wipe"] = s.stand.wipe
+		if s.stand.standee != "":
+			out["standee"] = s.stand.standee
+	# ED1 (Protocol "deal"): the ride's card, its answers and roll, and what holds on this floor; absent with it off.
+	if s.deal != null:
+		var deal_block: Variant = Run.Deal.block(s.deal)
+		if deal_block != null:
+			out["deal"] = deal_block
 	return out
 
 ## DF1 (sim/run.gd "Pressures"): the near light every screen draws, the heals left to the crew on this floor (-1: no
@@ -1809,6 +1845,36 @@ static func pressure_block(s: Run.RunState) -> Variant:
 		if Run.pressure_free_help(s, p.id):
 			free.append(p.id)
 	return {"light": Run.pressure_near_light(s), "heals": Run.pressure_heals_left(s), "free": free}
+
+## RR1: the crawling Rigger's surface graph takes seconds to build (sim/ward/rigger_graph.gd). The run's Ward seed is
+## known from the start (late_seed), so it is built in pieces of ROAM_BUILD_US a tick (update) from when the late floors
+## are turned on, long before the crew reaches floor 6; only a run begun on floor 6 builds it at once. No thread.
+const ROAM_BUILD_US := 3000
+var _roam_ward: Ward = null
+var _roam_build: RefCounted = null
+
+func _prebuild_roam() -> void:
+	if _roam_build != null or not rigger_roam() or state == null:
+		return
+	# The layout's options as start_ward_review will make them (WG1), so the graph built now is the one it uses.
+	var options := WardLayout.options(state.tuning) if ward_layout() else {}
+	_roam_ward = Ward.new(late_seed(state), options)
+	_roam_build = RiggerRoam.begin_graph(_roam_ward)
+
+## A piece of the graph's build (each tick), or the rest of it (`all`); kept for the Ward once it is done.
+func _advance_roam_build(all := false) -> void:
+	if _roam_build == null or _roam_build.call("done"):
+		return
+	if _roam_build.call("advance", -1 if all else ROAM_BUILD_US):
+		RiggerRoam.keep(_roam_ward, _roam_build)
+
+func _finish_roam_build() -> void:
+	_advance_roam_build(true)
+
+## RR1: whether the rules stepping this run have the solid, crawling Rigger (net/host_rules.gd rigger_roam).
+func rigger_roam() -> bool:
+	var rules: Object = _step_fn.get_object() if _step_fn.is_valid() else null
+	return rules != null and bool(rules.get("rigger_roam"))
 
 ## WN1: whether the rules stepping this run play the Ward as a normal level (net/host_rules.gd ward_place).
 func ward_native() -> bool:
@@ -1839,11 +1905,19 @@ func tenant_block() -> Variant:
 	return rules.call("tenant_block", state)
 
 ## Nerve is an owner's private floor reading. The shared world never carries the crew's values.
+## SR1 (sim/split.gd): so is exposure, and a false sight goes only to the player who sees it ("split").
 func _world_for(shared: Dictionary, peer: HostPlayer) -> Dictionary:
-	if not peer.in_run or not Run.shows_nerve(state):
+	if not peer.in_run:
+		return shared
+	var nerve := Run.shows_nerve(state)
+	var split: Variant = Split.view(state, peer.id)
+	if not nerve and split == null:
 		return shared
 	var own := shared.duplicate()
-	own["nerve"] = Run.Nerve.view(Run.nerve_of(state, peer.id))
+	if nerve:
+		own["nerve"] = Run.Nerve.view(Run.nerve_of(state, peer.id))
+	if split != null:
+		own["split"] = split
 	return own
 
 ## The shop and the cabinet (S2; Protocol.enc_shop): every player's credits and cabinet in the run's order, the glow
@@ -2060,7 +2134,7 @@ func _send_snapshots(ht: float) -> void:
 		var head := {"st": ht, "ackIn": p.last_seq, "echo": [p.echo[0], ht - float(p.echo[1])] if p.echo != null else null,
 			"ackSeen": p.ack_seen, "evFrom": p.ack_event + 1, "place": place, "stamina": p.stamina if p.in_run else null}
 		var own := _world_for(w, p)
-		var data := Protocol.snapshot_text(head, evs, Protocol.world_json(own) if own.has("nerve") else text)
+		var data := Protocol.snapshot_text(head, evs, text if is_same(own, w) else Protocol.world_json(own))
 		_transport.send(p.peer, data)
 		stats.snapshots += 1
 		stats.snapshot_bytes += data.length()
@@ -2102,6 +2176,7 @@ func start_reactor_review(review_seed: int, place_crew := false, archive_path :=
 func enable_late_floors(archive_path := "") -> void:
 	late_floors = true
 	late_archive_path = archive_path
+	_prebuild_roam()
 	_start_late_floor()
 
 ## The late floor of the current state, started once per arrival.

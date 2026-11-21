@@ -66,6 +66,8 @@ const GROUPS: Array = [
 	[&"earning", "EARNING"],
 	[&"hiding", "HIDING"],
 	[&"deeper", "FLOOR 8 AND DEEPER"],
+	# ED1: the elevator deal's cards (sim/deal.gd).
+	[&"deal", "THE DEAL"],
 	# The owner, 17 Nov: player speeds come last.
 	[&"speeds", "PLAYER SPEEDS"],
 ]
@@ -85,11 +87,13 @@ const SECTIONS: Array = [
 	[&"stamina", &"players", "STAMINA"],
 	[&"down", &"players", "DOWN AND HEALING"],
 	[&"health", &"players", "HEALTH (THE PLAYROOM)"],
+	[&"split", &"players", "SPLIT REALITY"],
 	[&"carry", &"players", "CARRYING"],
 	[&"shop", &"players", "THE SHOP AND THE CABINET"],
 	[&"earning", &"earning", "EARNING"],
 	[&"hiding", &"hiding", "HIDING"],
 	[&"pressure", &"deeper", "FLOOR 8 AND DEEPER"],
+	[&"deal", &"deal", "THE DEAL"],
 	[&"moving", &"speeds", "MOVING"],
 ]
 
@@ -242,6 +246,21 @@ const ROWS: Array = [
 	# (sim/ward/state.gd hear_loud): heard as a flare's burst is, this near where he is. 80 m is anywhere on the Ward.
 	[&"rigger.call_heard", &"rigger", "HEARS THE LIFT CALLED WITHIN", "the call button at the far house, this near the house he is at; 0 is never", "m", 80.0, 0.0, 80.0, 1.0, &"now", &"WC1", F],
 	[&"rigger.cut_heard", &"rigger", "HEARS A CUT FROM THE WEB WITHIN", "a crewmate cut down from the web, this near the house he is at; 0 is never", "m", 80.0, 0.0, 80.0, 1.0, &"now", &"WC1", F],
+	# RR1: the Rigger as a solid creature crawling the Ward's surfaces (sim/ward/rigger_graph.gd; the run flag
+	# rigger_roam). Read only with that flag on.
+	[&"rigger.climb_speed", &"rigger", "CLIMBS HIS LINES AT", "up and down the taut lines at the houses' corners", "m/s", 6.0, 1.0, 10.0, 0.25, &"now", &"RR1", F],
+	[&"rigger.crawl_speed", &"rigger", "CRAWLS AT", "over walls, roofs, decks and undersides", "m/s", 3.0, 0.5, 6.0, 0.1, &"now", &"RR1", F],
+	[&"rigger.lair_speed", &"rigger", "CROSSES HIS LAIR AT", "in the dark far below the houses", "m/s", 16.0, 2.0, 30.0, 0.5, &"now", &"RR1", F],
+	[&"rigger.linger", &"rigger", "STAYS AFTER A SEARCH", "seconds he waits at the house before going home; a noise then brings him straight on", "s", 8.0, 0.0, 60.0, 1.0, &"now", &"RR1", F],
+	[&"rigger.opening_time", &"rigger", "SEARCHES FROM ONE OPENING FOR", "the longest his hand stays in at one window or door", "s", 20.0, 5.0, 60.0, 1.0, &"now", &"RR1", F],
+	[&"rigger.feel", &"rigger", "FEELS EACH ROOM FOR, CRAWLING", "how long his hand stays at the end of its reach into a room", "s", 4.5, 0.0, 8.0, 0.1, &"now", &"RR1", F],
+	[&"rigger.openings", &"rigger", "OPENINGS A VISIT", "windows and doors he may move between on one visit to a house", "openings", 2.0, 1.0, 3.0, 1.0, &"now", &"RR1", W],
+	[&"rigger.loud", &"rigger", "CHASES AFTER NOISES", "noises he hears from one player out of doors within 5 s that start a chase; 0 is never", "noises", 3.0, 0.0, 10.0, 1.0, &"now", &"RR1", W],
+	[&"rigger.chase_time", &"rigger", "CHASES FOR", "seconds he follows a loud player before he stops to reach", "s", 8.0, 1.0, 30.0, 0.5, &"now", &"RR1", F],
+	[&"rigger.chase_gap", &"rigger", "KEEPS BACK DURING A CHASE", "the nearest his body comes to the player he chases", "m", 6.0, 3.0, 15.0, 0.5, &"now", &"RR1", F],
+	[&"rigger.chase_gain", &"rigger", "GAINS ON A PLAYER AT", "how much faster than the player he goes per metre beyond that gap", "1/s", 0.8, 0.0, 3.0, 0.1, &"now", &"RR1", F],
+	[&"rigger.chase_top", &"rigger", "CHASES AT MOST AT", "his top speed in a chase", "m/s", 5.5, 1.0, 10.0, 0.25, &"now", &"RR1", F],
+	[&"rigger.reach_pause", &"rigger", "REARS BEFORE HE GRABS FOR", "seconds between his rearing up and the arm going out; a player in a house by then is not taken", "s", 1.5, 0.5, 5.0, 0.1, &"now", &"RR1", F],
 	# The lift and the dark. "Time for the elevator to return" is the first three rows.
 	[&"lift.floors_min", &"lift", "CAR STARTS, FEWEST FLOORS AWAY", "the shortest the indicator can start from", "floors", 6.0, 2.0, 19.0, 1.0, &"next", &"LS1", W],
 	[&"lift.floors_max", &"lift", "CAR STARTS, MOST FLOORS AWAY", "the longest", "floors", 12.0, 3.0, 20.0, 1.0, &"next", &"LS1", W],
@@ -287,6 +306,18 @@ const ROWS: Array = [
 	[&"health.sprint", &"health", "SPRINTING COSTS", "health a second of sprinting, only while it hunts", "a second", 8.0, 0.0, 20.0, 1.0, &"now", &"LS5", F],
 	[&"health.rest", &"health", "STANDING GIVES BACK", "health a second of standing", "a second", 1.0, 0.0, 5.0, 0.25, &"now", &"LS5", F],
 	[&"heal.health", &"health", "A HEAL GIVES BACK", "the health a heal puts back", "health", 50.0, 10.0, 100.0, 5.0, &"next", &"LS5", F],
+	# Players: split reality (SR1, sim/split.gd; North Star E1, E2, E5), on in the game's rooms. Exposure is 0 to 100,
+	# never shown. Today's are the Split constants.
+	[&"split.read_rise", &"split", "RISES WITH THE INSTRUMENT UP", "exposure gained a second while recording", "in 100 a second", 0.35, 0.0, 3.0, 0.05, &"now", &"SR1", F],
+	[&"split.alone_rise", &"split", "RISES WHILE ALONE", "exposure gained a second with no crewmate near", "in 100 a second", 0.15, 0.0, 3.0, 0.05, &"now", &"SR1", F],
+	[&"split.alone_m", &"split", "ALONE WITH NOBODY WITHIN", "how near a crewmate must be for you not to be alone", "m", 8.0, 3.0, 20.0, 1.0, &"now", &"SR1", F],
+	[&"split.dark_rise", &"split", "RISES IN THE DARK", "exposure gained a second in a blink or the blackout, lamp off", "in 100 a second", 0.5, 0.0, 3.0, 0.05, &"now", &"SR1", F],
+	[&"split.lift_fall", &"split", "FALLS IN THE LIFT", "exposure lost a second aboard the car", "in 100 a second", 2.0, 0.0, 10.0, 0.25, &"now", &"SR1", F],
+	[&"split.first_at", &"split", "FALSE SIGHTS FROM", "no false sight below this exposure", "in 100", 30.0, 5.0, 95.0, 5.0, &"now", &"SR1", W],
+	[&"split.calm_at", &"split", "FALSE CALM FROM", "at this exposure and above the heartbeat stops and the picture is clean", "in 100", 90.0, 50.0, 100.0, 5.0, &"now", &"SR1", W],
+	[&"split.every", &"split", "A CHANCE EVERY", "seconds between chances of a false sight", "s", 6.0, 2.0, 30.0, 1.0, &"now", &"SR1", F],
+	[&"split.chance", &"split", "CHANCE AT THE TOP", "the chance of a false sight at full exposure (none at FALSE SIGHTS FROM)", "%", 35.0, 0.0, 100.0, 5.0, &"now", &"SR1", W],
+	[&"split.lasts", &"split", "A FALSE SIGHT LASTS", "seconds, unless it is touched or lit by a flare first", "s", 10.0, 3.0, 30.0, 1.0, &"now", &"SR1", F],
 	# Players: carrying (the four-slot inventory, S1; sim/inventory.gd). Four slots is fixed. The stack goes into force
 	# at lights out, when every bag is empty, so a slot never holds more than the number in force.
 	[&"inv.stack", &"carry", "ONE SLOT HOLDS", "how many of the same item stack in one slot", "items", 1.0, 1.0, 5.0, 1.0, &"day", &"S1", W],
@@ -314,6 +345,9 @@ const ROWS: Array = [
 	[&"pay.step", &"earning", "PAY GROWS, A FLOOR", "a reading is worth this much more a floor", "times", 1.35, 1.0, 2.0, 0.05, &"floor", &"LS5", F],
 	[&"record.reach", &"earning", "RECORDING REACH", "how near the resident the needle writes", "m", 9.0, 4.0, 16.0, 0.5, &"now", &"LS5", F],
 	[&"record.rate", &"earning", "PAY RATE UP CLOSE", "credits a second at the nearest", "a second", 140.0, 40.0, 400.0, 10.0, &"now", &"LS5", F],
+	# LS1 (North Star B7, sim/last_stand.gd): on in the game's rooms. The last player up in a crew of two or more earns this
+	# many times what they record while alone; stamped as the spotlight begins and shown then. Today's is LastStand.BONUS.
+	[&"last_stand.bonus", &"earning", "SOLE SURVIVOR PAYS", "times what the last player on their feet records while alone (from a crew of two)", "times", 1.5, 1.0, 3.0, 0.05, &"next", &"B7", F],
 	[&"day.first", &"earning", "DAY 1 OWES", "in floor-1 quotas", "quotas", 1.5, 0.5, 4.0, 0.5, &"day", &"LS5", F],
 	[&"day.lights_out", &"earning", "LIGHTS OUT AFTER", "once more than half the crew is in bed", "s", 20.0, 5.0, 60.0, 5.0, &"next", &"LS5", F],
 	[&"marks.pad", &"earning", "ARROWS ON THE PAD", "the Annex's marks, a floor", "arrows", 3.0, 0.0, 9.0, 1.0, &"floor", &"LS5", W],
@@ -336,6 +370,27 @@ const ROWS: Array = [
 	[&"pressure.near_light3", &"pressure", "NEAR LIGHT REACH, CYCLE 3 ON", "the light around you on your own screen (4 is off, 0 is none)", "m", 0.0, 0.0, 4.0, 0.5, &"floor", &"DF1", F],
 	[&"pressure.tenant_minutes", &"pressure", "TENANT ARRIVES AFTER, CYCLE 2", "minutes on a floor, when sooner than ARRIVES AFTER (0 is off)", "min", 8.0, 0.0, 30.0, 1.0, &"next", &"DF1", W],
 	[&"pressure.tenant_minutes3", &"pressure", "TENANT ARRIVES AFTER, CYCLE 3 ON", "minutes on a floor, when sooner than ARRIVES AFTER (0 is off)", "min", 6.0, 0.0, 30.0, 1.0, &"next", &"DF1", W],
+	# ED1, the elevator deal (sim/deal.gd; on in the game's rooms). Today's are Deal's constants and its CARD table.
+	# A card's odds are its boon's chance in twelfths (6 prints 1 in 2, 9 prints 3 in 4). Off (tests only) nothing reads them.
+	[&"deal.ride", &"deal", "A RIDE WITH A CARD LASTS", "the ride down is at least this long when a card is dealt: the time to choose (4 s after the choice is made, once nothing is left to choose)", "s", 15.0, 6.0, 40.0, 1.0, &"next", &"ED1", F],
+	[&"deal.squeak_in", &"deal", "SQUEAKY SOLES IN THE DECK", "the card can be dealt", "on/off", 1.0, 0.0, 1.0, 1.0, &"next", &"ED1", W],
+	[&"deal.squeak", &"deal", "SQUEAKY SOLES: BOON CHANCE", "in 12: hazard pay; else the carrier's shoes squeak", "in 12", 6.0, 1.0, 11.0, 1.0, &"next", &"ED1", W],
+	[&"deal.torch_in", &"deal", "NOVELTY TORCH IN THE DECK", "the card can be dealt", "on/off", 1.0, 0.0, 1.0, 1.0, &"next", &"ED1", W],
+	[&"deal.torch", &"deal", "NOVELTY TORCH: BOON CHANCE", "in 12: hazard pay; else the carrier's light is a novelty torch", "in 12", 6.0, 1.0, 11.0, 1.0, &"next", &"ED1", W],
+	[&"deal.second_in", &"deal", "SECOND OPINION IN THE DECK", "the card can be dealt", "on/off", 1.0, 0.0, 1.0, 1.0, &"next", &"ED1", W],
+	[&"deal.second", &"deal", "SECOND OPINION: BOON CHANCE", "in 12: one look through a crewmate's eyes; else the carrier squeaks", "in 12", 9.0, 1.0, 11.0, 1.0, &"next", &"ED1", W],
+	[&"deal.dark_in", &"deal", "LIGHTS OUT IN THE DECK", "the card can be dealt", "on/off", 1.0, 0.0, 1.0, 1.0, &"next", &"ED1", W],
+	[&"deal.dark", &"deal", "LIGHTS OUT: BOON CHANCE", "in 12: dark and paid more; else dark for nothing", "in 12", 6.0, 1.0, 11.0, 1.0, &"next", &"ED1", W],
+	[&"deal.express_in", &"deal", "EXPRESS IN THE DECK", "the card can be dealt (only where skipping a floor is safe)", "on/off", 1.0, 0.0, 1.0, 1.0, &"next", &"ED1", W],
+	[&"deal.express", &"deal", "EXPRESS: BOON CHANCE", "in 12: skip a floor for more pay; else the same and it is awake", "in 12", 6.0, 1.0, 11.0, 1.0, &"next", &"ED1", W],
+	[&"deal.double_in", &"deal", "DOUBLE OR NOTHING", "after a boon the carrier may draw again", "on/off", 1.0, 0.0, 1.0, 1.0, &"next", &"ED1", W],
+	[&"deal.double_drop", &"deal", "DOUBLE OR NOTHING ODDS WORSE BY", "in 12, off the second card's boon chance (never under 1 in 12)", "in 12", 3.0, 1.0, 6.0, 1.0, &"next", &"ED1", W],
+	[&"deal.hazard_pay", &"deal", "HAZARD PAY", "the carrier's readings pay this many times", "times", 1.5, 1.0, 3.0, 0.05, &"next", &"ED1", F],
+	[&"deal.dark_pay", &"deal", "LIGHTS OUT PAYS", "every reading on the dark floor pays this many times", "times", 2.0, 1.0, 4.0, 0.05, &"next", &"ED1", F],
+	[&"deal.express_pay", &"deal", "EXPRESS PAYS", "every reading on the floor after the skip pays this many times", "times", 2.0, 1.0, 4.0, 0.05, &"next", &"ED1", F],
+	[&"deal.squeak_loud", &"deal", "SQUEAKY SOLES CARRY", "the carrier's footsteps this many times as far to a resident that hears", "times", 1.6, 1.0, 3.0, 0.1, &"now", &"ED1", F],
+	[&"deal.torch_dim", &"deal", "NOVELTY TORCH STRENGTH", "the carrier's near light, in 100 of a normal one (it flickers too)", "in 100", 45.0, 10.0, 100.0, 5.0, &"now", &"ED1", W],
+	[&"deal.second_time", &"deal", "SECOND OPINION LASTS", "the look through a crewmate's eyes", "s", 10.0, 5.0, 30.0, 1.0, &"next", &"ED1", F],
 	# Player speeds, last (the owner: "player speeds come last").
 	[&"player.walk", &"moving", "WALK", "a player's walking speed", "m/s", 3.0, 2.0, 4.0, 0.1, &"floor", &"LS6", F],
 	[&"player.sprint", &"moving", "SPRINT", "a player's sprinting speed", "m/s", 5.0, 3.5, 7.0, 0.1, &"floor", &"LS6", F],
@@ -344,7 +399,7 @@ const ROWS: Array = [
 ]
 
 ## The pieces whose rows the rules read today (`wired`). LS4, LS5 and LS6 add theirs as they wire them.
-const WIRED_PIECES: Array[StringName] = [&"LS1", &"AR5", &"DF1", &"WD1"]
+const WIRED_PIECES: Array[StringName] = [&"LS1", &"AR5", &"DF1", &"WD1", &"RR1"]
 ## Rows of later pieces the rules already read (wired one group at a time, each with its proof).
 const WIRED_IDS: Array[StringName] = [
 	&"groundskeeper.tilt", &"groundskeeper.beat", &"groundskeeper.sweep", &"groundskeeper.turn",
@@ -396,6 +451,15 @@ const WIRED_IDS: Array[StringName] = [
 	&"orderly.reach_walk", &"orderly.dirty_from",
 	# MA1 and DR1: the owner's playtest of 20 Nov.
 	&"minder.after_hunt", &"minder.anger_hide", &"minder.anger_open", &"minder.stalk", &"down.ring",
+	# LS1: the sole survivor's bonus (North Star B7).
+	&"last_stand.bonus",
+	# ED1: the elevator deal.
+	&"deal.ride", &"deal.squeak_in", &"deal.squeak", &"deal.torch_in", &"deal.torch", &"deal.second_in", &"deal.second",
+	&"deal.dark_in", &"deal.dark", &"deal.express_in", &"deal.express", &"deal.double_in", &"deal.double_drop",
+	&"deal.hazard_pay", &"deal.dark_pay", &"deal.express_pay", &"deal.squeak_loud", &"deal.torch_dim", &"deal.second_time",
+	# SR1: split reality.
+	&"split.read_rise", &"split.alone_rise", &"split.alone_m", &"split.dark_rise", &"split.lift_fall", &"split.first_at",
+	&"split.calm_at", &"split.every", &"split.chance", &"split.lasts",
 ]
 
 ## The least wait of a call is its start delay plus the floors: sim/run.gd CALL_START_DELAY_MIN (this file

@@ -1116,9 +1116,14 @@ func _room_tones(t: float, o: Dictionary, dark: bool) -> void:
 
 # --- the Playroom -----------------------------------------------------------------------------------
 
-## The floor's tune, from the ceiling speakers: `on` on the Playroom; `sag` 0 at speed, 1 the count's
+## LS1: set by client/main.gd every frame while the last one standing's spotlight or the wipe's scene is on.
+var tune_hushed := false
+
+## The floor's tune, from the ceiling speakers: `on_floor` on the Playroom; `sag` 0 at speed, 1 the count's
 ## half speed through the low-pass.
-func playroom(on: bool, sag: float) -> void:
+func playroom(on_floor: bool, sag: float) -> void:
+	# LS1 (North Star B7, "the music cuts"): the Playroom's own tune stops for the last one standing too.
+	var on := on_floor and not tune_hushed
 	_loop(tune_player, "tune", on, BASE_DB + float(SYNTH_DB["tune"]) - 3.0 * sag)
 	tune_player.pitch_scale = lerpf(1.0, 0.5, clampf(sag, 0.0, 1.0))
 	var amb := AudioServer.get_bus_index("Ambience")

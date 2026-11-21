@@ -38,6 +38,7 @@ var areas: Dictionary = {}
 var room_doors := PackedVector3Array()
 var _guides := PackedVector3Array()
 var _seed: int
+var _parlour := false
 var _transform: Transform3D
 ## WG1: which way the front door faces (0 south, 1 east, 2 north, 3 west) and whether the stair runs the other way.
 var facing := 0
@@ -54,6 +55,7 @@ func _init(house: Dictionary, ward_seed: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = _seed
 	var parlour: bool = house.id == 0
+	_parlour = parlour
 	# WG1 (sim/ward/layout.gd generate_v2): a house may face any of four ways and run its stair the other way. Without
 	# those fields, today's: the parlour's door east (facing 1), every other door south (facing 0).
 	facing = int(house.get("facing", 1 if parlour else 0))
@@ -239,6 +241,193 @@ func make_arm(extra_walls: Array[AABB] = []) -> ArmSearch:
 	blockers.append_array(storeys[1].slab)
 	blockers.append_array(extra_walls)
 	return ArmSearch.new(shoulder, door, blockers, _guides, areas, _seed, not search_window.has_volume())
+
+## RR1: every opening the Rigger's arm can enter this house by, in a fixed order: the front door, then each ground-floor
+## window (the sash in each outer side wall, client/ward/view.gd _window_wall; not the parlour's lift wall). Each:
+## index, kind (&"door" or &"window"), side (a window's wall, -1 or 1; 0 the door), shoulder (local: where the arm leaves
+## him, 0.6 m outside the opening at arm height), inward (local: into the house), hole (a window's opening, local).
+func openings() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	out.append({"index": 0, "kind": &"door", "side": 0, "shoulder": Vector3(0.0, ARM_HEIGHT, -0.6), "inward": Vector3.BACK, "hole": AABB()})
+	var half := floor_bounds.size.x * 0.5
+	var depth := floor_bounds.size.y
+	for side: int in [-1, 1]:
+		if _parlour and side < 0:
+			continue
+		var outer_x := float(side) * (half + WALL_THICKNESS)
+		var face_x := -half - WALL_THICKNESS if side < 0 else half
+		out.append({"index": out.size(), "kind": &"window", "side": side,
+			"shoulder": Vector3(outer_x + float(side) * 0.6, ARM_HEIGHT, depth * 0.5), "inward": Vector3(-float(side), 0.0, 0.0),
+			"hole": AABB(Vector3(face_x, 0.82, depth * 0.5 - 0.71), Vector3(WALL_THICKNESS, 1.25, 1.42))})
+	# Stage 2: the windows of every upper storey, both side walls (client/ward/view.gd _dress_house draws them there).
+	for level in range(1, storeys.size() - 1):
+		var base := float(level) * HEIGHT
+		for side: int in [-1, 1]:
+			var outer_x := float(side) * (half + WALL_THICKNESS)
+			var face_x := -half - WALL_THICKNESS if side < 0 else half
+			out.append({"index": out.size(), "kind": &"window", "side": side, "storey": level,
+				"shoulder": Vector3(outer_x + float(side) * 0.6, base + ARM_HEIGHT, depth * 0.5), "inward": Vector3(-float(side), 0.0, 0.0),
+				"hole": AABB(Vector3(face_x, base + 0.82, depth * 0.5 - 0.71), Vector3(WALL_THICKNESS, 1.25, 1.42))})
+	return out
+
+## RR1 stage 2: the rooms of an upper storey (its two halves, front and back of the jamb wall), {name: probe point}.
+func upper_areas(level: int) -> Dictionary:
+	var depth := floor_bounds.size.y
+	var base := float(level) * HEIGHT
+	return {StringName("up%d_front" % level): Vector3(0.0, base + ARM_HEIGHT, depth * 0.27),
+		StringName("up%d_back" % level): Vector3(0.0, base + ARM_HEIGHT, depth * 0.73)}
+
+## RR1 stage 2: the room a point (local) is in on any storey: area_at on the ground floor, an upper storey's half above.
+## area_at itself is unchanged (the Ward without the flag knows only the ground floor's rooms).
+func area_at_any(point: Vector3) -> StringName:
+	var ground := area_at(point)
+	if ground != &"":
+		return ground
+	if not floor_bounds.has_point(Vector2(point.x, point.z)):
+		return &""
+	var level := int(floorf(point.y / HEIGHT))
+	if level < 1 or level >= storeys.size() - 1:
+		return &""
+	return StringName("up%d_%s" % [level, "front" if point.z < floor_bounds.size.y * 0.5 else "back"])
+
+## The rooms an opening's arm searches: the ground floor's for the door and the ground-floor windows, its own storey's
+## for an upper window.
+func probes_for(opening: Dictionary) -> Dictionary:
+	var level := int(opening.get("storey", 0))
+	return areas if level == 0 else upper_areas(level)
+
+## RR1: the arm for an opening (openings): the walls with that window's hole cut (as make_arm cuts the laundry's sash),
+## the guides round its jambs, entering by the door only for the door. Its reach is opening_reach's.
+func make_arm_at(opening: Dictionary, extra_walls: Array[AABB] = []) -> ArmSearch:
+	var blockers: Array[AABB] = []
+	var guides := _guides.duplicate()
+	var hole: AABB = opening.hole
+	var shoulder_at: Vector3 = opening.shoulder
+	if int(opening.get("storey", 0)) > 0:
+		return _upper_arm(opening, extra_walls)
+	if opening.kind == &"window":
+		var face := AABB(Vector3(hole.position.x, 0, 0), Vector3(WALL_THICKNESS, HEIGHT, floor_bounds.size.y))
+		for wall in walls:
+			if not wall.is_equal_approx(face):
+				blockers.append(wall)
+		var start := hole.position
+		var end := hole.end
+		blockers.append(AABB(face.position, Vector3(face.size.x, start.y, face.size.z)))
+		blockers.append(AABB(Vector3(start.x, end.y, 0), Vector3(face.size.x, HEIGHT - end.y, face.size.z)))
+		blockers.append(AABB(Vector3(start.x, start.y, 0), Vector3(face.size.x, hole.size.y, start.z)))
+		blockers.append(AABB(Vector3(start.x, start.y, end.z), Vector3(face.size.x, hole.size.y, face.end.z - end.z)))
+		var side := float(opening.side)
+		var outer_x := side * (floor_bounds.size.x * 0.5 + WALL_THICKNESS)
+		for side_of_jamb: float in [-0.50, 0.50]:
+			var inside_z := floor_bounds.size.y * 0.5 + side_of_jamb
+			guides.append(Vector3(outer_x + side * 0.23, ARM_HEIGHT, inside_z))
+			guides.append(Vector3(side * (floor_bounds.size.x * 0.5 - 0.32), ARM_HEIGHT, inside_z))
+	else:
+		blockers = walls.duplicate()
+	blockers.append_array(storeys[1].slab)
+	blockers.append_array(extra_walls)
+	var arm := ArmSearch.new(shoulder_at, door, blockers, guides, areas, _seed + 13 * int(opening.index), opening.kind == &"door")
+	arm.reach = opening_reach(opening)
+	return arm
+
+## RR1: how far the arm pays out from an opening: today's ArmSearch.REACH, shortened where it would reach every room of
+## the ground floor, so that the room farthest along the arm's own route stays out of reach from that opening (the
+## owner: "the proposition of him not being able to hit at least one of the rooms in the house needs to be true from
+## every window"). The same geometry on the host and every screen. Cached per opening.
+func opening_reach(opening: Dictionary) -> float:
+	var index := int(opening.index)
+	if _reach_cache.has(index):
+		return _reach_cache[index]
+	var lengths := route_lengths(opening)
+	var longest := 0.0
+	var all := true
+	for area: StringName in lengths:
+		if not is_finite(float(lengths[area])) or float(lengths[area]) > ArmSearch.REACH:
+			all = false
+		longest = maxf(longest, float(lengths[area]))
+	var out := ArmSearch.REACH if not all else minf(ArmSearch.REACH, longest - SAFE_MARGIN)
+	_reach_cache[index] = out
+	return out
+
+## How much shorter than its farthest room's route the arm is cut, metres.
+const SAFE_MARGIN := 0.25
+var _reach_cache := {}
+
+## RR1: the length of the arm's route from an opening to each room's probe point with no limit on its reach (INF when no
+## route passes the walls), {area: metres}.
+func route_lengths(opening: Dictionary) -> Dictionary:
+	var blockers_arm := _bare_arm(opening)
+	blockers_arm.reach = 1000.0
+	var out := {}
+	var probes := probes_for(opening)
+	for area: StringName in probes:
+		var route := blockers_arm._find_route(probes[area])
+		var length := INF
+		if not route.is_empty():
+			length = 0.0
+			for i in range(1, route.size()):
+				length += route[i - 1].distance_to(route[i])
+		out[area] = length
+	return out
+
+## An upper window's arm: every wall, slab and partition of the house (that storey's side wall with the window's hole
+## cut), the guides round the window's jambs and through the storey's middle opening, that storey's two rooms.
+func _upper_arm(opening: Dictionary, extra_walls: Array[AABB]) -> ArmSearch:
+	var level := int(opening.storey)
+	var base := float(level) * HEIGHT
+	var hole: AABB = opening.hole
+	var half := floor_bounds.size.x * 0.5
+	var depth := floor_bounds.size.y
+	var blockers: Array[AABB] = walls.duplicate()
+	var face := AABB(Vector3(hole.position.x, base, 0.0), Vector3(WALL_THICKNESS, HEIGHT, depth))
+	for wall in upper_envelope:
+		if wall.is_equal_approx(face):
+			continue
+		blockers.append(wall)
+	var start := hole.position
+	var end := hole.end
+	blockers.append(AABB(face.position, Vector3(face.size.x, start.y - base, depth)))
+	blockers.append(AABB(Vector3(start.x, end.y, 0.0), Vector3(face.size.x, base + HEIGHT - end.y, depth)))
+	blockers.append(AABB(Vector3(start.x, start.y, 0.0), Vector3(face.size.x, hole.size.y, start.z)))
+	blockers.append(AABB(Vector3(start.x, start.y, end.z), Vector3(face.size.x, hole.size.y, depth - end.z)))
+	for floor in storeys:
+		blockers.append_array(floor.slab)
+		blockers.append_array(floor.partitions)
+	blockers.append_array(extra_walls)
+	var guides := PackedVector3Array()
+	var side := float(opening.side)
+	var outer_x := side * (half + WALL_THICKNESS)
+	var y := base + ARM_HEIGHT
+	# The jamb wall of the storey meets this side wall in the window's middle: the arm comes in on one side of it (the
+	# front for the -x wall, the back for the +x wall), so each upper window opens into one room and the other is only
+	# reached round through the middle opening (and is the safe one when that is too far).
+	var jamb := -0.45 if side < 0.0 else 0.45
+	guides.append(Vector3(outer_x + side * 0.23, y, depth * 0.5 + jamb))
+	guides.append(Vector3(side * (half - 0.32), y, depth * 0.5 + jamb))
+	for edge: float in [-1.0, 1.0]:
+		for clearance: float in [-1.0, 1.0]:
+			guides.append(Vector3(edge * 0.33, y, depth * 0.5 + clearance * 0.29))
+	var arm := ArmSearch.new(opening.shoulder, door, blockers, guides, upper_areas(level), _seed + 13 * int(opening.index), false)
+	arm.reach = opening_reach(opening)
+	return arm
+
+func _bare_arm(opening: Dictionary) -> ArmSearch:
+	# make_arm_at without its reach (which needs this), the door open as a search finds it.
+	var saved := _reach_cache.duplicate()
+	_reach_cache[int(opening.index)] = ArmSearch.REACH
+	var arm := make_arm_at(opening)
+	_reach_cache = saved
+	return arm
+
+## RR1: the rooms the arm can reach from an opening (its route to the room's probe within opening_reach).
+func reachable_areas(opening: Dictionary) -> Array[StringName]:
+	var out: Array[StringName] = []
+	var reach := opening_reach(opening)
+	var lengths := route_lengths(opening)
+	for area: StringName in lengths:
+		if float(lengths[area]) <= reach:
+			out.append(area)
+	return out
 
 func to_world(point: Vector3) -> Vector3:
 	return _transform * point

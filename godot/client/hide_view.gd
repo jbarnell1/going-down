@@ -87,6 +87,8 @@ const ANGER_RATES := "SPRINT 2 S OR 3 NOISES FILL IT"
 ## Live settings: the run's tuning as this client has it (the game sets it every frame; null for none), so the
 ## printed rates follow the host's minder.anger_sprint and minder.anger_noise.
 var tuning: Settings.Values = null
+## CS1: set by client/main.gd while the Minder's caught scene has been shown for this found: no flat card mask.
+var scene_mask := false
 
 ## The anger bar's printed rates: ANGER_RATES, or the same words with the host's numbers. `hunt` (PT1): the
 ## numbers in force are the host's or else Seek.HUNT_ANGER_SPRINT and Seek.HUNT_ANGER_NOISE.
@@ -575,6 +577,9 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 	hud.party_note = party_warning(seek, names, status == "taken", tuning) if status == "taken" else party_line
 	if status != "found":
 		catch_k = move_toward(catch_k, 0.0, dt * 4.0)
+	# CS1: once the Minder's own figure has come for you (client/caught_scene.gd), its flat card mask is not drawn.
+	if scene_mask:
+		catch_k = 0.0
 	hud.seek_note = note
 	hud.health = float(row["health"]) if row is Dictionary and shows_health(seek, count_phase, hunt) and status == "ok" else -1.0
 	hud.health_rates = health_rates_text(hunt, tuning)

@@ -526,12 +526,38 @@ func say_count(line: String, text: String, ms: int, number := -1, length := 0, l
 	if bool(current.get("hint", false)) and int(current.get("priority", 1)) <= 2:
 		_cut()
 
-## The subtitle to show: the announcer's own line, else the count's caption while it lasts.
+## ED1, the elevator deal (client/deal_view.gd): the intercom reads the card and says how it went. No line is
+## recorded yet, so each is a subtitle on its own for DEAL_LINE_MS (longer for a long line), one after another,
+## under any recorded line that is playing. The lines to record are the ticket's (sim/deal.gd read_line, outcome_line).
+const DEAL_LINE_MS := 4500
+var _deal_lines: Array[String] = []
+var _deal_caption := ""
+var _deal_until := 0
+
+func deal_say(text: String) -> void:
+	if text != "":
+		_deal_lines.append(text)
+
+## The deal's line on screen now ("" for none).
+func deal_shown() -> String:
+	var now := _ms()
+	if now >= _deal_until and not _deal_lines.is_empty():
+		_deal_caption = _deal_lines.pop_front()
+		_deal_until = now + maxi(DEAL_LINE_MS, 55 * _deal_caption.length())
+	return _deal_caption if now < _deal_until else ""
+
+## The subtitle to show: the announcer's own line, else the count's caption while it lasts. The deal's line goes
+## under the announcer's, or in its place.
 func shown(floor_quota: Variant = null) -> String:
 	if _search_protected(_ms()):
 		return _search_caption if _ms() < _search_caption_until else ""
+	var deal := deal_shown()
 	if subtitle != "":
-		return subtitle.trim_suffix(FLOOR_STILL_NEEDED) if FloorQuota.floor_met(floor_quota) else subtitle
+		var own := subtitle.trim_suffix(FLOOR_STILL_NEEDED) if FloorQuota.floor_met(floor_quota) else subtitle
+		return own + ("
+" + deal if deal != "" else "")
+	if deal != "":
+		return deal
 	return caption if _ms() < caption_until else ""
 
 ## Whether any voice is playing (the beds duck under it).

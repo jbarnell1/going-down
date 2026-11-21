@@ -37,6 +37,8 @@ static func _room(native: bool, seed_: String) -> LocalRoom:
 	# WG1: this compares the block with ward_place off and on only; today's layout keeps its 13 and 14 fields
 	# (tests/prop_ward_layout.gd checks the generated layout's fifteenth).
 	room.ward_layout = false
+	# RR1: the crawling Rigger's pose would be one more field (in the extras); this file is the clinging Rigger's block.
+	room.rigger_roam = false
 	room.start_playtest(HostRules.WARD_DEPTH)
 	return room
 

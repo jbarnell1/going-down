@@ -336,7 +336,7 @@ static func rules(depth: int, fix: bool) -> HostRules:
 	return HostRules.new(true, depth, [], false, false, true, true, false,
 		false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
 		false, false, false, false, false, false, false, false, false, false, false, false, false, false,
-		false, false, false, false, true, false, false, false, false, false, false, false, fix)
+		false, false, false, false, true, false, false, false, false, false, false, false, false, fix)
 
 func test_they_start_in_the_dirty_part_apart_and_by_the_seed(t: T) -> void:
 	var ids: Array[String] = ["p0", "p1"]

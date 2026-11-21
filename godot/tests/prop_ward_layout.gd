@@ -607,13 +607,13 @@ func test_the_options_on_the_wire(t: T) -> void:
 	t.eq(WardWire.decode(bad16), {}, "a sixteenth field that is not the extras is refused")
 
 ## HostRules.new's arguments by position: every flag off but `late_floors` (the 39th) and `ward_layout` (no longer the last:
-## the 49th, after WC1's ward_call_ and ward_web_) as given.
+## the 50th, after WC1's ward_call_ and ward_web_ and RR1's rigger_roam_) as given.
 static func rules_args(late: bool, layout: bool) -> Array:
 	var args: Array = [true, 1, []]
-	for i in 46:
+	for i in 47:
 		args.append(false)
 	args[38] = late
-	args[48] = layout
+	args[49] = layout
 	return args
 
 func test_the_flag_reaches_the_rules(t: T) -> void:

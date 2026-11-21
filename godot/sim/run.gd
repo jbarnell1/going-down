@@ -434,6 +434,9 @@ const Flare = preload("res://sim/flare.gd")
 const Lamp = preload("res://sim/lamp.gd")
 const GardenCones = preload("res://sim/garden_cones.gd")
 const OrderlyFix = preload("res://sim/orderly_fix.gd")
+const LastStand = preload("res://sim/last_stand.gd")
+## ED1, the elevator deal (with_deal; see "The elevator deal" below and sim/deal.gd).
+const Deal = preload("res://sim/deal.gd")
 
 # ---------------------------------------------------------------------------------------------
 # Tuning.
@@ -1133,6 +1136,10 @@ class RunState:
 	var shadow_readers: Array[String] = []
 	var shadow_quiet := 0.0
 	var shadow_shown := false
+	## SR1, split reality (sim/split.gd, North Star E): a Split.SplitState, or null with the flag off. Only
+	## net/host_rules.gd steps it, after the run's own step; nothing in this file reads it, so it can never move
+	## a resident, a catch, a reading or a tape. Replaced, never edited (the copy shares it).
+	var split: RefCounted = null
 	var paced: bool = false
 	var car_waits: bool = false
 	## The car waits: who the car left on a floor today, {id: true}, until the crew gets home. Replaced, never edited.
@@ -1254,10 +1261,20 @@ class RunState:
 	var pressure_dressing: Dictionary = {}
 	## OR2, the Orderly fix (with_orderly_fix; see "The Orderly fix" in the header). Off: nothing below reads it.
 	var orderly_fix := false
+	## LS1, the last one standing and the wipe (North Star B7; with_last_stand, sim/last_stand.gd): the spotlight, the
+	## sole survivor's bonus, the wipe's scene and the standee. Off: `stand` is never made or read.
+	var last_stand := false
+	var stand: LastStand.State = null
+	## ED1, the elevator deal (with_deal; sim/deal.gd): this run's cards (a Deal.DealState), or null with the deal off,
+	## when nothing reads it. Replaced, never edited.
+	var deal: RefCounted = null
 
 	func copy() -> RunState:
 		var s := RunState.new()
+		s.last_stand = last_stand
+		s.stand = stand
 		s.orderly_fix = orderly_fix
+		s.deal = deal
 		s.pressures = pressures
 		s.pressure_heals_key = pressure_heals_key
 		s.pressure_heals_used = pressure_heals_used
@@ -1387,6 +1404,7 @@ class RunState:
 		s.shadow_readers = shadow_readers
 		s.shadow_quiet = shadow_quiet
 		s.shadow_shown = shadow_shown
+		s.split = split
 		s.paced = paced
 		s.car_waits = car_waits
 		s.left_out = left_out
@@ -1722,6 +1740,126 @@ static func with_pn_fixes(s0: RunState) -> RunState:
 	var s := s0.copy()
 	s.pn_fixes = true
 	return s
+
+## Turns LS1 on (see last_stand): the spotlight on the last player up, their bonus, the wipe's scene, the standee.
+static func with_last_stand(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.last_stand = true
+	if s.stand == null:
+		s.stand = LastStand.State.new()
+	return s
+
+## LS1: the players up after a tick (status "ok", and on the Playroom neither found nor taken), in the run's order.
+static func stand_up_ids(s: RunState) -> Array[String]:
+	var out: Array[String] = []
+	for p in s.players:
+		if p.status != &"ok":
+			continue
+		if s.seek != null:
+			var sp := Seek.player_of(s.seek as Seek.SeekState, p.id)
+			if sp != null and sp.status != &"ok":
+				continue
+		out.append(p.id)
+	return out
+
+## LS1: whether a spotlight can be on this floor now: below the prison, not Practice, not riding, not ended.
+static func stand_floor(s: RunState) -> bool:
+	return s.depth >= 1 and not s.orientation and not at_home(s) and s.phase != &"riding" and s.phase != &"ended"
+
+## LS1 after a tick of `s` (step_run's, step_ward's): the spotlight, the last catch, the wipe (sim/last_stand.gd).
+static func _step_last_stand(s: RunState, events: Array[Dictionary], ward: bool) -> void:
+	if not s.last_stand:
+		return
+	var place: StringName = s.plan.place if s.plan != null else &""
+	s.stand = LastStand.after_tick(s.stand, stand_up_ids(s), s.players.size(), stand_floor(s), s.t, "%d:%d" % [s.day_index, s.depth],
+		s.depth, s.day_index, LastStand.resident_of(place, ward), s.tuning, events)
+
+# ---------------------------------------------------------------------------------------------
+# The elevator deal (ED1; North Star D1; sim/deal.gd has the whole rule). Off (RunState.deal null), nothing here runs.
+# On: _ride_down deals the ride's card and makes the ride at least deal.ride long; the crew's answers come in through
+# with_deal_answers between ticks (net/host.gd, as the reel's votes do); the arrival passes an open card, lands what
+# was taken on the floor reached (two floors down after an Express) and wakes that floor's resident for "and it is
+# awake"; _crew_tick pays a reading closed there times Deal.pay_mult; _step_garden makes the squeaky carrier's
+# footsteps louder to the Groundskeeper. Lights Out and the Novelty Torch are drawn on screen from the block.
+
+## Turns the elevator deal on (a run that has not ticked yet).
+static func with_deal(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.deal = Deal.DealState.new()
+	return s
+
+## The living players in the car, in seat order, as the deal counts them (`connected`: {id: true} for players the
+## host has with it; null counts everyone).
+static func deal_crew(s: RunState, connected: Variant = null) -> Array[String]:
+	var out: Array[String] = []
+	for p in s.players:
+		if p.status == &"ok" and p.aboard and (connected == null or (connected as Dictionary).has(p.id)):
+			out.append(p.id)
+	return out
+
+## Flares left in each player's bag (the "most flares left" card).
+static func flares_left(s: RunState) -> Dictionary:
+	var out := {}
+	for p in s.players:
+		out[p.id] = int(Inventory.bag_of(s.bags, p.id).totals().get(Flare.ITEM, 0))
+	return out
+
+## The crew's answers to the deal this tick (see sim/deal.gd answer; `answers` {id: [seq, choice, pick, double,
+## use]}) and a second opinion asked for (the answer's fifth number, the seq of the card that gave it). Returns `s`
+## itself when nothing changes; appends what happened to `events`.
+static func with_deal_answers(s: RunState, crew: Array[String], answers: Dictionary, events: Array[Dictionary]) -> RunState:
+	if s.deal == null:
+		return s
+	var d: Deal.DealState = s.deal
+	var nd := d
+	if s.phase == &"riding" and not s.going_up:
+		nd = Deal.answer(d, s.tuning, s.seed, s.deck, crew, answers, flares_left(s), s.t, events)
+	elif not at_home(s) and s.phase != &"riding" and d.second_by == "" and Deal.holds(d, &"second", s.depth, s.day_index):
+		var seq := -1
+		for a: Dictionary in d.active:
+			if a["face"] == &"second":
+				seq = int(a["seq"])
+		for p in s.players:
+			var a: Variant = answers.get(p.id)
+			if p.status == &"ok" and a is Array and (a as Array).size() >= 5 and int(a[4]) == seq and seq >= 0:
+				nd = Deal.use_second(d, p.id, s.depth, s.day_index, s.t, events)
+				break
+	if nd == d:
+		return s
+	var out := s.copy()
+	if nd.offer != null and Deal.settled(nd.offer) and not (d.offer != null and Deal.settled(d.offer)):
+		# Nothing left to choose: the car arrives DEAL_SETTLED after it, never sooner than a ride without a card.
+		var base_left := nd.offer.opened + Settings.f(s.tuning, &"lift.ride", RIDE_TIME) - s.t
+		var left := minf(s.timer, maxf(base_left, Deal.SETTLED))
+		if left < s.timer:
+			out.timer = left
+			nd = Deal.with_closes(nd, s.t + left)
+	out.deal = nd
+	return out
+
+## The deal's card for the ride that just started (from _ride_down), or nothing.
+static func _deal_ride(s: RunState, t: float, events: Array[Dictionary]) -> void:
+	if s.deal == null or s.going_up or at_home(s) or s.orientation:
+		return
+	var d: Deal.DealState = s.deal
+	var ride := maxf(s.timer, Deal.ride_time(s.tuning))
+	var nd := Deal.open(d, s.tuning, s.seed, s.day_index, s.depth, s.deck, t, ride)
+	s.deal = nd
+	if nd.offer != null:
+		s.timer = ride
+		events.append({"type": "dealOffered", "t": t, "seq": nd.offer.seq, "card": String(nd.offer.card), "closes": nd.offer.closes})
+
+## The floor's resident awake as the doors open ("and it is awake": Express's curse). Only a resident that waits.
+static func _deal_wake(s: RunState, t: float, events: Array[Dictionary]) -> void:
+	if s.orderly == null or s.orderly.mode != &"waiting":
+		return
+	var o := s.orderly.copy()
+	o.mode = &"hunting"
+	o.replan_in = 0.0
+	if s.lonely and resident_of(s).trait_name == &"lonely":
+		o.lonely_phase = &"lurk"
+	s.orderly = o
+	events.append({"type": "startedHunting", "t": t})
 
 ## The seconds a player going down now has before they are out: DOWN_TIME (down.time), or with DR1 DOWN_RING_TIME
 ## (down.ring). The Orderly's bend lasts as long, since the run lets it go only at the heal or the out.
@@ -2330,8 +2468,14 @@ static func _scale_readings(crew: Instr.CrewState, ids: Dictionary, mult: float)
 
 ## step_crew, with closed readings multiplied by the depth's pay (tapes and events both).
 static func _crew_tick(s: RunState, players: Array[Instr.CrewPlayer], entities: Array[Instr.EntityTick], dt: float) -> Instr.CrewStep:
-	var out := Instr.step_crew(s.plan, s.crew, players, entities, dt, s.tuning)
+	# LS1: a tick that starts in the spotlight pays its survivor the bonus stamped as it began (sim/last_stand.gd).
+	var paid := entities
+	if s.last_stand and s.stand != null and s.stand.id != "":
+		paid = LastStand.with_bonus(entities, s.stand.id, s.stand.mult)
+	var out := Instr.step_crew(s.plan, s.crew, players, paid, dt, s.tuning)
 	var mult := depth_multiplier(s.depth)
+	if s.deal != null:
+		return _deal_crew_tick(s, out, mult)
 	var ids := {}
 	for e in out.events:
 		if e["type"] == "readingClosed":
@@ -2352,6 +2496,42 @@ static func _crew_tick(s: RunState, players: Array[Instr.CrewPlayer], entities: 
 			events.append(e)
 	var res := Instr.CrewStep.new()
 	res.crew = _scale_readings(out.crew, ids, mult)
+	res.events = events
+	return res
+
+## _crew_tick with the deal on (ED1): each closed reading times the depth's pay and the deal's for its recorder
+## (Deal.pay_mult: hazard pay, Lights Out, Express). With no card in force it is the same as _crew_tick's own path.
+static func _deal_crew_tick(s: RunState, out: Instr.CrewStep, depth_mult: float) -> Instr.CrewStep:
+	var groups := {}
+	var mult_of := {}
+	for e in out.events:
+		if e["type"] == "readingClosed":
+			var m := depth_mult * Deal.pay_mult(s.deal, s.tuning, s.depth, s.day_index, str(e.get("playerId", "")))
+			var rid: Variant = (e["reading"] as TapeLib.Reading).id
+			mult_of[rid] = m
+			if not groups.has(m):
+				groups[m] = {}
+			groups[m][rid] = true
+	if groups.is_empty() or (groups.size() == 1 and groups.has(1.0)):
+		return out
+	var events: Array[Dictionary] = []
+	for e in out.events:
+		if e["type"] == "readingClosed":
+			var m: float = mult_of[(e["reading"] as TapeLib.Reading).id]
+			var ne := e.duplicate()
+			ne["value"] = float(e["value"]) * m
+			var rd := (e["reading"] as TapeLib.Reading).copy()
+			rd.value = rd.value * m
+			rd.peak_rate = rd.peak_rate * m
+			ne["reading"] = rd
+			events.append(ne)
+		else:
+			events.append(e)
+	var crew := out.crew
+	for m: float in groups:
+		crew = _scale_readings(crew, groups[m], m)
+	var res := Instr.CrewStep.new()
+	res.crew = crew
 	res.events = events
 	return res
 
@@ -2769,6 +2949,9 @@ static func _step_garden(s: RunState, players: Array[RunPlayer], input_of: Dicti
 			hp.soft_shoes = wallet != null and wallet.owned.has("soft_shoes")
 			if s.throwing_arm and wallet != null:
 				hp.footstep_scale = 1.0 - 0.1 * Upgrades.trade_seniority(wallet.owned, "Ear")
+		if s.deal != null:
+			# ED1: Squeaky Soles' carrier is louder to the Groundskeeper.
+			hp.footstep_scale *= Deal.footstep_scale(s.deal, s.tuning, s.depth, s.day_index, p.id)
 		hp.up = not down
 		hp.down = down
 		hp.emote = inp.emote_sound and not down
@@ -4229,6 +4412,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	var lift := _step_lift(s, players, input_of, car, t, dt, events)
 	seek_call_by = str(lift[0])
 	if bool(lift[1]):
+		_step_last_stand(s, events, false)
 		return res
 
 	# ---- Findables (FD9, see the header): searches, before the resident.
@@ -4381,6 +4565,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	# ---- Arriving on the next floor.
 	elif s.phase == &"riding" and s.timer <= EPS:
 		var depth := s.depth + 1
+		if s.deal != null:
+			# ED1: an Express landed on this ride stops two floors down (sim/deal.gd arrival_depth).
+			depth = Deal.arrival_depth(s.deal, s.depth)
 		var f := _floor_for(s.seed, depth, s.deck, s.garden_search)
 		var bodies := {}
 		var outside := 0
@@ -4432,6 +4619,11 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		_new_quota_floor(s, players)
 		_new_down_floor(s)
 		events.append({"type": "rodeDown", "t": t, "depth": depth, "bodies": bodies})
+		if s.deal != null:
+			# ED1: what was taken on the ride holds on this floor; an open card is passed.
+			s.deal = Deal.arrive(s.deal, depth, s.day_index, t, events)
+			if Deal.holds(s.deal, &"express_awake", depth, s.day_index):
+				_deal_wake(s, t, events)
 
 	s.players = players
 	_sync_seek(s)
@@ -4444,6 +4636,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	_wipe_if_out(s, players, t, events)
 	if s.nerve_passive:
 		_step_nerve(prev, s, input_of, dt, events)
+	_step_last_stand(s, events, false)
 	return res
 
 ## A wipe (step_run; WC1: also the Ward with its call, step_ward): nobody left who can call or board.
@@ -4522,6 +4715,8 @@ static func _ride_down(s: RunState, players: Array[RunPlayer], aboard_ids: Dicti
 	s.blink = null
 	s.lure = false
 	events.append({"type": "carLeft", "t": t, "reason": "ride"})
+	if s.deal != null:
+		_deal_ride(s, t, events)
 
 ## Whether the run repeats its floors in cycles (FL2, see the header): the deck carries Places.CYCLES.
 static func cycles_on(s: RunState) -> bool:
@@ -4819,10 +5014,12 @@ static func step_ward(prev: RunState, inputs: Array[PlayerInput], crew_rows: Dic
 		out.events.append({"type": "quotaMet", "t": s.t, "depth": s.depth, "earned": floori(s.floor_earned), "needed": s.floor_needed, "top": quota_top(s)})
 	if opts.get("car") is CarGeometry:
 		_step_ward_lift(s, players, by_id, opts, dt, out.events)
+		_step_last_stand(s, out.events, true)
 		return out
 	if phase != &"departed":
 		s.phase = phase
 		s.bell_left = bell_left
+		_step_last_stand(s, out.events, true)
 		return out
 	# Ward departure is collection, so only the physically boarded crew can take money home.
 	var car_waited := s.car_waits
@@ -4845,9 +5042,11 @@ static func step_ward(prev: RunState, inputs: Array[PlayerInput], crew_rows: Dic
 			aboard_set[id] = true
 		_ride_down(s, players, aboard_set, s.t, out.events)
 		s.players = players
+		_step_last_stand(s, out.events, true)
 		return out
 	_bank(s, players, aboard, s.t, out.events, aboard.is_empty(), true)
 	s.car_waits = car_waited
+	_step_last_stand(s, out.events, true)
 	return out
 
 ## WC1: the Ward's lift with its call (net/host_rules.gd ward_call; `opts` {"car": the Ward's car, "call_at": the

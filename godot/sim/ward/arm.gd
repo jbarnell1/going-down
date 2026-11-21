@@ -19,6 +19,9 @@ var warning_seconds := WARNING_SECONDS
 var probe_seconds := PROBE_SECONDS
 var out_speed := OUT_SPEED
 var in_speed := IN_SPEED
+## RR1: how far this arm pays out from its shoulder (sim/ward/house.gd opening_reach may shorten it for an opening so
+## that one room stays out of reach); today's is REACH.
+var reach := REACH
 
 var points := PackedVector3Array()
 var phase: StringName = &"idle"
@@ -61,6 +64,16 @@ func _init(shoulder: Vector3, door: AABB, walls: Array[AABB],
 		_order[j] = saved
 	points.append(_shoulder)
 
+## RR1 stage 2: hear a room at a point in it (local): the hand goes to that point rather than the room's middle, so it
+## follows the player it heard (the middle when no route reaches the point). Only the crawling Rigger calls this.
+func hear_at(area: StringName, point: Vector3) -> void:
+	if not _probes.has(area):
+		return
+	_aim[area] = point
+	hear(area)
+
+var _aim := {}
+
 func hear(area: StringName) -> void:
 	if not _probes.has(area):
 		return
@@ -74,6 +87,15 @@ func hear(area: StringName) -> void:
 	elif area != search_area:
 		_pending.erase(area)
 		_pending.push_front(area)
+
+## RR1: draw the arm back out and search no further from here (he is moving to another opening, or has searched from
+## this one long enough). Nothing is touched on the way out that would not be touched retracting today.
+func withdraw() -> void:
+	_pending.clear()
+	if phase == &"warning":
+		_begin_next()
+	elif phase == &"extending" or phase == &"probing":
+		phase = &"retracting"
 
 func step(delta: float, player_contacts: Dictionary, requested_door_open: bool = true) -> void:
 	contacts.clear()
@@ -91,7 +113,13 @@ func step(delta: float, player_contacts: Dictionary, requested_door_open: bool =
 			&"warning":
 				remaining = _consume_timer(remaining)
 				if _timer <= EPSILON:
-					_route = _find_route(_probes[search_area]) if door_open or not _enters_by_door else PackedVector3Array()
+					_route = PackedVector3Array()
+					if door_open or not _enters_by_door:
+						if _aim.has(search_area):
+							_route = _find_route(_aim[search_area])
+							_aim.erase(search_area)
+						if _route.is_empty():
+							_route = _find_route(_probes[search_area])
 					if _route.is_empty():
 						_begin_next()
 					else:
@@ -186,7 +214,7 @@ func _find_route(target: Vector3) -> PackedVector3Array:
 		visited[current] = 1
 		for next in graph.size():
 			var proposed := best + graph[current].distance_to(graph[next])
-			if visited[next] == 0 and proposed <= REACH and proposed < costs[next] and segment_clear(graph[current], graph[next], PALM_RADIUS):
+			if visited[next] == 0 and proposed <= reach and proposed < costs[next] and segment_clear(graph[current], graph[next], PALM_RADIUS):
 				costs[next] = proposed
 				parents[next] = current
 	return PackedVector3Array()
@@ -218,7 +246,7 @@ func _round_route(route: PackedVector3Array) -> PackedVector3Array:
 		if not segment_clear(rounded[i - 1], rounded[i]):
 			return route
 		length += rounded[i - 1].distance_to(rounded[i])
-	return rounded if length <= REACH else route
+	return rounded if length <= reach else route
 
 func _corner_curve(entry: Vector3, corner: Vector3, exit: Vector3) -> PackedVector3Array:
 	var curve := PackedVector3Array([entry])

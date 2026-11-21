@@ -37,6 +37,8 @@ var note := ""
 ## The ids that could be watched last frame, in order (for the next one and the hand-over).
 var _order: Array[String] = []
 var _next := false
+## LS1: this frame the view is locked on the last one up (update's `lock`).
+var locked := false
 
 ## Whether a snapshot's own player is out (see the file's head).
 static func is_out(s: Dictionary) -> bool:
@@ -59,6 +61,10 @@ static func targets(others: Array, my_id: String) -> Array[String]:
 
 static func watch_line(name: String) -> String:
 	return "WATCHING THROUGH %s'S EYES   LEFT CLICK OR E: NEXT" % name.to_upper()
+
+## LS1 (North Star B7: "every camera feed locks onto them"): the caption while the view is locked on the last one up.
+static func locked_line(name: String) -> String:
+	return "WATCHING THROUGH %s'S EYES   THE LAST ONE UP" % name.to_upper()
 
 ## LEFT CLICK or E while watching: the next crewmate (taken on the next update).
 func next() -> void:
@@ -97,6 +103,7 @@ func reset() -> void:
 	note = ""
 	_order = []
 	_next = false
+	locked = false
 
 ## Everything, the asks too (a new run).
 func clear() -> void:
@@ -107,8 +114,9 @@ func clear() -> void:
 ## This frame. `s` the snapshot (play_link.gd), `allowed` false where this view is not used (the party table, the
 ## catch's own scene, the end), `out_lines` the out screen's words today (joined into `note`). `also_out`: out by a
 ## floor's own rule the run's status does not show (the Ward's caught list); `exclude`: crewmates held the same way,
-## not watched.
-func update(s: Dictionary, my_id: String, names: Dictionary, allowed: bool, out_lines: Array = [], also_out := false, exclude: Array = []) -> void:
+## not watched. `lock`: LS1's spotlight (the host's "stand" block): the one crewmate still up; while they can be
+## watched the view is on them and LEFT CLICK or E does nothing ("" for none).
+func update(s: Dictionary, my_id: String, names: Dictionary, allowed: bool, out_lines: Array = [], also_out := false, exclude: Array = [], lock := "") -> void:
 	if not allowed or deferred or not (asked or also_out or is_out(s)):
 		reset()
 		return
@@ -116,7 +124,10 @@ func update(s: Dictionary, my_id: String, names: Dictionary, allowed: bool, out_
 	for id: Variant in exclude:
 		list.erase(str(id))
 	var pick := watch_id
-	if pick == "" or not list.has(pick):
+	locked = lock != "" and list.has(lock)
+	if locked:
+		pick = lock
+	elif pick == "" or not list.has(pick):
 		pick = ""
 		# The one watched went out or left: the next after them in the order they had.
 		var at := _order.find(watch_id)
@@ -146,7 +157,7 @@ func update(s: Dictionary, my_id: String, names: Dictionary, allowed: bool, out_
 			pitch = float(o.get("pitch", 0.0))
 			break
 	watching = true
-	caption = watch_line(str(names.get(pick, pick)))
+	caption = locked_line(str(names.get(pick, pick))) if locked else watch_line(str(names.get(pick, pick)))
 	var words: Array[String] = []
 	for l: Variant in out_lines:
 		if str(l) != "":
@@ -155,4 +166,4 @@ func update(s: Dictionary, my_id: String, names: Dictionary, allowed: bool, out_
 
 func describe() -> Dictionary:
 	return {"watching": watching, "id": watch_id, "eye": [eye.x, eye.y, eye.z], "yaw": yaw, "pitch": pitch,
-		"caption": caption, "note": note}
+		"caption": caption, "note": note, "locked": locked}

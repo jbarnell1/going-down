@@ -21,6 +21,8 @@
 # this computer only and never sent. The [YOUR SOUND] button on the top line or S opens it (S or a section goes
 # back); the Esc menu's V opens the panel on it. Up and down choose a slider, left and right move it 5 % (Shift
 # 25 %), Backspace puts it back to 100 %; the mouse clicks - and +, drags the slider, RESET.
+# CS1: under the sliders, the player's own CAUGHT SCENES row, FULL or SOFT (client/caught_pref.gd): left and right or a
+# click on [FULL] / [SOFT] change it, Backspace puts it back to FULL. Saved on this computer only, like the sound.
 #
 # The notice: one line at the top centre for 4 s (more than three in 2 s become one: "... CHANGED 5 SETTINGS. F8 TO
 # SEE."), from every "tune" message's line (the server words it, so every screen says the same).
@@ -65,6 +67,8 @@ var volume: Object = null
 var _sound := false
 var _sound_row := 0
 var _sound_drag := ""
+## CS1: the player's own CAUGHT SCENES setting (client/caught_pref.gd), set by the game; null for none (no row then).
+var caught_pref: Object = null
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -329,6 +333,22 @@ func sound_set(row: int, pct: int) -> bool:
 		volume.save()
 	return volume.get_pct(key_name) != was
 
+## CS1: the CAUGHT SCENES row's index on the sound page (after the sliders), -1 when there is none.
+func caught_row_index() -> int:
+	return Volume.ROWS.size() if caught_pref != null else -1
+
+## CS1: CAUGHT SCENES to SOFT (true) or FULL, saved at once. True when it changed.
+func caught_set(soft_on: bool) -> bool:
+	if caught_pref == null:
+		return false
+	var was: bool = caught_pref.soft
+	caught_pref.set_soft(soft_on)
+	caught_pref.save()
+	return was != soft_on
+
+func _sound_rows_n() -> int:
+	return Volume.ROWS.size() + (1 if caught_pref != null else 0)
+
 func _sound_let_go() -> void:
 	if _sound_drag != "" and volume != null:
 		_sound_drag = ""
@@ -336,9 +356,13 @@ func _sound_let_go() -> void:
 	_sound_drag = ""
 
 func _sound_key(k: InputEventKey) -> void:
+	var on_caught := _sound_row == caught_row_index()
 	if k.physical_keycode == KEY_BACKSPACE:
 		if k.pressed and not k.echo:
-			sound_set(_sound_row, Volume.DEFAULT)
+			if on_caught:
+				caught_set(false)
+			else:
+				sound_set(_sound_row, Volume.DEFAULT)
 		return
 	if not k.pressed:
 		return
@@ -353,9 +377,13 @@ func _sound_key(k: InputEventKey) -> void:
 		KEY_UP:
 			_sound_row = maxi(0, _sound_row - 1)
 		KEY_DOWN:
-			_sound_row = mini(Volume.ROWS.size() - 1, _sound_row + 1)
+			_sound_row = mini(_sound_rows_n() - 1, _sound_row + 1)
 		KEY_LEFT, KEY_RIGHT:
-			sound_nudge(_sound_row, -1 if k.physical_keycode == KEY_LEFT else 1, n)
+			if on_caught:
+				if not k.echo:
+					caught_set(k.physical_keycode == KEY_RIGHT)
+			else:
+				sound_nudge(_sound_row, -1 if k.physical_keycode == KEY_LEFT else 1, n)
 
 static func _sound_row_of(key_name: String) -> int:
 	for i in Volume.ROWS.size():
@@ -452,6 +480,11 @@ func click(pos: Vector2, shift: bool = false) -> bool:
 				_sound_row = int(h[2])
 				_sound_drag = str(Volume.ROWS[_sound_row][0])
 				_sound_drag_to(pos)
+			"caught_full", "caught_soft":
+				_sound_row = caught_row_index()
+				caught_set(h[1] == "caught_soft")
+			"caught_row":
+				_sound_row = caught_row_index()
 			"section":
 				show_sound(false)
 				_sel = int(h[2])
@@ -566,7 +599,8 @@ func describe() -> Dictionary:
 		"sections": secs, "sel": _sel, "row": _row, "rows": rows, "flash": _flash if _now() < _flash_until else "",
 		"asked": _plain(_asked()), "inForce": _plain(_in_force()), "rev": int(rc.get("tune_rev")) if rc != null else 0,
 		"runRev": int(rc.get("client").get("tune_rev")) if rc != null and rc.get("client") != null else 0,
-		"sound": {"open": _sound, "row": _sound_row, "rows": sound_rows(), "foot": foot_line()}}
+		"sound": {"open": _sound, "row": _sound_row, "rows": sound_rows(), "foot": foot_line(),
+			"caught": caught_pref.text() if caught_pref != null else ""}}
 
 static func _plain(d: Dictionary) -> Dictionary:
 	var out := {}
@@ -644,6 +678,25 @@ func _draw_sound(at: Vector2, rw: float, px: float, lh: float, right: float) -> 
 		draw_rect(Rect2(Vector2(track.position.x + track.size.x * fv - 2 * px, vy), Vector2(4 * px, 7 * px)), AMBER if changed else INK)
 		_hits.append([Rect2(Vector2(track.position.x, vy - 2 * px), Vector2(track.size.x, 11 * px)), "snd_slider", r])
 		ry += row_h + 4 * px
+	if caught_pref != null:
+		# CS1: the caught scenes, FULL or SOFT.
+		var on := _sound_row == caught_row_index()
+		var row_h := lh * 2.0 + 2 * px
+		if on:
+			draw_rect(Rect2(Vector2(rx - 4 * px, ry - 3 * px), Vector2(rw + 8 * px, row_h)), Color(1, 1, 1, 0.06))
+		_hits.append([Rect2(Vector2(rx, ry - 3 * px), Vector2(rw, row_h)), "caught_row", 0])
+		var is_soft: bool = caught_pref.soft
+		_text(caught_pref.NAME, Vector2(rx, ry), px, INK if on else Color(0.85, 0.86, 0.82))
+		var vy := ry + lh
+		if is_soft:
+			draw_rect(Rect2(Vector2(rx, vy + 2 * px), Vector2(3 * px, 3 * px)), AMBER)
+		_text(caught_pref.text(), Vector2(rx + 6 * px, vy), px, AMBER if is_soft else INK)
+		var full_r := _button("FULL", Vector2(rx + 6 * px + 8 * 6 * px, vy), px, INK if is_soft else AMBER)
+		_hits.append([full_r, "caught_full", 0])
+		var soft_r := _button("SOFT", Vector2(full_r.end.x + 6 * px, vy), px, AMBER if is_soft else INK)
+		_hits.append([soft_r, "caught_soft", 0])
+		_text("SOFT: NO SNAP, HALF THE FLASH AND NOISE", Vector2(rx + 6 * px, vy + lh), px, GREY)
+		ry += row_h + lh + 4 * px
 	_text("NOT SENT TO ANYONE. THE HOST'S SETTINGS ARE ON THE LEFT.", Vector2(rx, ry + 2 * px), px, GREY)
 
 func _draw() -> void:

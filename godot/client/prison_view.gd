@@ -509,6 +509,31 @@ func _kiosk() -> void:
 	set_kiosk_face("")
 	_plate("KioskSign", "YOUR FACE", wall + out * 0.012 + Vector3(0, 2.12, 0), out, 0.16, Color(0.86, 0.84, 0.74), Color(0.08, 0.08, 0.08), 0.15)
 
+## LS1 (North Star B7): the standee of the last player caught at the night's latest wipe, in the lift lobby's far corner
+## by the hall, turned to the car's doors so the crew meets it as they step out. `code` that player's face (FaceCodec
+## text, "" the default), `who` their name; an empty `who` with an empty `code` takes it away. Called every frame:
+## rebuilt only when the face or the name changes.
+var standee: Node3D = null
+
+func show_standee(code: String, who: String) -> void:
+	if standee != null and is_instance_valid(standee) and str(standee.get("face_code")) == code and str(standee.get("player_name")) == who:
+		return
+	if standee != null and is_instance_valid(standee):
+		standee.queue_free()
+	standee = null
+	if who == "" and code == "":
+		return
+	var s: Node3D = (load("res://client/standee.gd") as GDScript).new()
+	s.name = "Standee"
+	s.call(&"build", code, who)
+	var c := lv.cell_center(0, Prison.LANDING_CELL.x, Prison.LANDING_CELL.y)
+	var at := Vector3(c.x + S * 0.3, 0.0, c.z - S * 0.3)
+	var door := Vector3(c.x - S * 0.5, 0.0, c.z)
+	s.position = at
+	s.rotation.y = atan2(door.x - at.x, door.z - at.z)
+	lv.add_child(s)
+	standee = s
+
 ## Display each service's current hours on the cards behind the glass.
 func set_shop_open(on: bool, skills_open := false) -> void:
 	_set_window_cards(Prison.SHOP_WINDOWS, on)

@@ -88,6 +88,9 @@ const HideView = preload("res://client/hide_view.gd")
 const QuotaView = preload("res://client/quota_view.gd")
 const DownView = preload("res://client/down_view.gd")
 const CrewWatch = preload("res://client/crew_watch.gd")
+## LS1 (North Star B7): the last one standing's words and switches, and the wipe's scene.
+const LastStandView = preload("res://client/last_stand_view.gd")
+const WipeScene = preload("res://client/wipe_scene.gd")
 const HintCues = preload("res://client/hint_cues.gd")
 const DayView = preload("res://client/day_view.gd")
 # Findables on screen (FD10): client/search_view.gd (the prompt, the bar, what is open) and client/note_reader.gd.
@@ -104,6 +107,12 @@ const SkillsViewScript = preload("res://client/skills_view.gd")
 const Upgrades = preload("res://sim/upgrades.gd")
 const FlareViewScript = preload("res://client/flare_view.gd")
 const LampViewScript = preload("res://client/lamp_view.gd")
+## ED1: the elevator deal's card, its answer and its marks (client/deal_view.gd).
+const DealViewScript = preload("res://client/deal_view.gd")
+## ED1: how dark a Lights Out floor is (a blackout's dark is 0.07), and how far a squeaky carrier walks between squeaks.
+const DEAL_DARK := 0.09
+const DEAL_SQUEAK_EVERY := 1.4
+const SplitViewScript = preload("res://client/split_view.gd")
 const Shop = preload("res://sim/shop.gd")
 ## Logs, crash and F9 reports for game night (client/telemetry.gd): read-only on this node.
 const Telemetry = preload("res://client/telemetry.gd")
@@ -116,6 +125,9 @@ const Music = preload("res://client/music.gd")
 const Volume = preload("res://client/volume.gd")
 ## The Tenant clock on screen (TT1, client/tenant_clock.gd).
 const TenantClock = preload("res://client/tenant_clock.gd")
+## CS1: each resident's caught scene on the caught player's screen, and the player's own FULL / SOFT for it.
+const CaughtScene = preload("res://client/caught_scene.gd")
+const CaughtPref = preload("res://client/caught_pref.gd")
 
 const VFOV := 70.0
 const SENS := 0.0022
@@ -219,6 +231,11 @@ var quota_view := QuotaView.new()
 var down_view := DownView.new()
 ## DV1: out, the camera looks through a crewmate's eyes (client/crew_watch.gd).
 var crew_watch := CrewWatch.new()
+## LS1: the wipe's scene on this screen (client/wipe_scene.gd; made in the world when a wipe block plays), the host time
+## of the wipe it plays, and whether it is on this frame.
+var wipe_scene: WipeScene = null
+var _wipe_at := -1.0
+var wipe_on := false
 ## DV1: since when (msec) the native Ward has had this player on its caught list, or -1.
 var _ward_caught_ms := -1
 ## Findables (FD10): the search's prompt, bar and open pieces, and the reader over the HUD; the test's F for a
@@ -238,6 +255,16 @@ var shop_view: ShopViewScript
 var skills_view: SkillsViewScript
 var flare_view: FlareViewScript
 var lamp_view: LampViewScript
+var deal_view: DealViewScript
+## ED1: the squeaky carrier's last place and walk since the last squeak; whether this screen asked to watch a crewmate
+## for the Second Opinion.
+var _squeak_at: Variant = null
+var _squeak_walk := 0.0
+var _second_watch := false
+## SR1: split reality on this screen only (client/split_view.gd): the tells and this player's own false sights.
+var split_view: SplitViewScript
+const NEAR_LIGHT_COLOR := Color(0.62, 0.72, 1.0)
+const BEAM_COLOR := Color(1.0, 0.90, 0.71)
 var _testing_inventory_click := false
 var pending_inv_sel := -1
 var pending_inv_step := 0
@@ -350,6 +377,13 @@ var dark_since := -1
 var emergency := 0.0
 var light := 1.0
 var caught_at := -1
+## CS1: the caught scene (client/caught_scene.gd, under the picture's world), the player's FULL / SOFT, whether this
+## screen's own catch at caught_at plays a scene and had the down rule then, and the Minder's take already shown.
+var caught_scene: Node3D = null
+var caught_pref := CaughtPref.new()
+var _catch_scene := false
+var _catch_downs := false
+var _minder_scene_shown := false
 var _annex_note_at := -1
 var ending: Dictionary = {}
 var end_shown_at := -1
@@ -569,6 +603,9 @@ func _ready() -> void:
 	volume.persist = not automated
 	volume.load_saved()
 	volume.apply()
+	# CS1: the player's own CAUGHT SCENES (a test plays FULL).
+	caught_pref.persist = not automated
+	caught_pref.load_saved()
 	music = Music.on(get_tree())
 	# A scripted run (auto=1) hears the game as its mix checks measured it, without music, unless it asks (music=1).
 	var music_asked := OS.get_cmdline_user_args().has("music=1") or (OS.has_feature("web") and _url("music", "0") == "1")
@@ -793,7 +830,7 @@ func _build_view() -> void:
 	cam.current = true
 	near_light = OmniLight3D.new()
 	near_light.name = "NearLight"
-	near_light.light_color = Color(0.62, 0.72, 1.0)
+	near_light.light_color = NEAR_LIGHT_COLOR
 	near_light.omni_range = NEAR_LIGHT_REACH
 	near_light.omni_attenuation = 1.6
 	near_light.light_energy = 0.0
@@ -820,6 +857,10 @@ func _build_view() -> void:
 	hide_view.name = "HideView"
 	add_child(hide_view)
 	hide_view.setup(self, sub)
+	# CS1: the caught scene's figure in the picture's world, its black, flash and bar over the picture, under the HUD.
+	caught_scene = CaughtScene.new()
+	sub.add_child(caught_scene)
+	add_child(caught_scene.overlay)
 	hud = Hud.new()
 	add_child(hud)
 	# Findables (FD10): the reader and the search's HUD bits, over the HUD.
@@ -844,6 +885,13 @@ func _build_view() -> void:
 	add_child(flare_view)
 	lamp_view = LampViewScript.new()
 	hud.add_child(lamp_view)
+	deal_view = DealViewScript.new()
+	deal_view.name = "DealView"
+	hud.add_child(deal_view)
+	split_view = SplitViewScript.new()
+	split_view.name = "SplitView"
+	sub.add_child(split_view)
+	split_view.setup(hud)
 	start = StartScreen.new()
 	start.name = "StartScreen"
 	add_child(start)
@@ -876,6 +924,7 @@ func _build_view() -> void:
 	settings_panel = SettingsPanel.new()
 	settings_panel.name = "SettingsPanel"
 	settings_panel.volume = volume
+	settings_panel.caught_pref = caught_pref
 	panel_layer.add_child(settings_panel)
 	sfx = Sfx.new()
 	add_child(sfx)
@@ -1245,6 +1294,8 @@ func _clear_world() -> void:
 	built_depth = -1
 	orderly.call(&"reset")
 	others.clear()
+	if split_view != null:
+		split_view.clear()
 	snap = {}
 	_reel_skip_at = null
 	_remission_readable = false
@@ -1256,6 +1307,7 @@ func _clear_world() -> void:
 	down_view.reset()
 	crew_watch.clear()
 	_ward_caught_ms = -1
+	_stop_caught_scene()
 	search_view.reset()
 	note_reader.close()
 	inv_view.reset()
@@ -1298,6 +1350,7 @@ func _on_new_run() -> void:
 	_inv_want = -1
 	_finds_seen = false
 	_turn_until = -1
+	_stop_caught_scene()
 	# The welcome is held WELCOME_HOLD seconds (the car and the crew first, then the voice). In a browser
 	# nothing is heard before the first click or key (autoplay rules): it also waits for one.
 	_welcome_armed = true
@@ -1396,6 +1449,12 @@ func _use_resident(plan: Dictionary) -> void:
 		(orderly as MinderView).follow(link)
 	if kind == "groundskeeper":
 		orderly.call(&"set_floor", level)
+	# CS1: this floor's caught scene, built now so a catch never waits for a model to load.
+	if caught_scene != null:
+		_stop_caught_scene()
+		var scene_kind := CaughtScene.kind_for(str(plan.get("place", "")))
+		var paper: Variant = (orderly as TempView).paper_image if orderly is TempView else null
+		caught_scene.call(&"prepare", scene_kind, {"paper": paper, "seed": str(snap.get("seed", seed))})
 
 # --- input --------------------------------------------------------------------------------------
 
@@ -1503,6 +1562,10 @@ func _input(event: InputEvent) -> void:
 		if k.physical_keycode in [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER] and _vote_reel():
 			get_viewport().set_input_as_handled()
 			return
+		# ED1: the deal's keys while its card is up (Y, N, 1 to 8), and O for a Second Opinion.
+		if deal_view != null and not _esc_menu and not wheel_open and deal_view.key(k):
+			get_viewport().set_input_as_handled()
+			return
 		if k.physical_keycode == KEY_F and hud.prompt == AnnexNotesView.PROMPT and not annex_note_focus.is_empty() and not _esc_menu and not wheel_open:
 			note_reader.open_wall(int(annex_note_focus["id"]), str(annex_note_focus["text"]))
 			sfx.play("search_paper")
@@ -1560,6 +1623,84 @@ func _input(event: InputEvent) -> void:
 		elif k.physical_keycode == KEY_T:
 			var st: float = tape_mat.get_shader_parameter("strength")
 			tape_mat.set_shader_parameter("strength", 0.0 if st > 0.5 else 1.0)
+
+## ED1: the deal's block of the newest snapshot (Protocol "deal"), or null; the floor and the day it is shown on.
+func _deal_block() -> Variant:
+	var c: Variant = link.client() if link != null else null
+	var latest: Variant = c.latest if c != null else null
+	return latest.get("deal") if latest is Dictionary else null
+
+func _deal_depth() -> int:
+	var c: Variant = link.client() if link != null else null
+	var latest: Variant = c.latest if c != null else null
+	return int(latest.get("depth", -1)) if latest is Dictionary else -1
+
+func _deal_day() -> int:
+	var c: Variant = link.client() if link != null else null
+	var latest: Variant = c.latest if c != null else null
+	if latest is Dictionary and latest.get("day") is Dictionary:
+		return int(latest["day"]["index"])
+	return 1
+
+## The Novelty Torch's light at host time `t` (client/deal_view.gd: strength, flicker).
+func _torch_factor(t: float) -> float:
+	var c: Variant = link.client() if link != null else null
+	return DealViewScript.torch_strength(c.tuning if c != null else null) * DealViewScript.torch_flicker(t)
+
+## ED1 this frame: the card and the floor's marks, the intercom's lines, the Second Opinion's look and the squeak.
+func _deal_frame(s: Dictionary) -> void:
+	if deal_view == null:
+		return
+	var c: Variant = link.client() if link != null else null
+	var latest: Variant = c.latest if c != null else null
+	var block: Variant = _deal_block()
+	var me := link.my_id()
+	var host_now := float(s.get("hostNow", 0.0))
+	var riding := str(s.get("phase", "")) == "riding"
+	var crew_ids: Array[String] = []
+	if latest is Dictionary:
+		for row: Dictionary in latest["players"]:
+			if str(row["status"]) == "ok" and bool(row.get("aboard", false)):
+				crew_ids.append(str(row["id"]))
+	var tn: Variant = c.tuning if c != null else null
+	deal_view.update(block, me, crew_ids, link.names(), tn, host_now, _deal_depth(), _deal_day(), riding)
+	for line in deal_view.said:
+		announcer.deal_say(line)
+	deal_view.said.clear()
+	# The Second Opinion: this player's one look through a crewmate's eyes (client/crew_watch.gd chooses whom; E moves on).
+	if DealViewScript.second_watching(block, me, host_now, tn):
+		crew_watch.watch_crewmate()
+		_second_watch = true
+	elif _second_watch:
+		_second_watch = false
+		crew_watch.stop_watching()
+	# Squeaky Soles: the carrier's walking squeaks, heard by everyone where they are.
+	var squeaker := DealViewScript.carrier_here(block, &"squeak", _deal_depth(), _deal_day()) if not riding else ""
+	if squeaker == "":
+		_squeak_at = null
+		_squeak_walk = 0.0
+		return
+	var at: Variant = null
+	var gait := "walk"
+	if squeaker == me:
+		var m: Dictionary = s.get("me", {})
+		if str(m.get("status", "")) == "ok":
+			at = Vector3(float(m.get("x", 0.0)), float(m.get("y", 0.0)), float(m.get("z", 0.0)))
+			gait = str(m.get("gait", "walk"))
+	else:
+		for o: Dictionary in s.get("others", []):
+			if str(o["id"]) == squeaker and str(o["status"]) == "ok":
+				at = Vector3(float(o["x"]), float(o["y"]), float(o["z"]))
+				gait = str(o.get("gait", "walk"))
+	if at == null:
+		_squeak_at = null
+		return
+	if _squeak_at is Vector3 and gait != "creep":
+		_squeak_walk += Vector2((at as Vector3).x - (_squeak_at as Vector3).x, (at as Vector3).z - (_squeak_at as Vector3).z).length()
+	_squeak_at = at
+	if _squeak_walk >= DEAL_SQUEAK_EVERY:
+		_squeak_walk = 0.0
+		sfx.squeaker(null if squeaker == me else at)
 
 ## DV1: whether an input is the watching view's "next crewmate": E pressed, or a left click with the mouse already
 ## held by the game (the first click, with the mouse free, still only takes the mouse).
@@ -1645,7 +1786,10 @@ func _music_frame() -> void:
 	var st := Music.state_of(in_game, str(snap.get("phase", "")) if in_game else "", prison, ended)
 	var catch := in_game and (_noise_on() or Music.catch_recent(sfx.played, Time.get_ticks_msec()))
 	var duck := Music.duck_wanted(announcer.speaking(), catch, in_game and announcer.hold_chatter)
-	music.drive(st, Music.report_key_of(snap, ended) if in_game else "", duck)
+	# LS1: the music cuts for the last one standing and for the wipe's scene (the Playroom's tune too, client/sfx.gd).
+	var quiet := in_game and LastStandView.music_quiet(snap, float(snap.get("hostNow", 0.0)))
+	sfx.tune_hushed = quiet
+	music.drive(st, Music.report_key_of(snap, ended) if in_game else "", duck, quiet)
 
 ## The player's brightness on the picture: the tape's last step (client/tape.gdshader).
 func _apply_brightness(lv: int) -> void:
@@ -1813,7 +1957,100 @@ func _kiosk_changed(code: String) -> void:
 
 func _noise_on() -> bool:
 	var now := Time.get_ticks_msec()
-	return caught_at >= 0 and now - caught_at < BLACK_MS + NOISE_MS
+	return caught_at >= 0 and now - caught_at < catch_window_ms(_catch_scene, _catch_downs)
+
+## CS1: starts `kind`'s caught scene now; `mine` for this screen's own player (else a crewmate watched through their
+## eyes); `op` the resident's pose as the snapshot has it. FULL on your own screen snaps the camera round to it.
+func _start_caught_scene(kind: String, now: int, mine: bool, op: Variant) -> void:
+	var ctx := {}
+	var at: Variant = Vector3(float(op["x"]), float(op["y"]) + 1.4, float(op["z"])) if op is Dictionary else null
+	if kind == "crew":
+		# The Reactor: the nearest of the four as they are drawn, and its seat (its face and number).
+		var four: Node = level.find_child("StationCrew", true, false) if level != null else null
+		if four != null:
+			var best := INF
+			var figs: Array = four.get(&"figures")
+			var seats_of: Array = four.get(&"seats")
+			for i in figs.size():
+				var d := (figs[i] as Node3D).global_position.distance_to(cam.global_position)
+				if d < best:
+					best = d
+					ctx["seat"] = int(seats_of[i]) if i < seats_of.size() else i + 1
+					at = (figs[i] as Node3D).global_position + Vector3(0.0, 0.4, 0.0)
+	caught_scene.set(&"soft", caught_pref.soft)
+	if not bool(caught_scene.call(&"start", kind, now, mine, ctx)):
+		return
+	if mine:
+		_catch_scene = true
+	if bool(caught_scene.call(&"snaps")) and at is Vector3:
+		var lv: Vector3 = at
+		yaw = atan2(-(lv.x - cam.position.x), -(lv.z - cam.position.z))
+		pitch = clampf(atan2(lv.y - cam.position.y, Vector2(lv.x - cam.position.x, lv.z - cam.position.z).length()), -MAX_PITCH, MAX_PITCH)
+		cam.rotation = Vector3(pitch, yaw, 0.0)
+
+func _stop_caught_scene() -> void:
+	_catch_scene = false
+	_catch_downs = false
+	_minder_scene_shown = false
+	if caught_scene != null:
+		caught_scene.call(&"stop")
+	if cam != null:
+		cam.h_offset = 0.0
+		cam.v_offset = 0.0
+	if hide_view != null:
+		hide_view.scene_mask = false
+
+## CS1, each frame after the camera is placed: the Minder's take starts its scene; the scene's figure, its overlay, the
+## tape's noise pushed and the camera's shove (FULL).
+func _step_caught_scene(s: Dictionary, now: int) -> void:
+	if caught_scene == null:
+		return
+	if CaughtScene.kind_for(str(link.plan_dict.get("place", ""))) == "minder":
+		if minder_takes_now(s) and not _minder_scene_shown:
+			_minder_scene_shown = true
+			_start_caught_scene("minder", now, true, (s.get("orderly", {}) as Dictionary).get("pose"))
+		elif not minder_takes_now(s) and str(((s.get("mySeek", {}) if s.get("mySeek") is Dictionary else {}) as Dictionary).get("status", "")) != "found":
+			_minder_scene_shown = false
+		# Its flat card mask is not drawn once the figure itself has come for you.
+		hide_view.scene_mask = _minder_scene_shown
+	var r: Dictionary = caught_scene.call(&"step", now, cam)
+	if bool(r.get("on", false)):
+		# The scene sets the picture noise itself (its own build-up; SOFT halves it), over the catch's flat noise.
+		tape_mat.set_shader_parameter("snow", float(r["snow"]))
+		tape_mat.set_shader_parameter("glitch", float(r["glitch"]))
+		var sh: Vector2 = r["shove"]
+		cam.h_offset = sh.x
+		cam.v_offset = sh.y
+	else:
+		cam.h_offset = 0.0
+		cam.v_offset = 0.0
+
+## CS1: how long (ms) the catch keeps the picture (the noise, the resident hidden, the down timer not yet shown). With
+## a resident's own caught scene and the down rule, the scene's own length (about a second, then the ring and the
+## crawl); otherwise the black cut and the noise as before.
+static func catch_window_ms(scene: bool, downs: bool) -> int:
+	return CaughtScene.LENGTH_MS if scene and downs else BLACK_MS + NOISE_MS
+
+## CS1: which resident's caught scene a "caught" event `e` starts on this screen ("" for none): only for this screen's
+## own player `my` or, out and watching through a crewmate's eyes, for `watched` (client/crew_watch.gd), on a floor whose
+## place has one (client/caught_scene.gd kind_for). Never on the Hanging Ward played here (its web is the Rigger's catch,
+## client/ward/web_view.gd): `latest` the newest snapshot as net/client.gd holds it.
+static func caught_scene_kind(e: Dictionary, my: String, watched: String, place: String, latest: Variant) -> String:
+	var who := str(e.get("playerId", ""))
+	if who == "" or (who != my and (watched == "" or who != watched)):
+		return ""
+	if ward_native_on(latest) or late_floor_of(latest) == "ward":
+		return ""
+	return CaughtScene.kind_for(place)
+
+## CS1: the Playroom's Minder takes a found player when it reaches them (its catch, or the grab outside a count): the
+## snapshot's own row says found and the Minder's mode is catch or grab. The found event itself can come from 12 m away.
+static func minder_takes_now(s: Dictionary) -> bool:
+	var row: Variant = s.get("mySeek")
+	if not row is Dictionary or str((row as Dictionary).get("status", "")) != "found":
+		return false
+	var mode := str((s.get("orderly", {}) as Dictionary).get("mode", ""))
+	return mode == "catch" or mode == "grab"
 
 # --- the frame ----------------------------------------------------------------------------------
 
@@ -2027,7 +2264,8 @@ func _game_input(dt: float) -> Dictionary:
 		"hide": hide, "hideFast": hide_fast, "peek": peek,
 		# Findables (FD10): F held for the search client/search_view.gd offered on the last frame.
 		"search": search_view.want_search and not hide and not call, "searchFast": search_view.want_fast,
-		"invSel": inv_sel, "invOp": inv_op, "invArg": inv_arg, "skipReelAt": _reel_skip_at}
+		"invSel": inv_sel, "invOp": inv_op, "invArg": inv_arg, "skipReelAt": _reel_skip_at,
+		"deal": deal_view.answer() if deal_view != null else null}
 
 ## DF1: the host's "pressure" block of the newest snapshot (Protocol "pressure"), or null (cycle 1, the pressures off).
 func _pressure() -> Variant:
@@ -2115,6 +2353,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	# Everyone else, and their name tags (not through walls, fading with distance, not in the dark).
 	var dark: bool = s["dark"]
 	others.update(dt, _ward_unwrapped(s["others"]), cam.position)
+	_show_split(s, dt)
 	_name_tags(s, dark)
 
 	# The lights: a blink's warning flickers, the dark is deep, the emergency lighting comes up.
@@ -2138,6 +2377,9 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	_lights_out = _is_lights_out(s)
 	if _lights_out:
 		light = 0.0   # the prison at lights out: only the cells' night lights
+	# ED1: Lights Out, taken on the ride down: this floor's lights stay out (the lift keeps its own).
+	if str(s["phase"]) != "riding" and DealViewScript.lights_out(_deal_block(), _deal_depth(), _deal_day()):
+		light = minf(light, DEAL_DARK)
 	level.set_light_level(light)
 	sfx.set_hum(light, dark)
 	sfx.world(dt, s, emergency)
@@ -2160,6 +2402,9 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 			near_light.visible = false
 		else:
 			near_light.omni_range = reach + (near_light.omni_range - NEAR_LIGHT_REACH)
+	# ED1: the Novelty Torch: the carrier's own light is weaker and flickers (the same flicker on every screen).
+	if str(s["phase"]) != "riding" and DealViewScript.carrier_here(_deal_block(), &"torch", _deal_depth(), _deal_day()) == link.my_id():
+		near_light.light_energy *= _torch_factor(float(s.get("hostNow", 0.0)))
 	env.background_color = Color(0.02, 0.025, 0.025) * light
 
 	# The lift: doors, indicator, votes, buttons.
@@ -2168,6 +2413,9 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	if practice:
 		OrientationView.show_standees(level, s.get("orientationStandees"), float(s["hostNow"]))
 	lift.set_doors(bool(s["doorsOpen"]))
+	# LS1: the wipe's scene opens and closes the empty car's doors on its own clock.
+	if wipe_on and wipe_scene != null:
+		lift.set_doors(WipeScene.doors_open(float(s.get("hostNow", 0.0)) - _wipe_at))
 	_show_indicator(now)
 	lift.set_vote(str(me["side"]) if me.get("side") != null else "")
 	lift.set_call_lit(phase == "coming")
@@ -2245,7 +2493,8 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 
 	# The picture and the display.
 	var noise := _noise_on()
-	var black := caught_at >= 0 and now - caught_at < BLACK_MS
+	# CS1: a resident's caught scene draws its own black (client/caught_scene.gd).
+	var black := caught_at >= 0 and now - caught_at < BLACK_MS and not _catch_scene
 	tape_mat.set_shader_parameter("darkness", 1.0 if dark else 0.0)
 	tape_mat.set_shader_parameter("tired", 0.85 * pow(exertion, 1.4))
 	tape_mat.set_shader_parameter("shaken", 1.0 if shaken else 0.0)
@@ -2262,6 +2511,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	var tenant := TenantClock.line(lc.latest if lc != null else null)
 	hud.tenant_line = str(tenant["text"])
 	hud.tenant_warn = bool(tenant["warn"])
+	_deal_frame(s)
 	if reel != null and bool(s.get("playing", true)):
 		# The picture stays in the car. The subtitle remains legible through the camcorder
 		# at any seat, and eligible crew outside the car still get a vote prompt.
@@ -2312,6 +2562,12 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	flare_view.update(lights_in, s.get("flares"), link.my_id(), float(s.get("hostNow", 0.0)))
 	shop_view.flare_blind = flare_view.blind
 	lamp_view.update(lights_in, s.get("lamps"), link.my_id())
+	# ED1: the Novelty Torch's carrier's carried lamp too, as everyone sees it.
+	var torch_by := DealViewScript.carrier_here(_deal_block(), &"torch", _deal_depth(), _deal_day()) if str(s["phase"]) != "riding" else ""
+	for lamp_id: String in lamp_view.beams:
+		var beam: SpotLight3D = lamp_view.beams[lamp_id]
+		if is_instance_valid(beam):
+			beam.light_energy = 4.0 * (_torch_factor(float(s.get("hostNow", 0.0))) if lamp_id == torch_by else 1.0)
 	if shop_view.is_open() and (station != "shop" or me_down or ended or _lights_out):
 		shop_view.close()
 	if skills_view.is_open() and (s.get("skills") == null or station != "skills" or me_down or ended or _lights_out or _wake_left(s) >= 0.0):
@@ -2420,6 +2676,8 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	_show_end(now)
 	_ward_frame(dt)
 	_apply_watch()
+	_step_caught_scene(s, now)
+	_last_stand_frame(s, now)
 
 ## DV1: out (client/crew_watch.gd), the camera at a crewmate's eyes, looking where they look. Not on the Ward (its
 ## own watching camera), not at the Playroom's party table (a taken seek row), not during the catch's own scene or
@@ -2442,7 +2700,8 @@ func _update_watch(s: Dictionary, held: bool) -> void:
 	else:
 		_ward_caught_ms = -1
 	var words: Array = LEFT_OUT_LINES if _left_out(s) else ([] if ward_held.has(me) else DownView.OUT_LINES)
-	crew_watch.update(s, me, link.names(), watch_allowed(s, held, _noise_on(), hud.end_lines.is_empty()), words, ward_out, ward_held)
+	# LS1: a spotlight locks the view on the last one up.
+	crew_watch.update(s, me, link.names(), watch_allowed(s, held, _noise_on(), hud.end_lines.is_empty()), words, ward_out, ward_held, LastStandView.lock_for(s, me))
 	_apply_watch()
 
 ## DV1, for other code (WC1's web cocoon on the Ward): look through a crewmate's eyes now, whatever the run's status;
@@ -2468,10 +2727,89 @@ func _apply_watch() -> void:
 		cam.position = crew_watch.eye
 		cam.rotation = Vector3(crew_watch.pitch, crew_watch.yaw, 0.0)
 
+## LS1: the caught player's own catch scene keeps the first moments after a catch (another piece's); the wipe's scene
+## waits this long after this screen's catch before it takes the picture.
+const CATCH_KEEP_MS := 1200
+
+## LS1 and CS1: whether the wipe's scene waits on this screen at `now`: CATCH_KEEP_MS after this screen's own catch
+## (`caught_at`), and as long after a caught scene started (`scene_at`, -1 for none) that is still playing here, so an
+## out player watching the crewmate who is caught sees that crewmate's scene first too (client/crew_watch.gd).
+static func wipe_held(caught_at_ms: int, scene_at: int, now: int) -> bool:
+	if caught_at_ms >= 0 and now - caught_at_ms < CATCH_KEEP_MS:
+		return true
+	return scene_at >= 0 and now - scene_at < CATCH_KEEP_MS
+## LS1: after the scene, black until the prison is drawn (the ride's last moments), at most this long.
+const WIPE_HOLD := 1.5
+
+## LS1 (North Star B7; client/last_stand_view.gd, client/wipe_scene.gd, client/prison_view.gd show_standee), last in the
+## frame so it wins the picture: the spotlight's line; in the prison, the standee of the night's last player caught; and
+## while the host's wipe block plays on this floor, the wipe's scene (its camera, the figure, the doors, the bars).
+func _last_stand_frame(s: Dictionary, now: int) -> void:
+	var me := link.my_id()
+	var names := link.names()
+	var host_now := float(s.get("hostNow", 0.0))
+	var stand: Variant = LastStandView.stand_of(s)
+	hud.stand_line = LastStandView.line_for(s, me, names) if hud.end_lines.is_empty() else ""
+	hud.stand_self = stand != null and str((stand as Dictionary)["id"]) == me
+	if level != null and level.has_meta(&"prison"):
+		var who := str(s["standee"]) if s.get("standee") != null else ""
+		(level.get_meta(&"prison") as PrisonView).show_standee(link.face_of(who) if who != "" else "", str(names.get(who, who)).to_upper() if who != "" else "")
+	var w: Variant = s.get("wipe")
+	var here := w is Dictionary and level != null and lift != null and int((w as Dictionary)["depth"]) == built_depth and int((w as Dictionary)["depth"]) == int(s["depth"])
+	var scene_at := int(caught_scene.get(&"started")) if caught_scene != null and bool(caught_scene.call(&"playing", now)) else -1
+	var playing := here and WipeScene.playing(w, host_now) and not wipe_held(caught_at, scene_at, now)
+	if not playing:
+		if wipe_on:
+			wipe_on = false
+			hud.letterbox = false
+			if wipe_scene != null and is_instance_valid(wipe_scene):
+				wipe_scene.end()
+		var after := host_now - float((w as Dictionary)["at"]) if here else -1.0
+		if here and after >= WipeScene.LEN and after < WipeScene.LEN + WIPE_HOLD and bool(s.get("goingUp", false)):
+			hud.fade = 1.0
+		return
+	if wipe_scene == null or not is_instance_valid(wipe_scene):
+		wipe_scene = WipeScene.new()
+		wipe_scene.name = "WipeScene"
+		world.add_child(wipe_scene)
+	if not wipe_on or float((w as Dictionary)["at"]) != _wipe_at:
+		_wipe_at = float((w as Dictionary)["at"])
+		wipe_scene.begin(w, link.plan, level, lift, str(snap.get("seed", seed)), link.crew_faces(), _ward_floor != null)
+		wipe_on = true
+	var f := wipe_scene.show_at(host_now, cam, lift, sfx)
+	hud.letterbox = true
+	hud.fade = float(f["fade"])
+	hud.out_on = false
+	hud.prompt = ""
+	hud.watch_note = ""
+	hud.center_note = ""
+	hud.stand_line = ""
+	hud.down_head = ""
+	hud.tags = []
+	hud.eyes = {}
+	inv_view.hidden_now = true
+	# The floor's own resident is wherever the rules left it: only the scene's figure is drawn.
+	orderly.visible = false
+	if orderly2 != null:
+		orderly2.visible = false
+
+## Tests: the standee the prison shows now ({} for none or off the prison).
+func _standee_shown() -> Dictionary:
+	if level == null or not level.has_meta(&"prison"):
+		return {}
+	var st: Node3D = (level.get_meta(&"prison") as PrisonView).standee
+	if st == null or not is_instance_valid(st):
+		return {}
+	return {"name": st.get("player_name"), "face": st.get("face_code"), "hash": st.call(&"face_hash"), "at": [st.global_position.x, st.global_position.z]}
+
 ## WN1: the Hanging Ward as a normal level. While the newest snapshot carries a Ward block the host marks `native`
 ## (net/host_rules.gd ward_place) and its lift has not gone, this scene hosts the Ward's world (client/ward/floor.gd)
 ## in place of the floor plan's level and lift, walks this player through the Ward's walk model, and puts the Ward's
 ## lines on the HUD. Everything else of this scene goes on as on any floor. With no such block: nothing at all.
+## RR1: the tug of a walkway under the player as he takes weight on it: how long and how far the view dips (metres).
+const WARD_TUG_SECONDS := 0.35
+const WARD_TUG_DIP := 0.05
+
 func _ward_frame(_dt: float) -> void:
 	var c: Variant = link.client() if link != null else null
 	var latest: Variant = c.latest if c != null else null
@@ -2492,6 +2830,11 @@ func _ward_frame(_dt: float) -> void:
 	# WC1: the run's own lift beside the Ward's block (its lift is every floor's when called from the station).
 	ward = (ward as Dictionary).duplicate()
 	ward["lift"] = {"phase": str(latest.get("phase", "")), "floorsAway": latest.get("floorsAway"), "bellLeft": float(latest.get("bellLeft", 0.0))}
+	# RR1: the crawling Rigger drawn where every other resident is drawn from (net/client.gd rigger_drawn).
+	if (ward as Dictionary).has("rigger") and c.has_method("rigger_drawn"):
+		var drawn: Dictionary = c.rigger_drawn()
+		if not drawn.is_empty():
+			ward["rigger"] = drawn
 	_ward_floor.update(ward, host_now, link.my_id(), feet, latest["players"], c.events, link.names(), cam.global_transform, self)
 	link.call_spot = _ward_floor.call_spot()
 	# The floor plan's own resident, lift and lines are not on this floor.
@@ -2509,6 +2852,12 @@ func _ward_frame(_dt: float) -> void:
 	if _ward_floor.cut_fill >= 0.0:
 		hud.prompt_fill = _ward_floor.cut_fill
 	_ward_floor.apply_environment(env)
+	# RR1: the walkway under the player takes his weight: one brief tug of the view (client/ward/view.gd tug_at, host
+	# time), as the design asks ("Try one brief tug when he takes weight on a support shared with the player").
+	if _ward_floor.view != null:
+		var tug: float = host_now - float(_ward_floor.view.tug_at)
+		if tug >= 0.0 and tug < WARD_TUG_SECONDS:
+			cam.position.y -= WARD_TUG_DIP * sin(PI * tug / WARD_TUG_SECONDS)
 	var watch: Variant = _ward_floor.watch_transform()
 	if crew_watch.watching:
 		# DV1: caught on the Ward, the crewmate's-eyes view (client/crew_watch.gd), its caption, its keys.
@@ -2835,6 +3184,17 @@ func _reset_eye_stats() -> void:
 
 ## Name tags over the other players: projected from the head into the window, only within TAG_RANGE,
 ## never through walls (the rules' line of sight), not in the dark.
+## SR1 (client/split_view.gd): this player's own split block, drawn over the crew just placed (a wrong face hides one).
+func _show_split(s: Dictionary, dt: float) -> void:
+	var lc := link.client()
+	var block: Variant = lc.latest.get("split") if lc != null and lc.latest is Dictionary else null
+	var me: Dictionary = s["me"]
+	var beam: Variant = lamp_view.beams.get(link.my_id())
+	var lights: Array = [near_light, beam if is_instance_valid(beam) else null]
+	split_view.update(dt, block, float(s.get("hostNow", 0.0)), _resident_kind if not _no_resident else "", link.plan,
+		str(snap.get("seed", seed)), link.crew_faces(), s["others"], others, lights, NEAR_LIGHT_COLOR, BEAM_COLOR,
+		str(me.get("status", "")) == "ok", cam.global_position)
+
 func _name_tags(s: Dictionary, dark: bool) -> void:
 	var tags: Array = []
 	var win := get_viewport().get_visible_rect().size
@@ -2848,6 +3208,9 @@ func _name_tags(s: Dictionary, dark: bool) -> void:
 		sees = func(at: Vector3, _level: int) -> bool:
 			return _ward_floor.sees(from, at)
 	for o: Dictionary in s["others"]:
+		# SR1: a crewmate wearing the resident's face on this screen has no name tag here.
+		if split_view != null and str(o.get("id", "")) == split_view.masked():
+			continue
 		var tag := name_tag(o, cam, win, dark, sees)
 		if not tag.is_empty():
 			tags.append(tag)
@@ -3097,10 +3460,17 @@ func _present(events: Array, now: int) -> void:
 					_turn_to2 = int(e.get("n", 1)) == 2
 				var staple := bool(e.get("annexStaple", false))
 				sfx.caught(mine, Vector3(float(op["x"]), float(op["y"]) + 2.0, float(op["z"])) if op is Dictionary else null, staple)
+				# CS1: the resident's own caught scene, on this player's screen (or watching them, on the watcher's).
+				var scene_kind := caught_scene_kind(e, my, crew_watch.watch_id if crew_watch.watching else "",
+					str(link.plan_dict.get("place", "")), client.latest if client != null else null)
 				if mine:
 					_annex_note_at = now + sfx.STAPLE_AFTER if staple else -1
 					caught_at = now
 					raise_latch = false
+					_catch_scene = false
+					_catch_downs = snap.get("downs") is Dictionary
+				if scene_kind != "":
+					_start_caught_scene(scene_kind, now, mine, op)
 			"slip":
 				if mine:
 					inst_view.print_slip(str(e["text"]))
@@ -3115,6 +3485,9 @@ func _show_end(now: int) -> void:
 	var kind := str(ending["kind"])
 	var wait := 2600 if kind == "banked" else (NOISE_MS + 200 if kind == "wiped" else 1500)
 	if now - int(ending["at"]) < wait:
+		return
+	# LS1: the wipe's scene plays before the end screen.
+	if kind == "wiped" and wipe_on:
 		return
 	sfx.ride(false)
 	var again := {"text": "PRESS A KEY FOR A NEW RUN" if link.local else "BACK TO THE ROOM IN A MOMENT"}
@@ -4040,6 +4413,7 @@ func _test_state() -> Dictionary:
 			"look": orderly.call(&"look") if orderly.has_method(&"look") else {}},
 		"others": oth,
 		"nearLight": {"energy": near_light.light_energy, "on": near_light.visible, "reach": near_light.omni_range},
+		"split": split_view.check() if split_view != null else {},
 		"garden": _garden_state(),
 		"emotesSeen": emotes_seen,
 		"net": {"local": link.local, "id": link.my_id(), "bytesIn": link.rc.bytes_in, "bytesOut": link.rc.bytes_out, "now": _now(),
@@ -4049,6 +4423,7 @@ func _test_state() -> Dictionary:
 			"raise": inst_view.raise, "needle": inst_view.needle, "needleAngle": inst_view.angle, "subtitle": announcer.subtitle,
 			"spoken": announcer.history.map(func(h: Dictionary) -> String: return str(h["id"])), "history": announcer.history, "hintsOn": announcer.hints.enabled,
 			"hintLog": announcer.hint_log.slice(maxi(0, announcer.hint_log.size() - 60)), "caught": caught_at >= 0, "noise": _noise_on(),
+			"caughtScene": caught_scene.call(&"describe", Time.get_ticks_msec()) if caught_scene != null else {},
 			"wentDown": hud.went_down, "end": hud.end_lines.map(func(l: Dictionary) -> String: return str(l["text"])), "tapeText": hud.tape_text,
 			"prompt": hud.prompt, "menu": hud.menu_on, "built": built_depth, "hudSize": [hud.size.x, hud.size.y], "lift": _lift_drawn(),
 			"wheel": wheel_open, "wheelSel": hud.wheel_sel, "note": hud.note, "tags": hud.tags.map(func(t: Dictionary) -> String: return str(t["text"])), "tagRange": TAG_RANGE,
@@ -4075,6 +4450,9 @@ func _test_state() -> Dictionary:
 			"monitorAt": [lift.day_point().x, lift.day_point().y, lift.day_point().z], "subtitle": announcer.shown(link.client().quota() if link.client() != null else null),
 			"said": announcer.history.filter(func(h: Dictionary) -> bool: return str(h.moment) in ["bank_refused", "day_met", "ride", "hint_day", "hint_bank_locked", "hint_floor_not_day", "hint_stakes"])},
 		"watch": crew_watch.describe(),
+		"lastStand": {"host": s.get("stand"), "wipe": s.get("wipe"), "standee": s.get("standee"), "line": hud.stand_line, "self": hud.stand_self,
+			"scene": wipe_scene.describe() if wipe_on and wipe_scene != null else {}, "sceneOn": wipe_on, "letterbox": hud.letterbox,
+			"music": music.describe() if music != null else {}, "standeeShown": _standee_shown()},
 		"downs": {"host": s.get("downs"), "view": down_view.describe(), "hud": {"head": hud.down_head, "left": hud.down_left, "line": hud.down_line,
 			"line2": hud.down_line2, "heal": hud.down_heal, "out": hud.out_on, "outLines": hud.out_lines, "prompt": hud.prompt, "fill": hud.prompt_fill},
 			"turning": _turn_until > Time.get_ticks_msec(), "bend": orderly.get("bend") if orderly != null else null},

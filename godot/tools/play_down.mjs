@@ -13,6 +13,9 @@
 //      holds F a while and lets go: the bar empties; holds again and walks out of reach: it empties again.
 //      Nobody finishes: Ann is out. Her screen goes dark: OUT, YOU REJOIN WHEN THE CAR NEXT MOVES. A red spot
 //      is on the floor where she lay, on both screens, where the host says; Ann's figure is gone from Bob's.
+//   LS1 (North Star B7) along the way: while Ann is down Bob is the last one up, so his screen prints his tape's
+//      bonus, hers says every camera is on him, and both cut the music; healed, it is over; out, her view is locked
+//      on him.
 // Pictures in export/shots/down/: Ann's downed view with the timer, Bob's prompt with the bar part filled,
 // Ann's out screen, the red spot from Bob's view, and the resident bent over her from a step away. Prints `N passed, M failed`; exit code 1 on any failure.
 //   node godot/tools/play_down.mjs [--port=4466] [--seed=down-1] [--headless=1]
@@ -216,6 +219,11 @@ try {
     return { t, seenDown };
   })();
   a = await until(A.state, (s) => s.downs?.hud?.head?.startsWith('DOWN'), 6000, 50);
+  const ringAfter = Date.now() - downedAt;
+  // CS1: the Orderly's own caught scene played on Ann's screen only, and the ring came within about 1.2 s of it.
+  const sceneA = a.client?.caughtScene ?? {};
+  check('Ann\'s screen: the Orderly\'s caught scene played, then the down ring within about 1.2 s', sceneA.last === 'orderly' && sceneA.starts >= 1 && ringAfter <= 1600,
+    `scene ${JSON.stringify({ last: sceneA.last, starts: sceneA.starts, model: sceneA.model })}, ring ${ringAfter} ms after her screen had her down (polled every 50 ms)`);
   await sleep(300);
   a = await A.state();
   const left1 = myDown(a) ? myDown(a).until - a.hostNow : NaN;
@@ -233,6 +241,14 @@ try {
   check('Ann\'s timer counts down', shown2 < shown1 - 0.7 && shown2 > 0, `${r2(shown1)} s then ${r2(shown2)} s a second later; "${a.downs.hud.head}"`);
   const { t: b1, seenDown } = await bobGoes;
   b = b1;
+  // LS1 (North Star B7): Ann down leaves Bob the last one up: the spotlight on both screens, the music cut.
+  const ls = (s) => s.lastStand ?? {};
+  check('LS1: Bob is the last one up: his screen prints his tape\'s bonus, Ann\'s says the cameras are on him, the music is cut on both',
+    ls(b).host?.id === idB && ls(b).self === true && /^LAST ONE UP\. YOUR TAPE PAYS X1\.5 /.test(ls(b).line ?? '') && ls(a).line === 'ALL CAMERAS ON BOB. THE LAST ONE UP'
+    && ls(a).music?.hushed === true && ls(b).music?.hushed === true,
+    `host ${JSON.stringify(ls(b).host)}; Bob "${ls(b).line}", Ann "${ls(a).line}", hushed ${ls(a).music?.hushed}/${ls(b).music?.hushed}`);
+  check('Bob\'s screen: no caught scene for Ann\'s catch (he sees the figure in the world)', (b.client?.caughtScene?.starts ?? -1) === 0,
+    `starts ${b.client?.caughtScene?.starts}`);
   const figA = other(b, idA);
   check('Bob\'s screen: Ann\'s figure lies on the floor (downed, lying or crawling, not standing)', figA?.downed === true && ['taken', 'crawl', 'down_idle'].includes(figA.clip) && figA.drawn === true,
     `downed ${figA?.downed}, clip ${figA?.clip}, drawn ${figA?.drawn}, mask at ${r2(figA?.maskY)} m`);
@@ -260,6 +276,8 @@ try {
   check('1. healed: Ann is back on her feet, her view back up, the timer gone', a.me.status === 'ok' && eyeOf(a) > 1.5 && a.downs.hud.head === '' && !a.downs.hud.out && (a.events.healed ?? 0) === 1,
     `status ${a.me.status}, eye ${r2(eyeOf(a))} m, head "${a.downs.hud.head}", healed ${a.events.healed} (${r2(healedIn)} s after going down)`);
   check('Bob\'s screen: Ann stands, the prompt is gone', other(b, idA)?.downed === false && b.client.prompt !== 'HOLD F TO HELP', `downed ${other(b, idA)?.downed}, prompt "${b.client.prompt}"`);
+  check('LS1: healed, the spotlight is over on both screens', (b.lastStand?.host ?? null) === null && (b.lastStand?.line ?? '') === '' && (a.lastStand?.line ?? '') === '',
+    `host ${JSON.stringify(b.lastStand?.host)}, lines "${b.lastStand?.line}" / "${a.lastStand?.line}"`);
   await A.cmd('move 1 0 0 0');
   await sleep(500);
   await A.cmd('stopmove');
@@ -334,6 +352,8 @@ try {
   check('2. not healed: Ann is out', a.me.status === 'out' && (a.events.out ?? 0) === 1, `status ${a.me.status}, out events ${a.events.out}`);
   check('Ann\'s screen goes dark: OUT, YOU REJOIN WHEN THE CAR NEXT MOVES', (a.downs.hud.out === true || a.watch?.watching === true) && a.downs.hud.outLines[0] === 'OUT' && a.downs.hud.outLines.includes('YOU REJOIN WHEN THE CAR NEXT MOVES') && a.downs.hud.head === '',
     `out ${a.downs.hud.out}, lines ${JSON.stringify(a.downs.hud.outLines)}`);
+  check('LS1: out, Ann\'s view is locked on Bob, the last one up', a.watch?.watching === true && a.watch?.id === idB && a.watch?.locked === true && /THE LAST ONE UP/.test(a.watch?.caption ?? ''),
+    `watch ${JSON.stringify({ watching: a.watch?.watching, id: a.watch?.id, locked: a.watch?.locked, caption: a.watch?.caption })}`);
   await A.shot('3-out-screen.png');
   const info = await host('info');
   const spot = (info.spots ?? [])[0];
@@ -351,6 +371,43 @@ try {
   }
   b = await B.state();
   check('Bob plays on, on his feet', b.me.status === 'ok' && b.phase !== 'ended', `status ${b.me.status}, phase ${b.phase}`);
+
+  // ---- 3. LS1 (North Star B7): the wipe. The resident goes after Bob too; nobody is left to help him. When he is out the
+  // whole crew is: every screen plays the same scene of the empty car taking the resident up, then the prison shows a
+  // standee of Bob, the last one caught.
+  b = await B.state();
+  if (spot) await B.cmd(`face ${2 * b.me.x - spot.x} ${2 * b.me.z - spot.z}`);
+  await sleep(600);
+  const r3 = await host('behind Bob');
+  if (!r3.ok) throw new Error(`the server could not send the resident: ${JSON.stringify(r3)}`);
+  b = await until(B.state, (s) => s.me.status === 'down', 20000, 40);
+  if (b.me.status !== 'down') console.log(`  Bob not caught: host ${JSON.stringify(await host('info'))}, sent ${JSON.stringify(r3)}`);
+  a = await A.state();
+  check('3. caught: Bob is down too, so nobody is up: no spotlight', b.me.status === 'down' && (b.lastStand?.host ?? null) === null && (a.lastStand?.line ?? '') === '',
+    `status ${b.me.status}, host ${JSON.stringify(b.lastStand?.host)}`);
+  const [sa, sb] = await Promise.all([
+    until(A.state, (s) => s.lastStand?.sceneOn === true && s.lastStand?.scene?.figureDrawn === true, (DOWN_S + 12) * 1000, 40),
+    until(B.state, (s) => s.lastStand?.sceneOn === true && s.lastStand?.scene?.figureDrawn === true, (DOWN_S + 12) * 1000, 40)]);
+  const wa = sa.lastStand?.wipe ?? {};
+  const wb = sb.lastStand?.wipe ?? {};
+  check('the wipe: both screens play the scene from the one host event, naming the Orderly and Bob', wa.at === wb.at && wa.by === 'orderly' && wa.last === idB && wb.last === idB
+    && sa.lastStand.scene.figureKind === 'orderly' && sb.lastStand.scene.figureKind === 'orderly' && sa.lastStand.letterbox && sb.lastStand.letterbox,
+    `Ann ${JSON.stringify(wa)} / Bob ${JSON.stringify(wb)}; figures ${sa.lastStand.scene.figureKind}/${sb.lastStand.scene.figureKind}`);
+  check('the scene: the doors are open as the Orderly walks in, the music is cut', sa.lastStand.scene.doors === true && sb.lastStand.scene.doors === true && sa.lastStand.scene.anim === 'walk'
+    && sa.lastStand.music?.hushed === true && sb.lastStand.music?.hushed === true,
+    `doors ${sa.lastStand.scene.doors}/${sb.lastStand.scene.doors}, anim ${sa.lastStand.scene.anim}, ${r2(sa.lastStand.scene.e)} s / ${r2(sb.lastStand.scene.e)} s in`);
+  await A.shot('5-wipe-scene.png');
+  const [ha, hb] = await Promise.all([
+    until(A.state, (s) => s.depth === 0 && s.lastStand?.standeeShown?.name, 45000, 100),
+    until(B.state, (s) => s.depth === 0 && s.lastStand?.standeeShown?.name, 45000, 100)]);
+  check('the prison: both screens show a standee of Bob, the last one caught, with the same face', ha.lastStand.standeeShown.name === 'BOB' && hb.lastStand.standeeShown.name === 'BOB'
+    && ha.lastStand.standeeShown.hash === hb.lastStand.standeeShown.hash && ha.lastStand.standee === idB,
+    `Ann's ${JSON.stringify(ha.lastStand.standeeShown)}, Bob's ${JSON.stringify(hb.lastStand.standeeShown)}`);
+  if (ha.lastStand.standeeShown.at) {
+    await A.cmd(`face ${ha.lastStand.standeeShown.at[0]} ${ha.lastStand.standeeShown.at[1]} 1.2`);
+    await sleep(400);
+    await A.shot('6-standee.png');
+  }
   const errors = [...A.g.lines, ...B.g.lines, ...server.lines].filter((l) => /SCRIPT ERROR|ERROR: .*\.gd/.test(l));
   check('no script errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   writeFileSync(join(shots, 'play_down.json'), JSON.stringify({ results, seed }, null, 2));

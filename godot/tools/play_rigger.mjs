@@ -100,7 +100,9 @@ try {
   check(drawnAt !== null && !drawnBeforeHeard && drawnAt >= heardAt, 'he is heard before he is drawn', `heard ${heardAt}, drawn ${drawnAt}`);
   check(!litBeforeHeard, 'his lamp is never lit before the line is heard');
   check(s.rigger?.encounter === 'searching' && String(s.rigger?.house) === String(placed.house), `he searches house ${placed.house}, the player's`, JSON.stringify(s.rigger));
-  check(clips.has('climbing:Rigger Climb'), 'he climbs with the climb clip', [...clips].join(', '));
+  // RR1: the crawling Rigger (on by default; rigger_roam=0 brings back the one who climbs straight up) plays "climb" as
+  // he crawls his graph; the clinging one held "Rigger Climb" on his line.
+  check(clips.has('climbing:Rigger Climb') || clips.has('climbing:climb'), 'he climbs with a climb clip', [...clips].join(', '));
   check(s.rigger?.clip === 'hang', 'he hangs (the hang clip) while he searches', s.rigger?.clip);
   check(s.rigger?.lamp === true, 'his lamp is lit while he is drawn');
   const look = await json('wardlook hand');

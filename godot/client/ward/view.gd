@@ -46,6 +46,15 @@ static func set_v2_loops(player: AnimationPlayer) -> void:
 const ARM_RADII := Vector2(0.085, 0.055)
 const ARM_RADII_V2 := Vector2(0.13, 0.055)
 const ARM_COLOR_V2 := "#847076"
+## RR1 stage 2: the crawling Rigger's feet (client/ward/rigger_feet.gd), or null without the new figure.
+var feet: SkeletonModifier3D = null
+## RR1 stage 2: the light under his belly (figure space: -Y towards the surface), cold and weak.
+var rim_light: OmniLight3D = null
+const RIM_COLOR := "#8fa6c8"
+const RIM_ENERGY := 1.4
+const RIM_RANGE := 7.0
+const RIM_UNDER := -1.8
+const Graph = preload("res://sim/ward/rigger_graph.gd")
 ## True when this run asked for the new figures (read once, in _init; tests may set it before the view is added).
 var figures_new := false
 var rigger_wrist := RIGGER_WRIST
@@ -574,6 +583,9 @@ var shown_ward := {}
 
 func _show_rigger(ward: Dictionary, host_now: float) -> void:
 	shown_ward = ward
+	if ward.has("rigger"):
+		_show_roaming(ward, host_now)
+		return
 	_show_loaded_support(ward, host_now)
 	var active: bool = ward.encounter == "climbing" or ward.encounter == "searching"
 	rigger.visible = active
@@ -611,6 +623,121 @@ func _show_rigger(ward: Dictionary, host_now: float) -> void:
 		packed.append(fixture.to_local(Vector3(raw[0], raw[1], raw[2])))
 	_draw_arm(fixture, packed)
 
+## RR1: the crawling Rigger (the run flag rigger_roam): drawn exactly at the host's pose (the snapshot's, blended by the
+## client as every resident is: net/client.gd rigger_drawn), the figure's own frame being the graph's (sim/ward/
+## rigger_graph.gd: abdomen at the origin, back up, torso forward). He holds still in "hang" while he searches, stays or
+## rears; "reach" (the arm drawn up) is his rearing before a grab; "climb" while he crawls. His paid-out arm runs from the
+## figure's wrist to the host's arm. The lamp lives on the figure and is lit only while he is out of his lair (drawn).
+## The lines and walkways he weighs on strain for a moment (play_event "ward_weight").
+func _show_roaming(ward: Dictionary, host_now: float) -> void:
+	var r: Dictionary = ward.rigger
+	_show_weights(host_now)
+	var out := bool(r.get("out", false))
+	rigger.visible = out
+	walk_model_rigger(r)
+	if rim_light != null:
+		rim_light.visible = out
+	if feet != null:
+		if not out or not feet.active:
+			feet.call("reset")
+		feet.active = out
+		feet.set("now", host_now)
+	if not out:
+		ribbon.clear_surfaces()
+		previous_arm.clear()
+		hand.hide()
+		return
+	var at := Vector3(r.at[0], r.at[1], r.at[2])
+	var q := Quaternion(r.rot[0], r.rot[1], r.rot[2], r.rot[3]).normalized()
+	rigger.global_transform = Transform3D(Basis(q), at)
+	var encounter := str(ward.encounter)
+	if animation != null and hold_animation != &"":
+		var want: StringName = &"climb"
+		if encounter in ["searching", "lingering", "warning"]:
+			want = hold_animation
+		elif encounter == "rearing" and animation.has_animation(&"reach"):
+			want = &"reach"
+		if animation.has_animation(want) and (animation.assigned_animation != want or not animation.is_playing()):
+			animation.play(want)
+			animation.advance(0.0)
+	var points: Array = ward.armPoints
+	var fixture: House = houses[int(ward.house)].fixture if int(ward.house) >= 0 else houses[0].fixture
+	var packed := PackedVector3Array()
+	if points.size() > 1 and encounter == "searching":
+		# From his own wrist to the host's arm at the opening (the reach pose puts the wrist on it, or within 1 m).
+		packed.append(fixture.to_local(rigger.global_transform * rigger_wrist))
+	if points.size() > 1:
+		for raw: Array in points:
+			packed.append(fixture.to_local(Vector3(raw[0], raw[1], raw[2])))
+	_draw_arm(fixture, packed)
+
+## The walk model on this screen keeps his body solid where the host has him (sim/ward/roam.gd blocks).
+func walk_model_rigger(r: Dictionary) -> void:
+	if walk_model.roam == null:
+		walk_model.enable_roam(true)
+	walk_model.roam.at = Vector3(r.at[0], r.at[1], r.at[2])
+	walk_model.roam.turn = Quaternion(r.rot[0], r.rot[1], r.rot[2], r.rot[3]).normalized()
+	walk_model.roam.trip = &"" if not bool(r.get("out", false)) else &"shown"
+
+## RR1: his weight on a house's line or a walkway, for WEIGHT_SHOW seconds: the house's loaded support and take-up
+## levers swing (as today's climb), a walkway's ropes and deck dip; a player standing on that walkway feels a brief tug.
+const WEIGHT_SHOW := 1.6
+var _weights: Array = []
+## Host time of the last tug this player felt (the main game may nudge its camera from it).
+var tug_at := -INF
+
+func _show_weights(host_now: float) -> void:
+	var keep: Array = []
+	for w: Dictionary in _weights:
+		var k := (host_now - float(w.at)) / WEIGHT_SHOW
+		var pull := 0.0 if k < 0.0 or k > 1.0 else 0.2 * sin(k * TAU * 2.0) * (1.0 - k)
+		if int(w.house) >= 0 and int(w.house) < houses.size():
+			_set_house_load(houses[int(w.house)], pull)
+		if w.node != null and is_instance_valid(w.node):
+			(w.node as Node3D).position.y = -absf(pull) * 0.3
+		if k <= 1.0:
+			keep.append(w)
+	_weights = keep
+
+func _weight_event(event: Dictionary) -> void:
+	var at := Vector3(float(event.get("x", 0.0)), float(event.get("y", 0.0)), float(event.get("z", 0.0)))
+	load_sound.global_position = at
+	load_sound.play()
+	var row := {"at": float(event.get("at", event.get("t", 0.0))), "house": -1, "node": null}
+	if str(event.get("surface", "")) == "walkway":
+		var b := int(event.get("bridge", -1))
+		row.node = _walkway_node(b)
+		if _on_bridge(b):
+			tug_at = row.at
+	else:
+		row.house = int(event.get("house", -1))
+	_weights.append(row)
+
+## The drawn walkway (or the bridge) of layout bridge `b`.
+func _walkway_node(b: int) -> Node3D:
+	var fixed := 0
+	for i: int in walk_model.layout.bridges.size():
+		var winch: bool = walk_model.layout.bridges[i].kind == "winch"
+		if i == b:
+			return bridge if winch else (walkways[fixed] if fixed < walkways.size() else null)
+		if not winch:
+			fixed += 1
+	return null
+
+## Whether this screen's player stands on layout bridge `b`.
+func _on_bridge(b: int) -> bool:
+	if b < 0 or b >= walk_model.layout.bridges.size():
+		return false
+	var path: Array = walk_model.layout.bridges[b].path
+	var feet := player.position
+	for i in range(1, path.size()):
+		var from := Footing.path_point(path[i - 1])
+		var to := Footing.path_point(path[i])
+		var near := Geometry3D.get_closest_point_to_segment(feet, from, to)
+		if near.distance_to(feet) <= Footing.DECK_WIDTH:
+			return true
+	return false
+
 func _show_crew(crew: Array, my_id: String) -> void:
 	for ghost: MeshInstance3D in peers.values():
 		ghost.hide()
@@ -635,6 +762,10 @@ func _show_crew(crew: Array, my_id: String) -> void:
 		ghost.visible = not (watching and id == watch_id)
 
 func play_event(event: Dictionary) -> void:
+	# RR1: his weight where it is (the crawling Rigger's cues carry their place).
+	if event.type == "ward_weight" or event.type == "ward_rear" or (event.type == "ward_line_loaded" and event.has("x")):
+		_weight_event(event)
+		return
 	if event.type == "ward_line_loaded":
 		var house: Dictionary = houses[int(event.house)]
 		var support: Node3D = house.lines[(house.fixture as House).loaded_support_index()]
@@ -1106,6 +1237,15 @@ func _build_rigger() -> void:
 	if path == RIGGER_V2_PATH:
 		arm_radii = ARM_RADII_V2
 		arm_material = "arm_v2"
+	# RR1 stage 2: his feet on the surfaces he crawls (client/ward/rigger_feet.gd), only while the crawling Rigger is
+	# drawn (_show_roaming turns it on).
+	var skeletons := rigger.find_children("*", "Skeleton3D", true, false)
+	if path == RIGGER_V2_PATH and not skeletons.is_empty():
+		feet = (load("res://client/ward/rigger_feet.gd") as GDScript).new()
+		feet.name = "RiggerFeet"
+		feet.active = false
+		(skeletons[0] as Skeleton3D).add_child(feet)
+		feet.setup(skeletons[0] as Skeleton3D, Graph.solids_only(walk_model.layout, walk_model.houses, walk_model.lift_door()))
 	var lamp := rigger.find_child("Lamp", true, false) as Node3D
 	if path == RIGGER_V2_PATH and lamp != null:
 		lamp_light = OmniLight3D.new()
@@ -1114,6 +1254,18 @@ func _build_rigger() -> void:
 		lamp_light.omni_range = LAMP_RANGE
 		lamp_light.shadow_enabled = false
 		lamp.add_child(lamp_light)
+		# RR1 stage 2: a weak, cold light under his belly (between him and the wall or deck he holds: what the house's
+		# own windows throw on him), so his shape reads from inside a house against the dark outside the glass. It
+		# belongs to the drawn figure, so like the lamp it exists only while he is drawn, and is lit only for the
+		# crawling Rigger (_show_roaming).
+		rim_light = OmniLight3D.new()
+		rim_light.light_color = Color(RIM_COLOR)
+		rim_light.light_energy = RIM_ENERGY
+		rim_light.omni_range = RIM_RANGE
+		rim_light.shadow_enabled = false
+		rim_light.position = Vector3(0.0, RIM_UNDER, 1.0)
+		rim_light.visible = false
+		rigger.add_child(rim_light)
 	hand = (load(HAND_PATH) as PackedScene).instantiate()
 	add_child(hand)
 	hand.hide()

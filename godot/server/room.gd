@@ -466,9 +466,13 @@ func _start(now: float) -> void:
 		cycles and late_floors and not (ward_review or reactor_review or orientation_review) and pressures and HostRules.pressures_by_arg(),
 		late_floors and not (ward_review or reactor_review or orientation_review) and HostRules.ward_call_by_arg(),
 		late_floors and not (ward_review or reactor_review or orientation_review) and HostRules.ward_web_by_arg(),
+		late_floors and not (reactor_review or orientation_review) and HostRules.rigger_roam_by_arg(),
 		ward_layout and late_floors and not (ward_review or reactor_review or orientation_review),
 		not (ward_review or reactor_review or orientation_review),
-		playroom_tuned, downs, true)
+		playroom_tuned, downs, true,
+		not (ward_review or reactor_review or orientation_review),
+		not (ward_review or reactor_review or orientation_review) and HostRules.deal_by_arg(),
+		HostRules.split_on_by_arg() and not (ward_review or reactor_review or orientation_review))
 	if orientation_review:
 		rules.enable_orientation()
 	elif orientation_campaign:

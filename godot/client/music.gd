@@ -157,15 +157,23 @@ func _on_node_added(n: Node) -> void:
 		if n.get_parent() != self and StringName(n.get("bus")) == &"Master":
 			n.set("bus", EFFECTS_BUS)
 
-## Every frame from the game: where this player is, the report's key ("" for none), and whether to duck.
-func drive(st: String, key: String, is_ducked: bool) -> void:
+## Every frame from the game: where this player is, the report's key ("" for none), and whether to duck. `quiet`:
+## LS1 (North Star B7: "the music cuts"): the last one standing's spotlight, or the wipe's scene: no track at all
+## while it lasts (each fades out over FADE); a report's stamp waits for it.
+func drive(st: String, key: String, is_ducked: bool, quiet := false) -> void:
 	state = st
 	report_key = key
 	ducked = is_ducked
+	hushed = quiet
 	_driven_ms = Time.get_ticks_msec()
+
+## LS1: the game asked for silence this frame (drive's `quiet`).
+var hushed := false
 
 ## The track wanted now, from the last word and the stamp (advances the stamp's own state).
 func wanted() -> String:
+	if hushed:
+		return ""
 	var st := state
 	if _driven_ms >= 0 and Time.get_ticks_msec() - _driven_ms > UNDRIVEN_MS:
 		# The Ward's own scene is a floor; anything else (the cassette deck's film) keeps the last track, ducked.
@@ -222,6 +230,6 @@ func describe() -> Dictionary:
 		vols[st] = p.volume_db
 	var bi := AudioServer.get_bus_index(BUS)
 	var ei := AudioServer.get_bus_index(EFFECTS_BUS)
-	return {"state": state, "track": track, "report": report_key, "stamp": _stamp_on, "levels": levels.duplicate(), "playing": playing,
+	return {"state": state, "track": track, "hushed": hushed, "report": report_key, "stamp": _stamp_on, "levels": levels.duplicate(), "playing": playing,
 		"volumes": vols, "duck": duck_db, "ducked": ducked, "musicBusDb": AudioServer.get_bus_volume_db(bi) if bi >= 0 else 0.0,
 		"effectsBusDb": AudioServer.get_bus_volume_db(ei) if ei >= 0 else 0.0, "masterDb": AudioServer.get_bus_volume_db(0)}

@@ -140,6 +140,8 @@ class LocalFrame:
 	var flare_blind := false
 	var hold_doors := false
 	var skip_reel_at: Variant
+	## ED1: this player's answer to the deal [offer seq, choice, pick, double, use seq] (sim/deal.gd answer), or null.
+	var deal: Variant = null
 	## The call button was pressed this frame.
 	var call := false
 	## The pick-up key was pressed this frame.
@@ -766,6 +768,35 @@ func _render_time(now: float) -> Variant:
 	_rt_local = now
 	return _rt
 
+## The bracket of snapshots this frame draws from ([a, b, alpha], or []), kept for rigger_drawn.
+var _rigger_show: Array = []
+
+## RR1: the crawling Rigger's pose as this frame draws it: the host's poses in the two snapshots every other resident is
+## drawn between, blended at the same render time ({} without the Ward's rigger block). Never ahead of the host.
+func rigger_drawn() -> Dictionary:
+	if _rigger_show.is_empty():
+		return {}
+	var wa: Variant = (_rigger_show[0] as Dictionary).get("ward")
+	var wb: Variant = (_rigger_show[1] as Dictionary).get("ward")
+	if not wa is Dictionary or not (wa as Dictionary).has("rigger"):
+		return {}
+	var ra: Dictionary = wa.rigger
+	if not wb is Dictionary or not (wb as Dictionary).has("rigger"):
+		return ra
+	var rb: Dictionary = wb.rigger
+	var k := float(_rigger_show[2])
+	var pa := Vector3(ra.at[0], ra.at[1], ra.at[2])
+	var pb := Vector3(rb.at[0], rb.at[1], rb.at[2])
+	var qa := Quaternion(ra.rot[0], ra.rot[1], ra.rot[2], ra.rot[3]).normalized()
+	var qb := Quaternion(rb.rot[0], rb.rot[1], rb.rot[2], rb.rot[3]).normalized()
+	var p := pa.lerp(pb, k)
+	var q := qa.slerp(qb, k)
+	var out := (ra if k < 0.5 else rb).duplicate()
+	out["at"] = [p.x, p.y, p.z]
+	out["rot"] = [q.x, q.y, q.z, q.w]
+	out["out"] = bool(ra.out) or bool(rb.out)
+	return out
+
 ## [a, b, alpha] for drawing at host time `rt` (INF: the newest), or [] with nothing to draw.
 func _bracket(rt: float) -> Array:
 	var s := _snaps
@@ -846,6 +877,7 @@ func frame(now: float, local: LocalFrame) -> Frame:
 	last_camera = cam
 	var clock_rt: Variant = _render_time(now)
 	var show := _bracket(INF if clock_rt == null else float(clock_rt))
+	_rigger_show = show
 	# The host time of the state actually drawn (behind the clock when snapshots are late).
 	var rt := -1.0
 	if not show.is_empty():
@@ -1283,6 +1315,8 @@ func _send(now: float, cam: Pose.Camera, local: LocalFrame, rt: float) -> void:
 		m["use"] = true
 	if local.skip_reel_at != null:
 		m["skipReelAt"] = local.skip_reel_at
+	if local.deal != null:
+		m["deal"] = local.deal
 	if local.peek:
 		m["peek"] = true
 	if local.search:

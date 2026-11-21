@@ -75,6 +75,11 @@ const OrderlyFix = preload("res://sim/orderly_fix.gd")
 const PropFix = preload("res://tests/prop_orderly_fix.gd")
 const PropCalm = preload("res://tests/prop_minder_calm.gd")
 const PropRing = preload("res://tests/prop_down_ring.gd")
+const LastStand = preload("res://sim/last_stand.gd")
+const Deal = preload("res://sim/deal.gd")
+const PropDeal = preload("res://tests/prop_deal.gd")
+const PropSplit = preload("res://tests/prop_split.gd")
+const Split = preload("res://sim/split.gd")
 
 const DT := 0.05
 const EPS := 1e-9
@@ -194,6 +199,19 @@ const PROOFS := {
 	&"rigger.arm_speed": "test_rigger_numbers",
 	&"rigger.alone_arm_speed": "test_rigger_numbers",
 	&"rigger.arm_back": "test_rigger_numbers",
+	&"rigger.climb_speed": "test_rigger_roam_numbers",
+	&"rigger.crawl_speed": "test_rigger_roam_numbers",
+	&"rigger.lair_speed": "test_rigger_roam_numbers",
+	&"rigger.linger": "test_rigger_roam_numbers",
+	&"rigger.opening_time": "test_rigger_roam_numbers",
+	&"rigger.feel": "test_rigger_roam_numbers",
+	&"rigger.openings": "test_rigger_roam_numbers",
+	&"rigger.loud": "test_rigger_roam_numbers",
+	&"rigger.chase_time": "test_rigger_roam_numbers",
+	&"rigger.chase_gap": "test_rigger_roam_numbers",
+	&"rigger.chase_gain": "test_rigger_roam_numbers",
+	&"rigger.chase_top": "test_rigger_roam_numbers",
+	&"rigger.reach_pause": "test_rigger_roam_numbers",
 	# RX2: the Reactor by crew size, the crawlers' distance, the catcher over its catch.
 	&"reactor.alone_scale": "test_reactor_crew_numbers",
 	&"reactor.pair_scale": "test_reactor_crew_numbers",
@@ -244,6 +262,8 @@ const PROOFS := {
 	&"minder.anger_open": "test_minder_calm_numbers",
 	&"minder.stalk": "test_minder_calm_numbers",
 	&"down.ring": "test_down_ring_time",
+	# LS1: the sole survivor's bonus (North Star B7).
+	&"last_stand.bonus": "test_last_stand_bonus",
 	# DF1: the pressures of floor 8 and deeper.
 	&"pressure.quota": "test_pressure_settings",
 	&"pressure.quota3": "test_pressure_settings",
@@ -258,6 +278,37 @@ const PROOFS := {
 	# OR2: the Orderly fix.
 	&"orderly.reach_walk": "test_orderly_fix_settings",
 	&"orderly.dirty_from": "test_orderly_fix_settings",
+	# ED1: the elevator deal.
+	&"deal.ride": "test_deal_settings",
+	&"deal.squeak_in": "test_deal_settings",
+	&"deal.squeak": "test_deal_settings",
+	&"deal.torch_in": "test_deal_settings",
+	&"deal.torch": "test_deal_settings",
+	&"deal.second_in": "test_deal_settings",
+	&"deal.second": "test_deal_settings",
+	&"deal.dark_in": "test_deal_settings",
+	&"deal.dark": "test_deal_settings",
+	&"deal.express_in": "test_deal_settings",
+	&"deal.express": "test_deal_settings",
+	&"deal.double_in": "test_deal_settings",
+	&"deal.double_drop": "test_deal_settings",
+	&"deal.hazard_pay": "test_deal_settings",
+	&"deal.dark_pay": "test_deal_settings",
+	&"deal.express_pay": "test_deal_settings",
+	&"deal.squeak_loud": "test_deal_settings",
+	&"deal.torch_dim": "test_deal_settings",
+	&"deal.second_time": "test_deal_settings",
+	# SR1: split reality.
+	&"split.read_rise": "test_split_numbers",
+	&"split.alone_rise": "test_split_numbers",
+	&"split.alone_m": "test_split_numbers",
+	&"split.dark_rise": "test_split_numbers",
+	&"split.lift_fall": "test_split_numbers",
+	&"split.first_at": "test_split_numbers",
+	&"split.calm_at": "test_split_numbers",
+	&"split.every": "test_split_numbers",
+	&"split.chance": "test_split_numbers",
+	&"split.lasts": "test_split_numbers",
 }
 
 ## The rows of later pieces wired so far (sim/settings.gd WIRED_IDS), in the registry's order.
@@ -274,6 +325,7 @@ const MORE: Array[StringName] = [
 	&"reactor.power_hold", &"reactor.wake_after", &"reactor.wake_gap", &"reactor.crawl_time", &"reactor.crawl_speed", &"reactor.run_speed",
 	&"ward.lift_minutes", &"rigger.call_heard", &"rigger.cut_heard", &"ward.lift_clock", &"ward.carry_time", &"ward.cut_time", &"ward.spread", &"ward.rise",
 	&"rigger.steps_reach", &"rigger.click_reach", &"rigger.open_heard", &"rigger.door_heard", &"rigger.move_on", &"rigger.record_inside", &"rigger.room_warn", &"rigger.probe", &"rigger.arm_speed", &"rigger.alone_arm_speed", &"rigger.arm_back",
+	&"rigger.climb_speed", &"rigger.crawl_speed", &"rigger.lair_speed", &"rigger.linger", &"rigger.opening_time", &"rigger.feel", &"rigger.openings", &"rigger.loud", &"rigger.chase_time", &"rigger.chase_gap", &"rigger.chase_gain", &"rigger.chase_top", &"rigger.reach_pause",
 	&"reactor.alone_scale", &"reactor.pair_scale", &"reactor.crawl_keep", &"reactor.feed", &"reactor.stand_off",
 	&"reactor.senses", &"reactor.sight_dark", &"reactor.sight_lit", &"reactor.sight_glow", &"reactor.sight_creep", &"reactor.lamp_glow", &"reactor.hear_walk", &"reactor.hear_sprint", &"reactor.hear_socket", &"reactor.search_time", &"reactor.search_speed", &"reactor.noise_draws",
 	&"reactor.hear_wall", &"reactor.lunge_range", &"reactor.lunge_speed", &"reactor.wake_alone", &"reactor.wake_pair", &"reactor.wake_late", &"reactor.flinch", &"reactor.board",
@@ -281,8 +333,11 @@ const MORE: Array[StringName] = [
 	&"quota.step", &"record.reach", &"record.rate", &"marks.pad",
 	&"party.free_time", &"party.free_anger", &"party.reach",
 	&"minder.after_hunt", &"minder.anger_hide", &"minder.anger_open", &"minder.stalk", &"down.ring",
+	&"split.read_rise", &"split.alone_rise", &"split.alone_m", &"split.dark_rise", &"split.lift_fall", &"split.first_at",
+	&"split.calm_at", &"split.every", &"split.chance", &"split.lasts",
 	&"pressure.quota", &"pressure.quota3", &"pressure.heals", &"pressure.heals3", &"pressure.watchers", &"pressure.watchers3", &"pressure.near_light", &"pressure.near_light3", &"pressure.tenant_minutes", &"pressure.tenant_minutes3",
-	&"orderly.reach_walk", &"orderly.dirty_from"]
+	&"orderly.reach_walk", &"orderly.dirty_from", &"last_stand.bonus",
+	&"deal.ride", &"deal.squeak_in", &"deal.squeak", &"deal.torch_in", &"deal.torch", &"deal.second_in", &"deal.second", &"deal.dark_in", &"deal.dark", &"deal.express_in", &"deal.express", &"deal.double_in", &"deal.double_drop", &"deal.hazard_pay", &"deal.dark_pay", &"deal.express_pay", &"deal.squeak_loud", &"deal.torch_dim", &"deal.second_time"]
 
 ## The game's value of every setting: the constant the game uses, with the rooms' switches on (paced, the long
 ## dark, the car waits: net/host_rules.gd). This table, not the registry, is the test's oracle.
@@ -309,6 +364,19 @@ static func game_values() -> Dictionary:
 		&"minder.anger_open": Seek.CALM_OPEN_ANGER * 100.0,
 		&"minder.stalk": Seek.CALM_STALK_SPEED,
 		&"down.ring": Run.DOWN_RING_TIME,
+		# ED1: the elevator deal (on in the game's rooms): sim/deal.gd's numbers and its cards' odds.
+		&"deal.ride": Deal.RIDE,
+		&"deal.squeak_in": 1.0, &"deal.torch_in": 1.0, &"deal.second_in": 1.0, &"deal.dark_in": 1.0, &"deal.express_in": 1.0,
+		&"deal.squeak": float(Deal.CARD[&"squeak"]["odds"]), &"deal.torch": float(Deal.CARD[&"torch"]["odds"]),
+		&"deal.second": float(Deal.CARD[&"second"]["odds"]), &"deal.dark": float(Deal.CARD[&"dark"]["odds"]),
+		&"deal.express": float(Deal.CARD[&"express"]["odds"]),
+		&"deal.double_in": 1.0, &"deal.double_drop": float(Deal.DOUBLE_DROP),
+		&"deal.hazard_pay": Deal.HAZARD_PAY, &"deal.dark_pay": Deal.DARK_PAY, &"deal.express_pay": Deal.EXPRESS_PAY,
+		&"deal.squeak_loud": Deal.SQUEAK_LOUD, &"deal.torch_dim": float(Deal.TORCH_DIM), &"deal.second_time": Deal.SECOND_TIME,
+		# SR1: split reality (sim/split.gd).
+		&"split.read_rise": Split.READ_RISE, &"split.alone_rise": Split.ALONE_RISE, &"split.alone_m": Split.ALONE_METRES,
+		&"split.dark_rise": Split.DARK_RISE, &"split.lift_fall": Split.LIFT_FALL, &"split.first_at": float(Split.FIRST_AT),
+		&"split.calm_at": float(Split.CALM_AT), &"split.every": Split.EVERY, &"split.chance": float(Split.CHANCE), &"split.lasts": Split.LASTS,
 		&"orderly.dark_speed": Run.PACED_BLACKOUT_HUNT_SPEED,
 		# The Temp is Lonely in the game's rooms (sim/lonely.gd): its chase, lit and in the blackout, and alone.
 		&"temp.speed": Lonely.CHASE_SPEED,
@@ -382,6 +450,20 @@ static func game_values() -> Dictionary:
 		&"rigger.arm_speed": WardState.ARM_SPEED,
 		&"rigger.alone_arm_speed": WardState.ALONE_ARM_SPEED,
 		&"rigger.arm_back": WardState.ARM_BACK,
+		# RR1 (sim/ward/state.gd, read with the run flag rigger_roam on).
+		&"rigger.climb_speed": WardState.CLIMB_SPEED,
+		&"rigger.crawl_speed": WardState.CRAWL_SPEED,
+		&"rigger.lair_speed": WardState.LAIR_SPEED,
+		&"rigger.linger": WardState.LINGER,
+		&"rigger.opening_time": WardState.OPENING_TIME,
+		&"rigger.feel": WardState.FEEL,
+		&"rigger.openings": float(WardState.OPENINGS),
+		&"rigger.loud": float(WardState.LOUD),
+		&"rigger.chase_time": WardState.CHASE_TIME,
+		&"rigger.chase_gap": WardState.CHASE_GAP,
+		&"rigger.chase_gain": WardState.CHASE_GAIN,
+		&"rigger.chase_top": WardState.CHASE_TOP,
+		&"rigger.reach_pause": WardState.REACH_PAUSE,
 		&"reactor.alone_scale": StationRules.ALONE_SCALE,
 		&"reactor.pair_scale": StationRules.PAIR_SCALE,
 		&"reactor.crawl_keep": StationRules.CRAWL_KEEP,
@@ -453,6 +535,7 @@ static func game_values() -> Dictionary:
 		&"pay.step": Run.DEPTH_PAY_STEP,
 		&"record.reach": Instr.RECORD_RANGE,
 		&"record.rate": Instr.RATE_NEAR,
+		&"last_stand.bonus": LastStand.BONUS,
 		&"day.first": Day.START_HALVES / 2.0,
 		&"day.lights_out": Day.LIGHTS_OUT_DELAY,
 		&"marks.pad": float(Marks.DEFAULT_PAD),
@@ -476,6 +559,12 @@ static func ten_at_today() -> Dictionary:
 # ---------------------------------------------------------------------------------------------
 # 1. The registry.
 
+## LS1: the sole survivor's bonus at least, today's and most (tests/prop_last_stand.gd bonus_proof): stamped as the
+## spotlight begins, the number the event says, and the number paid.
+func test_last_stand_bonus(t: T) -> void:
+	# Loaded here, not preloaded: that file preloads this one.
+	load("res://tests/prop_last_stand.gd").bonus_proof(t)
+
 func test_catch_dance_setting(t: T) -> void:
 	var row := Settings.row(&"orderly.catch_dance")
 	t.check(row != null and row.wired and row.section == &"orderly", "the host can find the dance under the Orderly")
@@ -490,7 +579,11 @@ func test_registry_rows(t: T) -> void:
 	# OR2 added the Orderly fix's two (KEEPS COMING AS IT REACHES, STARTS IN THE DIRTY PART).
 	# WG1 added the Ward's two layout rows (THE WARD, in the lift's group).
 	# MA1 added four Minder rows and DR1 the ring's down time (20 Nov).
-	t.eq(rows.size(), 181, "rows in the registry")
+	# RR1 added the Rigger's thirteen (his crawl, his search from any opening and his chase).
+	# LS1 added the sole survivor's bonus (EARNING).
+	# ED1 added the deal's nineteen (THE DEAL, its own group before the player speeds).
+	# SR1 added split reality's ten (players).
+	t.eq(rows.size(), 224, "rows in the registry")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -538,12 +631,13 @@ func test_registry_rows(t: T) -> void:
 		if TEN.has(s.id) or MORE.has(s.id) or KEEPER_SIX.has(s.id):
 			want.append(s.id)
 	t.check(wired == want and want.size() == TEN.size() + MORE.size() + KEEPER_SIX.size(), "the wired rows are exactly those of LS1 and the groups wired since, in order: %s" % str(wired))
-	t.eq(by_group.get(&"residents", 0), 105, "residents (WC1 added two Rigger rows, OR2 two Orderly rows, MA1 four Minder rows)")
+	t.eq(by_group.get(&"residents", 0), 118, "residents (WC1 added two Rigger rows, OR2 two Orderly rows, MA1 four Minder rows, RR1 thirteen Rigger rows)")
 	t.eq(by_group.get(&"lift", 0), 18, "the lift and the dark (and the Ward's lift, PL2, its call and web, WC1, and its layout, WG1)")
-	t.eq(by_group.get(&"players", 0), 31, "players (DR1 added the ring's down time)")
-	t.eq(by_group.get(&"earning", 0), 10, "earning")
+	t.eq(by_group.get(&"players", 0), 41, "players (DR1 added the ring's down time, SR1 split reality's ten)")
+	t.eq(by_group.get(&"earning", 0), 11, "earning (LS1 added the sole survivor's bonus)")
 	t.eq(by_group.get(&"hiding", 0), 3, "hiding")
 	t.eq(by_group.get(&"deeper", 0), 10, "floor 8 and deeper")
+	t.eq(by_group.get(&"deal", 0), 19, "the deal (ED1)")
 	t.eq(by_group.get(&"speeds", 0), 4, "player speeds, the last group")
 	t.eq(group_order[group_order.size() - 1], &"speeds", "player speeds come last")
 	t.eq(Settings.LIFT_DELAY_MIN, Run.CALL_START_DELAY_MIN, "the pair rule's start delay is the run's")
@@ -1107,6 +1201,10 @@ func test_minder_calm_numbers(t: T) -> void:
 		t.check(fastest <= stalk + 1e-3 and fastest >= stalk * 0.8, "%s: it walks to them at %.3f m/s (want %.2f)" % [str(given), fastest, stalk])
 
 ## DR1's down.ring: a caught player is down that long with the ring (tests/prop_down_ring.gd's run).
+## SR1: split reality's ten (tests/prop_split.gd settings_proof).
+func test_split_numbers(t: T) -> void:
+	PropSplit.settings_proof(t)
+
 func test_down_ring_time(t: T) -> void:
 	for d: float in [30.0, 12.0, 60.0]:
 		var hit := false
@@ -2474,6 +2572,10 @@ func test_second_orderly_first_floor(t: T) -> void:
 ## follows the setting in 100 of its hunt speed (0: it stands, as before the fix), read by the run (Run.reach_walk_of);
 ## at 0 the walker gets away and at today's they are caught. orderly.dirty_from: over a set of seeds both starts are at
 ## least that far in (OrderlyFix.dirt), and at the least some start nearer than today's (so the setting is what moves it).
+## ED1: every row of THE DEAL moves what it names (tests/prop_deal.gd settings_proof).
+func test_deal_settings(t: T) -> void:
+	PropDeal.settings_proof(t)
+
 func test_orderly_fix_settings(t: T) -> void:
 	var plan := PropFix.Plans.plan("seed-0", 2)
 	var route := PropFix.long_route(plan)
@@ -2753,3 +2855,7 @@ func test_pressure_settings(t: T) -> void:
 ## unset row is today's constant (tests/test_ward_rigger.gd holds the scenes).
 func test_rigger_numbers(t: T) -> void:
 	RiggerTest.settings_proof(t)
+
+## RR1: the Rigger's crawl and chase (tests/prop_rigger_roam.gd settings_proof).
+func test_rigger_roam_numbers(t: T) -> void:
+	(load("res://tests/prop_rigger_roam.gd") as GDScript).call("settings_proof", t)

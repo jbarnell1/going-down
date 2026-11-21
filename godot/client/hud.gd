@@ -131,6 +131,11 @@ var day_met := false
 ## whether it is in the warning colour (the last minute).
 var tenant_line := ""
 var tenant_warn := false
+## LS1 (North Star B7; client/last_stand_view.gd): the spotlight's line, at the top, in the survivor's amber or the
+## watchers' red ("" for none); and the wipe's scene (client/wipe_scene.gd): black bars top and bottom, nothing else.
+var stand_line := ""
+var stand_self := false
+var letterbox := false
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -168,8 +173,23 @@ func _draw() -> void:
 	if not end_lines.is_empty():
 		_draw_end()
 		return
+	if letterbox:
+		# The wipe's scene: the shot alone, between two bars, then its fade (and the voice's subtitles, if it speaks).
+		var bar := floorf(size.y * 0.12)
+		draw_rect(Rect2(Vector2.ZERO, Vector2(size.x, bar)), Color.BLACK)
+		draw_rect(Rect2(Vector2(0, size.y - bar), Vector2(size.x, bar)), Color.BLACK)
+		if fade > 0.0:
+			draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, clampf(fade, 0.0, 1.0)))
+		if subtitle != "":
+			_draw_subtitle(px)
+		return
 	if fade > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, clampf(fade, 0.0, 1.0)))
+	if stand_line != "" and not black:
+		var sw0 := PixelFont.width(stand_line) * px
+		var sp0 := Vector2(floorf((size.x - sw0) * 0.5), floorf(size.y * 0.13))
+		draw_rect(Rect2(sp0 - Vector2(4, 3) * px, Vector2(sw0 + 8 * px, 13 * px)), Color(0, 0, 0, 0.55))
+		PixelFont.draw_shadowed(self, stand_line, sp0, px, Color("#ffd27a") if stand_self else Color("#ff7a6a"))
 	if annex_forehead_note and not black:
 		var w := size.x
 		var h := size.y

@@ -118,6 +118,19 @@
 #    and between counts it walks to a player it sees), `down_ring` (DR1, only with `downs`: a downed player has 30 s,
 #    the live setting down.ring, before they are out) and `pn_fixes` (PN2: G with an empty hand puts down a carried
 #    tape; PN3: the Annex's hides work under Lonely). prepare() turns them on before the first tick.
+#  - The last one standing and the wipe (LS1, North Star B7; `last_stand`, after `pn_fixes`;
+#    sim/last_stand.gd): off unless asked; the game's rooms ask for it. When one player of a crew of two or more is the only
+#    one still up on a floor, the run marks the spotlight, and what that player records from the next tick on pays the
+#    live setting last_stand.bonus more; a wipe keeps who and what made the last catch for every screen's scene and the
+#    prison's standee. prepare() turns it on before the first tick. The soft catch keeps the re-run tick's own (no wipe).
+#  - The elevator deal (ED1, `deal`, the parameter after `last_stand`; agreed tail ..., pn_fixes_, last_stand_,
+#    deal_, split_): off unless asked; the game's rooms ask for it (`deal=0` switches it off). On each ride down to the
+#    2nd to 5th floor of a cycle the host deals one card from the seed; the crew takes or passes it (sim/deal.gd,
+#    sim/run.gd "The elevator deal"). prepare() turns it on before the first tick.
+#  - Split reality (SR1, sim/split.gd, North Star E1 to E5; `split_`, the last parameter): off unless asked; the game's
+#    rooms ask for it (`split=0` switches it off). prepare() gives the run its exposure state; step() steps it after
+#    everything else, on the tick's own new state, so nothing the run decides (residents, catches, the instrument,
+#    tapes, the quota) can see it. net/host.gd sends each player only their own exposure and false sights.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -127,6 +140,7 @@ const Places = preload("res://sim/places.gd")
 const Move = preload("res://sim/move.gd")
 const Instr = preload("res://sim/instrument.gd")
 const Settings = preload("res://sim/settings.gd")
+const Split = preload("res://sim/split.gd")
 
 ## Where a player stands alone in the car at the start: the middle, so the doorway is straight ahead.
 const START_U := Run.CAR_DEPTH / 2.0
@@ -224,6 +238,10 @@ var ward_call: bool
 ## WC1: the web (the last parameter; sim/ward/state.gd `web`): a caught player is hung at a hang point and a crewmate's
 ## loud cut frees them. Off unless asked, and only with the late floors; the game's rooms ask for it (`ward_web=0`).
 var ward_web: bool
+## RR1: the Rigger as a solid creature (the last parameter; sim/ward/roam.gd): he crawls the Ward's surfaces on his own
+## graph, reaches in by any window or door, and chases a player who is too loud out of doors. Off unless asked, and
+## only with the late floors. The game's rooms ask for it unless started with `rigger_roam=0` (rigger_roam_by_arg).
+var rigger_roam: bool
 ## WG1: the Ward's layout from the seed (see the header; the parameter after ward_web_). Read by net/host.gd ward_layout().
 var ward_layout: bool
 ## The Orderly fix (OR2, the parameter after ward_layout_; sim/run.gd with_orderly_fix): off unless asked. The game's rooms ask for
@@ -234,6 +252,12 @@ var orderly_fix: bool
 var minder_calm: bool
 var down_ring: bool
 var pn_fixes: bool
+## LS1, the last one standing and the wipe (North Star B7; the parameter after pn_fixes_; sim/last_stand.gd).
+var last_stand: bool
+## ED1: the elevator deal (see the header; after last_stand_).
+var deal: bool
+## Split reality (SR1; see the header). Off unless asked.
+var split: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -261,14 +285,19 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		nerve_passive_: bool = false, annex_drag_: bool = false, minder_hunt_: bool = false, late_floors_: bool = false,
 		party_table_: bool = false, tenant_timer_: bool = false, second_orderly_: bool = false, cycles_: bool = false,
 		ward_place_: bool = false, reactor_place_: bool = false, pressures_: bool = false, ward_call_: bool = false,
-		ward_web_: bool = false, ward_layout_: bool = false, orderly_fix_: bool = false,
-		minder_calm_: bool = false, down_ring_: bool = false, pn_fixes_: bool = false) -> void:
+		ward_web_: bool = false, rigger_roam_: bool = false, ward_layout_: bool = false, orderly_fix_: bool = false,
+		minder_calm_: bool = false, down_ring_: bool = false, pn_fixes_: bool = false, last_stand_: bool = false,
+		deal_: bool = false, split_: bool = false) -> void:
+	last_stand = last_stand_
+	deal = deal_
+	split = split_
 	orderly_fix = orderly_fix_
 	minder_calm = minder_calm_
 	down_ring = down_ring_ and downs_
 	pn_fixes = pn_fixes_
 	ward_place = ward_place_ and late_floors_
 	ward_layout = ward_layout_ and late_floors_
+	rigger_roam = rigger_roam_ and late_floors_
 	# Both need the Ward drawn by the main game (ward_place): the old swapped-in Ward has neither the station nor the web.
 	ward_call = ward_call_ and ward_place
 	ward_web = ward_web_ and ward_place
@@ -429,6 +458,13 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_down_ring(s)
 	if pn_fixes and not s.pn_fixes:
 		s = Run.with_pn_fixes(s)
+	if last_stand and not s.last_stand:
+		s = Run.with_last_stand(s)
+	if deal and s.deal == null:
+		s = Run.with_deal(s)
+	# SR1: exposure starts at nothing for everyone.
+	if split and s.split == null:
+		s = Split.with_split(s)
 	# The day lock needs something to earn: only with days and the floor quota on (so never with the
 	# resident off, and never with the test switch quota=0).
 	if day_lock and s.days and s.quota and not s.day_lock:
@@ -499,6 +535,10 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		Run._sync_station(s)
 	return Run.with_orientation(s, true) if orientation_prelude else s
 
+## SR1: split reality unless `split=0` (an argument after `--`, or the web page's ?split=0).
+static func split_on_by_arg() -> bool:
+	return not _arg_off("split")
+
 static func doorway_shadow_on_by_arg() -> bool:
 	return not OS.get_cmdline_user_args().has("doorway_shadow=0")
 
@@ -525,6 +565,17 @@ static func pressures_by_arg() -> bool:
 		return str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('pressures') ?? ''", true)) != "0"
 	return true
 
+## RR1: the solid, crawling Rigger unless `rigger_roam=0` (an argument after `--`, or the web page's ?rigger_roam=0)
+## brings back the Rigger who climbs straight up to a house. On by default since the bot crews record and get home with
+## it as often as without it, on fixed and generated layouts (tests/prop_rigger_quota.gd).
+static func rigger_roam_by_arg() -> bool:
+	for raw in OS.get_cmdline_user_args():
+		if raw.trim_prefix("--") == "rigger_roam=0":
+			return false
+	if OS.has_feature("web"):
+		return str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('rigger_roam') ?? ''", true)) != "0"
+	return true
+
 static func garden_admission_by_arg() -> bool:
 	return not OS.get_cmdline_user_args().has("garden_admission=0")
 
@@ -534,6 +585,10 @@ static func ward_call_by_arg() -> bool:
 
 static func ward_web_by_arg() -> bool:
 	return not _arg_off("ward_web")
+
+## ED1: the elevator deal is on in the game's rooms unless started with `deal=0`.
+static func deal_by_arg() -> bool:
+	return not _arg_off("deal")
 
 static func _arg_off(name: String) -> bool:
 	for raw in OS.get_cmdline_user_args():
@@ -741,6 +796,9 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 				state = state.copy()
 				state.orderly = parked_orderly(state)
 				break
+	# SR1: last, on the tick's new state; it reads the run and writes only state.split.
+	if state.split != null:
+		Split.step(state, inputs, dt, events)
 	var out := Run.RunStep.new()
 	out.state = _capped(state)
 	out.events = events

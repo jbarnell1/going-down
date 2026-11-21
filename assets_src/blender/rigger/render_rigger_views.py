@@ -166,6 +166,24 @@ for shot in DATA["shots"]:
             rig.animation_data.action_slot = action.slots[0]
         frame = r["time"] * FPS
         scene.frame_set(int(math.floor(frame)), subframe=frame - math.floor(frame))
+    # RR1 stage 2: legs the game solved onto the surfaces (client/ward/rigger_feet.gd): each femur aimed at its knee,
+    # tibia at its ankle and tarsus at its foot, as the game's two-bone IK did.
+    if r.get("legs"):
+        bpy.context.view_layer.update()
+        to_arm = rig.matrix_world.inverted()
+        for leg, points in r["legs"].items():
+            for part, target in zip(("femur", "tibia", "tarsus"), points):
+                pb = rig.pose.bones.get("leg_%s_%s" % (leg, part))
+                if pb is None:
+                    continue
+                m = pb.matrix.copy()
+                head = m.translation.copy()
+                want = (to_arm @ vec(target)) - head
+                if want.length < 1e-5:
+                    continue
+                turn = m.col[1].xyz.normalized().rotation_difference(want.normalized())
+                pb.matrix = Matrix.Translation(head) @ turn.to_matrix().to_4x4() @ m.to_3x3().to_4x4()
+                bpy.context.view_layer.update()
     h = shot["hand"]
     hand.matrix_world = xform(h["m"])
     for o in [hand] + list(hand.children_recursive):

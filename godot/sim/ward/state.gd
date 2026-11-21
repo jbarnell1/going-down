@@ -6,6 +6,7 @@ const Layout = preload("res://sim/ward/layout.gd")
 const House = preload("res://sim/ward/house.gd")
 const Arm = preload("res://sim/ward/arm.gd")
 const Settings = preload("res://sim/settings.gd")
+const Roam = preload("res://sim/ward/roam.gd")
 const RETURN_SECONDS := 600.0
 const WARN_SECONDS := 0.85
 const CLIMB_SECONDS := 2.5
@@ -69,6 +70,30 @@ const ALONE_ARM_SPEED := 1.8
 const ROOM_WARN := 0.9
 const PROBE := 1.0
 const ARM_BACK := 2.6
+## RR1: the Rigger as a solid creature crawling the Ward's surfaces (sim/ward/roam.gd), the run flag rigger_roam
+## (net/host_rules.gd). Null: today's Rigger, exactly as before. Today's values of its rows (tests/prop_settings.gd).
+var roam: Roam = null
+const CLIMB_SPEED := Roam.CLIMB_SPEED
+const CRAWL_SPEED := Roam.CRAWL_SPEED
+const LAIR_SPEED := Roam.LAIR_SPEED
+const LINGER := Roam.LINGER
+const OPENING_TIME := Roam.OPENING_TIME
+const OPENINGS := Roam.OPENINGS
+const LOUD := Roam.LOUD
+const CHASE_TIME := Roam.CHASE_TIME
+const CHASE_GAP := Roam.CHASE_GAP
+const CHASE_GAIN := Roam.CHASE_GAIN
+const CHASE_TOP := Roam.CHASE_TOP
+const REACH_PAUSE := Roam.REACH_PAUSE
+const FEEL := Roam.FEEL
+## RR1: the crew's speeds this tick (flat metres a second, by id), for the chase.
+var _speeds := {}
+
+## RR1: turns the solid, crawling Rigger on (builds his surface graph from this Ward's layout). `shown`: a screen's
+## walk model, which never steps him and only places his body where the host says (no graph is built).
+func enable_roam(shown := false) -> void:
+	if roam == null:
+		roam = Roam.new(self, not shown)
 
 ## WC1, the lift called from a far house (net/host_rules.gd ward_call; the owner, 20 Nov: "There should be nothing
 ## special mechanically ... except that in the ward the button for the elevator is on the other side"). With `called`
@@ -231,6 +256,18 @@ func hear_loud(at: Vector3, now: float, reach: float) -> Array[Dictionary]:
 	if reach <= 0.0 or _flat(at, lair) > reach:
 		return []
 	return hear_at(at, now)
+
+## RR1: a catch by the crawling Rigger (sim/ward/roam.gd: his search's hand, or the grab after a chase) takes the player
+## into the web exactly as the hand's catch does (_pursue): carried to the nearest free hang point and hung there after
+## ward.carry_time. `contact` is the event, given the point and the time it hangs.
+func web_catch(id: String, where: Vector3, now: float, contact: Dictionary) -> void:
+	if not web or webbed.has(id):
+		return
+	var point := hang_point_for(where)
+	var hang_at := now + maxf(0.0, _f(&"ward.carry_time", CARRY_TIME))
+	webbed[id] = {"point": point, "caughtAt": now, "hangAt": hang_at, "said": false}
+	contact["point"] = point
+	contact["hangAt"] = hang_at
 
 ## WC1: the hang point nearest `at` that nobody hangs from (the nearest of all when every one is in use).
 func hang_point_for(at: Vector3) -> int:
@@ -397,9 +434,11 @@ func step(now: float, delta: float, boarding_seconds: float, crew: Dictionary) -
 		var was: Vector3 = _last_pos.get(id, at)
 		_last_pos[id] = at
 		var moving := delta > 0.0 and Vector2(at.x - was.x, at.z - was.z).length() / delta >= MOVING_SPEED
+		if roam != null and delta > 0.0:
+			_speeds[id] = Vector2(at.x - was.x, at.z - was.z).length() / delta
 		if member.get("sprint", false) and now >= float(_sprint_at.get(id, -INF)):
 			_sprint_at[id] = now + 0.65
-			_hear_point(at, now, events, true)
+			_hear_point(at, now, events, true, id)
 		elif moving and not member.get("creep", false) and not member.get("sprint", false) and now >= float(_step_at.get(id, -INF)):
 			_step_at[id] = now + STEP_EVERY
 			var reach := _f(&"rigger.steps_reach", STEPS_REACH)
@@ -408,15 +447,28 @@ func step(now: float, delta: float, boarding_seconds: float, crew: Dictionary) -
 		if member.get("recording", false) and encounter == &"searching" and arm != null and arm.points.size() > 1:
 			var reach := _f(&"rigger.click_reach", CLICK_REACH)
 			if reach > 0.0 and (at + Vector3.UP * 1.25).distance_to(houses[resident_house].to_world(arm.points[-1])) <= reach:
-				var room := houses[resident_house].area_at(houses[resident_house].to_local(at + Vector3.UP * 1.25))
+				var room := _room_at(houses[resident_house], at)
 				if room != &"":
 					arm.hear(room)
-	if encounter == &"idle" and _queued_house >= 0:
+	if encounter == &"idle" and _queued_house >= 0 and roam == null:
 		var house := _queued_house
 		_queued_house = -1
 		_hear(house, _queued_area, now, events)
+	if roam != null:
+		if encounter == &"idle" and _queued_house >= 0:
+			var queued := _queued_house
+			_queued_house = -1
+			_hear(queued, _queued_area, now, events)
+		roam.step(now, delta, crew, _speeds, events)
+		return events
 	_pursue(now, delta, crew, events)
 	return events
+
+## The room of a house a player (feet) is in: the ground floor's (today), or with the crawling Rigger any storey's
+## (stage 2: he can reach upstairs through the upper windows).
+func _room_at(house: House, feet: Vector3) -> StringName:
+	var local := house.to_local(feet + Vector3.UP * 1.25)
+	return house.area_at_any(local) if roam != null else house.area_at(local)
 
 ## Flat distance from a point to a house's middle.
 func _flat(at: Vector3, house: int) -> float:
@@ -426,14 +478,17 @@ func _flat(at: Vector3, house: int) -> float:
 	return Vector2(at.x - float(site.x), at.z - float(site.y)).length()
 
 ## A disturbance at a point (feet): the room of the house it is in, if any, is heard as a sprint there is.
-func _hear_point(at: Vector3, now: float, events: Array[Dictionary], _loud := true) -> void:
+func _hear_point(at: Vector3, now: float, events: Array[Dictionary], _loud := true, who := "") -> void:
 	for i in houses.size():
-		var area := houses[i].area_at(houses[i].to_local(at + Vector3.UP * 1.25))
+		var area := _room_at(houses[i], at)
 		if area != &"":
-			_hear(i, area, now, events)
+			_hear(i, area, now, events, at)
 			return
 	# WD1: upstairs, on a gallery or on a walkway: the nearest house (its own, for upstairs and a gallery).
 	if _f(&"rigger.open_heard", OPEN_HEARD) < 0.5:
+		return
+	# RR1: a player out of doors this loud is chased (sim/ward/roam.gd heard_loud); upstairs is in a house.
+	if roam != null and who != "" and roam.house_holding(at) < 0 and roam.heard_loud(who, now, events):
 		return
 	var best := -1
 	var near := INF
@@ -446,7 +501,7 @@ func _hear_point(at: Vector3, now: float, events: Array[Dictionary], _loud := tr
 			near = gap
 			best = i
 	if best >= 0:
-		_hear(best, &"entry", now, events)
+		_hear(best, &"entry", now, events, at)
 
 ## WN2: a noise the run made at a point (a flare's burst, a toy's rattle; sim/run.gd step_ward_kit) is heard the same
 ## way, at the same times step hears a sprint (the lift gone and not yet left again). Returns the cues it raised.
@@ -488,7 +543,10 @@ func _shortcut_occupied(crew: Dictionary) -> bool:
 			return true
 	return false
 
-func _hear(house: int, area: StringName, now: float, events: Array[Dictionary]) -> void:
+func _hear(house: int, area: StringName, now: float, events: Array[Dictionary], point := Vector3.INF) -> void:
+	if roam != null:
+		roam.hear(house, area, point, now, events)
+		return
 	if encounter == &"idle":
 		resident_house = house
 		lair = house
@@ -556,13 +614,19 @@ func recorders(crew: Dictionary, _now := 0.0) -> Variant:
 	var house := houses[resident_house]
 	for id: String in crew:
 		var p: Vector3 = crew[id].position
-		if house.area_at(house.to_local(p + Vector3.UP * 1.25)) != &"":
+		if _room_at(house, p) != &"":
 			out[id] = true
 	return out
 
 ## The same support and grip that the view draws. Empty outside an active physical reach.
 func posed_limb(now: float) -> PackedVector3Array:
 	var points := PackedVector3Array()
+	if roam != null and phase != &"departed":
+		if encounter == &"searching" and arm != null and arm.points.size() > 1 and resident_house >= 0:
+			for local in arm.points:
+				points.append(houses[resident_house].to_world(local))
+			return points
+		return roam.posed_limb(now)
 	if resident_house < 0 or phase == &"departed":
 		return points
 	var house := houses[resident_house]
@@ -588,6 +652,9 @@ func posed_limb(now: float) -> PackedVector3Array:
 ## Authoritative door leaves and the same interior wall clearance as the moving player.
 func walk_clear(from: Vector3, to: Vector3) -> bool:
 	if not footing.route_supported(from, to, bridge_lowered):
+		return false
+	# RR1: his body is solid; a walker cannot step into it.
+	if roam != null and roam.blocks(from, to):
 		return false
 	# The creature already owns the swing-space decision for a door held by its arm.
 	for id in houses.size():
@@ -652,6 +719,13 @@ func extras() -> Dictionary:
 	return out
 
 func snapshot(clock := 0.0) -> Dictionary:
+	var out := _snapshot(clock)
+	# RR1: his pose from the host, with the flag on only.
+	if roam != null:
+		out["rigger"] = roam.snapshot()
+	return out
+
+func _snapshot(clock := 0.0) -> Dictionary:
 	var points: Array = []
 	var doors := []
 	for id in houses.size():
