@@ -83,6 +83,7 @@ const FILES: Array[String] = [
 	"prop_last_stand",
 	"test_wipe_scene",
 	"test_caught_scene",
+	"test_reel_counts",
 	"prop_deal",
 	"prop_split",
 	"test_split_view",
@@ -96,6 +97,7 @@ const FILES: Array[String] = [
 	"test_hush",
 	"test_light_pairs",
 	"test_lamp_beam",
+	"test_hud_quiet",
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).

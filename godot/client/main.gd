@@ -38,6 +38,7 @@
 extends Node
 
 const PlayLink = preload("res://client/play_link.gd")
+const ReelView = preload("res://client/night_reel_view.gd")
 const AirSound = preload("res://client/air_sound.gd")
 const Session = preload("res://net/session.gd")
 const DoorShadow = preload("res://client/door_shadow.gd")
@@ -399,6 +400,9 @@ var prev_bell_left := BOARD_TIME
 ## and when (msec) the arrival doors were first seen open (-1 while they are not).
 var car_waiting := ""
 var _unload_since := -1
+## HUD1: the Tenant clock's moments on this screen (client/tenant_clock.gd step), and a scripted run's held Tab.
+var tenant_beats := TenantClock.new()
+var t_display := false
 var lifetime := 0.0
 var tick_acc := 0.0
 var event_counts: Dictionary = {}
@@ -2457,6 +2461,10 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	var reel: Variant = _active_reel(s)
 	if reel == null or _reel_skip_at != reel["started"]:
 		_reel_skip_at = null
+	var reel_client: Variant = link.client() if link != null else null
+	if reel is Dictionary and reel_client != null and reel_client.latest is Dictionary:
+		# The reel's closing line counts who really went down and who came up (client text only).
+		reel = ReelView.with_counts(reel, reel_client.latest["players"])
 	lift.show_reel(reel, float(s.get("hostNow", 0.0)), link.my_id(), _reel_skip_at)
 	lift.update(dt)
 	if level.has_meta(&"prison"):
@@ -2540,6 +2548,15 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	var tenant := TenantClock.line(lc.latest if lc != null else null)
 	hud.tenant_line = str(tenant["text"])
 	hud.tenant_warn = bool(tenant["warn"])
+	# HUD1: the clock on the glass only at its moments (doors, 5:00, 2:00, the last minute; always on Tab), and the
+	# voice's caption at each, from the host's clock.
+	var beat := tenant_beats.step(lc.latest if lc != null else null)
+	hud.tenant_beat = bool(beat["show"])
+	if str(beat["moment"]) != "" and not _welcome_armed:
+		var tl: Dictionary = (lc.latest as Dictionary)["tenant"]
+		announcer.tenant_beat(str(beat["moment"]), roundi(float(tl.get("len", 600.0)) / 60.0))
+	hud.place = str(s.get("depth", "")) + str(s.get("place", ""))
+	hud.display = _display_held()
 	_deal_frame(s)
 	if reel != null and bool(s.get("playing", true)):
 		# The picture stays in the car. The subtitle remains legible through the camcorder
@@ -2873,6 +2890,7 @@ func _ward_frame(_dt: float) -> void:
 	hud.eyes = {}
 	hud.tenant_line = _ward_floor.clock_line
 	hud.tenant_warn = _ward_floor.clock_warn
+	hud.tenant_beat = true   # HUD1: the Ward's own lift clock keeps its place
 	# WN2: with no Ward line of its own, a tape or an item in reach keeps the main game's prompt (F takes it).
 	var own_prompt := hud.prompt
 	hud.prompt = _ward_floor.prompt_line
@@ -2978,7 +2996,7 @@ func _show_quota(s: Dictionary, now: int) -> void:
 	hud.quota_line = quota_view.update(q, lift, hud.prompt, now)
 	hud.quota_tone = quota_view.tone
 	# The car waits (FD4): standing open on arrival for whoever is still aboard, the panel says who.
-	car_waiting = car_waiting_text(c.latest if c != null else null, link.names(), now)
+	car_waiting = car_waiting_shown(car_waiting_text(c.latest if c != null else null, link.names(), now), c.latest if c != null else null)
 	if car_waiting != "":
 		lift.show_quota(car_waiting, "count", true)
 		hud.quota_line = car_waiting
@@ -3031,6 +3049,25 @@ func car_waiting_text(latest: Variant, names: Dictionary, now: int) -> String:
 	if who.is_empty():
 		return ""
 	return "CAR WAITING FOR: " + ", ".join(who)
+
+## HUD1: the car's waiting words are for a crew: shown only when the run has someone else in it (someone waits on
+## you, or you on them). Alone, nobody is waiting: "" (the voice's nag still comes, without the names).
+static func car_waiting_shown(text: String, latest: Variant) -> String:
+	if text == "" or not latest is Dictionary:
+		return ""
+	var crew := 0
+	for p: Dictionary in (latest as Dictionary).get("players", []):
+		if bool(p.get("active", false)):
+			crew += 1
+	return text if crew > 1 else ""
+
+## HUD1: Tab (DISPLAY) held, in a run, with no panel or card taking the keys; or a scripted run's "display 1".
+func _display_held() -> bool:
+	if t_display:
+		return true
+	if mode != "game" or automated or kiosk.is_open() or settings_panel.is_open() or bright_card.is_open():
+		return false
+	return Input.is_physical_key_pressed(KEY_TAB)
 
 ## The car waits (FD4): this player was left out by the car today (status "leftBehind" in a run with days):
 ## out of the run until the crew gets home.
@@ -3910,6 +3947,10 @@ func _command(c: String) -> String:
 			t_move = [float(p[1]), float(p[2]), p.size() > 3 and p[3] == "1", p.size() > 4 and p[4] == "1"]
 		"menu":
 			t_menu = p.size() > 1 and p[1] == "1"
+		"display":
+			# HUD1: "display 1" holds Tab (DISPLAY) for a scripted run, "display 0" lets go.
+			t_display = p.size() > 1 and p[1] == "1"
+			return JSON.stringify({"display": t_display, "lines": Array(hud.visible_lines(Time.get_ticks_msec()))})
 		"stopmove":
 			t_move = []
 		"look":
@@ -4473,7 +4514,7 @@ func _test_state() -> Dictionary:
 			"spoken": announcer.history.map(func(h: Dictionary) -> String: return str(h["id"])), "history": announcer.history, "hintsOn": announcer.hints.enabled,
 			"hintLog": announcer.hint_log.slice(maxi(0, announcer.hint_log.size() - 60)), "caught": caught_at >= 0, "noise": _noise_on(),
 			"caughtScene": caught_scene.call(&"describe", Time.get_ticks_msec()) if caught_scene != null else {},
-			"wentDown": hud.went_down, "end": hud.end_lines.map(func(l: Dictionary) -> String: return str(l["text"])), "tapeText": hud.tape_text,
+			"wentDown": hud.went_down, "end": hud.end_lines.map(func(l: Dictionary) -> String: return str(l["text"])), "tapeText": hud.tape_text_of(), "hudShown": Array(hud.visible_lines(Time.get_ticks_msec())), "display": hud.display,
 			"prompt": hud.prompt, "menu": hud.menu_on, "built": built_depth, "hudSize": [hud.size.x, hud.size.y], "lift": _lift_drawn(),
 			"wheel": wheel_open, "wheelSel": hud.wheel_sel, "note": hud.note, "tags": hud.tags.map(func(t: Dictionary) -> String: return str(t["text"])), "tagRange": TAG_RANGE,
 			"camY": cam.position.y, "board": _board, "count": hud.count_text, "bigNote": hud.big_note,

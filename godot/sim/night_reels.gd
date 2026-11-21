@@ -39,3 +39,14 @@ static func duration(day: int) -> float:
 	for shot: Array in SHOTS[day - 1]:
 		seconds += float(shot[0])
 	return seconds
+
+const NUMBER_WORDS := ["NONE", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT"]
+
+## One number as a word, 0 to 8 (past that, the digits).
+static func number_word(n: int) -> String:
+	return NUMBER_WORDS[n] if n >= 0 and n < NUMBER_WORDS.size() else str(n)
+
+## Day 1's closing line with the run's real counts: how many went down and how many came up.
+static func day_one_line(went: int, came: int) -> String:
+	var up := "NONE CAME UP." if came <= 0 else "%s CAME UP." % number_word(came)
+	return "CREW 7. DAY 1. %s WENT DOWN. %s" % [number_word(went), up]

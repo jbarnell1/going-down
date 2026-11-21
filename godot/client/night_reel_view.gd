@@ -14,6 +14,20 @@ var cue: Array = []
 var elapsed := 0.0
 var status_text := ""
 
+## The reel with the real counts added: "went" (players in the run) and "came" (those aboard and well).
+static func with_counts(reel: Dictionary, players: Array) -> Dictionary:
+	var went := 0
+	var came := 0
+	for row: Dictionary in players:
+		if bool(row.get("active", false)):
+			went += 1
+			if bool(row.get("aboard", false)) and str(row.get("status", "")) == "ok":
+				came += 1
+	var out := reel.duplicate()
+	out["went"] = went if went > 0 else int(reel.get("crew", 0))
+	out["came"] = came
+	return out
+
 func present(reel: Dictionary, host_now: float, player_id: String, pending: Variant) -> void:
 	reel_day = int(reel["day"])
 	elapsed = maxf(0.0, host_now - float(reel["started"]))
@@ -24,6 +38,11 @@ func present(reel: Dictionary, host_now: float, player_id: String, pending: Vari
 		shot_time -= float(shots[shot][0])
 		shot += 1
 	cue = shots[shot]
+	if reel_day == 1 and reel.has("went") and reel.has("came"):
+		# The closing line states the crew's real numbers (a wipe sends the car up empty).
+		cue = cue.duplicate()
+		if shot == shots.size() - 1:
+			cue[2] = Reels.day_one_line(int(reel["went"]), int(reel["came"]))
 	var votes: Array = reel["votes"]
 	var needed := int(reel["crew"]) / 2 + 1
 	var voted: bool = votes.has(player_id) or pending == reel["started"]

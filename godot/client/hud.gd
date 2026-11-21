@@ -51,6 +51,8 @@ const MENU_ROWS: Array[Array] = [
 	["T", "TAPE LOOK ON / OFF"],
 	["HOLD R", "EMOTE WHEEL: AIM, LET GO"],
 	["TAP R", "CLOSE THE WHEEL"],
+	# HUD1: the camcorder's DISPLAY button: every count, rate and the nerve while held.
+	["HOLD TAB", "DISPLAY: EVERY COUNT"],
 	["ESC", "THIS MENU"],
 ]
 ## The host's tools on the card (PT6), only where each works (client/main.gd _host_tools_hud): F6 in a game played
@@ -137,6 +139,21 @@ var stand_line := ""
 var stand_self := false
 var letterbox := false
 
+## HUD1 (the screen plan, stage 1, the owner's yes of 21 Nov: "Lift and tab, no keeping them on screen"): the counters
+## show when they change and fade (client/hud_fade.gd); urgent ones stay. `display`: Tab (DISPLAY) is held, so every
+## counter, every rate line and the nerve show at full. The values are never changed here, only how visible they are.
+const HudFade = preload("res://client/hud_fade.gd")
+var fades := HudFade.new()
+var display := false
+## The Tenant clock's moments (client/tenant_clock.gd TenantBeats): true while the line belongs on the glass (the
+## doors, 5:00, 2:00, the last minute). True by default, so a clock that sets no beats (the Ward's) keeps showing.
+var tenant_beat := true
+var _tenant_beat_ms := -100000
+## The place shown ("" none; client/main.gd sets the floor's depth): the tape's timecode shows on each arrival, then fades.
+var place := ""
+## How visible each managed element is this frame (plan()): floor, day, tenant, time, tape, nerve, anger.
+var _a := {}
+
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -165,9 +182,74 @@ func _scale() -> float:
 
 var annex_forehead_note := false
 
+## HUD1: works out how visible each counter is at `now` (ms) and keeps it for the draw. Called once a frame by _draw;
+## tests call it with their own times.
+func plan(now: int) -> Dictionary:
+	_a = {}
+	_a["floor"] = fades.see("floor", floor_quota_line, now, false, display) if floor_quota_line != "" else 0.0
+	_a["day"] = fades.see("day", day_line, now, false, display) if day_line != "" else 0.0
+	if tenant_beat or display:
+		_tenant_beat_ms = now
+	_a["tenant"] = HudFade.alpha(_tenant_beat_ms, now, false, 0) if tenant_line != "" else 0.0
+	_a["time"] = fades.see("time", place, now, false, display)
+	_a["tape"] = fades.see("tape", tape_text_of(), now, false, display) if tape_text_of() != "" else 0.0
+	if nerve.is_empty():
+		_a["nerve"] = 0.0
+	else:
+		_a["nerve"] = fades.see("nerve", ceili(float(nerve[0])) / 10, now, nerve_shaken(), display)
+	if anger < 0.0:
+		_a["anger"] = 0.0
+	else:
+		_a["anger"] = fades.see("anger", roundi(anger * 20.0), now, anger >= 0.75 or count_text != "", display)
+	return _a
+
+## The tape value's words ("" for none), as drawn.
+func tape_text_of() -> String:
+	if tape_count > 0 or tape_value > 0.0:
+		return "#x%d %04d" % [tape_count, int(floor(tape_value))]
+	return ""
+
+## HUD1: the words the managed parts of the HUD show at `now` (each line whose visibility is above zero), plus PLAY.
+## Tests count them; the state command reports them.
+func visible_lines(now: int) -> PackedStringArray:
+	plan(now)
+	var out := PackedStringArray()
+	if osd_on:
+		out.append("PLAY >")
+		if float(_a["floor"]) > 0.01:
+			out.append(floor_quota_line)
+		if float(_a["day"]) > 0.01:
+			out.append(day_line)
+		out.append_array(loss_rows)
+		if float(_a["tenant"]) > 0.01 and down_head == "" and not out_on:
+			out.append(tenant_line)
+		if float(_a["time"]) > 0.01:
+			out.append("SP")
+		if float(_a["tape"]) > 0.01:
+			out.append(tape_text_of())
+	if not nerve.is_empty() and float(_a["nerve"]) > 0.01:
+		var nl := nerve_lines()
+		out.append(nl[0])
+		if display:
+			out.append_array(nl.slice(1))
+	if anger >= 0.0 and float(_a["anger"]) > 0.01:
+		out.append("ANGER")
+		if display and anger_rates != "":
+			out.append(anger_rates)
+	if health >= 0.0:
+		out.append("HEALTH")
+		if display and health_rates != "":
+			out.append(health_rates)
+	return out
+
+## A colour at `a` of its own alpha.
+static func _fa(c: Color, a: float) -> Color:
+	return Color(c, c.a * clampf(a, 0.0, 1.0))
+
 func _draw() -> void:
 	var px := _scale()
 	var now := Time.get_ticks_msec()
+	plan(now)
 	if black:
 		draw_rect(Rect2(Vector2.ZERO, size), Color.BLACK)
 	if not end_lines.is_empty():
@@ -214,14 +296,16 @@ func _draw() -> void:
 		var bottom := "SP %d:%02d:%02d" % [s / 3600, (s / 60) % 60, s % 60]
 		var bw := PixelFont.width(bottom) * px
 		var by := size.y - margin.y - 9 * px
-		PixelFont.draw_shadowed(self, bottom, Vector2(size.x - margin.x - bw, by), px, Color("#f4f4ec"))
+		var ta := float(_a["time"])
+		if ta > 0.01:
+			PixelFont.draw_shadowed(self, bottom, Vector2(size.x - margin.x - bw, by), px, _fa(Color("#f4f4ec"), ta), _fa(Color(0, 0, 0, 0.55), ta))
 		var since := now - _jump_at
 		var blink_off := since < JUMP_MS and (since / JUMP_BLINK_MS) % 2 == 1
-		tape_text = ""
-		if (tape_count > 0 or tape_value > 0.0):
-			tape_text = "#x%d %04d" % [tape_count, int(floor(tape_value))]
+		tape_text = tape_text_of()
+		var tpa := float(_a["tape"])
+		if tape_text != "" and tpa > 0.01:
 			if not blink_off:
-				PixelFont.draw_shadowed(self, tape_text, Vector2(size.x - margin.x - PixelFont.width(tape_text) * px, by - 12 * px), px, Color("#f4f4ec"))
+				PixelFont.draw_shadowed(self, tape_text, Vector2(size.x - margin.x - PixelFont.width(tape_text) * px, by - 12 * px), px, _fa(Color("#f4f4ec"), tpa), _fa(Color(0, 0, 0, 0.55), tpa))
 	if prompt != "" and not black:
 		var pw := PixelFont.width(prompt) * px
 		var pp := Vector2((size.x - pw) * 0.5, _prompt_y(px))
@@ -295,21 +379,25 @@ func _draw() -> void:
 func _draw_quota_corner(px: float, margin: Vector2) -> void:
 	# The Playroom count uses two centered rows near PLAY. Keep the quota rows below it.
 	var y := margin.y + (31.0 if count_text != "" or count_by != "" else 12.0) * px
-	if floor_quota_line != "":
+	# HUD1: each line shows on change and fades (its place is kept only while it shows).
+	var fa := float(_a.get("floor", 0.0))
+	if floor_quota_line != "" and fa > 0.01:
 		var x := size.x - margin.x - PixelFont.width(floor_quota_line) * px
-		PixelFont.draw_shadowed(self, floor_quota_line, Vector2(x, y), px, Color("#ffd27a") if floor_quota_met else Color("#f4f4ec"))
+		PixelFont.draw_shadowed(self, floor_quota_line, Vector2(x, y), px, _fa(Color("#ffd27a") if floor_quota_met else Color("#f4f4ec"), fa), _fa(Color(0, 0, 0, 0.55), fa))
 		y += 10.0 * px
-	if day_line != "":
+	var da := float(_a.get("day", 0.0))
+	if day_line != "" and da > 0.01:
 		var x := size.x - margin.x - PixelFont.width(day_line) * px
-		PixelFont.draw_shadowed(self, day_line, Vector2(x, y), px, Color("#ffd27a") if day_met else Color("#f4f4ec"))
+		PixelFont.draw_shadowed(self, day_line, Vector2(x, y), px, _fa(Color("#ffd27a") if day_met else Color("#f4f4ec"), da), _fa(Color(0, 0, 0, 0.55), da))
 		y += 10.0 * px
 	for i in loss_rows.size():
 		var x := size.x - margin.x - PixelFont.width(loss_rows[i]) * px
 		PixelFont.draw_shadowed(self, loss_rows[i], Vector2(x, y), px, Color("#ffd27a") if i == 0 else Color("#f4f4ec"))
 		y += 10.0 * px
 	# Not over the down timer (big, at a fifth of the height) or the out screen.
-	if tenant_line != "" and down_head == "" and not out_on:
-		PixelFont.draw_shadowed(self, tenant_line, Vector2(size.x - margin.x - PixelFont.width(tenant_line) * px, y), px, Color("#ff7a6a") if tenant_warn else Color("#f4f4ec"))
+	var tna := float(_a.get("tenant", 0.0))
+	if tenant_line != "" and down_head == "" and not out_on and tna > 0.01:
+		PixelFont.draw_shadowed(self, tenant_line, Vector2(size.x - margin.x - PixelFont.width(tenant_line) * px, y), px, _fa(Color("#ff7a6a") if tenant_warn else Color("#f4f4ec"), tna), _fa(Color(0, 0, 0, 0.55), tna))
 
 ## The call panel's words under the prompt: amber while counting, green once met, red (blinking) when a
 ## press was refused.
@@ -438,7 +526,8 @@ func _draw_health(px: float) -> void:
 	var bar := Rect2(Vector2(margin.x, y + 10 * px), Vector2(bar_w, 4 * px))
 	draw_rect(bar.grow(px), Color(0, 0, 0, 0.6))
 	draw_rect(Rect2(bar.position, Vector2(bar_w * clampf(health / 100.0, 0.0, 1.0), bar.size.y)), Color("#ff7a6a") if low else Color("#9fe0a0"))
-	if health_rates != "":
+	# HUD1: the rates are read on Tab (DISPLAY), not kept on the glass.
+	if health_rates != "" and display:
 		PixelFont.draw_shadowed(self, health_rates, Vector2(margin.x, y + 17 * px), px, Color("#d8ddd9"))
 
 func nerve_lines() -> PackedStringArray:
@@ -462,16 +551,24 @@ func nerve_shaken() -> bool:
 	return nerve.size() == 7 and nerve[6] == 1.0
 
 func _draw_nerve(px: float) -> void:
+	# HUD1: the level and its bar show on change (each ten points), stay while SHAKEN; the rates only on Tab.
+	var na := float(_a.get("nerve", 0.0))
+	if na <= 0.01:
+		return
 	var lines := nerve_lines()
+	if not display:
+		lines = lines.slice(0, 1)
 	var x := maxf(size.x * 0.06, 16.0)
 	var extra := (lines.size() - 3) * 9.0
 	var y := size.y - maxf(size.y * 0.06, 12.0) - ((79.0 if health >= 0.0 else 50.0) + extra) * px
-	var width := maxi(PixelFont.width(lines[1]), PixelFont.width(lines[2])) * px
-	draw_rect(Rect2(Vector2(x - 3 * px, y - 2 * px), Vector2(width + 6 * px, (35 + extra) * px)), Color(0, 0, 0, 0.52))
-	PixelFont.draw_shadowed(self, lines[0], Vector2(x, y), px, Color("#f4f4ec"))
+	var width := 80 * px
+	for l in lines:
+		width = maxf(width, PixelFont.width(l) * px)
+	draw_rect(Rect2(Vector2(x - 3 * px, y - 2 * px), Vector2(width + 6 * px, (35 + extra) * px)), Color(0, 0, 0, 0.52 * na))
+	PixelFont.draw_shadowed(self, lines[0], Vector2(x, y), px, _fa(Color("#f4f4ec"), na), _fa(Color(0, 0, 0, 0.55), na))
 	var bar := Rect2(Vector2(x, y + 9 * px), Vector2(80 * px, 3 * px))
-	draw_rect(bar, Color("#59584d"))
-	draw_rect(Rect2(bar.position, Vector2(bar.size.x * float(nerve[0]) / 100.0, bar.size.y)), Color("#ffd27a"))
+	draw_rect(bar, _fa(Color("#59584d"), na))
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * float(nerve[0]) / 100.0, bar.size.y)), _fa(Color("#ffd27a"), na))
 	for i in range(1, lines.size()):
 		PixelFont.draw_shadowed(self, lines[i], Vector2(x, y + (6 + i * 9) * px), px, Color("#d8ddd9"))
 
@@ -483,16 +580,20 @@ func _draw_anger(px: float) -> void:
 	var x := margin.x
 	var y := margin.y
 	var hot := anger >= 0.75
+	# HUD1: the bar shows when it moves and stays from 75 and during a count; what fills it only on Tab.
+	var aa := float(_a.get("anger", 1.0))
+	if aa <= 0.01:
+		return
 	var label := "ANGER %d/100" % roundi(anger * 100.0)
-	PixelFont.draw_shadowed(self, label, Vector2(x, y), px, Color("#ff7a6a") if hot else Color("#f4f4ec"))
+	PixelFont.draw_shadowed(self, label, Vector2(x, y), px, _fa(Color("#ff7a6a") if hot else Color("#f4f4ec"), aa), _fa(Color(0, 0, 0, 0.55), aa))
 	var bar := Rect2(Vector2(x, y + 10 * px), Vector2(bar_w, 4 * px))
-	draw_rect(bar.grow(px), Color(0, 0, 0, 0.6))
+	draw_rect(bar.grow(px), Color(0, 0, 0, 0.6 * aa))
 	var col := Color("#ff5a4a") if hot else Color("#ffd27a")
 	if hot:
 		col.a = 0.75 + 0.25 * sin(Time.get_ticks_msec() / 120.0)
-	draw_rect(Rect2(bar.position, Vector2(bar_w * clampf(anger, 0.0, 1.0), bar.size.y)), col)
+	draw_rect(Rect2(bar.position, Vector2(bar_w * clampf(anger, 0.0, 1.0), bar.size.y)), _fa(col, aa))
 	# What fills it, while it can still fill (a full bar is a count: its own lines are under the count line).
-	if anger_rates != "" and anger < 1.0:
+	if anger_rates != "" and anger < 1.0 and display:
 		PixelFont.draw_shadowed(self, anger_rates, Vector2(x, y + 17 * px), px, Color("#d8ddd9"))
 
 ## The report board, crisp, down the left of the picture: a dark card, the title amber.

@@ -63,6 +63,38 @@ const PLACE_NEVER := {"arrived_5": ["playroom"], "blackout_3": ["playroom"], "be
 const TENANT_DELAY_MS := 1000
 const TENANT_CAPTIONS := {"tenant": "Time's up! Your crew has failed to reach quota in time. The Tenant will see you now.",
 	"tenant_met": "Time's up! Your quota was met, well done. The Tenant is here all the same."}
+## HUD1 (the owner, 21 Nov: "use voices to announce tenant updates ... 'Tenant arrives in one minute, I'd hurry up if I
+## were you...'"): the Tenant clock's moments (client/tenant_clock.gd step): the doors, 5:00, 2:00, 1:00. Three lines
+## each, dealt without repeating the last. Captions only until recordings exist (assets/voice/<voice>/<id>.mp3 and the
+## manifest): a missing recording is silent, its words shown. "tenant_doors" carries the floor's own minutes from the
+## host's setting ({m}); its recordings (which say ten) are played only when the clock is ten minutes.
+const TENANT_BEAT_LINES := {
+	"tenant_doors": [
+		["tenant_doors_1", "Doors open. The Tenant is expected in {m} minutes. Do keep busy."],
+		["tenant_doors_2", "Welcome to the floor. You have {m} minutes before the Tenant comes down. The company suggests you use them."],
+		["tenant_doors_3", "This floor allows {m} minutes before the Tenant arrives. The clock started when the doors did."],
+	],
+	"tenant_five": [
+		["tenant_five_1", "Five minutes until the Tenant arrives. An excellent time to look productive."],
+		["tenant_five_2", "The Tenant arrives in five minutes. Anything worth recording is worth recording now."],
+		["tenant_five_3", "Five minutes remain before the Tenant. The company thanks you for your continued effort."],
+	],
+	"tenant_two": [
+		["tenant_two_1", "Two minutes until the Tenant arrives. Sensible crews are already thinking about the lift."],
+		["tenant_two_2", "The Tenant arrives in two minutes. The company does not reimburse lateness."],
+		["tenant_two_3", "Two minutes remain. Do wrap up whatever it is you are doing."],
+	],
+	"tenant_one": [
+		["tenant_one_1", "Tenant arrives in one minute. I'd hurry up if I were you."],
+		["tenant_one_2", "One minute until the Tenant arrives. Consider this your final courtesy notice."],
+		["tenant_one_3", "The Tenant arrives in one minute. The company wishes you a brisk walk to the lift."],
+	],
+}
+const TENANT_BEAT_PRIORITY := 3
+var _tenant_beat_last := {}
+## What the Tenant's moments said ({moment, id, text, at}: tests).
+var tenant_said: Array = []
+
 ## IV1 (game night fixes; the review in .local/reviews, items 2 to 7). Danger lines: a player taken, a player down.
 ## They wait in the queue DANGER_LIFE_MS (not 3 or 4 s), go ahead of every other line of their priority, and a
 ## danger hint refused only for spacing is queued anyway (the gate's spacing is checked again when it starts). They
@@ -602,6 +634,33 @@ func ward_line(cue: String) -> void:
 		by_moment[cue] = [cue]
 		priority[cue] = WARD_PRIORITY
 	request(cue, EXPIRE_LONG_MS)
+
+## HUD1: one of the Tenant clock's moments (TENANT_BEAT_LINES); `minutes`: the floor's clock in whole minutes (the
+## host's setting). Returns the words shown.
+func tenant_beat(moment: String, minutes: int) -> String:
+	if not TENANT_BEAT_LINES.has(moment):
+		return ""
+	var options: Array = TENANT_BEAT_LINES[moment]
+	var pick := _rng.randi_range(0, options.size() - 1)
+	if options.size() > 1 and pick == int(_tenant_beat_last.get(moment, -1)):
+		pick = (pick + 1) % options.size()
+	_tenant_beat_last[moment] = pick
+	var id := str(options[pick][0])
+	var text := str(options[pick][1]).replace("{m}", str(minutes))
+	var now := _ms()
+	tenant_said.append({"moment": moment, "id": id, "text": text, "at": now})
+	var path := "res://assets/voice/%s/%s.mp3" % [voice, id]
+	var recorded := not fake and ResourceLoader.exists(path) and (moment != "tenant_doors" or minutes == 10)
+	if recorded:
+		if not lines.has(id):
+			lines[id] = {"id": id, "moment": moment, "plain": text, "path": path}
+		by_moment[moment] = [id]
+		priority[moment] = TENANT_BEAT_PRIORITY
+		request(moment, EXPIRE_LONG_MS, "", id)
+	else:
+		caption = text
+		caption_until = now + EXPIRE_LONG_MS
+	return text
 
 ## The place for the lines a place makes wrong: the late floor shown, else the plan's place.
 func _where() -> String:
