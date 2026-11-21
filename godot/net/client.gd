@@ -142,6 +142,10 @@ class LocalFrame:
 	var skip_reel_at: Variant
 	## ED1: this player's answer to the deal [offer seq, choice, pick, double, use seq] (sim/deal.gd answer), or null.
 	var deal: Variant = null
+	## VC1: how loud this player is this frame, the microphone's level 0 to 15 (client/mic.gd); 0 with no microphone.
+	var voice := 0
+	## VC1: the microphone is listening (sent as "mic", even when silent, for the NO MIC marks).
+	var mic := false
 	## The call button was pressed this frame.
 	var call := false
 	## The pick-up key was pressed this frame.
@@ -949,6 +953,8 @@ func frame(now: float, local: LocalFrame) -> Frame:
 				"gait": pa["gait"] if k < 0.5 else pb["gait"],
 			})
 
+	# VC1: the loudest level since the last input is what the next one carries.
+	_voice_peak = clampi(maxi(_voice_peak, local.voice), 0, Protocol.VOICE_MAX)
 	# The input: every INPUT_INTERVAL, and at once on a new sighting.
 	if report != null or latched_now or now - _last_send >= _input_interval - 1e-9:
 		_send(now, cam, local, rt)
@@ -1300,6 +1306,9 @@ func _make_report(a: Dictionary, b: Dictionary, alpha: float, pose: Dictionary) 
 	stats.reports += 1
 	return r
 
+## VC1: the loudest microphone level seen since the last input was sent.
+var _voice_peak := 0
+
 func _send(now: float, cam: Pose.Camera, local: LocalFrame, rt: float) -> void:
 	_seq += 1
 	var seen: Array = _unacked.slice(maxi(0, _unacked.size() - 2))
@@ -1317,6 +1326,12 @@ func _send(now: float, cam: Pose.Camera, local: LocalFrame, rt: float) -> void:
 		m["skipReelAt"] = local.skip_reel_at
 	if local.deal != null:
 		m["deal"] = local.deal
+	# VC1: only a number for how loud, never a sound; nothing when silent.
+	if _voice_peak > 0:
+		m["voice"] = _voice_peak
+	_voice_peak = 0
+	if local.mic:
+		m["mic"] = true
 	if local.peek:
 		m["peek"] = true
 	if local.search:

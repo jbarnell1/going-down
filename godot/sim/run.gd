@@ -250,6 +250,21 @@
 #  - Soft Shoes shortens the Reactor's four's hearing of a walk (StationRules.Crew.soft) and the Rigger's (net/host.gd
 #    sets the Ward row's "soft"), by Noises.SOFT_SHOES as for the Groundskeeper.
 #
+# VC1, the microphone (North Star B5 "Your real voice counts"; B1 hearing "comes to footsteps, noise and your real
+# voice"), on only for a run made with it (with_voice(): net/host_rules.gd voice turns it on for the game's rooms;
+# tests and every stored result leave it off, and then nothing below happens). Each player's machine sends how loud
+# they are, a level 0 to 15 (PlayerInput.voice_level; no sound ever leaves their machine). With it on, a level is a
+# noise at the body the host has for them that tick, where they WERE as they spoke (Noises.voice_radius: whisper,
+# talk, shout), never where they are later; a missing input is silence. Nobody in the car, down, out or hung in the
+# Ward's web makes one (voice_level_of). Heard by:
+#  - the Groundskeeper: a noise like any other (Noises.voice_sound, kind &"voice", times groundskeeper.voice);
+#  - the Minder: within the voice's reach times minder.voice it is a provocation (its anger, at the voice rate), and
+#    from a hide during a count it is a reason there (sim/seek.gd SeekInput.voice_r);
+#  - the Reactor's four: like a walk, through walls, within the reach times reactor.voice (StationRules.Crew.voice_r);
+#  - the Rigger: within rigger.voice_reach of his house for talking, scaled by the band (net/host.gd sets the Ward
+#    row's "voice"; sim/ward/state.gd). Soft Shoes never quietens a voice.
+# The Orderly (Stillness) and the Temp (Lonely) never hear one.
+#
 # Down first, then out (North Star B6; loop/NIGHT-PLAN.md A5, T8a), on only for a run made with it
 # (create_run's `downs`, with_downs(): net/host_rules.gd turns it on for the game's rooms; tests and every
 # stored result leave it off, and then nothing below happens and a catch is "caught" as before). With it on:
@@ -1324,6 +1339,8 @@ class RunState:
 	## PY1, the owner's pay and stakes fixes of 20-21 Nov (with_economy_fix; see "PY1" in the header). Off: nothing
 	## below reads it.
 	var economy_fix := false
+	## VC1, the microphone (with_voice; see "VC1" in the header). Off: no voice level is read.
+	var voice := false
 
 	func copy() -> RunState:
 		var s := RunState.new()
@@ -1332,6 +1349,7 @@ class RunState:
 		s.orderly_fix = orderly_fix
 		s.deal = deal
 		s.economy_fix = economy_fix
+		s.voice = voice
 		s.pressures = pressures
 		s.pressure_heals_key = pressure_heals_key
 		s.pressure_heals_used = pressure_heals_used
@@ -1505,6 +1523,9 @@ class PlayerInput:
 	var emote_sound: bool = false
 	var wind_gasp: bool = false
 	var voice: bool = false
+	## VC1: how loud they are this tick, 0 to 15, the loudest their machine measured since its last input (read only
+	## with the run's voice on; see "VC1" in the header).
+	var voice_level: int = 0
 	var horn: bool = false
 	## A lamp or flash (a Seek.Light), or null. A hook: lamps do not exist yet.
 	var light: Variant = null
@@ -1804,6 +1825,24 @@ static func with_economy_fix(s0: RunState) -> RunState:
 	if s.quota and not s.orientation and s.floor_needed > 0 and not at_home(s):
 		s.floor_needed = 0 if s.station != null else floor_quota(s.depth, quota_crew(s.players), s.quota_tuning, pressure_quota_mult(s, s.quota_tuning), true)
 	return s
+
+## Turns VC1 on (see "VC1" in the header): a player's microphone level becomes a noise where they were.
+static func with_voice(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.voice = true
+	return s
+
+## VC1: the level player `p` speaks at this tick (0 to Noises.VOICE_MAX), 0 with the flag off, for a player in the car,
+## not on their feet (down, out, caught), or without an input this tick.
+static func voice_level_of(s: RunState, p: RunPlayer, inp: PlayerInput) -> int:
+	if not s.voice or inp == null or p.status != &"ok" or p.aboard or p.body == null or in_car(s.car, p.body):
+		return 0
+	return clampi(inp.voice_level, 0, Noises.VOICE_MAX)
+
+## VC1: how far player `p`'s voice carries this tick to the resident whose share is the live setting `hearer`
+## (groundskeeper.voice, minder.voice, reactor.voice), metres; 0 is silent or deaf.
+static func voice_reach(s: RunState, p: RunPlayer, inp: PlayerInput, hearer: StringName) -> float:
+	return Noises.voice_radius(voice_level_of(s, p, inp), s.tuning) * Noises.voice_share(hearer, s.tuning)
 
 static func with_pn_fixes(s0: RunState) -> RunState:
 	var s := s0.copy()
@@ -2837,6 +2876,8 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 		si.peek = i.peek
 		si.emote_sound = i.emote_sound
 		si.voice = i.voice
+		# VC1: their voice's reach for the Minder (sim/seek.gd voice_r).
+		si.voice_r = voice_reach(s, p, i, &"minder.voice")
 		si.horn = i.horn
 		si.light = i.light
 		# The party table: F held at it frees whoever is seated (read only with the party table on).
@@ -3015,6 +3056,7 @@ static func _step_garden(s: RunState, players: Array[RunPlayer], input_of: Dicti
 			elif kind == "searchDone" and not bool(e["fast"]):
 				search_noise[str(e["playerId"])] = Noises.search_radius(false, s.tuning)
 	var people: Array[Hearing.Person] = []
+	var voices: Array[Noises.Sound] = []
 	for p in players:
 		var down := p.status == &"down" and s.down.has(p.id)
 		if in_car(s.car, p.body) or not (down or _is_active(p, input_of)):
@@ -3037,12 +3079,17 @@ static func _step_garden(s: RunState, players: Array[RunPlayer], input_of: Dicti
 		hp.healed = g.healed.has(p.id)
 		hp.hide_noise = int(hide_noise.get(p.id, -1))
 		hp.search_radius = float(search_noise.get(p.id, 0.0))
+		# VC1: their voice, a noise of its own where they are (sim/noise.gd voice_sound).
+		var voiced := Noises.voice_sound(p.id, p.body, voice_level_of(s, p, input_of.get(p.id)), Noises.voice_share(&"groundskeeper.voice", s.tuning), s.tuning)
+		if voiced != null:
+			voices.append(voiced)
 		if s.hiding != null and not down:
 			var h := Hiding.player_of(s.hiding, p.id)
 			if h != null and h.phase == &"inside":
 				hp.hide = h.hide
 		people.append(hp)
 	var heard_things := g.drops
+	heard_things.append_array(voices)
 	if s.flare:
 		for e in events:
 			if e.type == "flareUsed":
@@ -3198,6 +3245,8 @@ static func _step_station(s: RunState, players: Array[RunPlayer], input_of: Dict
 		sc.shout = inp != null and inp.emote_sound
 		# PY1: Soft Shoes against the four as against the Groundskeeper.
 		sc.soft = s.economy_fix and owns_soft_shoes(s, p.id)
+		# VC1: their voice's reach for the four (sim/station_floor.gd senses_player).
+		sc.voice_r = voice_reach(s, p, inp, &"reactor.voice")
 		crew.append(sc)
 	var from := events.size()
 	var caught := StationRules.step(st, crew, t, dt, s.tuning, events)

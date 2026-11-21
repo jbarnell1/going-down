@@ -88,6 +88,7 @@ const SECTIONS: Array = [
 	[&"down", &"players", "DOWN AND HEALING"],
 	[&"health", &"players", "HEALTH (THE PLAYROOM)"],
 	[&"split", &"players", "SPLIT REALITY"],
+	[&"voice", &"players", "THE MICROPHONE"],
 	[&"carry", &"players", "CARRYING"],
 	[&"shop", &"players", "THE SHOP AND THE CABINET"],
 	[&"earning", &"earning", "EARNING"],
@@ -159,6 +160,7 @@ const ROWS: Array = [
 	[&"minder.anger_hide", &"minder", "HIDING ANGERS IT BY", "getting into a hide adds this to its anger bar", "in 100", 10.0, 0.0, 50.0, 1.0, &"now", &"MA1", W],
 	[&"minder.anger_open", &"minder", "OPENING SOMETHING ANGERS IT BY", "opening a drawer or a box adds this to its anger bar", "in 100", 10.0, 0.0, 50.0, 1.0, &"now", &"MA1", W],
 	[&"minder.stalk", &"minder", "WALKS TO A PLAYER IT SEES AT", "between counts, toward a player in its view (walk 3, creep 1.2)", "m/s", 1.5, 0.5, 2.9, 0.1, &"now", &"MA1", F],
+	[&"minder.voice", &"minder", "HEARS VOICES", "in 100 of a voice's reach: angers it, and a talking hider is heard in a count; 0 is deaf", "in 100", 100.0, 0.0, 200.0, 10.0, &"now", &"VC1", W],
 	# The party table (T15h, sim/seek.gd "Party table"): on in the game's rooms. Today's are Seek.FETCH_TIME, FETCH_ANGER
 	# and FETCH_REACH. The health the freed get back is heal.health. Read by the rules and by the client's table
 	# prompt (client/hide_view.gd), so the screen prints the number in force; on the panel since T22c.
@@ -190,6 +192,7 @@ const ROWS: Array = [
 	[&"noise.search_open", &"groundskeeper", "HEARS A CAREFUL SEARCH WITHIN", "the storage opening at the end of a careful search", "m", 4.0, 2.0, 6.0, 1.0, &"now", &"AR", F],
 	[&"noise.search_rush", &"groundskeeper", "HEARS A RUSHED SEARCH WITHIN", "rummaging in storage at the start of a rushed search", "m", 8.0, 6.0, 12.0, 1.0, &"now", &"AR", F],
 	[&"noise.emote", &"groundskeeper", "HEARS A WHISTLE WITHIN", "a sound emote: a whistle, a clap, a shout", "m", 18.0, 10.0, 30.0, 1.0, &"now", &"AR", F],
+	[&"groundskeeper.voice", &"groundskeeper", "HEARS VOICES", "in 100 of a voice's reach (THE MICROPHONE); 0 is deaf to voices", "in 100", 100.0, 0.0, 200.0, 10.0, &"now", &"VC1", W],
 	# The Tenant clock (TT1, net/host_rules.gd tenant_timer): on in the game's rooms, the clock on every floor below the
 	# prison, stamped as the doors open on arrival (a change waits for the next floor). Today's is HostRules.TENANT_MINUTES.
 	[&"tenant.minutes", &"tenant", "ARRIVES AFTER", "minutes on a floor before the Tenant arrives", "min", 10.0, 2.0, 30.0, 1.0, &"next", &"TT1", W],
@@ -229,6 +232,7 @@ const ROWS: Array = [
 	[&"reactor.flinch", &"reactor", "FLINCH AT THE LIGHTS", "seconds every awake body holds still when the power comes back", "s", 3.5, 0.0, 15.0, 0.5, &"now", &"RX3", F],
 	[&"reactor.board", &"reactor", "REACTOR'S CAR WAITS", "seconds the car stands open after the power comes back, before the bell", "s", 60.0, 10.0, 180.0, 5.0, &"now", &"RX3", F],
 	[&"reactor.wake_late", &"reactor", "THE REST WAKE AFTER", "seconds after the cut that the ones a small crew did not wake stir", "s", 90.0, 0.0, 600.0, 5.0, &"now", &"RX3", F],
+	[&"reactor.voice", &"reactor", "HEAR VOICES", "in 100 of a voice's reach, through walls, like a walk; 0 is deaf to voices", "in 100", 100.0, 0.0, 200.0, 10.0, &"now", &"VC1", W],
 	# The Rigger (the Ward, WD1: sim/ward/state.gd and arm.gd). Today's are their constants, set by bot crews
 	# (tools/ward_hunt.gd). A sprint is heard on any house floor; these say what else he hears and how he searches.
 	[&"rigger.steps_reach", &"rigger", "HEARS A WALK WITHIN", "walking (not creeping) this near the house he is at; 0 is never", "m", 9.0, 0.0, 30.0, 0.5, &"now", &"WD1", F],
@@ -260,6 +264,9 @@ const ROWS: Array = [
 	[&"rigger.chase_gap", &"rigger", "KEEPS BACK DURING A CHASE", "the nearest his body comes to the player he chases", "m", 6.0, 3.0, 15.0, 0.5, &"now", &"RR1", F],
 	[&"rigger.chase_gain", &"rigger", "GAINS ON A PLAYER AT", "how much faster than the player he goes per metre beyond that gap", "1/s", 0.8, 0.0, 3.0, 0.1, &"now", &"RR1", F],
 	[&"rigger.chase_top", &"rigger", "CHASES AT MOST AT", "his top speed in a chase", "m/s", 5.5, 1.0, 10.0, 0.25, &"now", &"RR1", F],
+	# VC1: who hears a player's real voice (the run flag voice; sim/run.gd "VC1"). 0 is deaf to voices. Read only with
+	# the flag on. The Orderly and the Temp never hear a voice (Stillness, Lonely).
+	[&"rigger.voice_reach", &"rigger", "HEARS TALKING WITHIN", "a talking voice this near the house he is at (a whisper less, a shout more); 0 is never", "m", 9.0, 0.0, 30.0, 0.5, &"now", &"VC1", F],
 	[&"rigger.reach_pause", &"rigger", "REARS BEFORE HE GRABS FOR", "seconds between his rearing up and the arm going out; a player in a house by then is not taken", "s", 1.5, 0.5, 5.0, 0.1, &"now", &"RR1", F],
 	# The lift and the dark. "Time for the elevator to return" is the first three rows.
 	[&"lift.floors_min", &"lift", "CAR STARTS, FEWEST FLOORS AWAY", "the shortest the indicator can start from", "floors", 6.0, 2.0, 19.0, 1.0, &"next", &"LS1", W],
@@ -318,6 +325,11 @@ const ROWS: Array = [
 	[&"split.every", &"split", "A CHANCE EVERY", "seconds between chances of a false sight", "s", 6.0, 2.0, 30.0, 1.0, &"now", &"SR1", F],
 	[&"split.chance", &"split", "CHANCE AT THE TOP", "the chance of a false sight at full exposure (none at FALSE SIGHTS FROM)", "%", 35.0, 0.0, 100.0, 5.0, &"now", &"SR1", W],
 	[&"split.lasts", &"split", "A FALSE SIGHT LASTS", "seconds, unless it is touched or lit by a flare first", "s", 10.0, 3.0, 30.0, 1.0, &"now", &"SR1", F],
+	# VC1: a player's microphone level (0 to 15) as a noise where they were. Whisper is levels 1 to 4, talk 5 to 10,
+	# shout 11 to 15; below 1, silent. Read only with the run flag voice on.
+	[&"noise.voice_whisper", &"voice", "A WHISPER CARRIES", "microphone levels 1 to 4", "m", 2.0, 0.0, 6.0, 0.5, &"now", &"VC1", F],
+	[&"noise.voice_talk", &"voice", "TALKING CARRIES", "microphone levels 5 to 10", "m", 8.0, 2.0, 16.0, 0.5, &"now", &"VC1", F],
+	[&"noise.voice_shout", &"voice", "A SHOUT CARRIES", "microphone levels 11 to 15", "m", 16.0, 6.0, 30.0, 1.0, &"now", &"VC1", F],
 	# Players: carrying (the four-slot inventory, S1; sim/inventory.gd). Four slots is fixed. The stack goes into force
 	# at lights out, when every bag is empty, so a slot never holds more than the number in force.
 	[&"inv.stack", &"carry", "ONE SLOT HOLDS", "how many of the same item stack in one slot", "items", 1.0, 1.0, 5.0, 1.0, &"day", &"S1", W],
@@ -466,6 +478,9 @@ const WIRED_IDS: Array[StringName] = [
 	&"split.calm_at", &"split.every", &"split.chance", &"split.lasts",
 	# PY1: pay and quota by the cycle.
 	&"pay.cycle1", &"pay.cycle2", &"pay.cycle3",
+	# VC1: the microphone.
+	&"groundskeeper.voice", &"minder.voice", &"reactor.voice", &"rigger.voice_reach",
+	&"noise.voice_whisper", &"noise.voice_talk", &"noise.voice_shout",
 ]
 
 ## The least wait of a call is its start delay plus the floors: sim/run.gd CALL_START_DELAY_MIN (this file

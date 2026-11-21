@@ -25,6 +25,12 @@
 #   drops a tape, is healed back up                                  DROP         6 m
 #   a thrown pinecone lands (AR5)        CONE         12 m, where it lands
 #   a sound emote (whistle, clap, shout)                             EMOTE        18 m
+#   VC1, the run flag voice: their real voice, by the microphone level their machine sends (0 to 15)
+#     a whisper (levels 1 to 4)                                      VOICE_WHISPER 2 m
+#     talking (5 to 10)                                              VOICE_TALK    8 m
+#     a shout or a scream (11 to 15)                                 VOICE_SHOUT   16 m
+#   A voice is its own noise (kind &"voice", voice_sound), beside the one a player's gait and hands make, so a
+#   resident deaf to voices (its live setting 0) still hears their feet. Soft Shoes never quietens it.
 # Choices made where the design is silent:
 #  - "moves" means the body covered more than MOVING metres a second this tick: a player pressing into a trunk
 #    or turning on the spot is standing still.
@@ -67,6 +73,16 @@ const EMOTE := 18.0
 ## Soft Shoes (Ear 1): a walk or a creep carries this share as far (a sprint, as far as ever). PY1 applies the same
 ## share to the Rigger's and the Reactor's hearing of a walk.
 const SOFT_SHOES := 0.75
+## VC1: the microphone's bands (see the header). A level is 0 to VOICE_MAX; below VOICE_WHISPER_AT it is silent.
+const VOICE_MAX := 15
+const VOICE_WHISPER_AT := 1
+const VOICE_TALK_AT := 5
+const VOICE_SHOUT_AT := 11
+const VOICE_WHISPER := 2.0
+const VOICE_TALK := 8.0
+const VOICE_SHOUT := 16.0
+## Each hearing resident's share of a voice's reach, in 100 (groundskeeper.voice, minder.voice, reactor.voice).
+const VOICE_HEARD := 100.0
 ## A body is moving when it covers more than this, metres a second.
 const MOVING := 0.2
 
@@ -247,6 +263,27 @@ static func of(ground: Ground, a: Act, dt: float, cracked: Dictionary, tuning: S
 	var out := Sound.make(a.id, a.body.x, a.body.z, a.body.level, r, kind)
 	out.hide = hide
 	return out
+
+## VC1: how far a microphone level carries (0: silent), by the three bands.
+static func voice_radius(level: int, tuning: Settings.Values = null) -> float:
+	if level >= VOICE_SHOUT_AT:
+		return Settings.f(tuning, &"noise.voice_shout", VOICE_SHOUT)
+	if level >= VOICE_TALK_AT:
+		return Settings.f(tuning, &"noise.voice_talk", VOICE_TALK)
+	if level >= VOICE_WHISPER_AT:
+		return Settings.f(tuning, &"noise.voice_whisper", VOICE_WHISPER)
+	return 0.0
+
+## VC1: a resident's share of a voice's reach from its live setting (`id`, in 100; 0 is deaf).
+static func voice_share(id: StringName, tuning: Settings.Values = null) -> float:
+	return maxf(0.0, Settings.f(tuning, id, VOICE_HEARD)) / 100.0
+
+## VC1: a player's voice this tick as a noise where they are (null: silent). `share` is the hearer's voice_share.
+static func voice_sound(by: String, at: Move.Body, level: int, share: float, tuning: Settings.Values = null) -> Sound:
+	var r := voice_radius(level, tuning) * share
+	if r <= 0.0 or at == null:
+		return null
+	return Sound.make(by, at.x, at.z, at.level, r, &"voice")
 
 ## Careful storage opens at the end of the search. Rushing makes its noise when the search starts.
 static func search_radius(fast: bool, tuning: Settings.Values = null) -> float:

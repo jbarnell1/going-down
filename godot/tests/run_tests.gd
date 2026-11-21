@@ -87,6 +87,12 @@ const FILES: Array[String] = [
 	"test_split_view",
 	"prop_economy_fix",
 	"test_reactor_look",
+	"prop_voice_off",
+	"prop_voice_noise",
+	"prop_voice_residents",
+	"test_voice_wire",
+	"test_mic_meter",
+	"test_hush",
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).

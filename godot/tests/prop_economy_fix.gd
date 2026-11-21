@@ -72,9 +72,9 @@ func test_off_by_default_and_on_in_the_rooms(t: T) -> void:
 	t.check(Run.with_economy_fix(Run.create_run("py1", _ids(2))).copy().economy_fix, "copy() keeps it")
 	t.check(HostRules.economy_fix_by_arg(), "no economy_fix=0 on this command line: the rooms ask for it")
 	var src := FileAccess.get_file_as_string("res://server/room.gd")
-	t.check(src.contains("HostRules.economy_fix_by_arg())"), "server/room.gd passes it")
+	t.check(src.contains("HostRules.economy_fix_by_arg()"), "server/room.gd passes it")
 	src = FileAccess.get_file_as_string("res://net/local_room.gd")
-	t.check(src.contains("HostRules.economy_fix_by_arg())"), "net/local_room.gd passes it")
+	t.check(src.contains("HostRules.economy_fix_by_arg()"), "net/local_room.gd passes it")
 
 func test_flag_off_changes_nothing(t: T) -> void:
 	for d in range(1, 22):

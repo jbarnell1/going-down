@@ -135,6 +135,10 @@
 #    quota by the floor's place in its cycle times the cycle's multiplier, credits kept at game over, the Reactor's
 #    call panel says why it is refused, a player still hung in the Ward's web when its car leaves is left out for the
 #    day, and Soft Shoes against the Rigger and the Reactor's four (sim/run.gd "PY1").
+#  - VC1, `voice`, the last parameter, after `economy_fix` (off unless asked; the game's rooms ask for it, `voice=0`
+#    switches it off): each player's microphone level (0 to 15, an input element; no audio is ever sent) becomes a noise
+#    where they were, in three bands (noise.voice_whisper, voice_talk, voice_shout), heard by the Groundskeeper, the
+#    Minder, the Rigger and the Reactor's four, each by its own live setting (0: deaf). sim/run.gd "VC1".
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -264,6 +268,8 @@ var deal: bool
 var split: bool
 ## PY1 (the last parameter, after `split_`): see the header.
 var economy_fix: bool
+## VC1, the microphone (the last parameter, after economy_fix_; see the header).
+var voice: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -293,7 +299,8 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		ward_place_: bool = false, reactor_place_: bool = false, pressures_: bool = false, ward_call_: bool = false,
 		ward_web_: bool = false, rigger_roam_: bool = false, ward_layout_: bool = false, orderly_fix_: bool = false,
 		minder_calm_: bool = false, down_ring_: bool = false, pn_fixes_: bool = false, last_stand_: bool = false,
-		deal_: bool = false, split_: bool = false, economy_fix_: bool = false) -> void:
+		deal_: bool = false, split_: bool = false, economy_fix_: bool = false, voice_: bool = false) -> void:
+	voice = voice_
 	last_stand = last_stand_
 	deal = deal_
 	split = split_
@@ -440,6 +447,9 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 	# PY1: before the quota too, so the first floor's quota is the new rule's.
 	if economy_fix and not s.economy_fix:
 		s = Run.with_economy_fix(s)
+	# VC1: a player's microphone level becomes a noise where they were (sim/run.gd "VC1").
+	if voice and not s.voice:
+		s = Run.with_voice(s)
 	if quota and _entity_on and not s.quota:
 		s = Run.with_quota(s)
 	if downs and not s.downs:
@@ -603,6 +613,10 @@ static func deal_by_arg() -> bool:
 ## PY1: on unless the game was started with `economy_fix=0` (or `?economy_fix=0` on the web page).
 static func economy_fix_by_arg() -> bool:
 	return not _arg_off("economy_fix")
+
+## VC1: the microphone counts in the game's rooms unless started with `voice=0` (or `?voice=0` on the web page).
+static func voice_by_arg() -> bool:
+	return not _arg_off("voice")
 
 static func _arg_off(name: String) -> bool:
 	for raw in OS.get_cmdline_user_args():

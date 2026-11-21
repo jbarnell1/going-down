@@ -69,6 +69,12 @@ var _sound_row := 0
 var _sound_drag := ""
 ## CS1: the player's own CAUGHT SCENES setting (client/caught_pref.gd), set by the game; null for none (no row then).
 var caught_pref: Object = null
+## VC1: the microphone (client/mic.gd), set by the game; null for none (no rows then). Its rows come after CAUGHT
+## SCENES on the YOUR SOUND page: MICROPHONE on or off, HEADPHONES or SPEAKERS, SENSITIVITY with a live test bar (the
+## same level the host is sent, the whisper and talk marks on it), and C to calibrate (3 s quiet, 4 s a line read aloud).
+var mic: Node = null
+const MIC_ROWS := 3
+const NoiseMeterColors = preload("res://client/noise_meter.gd")
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -347,7 +353,42 @@ func caught_set(soft_on: bool) -> bool:
 	return was != soft_on
 
 func _sound_rows_n() -> int:
-	return Volume.ROWS.size() + (1 if caught_pref != null else 0)
+	return Volume.ROWS.size() + (1 if caught_pref != null else 0) + (MIC_ROWS if mic != null else 0)
+
+## VC1: the first microphone row's index on the sound page, -1 when there is none.
+func mic_row_index() -> int:
+	return Volume.ROWS.size() + (1 if caught_pref != null else 0) if mic != null else -1
+
+## VC1: calibrate again: the panel closes and the calibration card (client/mic_hud.gd) runs over the game.
+func _mic_calibrate() -> void:
+	if mic == null or not bool(mic.call(&"listening")):
+		return
+	close()
+	mic.call(&"open_calibration")
+
+## VC1: row `r` of the microphone's (0 on/off, 1 headphones/speakers, 2 sensitivity) nudged `dir`. True when it changed.
+func mic_nudge(r: int, dir: int, n: int = 1) -> bool:
+	if mic == null:
+		return false
+	var m: Object = mic.get(&"meter")
+	match r:
+		0:
+			var want := dir > 0
+			if bool(m.get(&"enabled")) == want:
+				return false
+			mic.call(&"set_enabled", want)
+		1:
+			var sp := dir > 0
+			if bool(m.get(&"speakers")) == sp:
+				return false
+			m.set(&"speakers", sp)
+			m.call(&"save")
+		2:
+			var was := int(m.get(&"sensitivity"))
+			m.call(&"set_sensitivity", was + dir * n * 5)
+			m.call(&"save")
+			return int(m.get(&"sensitivity")) != was
+	return true
 
 func _sound_let_go() -> void:
 	if _sound_drag != "" and volume != null:
@@ -357,6 +398,20 @@ func _sound_let_go() -> void:
 
 func _sound_key(k: InputEventKey) -> void:
 	var on_caught := _sound_row == caught_row_index()
+	var mic_r := _sound_row - mic_row_index() if mic != null and _sound_row >= mic_row_index() else -1
+	if mic_r >= 0 and k.pressed and not k.echo and k.physical_keycode == KEY_C:
+		_mic_calibrate()
+		return
+	if mic_r >= 0 and k.physical_keycode in [KEY_LEFT, KEY_RIGHT, KEY_BACKSPACE]:
+		if k.pressed:
+			if k.physical_keycode == KEY_BACKSPACE:
+				if mic_r == 2 and not k.echo:
+					var m: Object = mic.get(&"meter")
+					m.call(&"set_sensitivity", 50)
+					m.call(&"save")
+			else:
+				mic_nudge(mic_r, -1 if k.physical_keycode == KEY_LEFT else 1, 5 if k.shift_pressed else 1)
+		return
 	if k.physical_keycode == KEY_BACKSPACE:
 		if k.pressed and not k.echo:
 			if on_caught:
@@ -485,6 +540,13 @@ func click(pos: Vector2, shift: bool = false) -> bool:
 				caught_set(h[1] == "caught_soft")
 			"caught_row":
 				_sound_row = caught_row_index()
+			"mic_row":
+				_sound_row = mic_row_index() + int(h[2])
+			"mic_minus", "mic_plus":
+				_sound_row = mic_row_index() + int(h[2])
+				mic_nudge(int(h[2]), -1 if h[1] == "mic_minus" else 1)
+			"mic_cal":
+				_mic_calibrate()
 			"section":
 				show_sound(false)
 				_sel = int(h[2])
@@ -600,7 +662,8 @@ func describe() -> Dictionary:
 		"asked": _plain(_asked()), "inForce": _plain(_in_force()), "rev": int(rc.get("tune_rev")) if rc != null else 0,
 		"runRev": int(rc.get("client").get("tune_rev")) if rc != null and rc.get("client") != null else 0,
 		"sound": {"open": _sound, "row": _sound_row, "rows": sound_rows(), "foot": foot_line(),
-			"caught": caught_pref.text() if caught_pref != null else ""}}
+			"caught": caught_pref.text() if caught_pref != null else "",
+			"mic": mic.call(&"describe") if mic != null else {}}}
 
 static func _plain(d: Dictionary) -> Dictionary:
 	var out := {}
@@ -697,7 +760,59 @@ func _draw_sound(at: Vector2, rw: float, px: float, lh: float, right: float) -> 
 		_hits.append([soft_r, "caught_soft", 0])
 		_text("SOFT: NO SNAP, HALF THE FLASH AND NOISE", Vector2(rx + 6 * px, vy + lh), px, GREY)
 		ry += row_h + lh + 4 * px
+	if mic != null:
+		ry = _draw_mic(Vector2(rx, ry), rw, px, lh)
 	_text("NOT SENT TO ANYONE. THE HOST'S SETTINGS ARE ON THE LEFT.", Vector2(rx, ry + 2 * px), px, GREY)
+
+## VC1: the microphone's three rows and its live test bar. Returns the y under them.
+func _draw_mic(at: Vector2, rw: float, px: float, lh: float) -> float:
+	var rx := at.x
+	var ry := at.y
+	var m: Object = mic.get(&"meter")
+	var d: Dictionary = mic.call(&"describe")
+	var st := str(d["status"])
+	var rows: Array = [
+		["MICROPHONE", "ON" if bool(m.get(&"enabled")) else "OFF", "OFF", "ON"],
+		["HEADPHONES OR SPEAKERS", "SPEAKERS" if bool(m.get(&"speakers")) else "HEADPHONES", "HEADPHONES", "SPEAKERS"],
+		["MIC SENSITIVITY", "%d" % int(m.get(&"sensitivity")), "-", "+"],
+	]
+	for r in rows.size():
+		var row: Array = rows[r]
+		var on := _sound_row == mic_row_index() + r
+		var row_h := lh * 2.0 + 2 * px
+		if on:
+			draw_rect(Rect2(Vector2(rx - 4 * px, ry - 3 * px), Vector2(rw + 8 * px, row_h)), Color(1, 1, 1, 0.06))
+		_hits.append([Rect2(Vector2(rx, ry - 3 * px), Vector2(rw, row_h)), "mic_row", r])
+		_text(str(row[0]), Vector2(rx, ry), px, INK if on else Color(0.85, 0.86, 0.82))
+		var vy := ry + lh
+		_text(str(row[1]), Vector2(rx + 6 * px, vy), px, AMBER)
+		var b1 := _button(str(row[2]), Vector2(rx + 6 * px + 12 * 6 * px, vy), px, INK)
+		_hits.append([b1, "mic_minus", r])
+		var b2 := _button(str(row[3]), Vector2(b1.end.x + 6 * px, vy), px, INK)
+		_hits.append([b2, "mic_plus", r])
+		ry += row_h + 4 * px
+	# The live test bar: the level the host is sent, with the whisper and talk marks.
+	var state := "LISTENING" if bool(d["listening"]) else ("NO MICROPHONE SIGNAL" if st == "none" else "OFF")
+	_text("TEST: " + state + ("   TALKING" if bool(d["talking"]) else ""), Vector2(rx, ry), px, INK)
+	var by := ry + lh
+	var cell := 4.0 * px
+	var lv := int(d["level"])
+	for i in 15:
+		var c := GREY
+		if i < lv:
+			c = NoiseMeterColors.color_of(lv)
+		draw_rect(Rect2(Vector2(rx + i * (cell + px), by), Vector2(cell, 6 * px)), c)
+	for mk: Array in [[1, "WHISPER"], [5, "TALK"]]:
+		var x := rx + float(int(mk[0]) - 1) * (cell + px)
+		draw_rect(Rect2(Vector2(x - px, by - 2 * px), Vector2(px, 10 * px)), INK)
+		_text(str(mk[1]), Vector2(x, by + 9 * px), px, GREY)
+	ry = by + 9 * px + lh
+	var cal := str(d["calibrating"])
+	var cal_r := _button("C: CALIBRATE AGAIN" if cal.is_empty() else "C: CALIBRATE AGAIN  " + cal, Vector2(rx, ry), px, AMBER if not cal.is_empty() else INK)
+	_hits.append([cal_r, "mic_cal", 0])
+	ry += lh + 4 * px
+	_text("ONLY HOW LOUD YOU ARE IS SENT. M TURNS IT ON OR OFF.", Vector2(rx, ry), px, GREY)
+	return ry + lh
 
 func _draw() -> void:
 	var px := _px()

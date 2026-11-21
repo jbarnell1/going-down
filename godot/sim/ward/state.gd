@@ -50,6 +50,7 @@ var tuning: Settings.Values = null
 var crew_size := 4
 var lair := -1
 var _step_at := {}
+var _voice_at := {}
 var _last_pos := {}
 var _queued_house := -1
 var _queued_area := &""
@@ -59,6 +60,12 @@ const MOVING_SPEED := 0.6
 const STEPS_REACH := 9.0
 ## PY1: Soft Shoes' share of a walk's reach: sim/noise.gd SOFT_SHOES, the Groundskeeper's (tests/prop_economy_fix.gd checks they agree).
 const SOFT_SHOES := 0.75
+## VC1: a talking voice is heard within rigger.voice_reach of the house he is at, a whisper or a shout by its share of
+## talking's reach (the row's "voice", sim/noise.gd voice_radius, over noise.voice_talk); a shout out of doors is loud
+## (a chase, as a sprint). VOICE_TALK and VOICE_SHOUT are sim/noise.gd's (tests/prop_voice_residents.gd checks).
+const VOICE_REACH := 9.0
+const VOICE_TALK := 8.0
+const VOICE_SHOUT := 16.0
 const CLICK_REACH := 2.5
 const OPEN_HEARD := 1
 const DOOR_HEARD := 1
@@ -449,6 +456,14 @@ func step(now: float, delta: float, boarding_seconds: float, crew: Dictionary) -
 				reach *= SOFT_SHOES
 			if reach > 0.0 and _flat(at, lair) <= reach:
 				_hear_point(at, now, events, false)
+		# VC1: their real voice (the host sets "voice", its reach in metres, only with the run's voice on).
+		var voice_r := float(member.get("voice", 0.0))
+		if voice_r > 0.0 and now >= float(_voice_at.get(id, -INF)):
+			var talk := maxf(_f(&"noise.voice_talk", VOICE_TALK), 0.01)
+			var voice_reach := _f(&"rigger.voice_reach", VOICE_REACH) * voice_r / talk
+			if voice_reach > 0.0 and _flat(at, lair) <= voice_reach:
+				_voice_at[id] = now + STEP_EVERY
+				_hear_point(at, now, events, false, id if voice_r >= _f(&"noise.voice_shout", VOICE_SHOUT) - 1e-9 else "")
 		if member.get("recording", false) and encounter == &"searching" and arm != null and arm.points.size() > 1:
 			var reach := _f(&"rigger.click_reach", CLICK_REACH)
 			if reach > 0.0 and (at + Vector3.UP * 1.25).distance_to(houses[resident_house].to_world(arm.points[-1])) <= reach:

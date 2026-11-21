@@ -313,6 +313,14 @@ const PROOFS := {
 	&"pay.cycle1": "test_pay_cycle_settings",
 	&"pay.cycle2": "test_pay_cycle_settings",
 	&"pay.cycle3": "test_pay_cycle_settings",
+	# VC1: the microphone.
+	&"groundskeeper.voice": "test_voice_settings",
+	&"minder.voice": "test_voice_settings",
+	&"reactor.voice": "test_voice_settings",
+	&"rigger.voice_reach": "test_voice_settings",
+	&"noise.voice_whisper": "test_voice_settings",
+	&"noise.voice_talk": "test_voice_settings",
+	&"noise.voice_shout": "test_voice_settings",
 }
 
 ## The rows of later pieces wired so far (sim/settings.gd WIRED_IDS), in the registry's order.
@@ -342,7 +350,9 @@ const MORE: Array[StringName] = [
 	&"pressure.quota", &"pressure.quota3", &"pressure.heals", &"pressure.heals3", &"pressure.watchers", &"pressure.watchers3", &"pressure.near_light", &"pressure.near_light3", &"pressure.tenant_minutes", &"pressure.tenant_minutes3",
 	&"orderly.reach_walk", &"orderly.dirty_from", &"last_stand.bonus",
 	&"deal.ride", &"deal.squeak_in", &"deal.squeak", &"deal.torch_in", &"deal.torch", &"deal.second_in", &"deal.second", &"deal.dark_in", &"deal.dark", &"deal.express_in", &"deal.express", &"deal.double_in", &"deal.double_drop", &"deal.hazard_pay", &"deal.dark_pay", &"deal.express_pay", &"deal.squeak_loud", &"deal.torch_dim", &"deal.second_time",
-	&"pay.cycle1", &"pay.cycle2", &"pay.cycle3"]
+	&"pay.cycle1", &"pay.cycle2", &"pay.cycle3",
+	&"groundskeeper.voice", &"minder.voice", &"reactor.voice", &"rigger.voice_reach",
+	&"noise.voice_whisper", &"noise.voice_talk", &"noise.voice_shout"]
 
 ## The game's value of every setting: the constant the game uses, with the rooms' switches on (paced, the long
 ## dark, the car waits: net/host_rules.gd). This table, not the registry, is the test's oracle.
@@ -445,6 +455,9 @@ static func game_values() -> Dictionary:
 		&"reactor.crawl_speed": StationRules.CRAWL_SPEED,
 		&"reactor.run_speed": StationRules.RUN_SPEED,
 		&"rigger.steps_reach": WardState.STEPS_REACH,
+		&"rigger.voice_reach": WardState.VOICE_REACH,
+		&"groundskeeper.voice": Noises.VOICE_HEARD, &"minder.voice": Noises.VOICE_HEARD, &"reactor.voice": Noises.VOICE_HEARD,
+		&"noise.voice_whisper": Noises.VOICE_WHISPER, &"noise.voice_talk": Noises.VOICE_TALK, &"noise.voice_shout": Noises.VOICE_SHOUT,
 		&"rigger.click_reach": WardState.CLICK_REACH,
 		&"rigger.open_heard": float(WardState.OPEN_HEARD),
 		&"rigger.door_heard": float(WardState.DOOR_HEARD),
@@ -590,7 +603,7 @@ func test_registry_rows(t: T) -> void:
 	# ED1 added the deal's nineteen (THE DEAL, its own group before the player speeds).
 	# SR1 added split reality's ten (players).
 	# PY1 added the three cycle rows of pay and quota (earning).
-	t.eq(rows.size(), 227, "rows in the registry")
+	t.eq(rows.size(), 234, "rows in the registry (VC1 added seven)")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -638,9 +651,9 @@ func test_registry_rows(t: T) -> void:
 		if TEN.has(s.id) or MORE.has(s.id) or KEEPER_SIX.has(s.id):
 			want.append(s.id)
 	t.check(wired == want and want.size() == TEN.size() + MORE.size() + KEEPER_SIX.size(), "the wired rows are exactly those of LS1 and the groups wired since, in order: %s" % str(wired))
-	t.eq(by_group.get(&"residents", 0), 118, "residents (WC1 added two Rigger rows, OR2 two Orderly rows, MA1 four Minder rows, RR1 thirteen Rigger rows)")
+	t.eq(by_group.get(&"residents", 0), 122, "residents (WC1 added two Rigger rows, OR2 two Orderly rows, MA1 four Minder rows, RR1 thirteen Rigger rows, VC1 four voice rows)")
 	t.eq(by_group.get(&"lift", 0), 18, "the lift and the dark (and the Ward's lift, PL2, its call and web, WC1, and its layout, WG1)")
-	t.eq(by_group.get(&"players", 0), 41, "players (DR1 added the ring's down time, SR1 split reality's ten)")
+	t.eq(by_group.get(&"players", 0), 44, "players (DR1 added the ring's down time, SR1 split reality's ten, VC1 the microphone's three)")
 	t.eq(by_group.get(&"earning", 0), 14, "earning (LS1 added the sole survivor's bonus, PY1 the three cycle rows)")
 	t.eq(by_group.get(&"hiding", 0), 3, "hiding")
 	t.eq(by_group.get(&"deeper", 0), 10, "floor 8 and deeper")
@@ -2740,6 +2753,29 @@ func test_pay_cycle_settings(t: T) -> void:
 			t.check(absf(Run.pay_multiplier_at(depth, true, tun) - Run.depth_multiplier(local) * v) < 1e-9, "%s %.2f: floor %d pays %.3f" % [id, v, depth, Run.depth_multiplier(local) * v])
 			t.eq(Run.floor_quota(depth, 2, tun), Run.floor_quota(depth, 2), "%s %.2f: without the fix floor %d is the old quota" % [id, v, depth])
 			t.eq(Run.pay_multiplier_at(depth, false, tun), Run.depth_multiplier(depth), "%s %.2f: without the fix floor %d pays the old rate" % [id, v, depth])
+
+## VC1's rows: the three bands' reaches, and each hearing resident's share (0 deaf), as the rules read them.
+func test_voice_settings(t: T) -> void:
+	for row: Array in [[&"noise.voice_whisper", 3, 2.0], [&"noise.voice_talk", 7, 8.0], [&"noise.voice_shout", 13, 16.0]]:
+		var id: StringName = row[0]
+		var lv: int = row[1]
+		t.eq(Noises.voice_radius(lv), float(row[2]), "%s: level %d carries today's %.0f m" % [id, lv, float(row[2])])
+		for v: float in [Settings.row(id).lo, Settings.row(id).hi]:
+			t.eq(Noises.voice_radius(lv, Settings.make({id: v})), v, "%s at %.1f: level %d carries %.1f m" % [id, v, lv, v])
+	var ids: Array[String] = ["a"]
+	var s := Run.with_voice(Run.create_run("vc1-settings", ids))
+	var p := s.players[0].copy()
+	p.aboard = false
+	p.body = Move.Body.make(-50.0, -50.0, 0, 0.0)
+	var inp := Run.PlayerInput.make("a", p.body, 1.65, 0.0, 0.0, 90.0, 70.0)
+	inp.voice_level = 8
+	for id: StringName in [&"groundskeeper.voice", &"minder.voice", &"reactor.voice"]:
+		for v: float in [0.0, 100.0, 200.0]:
+			t.eq(Run.voice_reach(Run.with_tuning(s, {id: v}), p, inp, id), 8.0 * v / 100.0, "%s %.0f: talking carries %.1f m to it" % [id, v, 8.0 * v / 100.0])
+	# The Rigger: rigger.voice_reach is talking's reach to him (sim/ward/state.gd; tests/prop_voice_residents.gd hears it).
+	t.eq(WardState.VOICE_REACH, WardState.STEPS_REACH, "his voice reach is his walking reach today")
+	var src := FileAccess.get_file_as_string("res://sim/ward/state.gd")
+	t.check(src.contains("_f(&\"rigger.voice_reach\", VOICE_REACH)"), "the Rigger reads rigger.voice_reach")
 
 func test_quota_step(t: T) -> void:
 	for step: float in [1.0, Run.QUOTA_DEPTH_STEP, 2.0]:

@@ -473,7 +473,8 @@ func _start(now: float) -> void:
 		not (ward_review or reactor_review or orientation_review),
 		not (ward_review or reactor_review or orientation_review) and HostRules.deal_by_arg(),
 		HostRules.split_on_by_arg() and not (ward_review or reactor_review or orientation_review),
-		not (ward_review or reactor_review or orientation_review) and HostRules.economy_fix_by_arg())
+		not (ward_review or reactor_review or orientation_review) and HostRules.economy_fix_by_arg(),
+		not (ward_review or reactor_review or orientation_review) and HostRules.voice_by_arg())
 	if orientation_review:
 		rules.enable_orientation()
 	elif orientation_campaign:

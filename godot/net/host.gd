@@ -151,6 +151,17 @@ const StationPlan = preload("res://sim/station.gd")
 
 const EPS := 1e-9
 const TICK := Session.TICK
+## VC2, the intercom's hush (the owner, 20 Nov: "if people are talking a lot when the intercom goes off, the intercom
+## responds to that with a throat clearing and asking them to be quiet and then continues saying what I was saying
+## before"; "I agree to intercom hushing."). The host decides from the levels it already has, so every screen hears the
+## same thing: while two or more players are talking, or one is shouting, it sends the event "crewNoisy" {t, talkers,
+## shouting} at most once every HUSH_EVERY seconds; each screen's announcer (client/announcer.gd hush) stops a hushable
+## line, shows the hush and says the line again from its start, at most once a line and once a minute. Only in a run
+## with the voice (VC1). Talking: level 5 or more (sim/noise.gd VOICE_TALK_AT) for HUSH_HOLD seconds, ending HUSH_GAP
+## seconds after the last; shouting the same at level 11 or more. No rule reads it.
+const HUSH_EVERY := 1.0
+const HUSH_HOLD := 0.2
+const HUSH_GAP := 0.4
 const HISTORY_TICKS := 60  # ceil(HISTORY_SECONDS / TICK)
 ## Run states kept for inspection (tests compare clients against the host at a given tick).
 const STATE_TICKS := 200
@@ -208,6 +219,16 @@ class HostPlayer:
 	var hide_pending := false
 	var hide_fast := false
 	var emote_pending := false
+	## VC1: the loudest microphone level (0 to 15) their inputs carried since the run last took it; 0 for a client
+	## without a microphone or an old one (protocol.gd "voice"). Never a sound: only this number.
+	var voice_level := 0
+	## VC1: their newest input says their microphone is listening (the NO MIC marks; protocol.gd "mic").
+	var mic_on := false
+	## VC2, the intercom's hush: when their talking began and was last heard (host time), and the same for a shout.
+	var talk_since := -1.0
+	var talk_last := -INF
+	var shout_since := -1.0
+	var shout_last := -INF
 	## The name this player joined with ("" before the join).
 	var name := ""
 	## The Annex: Q presses counted so far (a press not yet given to the run), peels asked for so far and
@@ -688,6 +709,9 @@ func _on_input(p: HostPlayer, m: Dictionary, ht: float) -> void:
 	p.last_seq = seq
 	p.input = m
 	p.input_at = ht
+	# VC1: the loudest level since the run last took it (taken each tick, so a late or missing input is silence).
+	p.voice_level = clampi(maxi(p.voice_level, int(m.get("voice", 0))), 0, Run.Noises.VOICE_MAX)
+	p.mic_on = m.get("mic", false) == true
 	p.echo = [m["ct"], ht]
 	if int(m["calls"]) > p.calls:
 		p.calls = m["calls"]
@@ -752,6 +776,43 @@ func _on_input(p: HostPlayer, m: Dictionary, ht: float) -> void:
 ## frames to an input, so the straight line between two inputs can cut the inside of a jamb's clearance that the walk
 ## went round (the first refusal seen, seed late-5: held (0.46, 0, -6.08), sent (0.53, 0, -5.97), both clear, the
 ## line between them not). Tried in turn: the straight line, the two ways round one corner, the walk replayed.
+## VC2: one tick's level for the hush's talking and shouting (see HUSH_EVERY).
+static func _hush_track(p: HostPlayer, lv: int, t: float) -> void:
+	if lv >= Run.Noises.VOICE_TALK_AT:
+		if p.talk_since < 0.0 or t - p.talk_last > HUSH_GAP + 1e-9:
+			p.talk_since = t
+		p.talk_last = t
+	if lv >= Run.Noises.VOICE_SHOUT_AT:
+		if p.shout_since < 0.0 or t - p.shout_last > HUSH_GAP + 1e-9:
+			p.shout_since = t
+		p.shout_last = t
+
+static func _hush_talking(p: HostPlayer, t: float) -> bool:
+	return p.talk_since >= 0.0 and t - p.talk_last <= HUSH_GAP + 1e-9 and t - p.talk_since >= HUSH_HOLD - 1e-9
+
+static func _hush_shouting(p: HostPlayer, t: float) -> bool:
+	return p.shout_since >= 0.0 and t - p.shout_last <= HUSH_GAP + 1e-9 and t - p.shout_since >= HUSH_HOLD - 1e-9
+
+var _hush_sent := -INF
+
+## VC2: the "crewNoisy" event, with the voice on, while two or more are talking or one is shouting.
+func _hush_check(s: Run.RunState, t: float, extra: Array[Dictionary]) -> void:
+	if not s.voice or t - _hush_sent < HUSH_EVERY - 1e-9:
+		return
+	var talkers := 0
+	var shouting := false
+	for id: String in _players:
+		var hp: HostPlayer = _players[id]
+		if not _playing(hp):
+			continue
+		if _hush_talking(hp, t):
+			talkers += 1
+		if _hush_shouting(hp, t):
+			shouting = true
+	if talkers >= 2 or shouting:
+		_hush_sent = t
+		extra.append({"type": "crewNoisy", "t": t, "talkers": talkers, "shouting": shouting})
+
 func _ward_reach(from: Vector3, to: Vector3) -> bool:
 	var w := _ward_review
 	if w.walk_clear(from, to):
@@ -850,6 +911,11 @@ func _step_ward_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> Run.R
 		# PY1 (the run's economy_fix): Soft Shoes shortens how far he hears a walk (sim/ward/state.gd rigger.steps_reach).
 		if s.economy_fix and Run.owns_soft_shoes(s, i.id):
 			row.soft = true
+		# VC1: their voice's reach (0: silent), unless hung in the web; Soft Shoes never shortens it (sim/ward/state.gd).
+		if s.voice and not _ward_review.webbed.has(i.id):
+			var rp := Run._player_in(s.players, i.id)
+			if rp != null:
+				row.voice = Run.Noises.voice_radius(Run.voice_level_of(s, rp, i), s.tuning)
 		row.recording = _ward_recording(s, i.id)
 		_ward_use[i.id] = i.use
 	var next_time := s.t + TICK
@@ -1087,6 +1153,7 @@ func _step(now: float) -> void:
 			p.pick_pending = false
 			p.hide_pending = false
 			p.emote_pending = false
+			p.voice_level = 0
 			p.mark_pending = false
 			p.peel_pending = -1
 			p.inv_pending = []
@@ -1100,6 +1167,7 @@ func _step(now: float) -> void:
 				# Out of the run this tick: a press or an emote made meanwhile is not saved up for later.
 				p.hide_pending = false
 				p.emote_pending = false
+				p.voice_level = 0
 				p.mark_pending = false
 				p.peel_pending = -1
 				p.inv_pending = []
@@ -1133,6 +1201,9 @@ func _step(now: float) -> void:
 		inp.hide_fast = p.hide_pending and p.hide_fast
 		inp.peek = m.get("peek", false) == true
 		inp.emote_sound = p.emote_pending
+		# VC1: how loud they were (read by the rules only with the run's voice on).
+		inp.voice_level = p.voice_level
+		_hush_track(p, p.voice_level, t_next)
 		# The Annex (sim/run.gd): Q pressed, a peel asked for.
 		inp.mark = p.mark_pending
 		inp.peel = p.peel_pending
@@ -1157,9 +1228,13 @@ func _step(now: float) -> void:
 		p.pick_pending = false
 		p.hide_pending = false
 		p.emote_pending = false
+		p.voice_level = 0
 		p.mark_pending = false
 		p.peel_pending = -1
 		p.inv_pending = []
+
+	# VC2: a noisy crew while the intercom may be speaking.
+	_hush_check(s, t_next, extra)
 
 	# 5. The run.
 	var ward_active := _ward_review != null and _ward_review.phase != &"departed"
@@ -1822,6 +1897,15 @@ func world(full: bool = false) -> Dictionary:
 		# works it out the host's way. Absent in cycle 1, where both rules agree, and with the fix off.
 		if s.economy_fix:
 			out["economy"] = 1
+	# VC1 (Protocol "mic"): whose microphone is listening, for the NO MIC marks; only in a run with the voice.
+	if s.voice:
+		var mic_ids: Array = []
+		for id: String in _players:
+			var hp: HostPlayer = _players[id]
+			if hp.mic_on and hp.connected and not hp.left:
+				mic_ids.append(id)
+		mic_ids.sort()
+		out["mic"] = mic_ids
 	# DF1 (Protocol "pressure"): what the pressures change on screens, from floor 8; absent in cycle 1 and with them off.
 	var pressure: Variant = pressure_block(s)
 	if pressure != null:

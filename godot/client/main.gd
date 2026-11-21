@@ -128,6 +128,8 @@ const TenantClock = preload("res://client/tenant_clock.gd")
 ## CS1: each resident's caught scene on the caught player's screen, and the player's own FULL / SOFT for it.
 const CaughtScene = preload("res://client/caught_scene.gd")
 const CaughtPref = preload("res://client/caught_pref.gd")
+const Mic = preload("res://client/mic.gd")
+const MicHud = preload("res://client/mic_hud.gd")
 
 const VFOV := 70.0
 const SENS := 0.0022
@@ -381,6 +383,9 @@ var caught_at := -1
 ## screen's own catch at caught_at plays a scene and had the down rule then, and the Minder's take already shown.
 var caught_scene: Node3D = null
 var caught_pref := CaughtPref.new()
+## VC1: the microphone's loudness (client/mic.gd) and its meter and consent card (client/mic_hud.gd).
+var mic: Mic = null
+var mic_hud: MicHud = null
 var _catch_scene := false
 var _catch_downs := false
 var _minder_scene_shown := false
@@ -606,6 +611,18 @@ func _ready() -> void:
 	# CS1: the player's own CAUGHT SCENES (a test plays FULL).
 	caught_pref.persist = not automated
 	caught_pref.load_saved()
+	# VC1: the microphone, opened only after the player says yes, never in a scripted run or the browser.
+	mic = Mic.new()
+	mic.name = "Mic"
+	add_child(mic)
+	mic.setup(automated)
+	settings_panel.set(&"mic", mic)
+	var mic_layer := CanvasLayer.new()
+	mic_layer.layer = 49
+	add_child(mic_layer)
+	mic_hud = MicHud.new()
+	mic_hud.mic = mic
+	mic_layer.add_child(mic_hud)
 	music = Music.on(get_tree())
 	# A scripted run (auto=1) hears the game as its mix checks measured it, without music, unless it asks (music=1).
 	var music_asked := OS.get_cmdline_user_args().has("music=1") or (OS.has_feature("web") and _url("music", "0") == "1")
@@ -1462,6 +1479,10 @@ func _input(event: InputEvent) -> void:
 	if (event is InputEventMouseButton or event is InputEventKey) and event.is_pressed() and not _gesture:
 		_gesture = true
 		_welcome_pending = false
+	# VC1: the microphone's consent card, the first time, takes every key until it is answered.
+	if mic_hud != null and event is InputEventKey and mic_hud.key(event as InputEventKey):
+		get_viewport().set_input_as_handled()
+		return
 	if bright_card.is_open():
 		# The brightness card has the keys (its slider, Enter done) and its own mouse.
 		if event is InputEventKey:
@@ -1588,6 +1609,9 @@ func _input(event: InputEvent) -> void:
 				_new_run()
 		elif k.physical_keycode == KEY_E:
 			raise_latch = not raise_latch
+		elif k.physical_keycode == KEY_M and mic != null:
+			# VC1: the microphone on or off at once.
+			mic.toggle()
 		elif k.physical_keycode == KEY_Q and snap.get("annexPad") != null and not _esc_menu and not wheel_open:
 			pending_mark = true
 		elif k.physical_keycode == KEY_L and not lamp_view.own.is_empty():
@@ -2077,6 +2101,8 @@ func _poll_test() -> void:
 func _process(delta: float) -> void:
 	_poll_test()
 	_music_frame()
+	if mic_hud != null:
+		mic_hud.voice_on = mode == "game" and _mic_list() != null
 	if start.screen == "playtest":
 		return
 	frames += 1
@@ -2265,7 +2291,9 @@ func _game_input(dt: float) -> Dictionary:
 		# Findables (FD10): F held for the search client/search_view.gd offered on the last frame.
 		"search": search_view.want_search and not hide and not call, "searchFast": search_view.want_fast,
 		"invSel": inv_sel, "invOp": inv_op, "invArg": inv_arg, "skipReelAt": _reel_skip_at,
-		"deal": deal_view.answer() if deal_view != null else null}
+		"deal": deal_view.answer() if deal_view != null else null,
+		# VC1: how loud this player is (the loudest window since the last frame), and whether the microphone listens.
+		"voice": mic.take() if mic != null else 0, "mic": mic != null and mic.listening()}
 
 ## DF1: the host's "pressure" block of the newest snapshot (Protocol "pressure"), or null (cycle 1, the pressures off).
 func _pressure() -> Variant:
@@ -3199,6 +3227,7 @@ func _show_split(s: Dictionary, dt: float) -> void:
 
 func _name_tags(s: Dictionary, dark: bool) -> void:
 	var tags: Array = []
+	var mics: Variant = _mic_list()
 	var win := get_viewport().get_visible_rect().size
 	var vb := link.view_body()
 	var open: bool = s["doorsOpen"]
@@ -3215,8 +3244,18 @@ func _name_tags(s: Dictionary, dark: bool) -> void:
 			continue
 		var tag := name_tag(o, cam, win, dark, sees)
 		if not tag.is_empty():
+			# VC1: a crewmate whose microphone is not listening, in a run with the voice.
+			if mics is Array and not (mics as Array).has(str(o.get("id", ""))):
+				tag["text"] = str(tag["text"]) + " - NO MIC"
 			tags.append(tag)
 	hud.tags = tags
+
+## VC1: the host's list of players whose microphone is listening (Protocol "mic"), or null in a run without the voice.
+func _mic_list() -> Variant:
+	if link == null:
+		return null
+	var lc := link.client()
+	return (lc.latest as Dictionary).get("mic") if lc != null and lc.latest is Dictionary else null
 
 ## One name tag (or {}) for another player `o` (an `others` row) seen from `cam` (a camera in a 480x270
 ## picture shown at window size `win`). `sees.call(point, level)` is the floor's line of sight to the head.
@@ -3843,6 +3882,13 @@ func _command(c: String) -> String:
 			start.tape.skip()
 		"leave":
 			_back_to_title()
+		"mic":
+			# VC1: a fake microphone level (0 to 15) in place of the real one; `mic off` gives the real one back.
+			if mic == null:
+				return "no mic"
+			if p.size() >= 2:
+				mic.fake_level = -1 if p[1] == "off" else clampi(int(p[1]), 0, 15)
+			return JSON.stringify(mic.describe())
 		"emote":
 			if p.size() < 2 or not p[1] in Protocol.EMOTES:
 				return "unknown emote"

@@ -18,6 +18,10 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 ; The Voice, Entity, Scare, Effects, Ambience and UI buses are declared in this file. Never add buses at run time
 ; (AudioServer.add_bus): in the browser's Sample playback mode that silences everything.
 buses/default_bus_layout="res://default_bus_layout.tres"
+; VC1 (client/mic.gd): the microphone's loudness, read only after the player says yes. Off in the browser and the server.
+driver/enable_input=true
+driver/enable_input.web=false
+driver/enable_input.server=false
 driver/mix_rate.web=44100
 
 [debug]

@@ -272,6 +272,12 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    double, and what holds on the floor reached); Deal.dec checks it and a malformed one refuses the snapshot;
 ##  - an input gains a 29th element, the answer [offer seq, choice 0/1 take/2 pass, picked player id or "", double
 ##    0/1 draw/2 keep, second opinion seq or -1], after the reel's skip (then sent as -1 when there is none);
+##  - VC1, the microphone: an input gains a 30th element, "voice", the loudest microphone level (0 to 15) measured
+##    since the last input, after the deal's answer (then sent as 0 when there is none). Sent while the player's
+##    microphone is listening ("mic": true, even at 0) or above 0, so a player with no microphone or with it off and
+##    an old client send what they did before (and are silent); decoded clamped to 0..15, and as "mic": true;
+##  - the world's floor extensions gain "mic": the ids of the players whose microphone is listening, sorted, in a run
+##    with the voice (absent without it), for the NO MIC marks. No sound is ever sent, only these numbers.
 ##  - events "dealOffered" {seq, card, closes}, "dealTaken" {seq, card, carrier, roll, outcome}, "dealPassed" {seq,
 ##    card}, "dealDoubled" {seq, card, carrier, roll, outcome}, "dealLanded" {seq, depth, faces} and "dealSecondUsed"
 ##    {playerId}.
@@ -318,6 +324,8 @@ const MAX_TELEMETRY_PARTS := 8
 ## Limits on what a client may send (the server refuses anything outside them).
 const MAX_NAME := 32
 const MAX_SEEN := 8
+## VC1: the loudest microphone level an input carries (sim/noise.gd VOICE_MAX).
+const VOICE_MAX := 15
 const MAX_COORD := 10000.0
 const MAX_CLOCK := 1e9
 ## SR1: the kinds of false sight, as the "split" block numbers them (sim/split.gd KINDS).
@@ -526,8 +534,11 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < WORLD_SHOP_INDEX:
 			out.append(null)
 		out.append(enc_shop(w["shop"]))
-	if w.get("orderly2") != null or w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null or w.get("nerve") != null or w.get("tenant") != null or w.get("cycle") != null or w.get("pressure") != null or w.get("stand") != null or w.get("wipe") != null or w.get("standee") != null or w.get("deal") != null or w.get("split") != null or w.get("economy") != null:
+	if w.get("orderly2") != null or w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null or w.get("nerve") != null or w.get("tenant") != null or w.get("cycle") != null or w.get("pressure") != null or w.get("stand") != null or w.get("wipe") != null or w.get("standee") != null or w.get("deal") != null or w.get("split") != null or w.get("economy") != null or w.get("mic") != null:
 		var extensions := {}
+		# VC1: whose microphone is listening (the NO MIC marks).
+		if w.get("mic") != null:
+			extensions["mic"] = (w["mic"] as Array).duplicate()
 		# LS1 (sim/last_stand.gd): the spotlight, the wipe's scene, the prison's standee.
 		if w.get("stand") != null:
 			extensions["stand"] = [w["stand"]["id"], q3(w["stand"]["since"]), q3(w["stand"]["mult"])]
@@ -1064,7 +1075,9 @@ static func encode(m: Dictionary) -> String:
 			# The inventory (see the header): its four after the Annex's, which are then sent even when unused.
 			var skip_at: Variant = m.get("skipReelAt")
 			var deal_in: Variant = m.get("deal")
-			var inv := m.get("invSel") != null or int(m.get("invs", 0)) > 0 or skip_at != null or deal_in != null
+			var voice_lv := clampi(int(m.get("voice", 0)), 0, VOICE_MAX)
+			var mic_on: bool = voice_lv > 0 or m.get("mic", false) == true
+			var inv := m.get("invSel") != null or int(m.get("invs", 0)) > 0 or skip_at != null or deal_in != null or mic_on
 			if int(m.get("hides", 0)) > 0 or marks > 0 or peels > 0 or inv:
 				inp.append(int(m.get("hides", 0)))
 				inp.append(int(m.get("fastHides", 0)))
@@ -1078,11 +1091,15 @@ static func encode(m: Dictionary) -> String:
 				inp.append(int(m.get("invs", 0)))
 				inp.append(INV_OPS.find(op))
 				inp.append(str(m["invArg"]) if op == "give" else (int(m["invArg"]) if op in ["take", "stash", "fetch", "buy", "skill", "lamp"] else 0))
-			if skip_at != null or deal_in != null:
+			if skip_at != null or deal_in != null or mic_on:
 				inp.append(q3(float(skip_at)) if skip_at != null else -1.0)
 			if deal_in != null:
 				var da: Array = deal_in
 				inp.append([int(da[0]), int(da[1]), str(da[2]), int(da[3]), int(da[4])])
+			elif mic_on:
+				inp.append(0)
+			if mic_on:
+				inp.append(voice_lv)
 			return JsJson.stringify(inp)
 		"join":
 			var j: Array = [PROTOCOL_VERSION, "J", m["name"], m["ct"]]
@@ -1299,6 +1316,12 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 				"by": _s(c, wd[3]), "n": _i(c, wd[4], 1, 2), "last": _s(c, wd[5])}
 		if extensions.has("standee"):
 			out["standee"] = _s(c, extensions["standee"])
+		if extensions.has("mic"):
+			var ids := _a(c, extensions["mic"], 0, 64)
+			var mic_ids: Array = []
+			for v: Variant in ids:
+				mic_ids.append(_s(c, v))
+			out["mic"] = mic_ids
 		if extensions.has("economy"):
 			out["economy"] = _i(c, extensions["economy"], 1, 1)
 		if extensions.has("pressure"):
@@ -1471,7 +1494,7 @@ static func decode(text: String) -> Variant:
 						st.tank = _f(c, sa[2], 1.0, 60.0)
 					out["stamina"] = st
 		"I":
-			if a.size() != 18 and a.size() != 20 and a.size() != 23 and a.size() != 27 and a.size() != 28 and a.size() != 29:
+			if a.size() != 18 and a.size() != 20 and a.size() != 23 and a.size() != 27 and a.size() != 28 and a.size() != 29 and a.size() != 30:
 				return null
 			var f := _i(c, a[10], 0, 1023)
 			var gait := (f >> 3) & 3
@@ -1509,15 +1532,23 @@ static func decode(text: String) -> Variant:
 				out["peelId"] = _i(c, a[22], -1, MAX_COUNT)
 			if a.size() == 28:
 				out["skipReelAt"] = _f(c, a[27])
-			elif a.size() == 29:
+			elif a.size() >= 29:
 				# ED1: the deal's answer [seq, choice, pick, double, use]; the reel's skip before it (-1 for none).
 				var skip := _f(c, a[27], -1.0)
 				if skip >= 0.0:
 					out["skipReelAt"] = skip
-				var da := _a(c, a[28], 5, 5)
-				if c.bad:
-					return null
-				out["deal"] = [_i(c, da[0], 0, MAX_COUNT), _i(c, da[1], 0, 2), _s(c, da[2]), _i(c, da[3], 0, 2), _i(c, da[4], -1, MAX_COUNT)]
+				# VC1: with the voice after it, 0 in the deal's place is no answer.
+				if not (a.size() == 30 and _is_num(a[28]) and float(a[28]) == 0.0):
+					var da := _a(c, a[28], 5, 5)
+					if c.bad:
+						return null
+					out["deal"] = [_i(c, da[0], 0, MAX_COUNT), _i(c, da[1], 0, 2), _s(c, da[2]), _i(c, da[3], 0, 2), _i(c, da[4], -1, MAX_COUNT)]
+				if a.size() == 30:
+					# VC1: the microphone's level, clamped to 0..15.
+					if not _is_num(a[29]):
+						return null
+					out["voice"] = clampi(int(float(a[29])), 0, VOICE_MAX)
+					out["mic"] = true
 			if a.size() >= 27:
 				# The inventory (see the header).
 				out["invSel"] = _i(c, a[23], -1, Inventory.SLOTS - 1)

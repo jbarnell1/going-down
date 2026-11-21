@@ -229,6 +229,9 @@ class SeekInput:
 	var ticking: bool = false
 	## Their voice was heard (the hook for when the microphone is built).
 	var voice: bool = false
+	## VC1 (sim/run.gd "VC1"): how far their real voice carries to the Minder this tick, metres (0: silent). Within
+	## it the voice is a provocation; from a hide during a count it is a reason there. 0 unless the run's voice is on.
+	var voice_r: float = 0.0
 	## Their lamp or flash, or null.
 	var light: Light = null
 	## F held this tick (with_party: at the party table it fetches).
@@ -846,8 +849,12 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 			_note(noisy, p.id, WHY_BUMP)
 		if inp.light != null and lights(plan, inp.light, m.body):
 			_note(noisy, p.id, WHY_LIGHT)
-		if inp.voice:
+		# VC1: their real voice within its reach of the Minder (where they are this tick, inside a hide its inside).
+		var voiced := inp.voice_r > 0.0 and _touching(m.body, p.body, inp.voice_r)
+		if inp.voice or voiced:
 			_note(noisy, p.id, WHY_VOICE)
+		if voiced and seeking and p.phase == &"inside":
+			_reason(s, p.hide, WHY_VOICE, p.id, t, events)
 		# The party horn is harmless (owner): it makes a sound but is never a provocation. From a hide
 		# during a count it is a reason (section 9), though a seated player is never in one.
 		if inp.horn and seeking and p.phase == &"inside":

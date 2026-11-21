@@ -87,6 +87,19 @@ const RETIRED := ["banked_3", "ride_2"]
 ## "Call any time" and "press the button": never where the call is locked (the floor quota, or the Reactor's power).
 const CALL_ANY_TIME := ["left_1", "left_5"]
 
+## VC2, the hush (net/host.gd HUSH_EVERY): on the host's "crewNoisy", a hushable line (priority 3 or lower, not a
+## hint, not danger, not the Ward's lift, not the slip, resume or tape, not during a count, at least HUSH_INTO_MS
+## into it) stops; a hush caption shows for HUSH_MS in silence (no recording yet: the lines to record are in the VC2
+## ticket); then the same line starts again from its beginning. At most once a line and once every HUSH_GAP_MS.
+const HUSH_INTO_MS := 500
+const HUSH_MS := 1800
+const HUSH_GAP_MS := 60000
+const HUSH_NEVER := ["slip", "resume", "tape"]
+const HUSH_CAPTIONS := ["AHEM. QUIET PLEASE, COLLEAGUES.", "AHEM. THE COMPANY IS SPEAKING.", "AHEM. THANK YOU. AS I WAS SAYING."]
+var hushes := 0
+var _hush_until := -1
+var _last_hush := -1
+
 var voice := "bella"
 var lines := {}          # id -> {moment, plain}
 var by_moment := {}      # moment -> [ids]
@@ -255,6 +268,8 @@ func on_events(events: Array, first_depth := 1, floor_quota: Variant = null) -> 
 			floor_met_ticks[e.get("t", 0.0)] = e
 	for e: Dictionary in events:
 		match str(e.type):
+			"crewNoisy":
+				hush()
 			"doorsOpened":
 				if e.reason == "arrival":
 					_arrival(int(e.depth), first_depth, now)
@@ -620,6 +635,41 @@ func request(moment: String, expire_ms := EXPIRE_MS, caption2 := "", only_id := 
 	if not current.is_empty() and int(priority.get(moment, 1)) > int(current.priority) + 1:
 		_cut()
 
+## VC2: whether the playing line may be hushed now (see HUSH_INTO_MS).
+func hushable() -> bool:
+	var now := _ms()
+	if current.is_empty() or bool(current.get("hint", false)) or bool(current.get("hushed", false)):
+		return false
+	if int(current.get("priority", 1)) > 3 or DANGER.has(str(current.moment)) or HUSH_NEVER.has(str(current.moment)):
+		return false
+	if str(current.moment).begins_with("ward_lift") or _busy("count") or _busy("number"):
+		return false
+	if _last_hush >= 0 and now - _last_hush < HUSH_GAP_MS:
+		return false
+	var started := int(history[-1].get("at", now)) if not history.is_empty() else now
+	return now - started >= HUSH_INTO_MS
+
+## VC2: the crew is noisy (the host's "crewNoisy"): hush the playing line if it may be, and say it again after.
+func hush() -> bool:
+	if not hushable():
+		return false
+	var now := _ms()
+	var again := current.duplicate()
+	again["hushed"] = true
+	again["expires"] = now + HUSH_MS + EXPIRE_LONG_MS
+	_cut()
+	queue.push_front(again)
+	_sort_queue()
+	_hush_until = now + HUSH_MS
+	_last_hush = now
+	subtitle = HUSH_CAPTIONS[hushes % HUSH_CAPTIONS.size()]
+	hushes += 1
+	_log({"what": "hush", "id": again.id, "moment": again.moment, "at": now})
+	return true
+
+func hushing() -> bool:
+	return _ms() < _hush_until
+
 ## Stops the playing line now. A hint stopped this way is not heard.
 func _cut() -> void:
 	if current.is_empty():
@@ -759,6 +809,11 @@ func update() -> void:
 			_sort_queue()
 	else:
 		_held_last = -1
+	# VC2: the hush's silence: nothing starts until it is over; then its caption goes.
+	if now < _hush_until:
+		return
+	if _hush_until >= 0 and current.is_empty() and subtitle in HUSH_CAPTIONS:
+		subtitle = ""
 	if not current.is_empty() or now < _gap_until or queue.is_empty():
 		return
 	# The first line in priority order that may start now: a hint only when nothing else is playing and

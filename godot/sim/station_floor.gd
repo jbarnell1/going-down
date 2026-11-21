@@ -232,6 +232,9 @@ class Crew:
 	var shout: bool = false
 	## PY1 (the run's economy_fix): they own Soft Shoes, so a walk is heard Noises.SOFT_SHOES as far.
 	var soft: bool = false
+	## VC1 (sim/run.gd "VC1"): how far their real voice carries to the four this tick (0: silent). Heard like a walk,
+	## through walls, standing or moving; Soft Shoes never shortens it.
+	var voice_r: float = 0.0
 
 	static func make(id_: String, body_: Move.Body, status_: StringName, gait_: StringName, use_: bool, active_: bool) -> Crew:
 		var c := Crew.new()
@@ -540,6 +543,9 @@ static func senses_player(st: StationFloor, b: Body4, crawl: bool, c: Crew, movi
 		wall_reach *= Noises.SOFT_SHOES
 	var walk_heard := moving and c.gait == &"walk" and d <= walk_reach
 	if walk_heard and d <= wall_reach:
+		return true
+	# VC1: a voice within its reach, through walls.
+	if c.voice_r > 0.0 and d <= c.voice_r:
 		return true
 	# The lit sight only once their flinch at the mains coming back is over.
 	var lit_now := st.power == Power.RESTORED and st.seq_t >= st.restored_at + Settings.f(tuning, &"reactor.flinch", FLINCH) - 1e-9

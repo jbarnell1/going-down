@@ -357,6 +357,9 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	# ED1: the deal's answer, as client/main.gd keeps it (client/deal_view.gd), while there is something to answer.
 	if inp.get("deal") is Array:
 		lf.deal = inp["deal"]
+	# VC1: how loud they are (client/mic.gd), on the floor or off it; the host reads it only with the run's voice on.
+	lf.voice = clampi(int(inp.get("voice", 0)), 0, 15)
+	lf.mic = inp.get("mic") == true
 	lf.stamina = tank if body != null else null
 	# The Playroom: F for a hide (into the one in reach, or out of the one you are in), quick and loud
 	# with sprint held; W held inside is a peek. The body waits for the host's answer before it moves.
