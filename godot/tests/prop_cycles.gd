@@ -12,7 +12,7 @@
 #   - the next morning starts at floor 8; a day that ends before the Reactor leaves the next at floor 1; a game over
 #     goes back to floor 1;
 #   - the snapshot's "cycle" (from cycle 2), the solo picker's floor 8, and two clients over the real server.
-# The server test listens on 127.0.0.1:4681 (run it alone if another check uses that port).
+# The server test listens on 127.0.0.1, on its own port of this process's test block (tests/test_ports.gd).
 # Run alone: npm run godot:test -- prop_cycles
 extends RefCounted
 
@@ -41,7 +41,8 @@ const Upgrades = preload("res://sim/upgrades.gd")
 ## tests/cycles_rig.gd flag_off_digest() on commit 1013e52 (ticks of the Ward run / of the Reactor run, then the hash).
 const BASE_DIGEST := "796/139 ed169093d8e0423d465dec3212529edcd7f8cad2fb9b0cd39f7e5bae81d6248a"
 const SECRET := "cycles-test-passphrase"
-const PORT := 4681
+const TestPorts = preload("res://tests/test_ports.gd")
+static var PORT: int = TestPorts.port(TestPorts.CYCLES)
 
 ## HostRules with the named parameters on (by name, so the test does not count positions).
 static func rules_with(depth: int, on: Array[String]) -> HostRules:
@@ -138,7 +139,7 @@ func test_the_flag_is_last_off_by_default_and_needs_the_late_floors(t: T) -> voi
 		names.append(str(a["name"]))
 	# RN1 added ward_place_ and reactor_place_ after cycles_, in the order agreed for the three workers.
 	# DF1 added pressures_ after reactor_place_.
-	t.eq(names.slice(names.size() - 8), ["late_floors_", "party_table_", "tenant_timer_", "second_orderly_", "cycles_", "ward_place_", "reactor_place_", "pressures_"] as Array[String], "the last eight parameters, in the agreed order")
+	t.eq(names.slice(names.size() - 15), ["late_floors_", "party_table_", "tenant_timer_", "second_orderly_", "cycles_", "ward_place_", "reactor_place_", "pressures_", "ward_call_", "ward_web_", "ward_layout_", "orderly_fix_", "minder_calm_", "down_ring_", "pn_fixes_"] as Array[String], "the last fifteen parameters, in the agreed order (WC1 added ward_call_ and ward_web_, WG1 ward_layout_, OR2 orderly_fix_, MA1 minder_calm_, down_ring_ and pn_fixes_)")
 	var plain := HostRules.new(true, 1, Places.FULL, true)
 	t.check(not plain.cycles and not plain.party_table and not plain.tenant_timer and not plain.second_orderly, "all off by default")
 	t.eq(plain.deck, Places.FULL, "the deck without the flag is the deck given")

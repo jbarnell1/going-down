@@ -22,12 +22,21 @@ const Client = preload("res://net/client.gd")
 const Move = preload("res://sim/move.gd")
 const WardWire = preload("res://net/ward_wire.gd")
 const Ward = preload("res://sim/ward/state.gd")
+## WG1: a block's layout options (sim/ward/layout.gd from_wire), so the test builds the host's Ward.
+const WardLayout = preload("res://sim/ward/layout.gd")
 
 static func _room(native: bool, seed_: String) -> LocalRoom:
 	var room := LocalRoom.new()
 	room.open_local(seed_, "Tester", true)
 	room.late_archive_root = ""
 	room.ward_place = native
+	# WC1: this file is the Ward as a normal level with its own clock (ward.lift_clock, the host's fallback); the lift
+	# called from the station and the web are tests/prop_ward_call.gd's and tests/test_ward_web_view.gd's.
+	room.ward_call = false
+	room.ward_web = false
+	# WG1: this compares the block with ward_place off and on only; today's layout keeps its 13 and 14 fields
+	# (tests/prop_ward_layout.gd checks the generated layout's fifteenth).
+	room.ward_layout = false
 	room.start_playtest(HostRules.WARD_DEPTH)
 	return room
 
@@ -57,7 +66,7 @@ func test_off_is_tick_for_tick_the_same_rules_and_the_old_block(t: T) -> void:
 	var now := 0.0
 	var same := true
 	var first_diff := ""
-	var spawn: Vector3 = Ward.new(int(off.host.world().ward.seed)).lift_door() + Vector3(-0.28, 0.02, -0.55)
+	var spawn: Vector3 = Ward.new(int(off.host.world().ward.seed), WardLayout.from_wire(off.host.world().ward.get("layout"))).lift_door() + Vector3(-0.28, 0.02, -0.55)
 	for i in 160:
 		now += 0.05
 		# The same walk out of the car for both: a step along +z each tick, as a client would send it.
@@ -155,6 +164,12 @@ func test_the_main_scene_plays_the_ward(t: T) -> void:
 	game.start.press(str(HostRules.WARD_DEPTH))
 	var lr := game.link.rc as LocalRoom
 	t.check(lr.rules.ward_place, "the sandbox's floor 6 has the Ward as a normal level")
+	# WC1: the game's rooms call the Ward's lift from its station (net/host_rules.gd ward_call). This test walks the
+	# Ward's own clock (the host's fallback, ward.lift_clock) through the main scene; the called lift is
+	# tests/prop_ward_call.gd's and tools/play_late.mjs's.
+	t.check(lr.rules.ward_call and lr.host._ward_review != null and lr.host._ward_review.called, "the game's room calls the Ward's lift from the station")
+	if lr.host._ward_review != null:
+		lr.host._ward_review.called = false
 	_frames(game, 20)
 	t.check(is_instance_valid(game) and game.is_inside_tree() and game.link != null and game.link.rc == lr, "no scene change: the main scene is still the game")
 	t.check(not game._floor_entry_pending, "and no swap is queued")

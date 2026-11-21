@@ -238,6 +238,13 @@ func room_time() -> float:
 ## WN1: the Hanging Ward as a normal level in the next run (net/host_rules.gd ward_place), with the late floors.
 ## Tests set it false for FL1's scene swap; the command line's `ward_place=0` does the same.
 var ward_place := true
+## WC1: the Ward's lift called from its station and the web (net/host_rules.gd ward_call, ward_web), with the Ward as a
+## normal level. Tests set them false; the command line's `ward_call=0` / `ward_web=0` do the same.
+var ward_call := true
+var ward_web := true
+## WG1: the Ward laid out from the floor seed in the next run (net/host_rules.gd ward_layout), with the full deck's late
+## floors. Tests set it false for today's Ward.
+var ward_layout := true
 
 ## Whether the next run has the late floors (FL1, net/host_rules.gd late_floors): the game's deck only.
 func late_floors_on() -> bool:
@@ -352,7 +359,12 @@ func start_run() -> void:
 		HostRules.annex_drag_on_by_arg() and not _orientation_playtest,
 		playroom_tuned_on(), late_floors_on() and not _orientation_playtest, playroom_tuned_on(), Session.deck == Places.FULL, Session.deck == Places.FULL, late_floors_on() and not _orientation_playtest,
 		late_floors_on() and not _orientation_playtest and not HostRules.ward_place_off_by_arg() and ward_place, reactor_place and late_floors_on() and not _orientation_playtest,
-		late_floors_on() and not _orientation_playtest and HostRules.pressures_by_arg())
+		late_floors_on() and not _orientation_playtest and HostRules.pressures_by_arg(),
+		ward_call and late_floors_on() and not _orientation_playtest and Session.deck == Places.FULL and HostRules.ward_call_by_arg(),
+		ward_web and late_floors_on() and not _orientation_playtest and Session.deck == Places.FULL and HostRules.ward_web_by_arg(),
+		late_floors_on() and not _orientation_playtest and ward_layout,
+		Session.deck == Places.FULL,
+		playroom_tuned_on(), downs_on(), Session.deck == Places.FULL)
 	if _orientation_playtest:
 		rules.enable_orientation()
 	elif orientation_campaign and _playtest_depth < 0:

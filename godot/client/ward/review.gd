@@ -8,6 +8,7 @@ const Instrument = preload("res://sim/instrument.gd")
 const Move = preload("res://sim/move.gd")
 const House = preload("res://sim/ward/house.gd")
 const Ward = preload("res://sim/ward/state.gd")
+const WardLayout = preload("res://sim/ward/layout.gd")
 const View = preload("res://client/ward/view.gd")
 const Main = preload("res://client/main.gd")
 const Stamina = preload("res://sim/stamina.gd")
@@ -209,7 +210,9 @@ func _process(_delta: float) -> void:
 	var world: Dictionary = c.latest
 	var snapshot: Dictionary = world.ward
 	if view == null:
-		var fixture := Ward.new(int(snapshot.seed)).lift_door()
+		# WG1: the block's layout options, so this screen builds the host's Ward ([] today's).
+		var layout_wire: Array = snapshot.get("layout") if snapshot.get("layout") is Array else []
+		var fixture := Ward.new(int(snapshot.seed), WardLayout.from_wire(layout_wire)).lift_door()
 		var spawn := fixture + Vector3(0, 0.06, -1.5)
 		for index: int in world.players.size():
 			var row: Dictionary = world.players[index]
@@ -218,7 +221,7 @@ func _process(_delta: float) -> void:
 				break
 		if frame.placed != null:
 			spawn = Vector3(frame.placed.x, frame.placed.y, frame.placed.z)
-		view = View.new(int(snapshot.seed), spawn)
+		view = View.new(int(snapshot.seed), spawn, layout_wire)
 		view.own_hud = false
 		view.capsules = false
 		picture.add_child(view)

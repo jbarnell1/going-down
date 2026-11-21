@@ -17,8 +17,10 @@ extends Node3D
 
 const View = preload("res://client/ward/view.gd")
 const Ward = preload("res://sim/ward/state.gd")
+const Layout = preload("res://sim/ward/layout.gd")
 const Move = preload("res://sim/move.gd")
 const Protocol = preload("res://net/protocol.gd")
+const WebView = preload("res://client/ward/web_view.gd")
 
 var seed_value := 0
 ## The Ward's world on screen, or null without its files.
@@ -30,12 +32,24 @@ var clock_line := ""
 var clock_warn := false
 var prompt_line := ""
 var _event_index := 0
+## WC1: the caught player's own sequence in the web (client/ward/web_view.gd), and the cut's bar (-1: none).
+var web_view: WebView = null
+var cut_fill := -1.0
+var _block := {}
 
-func setup(seed_: int, media: bool, events_seen: int) -> void:
+## WG1: the layout options the Ward block carried (sim/ward/layout.gd from_wire; [] today's), so this screen builds
+## the host's Ward.
+var layout_wire: Array = []
+
+func setup(seed_: int, media: bool, events_seen: int, layout: Variant = null) -> void:
 	seed_value = seed_
+	layout_wire = layout if layout is Array else []
 	_event_index = events_seen
+	web_view = WebView.new()
+	web_view.name = "WebView"
+	add_child(web_view)
 	if media:
-		view = View.new(seed_, Vector3.ZERO)
+		view = View.new(seed_, Vector3.ZERO, layout_wire)
 		view.own_hud = false
 		view.capsules = false
 		view.own_camera = false
@@ -44,7 +58,7 @@ func setup(seed_: int, media: bool, events_seen: int) -> void:
 		add_child(view)
 		model = view.walk_model
 	else:
-		model = Ward.new(seed_)
+		model = Ward.new(seed_, Layout.from_wire(layout_wire))
 
 ## One step of the main game's own player, through the Ward's footing and walls: the body after moving (dx, dz).
 ## WN3: the wire carries a body to the centimetre (net/protocol.gd q_body), and the host checks what it receives. A
@@ -117,8 +131,10 @@ func sees(from: Vector3, at: Vector3) -> bool:
 
 ## Per frame, from the newest snapshot: the Ward block, host time now, this player's id and feet, the snapshot's
 ## players (for the watch and the gate), the client's events (the Ward's cues).
-func update(ward: Dictionary, host_now: float, my_id: String, feet: Vector3, players: Array, events: Array, names: Dictionary) -> void:
+func update(ward: Dictionary, host_now: float, my_id: String, feet: Vector3, players: Array, events: Array, names: Dictionary,
+		eye := Transform3D.IDENTITY, scene: Object = null) -> void:
 	phase = str(ward.get("phase", ""))
+	_block = ward
 	if view != null:
 		view.player.position = feet
 		view.names = names
@@ -132,7 +148,14 @@ func update(ward: Dictionary, host_now: float, my_id: String, feet: Vector3, pla
 		_sync(ward)
 		clock_line = lift_line(ward, host_now, my_id)
 		prompt_line = ""
-	clock_warn = phase == "boarding" or (phase == "away" and float(ward.get("collectionAt", -1.0)) - host_now <= 60.0)
+	var extras: Dictionary = ward.get("extras", {})
+	if extras.get("called", false) == true:
+		# WC1: no clock: the warning colour only while the doors are open for boarding.
+		clock_warn = phase == "boarding"
+	else:
+		clock_warn = phase == "boarding" or (phase == "away" and float(ward.get("collectionAt", -1.0)) - host_now <= 60.0)
+	cut_fill = view.cut_fill if view != null else -1.0
+	_update_web(extras, host_now, my_id, eye, scene)
 	if phase == "unloading":
 		# Before the lift leaves the crew there is no clock: the line is the prompt.
 		if prompt_line == "":
@@ -149,6 +172,8 @@ func _sync(ward: Dictionary) -> void:
 
 ## The lift's line without the view (the same words as client/ward/view.gd show_host).
 static func lift_line(ward: Dictionary, host_now: float, id: String) -> String:
+	if (ward.get("extras", {}) as Dictionary).get("called", false) == true:
+		return View.called_line(ward.get("lift", {}), str(ward.get("phase", "")), ward, id, "")
 	match str(ward.get("phase", "")):
 		"away":
 			var seconds := maxi(0, ceili(float(ward.collectionAt) - host_now))
@@ -165,6 +190,8 @@ static func lift_line(ward: Dictionary, host_now: float, id: String) -> String:
 
 ## A caught player's watching camera (client/ward/view.gd _watch), or null while not watching.
 func watch_transform() -> Variant:
+	if web_view != null and web_view.camera() is Transform3D:
+		return web_view.camera()
 	if view == null or not view.watching:
 		return null
 	return view.watch_camera.global_transform
@@ -181,3 +208,37 @@ func apply_environment(env: Environment) -> void:
 	env.fog_enabled = own.fog_enabled
 	env.fog_light_color = own.fog_light_color
 	env.fog_density = own.fog_density
+
+## WC1: this player's web sequence (client/ward/web_view.gd) from their row of the host's web, the arm as the host posed
+## it and their hang point; in the grab, the search hand closes just under the camera.
+func _update_web(extras: Dictionary, host_now: float, my_id: String, eye: Transform3D, scene: Object) -> void:
+	if web_view == null:
+		return
+	if scene != null:
+		web_view.scene = scene
+	var row: Variant = (extras.get("web", {}) as Dictionary).get(my_id)
+	var hang := Vector3.INF
+	var points: Array = extras.get("hangPoints", [])
+	if row is Dictionary and int(row.point) < points.size():
+		var p: Array = points[int(row.point)]
+		hang = Vector3(float(p[0]), float(p[1]), float(p[2]))
+	web_view.update(row, host_now, eye, _block.get("armPoints", []), hang)
+	if web_view.phase == "grab" and view != null and view.hand != null:
+		view.hand.visible = true
+		view.hand.global_position = web_view.grab_point()
+
+## WC1: the station's button (feet) when the lift is called from it, else null (client/play_link.gd call_spot).
+func call_spot() -> Variant:
+	var extras: Dictionary = _block.get("extras", {})
+	if extras.get("called", false) == true and extras.get("station") is Array:
+		var p: Array = extras["station"]
+		return Vector3(float(p[0]), float(p[1]), float(p[2]))
+	return null
+
+## WC1: the ids hung or being carried in the web now: their own figures are not drawn (the cocoon, or the bundle the
+## hand carries, is their body).
+func wrapped_ids() -> Dictionary:
+	var out := {}
+	for id: String in ((_block.get("extras", {}) as Dictionary).get("web", {}) as Dictionary):
+		out[id] = true
+	return out

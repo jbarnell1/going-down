@@ -46,8 +46,9 @@ static func _reach(w: Ward, start: Vector3, lo: Vector2) -> Dictionary:
 	return seen
 
 ## Spots reached from the lift with no walk back into the car (within 1 m of where the crew stands in it).
-static func stranded(seed_value: int, lowered: bool, doors_open: bool, raise_after := false) -> Array[Vector3]:
-	var w := Ward.new(seed_value)
+## `options` a generated layout's (WG1, sim/ward/layout.gd options; tests/prop_ward_layout.gd); {} today's Ward.
+static func stranded(seed_value: int, lowered: bool, doors_open: bool, raise_after := false, options: Dictionary = {}) -> Array[Vector3]:
+	var w := Ward.new(seed_value, options)
 	w.bridge_lowered = lowered
 	for i in w.houses.size():
 		w.requested_doors[i] = doors_open

@@ -1,5 +1,6 @@
 // npm run godot:test       -> run the Godot test suite headless (extra args pass through, e.g. -- --full)
-// npm run godot:test -- --quick  -> the quick set (about a minute): every test file, smaller runs
+// npm run godot:test -- --quick  -> the quick set: every test file, smaller runs (one engine, about 30 minutes)
+// npm run godot:test -- --quick --shards=auto -> the same in several engines at once (tools/test_shards.mjs)
 // npm run godot:golden     -> RECORD the goldens (godot/tests/golden/) from the GDScript implementation,
 //                             then print what changed against the goldens that were on disk. Never part
 //                             of the tests: run it on purpose after changing a rule (godot/tests/README.md).
@@ -99,11 +100,10 @@ if (command === 'reference') {
   if (code === 0 && job === undefined) code = run(process.execPath, [tsx, join(here, 'property_counts.ts'), ...rest]);
   process.exit(code);
 } else if (command === 'test') {
-  const full = rest.includes('--full');
-  const seconds = Number(process.env.GODOT_TIMEOUT || (full ? 21600 : 3600));
-  const args = ['--headless', '--path', project, '--script', 'res://tests/run_tests.gd'];
-  if (rest.length > 0) args.push('--', ...rest);
-  process.exit(run(engine(), args, { timeout: seconds * 1000, killSignal: 'SIGKILL' }));
+  // One engine by default; --shards=N|auto (or GD_TEST_SHARDS) runs the files in N engines at once.
+  // --port-base=N, --record-timings: see tools/test_shards.mjs and godot/README.md.
+  const { testCommand } = await import('./test_shards.mjs');
+  process.exitCode = await testCommand({ root, project, engine: engine(), rest });
 } else if (command === 'golden') {
   const full = rest.includes('--full');
   const goldenDir = join(project, 'tests', 'golden');

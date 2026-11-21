@@ -9,15 +9,49 @@ static func encode(s: Dictionary) -> Array:
 		s.house, s.startedAt, RIGGER_PHASES.find(s.encounter), s.armPoints, s.doors, s.boarded, s.leftBehind, s.seed, s.caught]
 	# WN1: a fourteenth field only when the main scene plays the Ward (net/host_rules.gd ward_place); off, the
 	# block is the thirteen it always was.
-	if s.get("native", false) == true:
+	# WG1: a fifteenth field only for a generated layout (net/host_rules.gd ward_layout): its options
+	# (sim/ward/layout.gd to_wire); the fourteenth is then native, true or false.
+	if s.has("layout"):
+		out.append(s.get("native", false) == true)
+		out.append(s.layout)
+	elif s.get("native", false) == true:
 		out.append(true)
+	# WC1: one more field after those, the call's station and the web (sim/ward/state.gd extras), only with either flag
+	# on: the fifteenth, or the sixteenth after WG1's layout.
+	if s.has("extras"):
+		if out.size() == 13:
+			out.append(false)
+		out.append(s["extras"])
 	return out
 
 static func decode(raw: Variant) -> Dictionary:
-	if not raw is Array or (raw.size() != 13 and raw.size() != 14):
+	# WC1 and WG1 merged: 13 fields; 14 with native; 15 with native and either the layout (an Array, WG1) or the
+	# extras (a Dictionary, WC1); 16 with native, the layout, then the extras.
+	if not raw is Array or raw.size() < 13 or raw.size() > 16:
 		return {}
 	var s: Array = raw
 	if s.size() == 14 and not (s[13] is bool and s[13]):
+		return {}
+	var layout_at := -1
+	var extras_at := -1
+	if s.size() >= 15:
+		if not s[13] is bool:
+			return {}
+		if s[14] is Array:
+			layout_at = 14
+			if s.size() == 16:
+				extras_at = 15
+		elif s.size() == 15:
+			extras_at = 14
+		else:
+			return {}
+	if layout_at >= 0:
+		var lay: Variant = s[layout_at]
+		if lay.size() != 3:
+			return {}
+		if not _integer(lay[0], 2, 2) or not _integer(lay[1], 50, 300) or not _integer(lay[2], 0, 500):
+			return {}
+	if extras_at >= 0 and not _extras_ok(s[extras_at]):
 		return {}
 	if not _time(s[0]) or not _time(s[1]) or not _time(s[5]) or not s[2] is bool:
 		return {}
@@ -39,9 +73,55 @@ static func decode(raw: Variant) -> Dictionary:
 	var out := {"collectionAt": float(s[0]), "departAt": float(s[1]), "bridgeLowered": s[2], "phase": LIFT_PHASES[int(s[3])],
 		"house": int(s[4]), "startedAt": float(s[5]), "encounter": RIGGER_PHASES[int(s[6])],
 		"armPoints": s[7], "doors": s[8], "boarded": s[9], "leftBehind": s[10], "seed": int(s[11]), "caught": s[12]}
-	if s.size() == 14:
+	if s.size() >= 14 and s[13] == true:
 		out["native"] = true
+	if layout_at >= 0:
+		out["layout"] = [int(s[layout_at][0]), int(s[layout_at][1]), int(s[layout_at][2])]
+	if extras_at >= 0:
+		out["extras"] = s[extras_at]
 	return out
+
+## WC1: the extras as sim/ward/state.gd extras writes them, and nothing else.
+static func _extras_ok(e: Variant) -> bool:
+	if not e is Dictionary:
+		return false
+	for key: Variant in e:
+		if not key in ["called", "station", "stationHouse", "hangPoints", "web", "cuts"]:
+			return false
+	if e.has("called") and not e["called"] is bool:
+		return false
+	if e.has("station") and not _point(e["station"]):
+		return false
+	if e.has("stationHouse") and not _integer(e["stationHouse"], 0, 7):
+		return false
+	if e.has("hangPoints"):
+		if not e["hangPoints"] is Array or e["hangPoints"].size() > 8:
+			return false
+		for p: Variant in e["hangPoints"]:
+			if not _point(p):
+				return false
+	for key: String in ["web", "cuts"]:
+		if not e.has(key):
+			continue
+		if not e[key] is Dictionary or e[key].size() > 8:
+			return false
+		for id: Variant in e[key]:
+			var row: Variant = e[key][id]
+			if not id is String or id.length() > 64 or not row is Dictionary:
+				return false
+			if key == "web" and not (_integer(row.get("point"), 0, 7) and _time(row.get("caughtAt")) and _time(row.get("hangAt"))):
+				return false
+			if key == "cuts" and not (row.get("id") is String and _time(row.get("from")) and _time(row.get("done"))):
+				return false
+	return true
+
+static func _point(p: Variant) -> bool:
+	if not p is Array or p.size() != 3:
+		return false
+	for axis: Variant in p:
+		if not _numeric(axis) or absf(float(axis)) > 1024.0:
+			return false
+	return true
 
 static func _numeric(value: Variant) -> bool:
 	return (value is int or value is float) and is_finite(float(value))

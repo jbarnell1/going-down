@@ -35,8 +35,10 @@ const RoomClient = preload("res://net/room_client.gd")
 const WsServer = preload("res://net/ws_server.gd")
 const Client = preload("res://net/client.gd")
 const SECRET := "station-test-passphrase"
-## RN1's ports (4720-4739): this file uses 4720 and 4721.
-const PORT := 4720
+const TestPorts = preload("res://tests/test_ports.gd")
+## Two ports of this process's test block (tests/test_ports.gd): the rule on, and the rule off.
+static var PORT: int = TestPorts.port(TestPorts.STATION)
+static var PORT_OFF: int = TestPorts.port(TestPorts.STATION_OFF)
 
 const DT := 0.05
 ## Prints every event of crew_run (a debugging aid; tests leave it off).
@@ -511,7 +513,7 @@ func test_server_room_two_clients(t: T) -> void:
 	for on: bool in [true, false]:
 		var say := func(_l: String) -> void: pass
 		var ws := WsServer.new(SECRET, false, say)
-		var port := PORT + (0 if on else 1)
+		var port := PORT if on else PORT_OFF
 		ws.listen(port, "127.0.0.1")
 		var room := Room.new(ws, say)
 		room.fixed_seed = "station-net"

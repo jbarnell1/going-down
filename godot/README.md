@@ -45,7 +45,8 @@ the npm scripts use `tools/godot/Godot_v4.7.2-stable_win64_console.exe` under th
 
 ```sh
 npm run godot:test                       # everything, default sizes; exit code 0 only if all pass
-npm run godot:test -- --quick            # the quick set, for every commit: about 20 minutes on this PC, every test file
+npm run godot:test -- --quick            # the quick set, every test file, one engine: about 28 minutes on this PC
+npm run godot:test -- --quick --shards=auto  # the same in several engines at once (the commit hook): see below
 npm run godot:test -- ref_rng prop_clinic  # only these test files
 npm run godot:test -- --full             # property tests at the Vitest sizes (slow: see Timing)
 npm run godot:reference                  # regenerate tests/reference/ from src/ (needs Node; installs tsx here)
@@ -91,6 +92,39 @@ bridge runs, and smaller property runs whose counts are compared exactly with Ty
 same seeds (`properties.json` key `quick`, written by `property_counts.ts`). It skips the statistical
 "not vacuous" and fairness shares, which need the default sizes. The default run is unchanged and
 remains the full check.
+
+### Running the tests in parallel
+
+```sh
+npm run godot:test -- --quick --shards=auto   # what the commit hook and hotfix.mjs run: several engines at once
+npm run godot:test -- --quick --shards=4      # exactly four engines
+GD_TEST_SHARDS=1 npm run godot:test -- --quick --shards=auto   # one engine, as before (also: no --shards at all)
+npm run godot:test -- --quick --port-base=4920  # take this run's ports from 4920 on (else a free block is picked)
+npm run godot:test -- --quick --record-timings  # afterwards write each file's seconds to tests/timings.json
+node godot/tools/test_compare.mjs a.log b.log   # the same tests with the same results in two logs? (exit 0 if so)
+```
+
+`--shards=N` (`tools/test_shards.mjs`) runs `test_scripts_load` and `test_export_data` first and alone,
+then splits the other files into N groups of about equal recorded time (`tests/timings.json`) and runs
+them in N engines side by side, then runs the few load-sensitive files (`LOAD_SENSITIVE` in
+`test_shards.mjs`, each with its reason) alone at the end. Every line is printed as it comes with the
+engine's name in front (`[first]`, `[s1]`, `[last]`); the last line is the totals in the usual words,
+`N passed, M failed in S s`. An engine that crashes, is killed, times out or does not print its own
+totals counts as a failure (`FAIL  engine s3 ...`), so a dead engine never makes a run green.
+`--shards=auto` is half the processors, at most 6; `GD_TEST_SHARDS=N` overrides it.
+
+Ports: a test that opens a socket takes its port from `tests/test_ports.gd` (`TestPorts.port(OFFSET)`),
+never a number of its own (`test_test_ports` checks). Each engine gets its own block of 12 ports from
+`--port-base=`; the runner reserves its blocks with lock files in the system temp folder
+(`going-down-test-ports/`) and prints them (`test ports: 5200-5271`), so two runs in two checkouts never
+collide. It searches 5200-5999 unless given `--port-base=` or `GD_TEST_PORT_RANGE=LO-HI`. The engine run
+by hand uses 4910-4921. In a sharded run each engine also has its own empty `user://` folder in the temp
+folder, so no two engines write the same file.
+
+The green stamp: when the commit hook's quick tests pass, it writes the tree it tested (`git write-tree`)
+to `going-down-quick-green` in the git folder (`git rev-parse --git-dir`; never committed). `hotfix.mjs`
+skips its quick tests when HEAD's tree is that tree (`tests: already green for this tree (stamp ...)`)
+and runs them otherwise. The hook writes no stamp when `godot/` has changes that are not being committed.
 
 When a rule changes in `src/sim`, change the GDScript the same way, run `npm run godot:reference`,
 then `npm run godot:test`. The reference files are small enough to commit (about 7 MB; the bridge's is 2 MB).

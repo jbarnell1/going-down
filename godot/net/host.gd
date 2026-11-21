@@ -121,6 +121,7 @@ extends RefCounted
 const ReactorReview := preload("res://net/reactor_review.gd")
 const Ward = preload("res://sim/ward/state.gd")
 const WardSettings = preload("res://sim/settings.gd")
+const WardLayout = preload("res://sim/ward/layout.gd")
 const HostRules = preload("res://net/host_rules.gd")
 
 const Run = preload("res://sim/run.gd")
@@ -318,6 +319,8 @@ var _reactor_plan: Floor.FloorPlan
 var _ward_review: Ward
 var _ward_plan: Floor.FloorPlan
 var _ward_use := {}
+## WC1: the Ward's car as the run's car geometry (Run.ward_car), for its lift called from the station.
+var _ward_car: Run.CarGeometry = null
 ## The late floors (FL1; net/host_rules.gd late_floors): off unless enable_late_floors() is called. On, arriving
 ## at HostRules.WARD_DEPTH starts the Ward exactly as start_ward_review does, and HostRules.REACTOR_DEPTH the
 ## Reactor exactly as start_reactor_review does, seeded from the day's floor seed (state.seed), with the crew placed
@@ -712,6 +715,9 @@ func _on_input(p: HostPlayer, m: Dictionary, ht: float) -> void:
 	var mb: Move.Body = m["body"]
 	if _ward_review != null and _ward_review.phase == &"departed":
 		return
+	# WC1: caught in the web, carried and hung: the rules hold the body (placed where they hang, and where they are cut down).
+	if _ward_review != null and _ward_review.webbed.has(p.id):
+		return
 	if _ward_review != null and not _trusted.has(p.id):
 		var held := Vector3(p.body.x, p.body.y, p.body.z) if p.body != null else Vector3.INF
 		var to := Vector3(mb.x, mb.y, mb.z)
@@ -796,9 +802,17 @@ func _playing(p: HostPlayer) -> bool:
 func start_ward_review(review_seed: int, place_crew := false) -> void:
 	_reactor_review = null
 	_reactor_plan = null
-	_ward_review = Ward.new(review_seed)
+	# WG1: with the run flag ward_layout (net/host_rules.gd) the layout comes from the seed and the host's live
+	# settings in force now (ward.spread, ward.rise); the snapshot carries them so every screen builds the same.
+	var options := WardLayout.options(state.tuning if state != null else null) if ward_layout() else {}
+	_ward_review = Ward.new(review_seed, options)
 	_ward_plan = state.plan
 	_ward_use.clear()
+	# WC1: the lift called from its station, unless the host has the clock back (ward.lift_clock, read now), and the web.
+	_ward_review.called = ward_call_rule() and WardSettings.i(state.tuning, &"ward.lift_clock", 0) == 0
+	_ward_review.web = ward_web_rule()
+	var foyer := _ward_review.lift_door()
+	_ward_car = Run.ward_car(foyer, 1.34, 2.93)
 	if place_crew:
 		for i in state.players.size():
 			var slot := Vector3(-0.28 + float(i % 2) * 0.56, 0.02, -0.55 - 0.59 * float(i / 2))
@@ -819,6 +833,8 @@ func _step_ward_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> Run.R
 		row.aboard = _ward_review.in_lift(row.position)
 		row.active = not _ward_review.caught.has(i.id)
 		row.use = i.use and not _ward_use.get(i.id, false)
+		# WC1: F held (a cut down from the web).
+		row.hold = i.use
 		row.sprint = i.gait == &"sprint"
 		# WD1: a creeping walker is never heard; an instrument recording (ticking) may be (sim/ward/state.gd).
 		row.creep = i.gait == &"creep"
@@ -836,7 +852,13 @@ func _step_ward_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> Run.R
 				any_in = true
 			else:
 				any_out = true
-	if any_out and not any_in:
+	var called := _ward_review.called
+	var leave_now := false
+	if called:
+		# WC1: the Ward's lift is every floor's (sim/run.gd _step_ward_lift); its gate and hearing follow the run's lift.
+		_ward_review.phase = _ward_lift_phase(s.phase)
+		leave_now = any_out and not any_in and s.phase in [&"unloading", &"arriving"]
+	elif any_out and not any_in:
 		# PL2: the lift's return time is the live setting ward.lift_minutes, stamped as it leaves (today's 10).
 		var minutes := WardSettings.i(s.tuning, &"ward.lift_minutes", int(Ward.RETURN_SECONDS / 60.0))
 		ward_events.append_array(_ward_review.leave(next_time, 60.0 * minutes))
@@ -847,12 +869,74 @@ func _step_ward_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> Run.R
 		event["type"] = "ward_" + str(event["kind"])
 		event["t"] = event["at"]
 		cues.append(event)
+	var opts := {}
+	if _ward_review.web:
+		opts["web"] = true
+	if called:
+		opts["car"] = _ward_car
+		opts["call_at"] = _ward_review.station
+		opts["leave"] = leave_now
 	var r := Run.step_ward(s, inputs, crew, _ward_review.posed_limb(next_time), _ward_review.phase,
-		maxf(0.0, _ward_review.depart_at - next_time), _ward_review.boarded, TICK, cues, _ward_review.recorders(crew))
+		maxf(0.0, _ward_review.depart_at - next_time), _ward_review.boarded, TICK, cues, _ward_review.recorders(crew), opts)
+	if called:
+		_after_ward_lift(r, next_time)
 	if ward_native() and _ward_review.phase != &"departed":
 		_step_ward_kit(r, inputs, next_time)
 	_hear_test_noises(r, next_time)
 	return r
+
+## WC1: the Ward's phase for the run's lift: its gate shuts while the car is away or coming, and it is gone once the
+## car has left (riding, or ended).
+static func _ward_lift_phase(run_phase: StringName) -> StringName:
+	match run_phase:
+		&"arriving", &"unloading":
+			return &"unloading"
+		&"away", &"coming":
+			return &"away"
+		&"boarding":
+			return &"boarding"
+	return &"departed"
+
+## WC1, after the Ward's lift tick (sim/run.gd _step_ward_lift): a call is loud at the station (the Rigger hears it as
+## he hears a flare, within rigger.call_heard); the Ward's phase follows the run's; when the car goes, who rode and who
+## was left (as the Ward's clock always said); and anyone standing in the doorway as the doors shut is put just outside.
+func _after_ward_lift(r: Run.RunStep, now: float) -> void:
+	var ward := _ward_review
+	var heard: Array[Dictionary] = []
+	for e in r.events:
+		if e["type"] == "called":
+			heard.append_array(ward.hear_loud(ward.station, now, WardSettings.f(r.state.tuning, &"rigger.call_heard", Ward.CALL_HEARD)))
+	for cue in heard:
+		var event := cue.duplicate()
+		event["type"] = "ward_" + str(event["kind"])
+		event["t"] = event["at"]
+		r.events.append(event)
+	ward.phase = _ward_lift_phase(r.state.phase)
+	for e in r.events:
+		if e["type"] != "doorsClosed":
+			continue
+		var aboard: Array = e["aboard"]
+		var k := 0
+		for rp in r.state.players:
+			var feet := Vector3(rp.body.x, rp.body.y, rp.body.z)
+			if not aboard.has(rp.id) and rp.status == &"ok" and not ward.in_lift(feet) and not ward.clear_of_lift(feet):
+				var out := ward.lift_door() + Vector3(-0.3 + 0.3 * float(k % 3), 0.0, 0.75 + 0.35 * float(k / 3))
+				k += 1
+				if ward.walk_clear(out, out):
+					rp.body = Move.Body.make(out.x, out.z, 0, out.y)
+					_place(rp.id, rp.body, r.state.depth, r.state)
+		if ward.phase == &"departed":
+			ward.boarded.clear()
+			ward.left_behind.clear()
+			for rp in r.state.players:
+				if aboard.has(rp.id):
+					ward.boarded.append(rp.id)
+				else:
+					ward.left_behind.append(rp.id)
+	if ward.phase == &"departed" and ward.boarded.is_empty() and ward.left_behind.is_empty():
+		# A wipe: nobody rode.
+		for rp in r.state.players:
+			ward.left_behind.append(rp.id)
 
 ## RW1, tests only: noises a test asked for (net/local_room.gd test_ward_noise, the solo room's; never the server's),
 ## heard at the next Ward tick exactly as a flare's burst is (_step_ward_kit: Ward.hear_at, its cues as events).
@@ -1106,6 +1190,14 @@ func _step(now: float) -> void:
 			var hp := _find_run_player(st, str(e["playerId"]))
 			if hp != null:
 				_place(hp.id, hp.body, st.depth, st)
+		elif (ty == "ward_hung" or ty == "ward_cut") and _ward_review != null:
+			# WC1: hung at the hang point (feet under the ceiling), or cut down onto the floor below it.
+			var wid := str(e["id"])
+			var wb := Move.Body.make(float(e["x"]), float(e["z"]), 0, float(e["y"]))
+			var wp := _find_run_player(st, wid)
+			if wp != null:
+				wp.body = wb
+			_place(wid, wb, st.depth, st)
 		elif ty == "tableFreed":
 			# The party table freed (T15h): everyone who was seated stands beside it, where the rules put them.
 			for fid: Variant in e["freed"]:
@@ -1679,9 +1771,16 @@ func world(full: bool = false) -> Dictionary:
 		out["lamps"] = lamps
 	if _ward_review != null:
 		out["ward"] = _ward_review.snapshot(s.t)
+		# WG1: a generated layout's options, so every screen builds the same Ward (absent for today's).
+		if not _ward_review.layout_wire().is_empty():
+			out["ward"]["layout"] = _ward_review.layout_wire()
 		# WN1: the main scene plays this Ward as a normal level (net/host_rules.gd ward_place); absent with the flag off.
 		if ward_native():
 			out["ward"]["native"] = true
+		# WC1: the station and the web, only with the call or the web on.
+		var extras := _ward_review.extras()
+		if not extras.is_empty():
+			out["ward"]["extras"] = extras
 	if _reactor_review != null:
 		out["reactor"] = _reactor_review.snapshot()
 	elif s.station != null or not _station_home.is_empty():
@@ -1715,6 +1814,21 @@ static func pressure_block(s: Run.RunState) -> Variant:
 func ward_native() -> bool:
 	var rules: Object = _step_fn.get_object() if _step_fn.is_valid() else null
 	return rules != null and bool(rules.get("ward_place"))
+
+## WC1: whether the rules stepping this run have the Ward's lift called from its station (net/host_rules.gd ward_call)
+## and the web (ward_web). The Ward's own clock comes back with the live setting ward.lift_clock (read as the Ward starts).
+func ward_call_rule() -> bool:
+	var rules: Object = _step_fn.get_object() if _step_fn.is_valid() else null
+	return rules != null and bool(rules.get("ward_call"))
+
+func ward_web_rule() -> bool:
+	var rules: Object = _step_fn.get_object() if _step_fn.is_valid() else null
+	return rules != null and bool(rules.get("ward_web"))
+
+## WG1: whether the rules stepping this run lay the Ward out from the seed (net/host_rules.gd ward_layout).
+func ward_layout() -> bool:
+	var rules: Object = _step_fn.get_object() if _step_fn.is_valid() else null
+	return rules != null and bool(rules.get("ward_layout"))
 
 ## The Tenant clock's block from the rules stepping this run (net/host_rules.gd tenant_block), or null: the plain
 ## run's step, or rules without the clock.

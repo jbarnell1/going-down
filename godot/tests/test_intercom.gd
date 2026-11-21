@@ -140,6 +140,23 @@ func test_the_ward_quota_met_says_nothing_about_calling(t: T) -> void:
 	a.free()
 	b.free()
 
+## WC1: with the Ward's lift called from its station (net/host_rules.gd ward_call; client/main.gd ward_called_on), the
+## call is every floor's again, so its quota line plays there; the clock's five lines are never asked for (the host sends
+## none of their cues: tests/prop_ward_call.gd).
+func test_the_called_ward_quota_met_says_call(t: T) -> void:
+	var a := _make("ward-called")
+	a.late_floor = "ward"
+	a.ward_called = true
+	a.day_lock_on = true
+	a.on_events([{"type": "quotaMet", "t": 20.0, "depth": 6, "earned": 900, "needed": 900}], 1, {"needed": 900, "earned": 900})
+	_wait(a, 10000)
+	t.check(not _heard(a, "quota").is_empty(), "the called Ward says the call is open, as every floor does")
+	t.check(a.history.filter(func(x: Dictionary) -> bool: return str(x.moment).begins_with("ward_lift_")).is_empty(), "and none of the clock's lines")
+	var latest := {"depth": 6, "ward": {"extras": {"called": true}}}
+	t.check(preload("res://client/main.gd").ward_called_on(latest), "the main scene reads the call from the Ward's block")
+	t.check(not preload("res://client/main.gd").ward_called_on({"depth": 6, "ward": {}}), "and not without it")
+	a.free()
+
 func test_danger_lines_outlive_a_lift_line(t: T) -> void:
 	var a := _make("danger")
 	a.place = "clinic"

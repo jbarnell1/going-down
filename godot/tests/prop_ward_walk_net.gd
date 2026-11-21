@@ -23,6 +23,9 @@ const Session = preload("res://net/session.gd")
 const Places = preload("res://sim/places.gd")
 const Move = preload("res://sim/move.gd")
 const Ward = preload("res://sim/ward/state.gd")
+## WG1: a block's layout options (sim/ward/layout.gd from_wire), so the test builds the host's Ward.
+const WardLayout = preload("res://sim/ward/layout.gd")
+const WardRoute = preload("res://client/ward/route.gd")
 const PlayLink = preload("res://client/play_link.gd")
 const WardFloor = preload("res://client/ward/floor.gd")
 const Main = preload("res://client/main.gd")
@@ -142,7 +145,7 @@ class Rig:
 		var block: Dictionary = latest["ward"]
 		if s.floor == null:
 			s.floor = WardFloor.new()
-			s.floor.setup(int(block["seed"]), false, c.events.size())
+			s.floor.setup(int(block["seed"]), false, c.events.size(), block.get("layout"))
 			s.link.walker = s.floor.walk
 		var feet := Vector3(s.link.body.x, s.link.body.y, s.link.body.z) if s.link.body != null else Vector3.ZERO
 		s.floor.update(block, c.clock.host_time(now), s.link.my_id(), feet, latest["players"], c.events, {})
@@ -174,13 +177,13 @@ class Rig:
 			return
 		var block: Dictionary = c.latest.ward
 		if s.view == null:
-			var spawn := Ward.new(int(block.seed)).lift_door() + Vector3(0, 0.06, -1.5)
+			var spawn := Ward.new(int(block.seed), WardLayout.from_wire(block.get("layout"))).lift_door() + Vector3(0, 0.06, -1.5)
 			for index: int in c.latest.players.size():
 				if c.latest.players[index].id == str(c.id):
-					spawn = Ward.new(int(block.seed)).lift_door() + Vector3(-0.28 + float(index % 2) * 0.56, 0.02, -0.55 - 0.59 * float(index / 2))
+					spawn = Ward.new(int(block.seed), WardLayout.from_wire(block.get("layout"))).lift_door() + Vector3(-0.28 + float(index % 2) * 0.56, 0.02, -0.55 - 0.59 * float(index / 2))
 			if fr.placed != null:
 				spawn = Vector3(fr.placed.x, fr.placed.y, fr.placed.z)
-			s.view = View.new(int(block.seed), spawn)
+			s.view = View.new(int(block.seed), spawn, block.get("layout", []) as Array)
 			s.view.player.position = spawn
 		elif fr.placed != null:
 			s.view.player.position = Vector3(fr.placed.x, fr.placed.y, fr.placed.z)
@@ -226,6 +229,18 @@ class Rig:
 ## A walkable route through the Ward's walk model (as tools/play_late.mjs's wardroute): waypoints from `from` to
 ## within `radius` of any of `goals` (xz), or [] when none.
 static func route(model: Ward, from: Vector3, goals: Array[Vector3], radius := 0.4) -> Array[Vector3]:
+	if int(model.layout.get("version", 1)) == 2:
+		# WG1: a generated Ward is larger than this breadth-first search's 60000 spots; the tool's own route
+		# (client/ward/route.gd, guided by the layout's graph), to the nearest goal it finds a way to.
+		var order := goals.duplicate()
+		order.sort_custom(func(a: Vector3, b: Vector3) -> bool: return Vector2(a.x - from.x, a.z - from.z).length() < Vector2(b.x - from.x, b.z - from.z).length())
+		for g: Vector3 in order:
+			var found: Array[Vector3] = []
+			for p: Vector3 in WardRoute.find(model, from, Vector2(g.x, g.z), radius, 40000):
+				found.append(p)
+			if not found.is_empty() and absf(found[-1].y - g.y) < 0.4:
+				return found
+		return [] as Array[Vector3]
 	var stp := 0.3
 	var key := func(v: Vector3) -> Vector3i: return Vector3i(roundi(v.x / stp), roundi(v.z / stp), roundi(v.y / 0.5))
 	var came := {key.call(from): null}
@@ -451,6 +466,10 @@ func test_a_refused_step_brings_the_screen_back_to_the_host(t: T) -> void:
 func test_left_outside_at_departure_sees_themselves_outside(t: T) -> void:
 	_with_deck(func() -> void:
 		var rig := Rig.new("late-5", Transport.LinkConfig.make(0.0))
+		# WC1: the game's rooms now call the Ward's lift from its station (net/host_rules.gd ward_call); this test is the
+		# Ward's own clock departure, which the host keeps as its fallback (ward.lift_clock). The called lift's departure
+		# (every floor's bell, BANK or DOWN, the left behind) is tests/prop_ward_call.gd's.
+		rig.ward().called = false
 		_settle(rig, 1.0)
 		var ann := rig.screens[0]
 		var bob := rig.screens[1]

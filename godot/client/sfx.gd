@@ -58,6 +58,13 @@ const LH := 3.2                 # storey height (m)
 const HUNT_SPEED := 3.7         # sim/entity.gd: the trolley's pitch follows its speed
 const APPROACH_DB := 7.0
 const MUFFLED_DB := 5.0
+## OR2: the trolley's level at gain g (0 to 1, the air's: client/air_sound.gd), on top of BASE_DB. It used to fall only
+## 3 dB from beside you to the edge of hearing, so it sounded as loud across the floor as next to you; now it falls as
+## the gain does (in dB, 10 log g: -3 dB at 10 m, -8 dB at 20 m, -19 dB at 30 m on 34 m), never under TROLLEY_FLOOR_DB.
+const TROLLEY_FLOOR_DB := -30.0
+static func trolley_db(g: float, muffled: bool) -> float:
+	var fall := maxf(TROLLEY_FLOOR_DB, 10.0 * log(maxf(g, 1e-6)) / log(10.0))
+	return APPROACH_DB + fall + (MUFFLED_DB if muffled else 0.0)
 ## Per category: bus, 3D unit size (m, where it plays at its file's level) and max distance (m).
 const CATS := {
 	"entity": ["Entity", 2.0, 18.0],
@@ -658,7 +665,7 @@ func update(delta: float, sq: Dictionary, pose: Variant, tick_hz: float, loudnes
 		# about 7 dB: +APPROACH_DB brings it back to the voice -3 LU right behind you, falling 3 dB to the edge
 		# of hearing; through a wall the low-pass takes more and MUFFLED_DB gives it back. Measured by
 		# tools/mix_check.mjs: never so quiet that it is not heard before it is seen (MIX.md).
-		var db := BASE_DB + APPROACH_DB - 3.0 * (1.0 - g) + (MUFFLED_DB if muffled else 0.0)
+		var db := BASE_DB + trolley_db(g, muffled)
 		var pitch := clampf(0.75 + 0.25 * speed / HUNT_SPEED, 0.8, 1.05)
 		squeak.pitch_scale = pitch
 		roll.pitch_scale = pitch

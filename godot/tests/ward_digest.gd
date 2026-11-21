@@ -7,19 +7,24 @@ extends SceneTree
 
 const Ward = preload("res://sim/ward/state.gd")
 const House = preload("res://sim/ward/house.gd")
+const Layout = preload("res://sim/ward/layout.gd")
 
 func _init() -> void:
 	var seeds: Array[int] = []
+	# WG1: `--layout=2` digests the generated layout (sim/ward/layout.gd options at today's settings) instead.
+	var options := {}
 	for a in OS.get_cmdline_user_args():
 		if a.is_valid_int():
 			seeds.append(int(a))
+		elif a == "--layout=2":
+			options = Layout.options(null)
 	for s in seeds:
-		print(line(s))
+		print(line(s, options))
 	quit()
 
-## The digest line of one seed.
-static func line(seed_value: int) -> String:
-	var parts := parts_of(Ward.new(seed_value))
+## The digest line of one seed (`options`: a generated layout's, WG1; {} today's Ward).
+static func line(seed_value: int, options: Dictionary = {}) -> String:
+	var parts := parts_of(Ward.new(seed_value, options))
 	var all := ""
 	for p: String in parts:
 		all += p

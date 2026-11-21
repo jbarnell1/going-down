@@ -70,14 +70,59 @@ const ROOM_WARN := 0.9
 const PROBE := 1.0
 const ARM_BACK := 2.6
 
+## WC1, the lift called from a far house (net/host_rules.gd ward_call; the owner, 20 Nov: "There should be nothing
+## special mechanically ... except that in the ward the button for the elevator is on the other side"). With `called`
+## on, the host steps the Ward's lift by every floor's rules (sim/run.gd _step_lift, called at `station`) and sets
+## `phase` from the run's each tick; step never runs the clock below. The station is in a house of the seed's choosing,
+## never the lift's house nor the two a crew comes to first walking from it (the owner: "in one of the houses at random,
+## just not one of the first two that the players come across"). A call is a noise there, heard through the same
+## hearing every noise uses (hear_loud), within rigger.call_heard metres of where he is (the owner: "pressing the
+## buttons brings the rigger up to aggro").
+var called := false
+var station_house := -1
+var station := Vector3.INF
+const CALL_HEARD := 80.0
+## WC1, the web (net/host_rules.gd ward_web; the owner, 20 Nov: "Caught player on ward should be hung wrapped in web
+## from the ceiling. A loud cut can free them. But it might bring the rigger."). With `web` on, the hand's catch carries
+## the player for ward.carry_time and hangs them at the nearest free hang point (hang_points: set from the seed, in the
+## entry rooms of HANG_POINTS houses, reached on foot whatever the drawbridge's state). A crewmate standing under them
+## holding F for ward.cut_time cuts them down: a noise there, heard within rigger.cut_heard metres of him.
+var web := false
+var hang_points: Array[Dictionary] = []
+## Caught and hung, by id: {"point": hang point, "caughtAt", "hangAt"} (host time).
+var webbed := {}
+## Cuts going on, by the cutter's id: {"id": who, "from", "done"} (host time).
+var cuts := {}
+const HANG_POINTS := 4
+const CARRY_TIME := 2.0
+const CUT_TIME := 4.0
+const CUT_HEARD := 80.0
+## How near a cutter's feet must be to the spot under the cocoon (flat), and the most their feet are above or below it.
+const CUT_REACH := 1.3
+const CUT_RISE := 1.2
+## How high a hung player's feet are above the floor (their head under the ceiling, House.HEIGHT).
+const HANG_LIFT := 1.0
+
 func _f(id: StringName, fallback: float) -> float:
 	return Settings.f(tuning, id, fallback)
 
-func _init(seed_value: int) -> void:
-	layout = Layout.generate(seed_value)
+## WG1: the layout's options (sim/ward/layout.gd generate): {} today's Ward; the host's run flag `ward_layout` gives
+## Layout.options(tuning), and the snapshot carries them (layout_wire) so every screen builds the same.
+var layout_options := {}
+
+## WG1: the options as the Ward block carries them (sim/ward/layout.gd to_wire; net/host.gd adds them to the block),
+## or [] for today's Ward.
+func layout_wire() -> Array:
+	return [] if layout_options.is_empty() else Layout.to_wire(layout_options)
+
+func _init(seed_value: int, options: Dictionary = {}) -> void:
+	layout_options = options.duplicate()
+	layout = Layout.generate(seed_value, options)
 	for site: Dictionary in layout.houses:
 		houses.append(House.new(site, seed_value))
 	footing = Footing.new(layout, lift_door(), houses)
+	_place_station(seed_value)
+	_place_hang_points(seed_value)
 	# He lives below the lowest house.
 	var low := INF
 	for i in houses.size():
@@ -90,6 +135,177 @@ func _init(seed_value: int) -> void:
 		var path: Array = edge.path
 		_add_switch(path[0], path[1], int(edge.a))
 		_add_switch(path[-1], path[-2], int(edge.b))
+
+## WC1: the houses in the order a crew comes to them walking from the lift: by the length of the shortest way along the
+## fixed walkways (never the drawbridge, which may be up), from house to house through their docks; ties by number.
+## The lift's house is first.
+func walking_order() -> Array[int]:
+	var n := houses.size()
+	var dist: Array[float] = []
+	dist.resize(n)
+	dist.fill(INF)
+	dist[0] = 0.0
+	var done: Array[bool] = []
+	done.resize(n)
+	done.fill(false)
+	for _k in n:
+		var best := -1
+		for i in n:
+			if not done[i] and is_finite(dist[i]) and (best < 0 or dist[i] < dist[best]):
+				best = i
+		if best < 0:
+			break
+		done[best] = true
+		for edge: Dictionary in layout.bridges:
+			if edge.kind == "winch" or (int(edge.a) != best and int(edge.b) != best):
+				continue
+			var other := int(edge.b) if int(edge.a) == best else int(edge.a)
+			var d: float = dist[best] + _walkway_length(edge)
+			if d < dist[other] - 1e-9:
+				dist[other] = d
+	var order: Array[int] = []
+	for i in n:
+		order.append(i)
+	order.sort_custom(func(a: int, b: int) -> bool: return dist[a] < dist[b] - 1e-9 or (absf(dist[a] - dist[b]) <= 1e-9 and a < b))
+	return order
+
+## A walkway's walking length: from house a's middle to its dock, along the path, to house b's middle.
+func _walkway_length(edge: Dictionary) -> float:
+	var path: Array = edge.path
+	var a: Dictionary = layout.houses[int(edge.a)]
+	var b: Dictionary = layout.houses[int(edge.b)]
+	var total := Vector2(float(a.x), float(a.y)).distance_to(Vector2(float(path[0][0]), float(path[0][1])))
+	for k in range(1, path.size()):
+		total += Vector3(path[k - 1][0], path[k - 1][1], path[k - 1][2]).distance_to(Vector3(path[k][0], path[k][1], path[k][2]))
+	total += Vector2(float(b.x), float(b.y)).distance_to(Vector2(float(path[-1][0]), float(path[-1][1])))
+	return total
+
+## WC1: the station's house, from the seed, among the houses after the lift's and the first two a crew comes to; and
+## the button (feet) in its rear room, just through the room's door, where a walker stands clear of every wall.
+func _place_station(seed_value: int) -> void:
+	var order := walking_order()
+	var pool: Array[int] = order.slice(3)
+	if pool.is_empty():
+		pool = order.slice(maxi(0, order.size() - 1))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value * 7919 + 4721
+	station_house = pool[rng.randi_range(0, pool.size() - 1)]
+	var fixture := houses[station_house]
+	var door := fixture.room_doors[1]
+	var rear: Vector3 = fixture.areas[&"rear"]
+	var tries: Array[Vector3] = [Vector3(door.x * 0.35, 0.0, door.z + 0.8), Vector3(door.x, 0.0, door.z + 0.7), Vector3(rear.x, 0.0, rear.z)]
+	for local in tries:
+		var at := fixture.to_world(local)
+		if walk_clear(at, at):
+			station = at
+			return
+	station = fixture.to_world(tries[-1])
+
+## WC1: the web's hang points, from the seed: the middle of the entry room (ground floor, just inside its door, the
+## ceiling HANG_LIFT above a hung player's feet) of HANG_POINTS different houses. Each a dict {"house", "at": the spot
+## under the cocoon (feet), "hang": a hung player's feet}.
+func _place_hang_points(seed_value: int) -> void:
+	var pick: Array[int] = []
+	for i in houses.size():
+		pick.append(i)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value * 104729 + 1291
+	for i in range(pick.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var old := pick[i]
+		pick[i] = pick[j]
+		pick[j] = old
+	for i in pick:
+		if hang_points.size() >= HANG_POINTS:
+			break
+		var fixture := houses[i]
+		var entry: Vector3 = fixture.areas[&"entry"]
+		var spot := fixture.to_world(Vector3(entry.x, 0.0, fixture.room_doors[0].z * 0.5))
+		if not walk_clear(spot, spot):
+			spot = fixture.to_world(Vector3(entry.x, 0.0, entry.z))
+		hang_points.append({"house": i, "at": spot, "hang": spot + Vector3.UP * HANG_LIFT})
+
+## WC1: a loud noise at a point (the call at the station, a cut), heard exactly as a flare's burst is (hear_at) when it
+## is within `reach` metres (flat) of the house he is at, or under the lowest house before he first climbs.
+func hear_loud(at: Vector3, now: float, reach: float) -> Array[Dictionary]:
+	if reach <= 0.0 or _flat(at, lair) > reach:
+		return []
+	return hear_at(at, now)
+
+## WC1: the hang point nearest `at` that nobody hangs from (the nearest of all when every one is in use).
+func hang_point_for(at: Vector3) -> int:
+	var used := {}
+	for row: Dictionary in webbed.values():
+		used[int(row.point)] = true
+	var best := -1
+	var best_free := -1
+	for k in hang_points.size():
+		var d := Vector2(at.x - hang_points[k].at.x, at.z - hang_points[k].at.z).length() + absf(at.y - hang_points[k].at.y)
+		if best < 0 or d < _hang_gap(at, best):
+			best = k
+		if not used.has(k) and (best_free < 0 or d < _hang_gap(at, best_free)):
+			best_free = k
+	return best_free if best_free >= 0 else best
+
+func _hang_gap(at: Vector3, k: int) -> float:
+	var p: Vector3 = hang_points[k].at
+	return Vector2(at.x - p.x, at.z - p.z).length() + absf(at.y - p.y)
+
+## WC1: whether a webbed player is hanging now (their carry over).
+func hung(id: String, now: float) -> bool:
+	return webbed.has(id) and now >= float(webbed[id].hangAt) - 1e-9
+
+## WC1: where a webbed player's body is: their hang point's (feet), or INF for nobody webbed.
+func web_body(id: String) -> Vector3:
+	if not webbed.has(id):
+		return Vector3.INF
+	return hang_points[int(webbed[id].point)].hang
+
+## WC1: cuts, one tick. Each active crewmate on foot holding F (`hold`) under a hung player (CUT_REACH) works at them;
+## held for ward.cut_time they are cut down. Returns the ids of those who were near a cocoon (their F is the cut's).
+func _step_cuts(now: float, crew: Dictionary, events: Array[Dictionary]) -> Dictionary:
+	var at_web := {}
+	if not web:
+		return at_web
+	var length := _f(&"ward.cut_time", CUT_TIME)
+	var ids: Array = crew.keys()
+	ids.sort()
+	var taken := {}
+	for id: String in ids:
+		var member: Dictionary = crew[id]
+		var target := ""
+		if member.get("active", true) and not member.get("aboard", false):
+			var feet: Vector3 = member.position
+			var targets: Array = webbed.keys()
+			targets.sort()
+			for wid: String in targets:
+				var under: Vector3 = hang_points[int(webbed[wid].point)].at
+				if wid != id and hung(wid, now) and Vector2(feet.x - under.x, feet.z - under.z).length() <= CUT_REACH and absf(feet.y - under.y) <= CUT_RISE:
+					at_web[id] = true
+					if member.get("hold", false) and not taken.has(wid):
+						target = wid
+					break
+		var going: Variant = cuts.get(id)
+		if going is Dictionary and str(going.id) != target:
+			cuts.erase(id)
+			events.append({"kind": &"cut_stop", "at": now, "by": id, "id": str(going.id)})
+			going = null
+		if target == "":
+			continue
+		taken[target] = true
+		if going == null:
+			cuts[id] = {"id": target, "from": now, "done": now + length}
+			events.append({"kind": &"cut_start", "at": now, "by": id, "id": target, "done": now + length})
+			continue
+		if now >= float(going.done) - 1e-9:
+			cuts.erase(id)
+			var point := int(webbed[target].point)
+			webbed.erase(target)
+			caught.erase(target)
+			var spot: Vector3 = hang_points[point].at
+			events.append({"kind": &"cut", "at": now, "by": id, "id": target, "point": point, "x": spot.x, "y": spot.y, "z": spot.z})
+			events.append_array(hear_loud(spot, now, _f(&"rigger.cut_heard", CUT_HEARD)))
+	return at_web
 
 func _add_switch(raw: Array, adjacent: Array, house: int) -> void:
 	var point := Vector3(raw[0], raw[2], raw[1])
@@ -137,7 +353,7 @@ func step(now: float, delta: float, boarding_seconds: float, crew: Dictionary) -
 	var events: Array[Dictionary] = []
 	if phase == &"unloading" or phase == &"departed":
 		return events
-	if phase == &"away":
+	if phase == &"away" and not called:
 		if not last_minute_sent and now >= collection_at - 60.0:
 			last_minute_sent = true
 			events.append({"kind": &"last_minute", "at": collection_at - 60.0})
@@ -145,7 +361,7 @@ func step(now: float, delta: float, boarding_seconds: float, crew: Dictionary) -
 			phase = &"boarding"
 			depart_at = collection_at + maxf(boarding_seconds, 0.0)
 			events.append({"kind": &"returned", "at": collection_at})
-	if phase == &"boarding":
+	if phase == &"boarding" and not called:
 		var final_at := maxf(collection_at, depart_at - 10.0)
 		if not final_call_sent and now >= final_at and final_at < depart_at:
 			final_call_sent = true
@@ -160,12 +376,23 @@ func step(now: float, delta: float, boarding_seconds: float, crew: Dictionary) -
 			events.append({"kind": &"closed", "at": depart_at, "boarded": boarded.duplicate(), "leftBehind": left_behind.duplicate()})
 			return events
 
+	# WC1: the web. A carried player hangs at their point once the carry is over; then the cuts.
+	if web:
+		var hanging: Array = webbed.keys()
+		hanging.sort()
+		for wid: String in hanging:
+			var row: Dictionary = webbed[wid]
+			if not bool(row.get("said", false)) and now >= float(row.hangAt) - 1e-9:
+				row["said"] = true
+				var hang: Vector3 = hang_points[int(row.point)].hang
+				events.append({"kind": &"hung", "at": float(row.hangAt), "id": wid, "point": int(row.point), "x": hang.x, "y": hang.y, "z": hang.z})
+	var at_web := _step_cuts(now, crew, events)
 	for id: String in crew:
 		var member: Dictionary = crew[id]
 		if not member.get("active", true) or member.get("aboard", false):
 			continue
 		var at: Vector3 = member.position
-		if member.get("use", false):
+		if member.get("use", false) and not at_web.has(id):
 			_use_near(at, now, crew, events)
 		var was: Vector3 = _last_pos.get(id, at)
 		_last_pos[id] = at
@@ -305,7 +532,16 @@ func _pursue(now: float, delta: float, crew: Dictionary, events: Array[Dictionar
 	for id: String in arm.contacts:
 		if not caught.has(id):
 			caught.append(id)
-			events.append({"kind": &"contact", "at": now, "house": resident_house, "id": id})
+			var contact := {"kind": &"contact", "at": now, "house": resident_house, "id": id}
+			if web and not webbed.has(id):
+				# WC1: carried to the nearest free hang point and hung there after the carry.
+				var where: Vector3 = crew[id].position if crew.has(id) else houses[resident_house].to_world(Vector3.ZERO)
+				var point := hang_point_for(where)
+				var hang_at := now + maxf(0.0, _f(&"ward.carry_time", CARRY_TIME))
+				webbed[id] = {"point": point, "caughtAt": now, "hangAt": hang_at, "said": false}
+				contact["point"] = point
+				contact["hangAt"] = hang_at
+			events.append(contact)
 	if arm.phase == &"idle":
 		encounter = &"idle"
 		resident_house = -1
@@ -334,6 +570,9 @@ func posed_limb(now: float) -> PackedVector3Array:
 		var site: Dictionary = layout.houses[resident_house]
 		var anchor := Vector3(float(site.x) + (1.0 if house.window_side > 0 else -1.0) * (float(site.w) * 0.5 + Layout.GALLERY - 0.13),
 			float(site.z) + 0.17, float(site.y) - float(site.d) * 0.5 - Layout.GALLERY + 0.13)
+		if house.generated():
+			# WG1: a turned house's loaded line is at the corner the view draws it at (House.support_corner).
+			anchor = house.support_corner(site)
 		var shoulder := house.to_world(house.shoulder)
 		var climb := clampf((now - encounter_at - WARN_SECONDS) / CLIMB_SECONDS, 0.0, 1.0)
 		anchor.y = shoulder.y
@@ -389,6 +628,28 @@ func _walk_piece(from: Vector3, motion: Vector2) -> Vector3:
 		if walk_clear(from, candidate):
 			return candidate
 	return from
+
+## WC1: the block's extras, only with the call or the web on (empty with both off, so the block is what it was).
+func extras() -> Dictionary:
+	var out := {}
+	if called:
+		out["called"] = true
+		out["station"] = [snappedf(station.x, 0.01), snappedf(station.y, 0.01), snappedf(station.z, 0.01)]
+		out["stationHouse"] = station_house
+	if web:
+		var points: Array = []
+		for p: Dictionary in hang_points:
+			points.append([snappedf(p.at.x, 0.01), snappedf(p.at.y, 0.01), snappedf(p.at.z, 0.01)])
+		out["hangPoints"] = points
+		var rows := {}
+		for id: String in webbed:
+			rows[id] = {"point": int(webbed[id].point), "caughtAt": float(webbed[id].caughtAt), "hangAt": float(webbed[id].hangAt)}
+		out["web"] = rows
+		var going := {}
+		for id: String in cuts:
+			going[id] = {"id": str(cuts[id].id), "from": float(cuts[id].from), "done": float(cuts[id].done)}
+		out["cuts"] = going
+	return out
 
 func snapshot(clock := 0.0) -> Dictionary:
 	var points: Array = []

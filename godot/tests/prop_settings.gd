@@ -60,6 +60,8 @@ const Prison = preload("res://sim/prison.gd")
 const StationRules = preload("res://sim/station_floor.gd")
 const StationPlan = preload("res://sim/station.gd")
 const WardState = preload("res://sim/ward/state.gd")
+const WardLayout = preload("res://sim/ward/layout.gd")
+const WardLayoutTest = preload("res://tests/prop_ward_layout.gd")
 const WardArm = preload("res://sim/ward/arm.gd")
 const RiggerTest = preload("res://tests/test_ward_rigger.gd")
 const StationCrews = preload("res://tests/prop_station_crews.gd")
@@ -68,6 +70,11 @@ const Lamp = preload("res://sim/lamp.gd")
 const PropO2 = preload("res://tests/prop_second_orderly.gd")
 const PropParty = preload("res://tests/prop_party_table.gd")
 const PropWardNetRig = preload("res://tests/prop_ward_net.gd")
+const PropWardCall = preload("res://tests/prop_ward_call.gd")
+const OrderlyFix = preload("res://sim/orderly_fix.gd")
+const PropFix = preload("res://tests/prop_orderly_fix.gd")
+const PropCalm = preload("res://tests/prop_minder_calm.gd")
+const PropRing = preload("res://tests/prop_down_ring.gd")
 
 const DT := 0.05
 const EPS := 1e-9
@@ -161,6 +168,14 @@ const PROOFS := {
 	&"tenant.minutes": "test_tenant_minutes",
 	# PL2: the Ward's lift.
 	&"ward.lift_minutes": "test_ward_lift_minutes",
+	&"rigger.call_heard": "test_ward_call_and_web_settings",
+	&"rigger.cut_heard": "test_ward_call_and_web_settings",
+	&"ward.lift_clock": "test_ward_call_and_web_settings",
+	&"ward.carry_time": "test_ward_call_and_web_settings",
+	&"ward.cut_time": "test_ward_call_and_web_settings",
+	# WG1: the Ward's layout.
+	&"ward.spread": "test_ward_layout_settings",
+	&"ward.rise": "test_ward_layout_settings",
 	# RN1: the Reactor.
 	&"reactor.power_hold": "test_reactor_numbers",
 	&"reactor.wake_after": "test_reactor_numbers",
@@ -223,6 +238,12 @@ const PROOFS := {
 	&"party.free_time": "test_party_table_numbers",
 	&"party.free_anger": "test_party_table_numbers",
 	&"party.reach": "test_party_table_numbers",
+	# MA1 and DR1, the owner's playtest of 20 Nov.
+	&"minder.after_hunt": "test_minder_calm_numbers",
+	&"minder.anger_hide": "test_minder_calm_numbers",
+	&"minder.anger_open": "test_minder_calm_numbers",
+	&"minder.stalk": "test_minder_calm_numbers",
+	&"down.ring": "test_down_ring_time",
 	# DF1: the pressures of floor 8 and deeper.
 	&"pressure.quota": "test_pressure_settings",
 	&"pressure.quota3": "test_pressure_settings",
@@ -234,6 +255,9 @@ const PROOFS := {
 	&"pressure.near_light3": "test_pressure_settings",
 	&"pressure.tenant_minutes": "test_pressure_settings",
 	&"pressure.tenant_minutes3": "test_pressure_settings",
+	# OR2: the Orderly fix.
+	&"orderly.reach_walk": "test_orderly_fix_settings",
+	&"orderly.dirty_from": "test_orderly_fix_settings",
 }
 
 ## The rows of later pieces wired so far (sim/settings.gd WIRED_IDS), in the registry's order.
@@ -248,7 +272,7 @@ const MORE: Array[StringName] = [
 	&"shop.price.marker", &"shop.price.glow", &"shop.price.flash", &"shop.price.speed", &"shop.price.toy", &"shop.price.salts", &"shop.glow", &"badge.chance", &"badge.depth_chance",
 	&"tenant.minutes",
 	&"reactor.power_hold", &"reactor.wake_after", &"reactor.wake_gap", &"reactor.crawl_time", &"reactor.crawl_speed", &"reactor.run_speed",
-	&"ward.lift_minutes",
+	&"ward.lift_minutes", &"rigger.call_heard", &"rigger.cut_heard", &"ward.lift_clock", &"ward.carry_time", &"ward.cut_time", &"ward.spread", &"ward.rise",
 	&"rigger.steps_reach", &"rigger.click_reach", &"rigger.open_heard", &"rigger.door_heard", &"rigger.move_on", &"rigger.record_inside", &"rigger.room_warn", &"rigger.probe", &"rigger.arm_speed", &"rigger.alone_arm_speed", &"rigger.arm_back",
 	&"reactor.alone_scale", &"reactor.pair_scale", &"reactor.crawl_keep", &"reactor.feed", &"reactor.stand_off",
 	&"reactor.senses", &"reactor.sight_dark", &"reactor.sight_lit", &"reactor.sight_glow", &"reactor.sight_creep", &"reactor.lamp_glow", &"reactor.hear_walk", &"reactor.hear_sprint", &"reactor.hear_socket", &"reactor.search_time", &"reactor.search_speed", &"reactor.noise_draws",
@@ -256,7 +280,9 @@ const MORE: Array[StringName] = [
 	&"orderly2.first_floor", &"flare.throw", &"flare.reach", &"flare.stun", &"flare.blind", &"flare.noise", &"lamp.seconds", &"lamp.range",
 	&"quota.step", &"record.reach", &"record.rate", &"marks.pad",
 	&"party.free_time", &"party.free_anger", &"party.reach",
-	&"pressure.quota", &"pressure.quota3", &"pressure.heals", &"pressure.heals3", &"pressure.watchers", &"pressure.watchers3", &"pressure.near_light", &"pressure.near_light3", &"pressure.tenant_minutes", &"pressure.tenant_minutes3"]
+	&"minder.after_hunt", &"minder.anger_hide", &"minder.anger_open", &"minder.stalk", &"down.ring",
+	&"pressure.quota", &"pressure.quota3", &"pressure.heals", &"pressure.heals3", &"pressure.watchers", &"pressure.watchers3", &"pressure.near_light", &"pressure.near_light3", &"pressure.tenant_minutes", &"pressure.tenant_minutes3",
+	&"orderly.reach_walk", &"orderly.dirty_from"]
 
 ## The game's value of every setting: the constant the game uses, with the rooms' switches on (paced, the long
 ## dark, the car waits: net/host_rules.gd). This table, not the registry, is the test's oracle.
@@ -271,10 +297,18 @@ static func game_values() -> Dictionary:
 		&"reloc.near_max": Relocate.NEAR_MAX,
 		&"orderly.speed": Run.PACED_HUNT_SPEED,
 		&"orderly.catch_dance": 0.0,
+		# OR2: the Orderly fix is on in the game's rooms.
+		&"orderly.reach_walk": float(Entity.REACH_WALK),
+		&"orderly.dirty_from": float(OrderlyFix.DIRTY_FROM),
 		&"orderly2.first_floor": float(Run.SECOND_ORDERLY_DEPTH),
 		&"party.free_time": Seek.FETCH_TIME,
 		&"party.free_anger": Seek.FETCH_ANGER * 100.0,
 		&"party.reach": Seek.FETCH_REACH,
+		&"minder.after_hunt": Seek.CALM_AFTER_HUNT * 100.0,
+		&"minder.anger_hide": Seek.CALM_HIDE_ANGER * 100.0,
+		&"minder.anger_open": Seek.CALM_OPEN_ANGER * 100.0,
+		&"minder.stalk": Seek.CALM_STALK_SPEED,
+		&"down.ring": Run.DOWN_RING_TIME,
 		&"orderly.dark_speed": Run.PACED_BLACKOUT_HUNT_SPEED,
 		# The Temp is Lonely in the game's rooms (sim/lonely.gd): its chase, lit and in the blackout, and alone.
 		&"temp.speed": Lonely.CHASE_SPEED,
@@ -324,6 +358,13 @@ static func game_values() -> Dictionary:
 		&"noise.emote": Noises.EMOTE,
 		&"tenant.minutes": float(HostRules.TENANT_MINUTES),
 		&"ward.lift_minutes": WardState.RETURN_SECONDS / 60.0,
+		&"rigger.call_heard": WardState.CALL_HEARD,
+		&"rigger.cut_heard": WardState.CUT_HEARD,
+		&"ward.lift_clock": 0.0,
+		&"ward.carry_time": WardState.CARRY_TIME,
+		&"ward.cut_time": WardState.CUT_TIME,
+		&"ward.spread": WardLayout.SPREAD,
+		&"ward.rise": WardLayout.RISE,
 		&"reactor.power_hold": StationRules.POWER_HOLD,
 		&"reactor.wake_after": StationRules.WAKE_AFTER,
 		&"reactor.wake_gap": StationRules.WAKE_GAP,
@@ -445,7 +486,11 @@ func test_registry_rows(t: T) -> void:
 	var game := game_values()
 	var rows := Settings.list()
 	# DF1 added the ten pressure rows (floor 8 and deeper, their own group before the player speeds).
-	t.eq(rows.size(), 167, "rows in the registry")
+	# WC1 added five: the Rigger hears the call and the cut; the Ward's clock, carry and cut.
+	# OR2 added the Orderly fix's two (KEEPS COMING AS IT REACHES, STARTS IN THE DIRTY PART).
+	# WG1 added the Ward's two layout rows (THE WARD, in the lift's group).
+	# MA1 added four Minder rows and DR1 the ring's down time (20 Nov).
+	t.eq(rows.size(), 181, "rows in the registry")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -493,9 +538,9 @@ func test_registry_rows(t: T) -> void:
 		if TEN.has(s.id) or MORE.has(s.id) or KEEPER_SIX.has(s.id):
 			want.append(s.id)
 	t.check(wired == want and want.size() == TEN.size() + MORE.size() + KEEPER_SIX.size(), "the wired rows are exactly those of LS1 and the groups wired since, in order: %s" % str(wired))
-	t.eq(by_group.get(&"residents", 0), 97, "residents")
-	t.eq(by_group.get(&"lift", 0), 13, "the lift and the dark (and the Ward's lift, PL2)")
-	t.eq(by_group.get(&"players", 0), 30, "players")
+	t.eq(by_group.get(&"residents", 0), 105, "residents (WC1 added two Rigger rows, OR2 two Orderly rows, MA1 four Minder rows)")
+	t.eq(by_group.get(&"lift", 0), 18, "the lift and the dark (and the Ward's lift, PL2, its call and web, WC1, and its layout, WG1)")
+	t.eq(by_group.get(&"players", 0), 31, "players (DR1 added the ring's down time)")
 	t.eq(by_group.get(&"earning", 0), 10, "earning")
 	t.eq(by_group.get(&"hiding", 0), 3, "hiding")
 	t.eq(by_group.get(&"deeper", 0), 10, "floor 8 and deeper")
@@ -1010,6 +1055,68 @@ static func down_and_out(seed: String, given: Dictionary, retune: Variant = null
 			s = Run.with_tuning(s, retune)
 			retune = null
 	return out
+
+## MA1's four (sim/seek.gd "MA1"): measured on a Playroom seek with the flag on (tests/prop_minder_calm.gd's rig).
+func test_minder_calm_numbers(t: T) -> void:
+	var ids: Array[String] = ["q"]
+	for given: Dictionary in [{}, {&"minder.after_hunt": 30.0, &"minder.anger_hide": 25.0, &"minder.anger_open": 40.0, &"minder.stalk": 1.0}]:
+		var tuning := Settings.make(given)
+		var after := Settings.f(tuning, &"minder.after_hunt", 15.0) / 100.0
+		var hide := Settings.f(tuning, &"minder.anger_hide", 10.0) / 100.0
+		var open := Settings.f(tuning, &"minder.anger_open", 10.0) / 100.0
+		var stalk := Settings.f(tuning, &"minder.stalk", 1.5)
+		var k: PropHunt.Sk = PropCalm.sk(0, ids, true)
+		k.tuning = tuning
+		var gone := PropHunt.gone("q", PropSeek.cell_body(k.s.floor.plan, k.s.floor.plan.landing))
+		k.step([gone] as Array[Seek.SeekInput])
+		var ev0: Array[Dictionary] = []
+		Seek._start_count(k.s, k.s.t, "q", &"sprint", false, ev0)
+		k.run([gone] as Array[Seek.SeekInput], k.s.hide_len + k.s.len + 1.0)
+		t.check(absf(k.s.anger - after) < 1e-6, "%s: a count's end leaves the bar at %.3f (want %.3f)" % [str(given), k.s.anger, after])
+		var f: PropSeek.Fl = PropSeek.floor_of(0)
+		var front := Seek.hide_front_body(f.plan, f.hide_list[0])
+		for what: String in ["hide", "open"]:
+			var k2: PropHunt.Sk = PropCalm.sk(0, ids, true)
+			k2.tuning = tuning
+			var stand := PropSeek.inp("q", front, &"creep")
+			k2.step([stand] as Array[Seek.SeekInput])
+			k2.s.anger = 0.2
+			var press := PropSeek.inp("q", front, &"creep")
+			if what == "hide":
+				press.use = true
+			else:
+				press.opened = true
+			k2.step([press] as Array[Seek.SeekInput])
+			var want := 0.2 + (hide if what == "hide" else open)
+			t.check(absf(k2.s.anger - want) < 1e-6, "%s: %s adds to %.3f (want %.3f)" % [str(given), what, k2.s.anger, want])
+		# The stalk's pace: a player in its view, its fastest step.
+		var k3: PropHunt.Sk = PropCalm.sk(1, ids, true)
+		k3.tuning = tuning
+		k3.s.minder.timer = 0.0
+		k3.run([gone] as Array[Seek.SeekInput], 2.0)
+		var at: Variant = PropCalm.spot_in_view(k3.s, 4.0, 8.0)
+		t.check(at != null, "a spot in its view (vacuous)")
+		if at == null:
+			continue
+		var fastest := 0.0
+		var before: Move.Body = k3.s.minder.body
+		for _n in 10:
+			k3.step([PropSeek.inp("q", at, &"creep")] as Array[Seek.SeekInput])
+			fastest = maxf(fastest, M.hypot2(k3.s.minder.body.x - before.x, k3.s.minder.body.z - before.z) / DT)
+			before = k3.s.minder.body
+		t.check(fastest <= stalk + 1e-3 and fastest >= stalk * 0.8, "%s: it walks to them at %.3f m/s (want %.2f)" % [str(given), fastest, stalk])
+
+## DR1's down.ring: a caught player is down that long with the ring (tests/prop_down_ring.gd's run).
+func test_down_ring_time(t: T) -> void:
+	for d: float in [30.0, 12.0, 60.0]:
+		var hit := false
+		for i in (2 if t.quick else 5):
+			var got: PackedFloat64Array = PropRing.down_and_out("ls-ring-%d" % i, true, {} if d == 30.0 else {&"down.ring": d})
+			if got[0] < 0.0:
+				continue
+			hit = true
+			t.check(absf(got[1] - got[0] - d) < 1e-6 and got[2] >= got[1] - 1e-6 and got[2] < got[1] + DT + 1e-6, "down.ring %.0f: down %.3f s, out at %.3f" % [d, got[1] - got[0], got[2]])
+		t.check(hit, "down.ring %.0f: a seed caught p0 (vacuous)" % d)
 
 func test_down_time(t: T) -> void:
 	var seeds := 2 if t.quick else 6
@@ -1925,6 +2032,63 @@ func test_ward_lift_minutes(t: T) -> void:
 	t.check(same and _ward_cue(plain, "departed") == _ward_cue(tuned, "departed") and not _ward_cue(plain, "departed").is_empty(),
 		"untuned and today's 10 give the same Ward on every frame")
 
+## WG1: ward.spread and ward.rise. The real host with the run flag ward_layout (net/host_rules.gd) builds the Ward as
+## it arrives from the live settings in force then, and its block carries them. Untuned and tuned to today's give the
+## same Ward; more spread moves the houses apart and keeps the shape, styles, facings and walkways (the seed's draws do
+## not change); no rise hangs every house level; the least spread with the most rise keeps every walkway walkable.
+func test_ward_layout_settings(t: T) -> void:
+	for id: StringName in [&"ward.spread", &"ward.rise"]:
+		var row := Settings.row(id)
+		t.check(row != null and row.wired and row.section == &"ward" and row.holds == &"floor", "%s: wired, in THE WARD, held to the next floor" % id)
+	var built := {}
+	var spread := Settings.row(&"ward.spread")
+	var rise := Settings.row(&"ward.rise")
+	var cases := {"untuned": {}, "today": {&"ward.spread": spread.today, &"ward.rise": rise.today},
+		"apart": {&"ward.spread": spread.hi}, "level": {&"ward.rise": 0.0}, "steep": {&"ward.spread": spread.lo, &"ward.rise": rise.hi}}
+	for key: String in cases:
+		var net := PropWardNetRig.Transport.MemoryNetwork.new("wg1", PropWardNetRig.Transport.LinkConfig.make(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+		var rules: HostRules = HostRules.new.callv(WardLayoutTest.rules_args(true, true))
+		var names: Array[String] = ["one"]
+		var host := PropWardNetRig.Host.new(net.connect_peer("host"), "ward-net", names, 0.0, Callable(rules, "prepare"), Callable(rules, "step"), names)
+		if not (cases[key] as Dictionary).is_empty():
+			host.set_tuning(cases[key], 1)
+		host.start_ward_review(8143)
+		var w: WardState = host._ward_review
+		built[key] = w
+		var want := WardLayout.to_wire(WardLayout.options(host.state.tuning))
+		t.eq(host.world().get("ward", {}).get("layout"), want, "%s: the block carries the options in force (%s)" % [key, str(want)])
+	t.eq(JSON.stringify(built.untuned.layout), JSON.stringify(built.today.layout), "untuned and today's: the same Ward")
+	var base: Dictionary = built.untuned.layout
+	for key: String in ["apart", "level", "steep"]:
+		var other: Dictionary = built[key].layout
+		var same: bool = other.houses.size() == base.houses.size()
+		for i in mini(other.houses.size(), base.houses.size()):
+			same = same and other.houses[i].style == base.houses[i].style and other.houses[i].cell == base.houses[i].cell and other.houses[i].facing == base.houses[i].facing
+		# The fixed walkways' tree (the first seven) is the seed's alone; which spare carries the bridge, and the extra
+		# walkways, are the first spares a walk can climb, so they may change with the heights.
+		for i in 7:
+			same = same and other.bridges[i].a == base.bridges[i].a and other.bridges[i].b == base.bridges[i].b and other.bridges[i].kind == "fixed"
+		t.check(same, "%s: the same shape, styles, facings and tree of fixed walkways as untuned" % key)
+	var far := func(l: Dictionary) -> float:
+		var most := 0.0
+		for h: Dictionary in l.houses:
+			most = maxf(most, Vector2(float(h.x), float(h.y) + 3.1).length())
+		return most
+	t.check(float(far.call(built.apart.layout)) > float(far.call(base)) * 1.25, "more spread: the farthest house from the lift's %.1f m (untuned %.1f m)" % [float(far.call(built.apart.layout)), float(far.call(base))])
+	var flat := true
+	for h: Dictionary in built.level.layout.houses:
+		flat = flat and float(h.z) == 0.0
+	var hilly := false
+	for h: Dictionary in base.houses:
+		hilly = hilly or absf(float(h.z)) > 0.3
+	t.check(flat and hilly, "no rise: every house level with the lift's (untuned: some 0.3 m or more off it)")
+	var steepest := 0.0
+	for e: Dictionary in built.steep.layout.bridges:
+		var p: Array = e.path[0]
+		var q: Array = e.path[-1]
+		steepest = maxf(steepest, absf(float(p[2]) - float(q[2])) / Vector2(p[0], p[1]).distance_to(Vector2(q[0], q[1])))
+	t.check(steepest <= WardLayout.SLOPE + 1e-6, "least spread, most rise: the steepest walkway %.3f (at most %.2f)" % [steepest, WardLayout.SLOPE])
+
 func _ward_cue(ex: Variant, kind: String) -> Array:
 	var out := []
 	for row: Variant in ex.host.event_log:
@@ -1932,6 +2096,63 @@ func _ward_cue(ex: Variant, kind: String) -> Array:
 		if e is Dictionary and e.get("type", "") == "ward_" + kind:
 			out.append(e)
 	return out
+
+## WC1: the Ward's call and web (sim/ward/state.gd; tests/prop_ward_call.gd proves the rules). Here each setting at its
+## least, today's and most: rigger.call_heard and rigger.cut_heard decide whether the call at the station and a cut are
+## heard (0 never); ward.cut_time is how long F is held; ward.carry_time how long a catch is carried before it hangs;
+## ward.lift_clock brings the old clock back as the Ward starts.
+func test_ward_call_and_web_settings(t: T) -> void:
+	for id: StringName in [&"rigger.call_heard", &"rigger.cut_heard", &"ward.lift_clock", &"ward.carry_time", &"ward.cut_time"]:
+		var row := Settings.row(id)
+		t.check(row != null and row.wired and (row.section == &"rigger" or row.section == &"ward"), "%s is wired in its section" % id)
+	var base := Run.create_run("wc1", ["a"] as Array[String])
+	# Heard or not: the call (and a cut: the same hear_loud) at the station.
+	for reach: float in [0.0, 40.0, 80.0]:
+		var w := WardState.new(8143)
+		w.called = true
+		w.phase = &"away"
+		w.tuning = Run.with_tuning(base, {&"rigger.call_heard": reach}).tuning
+		var heard := w.hear_loud(w.station, 1.0, Settings.f(w.tuning, &"rigger.call_heard", WardState.CALL_HEARD))
+		var far := Vector2(w.station.x - float(w.layout.houses[w.lair].x), w.station.z - float(w.layout.houses[w.lair].y)).length()
+		t.eq(not heard.is_empty(), reach > 0.0 and far <= reach, "call heard within %.0f m (%.1f m from him)" % [reach, far])
+	# A cut: held for the cut time, heard by the cut_heard reach.
+	for pair: Array in [[1.0, 0.0], [4.0, 80.0], [15.0, 80.0]]:
+		var w := WardState.new(8143)
+		w.web = true
+		w.called = true
+		w.phase = &"away"
+		w.tuning = Run.with_tuning(base, {&"ward.cut_time": pair[0], &"rigger.cut_heard": pair[1]}).tuning
+		w.webbed["b"] = {"point": 0, "caughtAt": 0.0, "hangAt": 0.0, "said": true}
+		w.caught.append("b")
+		var under: Vector3 = w.hang_points[0].at
+		var crew := {"a": {"position": under, "active": true, "hold": true}, "b": {"position": w.hang_points[0].hang, "active": false}}
+		var cut_at := -1.0
+		var loaded := false
+		var now := 1.0
+		while now < 1.0 + float(pair[0]) + 1.0:
+			for e in w.step(now, 0.05, 30.0, crew):
+				if e.kind == &"cut":
+					cut_at = now
+				if e.kind == &"line_loaded":
+					loaded = true
+			now += 0.05
+		t.check(absf(cut_at - 1.0 - float(pair[0])) < 0.06, "ward.cut_time %.0f s: cut %.2f s after the hold began" % [pair[0], cut_at - 1.0])
+		t.eq(loaded, float(pair[1]) > 0.0, "rigger.cut_heard %.0f m: the cut %s heard" % [pair[1], "is" if float(pair[1]) > 0.0 else "is not"])
+	# The clock back, and the carry (the hang time stamped on the catch).
+	for clock: float in [0.0, 1.0]:
+		var rig: Variant = PropWardCall.Rig.new(true, false, {&"ward.lift_clock": clock})
+		t.eq(rig.ward().called, clock == 0.0, "ward.lift_clock %d: called %s" % [int(clock), str(clock == 0.0)])
+	for carry: float in [0.0, 8.0]:
+		var rig: Variant = PropWardCall.Rig.new(false, true, {&"ward.carry_time": carry})
+		rig.tick_for(1.5)
+		var w: WardState = rig.ward()
+		var fixture: Variant = w.houses[int(w.hang_points[1].house)]
+		rig.bodies[1] = fixture.to_world(Vector3(fixture.areas[&"entry"].x, 0.0, fixture.areas[&"entry"].z))
+		rig.tick_for(0.3)
+		rig.host.test_ward_noise(rig.bodies[1])
+		rig.until(func() -> bool: return w.caught.has("two"), 20.0)
+		var contact: Array = rig.events("ward_contact")
+		t.check(not contact.is_empty() and absf(float(contact[0]["hangAt"]) - float(contact[0]["t"]) - carry) < 1e-6, "ward.carry_time %.0f s: hung that long after the catch" % carry)
 
 func test_badge_search_odds(t: T) -> void:
 	var ids: Array[String] = ["crew"]
@@ -2248,6 +2469,45 @@ func test_second_orderly_first_floor(t: T) -> void:
 	var s2: Run.RunState = Run.with_tuning(st2[1], {&"orderly2.first_floor": 9.0})
 	s2 = (st2[0] as HostRules).step(s2, none, DT).state
 	t.check(s2.depth == 2 and s2.orderly2 != null, "a second Orderly already on the floor is not taken away mid-floor")
+
+## OR2, the Orderly fix (tests/prop_orderly_fix.gd). orderly.reach_walk: the Orderly's pace while it reaches for a walker
+## follows the setting in 100 of its hunt speed (0: it stands, as before the fix), read by the run (Run.reach_walk_of);
+## at 0 the walker gets away and at today's they are caught. orderly.dirty_from: over a set of seeds both starts are at
+## least that far in (OrderlyFix.dirt), and at the least some start nearer than today's (so the setting is what moves it).
+func test_orderly_fix_settings(t: T) -> void:
+	var plan := PropFix.Plans.plan("seed-0", 2)
+	var route := PropFix.long_route(plan)
+	var ids: Array[String] = ["p0", "p1"]
+	var base: Run.RunState = PropFix.rules(2, true).prepare(Run.create_run("ls-fix", ids))
+	for v: float in [0.0, 50.0, 100.0]:
+		var s := Run.with_tuning(base, {&"orderly.reach_walk": v})
+		var frac := Run.reach_walk_of(s)
+		t.check(absf(frac - v / 100.0) < 1e-9, "reach_walk %.0f: the run reads %.2f" % [v, frac])
+		# The pace in the reach, on a walker just inside the catch range, then a little further on.
+		var o := PropFix.hunter(plan, route[0])
+		var body := o.body
+		var near := Move.Body.make(body.x + 0.8, body.z, body.level, body.y)
+		var players: Array[Entity.PlayerView] = [PropFix.view("p0", near, 0.0, true)]
+		var r := Entity.step_entity(plan, o, players, DT, PropFix.HUNT, true, 1, null, false, frac)
+		t.check(r.state.mode == &"windUp", "reach_walk %.0f: the reach starts" % v)
+		var on := Move.Body.make(body.x + 1.4, body.z, body.level, body.y)
+		var players2: Array[Entity.PlayerView] = [PropFix.view("p0", on, 0.0, true)]
+		var r2 := Entity.step_entity(plan, r.state, players2, DT, PropFix.HUNT, true, 1, null, false, frac)
+		t.check(absf(r2.state.speed - PropFix.HUNT * v / 100.0) < 0.05, "reach_walk %.0f: it comes at %.2f m/s in its reach (want %.2f)" % [v, r2.state.speed, PropFix.HUNT * v / 100.0])
+	var walked_off := PropFix.chase(plan, route, Stamina.WALK_SPEED, PropFix.CATCH_WITHIN, Run.reach_walk_of(Run.with_tuning(base, {&"orderly.reach_walk": 0.0})), null)
+	var walked_on := PropFix.chase(plan, route, Stamina.WALK_SPEED, PropFix.CATCH_WITHIN, Run.reach_walk_of(base), null)
+	t.check(float(walked_off["caught"]) < 0.0 and float(walked_on["caught"]) >= 0.0, "a walker gets away at 0 and is caught at today's (%s, %s)" % [str(walked_off), str(walked_on)])
+	for v: float in [30.0, 60.0, 90.0]:
+		var least := 2.0
+		for i in (3 if t.quick else 8):
+			var s0 := Run.with_tuning(Run.create_run("ls-dirt-%d" % i, ids), {&"orderly.dirty_from": v})
+			var s: Run.RunState = PropFix.rules(2, true).prepare(s0)
+			for o: Entity.OrderlyState in [s.orderly, s.orderly2]:
+				if o != null:
+					least = minf(least, OrderlyFix.dirt(s.plan, Move.cell_of(s.plan, o.body)))
+		t.check(least >= v / 100.0 - EPS, "dirty_from %.0f: every start at least that far in (least %.2f)" % [v, least])
+		if v == 30.0:
+			t.check(least < 0.6, "dirty_from 30: some start is nearer than today's 60 (least %.2f)" % least)
 
 ## The flare (B3): its five numbers, each measured on a real burst.
 static func _flare_burst(given: Dictionary, teammate: bool) -> Array:

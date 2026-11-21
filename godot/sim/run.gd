@@ -224,6 +224,14 @@
 # limits: the call's pull ends for both once either reaches the landing; one resident watches the hides each tick
 # (_hide_watcher).
 #
+# The Orderly fix (OR2; the owner's 20 Nov playtest), on only for a run made with it (with_orderly_fix():
+# net/host_rules.gd orderly_fix turns it on for the game's rooms; tests and every stored result leave it off, and then
+# nothing below happens). With it on: a Stillness Orderly keeps walking in its reach (orderly.reach_walk in 100 of
+# its hunt speed), so a walker is caught and a sprinter still gets away; a second Orderly chases another player than
+# the first does when there is one, and its own way round when not (sim/entity.gd "The Orderly fix"); and on a
+# Clinic floor the waiting Orderlies start in the dirty part, from the seed, apart (sim/orderly_fix.gd; _fix_starts,
+# after _spawn_second, as each floor is made).
+#
 # Down first, then out (North Star B6; loop/NIGHT-PLAN.md A5, T8a), on only for a run made with it
 # (create_run's `downs`, with_downs(): net/host_rules.gd turns it on for the game's rooms; tests and every
 # stored result leave it off, and then nothing below happens and a catch is "caught" as before). With it on:
@@ -425,6 +433,7 @@ const Shop = preload("res://sim/shop.gd")
 const Flare = preload("res://sim/flare.gd")
 const Lamp = preload("res://sim/lamp.gd")
 const GardenCones = preload("res://sim/garden_cones.gd")
+const OrderlyFix = preload("res://sim/orderly_fix.gd")
 
 # ---------------------------------------------------------------------------------------------
 # Tuning.
@@ -548,6 +557,8 @@ const CLOSE_DISTANCE := 1.0
 ## that loses its downed player to a heal stays quiet (seconds); the health a heal gives back on the
 ## Playroom; the body radius a crawl moves with (net/session.gd PLAYER_RADIUS).
 const DOWN_TIME := 10.0
+## DR1 (with_down_ring), the owner on 20 Nov: "Probably need 30 seconds."
+const DOWN_RING_TIME := 30.0
 const HEAL_TIME := 3.0
 const HEAL_REACH := 1.5
 const CRAWL_SPEED := 0.6
@@ -1146,6 +1157,17 @@ class RunState:
 	## The party table from the owner's words of 19 Nov (T15h, with_party_table; sim/seek.gd "Party table"). Off:
 	## the Playroom's rules are exactly as every stored result has them.
 	var party_table: bool = false
+	## MA1, the owner's playtest of 20 Nov (with_minder_calm; sim/seek.gd "MA1"): the anger bar never cools, hiding and
+	## opening things add to it, and between counts the Minder walks to a player it sees. Off: as every stored result.
+	var minder_calm: bool = false
+	## DR1, the owner's playtest of 20 Nov (with_down_ring): a downed player has DOWN_RING_TIME (the live setting
+	## down.ring) before they are out, not DOWN_TIME (down.time). Off: as every stored result.
+	var down_ring: bool = false
+	## PN2 and PN3, the owner's playtest of 20 Nov (with_pn_fixes). PN2: G (the inventory's drop) with nothing in the
+	## hand drops the last tape picked up, where the player stands, instead of refusing "empty". PN3: on the Annex with
+	## Lonely the floor's desks, cabinets and tables can be hidden in (sim/hiding.gd), and the Temp never goes for a
+	## player sitting in one. Off: as every stored result.
+	var pn_fixes: bool = false
 	## Solid furniture (FD7, with_furniture; sim/furniture.gd): players slide along the floor's pieces. Off:
 	## nothing blocks but walls, as every stored result has it.
 	var furniture: bool = false
@@ -1230,9 +1252,12 @@ class RunState:
 	var pressure_heals_key := ""
 	var pressure_heals_used := 0
 	var pressure_dressing: Dictionary = {}
+	## OR2, the Orderly fix (with_orderly_fix; see "The Orderly fix" in the header). Off: nothing below reads it.
+	var orderly_fix := false
 
 	func copy() -> RunState:
 		var s := RunState.new()
+		s.orderly_fix = orderly_fix
 		s.pressures = pressures
 		s.pressure_heals_key = pressure_heals_key
 		s.pressure_heals_used = pressure_heals_used
@@ -1253,6 +1278,9 @@ class RunState:
 		s.playroom_tuned = playroom_tuned
 		s.minder_hunt = minder_hunt
 		s.party_table = party_table
+		s.minder_calm = minder_calm
+		s.down_ring = down_ring
+		s.pn_fixes = pn_fixes
 		s.furniture = furniture
 		s.furniture_layout = furniture_layout
 		s.resident_navigation = resident_navigation
@@ -1673,6 +1701,35 @@ static func with_minder_hunt(s0: RunState) -> RunState:
 		s.seek = Seek.with_hunt(s.seek as Seek.SeekState)
 	return s
 
+## Turns MA1 on (sim/seek.gd "MA1"): every Playroom from now on (and one already reached) never cools its anger,
+## angers a little at a hide or an opened drawer, and walks to a player it sees between counts.
+static func with_minder_calm(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.minder_calm = true
+	if s.seek != null:
+		s.seek = Seek.with_calm(s.seek as Seek.SeekState)
+	return s
+
+## Turns DR1 on: from now on a downed player has down_time(s) (DOWN_RING_TIME, the live setting down.ring) before
+## they are out. A player already down keeps the time stamped when they went down.
+static func with_down_ring(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.down_ring = true
+	return s
+
+## Turns PN2 and PN3 on (see pn_fixes): a carried tape can be put down, and the Annex's hides work under Lonely.
+static func with_pn_fixes(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.pn_fixes = true
+	return s
+
+## The seconds a player going down now has before they are out: DOWN_TIME (down.time), or with DR1 DOWN_RING_TIME
+## (down.ring). The Orderly's bend lasts as long, since the run lets it go only at the heal or the out.
+static func down_time(s: RunState) -> float:
+	if s.down_ring:
+		return Settings.f(s.tuning, &"down.ring", DOWN_RING_TIME)
+	return Settings.f(s.tuning, &"down.time", DOWN_TIME)
+
 ## Turns the party table on (T15h, see the header; sim/seek.gd "Party table"): every Playroom from now on (and one
 ## already reached) lets a crewmate free the table, never cools the anger by itself, and leaves out whoever is
 ## still seated when the car leaves.
@@ -2032,6 +2089,44 @@ static func nearest_orderly(s: RunState, body: Move.Body) -> Entity.OrderlyState
 	var d1 := M.hypot2(body.x - s.orderly.body.x, body.z - s.orderly.body.z) + (1000.0 if s.orderly.body.level != body.level else 0.0)
 	var d2 := M.hypot2(body.x - s.orderly2.body.x, body.z - s.orderly2.body.z) + (1000.0 if s.orderly2.body.level != body.level else 0.0)
 	return s.orderly2 if d2 < d1 else s.orderly
+
+## The run with the Orderly fix on (OR2; see "The Orderly fix" in the header). The floor the run is on has its
+## Orderlies' starts now, if it is a Clinic floor whose Orderlies still wait.
+static func with_orderly_fix(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.orderly_fix = true
+	_fix_starts(s)
+	return s
+
+## The Orderly fix: the part of its hunt speed a Stillness Orderly keeps walking at in its reach (live setting
+## orderly.reach_walk, in 100); 0 with the fix off (it stands to reach, as always).
+static func reach_walk_of(s: RunState) -> float:
+	return float(Settings.i(s.tuning, &"orderly.reach_walk", Entity.REACH_WALK)) / 100.0 if s.orderly_fix else 0.0
+
+## The Orderly fix: this floor's waiting Orderlies (one or two) moved to their starts in the dirty part
+## (sim/orderly_fix.gd starts), facing the landing, settled clear of furniture. Updates `s`. Nothing with it off,
+## off the Clinic, at home or in the practice floor, or once an Orderly has woken.
+static func _fix_starts(s: RunState) -> void:
+	if not s.orderly_fix or s.orientation or s.plan == null or s.plan.place != Places.CLINIC or at_home(s) or s.orderly == null:
+		return
+	if s.orderly.mode != &"waiting" or (s.orderly2 != null and s.orderly2.mode != &"waiting"):
+		return
+	var r := s.car.rect
+	var n := 2 if s.orderly2 != null else 1
+	var cells := OrderlyFix.starts(s.plan, s.seed, s.depth, PackedFloat64Array([r.x0, r.z0, r.x1, r.z1]), s.car.level, n,
+		float(Settings.i(s.tuning, &"orderly.dirty_from", OrderlyFix.DIRTY_FROM)))
+	if cells.size() < n:
+		return
+	var cs := float(s.plan.cell_size)
+	for i in n:
+		var o := (s.orderly if i == 0 else s.orderly2).copy()
+		o.body = Move.body_at_cell(s.plan, cells[i])
+		o.resident_walk = null
+		o.yaw = Entity.yaw_toward((s.plan.landing.x + 0.5) * cs - o.body.x, (s.plan.landing.y + 0.5) * cs - o.body.z)
+		if i == 0:
+			s.orderly = _settled_resident(s, o)
+		else:
+			s.orderly2 = _settled_resident(s, o)
 
 ## The run with Lonely on (sim/lonely.gd; docs/floors/traits-and-hiding.md section 2): see the header.
 static func with_lonely(s0: RunState) -> RunState:
@@ -2444,6 +2539,8 @@ static func _sync_seek(s: RunState) -> void:
 		s.seek = Seek.with_hunt(s.seek as Seek.SeekState)
 	if s.party_table:
 		s.seek = Seek.with_party(s.seek as Seek.SeekState)
+	if s.minder_calm:
+		s.seek = Seek.with_calm(s.seek as Seek.SeekState)
 	s.seek_drops = []
 	s.seek_call_at = -1.0
 
@@ -2487,6 +2584,11 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 		si.light = i.light
 		# The party table: F held at it frees whoever is seated (read only with the party table on).
 		si.hold = i.use
+		# MA1: opening something this tick (the findables' search, stepped before the Minder; read only with it on).
+		if ss.calm:
+			for e in events:
+				if e["type"] == "searchStart" and str(e["playerId"]) == p.id:
+					si.opened = true
 		var carried := lamp_of(s, p.id) if s.lamp else {}
 		if bool(carried.get("on", false)):
 			si.light = Lamp.beam(s.tuning, p.body, i.eye, i.yaw, i.pitch)
@@ -3309,7 +3411,7 @@ static func _go_down(s: RunState, players: Array[RunPlayer], k: int, t: float, b
 	var d := Downed.new()
 	d.id = np.id
 	d.at = t
-	d.until = t + Settings.f(s.tuning, &"down.time", DOWN_TIME)
+	d.until = t + down_time(s)
 	d.by = by
 	if s.annex_drag and by == &"catch" and s.plan.place == &"annex" and s.orderly.mode == &"bending" \
 		and str(s.orderly.bend_target) == np.id:
@@ -3718,16 +3820,19 @@ static func _step_stillness(s: RunState, prev: RunState, players: Array[RunPlaye
 	if s.two_watchers and s.pressures:
 		need = pressure_watch_need(s, stillness_up_count(players, input_of), need)
 	var resident_solids := _resident_solids(s)
+	# The Orderly fix (OR2): it keeps walking in its reach, and the second chases another player its own way.
+	var reach := reach_walk_of(s)
+	var other: Entity.OrderlyState = s.orderly2 if s.orderly_fix and second else null
 	# Paced (see the header): both Stillness residents hunt at HUNT_SPEED, so both at the paced speeds.
 	# Live settings: the host's speeds for this body (_tuned_hunt), else these.
 	if flare_stunned(s, t):
 		er = Entity.step_entity(s.plan, before, views, dt, 0.0, false, need, resident_solids, true)
 	elif blacked_out(s):
-		er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, true, PACED_BLACKOUT_HUNT_SPEED if s.paced else BLACKOUT_HUNT_SPEED), false, need, resident_solids)
+		er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, true, PACED_BLACKOUT_HUNT_SPEED if s.paced else BLACKOUT_HUNT_SPEED), false, need, resident_solids, false, reach, other)
 	elif s.paced:
-		er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, false, PACED_HUNT_SPEED), true, need, resident_solids)
+		er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, false, PACED_HUNT_SPEED), true, need, resident_solids, false, reach, other)
 	else:
-		er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, false, -1.0), true, need, resident_solids)
+		er = Entity.step_entity(s.plan, before, views, dt, _tuned_hunt(s, false, -1.0), true, need, resident_solids, false, reach, other)
 	var next := er.state
 	# Belt and braces: it can never end a tick in (or overlapping) the car.
 	if rect_distance(car.rect, next.body.x, next.body.z) < Entity.ORDERLY_RADIUS - 1e-3 and next.body.level == car.level:
@@ -3782,58 +3887,16 @@ static func _second_event(e: Dictionary) -> Dictionary:
 	out["n"] = 2
 	return out
 
-static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) -> RunStep:
-	var res := RunStep.new()
-	if prev.phase == &"ended":
-		var ended := prev.copy()
-		ended.t = prev.t + dt
-		res.state = ended
-		return res
-	var t := prev.t + dt
-	var s := prev.copy()
-	s.t = t
-	res.state = s
-	var events := res.events
-	var car := s.car
-
-	# Each player's input this tick; players without one stay where they were, inactive.
-	var input_of := {}
-	for inp in inputs:
-		input_of[inp.id] = inp
-
-	var players: Array[RunPlayer] = []
-	for p in prev.players:
-		var np := p.copy()
-		var given: PlayerInput = input_of.get(p.id)
-		if annex_dragging(prev, p.id):
-			np.body = p.body
-		elif given != null and p.status == &"down" and prev.down.has(p.id):
-			# Down: they crawl, no faster than CRAWL_SPEED toward where they say they are.
-			np.body = _crawl(prev, p.body, given.body, dt)
-		else:
-			np.body = given.body if given != null else p.body
-		np.aboard = in_car(car, np.body)
-		players.append(np)
-	_sync_seek(s)
-	_sync_hiding(s)
-	_sync_annex(s)
-	_sync_garden(s)
-	_sync_station(s)
-	# Who called the car on the Playroom this tick (it starts the last count).
+## The lift, one tick: step_run's section 1 (the phases, the call and its indicator, boarding), its votes and its bell,
+## moved here unchanged (WC1) so the Hanging Ward with its call can step the very same lift (step_ward). `ward` is empty
+## on every ordinary floor. On the Ward with its call (net/host_rules.gd ward_call) it is {"car": the Ward's car,
+## "call_at": the station's button (feet)}: the call is pressed at the station, not at the doors (_at_call); no
+## resident of the floor plan wakes (the Ward's Rigger hears the call through the Ward's own hearing: net/host.gd); the
+## Playroom's last count is not the Ward's; and whoever rides is seated in the floor plan's car (_seat_ward_riders).
+## Returns [the Playroom's caller this tick ("" for none), whether the car banked (step_run's tick ends there)].
+static func _step_lift(s: RunState, players: Array[RunPlayer], input_of: Dictionary, car: CarGeometry, t: float, dt: float,
+		events: Array[Dictionary], ward: Dictionary = {}) -> Array:
 	var seek_call_by := ""
-	# The floor quota for the crew as it is: set while the car arrives (so a player admitted at the stop
-	# counts), then it can only shrink (a player who leaves the game), never grow.
-	if s.quota and not s.orientation and not at_home(s):
-		# Live settings: the host's quota.step as it was in force when the quota was set (quota_tuning), so a change
-		# never moves a quota already on screen; the next floor's takes the new one.
-		var setting := s.phase == &"arriving" or s.floor_needed <= 0
-		if setting:
-			s.quota_tuning = s.tuning
-		# The Reactor (RN1): nothing here gives a reading, so it asks no quota; its lift waits for the power instead.
-		var want := 0 if s.station != null else floor_quota(s.depth, quota_crew(players), s.quota_tuning, pressure_quota_mult(s, s.quota_tuning))
-		s.floor_needed = want if setting else mini(s.floor_needed, want)
-
-	# ---- 1. Run rules.
 	match s.phase:
 		&"arriving":
 			s.timer -= dt
@@ -3871,8 +3934,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		&"away":
 			var caller: RunPlayer = null
 			for p in players:
-				if _is_active(p, input_of) and not p.aboard and _inp(p, input_of).call \
-					and M.hypot2(p.body.x - car.door_x, p.body.z - car.door_z) <= CALL_REACH + EPS and p.body.level == car.level:
+				if _is_active(p, input_of) and not p.aboard and _inp(p, input_of).call and _at_call(p.body, car, ward):
 					caller = p
 					break
 			if caller != null and not quota_reached(s):
@@ -3883,7 +3945,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				# The Reactor (RN1): the lift needs power to return.
 				events.append({"type": "callRefused", "t": t, "playerId": caller.id, "earned": 0, "needed": 0, "reason": "power"})
 				caller = null
-			if caller != null and s.seek != null and not (s.seek as Seek.SeekState).done:
+			if caller != null and ward.is_empty() and s.seek != null and not (s.seek as Seek.SeekState).done:
 				# The Playroom: the call starts the last count; the car comes when it ends (see the header).
 				s.calls += 1
 				s.call = null
@@ -3915,14 +3977,14 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				s.phase = &"coming"
 				s.lure = not s.orientation
 				# The call is loud. If the Orderly was still standing where the floor began, it wakes now.
-				if not s.orientation and s.orderly.mode == &"waiting" and (resident_of(s).stillness or resident_of(s).trait_name == &"lonely"):
+				if not s.orientation and ward.is_empty() and s.orderly.mode == &"waiting" and (resident_of(s).stillness or resident_of(s).trait_name == &"lonely"):
 					var o := s.orderly.copy()
 					o.mode = &"hunting"
 					o.replan_in = 0.0
 					s.orderly = o
 					events.append({"type": "startedHunting", "t": t})
 				# A second Orderly (T9b) hears the call the same way.
-				if not s.orientation and s.orderly2 != null and s.orderly2.mode == &"waiting":
+				if not s.orientation and ward.is_empty() and s.orderly2 != null and s.orderly2.mode == &"waiting":
 					var o2 := s.orderly2.copy()
 					o2.mode = &"hunting"
 					o2.replan_in = 0.0
@@ -4057,6 +4119,8 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		else:
 			departing = StringName(outcome)
 
+	if departing != &"" and not ward.is_empty():
+		_seat_ward_riders(s, players, input_of)
 	if departing == &"bank":
 		var aboard_ids: Array[String] = []
 		for p in _active_aboard(players, input_of):
@@ -4075,13 +4139,97 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 				# DF1: tomorrow starts the next cycle, so its quota is that cycle's.
 				if s.pressures and s.day_result is Dictionary and s.day_next != null:
 					(s.day_result as Dictionary)["next_quota"] = Day.day_quota(s.day_next, _tomorrow_floor_quota(s, ""))
-		return res
+		return [seek_call_by, true]
 
 	if departing == &"ride":
 		var aboard_ids := {}
 		for p in _active_aboard(players, input_of):
 			aboard_ids[p.id] = true
 		_ride_down(s, players, aboard_ids, t, events)
+	return [seek_call_by, false]
+
+## Whether a body is at the call button: the car's doors, or on the Ward with its call the station (_step_lift).
+static func _at_call(b: Move.Body, car: CarGeometry, ward: Dictionary) -> bool:
+	var at: Variant = ward.get("call_at")
+	if at is Vector3:
+		var v: Vector3 = at
+		return M.hypot2(b.x - v.x, b.z - v.z) <= CALL_REACH + EPS and absf(b.y - v.y) <= WARD_CALL_RISE
+	return M.hypot2(b.x - car.door_x, b.z - car.door_z) <= CALL_REACH + EPS and b.level == car.level
+
+## WC1: the most a caller's feet may be above or below the Ward's station (a storey is 3.05 m).
+const WARD_CALL_RISE := 1.2
+
+## WC1: the Ward's riders, as the car leaves (_step_lift): seated in the floor plan's car, where the ride and the next
+## floor (or the prison) put them, as step_ward's own departure always did.
+static func _seat_ward_riders(s: RunState, players: Array[RunPlayer], input_of: Dictionary) -> void:
+	var slot := 0
+	for i in players.size():
+		var p := players[i]
+		if not (_is_active(p, input_of) and p.aboard):
+			continue
+		var np := p.copy()
+		np.body = car_body(s.car, 1.05 + float(slot / 2) * 0.61, -0.46 if slot % 2 == 0 else 0.46)
+		np.aboard = true
+		players[i] = np
+		slot += 1
+
+
+static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) -> RunStep:
+	var res := RunStep.new()
+	if prev.phase == &"ended":
+		var ended := prev.copy()
+		ended.t = prev.t + dt
+		res.state = ended
+		return res
+	var t := prev.t + dt
+	var s := prev.copy()
+	s.t = t
+	res.state = s
+	var events := res.events
+	var car := s.car
+
+	# Each player's input this tick; players without one stay where they were, inactive.
+	var input_of := {}
+	for inp in inputs:
+		input_of[inp.id] = inp
+
+	var players: Array[RunPlayer] = []
+	for p in prev.players:
+		var np := p.copy()
+		var given: PlayerInput = input_of.get(p.id)
+		if annex_dragging(prev, p.id):
+			np.body = p.body
+		elif given != null and p.status == &"down" and prev.down.has(p.id):
+			# Down: they crawl, no faster than CRAWL_SPEED toward where they say they are.
+			np.body = _crawl(prev, p.body, given.body, dt)
+		else:
+			np.body = given.body if given != null else p.body
+		np.aboard = in_car(car, np.body)
+		players.append(np)
+	_sync_seek(s)
+	_sync_hiding(s)
+	_sync_annex(s)
+	_sync_garden(s)
+	_sync_station(s)
+	# Who called the car on the Playroom this tick (it starts the last count).
+	var seek_call_by := ""
+	# The floor quota for the crew as it is: set while the car arrives (so a player admitted at the stop
+	# counts), then it can only shrink (a player who leaves the game), never grow.
+	if s.quota and not s.orientation and not at_home(s):
+		# Live settings: the host's quota.step as it was in force when the quota was set (quota_tuning), so a change
+		# never moves a quota already on screen; the next floor's takes the new one.
+		var setting := s.phase == &"arriving" or s.floor_needed <= 0
+		if setting:
+			s.quota_tuning = s.tuning
+		# The Reactor (RN1): nothing here gives a reading, so it asks no quota; its lift waits for the power instead.
+		var want := 0 if s.station != null else floor_quota(s.depth, quota_crew(players), s.quota_tuning, pressure_quota_mult(s, s.quota_tuning))
+		s.floor_needed = want if setting else mini(s.floor_needed, want)
+
+	# ---- 1. Run rules (the lift: _step_lift).
+	var lift := _step_lift(s, players, input_of, car, t, dt, events)
+	seek_call_by = str(lift[0])
+	if bool(lift[1]):
+		return res
 
 	# ---- Findables (FD9, see the header): searches, before the resident.
 	if s.findables:
@@ -4111,7 +4259,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		_step_hiding(s, players, input_of, prev.t, dt, events)
 		entity_ticks = [_step_garden(s, players, input_of, prev.t, t, dt, events, ev_from)]
 	elif s.phase != &"riding" and who.trait_name == &"lonely":
-		# The Temp's own mechanic (sim/lonely.gd; see the header).
+		# The Temp's own mechanic (sim/lonely.gd; see the header). PN3: the floor's hides first, as on a Stillness floor.
+		if s.pn_fixes:
+			_step_hiding(s, players, input_of, prev.t, dt, events)
 		entity_ticks = [_step_lonely(s, players, input_of, t, dt, events)]
 	elif s.phase != &"riding" and not who.stillness:
 		# A resident that is not a Stillness one, with its rules off (seek_off: the resident parked): it
@@ -4268,6 +4418,7 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		s.entity_id = f.entity_id
 		if s.second_orderly:
 			_spawn_second(s)
+		_fix_starts(s)
 		var nc := s.crew.copy()
 		nc.members = []
 		for m in s.crew.members:
@@ -4290,6 +4441,13 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 	_sync_station(s)
 
 	# ---- A wipe: nobody left who can call or board.
+	_wipe_if_out(s, players, t, events)
+	if s.nerve_passive:
+		_step_nerve(prev, s, input_of, dt, events)
+	return res
+
+## A wipe (step_run; WC1: also the Ward with its call, step_ward): nobody left who can call or board.
+static func _wipe_if_out(s: RunState, players: Array[RunPlayer], t: float, events: Array[Dictionary]) -> void:
 	var everyone_out := true
 	for p in players:
 		# A downed player is not out yet: the wipe waits for their ten seconds.
@@ -4310,9 +4468,6 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 			_ride_up(s, players, nobody, false)
 		else:
 			s.phase = &"ended"
-	if s.nerve_passive:
-		_step_nerve(prev, s, input_of, dt, events)
-	return res
 
 # ---------------------------------------------------------------------------------------------
 # The day loop (days on only; see the header).
@@ -4591,7 +4746,8 @@ static func step_ward_kit(s: RunState, inputs: Array[PlayerInput], dt: float, ev
 
 ## Ward review uses the same instrument, departure, wallet and day records.
 static func step_ward(prev: RunState, inputs: Array[PlayerInput], crew_rows: Dictionary, limb: PackedVector3Array,
-		phase: StringName, bell_left: float, aboard: Array[String], dt: float, cues: Array[Dictionary], holders: Variant = null) -> RunStep:
+		phase: StringName, bell_left: float, aboard: Array[String], dt: float, cues: Array[Dictionary], holders: Variant = null,
+		opts: Dictionary = {}) -> RunStep:
 	var out := RunStep.new()
 	var s := prev.copy()
 	out.state = s
@@ -4601,13 +4757,19 @@ static func step_ward(prev: RunState, inputs: Array[PlayerInput], crew_rows: Dic
 	var by_id := {}
 	for inp in inputs:
 		by_id[inp.id] = inp
+	# WC1 (net/host_rules.gd ward_web): a caught player hangs in the web, tape and all, as a downed player keeps theirs
+	# until they are out; the instrument does not hear the catch. Cut down ("ward_cut"), they stand as a healed player.
+	var web := bool(opts.get("web", false))
 	var caught_events: Array[Dictionary] = []
 	var caught := {}
+	var freed := {}
 	for cue in cues:
 		if cue["type"] == "ward_contact":
 			var hit := {"type": "caught", "t": s.t, "playerId": cue.id}
 			caught_events.append(hit)
 			caught[cue.id] = true
+		elif web and cue["type"] == "ward_cut":
+			freed[str(cue.id)] = cue
 	out.events.append_array(cues)
 	out.events.append_array(caught_events)
 	for old in prev.players:
@@ -4619,14 +4781,22 @@ static func step_ward(prev: RunState, inputs: Array[PlayerInput], crew_rows: Dic
 		p.aboard = row.aboard
 		if caught.has(p.id):
 			p.status = &"caught"
+		elif freed.has(p.id) and p.status == &"caught":
+			# Back on their feet where they were cut down, as a finished heal is (_step_downs "healed").
+			p.status = &"ok"
+			p.side = null
+			out.events.append({"type": "healed", "t": s.t, "playerId": p.id, "by": str(freed[p.id].get("by", "")), "at": p.body, "cut": true})
 		var active := bool(row.active) and p.status == &"ok" and not p.aboard
 		s.crew = Instr.set_raised(s.crew, p.id, active and given != null and bool(given.raised))
 		crew_holders.append(Instr.CrewPlayer.make(p.id, p.body, active))
 		players.append(p)
 	s.players = players
 	var entities: Array[Instr.EntityTick] = []
-	if not limb.is_empty() or not caught_events.is_empty():
-		var resident := Instr.EntityTick.make("rigger-%d" % s.depth, &"rigger", s.orderly, s.orderly, caught_events)
+	var heard_catches: Array[Dictionary] = []
+	if not web:
+		heard_catches = caught_events
+	if not limb.is_empty() or not heard_catches.is_empty():
+		var resident := Instr.EntityTick.make("rigger-%d" % s.depth, &"rigger", s.orderly, s.orderly, heard_catches)
 		resident.acting = limb.size() > 1
 		resident.limb = limb
 		# WD1: while he searches a house, only those on its ground floor may record his arm (sim/ward/state.gd recorders).
@@ -4647,6 +4817,9 @@ static func step_ward(prev: RunState, inputs: Array[PlayerInput], crew_rows: Dic
 	if s.quota and not s.quota_met and not at_home(s) and s.floor_needed > 0 and quota_reached(s):
 		s.quota_met = true
 		out.events.append({"type": "quotaMet", "t": s.t, "depth": s.depth, "earned": floori(s.floor_earned), "needed": s.floor_needed, "top": quota_top(s)})
+	if opts.get("car") is CarGeometry:
+		_step_ward_lift(s, players, by_id, opts, dt, out.events)
+		return out
 	if phase != &"departed":
 		s.phase = phase
 		s.bell_left = bell_left
@@ -4676,6 +4849,52 @@ static func step_ward(prev: RunState, inputs: Array[PlayerInput], crew_rows: Dic
 	_bank(s, players, aboard, s.t, out.events, aboard.is_empty(), true)
 	s.car_waits = car_waited
 	return out
+
+## WC1: the Ward's lift with its call (net/host_rules.gd ward_call; `opts` {"car": the Ward's car, "call_at": the
+## station, "leave": the Ward says the car may leave the crew now}). The Ward has no lift of its own then: it is every
+## floor's lift (_step_lift), called from the station, with the same quota lock, refusal, call plan, arrival, boarding,
+## votes, BANK or DOWN and wipe. The one Ward rule kept is when the arrival doors close: once nobody is in the car or its
+## doorway (sim/ward/state.gd clear_of_lift), where every other floor waits for the car to be empty.
+static func _step_ward_lift(s: RunState, players: Array[RunPlayer], input_of: Dictionary, opts: Dictionary, dt: float, events: Array[Dictionary]) -> void:
+	var t := s.t
+	if s.phase == &"arriving":
+		# The Ward starts on the ride's arrival (net/host.gd _start_late_floor): its doors are open now.
+		s.phase = &"unloading"
+		s.timer = UNLOAD_TIME
+		s.empty_for = 0.0
+		events.append({"type": "doorsOpened", "t": t, "depth": s.depth, "reason": "arrival"})
+	if s.phase == &"unloading":
+		if bool(opts.get("leave", false)):
+			events.append({"type": "doorsClosed", "t": t, "aboard": [], "pushedOut": {}})
+			s.phase = &"away"
+			events.append({"type": "carLeft", "t": t, "reason": "unloaded"})
+	elif s.phase in [&"away", &"coming", &"boarding"]:
+		_step_lift(s, players, input_of, opts["car"], t, dt, events, opts)
+	s.players = players
+	if s.phase in [&"unloading", &"away", &"coming", &"boarding"]:
+		_wipe_if_out(s, players, t, events)
+
+## WC1: the Ward's car (sim/ward/state.gd lift_door, in_lift) as the run's car geometry: its doors at the lift door,
+## the car behind them to world -z, BANK on the left walking in and DOWN on the right, as every car.
+static func ward_car(door: Vector3, width: float, depth: float) -> CarGeometry:
+	var c := CarGeometry.new()
+	c.wall = &"s"
+	c.level = 0
+	c.floor_y = door.y
+	c.door_x = door.x
+	c.door_z = door.z
+	c.in_x = 0.0
+	c.in_z = -1.0
+	c.right_x = -c.in_z
+	c.right_z = c.in_x
+	c.width = width
+	c.depth = depth
+	c.door_width = width
+	var hw := width / 2.0
+	c.rect = _rect_of([_car_at(c, 0.0, -hw), _car_at(c, depth, hw)])
+	c.bank = _rect_of([_car_at(c, 0.0, -hw), _car_at(c, depth, 0.0)])
+	c.down = _rect_of([_car_at(c, 0.0, 0.0), _car_at(c, depth, hw)])
+	return c
 
 static func _bank(s: RunState, players: Array[RunPlayer], aboard_ids: Array[String], t: float, events: Array[Dictionary], wiped := false, ward := false) -> void:
 	# The car waits: whoever it leaves on the floor has no share of this bank (see the header).
@@ -5060,6 +5279,7 @@ static func _morning(s: RunState, players: Array[RunPlayer], t: float, events: A
 	s.entity_id = f.entity_id
 	if s.second_orderly:
 		_spawn_second(s)
+	_fix_starts(s)
 	var nc := _fresh_crew(s.crew)
 	for m in nc.members:
 		m.body = bodies.get(m.id, m.body)
@@ -5141,7 +5361,9 @@ static func lonely_people(s: RunState, players: Array[RunPlayer], input_of: Dict
 	for p in players:
 		var i: PlayerInput = input_of.get(p.id)
 		if _is_active(p, input_of):
-			out.append(Lonely.Person.make(p.id, p.body, i.eye, not in_car(s.car, p.body)))
+			# PN3: a player sitting in a hide is company, never prey (traits-and-hiding.md: "not chased: it has no line").
+			var hidden := s.pn_fixes and _sitting_in_hide(s, p.id)
+			out.append(Lonely.Person.make(p.id, p.body, i.eye, not in_car(s.car, p.body) and not hidden))
 		elif p.status == &"down":
 			out.append(Lonely.Person.make(p.id, p.body, i.eye if i != null else 1.65, false))
 	return out
@@ -5225,6 +5447,13 @@ static func find_base(s: RunState, players: Array[RunPlayer]) -> int:
 	return s.floor_needed if s.quota and s.floor_needed > 0 else floor_quota(s.depth, quota_crew(players), s.tuning)
 
 ## Whether a player is in, getting into or getting out of a hide.
+## PN3: inside a hide (not getting in or out, which is out in the open).
+static func _sitting_in_hide(s: RunState, id: String) -> bool:
+	if s.hiding == null:
+		return false
+	var hp := Hiding.player_of(s.hiding as Hiding.HidingState, id)
+	return hp != null and hp.phase == &"inside"
+
 static func _in_hide(s: RunState, id: String) -> bool:
 	if s.hiding == null:
 		return false
@@ -5538,6 +5767,12 @@ static func _step_inventory(s: RunState, players: Array[RunPlayer], input_of: Di
 		match i.inv_op:
 			&"drop":
 				if b.count(k) <= 0:
+					# PN2: nothing in the hand, but a tape picked up: that tape goes down where they stand.
+					var put := Instr.put_down_tape(s.crew, p.id, p.body) if s.pn_fixes else null
+					if put != null and put.ok:
+						s.crew = put.crew
+						events.append(_with_t(put.event, t))
+						continue
 					refuse.call("empty")
 					continue
 				seq += 1

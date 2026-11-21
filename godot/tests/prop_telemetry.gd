@@ -16,6 +16,7 @@ const Telemetry = preload("res://client/telemetry.gd")
 
 const SECRET := "Known-Pass-7731-telemetry"
 const TEST_DIR := "user://telemetry_tests"
+const TestPorts = preload("res://tests/test_ports.gd")
 
 # --- the message ------------------------------------------------------------------------------------
 
@@ -167,7 +168,7 @@ func test_the_last_session_is_kept_clean_or_crashed(t: T) -> void:
 # --- the server, over real WebSockets -------------------------------------------------------------------
 
 func test_the_passphrase_never_reaches_a_server_log_line(t: T) -> void:
-	var out := _session(t, 4491, true)
+	var out := _session(t, TestPorts.port(TestPorts.TELEMETRY_SESSION), true)
 	t.check(out.size() > 10, "not vacuous: the server wrote %d lines" % out.size())
 	var kinds := {}
 	for l in out:
@@ -188,17 +189,18 @@ func test_another_build_is_refused_and_the_same_build_joins(t: T) -> void:
 	var said: Array[String] = []
 	var ws := WsServer.new(SECRET, false, func(l: String) -> void: said.append(l))
 	ws.build = "build-a"
-	t.check(ws.listen(4492, "127.0.0.1") == OK, "the test server listens on 4492")
+	var port := TestPorts.port(TestPorts.TELEMETRY_BUILD)
+	t.check(ws.listen(port, "127.0.0.1") == OK, "the test server listens on %d" % port)
 	var room := Room.new(ws, func(l: String) -> void: said.append(l))
 	var night := NightLog.new(func(l: String) -> void: said.append(l))
 	BuildInfo._id = "build-b"
 	var old := RoomClient.new()
-	old.connect_to("ws://127.0.0.1:4492", SECRET, "Old")
+	old.connect_to("ws://127.0.0.1:%d" % port, SECRET, "Old")
 	BuildInfo._id = "build-a"
 	var same := RoomClient.new()
-	same.connect_to("ws://127.0.0.1:4492", SECRET, "Same")
+	same.connect_to("ws://127.0.0.1:%d" % port, SECRET, "Same")
 	var raw := WebSocketPeer.new()
-	raw.connect_to_url("ws://127.0.0.1:4492")
+	raw.connect_to_url("ws://127.0.0.1:%d" % port)
 	var raw_said := false
 	var now := 0.0
 	for i in 300:

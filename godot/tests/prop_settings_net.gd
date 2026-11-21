@@ -40,8 +40,9 @@ const DownView = preload("res://client/down_view.gd")
 
 const SECRET := "settings-test-passphrase"
 const DIR := "user://ls_settings_test"
-const PORT_A := 4497
-const PORT_B := 4498
+const TestPorts = preload("res://tests/test_ports.gd")
+static var PORT_A: int = TestPorts.port(TestPorts.SETTINGS_A)
+static var PORT_B: int = TestPorts.port(TestPorts.SETTINGS_B)
 
 static func _fresh_dir() -> String:
 	var abs := ProjectSettings.globalize_path(DIR)

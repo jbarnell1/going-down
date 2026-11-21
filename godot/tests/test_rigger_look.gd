@@ -17,6 +17,8 @@ const T = preload("res://tests/t.gd")
 const View = preload("res://client/ward/view.gd")
 const House = preload("res://sim/ward/house.gd")
 const Ward = preload("res://sim/ward/state.gd")
+## WG1: a block's layout options (sim/ward/layout.gd from_wire), so the test builds the host's Ward.
+const WardLayout = preload("res://sim/ward/layout.gd")
 const Main = preload("res://client/main.gd")
 const PlayLink = preload("res://client/play_link.gd")
 const WardFloor = preload("res://client/ward/floor.gd")
@@ -235,7 +237,7 @@ static func _ward_main(local := true) -> Array:
 	main.link = PlayLink.new(room, local)
 	main.link.body = room.host._players[LocalRoom.ME].body
 	var ward_floor := WardFloor.new()
-	ward_floor.setup(int(room.client.latest.ward.seed), false, 0)
+	ward_floor.setup(int(room.client.latest.ward.seed), false, 0, room.client.latest.ward.get("layout"))
 	main._ward_floor = ward_floor
 	return [room, main, ward_floor]
 

@@ -201,6 +201,9 @@ var pressures := true
 ## WN1: the Hanging Ward as a normal level (net/host_rules.gd ward_place), with the late floors; `ward_place=0` falls
 ## back to the scene swap.
 var ward_place := true
+## WG1: the Ward laid out from the floor seed (net/host_rules.gd ward_layout), with the late floors; `ward_layout=0` or
+## tests turn it off (today's Ward for every seed).
+var ward_layout := true
 ## The Reactor as a generated place in the next run (RN1, net/host_rules.gd reactor_place: floor 7 is the station, drawn
 ## by the main game, with no scene swap). Only with the late floors; the game's; `reactor_place=0` falls back to the
 ## old overlay without a new build.
@@ -246,6 +249,7 @@ func configure_campaign_trades(args: Dictionary) -> void:
 	late_floors = args.get("late_floors", "1") == "1"
 	cycles = args.get("cycles", "1") == "1"
 	ward_place = args.get("ward_place", "1") == "1"
+	ward_layout = args.get("ward_layout", "1") == "1"
 	reactor_place = args.get("reactor_place", "1") == "1"
 	quick_fingers = args.get("quick_fingers", "1") == "1"
 
@@ -459,7 +463,12 @@ func _start(now: float) -> void:
 		HostRules.annex_drag_on_by_arg() and not (ward_review or reactor_review or orientation_review),
 		playroom_tuned, late_floors and not (ward_review or reactor_review or orientation_review), playroom_tuned, true, not (ward_review or reactor_review or orientation_review), cycles and late_floors and not (ward_review or reactor_review or orientation_review),
 		ward_place and late_floors and not (ward_review or reactor_review or orientation_review), reactor_place and late_floors and not (ward_review or reactor_review or orientation_review),
-		cycles and late_floors and not (ward_review or reactor_review or orientation_review) and pressures and HostRules.pressures_by_arg())
+		cycles and late_floors and not (ward_review or reactor_review or orientation_review) and pressures and HostRules.pressures_by_arg(),
+		late_floors and not (ward_review or reactor_review or orientation_review) and HostRules.ward_call_by_arg(),
+		late_floors and not (ward_review or reactor_review or orientation_review) and HostRules.ward_web_by_arg(),
+		ward_layout and late_floors and not (ward_review or reactor_review or orientation_review),
+		not (ward_review or reactor_review or orientation_review),
+		playroom_tuned, downs, true)
 	if orientation_review:
 		rules.enable_orientation()
 	elif orientation_campaign:

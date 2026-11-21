@@ -38,6 +38,7 @@
 extends Node
 
 const PlayLink = preload("res://client/play_link.gd")
+const AirSound = preload("res://client/air_sound.gd")
 const Session = preload("res://net/session.gd")
 const DoorShadow = preload("res://client/door_shadow.gd")
 const Places = preload("res://sim/places.gd")
@@ -110,6 +111,9 @@ const BuildInfo = preload("res://net/build_info.gd")
 ## The player's brightness and its card (client/brightness.gd, client/brightness_card.gd).
 const Brightness = preload("res://client/brightness.gd")
 const BrightnessCard = preload("res://client/brightness_card.gd")
+## The soundtrack and the player's own sound sliders (MU1: client/music.gd, client/volume.gd).
+const Music = preload("res://client/music.gd")
+const Volume = preload("res://client/volume.gd")
 ## The Tenant clock on screen (TT1, client/tenant_clock.gd).
 const TenantClock = preload("res://client/tenant_clock.gd")
 
@@ -261,6 +265,9 @@ var tape_mat: ShaderMaterial
 ## The player's brightness (the tape's last step) and the card that sets it (Esc menu B; first launch).
 var brightness := Brightness.new()
 var bright_card: BrightnessCard
+## MU1: the music node (on the root, see client/music.gd) and the player's MASTER, MUSIC and EFFECTS (Esc menu V, F8 S).
+var music: Node
+var volume := Volume.new()
 
 var seed := "alpha"
 var _solo_bots := 0
@@ -558,6 +565,15 @@ func _ready() -> void:
 	brightness.persist = not automated
 	brightness.load_saved()
 	_apply_brightness(brightness.level)
+	# MU1: the player's own sound levels, the same way (a test plays at 100 %), and the soundtrack.
+	volume.persist = not automated
+	volume.load_saved()
+	volume.apply()
+	music = Music.on(get_tree())
+	# A scripted run (auto=1) hears the game as its mix checks measured it, without music, unless it asks (music=1).
+	var music_asked := OS.get_cmdline_user_args().has("music=1") or (OS.has_feature("web") and _url("music", "0") == "1")
+	if automated and not music_asked:
+		AudioServer.set_bus_mute(AudioServer.get_bus_index(Music.BUS), true)
 	# IV1: the prison's cassette deck in every game (it shows nothing unless this is the prison and the Reactor's tape
 	# came home), not only after the old swapped-in Reactor scene: the native Reactor brings the crew home here too.
 	var station := preload("res://client/reactor_station.gd").new()
@@ -859,6 +875,7 @@ func _build_view() -> void:
 	add_child(panel_layer)
 	settings_panel = SettingsPanel.new()
 	settings_panel.name = "SettingsPanel"
+	settings_panel.volume = volume
 	panel_layer.add_child(settings_panel)
 	sfx = Sfx.new()
 	add_child(sfx)
@@ -1423,6 +1440,8 @@ func _input(event: InputEvent) -> void:
 				_set_hints(not announcer.hints.enabled)
 			elif menu_overlay and k0.pressed and not k0.echo and k0.physical_keycode == KEY_B:
 				_open_brightness()
+			elif menu_overlay and k0.pressed and not k0.echo and k0.physical_keycode == KEY_V:
+				_open_sound()
 			elif not menu_overlay:
 				start.key(k0)
 			get_viewport().set_input_as_handled()
@@ -1536,6 +1555,8 @@ func _input(event: InputEvent) -> void:
 			_set_hints(not announcer.hints.enabled)
 		elif k.physical_keycode == KEY_B and hud.menu_on:
 			_open_brightness()
+		elif k.physical_keycode == KEY_V and hud.menu_on:
+			_open_sound()
 		elif k.physical_keycode == KEY_T:
 			var st: float = tape_mat.get_shader_parameter("strength")
 			tape_mat.set_shader_parameter("strength", 0.0 if st > 0.5 else 1.0)
@@ -1602,6 +1623,29 @@ func _open_brightness() -> void:
 	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	bright_card.start()
+
+## MU1: the Esc menu's V: the settings panel open on the player's own sound page.
+func _open_sound() -> void:
+	menu_overlay = false
+	wheel_open = false
+	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	settings_panel.open()
+	settings_panel.show_sound(true)
+
+## MU1: where this player is, for the soundtrack (client/music.gd), every frame: the start screens and the lobby,
+## the car between floors, the prison, a floor, the end screen; the report's key; and the duck (the announcer's
+## voice, a catch's scene, the ride-up reel or the prison's cassette: the same hold as the announcer's chatter).
+func _music_frame() -> void:
+	if music == null:
+		return
+	var in_game := link != null and mode == "game" and not snap.is_empty()
+	var ended := in_game and (not hud.end_lines.is_empty() or str(snap.get("phase", "")) == "ended")
+	var prison := level != null and is_instance_valid(level) and level.has_meta(&"prison")
+	var st := Music.state_of(in_game, str(snap.get("phase", "")) if in_game else "", prison, ended)
+	var catch := in_game and (_noise_on() or Music.catch_recent(sfx.played, Time.get_ticks_msec()))
+	var duck := Music.duck_wanted(announcer.speaking(), catch, in_game and announcer.hold_chatter)
+	music.drive(st, Music.report_key_of(snap, ended) if in_game else "", duck)
 
 ## The player's brightness on the picture: the tape's last step (client/tape.gdshader).
 func _apply_brightness(lv: int) -> void:
@@ -1795,6 +1839,7 @@ func _poll_test() -> void:
 
 func _process(delta: float) -> void:
 	_poll_test()
+	_music_frame()
 	if start.screen == "playtest":
 		return
 	frames += 1
@@ -2013,6 +2058,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	announcer.place = str(link.plan_dict.get("place", ""))
 	var quota_client := link.client()
 	announcer.late_floor = late_floor_of(quota_client.latest if quota_client != null else null)
+	announcer.ward_called = ward_called_on(quota_client.latest if quota_client != null else null)
 	announcer.playroom_call_ready = announcer.place == "playroom" and str(s.get("phase", "")) == "away" \
 		and quota_client != null and QuotaView.floor_met(quota_client.quota())
 	announcer.days_on = s.get("day") != null
@@ -2068,7 +2114,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 
 	# Everyone else, and their name tags (not through walls, fading with distance, not in the dark).
 	var dark: bool = s["dark"]
-	others.update(dt, s["others"], cam.position)
+	others.update(dt, _ward_unwrapped(s["others"]), cam.position)
 	_name_tags(s, dark)
 
 	# The lights: a blink's warning flickers, the dark is deep, the emergency lighting comes up.
@@ -2142,7 +2188,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		if str(pv.get("kiosk_face")) != start.face_code:
 			pv.call("set_kiosk_face", start.face_code)
 	# WN1: the Ward's lift has its own calls (client/ward/view.gd play_event); not the plan's car's bell over them.
-	if phase == "boarding" and _ward_floor == null:
+	if phase == "boarding" and (_ward_floor == null or announcer.ward_called):
 		var bell_left := float(s["bellLeft"])
 		for w: float in BELL_WARNINGS:
 			if prev_bell_left > w and bell_left <= w:
@@ -2435,13 +2481,19 @@ func _ward_frame(_dt: float) -> void:
 		if _ward_floor != null:
 			_leave_ward_floor()
 		return
-	if _ward_floor == null or not is_instance_valid(_ward_floor) or _ward_floor.seed_value != int(ward["seed"]):
-		_enter_ward_floor(int(ward["seed"]), c)
+	# WG1: the block's layout options (net/host_rules.gd ward_layout) are part of which Ward this is.
+	var layout_wire: Array = ward.get("layout", []) if ward.get("layout") is Array else []
+	if _ward_floor == null or not is_instance_valid(_ward_floor) or _ward_floor.seed_value != int(ward["seed"]) or _ward_floor.layout_wire != layout_wire:
+		_enter_ward_floor(int(ward["seed"]), c, layout_wire)
 	# The room's own clock (a room on this machine runs on its own virtual time), as play_link.gd reads host time.
 	var host_now: float = c.clock.host_time(link.rc._now)
 	var me: Dictionary = snap.get("me", {})
 	var feet := Vector3(float(me.get("x", 0.0)), float(me.get("y", 0.0)), float(me.get("z", 0.0)))
-	_ward_floor.update(ward, host_now, link.my_id(), feet, latest["players"], c.events, link.names())
+	# WC1: the run's own lift beside the Ward's block (its lift is every floor's when called from the station).
+	ward = (ward as Dictionary).duplicate()
+	ward["lift"] = {"phase": str(latest.get("phase", "")), "floorsAway": latest.get("floorsAway"), "bellLeft": float(latest.get("bellLeft", 0.0))}
+	_ward_floor.update(ward, host_now, link.my_id(), feet, latest["players"], c.events, link.names(), cam.global_transform, self)
+	link.call_spot = _ward_floor.call_spot()
 	# The floor plan's own resident, lift and lines are not on this floor.
 	level.visible = false
 	lift.visible = false
@@ -2452,8 +2504,10 @@ func _ward_frame(_dt: float) -> void:
 	# WN2: with no Ward line of its own, a tape or an item in reach keeps the main game's prompt (F takes it).
 	var own_prompt := hud.prompt
 	hud.prompt = _ward_floor.prompt_line
-	if hud.prompt == "" and own_prompt != "" and (own_prompt == inv_view.prompt or own_prompt == "F  PICK UP"):
+	if hud.prompt == "" and own_prompt != "" and (own_prompt == inv_view.prompt or own_prompt == "F  PICK UP" or own_prompt == QuotaView.CALL_PROMPT):
 		hud.prompt = own_prompt
+	if _ward_floor.cut_fill >= 0.0:
+		hud.prompt_fill = _ward_floor.cut_fill
 	_ward_floor.apply_environment(env)
 	var watch: Variant = _ward_floor.watch_transform()
 	if crew_watch.watching:
@@ -2479,6 +2533,22 @@ static func late_floor_of(latest: Variant) -> String:
 		return "reactor"
 	return ""
 
+## WC1: whether a snapshot's Ward has its lift called from the station (net/host_rules.gd ward_call).
+static func ward_called_on(latest: Variant) -> bool:
+	if not latest is Dictionary or not latest.get("ward") is Dictionary:
+		return false
+	var extras: Variant = (latest["ward"] as Dictionary).get("extras")
+	return extras is Dictionary and extras.get("called", false) == true
+
+## WC1: the crewmates to draw on the Ward: not those wrapped in the web (the cocoon, or the hand's bundle, is them).
+func _ward_unwrapped(rows: Array) -> Array:
+	if _ward_floor == null or not is_instance_valid(_ward_floor):
+		return rows
+	var wrapped: Dictionary = _ward_floor.wrapped_ids()
+	if wrapped.is_empty():
+		return rows
+	return rows.filter(func(o: Dictionary) -> bool: return not wrapped.has(str(o["id"])))
+
 ## WN1: whether a snapshot is on a Ward the host plays as a normal level, its lift not yet gone.
 static func ward_native_on(latest: Variant) -> bool:
 	if not latest is Dictionary or int(latest.get("depth", 0)) <= 0:
@@ -2486,13 +2556,13 @@ static func ward_native_on(latest: Variant) -> bool:
 	var ward: Variant = latest.get("ward")
 	return ward is Dictionary and ward.get("native", false) == true and str(ward.get("phase", "")) != "departed"
 
-func _enter_ward_floor(seed_value: int, c: Variant) -> void:
+func _enter_ward_floor(seed_value: int, c: Variant, layout_wire: Array = []) -> void:
 	if _ward_floor != null and is_instance_valid(_ward_floor):
 		_ward_floor.queue_free()
 	var media := ResourceLoader.exists(WardFloor.View.RIGGER_PATH)
 	_ward_floor = WardFloor.new()
 	_ward_floor.name = "WardFloor"
-	_ward_floor.setup(seed_value, media, c.events.size())
+	_ward_floor.setup(seed_value, media, c.events.size(), layout_wire)
 	if _ward_floor.view != null:
 		# IV1: the Ward's lift lines through the announcer's queue, not a speaker of their own.
 		_ward_floor.view.say = announcer.ward_line
@@ -2509,6 +2579,8 @@ func _leave_ward_floor() -> void:
 	if is_instance_valid(_ward_floor):
 		_ward_floor.queue_free()
 	_ward_floor = null
+	if link != null:
+		link.call_spot = null
 	_floor_media_missing = ""
 	if level != null and is_instance_valid(level):
 		level.visible = true
@@ -3113,7 +3185,7 @@ func _show_second(s: Dictionary, dt: float, first_seen: bool) -> void:
 		var drawn := _orderly2_tpl.copy()
 		drawn.body = Move.Body.make(float(pd["x"]), float(pd["z"]), int(pd["level"]), float(pd["y"]))
 		drawn.moving = true
-		var a := Run.Entity.audibility(link.plan, drawn, link.view_body(), float((s["me"] as Dictionary)["eye"]))
+		var a := AirSound.audibility(link.plan, drawn, link.view_body(), float((s["me"] as Dictionary)["eye"]))
 		squeak = {"gain": a.gain, "muffled": a.muffled}
 	orderly2.voice(dt, {"pose": pd, "held": held, "taken": f.taken, "mode": str(lo.get("mode", "")), "speed": float(lo.get("speed", 0.0)),
 		"squeak": squeak}, cam.global_position)
@@ -3646,6 +3718,18 @@ func _command(c: String) -> String:
 			if p.size() >= 2:
 				_set_hints(p[1] == "on")
 			return JSON.stringify({"on": announcer.hints.enabled})
+		"music":
+			# music: what the soundtrack is doing (client/music.gd describe) and the player's three sliders.
+			var md: Dictionary = music.describe() if music != null else {}
+			md["sliders"] = volume.to_dict()
+			return JSON.stringify(md)
+		"volume":
+			# volume <master|music|effects> <0..100>: one slider, applied at once (never saved under automation).
+			if p.size() >= 3:
+				volume.set_pct(p[1], int(p[2]))
+				volume.apply()
+				volume.save()
+			return JSON.stringify(volume.to_dict())
 		"brightness":
 			# brightness [<0..20> | open | done | left | right]: the player's setting (never saved under automation).
 			if p.size() >= 2:
@@ -3702,7 +3786,8 @@ func _command(c: String) -> String:
 			for e: Dictionary in lc.events:
 				var ty := str(e.get("type", ""))
 				if ty.begins_with("ward_") or ty in ["powerHold", "powerCut", "stationStir", "bodyStands", "fuseTaken", "fuseDropped", "powerRestored",
-						"tapeTaken", "tapeDropped", "tapeExtracted", "caught", "down", "downed", "healed", "out", "readingClosed", "rodeDown", "rodeUp", "wokeUp", "newDay"]:
+						"tapeTaken", "tapeDropped", "tapeExtracted", "caught", "down", "downed", "healed", "out", "readingClosed", "rodeDown", "rodeUp", "wokeUp", "newDay",
+						"called", "callRefused", "carArrived", "carLeft", "bell", "doorsClosed", "banked"]:
 					evs.append(_late_plain(e))
 			var out := {"tick": int(lw.get("tick", -1)), "hostNow": snap.get("hostNow"), "depth": lw.get("depth"), "phase": str(lw.get("phase", "")),
 				"place": link.plan_dict.get("place", ""), "seed": lw.get("seed"), "me": link.my_id(), "ward": _late_plain(lw.get("ward")), "reactor": _late_plain(lw.get("reactor")),
@@ -3715,7 +3800,8 @@ func _command(c: String) -> String:
 			if _ward_floor != null:
 				var wm: Variant = _ward_floor.model
 				out["wardModel"] = {"seed": _ward_floor.seed_value, "liftDoor": _late_plain(wm.lift_door()), "switches": _late_plain(wm.switches),
-					"bridgeLowered": wm.bridge_lowered, "houses": wm.houses.size(), "layoutHouses": _late_plain(wm.layout.houses), "media": _ward_floor.view != null}
+					"bridgeLowered": wm.bridge_lowered, "houses": wm.houses.size(), "layoutHouses": _late_plain(wm.layout.houses), "media": _ward_floor.view != null,
+					"layoutWire": _ward_floor.layout_wire, "layoutVersion": int(wm.layout.version)}
 			return JSON.stringify(out)
 		"wardroute":
 			# PL1: wardroute x z [radius]: a walkable route from this player's feet to within radius (0.45 m) of (x, z) through the Ward's walk model

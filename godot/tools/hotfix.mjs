@@ -3,7 +3,9 @@
 //   node godot/tools/hotfix.mjs --dry-run "what the fix is"  print the steps and the deploy commands only
 // Steps:
 //   clean      godot/ and scripts/ have nothing uncommitted (the build id is the commit: net/build_info.gd)
-//   tests      the quick test set (npm run godot:test -- --quick) and the night log summary's own test
+//   tests      the quick test set in several engines (npm run godot:test -- --quick --shards=auto), skipped when
+//              the commit hook's green stamp names HEAD's tree; then the sharded runner's and the night log
+//              summary's own tests
 //   export     npm run godot:export (writes the build id, imports, exports the web build and GoingDown.exe)
 //   play_web   the browser playthrough on the new web build (a local static server, headless Chromium)
 //   play_down  the down-then-out check, two game processes, no windows (--headless=1)
@@ -82,6 +84,28 @@ function playLate() {
   return run(node, [join(here, 'play_late.mjs'), '--quick=1', `--port=${latePort}`]);
 }
 
+/**
+ * The commit hook's green stamp (scripts/hooks/pre-commit writes it in the git folder after the quick tests
+ * pass): {file, tree, when} when it names HEAD's tree, else null and the tests run. Prints why it is not used.
+ */
+function greenStamp() {
+  const gitDir = spawnSync('git', ['rev-parse', '--git-dir'], { cwd: root, encoding: 'utf8' });
+  const head = spawnSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: root, encoding: 'utf8' });
+  if (gitDir.status !== 0 || head.status !== 0) return null;
+  const file = resolve(root, gitDir.stdout.trim(), 'going-down-quick-green');
+  if (!existsSync(file)) {
+    console.log(`tests: no green stamp (${file}): running them`);
+    return null;
+  }
+  const [tree = '', when = ''] = readFileSync(file, 'utf8').trim().split(/\s+/);
+  const want = head.stdout.trim();
+  if (tree !== want) {
+    console.log(`tests: the green stamp is for tree ${tree || '(empty)'}, HEAD's tree is ${want}: running them`);
+    return null;
+  }
+  return { file, tree, when };
+}
+
 function changes() {
   const st = spawnSync('git', ['status', '--porcelain', '--', 'godot', 'scripts'], { cwd: root, encoding: 'utf8' });
   if (st.status !== 0) return ['(not a git checkout)'];
@@ -99,8 +123,12 @@ const steps = [
     console.log(`at ${head.stdout.trim()}`);
     return 0;
   }],
-  ['tests', 'npm run godot:test -- --quick; node godot/tools/night_logs.test.mjs', async () => {
-    const code = await run(node, [join(here, 'godot.mjs'), 'test', '--quick']);
+  ['tests', 'npm run godot:test -- --quick --shards=auto (unless the commit hook passed this tree); node godot/tools/test_shards.test.mjs; node godot/tools/night_logs.test.mjs', async () => {
+    const green = greenStamp();
+    let code = 0;
+    if (green) console.log(`tests: already green for this tree (stamp ${green.file}, tree ${green.tree}, ${green.when})`);
+    else code = await run(node, [join(here, 'godot.mjs'), 'test', '--quick', '--shards=auto']);
+    if (code === 0) code = await run(node, [join(here, 'test_shards.test.mjs')]);
     return code !== 0 ? code : run(node, [join(here, 'night_logs.test.mjs')]);
   }],
   ['export', 'npm run godot:export', () => run(node, [join(here, 'godot.mjs'), 'export'])],

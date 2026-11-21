@@ -634,6 +634,27 @@ static func pick_up_tape(crew: CrewState, player_id: String, tape_id: String) ->
 			next.members[i] = x
 	return PickUp.make(next, true, {"type": "tapePickedUp", "t": crew.t, "playerId": player_id, "tapeId": tape_id}, &"ok")
 
+## PN2: an active player puts down the last tape they picked up (not their own, which their instrument records
+## onto), at `at` (their body now; null: where they stood at the last step_crew). "tapeDropped" {playerId, tapeId, at, why: "put"}; it lies on the
+## floor as any dropped tape and pick_up_tape takes it again. Fails ("noTape") when they carry none.
+static func put_down_tape(crew: CrewState, player_id: String, at: Move.Body = null) -> PickUp:
+	var m := member(crew, player_id)
+	if m == null or m.body == null:
+		return PickUp.make(crew, false, null, &"noPlayer")
+	if not m.active:
+		return PickUp.make(crew, false, null, &"inactive")
+	if m.carrying.is_empty():
+		return PickUp.make(crew, false, null, &"noTape")
+	var next := crew.copy()
+	var x := m.copy()
+	var tape: TapeLib.Tape = x.carrying.pop_back()
+	for i in next.members.size():
+		if next.members[i].id == player_id:
+			next.members[i] = x
+	var where := at if at != null else m.body
+	next.floor.append(FloorTape.make(tape, where))
+	return PickUp.make(next, true, {"type": "tapeDropped", "t": crew.t, "playerId": player_id, "tapeId": tape.id, "at": where, "why": "put"}, &"ok")
+
 class Departure:
 	## Tapes that leave with the crew (non-empty only).
 	var carried: Array[TapeLib.Tape] = []

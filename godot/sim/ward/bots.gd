@@ -252,7 +252,8 @@ static func stay(seed_value: int, crew_n: int, skill: StringName, opts: Dictiona
 	var dt := float(opts.get("dt", 0.1))
 	var tuning: Settings.Values = opts.get("tuning", null)
 	var heal: bool = opts.get("heal", false)
-	var w := Ward.new(seed_value)
+	# WG1: opts.layout, a generated layout's options (sim/ward/layout.gd options); absent, today's Ward.
+	var w := Ward.new(seed_value, opts.get("layout", {}))
 	w.tuning = tuning
 	w.crew_size = crew_n
 	var trace: bool = opts.get("trace", false)

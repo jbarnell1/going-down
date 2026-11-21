@@ -41,8 +41,9 @@ const shots = resolve(project, 'export', 'shots', 'down');
 mkdirSync(shots, { recursive: true });
 const SECRET = 'test-passphrase';
 const url = `ws://127.0.0.1:${port}`;
-// The North Star's numbers (B6), the check's own: ten seconds down, three held, the crawl no faster than 0.6 m/s.
-const DOWN_S = 10;
+// The North Star's numbers (B6), the check's own: three held, the crawl no faster than 0.6 m/s; and the owner's
+// 20 Nov "Probably need 30 seconds" down (DR1, the home server's room has the ring on), drawn as a ring, not words.
+const DOWN_S = 30;
 const CRAWL = 0.6;
 
 const procs = new Set();
@@ -327,7 +328,7 @@ try {
     `prompt "${tries.p0}", bar ${r2(tries.f1)} then ${r2(tries.letGo.fill)} after letting go, host healer "${tries.letGo.healer}"`);
   check('Bob walks out of reach holding F: the bar empties, the prompt goes', tries.f2 >= 0.15 && tries.away.prompt !== 'HOLD F TO HELP' && (tries.away.healer ?? '') === '',
     `bar ${r2(tries.f2)}, then ${r2(tries.away.dist)} m away: prompt "${tries.away.prompt}", host healer "${tries.away.healer}"`);
-  a = await until(A.state, (s) => s.me.status === 'out', 12000, 50);
+  a = await until(A.state, (s) => s.me.status === 'out', (DOWN_S + 2) * 1000, 50);
   await sleep(500);
   a = await A.state();
   check('2. not healed: Ann is out', a.me.status === 'out' && (a.events.out ?? 0) === 1, `status ${a.me.status}, out events ${a.events.out}`);

@@ -90,7 +90,7 @@ func test_the_flag_is_last_off_by_default_and_needs_cycles(t: T) -> void:
 	var names: Array[String] = []
 	for a: Dictionary in init["args"]:
 		names.append(str(a["name"]))
-	t.eq(names.slice(names.size() - 4), ["cycles_", "ward_place_", "reactor_place_", "pressures_"] as Array[String], "pressures_ is last, after reactor_place_")
+	t.eq(names.slice(names.size() - 11), ["cycles_", "ward_place_", "reactor_place_", "pressures_", "ward_call_", "ward_web_", "ward_layout_", "orderly_fix_", "minder_calm_", "down_ring_", "pn_fixes_"] as Array[String], "pressures_ after reactor_place_, then WC1's ward_call_ and ward_web_, WG1's ward_layout_, OR2's orderly_fix_, then MA1's three")
 	t.check(not HostRules.new(true, 8, Places.FULL, true).pressures, "off by default")
 	t.check(not rules_with(8, ["pressures_", "late_floors_"] as Array[String]).pressures, "not without cycles")
 	t.check(not rules_with(8, ["pressures_", "cycles_"] as Array[String]).pressures, "not without the late floors")

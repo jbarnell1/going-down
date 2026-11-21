@@ -79,6 +79,16 @@ const WIND_UP_TIME := 0.6
 const REACH_RANGE := 1.6
 ## After a catch it does nothing for this long (seconds).
 const DORMANT_TIME := 10.0
+## OR2 (the Orderly fix, sim/run.gd with_orderly_fix; off unless asked): see "The Orderly fix" below.
+## In its reach it keeps walking at this many in 100 of its hunt speed (the live setting orderly.reach_walk).
+const REACH_WALK := 100
+## A second Orderly chasing the first's target takes its own way round: cells on the first's route cost this many
+## steps more, except the last FLANK_FREE before the target; it heads FLANK_AHEAD cells along its own route until
+## the target is within FLANK_NEAR metres in a straight line.
+const FLANK_COST := 4
+const FLANK_FREE := 3
+const FLANK_AHEAD := 4
+const FLANK_NEAR := 8.0
 ## When it shares a cell with its target it walks straight at them, stopping this far away.
 const APPROACH_STOP := 0.6
 ## Maximum turn rate, radians per second.
@@ -313,9 +323,14 @@ class OrderlyState:
 	var lonely_lost: float = 0.0
 	var lonely_quiet: float = 0.0
 
+	## OR2 (the Orderly fix): a second Orderly's waypoint on its own way round to the first's target, or null.
+	## Always null with the fix off.
+	var flank_goal: Variant = null
+
 	## TypeScript: { ...state }.
 	func copy() -> OrderlyState:
 		var s := OrderlyState.new()
+		s.flank_goal = flank_goal
 		s.lonely_phase = lonely_phase
 		s.lonely_target = lonely_target
 		s.lonely_left = lonely_left
@@ -523,9 +538,12 @@ static func seen_by(plan: Floor.FloorPlan, body: Move.Body, players: Array[Playe
 ## Advances the resident by dt seconds. Never mutates `prev`. (TypeScript HuntOptions: speed, creep.)
 ## `hunt_speed` below 0 means its body's own. `need`: watchers needed to hold it this tick (watch_need of
 ## the up players; 1, the default, is the rule every stored result was made with).
-static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float = -1.0, creep: bool = true, need: int = 1, solids: Move.Solids = null, stunned := false) -> StepResult:
+## OR2 (the Orderly fix; see "The Orderly fix" below): `reach_walk` is the part of its hunt speed it keeps walking at
+## in its reach (0, the default: it stands to reach, as every stored result was made); `other` is the first Orderly
+## when this is the second (null, the default: it chases the nearest, as always).
+static func step_entity(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float = -1.0, creep: bool = true, need: int = 1, solids: Move.Solids = null, stunned := false, reach_walk := 0.0, other: OrderlyState = null) -> StepResult:
 	var k := kind_of(prev)
-	var res := _step_rules(plan, prev, players, dt, k.hunt_speed if hunt_speed < 0.0 else hunt_speed, creep, k, need, solids, stunned)
+	var res := _step_rules(plan, prev, players, dt, k.hunt_speed if hunt_speed < 0.0 else hunt_speed, creep, k, need, solids, stunned, reach_walk, other)
 	if k.clicks() and not stunned:
 		_stapler(prev, res, dt, k)
 	return res
@@ -550,7 +568,7 @@ static func _stapler(prev: OrderlyState, res: StepResult, dt: float, k: BodySett
 			s.clicks += 1
 			res.events.append({"type": "click", "t": s.t, "why": "wait"})
 
-static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool, k: BodySettings, need: int, solids: Move.Solids, stunned: bool) -> StepResult:
+static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool, k: BodySettings, need: int, solids: Move.Solids, stunned: bool, reach_walk := 0.0, other: OrderlyState = null) -> StepResult:
 	var t := prev.t + dt
 	var s := prev.copy()
 	s.t = t
@@ -653,6 +671,9 @@ static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 			s.wind_up_target = null
 			s.wind_up_left = 0.0
 		else:
+			# The Orderly fix: it keeps coming while it reaches, so a steady walk away no longer outpaces the reach.
+			if reach_walk > 0.0 and k.name == &"orderly":
+				_reach_walk(plan, s, target.body, hunt_speed * reach_walk, dt, k, solids)
 			s.yaw = _turn_toward(s.yaw, yaw_toward(target.body.x - s.body.x, target.body.z - s.body.z), TURN_RATE * dt)
 			s.wind_up_left -= dt
 			s.anim = &"reach"
@@ -690,18 +711,27 @@ static func _step_rules(plan: Floor.FloorPlan, prev: OrderlyState, players: Arra
 	if _turn_to_hides(plan, s, players, events):
 		_step_hidden(plan, s, players, dt, hunt_speed, k, events, solids)
 		return res
-	_hunt(plan, s, players, dt, hunt_speed, creep, k, solids)
+	_hunt(plan, s, players, dt, hunt_speed, creep, k, solids, other)
 	return res
 
-## One tick of walking toward the nearest player. Mutates the (already copied) state.
-static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool, k: BodySettings, solids: Move.Solids = null) -> void:
+## One tick of walking toward the nearest player. Mutates the (already copied) state. `other`: the first Orderly
+## when this is the second with the Orderly fix (see "The Orderly fix"), else null.
+static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerView], dt: float, hunt_speed: float, creep: bool, k: BodySettings, solids: Move.Solids = null, other: OrderlyState = null) -> void:
 	s.replan_in -= dt
 	if s.replan_in <= EPS or (solids == null and s.path.is_empty()):
 		s.replan_in = REPLAN_INTERVAL
-		var near := _nearest_by_walk(plan, s.body, players)
+		var avoid := chasing(other)
+		var near := _nearest_by_walk(plan, s.body, players) if other == null else _nearest_except(plan, s.body, players, avoid)
 		s.target_id = near.player.id if near != null else null
+		var flank: Array[Floor.Pos] = []
+		if other != null:
+			s.flank_goal = null
+			if near != null and avoid != "" and str(near.player.id) == avoid:
+				flank = flank_path(plan, Move.cell_of(plan, s.body), Move.cell_of(plan, near.player.body), Move.cell_of(plan, other.body))
+				if solids != null and flank.size() > FLANK_AHEAD + 1:
+					s.flank_goal = flank[FLANK_AHEAD]
 		if near != null and solids == null:
-			s.path = Floor.find_path(plan, Move.cell_of(plan, s.body), Move.cell_of(plan, near.player.body))
+			s.path = flank if not flank.is_empty() else Floor.find_path(plan, Move.cell_of(plan, s.body), Move.cell_of(plan, near.player.body))
 		else:
 			s.path = []
 		s.path_next = 1 if s.path.size() > 1 else 0
@@ -735,7 +765,10 @@ static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerV
 	var pace := k.creep_speed if creeping else hunt_speed
 
 	var here := Move.cell_of(plan, before)
-	if solids != null:
+	if solids != null and s.flank_goal != null and (target.body.level != before.level or gap > FLANK_NEAR):
+		# The Orderly fix: the second's own way round to the first's target (see "The Orderly fix").
+		_resident_walk(plan, s, Move.body_at_cell(plan, s.flank_goal), pace * dt, k.radius, solids, 0.0)
+	elif solids != null:
 		_resident_walk(plan, s, target.body, pace * dt, k.radius, solids, APPROACH_STOP)
 	elif _same_cell(here, Move.cell_of(plan, target.body)):
 		var dx := target.body.x - before.x
@@ -769,6 +802,117 @@ static func _hunt(plan: Floor.FloorPlan, s: OrderlyState, players: Array[PlayerV
 		s.anim = &"duck" if k.ducks and near_door(plan, s.body, k.radius) else &"walk"
 	else:
 		s.anim = &"idle"
+
+# ---------------------------------------------------------------------------------------------
+# The Orderly fix (OR2; the owner's 20 Nov playtest). Only through step_entity's last two parameters, which sim/run.gd
+# passes only in a run made with it (with_orderly_fix); their defaults are exactly the old rules.
+#   - "The orderly will never catch you if you keep walking. He stops to swipe and then you go out of range so he
+#     starts walking again." In its reach (windUp) it keeps walking at `reach_walk` of its hunt speed toward the
+#     one it reaches for, stopping APPROACH_STOP short, so a walker (3 m/s) no longer opens the gap past
+#     REACH_RANGE before the reach lands. A sprinter (5 m/s) still opens it and gets away while their stamina lasts.
+#     Looking at it still cancels the reach the same tick, held it does not move: the reach is part of the hunt.
+#   - "The two orderlies need to have different pathings and chase different players when multiplayer." The second
+#     (given `other`, the first as it stands after its own step this tick) chases the nearest player by walking
+#     other than the one the first chases (chasing(): hunting, its target; in its reach, the one it reaches for),
+#     and only with nobody else to chase the same one. Chasing the same one, it plans its own way round
+#     (flank_path): the shortest route on which cells of the first's route cost FLANK_COST more, so it takes
+#     another corridor where there is one and comes at the target from another side.
+
+## The player an Orderly is going after now ("" for nobody, and never the call's pull).
+static func chasing(o: OrderlyState) -> String:
+	if o == null:
+		return ""
+	if o.mode == &"windUp" and o.wind_up_target != null:
+		return str(o.wind_up_target)
+	if o.mode == &"hunting" and o.target_id != null and not str(o.target_id).begins_with("#"):
+		return str(o.target_id)
+	return ""
+
+## The nearest active player by walking other than `avoid`; with nobody else, the nearest of all.
+static func _nearest_except(plan: Floor.FloorPlan, body: Move.Body, players: Array[PlayerView], avoid: String) -> Nearest:
+	if avoid == "":
+		return _nearest_by_walk(plan, body, players)
+	var rest: Array[PlayerView] = []
+	for p in players:
+		if p.id != avoid:
+			rest.append(p)
+	var near := _nearest_by_walk(plan, body, rest)
+	return near if near != null else _nearest_by_walk(plan, body, players)
+
+## Its own way from `from` to `to`, with the cells of the route from `first` to `to` (but its last FLANK_FREE) costing
+## FLANK_COST steps more: from and to included, or [] when there is none. Ties go as Floor's searches do.
+static func flank_path(plan: Floor.FloorPlan, from: Floor.Pos, to: Floor.Pos, first: Floor.Pos) -> Array[Floor.Pos]:
+	var none: Array[Floor.Pos] = []
+	if not Floor.is_walkable(plan, from.level, from.x, from.y) or not Floor.is_walkable(plan, to.level, to.x, to.y):
+		return none
+	var theirs := Floor.find_path(plan, first, to)
+	var dear := {}
+	for i in maxi(0, theirs.size() - FLANK_FREE):
+		dear[Floor.pos_index(plan, theirs[i])] = true
+	var adj := Floor.adjacency_of(plan)
+	var total := plan.width * plan.height * 2
+	var dist := PackedInt32Array()
+	dist.resize(total)
+	dist.fill(-1)
+	var back := PackedInt32Array()
+	back.resize(total)
+	back.fill(-1)
+	var goal := Floor.pos_index(plan, to)
+	var start := Floor.pos_index(plan, from)
+	# Dial's buckets: the costs are 1 and 1 + FLANK_COST.
+	var buckets: Array[PackedInt32Array] = []
+	for i in FLANK_COST + 2:
+		buckets.append(PackedInt32Array())
+	dist[start] = 0
+	buckets[0].append(start)
+	var d := 0
+	var left := 1
+	while left > 0:
+		var b := buckets[d % buckets.size()]
+		buckets[d % buckets.size()] = PackedInt32Array()
+		for pi in b:
+			left -= 1
+			if dist[pi] != d:
+				continue
+			if pi == goal:
+				left = 0
+				break
+			for k in range(adj.start[pi], adj.start[pi + 1]):
+				var qi := adj.list[k]
+				var nd := d + 1 + (FLANK_COST if dear.has(qi) else 0)
+				if dist[qi] == -1 or nd < dist[qi]:
+					dist[qi] = nd
+					back[qi] = pi
+					buckets[nd % buckets.size()].append(qi)
+					left += 1
+		d += 1
+	if dist[goal] < 0:
+		return none
+	var rev: Array[Floor.Pos] = []
+	var at := goal
+	while at != -1:
+		rev.append(Floor.pos_from_index(plan, at))
+		at = back[at] if at != start else -1
+	var out: Array[Floor.Pos] = []
+	for i in range(rev.size() - 1, -1, -1):
+		out.append(rev[i])
+	return out
+
+## In its reach, a step of `pace` m/s toward `goal`, stopping APPROACH_STOP short (the same walk as its hunt).
+static func _reach_walk(plan: Floor.FloorPlan, s: OrderlyState, goal: Move.Body, pace: float, dt: float, k: BodySettings, solids: Move.Solids) -> void:
+	var before := s.body
+	if solids != null:
+		_resident_walk(plan, s, goal, pace * dt, k.radius, solids, APPROACH_STOP)
+	else:
+		var dx := goal.x - before.x
+		var dz := goal.z - before.z
+		var d := M.hypot2(dx, dz)
+		var step := minf(pace * dt, d - APPROACH_STOP)
+		if step > 1e-6:
+			s.body = Move.move_with_collision(plan, before, (dx / d) * step, (dz / d) * step, k.radius)
+	var moved := M.hypot2(s.body.x - before.x, s.body.z - before.z)
+	s.moving = moved > 1e-9
+	s.speed = moved / maxf(dt, EPS)
 
 # ---------------------------------------------------------------------------------------------
 # Watchers: two-watcher Stillness (docs/floors/traits-and-hiding.md section 1, T19a).

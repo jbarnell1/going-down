@@ -5,7 +5,7 @@
 #     the Reactor's crew from that tick;
 #   - a player who joins while the crew is ON the Reactor and readies is admitted as the car arrives at the prison;
 #   - a joiner who never readies is admitted at neither stop (as on floors 1 to 5: tests/prop_ready.gd).
-# The server listens on 127.0.0.1:4856 (run it alone if another check uses that port).
+# The server listens on 127.0.0.1, on its own port of this process's test block (tests/test_ports.gd).
 # Run alone: npm run godot:test -- prop_late_admit
 extends RefCounted
 
@@ -20,7 +20,8 @@ const Move = preload("res://sim/move.gd")
 const Ward = preload("res://sim/ward/state.gd")
 
 const SECRET := "late-admit-test-passphrase"
-const PORT := 4856
+const TestPorts = preload("res://tests/test_ports.gd")
+static var PORT: int = TestPorts.port(TestPorts.LATE_ADMIT)
 
 class Net:
 	var ws: WsServer
@@ -110,9 +111,20 @@ func test_a_joiner_on_the_ward_is_admitted_at_the_reactor(t: T) -> void:
 		t.eq(cy.run_depth, HostRules.WARD_DEPTH, "%s: Cy's Ready-up says the crew is on floor 6" % tag)
 		# The Ward's lift back: boarding now, leaving in 0.3 s with Ann aboard (she stands where the lift put her).
 		var w: Ward = host._ward_review
-		w.phase = &"boarding"
-		w.collection_at = host.state.t
-		w.depart_at = host.state.t + 0.3
+		if w.called:
+			# WC1: the server's Ward calls its lift from the station (net/host_rules.gd ward_call): the car is every
+			# floor's. It is here and boarding, its bell in 0.3 s, with Ann on its DOWN half (right walking in).
+			var door := w.lift_door()
+			host._place(crew[0].my_id, Move.Body.make(door.x + 0.35, door.z - 1.2, 0, door.y), host.state.depth, host.state)
+			net.run(0.5)
+			var s := host.state.copy()
+			s.phase = &"boarding"
+			s.bell_left = 0.3
+			host.state = s
+		else:
+			w.phase = &"boarding"
+			w.collection_at = host.state.t
+			w.depart_at = host.state.t + 0.3
 		var arrived := net.run(20.0, func() -> bool: return net.room.host.state.depth == HostRules.REACTOR_DEPTH)
 		t.check(arrived and net.room.host.state.plan.place == Places.REACTOR, "%s: the Ward's lift rides down to the Reactor (depth %d, Ward %s boarded %s left %s, phase %s)" % [tag, net.room.host.state.depth, w.phase, w.boarded, w.left_behind, net.room.host.state.phase])
 		net.run(1.0)

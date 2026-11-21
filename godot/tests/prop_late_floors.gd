@@ -7,7 +7,7 @@
 #   - the Ward ends the day at the prison and bed starts the next day's descent at floor 1;
 #   - the Reactor's recovered tape is written to the normal room's archive folder and the crew is taken home;
 #   - the solo floor picker lists and starts both floors; the dedicated server room starts both for two clients.
-# The server test listens on 127.0.0.1:4566 (run it alone if another check uses that port).
+# The server test listens on 127.0.0.1, on its own port of this process's test block (tests/test_ports.gd).
 # Run alone: npm run godot:test -- prop_late_floors
 extends RefCounted
 
@@ -29,7 +29,8 @@ const ReactorState = preload("res://sim/reactor.gd")
 const ReactorArchive = preload("res://sim/reactor_archive.gd")
 
 const SECRET := "late-floors-test-passphrase"
-const PORT := 4566
+const TestPorts = preload("res://tests/test_ports.gd")
+static var PORT: int = TestPorts.port(TestPorts.LATE_FLOORS)
 
 ## The real host and two real clients over an in-memory link (as prop_ward_net). The test moves the bodies.
 class Crew:
@@ -101,7 +102,7 @@ func test_the_flag_is_the_last_parameter_and_off_by_default(t: T) -> void:
 	# FL2 added the agreed four after it (party_table_, tenant_timer_, second_orderly_, cycles_: tests/prop_cycles.gd).
 	# RN1 added ward_place_ and reactor_place_ after cycles_, in the order agreed for the three workers.
 	# DF1 added pressures_ after reactor_place_ (the order the lead set: ..., cycles_, ward_place_, reactor_place_, pressures_).
-	t.eq(names.slice(at), ["late_floors_", "party_table_", "tenant_timer_", "second_orderly_", "cycles_", "ward_place_", "reactor_place_", "pressures_"] as Array[String], "late_floors_ is followed only by the seven agreed flags")
+	t.eq(names.slice(at), ["late_floors_", "party_table_", "tenant_timer_", "second_orderly_", "cycles_", "ward_place_", "reactor_place_", "pressures_", "ward_call_", "ward_web_", "ward_layout_", "orderly_fix_", "minder_calm_", "down_ring_", "pn_fixes_"] as Array[String], "late_floors_ is followed only by the fourteen agreed flags (WC1 added ward_call_ and ward_web_, WG1 ward_layout_, OR2 orderly_fix_, MA1 minder_calm_, down_ring_ and pn_fixes_)")
 	t.eq(names[at - 1], "minder_hunt_", "minder_hunt_ comes just before it")
 	t.eq(names[at - 2], "annex_drag_", "after annex_drag_")
 	var plain := HostRules.new(true, 1, Places.FULL, true)

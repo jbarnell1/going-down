@@ -118,6 +118,10 @@ const ROWS: Array = [
 	# arrives, so a change waits for the next floor. Today's is Run.SECOND_ORDERLY_DEPTH.
 	[&"orderly2.first_floor", &"orderly", "SECOND ORDERLY FROM FLOOR", "a Clinic floor this deep or deeper has a second Orderly", "", 2.0, 1.0, 20.0, 1.0, &"floor", &"T22b", W],
 	[&"orderly.catch_dance", &"orderly", "BELLY DANCE AFTER A CATCH", "dance after bending over a downed crewmate", "on/off", 0.0, 0.0, 1.0, 1.0, &"now", &"T20i", W],
+	# OR2, the Orderly fix (sim/run.gd with_orderly_fix, on in the game's rooms). Today's are Entity.REACH_WALK and
+	# OrderlyFix.DIRTY_FROM. Off (tests only) nothing reads them.
+	[&"orderly.reach_walk", &"orderly", "KEEPS COMING AS IT REACHES", "in 100 of its hunt speed, while it swipes (0: it stops to swipe and a walker gets away)", "in 100", 100.0, 0.0, 100.0, 5.0, &"now", &"OR2", W],
+	[&"orderly.dirty_from", &"orderly", "STARTS IN THE DIRTY PART", "how far in the Orderlies start: in 100 of the walk from the lift to the far end", "in 100", 60.0, 30.0, 90.0, 5.0, &"floor", &"OR2", W],
 	# The Temp (the Annex). Lonely (T19c, sim/lonely.gd) is on in the game's rooms: its chase speed is temp.speed
 	# (temp.dark_speed in the blackout, temp.alone_speed with a crew of one), today's its CHASE_SPEED and
 	# SOLO_CHASE_SPEED. Without Lonely (tests only) the Temp's Stillness hunt reads the same two ids.
@@ -145,6 +149,12 @@ const ROWS: Array = [
 	[&"minder.anger_sprint", &"minder", "SPRINTING FILLS ITS ANGER IN", "seconds of sprinting that fill an empty anger bar", "s", 1.0, 0.5, 10.0, 0.5, &"now", &"LS4", F],
 	[&"minder.anger_noise", &"minder", "ONE NOISE ADDS TO ITS ANGER", "a ball pit, a flap, a dropped tape or an emote", "in 100", 55.0, 5.0, 100.0, 1.0, &"now", &"LS4", W],
 	[&"minder.anger_cool", &"minder", "ITS ANGER COOLS FROM FULL IN", "seconds of quiet that empty a full anger bar. Does nothing with the party table on (the game's rooms): there the bar never cools by itself", "s", 50.0, 10.0, 300.0, 5.0, &"now", &"LS4", F],
+	# MA1, the owner's playtest of 20 Nov (sim/seek.gd "MA1"): on in the game's rooms. Today's are Seek.CALM_AFTER_HUNT,
+	# CALM_HIDE_ANGER, CALM_OPEN_ANGER (in 100) and CALM_STALK_SPEED.
+	[&"minder.after_hunt", &"minder", "EACH HUNT LEAVES ITS ANGER AT", "where the anger bar restarts as a count ends, this much more for each count so far (never over 60)", "in 100", 15.0, 0.0, 45.0, 5.0, &"now", &"MA1", W],
+	[&"minder.anger_hide", &"minder", "HIDING ANGERS IT BY", "getting into a hide adds this to its anger bar", "in 100", 10.0, 0.0, 50.0, 1.0, &"now", &"MA1", W],
+	[&"minder.anger_open", &"minder", "OPENING SOMETHING ANGERS IT BY", "opening a drawer or a box adds this to its anger bar", "in 100", 10.0, 0.0, 50.0, 1.0, &"now", &"MA1", W],
+	[&"minder.stalk", &"minder", "WALKS TO A PLAYER IT SEES AT", "between counts, toward a player in its view (walk 3, creep 1.2)", "m/s", 1.5, 0.5, 2.9, 0.1, &"now", &"MA1", F],
 	# The party table (T15h, sim/seek.gd "Party table"): on in the game's rooms. Today's are Seek.FETCH_TIME, FETCH_ANGER
 	# and FETCH_REACH. The health the freed get back is heal.health. Read by the rules and by the client's table
 	# prompt (client/hide_view.gd), so the screen prints the number in force; on the panel since T22c.
@@ -228,6 +238,10 @@ const ROWS: Array = [
 	[&"rigger.arm_speed", &"rigger", "HAND REACHES AT", "how fast the hand pays out into a house (walk 3, creep 1.2)", "m/s", 2.2, 0.5, 4.0, 0.05, &"now", &"WD1", F],
 	[&"rigger.alone_arm_speed", &"rigger", "HAND REACHES AT, PLAYING ALONE", "the same with a crew of one", "m/s", 1.8, 0.5, 4.0, 0.05, &"now", &"WD1", F],
 	[&"rigger.arm_back", &"rigger", "HAND DRAWS BACK AT", "how fast the hand comes back out", "m/s", 2.6, 0.5, 6.0, 0.1, &"now", &"WD1", F],
+	# WC1 (net/host_rules.gd ward_call, ward_web): the lift's call at the far house and a cut down from the web are loud
+	# (sim/ward/state.gd hear_loud): heard as a flare's burst is, this near where he is. 80 m is anywhere on the Ward.
+	[&"rigger.call_heard", &"rigger", "HEARS THE LIFT CALLED WITHIN", "the call button at the far house, this near the house he is at; 0 is never", "m", 80.0, 0.0, 80.0, 1.0, &"now", &"WC1", F],
+	[&"rigger.cut_heard", &"rigger", "HEARS A CUT FROM THE WEB WITHIN", "a crewmate cut down from the web, this near the house he is at; 0 is never", "m", 80.0, 0.0, 80.0, 1.0, &"now", &"WC1", F],
 	# The lift and the dark. "Time for the elevator to return" is the first three rows.
 	[&"lift.floors_min", &"lift", "CAR STARTS, FEWEST FLOORS AWAY", "the shortest the indicator can start from", "floors", 6.0, 2.0, 19.0, 1.0, &"next", &"LS1", W],
 	[&"lift.floors_max", &"lift", "CAR STARTS, MOST FLOORS AWAY", "the longest", "floors", 12.0, 3.0, 20.0, 1.0, &"next", &"LS1", W],
@@ -245,13 +259,24 @@ const ROWS: Array = [
 	# Hanging Ward. Today's is sim/ward/state.gd RETURN_SECONDS (the design's ten minutes). At one minute there is no
 	# separate one-minute reminder.
 	[&"ward.lift_minutes", &"ward", "LIFT RETURNS AFTER", "minutes from the lift leaving the crew in the Ward to its return", "min", 10.0, 1.0, 20.0, 1.0, &"next", &"PL2", W],
+	# WC1: with the call on, the clock is back only when this is on (read as the Ward starts); the web's carry and cut.
+	[&"ward.lift_clock", &"ward", "LIFT ON A CLOCK, NOT CALLED", "the old ten-minute return instead of the call at the far house", "on/off", 0.0, 0.0, 1.0, 1.0, &"next", &"WC1", W],
+	[&"ward.carry_time", &"ward", "A CATCH IS HUNG AFTER", "seconds from the hand's catch to the cocoon at its hang point", "s", 2.0, 0.0, 8.0, 0.5, &"now", &"WC1", F],
+	[&"ward.cut_time", &"ward", "A CUT FROM THE WEB TAKES", "how long F is held under a cocoon", "s", 4.0, 1.0, 15.0, 0.5, &"now", &"WC1", F],
+	# WG1: the Ward laid out from the floor seed (net/host_rules.gd ward_layout; sim/ward/layout.gd generate_v2), stamped
+	# as the host builds the Ward on arrival and sent to every screen in the Ward's block. They only scale lengths: the
+	# seed's draws are the same whatever they say. Today's are sim/ward/layout.gd SPREAD and RISE.
+	[&"ward.spread", &"ward", "HOUSES HANG APART", "times the Ward's spacing between neighbouring houses (longer walkways)", "times", 1.1, 1.0, 1.6, 0.05, &"floor", &"WG1", F],
+	[&"ward.rise", &"ward", "HOUSES HANG WITHIN", "metres above or below the lift's cottage; walkways never steeper than 1 in 5.5", "m", 1.5, 0.0, 3.0, 0.1, &"floor", &"WG1", F],
 	# Players: stamina.
 	[&"stamina.tank", &"stamina", "A FULL TANK SPRINTS FOR", "seconds of sprinting in a full tank", "s", 7.0, 3.0, 15.0, 0.5, &"now", &"LS5", F],
 	[&"stamina.refill_walk", &"stamina", "REFILL, WALKING", "empty to full", "s", 8.0, 3.0, 20.0, 0.5, &"now", &"LS5", F],
 	[&"stamina.refill_rest", &"stamina", "REFILL, STANDING OR CREEPING", "empty to full", "s", 5.0, 2.0, 15.0, 0.5, &"now", &"LS5", F],
 	[&"stamina.winded", &"stamina", "WINDED UNTIL THE TANK IS", "after running dry, no sprint until this full", "in 100", 35.0, 10.0, 80.0, 5.0, &"now", &"LS5", W],
 	# Players: down and healing.
-	[&"down.time", &"down", "DOWN FOR, BEFORE YOU ARE OUT", "the owner's \"time down until you expire\"", "s", 10.0, 5.0, 60.0, 1.0, &"next", &"LS1", F],
+	[&"down.time", &"down", "DOWN FOR, BEFORE YOU ARE OUT", "the owner's \"time down until you expire\" (without the ring: tests only)", "s", 10.0, 5.0, 60.0, 1.0, &"next", &"LS1", F],
+	# DR1, the owner's playtest of 20 Nov (sim/run.gd down_time): on in the game's rooms. Today's is Run.DOWN_RING_TIME.
+	[&"down.ring", &"down", "DOWN FOR, WITH THE RING", "time down until you are out, shown as the ring", "s", 30.0, 5.0, 90.0, 1.0, &"next", &"DR1", F],
 	[&"heal.time", &"down", "A HEAL TAKES", "how long F is held", "s", 3.0, 1.0, 10.0, 0.5, &"next", &"LS5", F],
 	[&"heal.reach", &"down", "HEAL FROM WITHIN", "healer's feet to the downed player", "m", 1.5, 1.0, 3.0, 0.1, &"floor", &"LS6", F],
 	[&"down.crawl", &"down", "CRAWL SPEED", "a downed player", "m/s", 0.6, 0.0, 2.0, 0.1, &"floor", &"LS6", F],
@@ -332,6 +357,10 @@ const WIRED_IDS: Array[StringName] = [
 	&"dark.min", &"dark.max", &"dark.first_min", &"dark.first_max", &"dark.warning",
 	# PL2: the Ward's lift.
 	&"ward.lift_minutes",
+	# WC1: the Ward's call and web.
+	&"rigger.call_heard", &"rigger.cut_heard", &"ward.lift_clock", &"ward.carry_time", &"ward.cut_time",
+	# WG1: the Ward's layout.
+	&"ward.spread", &"ward.rise",
 	# LS4: the Minder (the tuned Playroom).
 	&"minder.stroll", &"minder.hide_time", &"minder.hide_more", &"minder.last_hide", &"minder.search",
 	&"minder.anger_sprint", &"minder.anger_noise", &"minder.anger_cool",
@@ -363,6 +392,10 @@ const WIRED_IDS: Array[StringName] = [
 	&"record.reach", &"record.rate", &"quota.step", &"marks.pad",
 	# T22c: the party table, now that client/hide_view.gd's table prompt prints the tuned numbers too.
 	&"party.free_time", &"party.free_anger", &"party.reach",
+	# OR2: the Orderly fix.
+	&"orderly.reach_walk", &"orderly.dirty_from",
+	# MA1 and DR1: the owner's playtest of 20 Nov.
+	&"minder.after_hunt", &"minder.anger_hide", &"minder.anger_open", &"minder.stalk", &"down.ring",
 ]
 
 ## The least wait of a call is its start delay plus the floors: sim/run.gd CALL_START_DELAY_MIN (this file

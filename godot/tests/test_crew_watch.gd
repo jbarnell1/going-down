@@ -24,7 +24,10 @@ const Places = preload("res://sim/places.gd")
 const Run = preload("res://sim/run.gd")
 
 const SECRET := "crew-watch-test-passphrase"
-const PORT := 4840
+const TestPorts = preload("res://tests/test_ports.gd")
+## Two ports of this process's test block (tests/test_ports.gd): the Clinic floor, and the Reactor.
+static var PORT: int = TestPorts.port(TestPorts.CREW_WATCH)
+static var PORT_REACTOR: int = TestPorts.port(TestPorts.CREW_WATCH_REACTOR)
 ## How close the out player's camera stays to the watched crewmate's own camera, and their look to theirs.
 const FOLLOW_M := 0.75
 const FOLLOW_RAD := 0.25
@@ -214,7 +217,7 @@ func test_follows_through_the_room_on_a_clinic_floor(t: T) -> void:
 	_room_follow(t, 1, PORT, Places.CLINIC)
 
 func test_follows_through_the_room_on_the_reactor(t: T) -> void:
-	_room_follow(t, 7, PORT + 1, Places.REACTOR)
+	_room_follow(t, 7, PORT_REACTOR, Places.REACTOR)
 
 func _room_follow(t: T, depth: int, port: int, place: StringName) -> void:
 	var say := func(_l: String) -> void: pass

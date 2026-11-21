@@ -16,6 +16,12 @@
 #   sending a value goes when the key or the mouse is let go, or after 0.3 s without moving: a drag is one change.
 #   refused the row snaps back and says why for 2 s.
 #
+# YOUR SOUND (MU1; the owner, 20 Nov: "That shouldn't just be the host, that should be everyone"): a page of the
+# player's own MASTER, MUSIC and EFFECTS sliders (client/volume.gd), live for every player, host or not, kept on
+# this computer only and never sent. The [YOUR SOUND] button on the top line or S opens it (S or a section goes
+# back); the Esc menu's V opens the panel on it. Up and down choose a slider, left and right move it 5 % (Shift
+# 25 %), Backspace puts it back to 100 %; the mouse clicks - and +, drags the slider, RESET.
+#
 # The notice: one line at the top centre for 4 s (more than three in 2 s become one: "... CHANGED 5 SETTINGS. F8 TO
 # SEE."), from every "tune" message's line (the server words it, so every screen says the same).
 extends Control
@@ -24,6 +30,7 @@ const Settings = preload("res://sim/settings.gd")
 const TuningDesk = preload("res://net/tuning_desk.gd")
 const Run = preload("res://sim/run.gd")
 const Stamina = preload("res://sim/stamina.gd")
+const Volume = preload("res://client/volume.gd")
 
 const INK := Color("#f4f4ec")
 const AMBER := Color("#ffd27a")
@@ -53,6 +60,11 @@ var _back_down_at := -1.0
 var _drag: StringName = &""
 var _hits: Array = []  # [Rect2, kind, arg]
 var _seen_refusals := 0
+## MU1: the player's own sound levels (client/volume.gd), set by the game; null for none (no page then).
+var volume: Object = null
+var _sound := false
+var _sound_row := 0
+var _sound_drag := ""
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -84,6 +96,7 @@ func open() -> void:
 
 func close() -> void:
 	_send_pending()
+	_sound_let_go()
 	_open = false
 	_drag = &""
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -286,9 +299,89 @@ func _send_pending() -> void:
 	_pending.clear()
 
 # ---------------------------------------------------------------------------------------------
+# YOUR SOUND (MU1): every player's own, nothing sent.
+
+func is_sound() -> bool:
+	return _sound
+
+## The sound page on or off (off: back to the section that was chosen).
+func show_sound(on: bool) -> void:
+	_sound = on and volume != null
+	_sound_drag = ""
+
+## One slider `dir` steps of Volume.STEP (`n` at a time), applied at once and saved.
+func sound_nudge(row: int, dir: int, n: int = 1) -> bool:
+	if volume == null or row < 0 or row >= Volume.ROWS.size():
+		return false
+	var key_name := str(Volume.ROWS[row][0])
+	var was: int = volume.get_pct(key_name)
+	return sound_set(row, was + dir * n * Volume.STEP)
+
+## One slider to `pct` %, applied at once (saved unless a drag is still going).
+func sound_set(row: int, pct: int) -> bool:
+	if volume == null or row < 0 or row >= Volume.ROWS.size():
+		return false
+	var key_name := str(Volume.ROWS[row][0])
+	var was: int = volume.get_pct(key_name)
+	volume.set_pct(key_name, pct)
+	volume.apply()
+	if _sound_drag == "":
+		volume.save()
+	return volume.get_pct(key_name) != was
+
+func _sound_let_go() -> void:
+	if _sound_drag != "" and volume != null:
+		_sound_drag = ""
+		volume.save()
+	_sound_drag = ""
+
+func _sound_key(k: InputEventKey) -> void:
+	if k.physical_keycode == KEY_BACKSPACE:
+		if k.pressed and not k.echo:
+			sound_set(_sound_row, Volume.DEFAULT)
+		return
+	if not k.pressed:
+		return
+	var n := 5 if k.shift_pressed else 1
+	match k.physical_keycode:
+		KEY_ESCAPE, KEY_F8:
+			if not k.echo:
+				close()
+		KEY_S, KEY_TAB:
+			if not k.echo:
+				show_sound(false)
+		KEY_UP:
+			_sound_row = maxi(0, _sound_row - 1)
+		KEY_DOWN:
+			_sound_row = mini(Volume.ROWS.size() - 1, _sound_row + 1)
+		KEY_LEFT, KEY_RIGHT:
+			sound_nudge(_sound_row, -1 if k.physical_keycode == KEY_LEFT else 1, n)
+
+static func _sound_row_of(key_name: String) -> int:
+	for i in Volume.ROWS.size():
+		if str(Volume.ROWS[i][0]) == key_name:
+			return i
+	return -1
+
+func _sound_drag_to(pos: Vector2) -> void:
+	for h: Array in _hits:
+		if String(h[1]) == "snd_slider" and int(h[2]) == _sound_row_of(_sound_drag):
+			var r: Rect2 = h[0]
+			var f := clampf((pos.x - r.position.x) / maxf(1.0, r.size.x), 0.0, 1.0)
+			sound_set(int(h[2]), roundi(f * 100.0))
+			return
+
+# ---------------------------------------------------------------------------------------------
 # Keys and the mouse (the game passes them while the panel is open).
 
 func key(k: InputEventKey) -> void:
+	if _sound:
+		_sound_key(k)
+		return
+	if k.physical_keycode == KEY_S and volume != null:
+		if k.pressed and not k.echo:
+			show_sound(true)
+		return
 	var now := _now()
 	if k.physical_keycode == KEY_BACKSPACE:
 		if k.pressed and not k.echo:
@@ -328,9 +421,13 @@ func mouse(e: InputEvent) -> void:
 			return
 		if mb.pressed:
 			click(mb.position, mb.shift_pressed)
+		elif _sound_drag != "":
+			_sound_let_go()
 		elif _drag != &"":
 			_drag = &""
 			_send_pending()
+	elif e is InputEventMouseMotion and _sound_drag != "":
+		_sound_drag_to((e as InputEventMouseMotion).position)
 	elif e is InputEventMouseMotion and _drag != &"":
 		_drag_to((e as InputEventMouseMotion).position)
 
@@ -341,7 +438,22 @@ func click(pos: Vector2, shift: bool = false) -> bool:
 		if not r.has_point(pos):
 			continue
 		match String(h[1]):
+			"sound_tab":
+				show_sound(not _sound)
+			"snd_row":
+				_sound_row = int(h[2])
+			"snd_minus", "snd_plus":
+				_sound_row = int(h[2])
+				sound_nudge(_sound_row, -1 if h[1] == "snd_minus" else 1, 5 if shift else 1)
+			"snd_reset":
+				_sound_row = int(h[2])
+				sound_set(_sound_row, Volume.DEFAULT)
+			"snd_slider":
+				_sound_row = int(h[2])
+				_sound_drag = str(Volume.ROWS[_sound_row][0])
+				_sound_drag_to(pos)
 			"section":
+				show_sound(false)
 				_sel = int(h[2])
 				_row = 0
 			"minus", "plus":
@@ -402,9 +514,21 @@ func top_line() -> String:
 
 ## The foot: for the host, how to change a value first (PT6: the panel says how it works on first open).
 func foot_line() -> String:
+	if _sound:
+		return "UP DOWN: CHOOSE    LEFT RIGHT OR DRAG: CHANGE    BACKSPACE: 100    S: BACK    F8: CLOSE"
 	if is_host():
 		return "LEFT RIGHT OR CLICK: CHANGE    TAB: NEXT    HOLD BACKSPACE: RESET ALL %d    F8: CLOSE" % changed_count()
-	return "F8: CLOSE"
+	return "S: YOUR SOUND    F8: CLOSE" if volume != null else "F8: CLOSE"
+
+## MU1: the sound page's rows: {key, name, pct, text}.
+func sound_rows() -> Array:
+	var out: Array = []
+	if volume == null:
+		return out
+	for r: Array in Volume.ROWS:
+		var pct: int = volume.get_pct(str(r[0]))
+		out.append({"key": str(r[0]), "name": str(r[1]), "pct": pct, "text": "OFF" if pct == 0 else "%d%%" % pct})
+	return out
 
 func saved_line() -> String:
 	if rc == null:
@@ -441,7 +565,8 @@ func describe() -> Dictionary:
 	return {"open": _open, "host": is_host(), "top": top_line(), "saved": saved_line(), "changed": changed_count(), "notice": notice if _now() < notice_until else "",
 		"sections": secs, "sel": _sel, "row": _row, "rows": rows, "flash": _flash if _now() < _flash_until else "",
 		"asked": _plain(_asked()), "inForce": _plain(_in_force()), "rev": int(rc.get("tune_rev")) if rc != null else 0,
-		"runRev": int(rc.get("client").get("tune_rev")) if rc != null and rc.get("client") != null else 0}
+		"runRev": int(rc.get("client").get("tune_rev")) if rc != null and rc.get("client") != null else 0,
+		"sound": {"open": _sound, "row": _sound_row, "rows": sound_rows(), "foot": foot_line()}}
 
 static func _plain(d: Dictionary) -> Dictionary:
 	var out := {}
@@ -483,6 +608,44 @@ func _button(label: String, at: Vector2, px: float, col: Color) -> Rect2:
 	_text(label, at, px, col)
 	return r
 
+## MU1: the sound page's three rows at `at` (the right side; `right` is the card's inner right edge): the name, the
+## value, - slider +, RESET. Live for every player: the host's grey never applies here.
+func _draw_sound(at: Vector2, rw: float, px: float, lh: float, right: float) -> void:
+	var ry := at.y
+	var rx := at.x
+	var rows := sound_rows()
+	for r in rows.size():
+		var row: Dictionary = rows[r]
+		var on := r == _sound_row
+		var row_h := lh * 2.0 + 2 * px
+		if on:
+			draw_rect(Rect2(Vector2(rx - 4 * px, ry - 3 * px), Vector2(rw + 8 * px, row_h)), Color(1, 1, 1, 0.06))
+		_hits.append([Rect2(Vector2(rx, ry - 3 * px), Vector2(rw, row_h)), "snd_row", r])
+		var changed := int(row["pct"]) != Volume.DEFAULT
+		_text(str(row["name"]), Vector2(rx, ry), px, INK if on else Color(0.85, 0.86, 0.82))
+		var vy := ry + lh
+		if changed:
+			draw_rect(Rect2(Vector2(rx, vy + 2 * px), Vector2(3 * px, 3 * px)), AMBER)
+		_text(str(row["text"]), Vector2(rx + 6 * px, vy), px, AMBER if changed else INK)
+		var reset_w := _w("RESET", px) + 4 * px
+		var reset_at := Vector2(right - reset_w + 2 * px, vy)
+		var reset_r := _button("RESET", reset_at, px, INK if changed else DIM)
+		_hits.append([reset_r, "snd_reset", r])
+		var plus_at := Vector2(reset_at.x - 14 * px, vy)
+		var slider_end := plus_at.x - 6 * px
+		var minus_at := Vector2(rx + 6 * px + 8 * 6 * px, vy)
+		var minus_r := _button("-", minus_at, px, INK if int(row["pct"]) > 0 else DIM)
+		_hits.append([minus_r, "snd_minus", r])
+		var plus_r := _button("+", plus_at, px, INK if int(row["pct"]) < 100 else DIM)
+		_hits.append([plus_r, "snd_plus", r])
+		var track := Rect2(Vector2(minus_r.end.x + 5 * px, vy + 3 * px), Vector2(maxf(10 * px, slider_end - minus_r.end.x - 10 * px), px))
+		draw_rect(track, GREY)
+		var fv := float(row["pct"]) / 100.0
+		draw_rect(Rect2(Vector2(track.position.x + track.size.x * fv - 2 * px, vy), Vector2(4 * px, 7 * px)), AMBER if changed else INK)
+		_hits.append([Rect2(Vector2(track.position.x, vy - 2 * px), Vector2(track.size.x, 11 * px)), "snd_slider", r])
+		ry += row_h + 4 * px
+	_text("NOT SENT TO ANYONE. THE HOST'S SETTINGS ARE ON THE LEFT.", Vector2(rx, ry + 2 * px), px, GREY)
+
 func _draw() -> void:
 	var px := _px()
 	var now := _now()
@@ -506,12 +669,18 @@ func _draw_panel(px: float, now: float) -> void:
 	var y := card.position.y + m
 	var top := top_line()
 	_text(top, Vector2(x0, y), px, INK if host else AMBER)
+	var mid_from := x0 + _w(top, px)
+	if volume != null:
+		# MU1: every player's own sound page, live whoever the host is.
+		var tab_r := _button("YOUR SOUND", Vector2(mid_from + 10 * px, y), px, AMBER if _sound else INK)
+		_hits.append([tab_r, "sound_tab", 0])
+		mid_from = tab_r.end.x
 	var sv := saved_line()
 	var sv_x := card.end.x - m - _w(sv, px)
 	_text(sv, Vector2(sv_x, y), px, GREY)
 	var mid := "%d CHANGED TONIGHT" % changed_count()
 	var mid_x := card.position.x + (card.size.x - _w(mid, px)) * 0.5
-	if mid_x > x0 + _w(top, px) + 6 * px and mid_x + _w(mid, px) < sv_x - 6 * px:
+	if mid_x > mid_from + 6 * px and mid_x + _w(mid, px) < sv_x - 6 * px:
 		_text(mid, Vector2(mid_x, y), px, AMBER if changed_count() > 0 else GREY)
 	y += lh + 2 * px
 	draw_rect(Rect2(Vector2(card.position.x, y), Vector2(card.size.x, px * 0.5)), Color(1, 1, 1, 0.18))
@@ -538,8 +707,8 @@ func _draw_panel(px: float, now: float) -> void:
 					ly += lh
 		if title.length() > 21:
 			title = title.left(21)
-		var col := INK if i == _sel else GREY
-		if i == _sel:
+		var col := INK if i == _sel and not _sound else GREY
+		if i == _sel and not _sound:
 			draw_rect(Rect2(Vector2(x0 - 3 * px, ly - 2 * px), Vector2(left_w - 2 * px, lh)), Color(1, 1, 1, 0.07))
 		_text(title, Vector2(x0 + indent, ly), px, col)
 		var n := _changed_in(i)
@@ -552,10 +721,12 @@ func _draw_panel(px: float, now: float) -> void:
 	var rx := x0 + left_w + 10 * px
 	var rw := card.end.x - m - rx
 	var ry := y
-	var rows := _section_rows(_sel)
-	_text(_printable(str(_sections[_sel]["title"])), Vector2(rx, ry), px, INK)
+	var rows: Array = [] if _sound else _section_rows(_sel)
+	_text("YOUR SOUND: ON THIS COMPUTER ONLY" if _sound else _printable(str(_sections[_sel]["title"])), Vector2(rx, ry), px, INK)
 	ry += lh + 5 * px
-	if rows.is_empty():
+	if _sound:
+		_draw_sound(Vector2(rx, ry), rw, px, lh, card.end.x - m)
+	elif rows.is_empty():
 		_text("NOTHING IS CHANGED TONIGHT" if _sel == 0 else "NOTHING HERE YET", Vector2(rx, ry), px, GREY)
 	for r in rows.size():
 		var s: Settings.Setting = rows[r]

@@ -67,6 +67,27 @@ const FLOOR_FILES: Array[String] = [
 	"assets/entities/orderly_v2.glb", "assets/entities/orderly_v2_Orderly_v2_albedo.webp",
 ]
 const TAPE := {"Web": "assets/station/tape/crew23_web.ogv", "Windows": "assets/station/tape/crew23.ogv"}
+## MU1: the owner's five music tracks (client/music.gd), loaded by name rather than preloaded, so named here.
+const MUSIC_FILES: Array[String] = ["assets/music/abandoned_jingle.ogg", "assets/music/elevator_muzak.ogg",
+	"assets/music/wistful_regret.ogg", "assets/music/sub_bass_drone.ogg", "assets/music/final_stamp.ogg"]
+
+func test_the_music_ships_in_every_game_build(t: T) -> void:
+	for f: String in MUSIC_FILES:
+		t.check(ResourceLoader.exists("res://" + f) and load("res://" + f) is AudioStreamOggVorbis, "res://%s is in the project, an Ogg Vorbis stream" % f)
+	var text := FileAccess.get_file_as_string("res://export_presets.cfg")
+	var name := ""
+	var seen := 0
+	for raw: String in text.split("\n"):
+		var line := raw.strip_edges()
+		if line.begins_with("name="):
+			name = line.trim_prefix("name=").trim_prefix("\"").trim_suffix("\"")
+		elif line.begins_with("export_filter=") and TAPE.has(name):
+			t.eq(line, "export_filter=\"all_resources\"", "%s exports every resource" % name)
+		elif line.begins_with("exclude_filter=") and TAPE.has(name):
+			seen += 1
+			for dir: String in ["assets/*", "assets/music", ".ogg", "music"]:
+				t.check(not line.contains(dir), "%s: exclude_filter does not name %s (%s)" % [name, dir, line])
+	t.eq(seen, 2, "the web and Windows presets were read")
 
 func test_the_late_floors_files_ship_in_every_game_build(t: T) -> void:
 	for f: String in FLOOR_FILES + TAPE.values():

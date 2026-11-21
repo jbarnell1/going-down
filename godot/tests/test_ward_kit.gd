@@ -20,6 +20,8 @@ const Run = preload("res://sim/run.gd")
 const Inventory = preload("res://sim/inventory.gd")
 const Flare = preload("res://sim/flare.gd")
 const Ward = preload("res://sim/ward/state.gd")
+## WG1: a block's layout options (sim/ward/layout.gd from_wire), so the test builds the host's Ward.
+const WardLayout = preload("res://sim/ward/layout.gd")
 
 class Rig:
 	var room: LocalRoom
@@ -146,7 +148,7 @@ func test_a_flare_is_thrown_through_the_wards_walls_and_heard(t: T) -> void:
 	var feet := Vector3(on.body.x, on.body.y, on.body.z)
 	var reach := Run.Settings.f(on.state().tuning, &"flare.throw", Flare.THROW)
 	var direction := Flare.forward(on.yaw) * reach
-	var expect := Ward.new(int(on.room.host.world().ward.seed))
+	var expect := Ward.new(int(on.room.host.world().ward.seed), WardLayout.from_wire(on.room.host.world().ward.get("layout")))
 	expect.phase = ward.phase
 	expect.bridge_lowered = ward.bridge_lowered
 	expect.requested_doors = ward.requested_doors.duplicate()

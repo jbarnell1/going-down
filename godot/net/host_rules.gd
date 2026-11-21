@@ -103,6 +103,21 @@
 #    unless asked, and only with cycles; the game's rooms ask for it with them (`pressures=0` switches it off). From
 #    floor 8 the quotas grow, heals are counted, a Stillness resident needs a third watcher, the near light shrinks
 #    and the Tenant comes sooner (sim/run.gd "Pressures"). Cycle 1 is unchanged.
+#  - The Ward's call and web (WC1, `ward_call` then `ward_web`, the last two parameters after `pressures`): off unless
+#    asked, and only with the late floors; the game's rooms ask for both (`ward_call=0`, `ward_web=0` switch them off).
+#    Stored here; net/host.gd reads them as the Ward starts (sim/ward/state.gd `called` and `web`).
+#  - The Ward's layout from the seed (WG1, `ward_layout`, after `ward_web`): off unless asked, and
+#    only with the late floors. On, net/host.gd builds the Hanging Ward with sim/ward/layout.gd generate_v2 (the
+#    houses' places, heights, facing and walkways from the floor seed) and its block carries the options, so every
+#    screen builds the same; off, the Ward is today's for every seed.
+#  - The Orderly fix (OR2, `orderly_fix`, after `ward_layout`; sim/run.gd "The Orderly fix"): off
+#    unless asked; the game's rooms ask for it. The Orderly keeps walking as it reaches, a second Orderly chases
+#    another player its own way round, and on the Clinic the Orderlies start in the dirty part, apart, by the seed.
+#  - The owner's playtest of 20 Nov, the last three flags, after `orderly_fix` (each off unless asked; the game's rooms ask for all
+#    three): `minder_calm` (MA1, sim/seek.gd "MA1": the Minder's anger never cools, hiding and opening things add to it,
+#    and between counts it walks to a player it sees), `down_ring` (DR1, only with `downs`: a downed player has 30 s,
+#    the live setting down.ring, before they are out) and `pn_fixes` (PN2: G with an empty hand puts down a carried
+#    tape; PN3: the Annex's hides work under Lonely). prepare() turns them on before the first tick.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -201,6 +216,24 @@ var reactor_place: bool
 ## The pressures of floor 8 and deeper (DF1, the last parameter; sim/run.gd "Pressures"): off unless asked, and only
 ## with cycles. The game's rooms ask for it with the late floors unless started with `pressures=0`.
 var pressures: bool
+## WC1: the Hanging Ward's lift called from a far house (the last parameter but one; sim/ward/state.gd `called`, net/host.gd
+## _step_ward_review): no clock; the car comes, boards and goes up or down by every floor's rules (sim/run.gd _step_lift),
+## called from the station; the call is a noise the Rigger hears. The live setting ward.lift_clock brings the clock back.
+## Off unless asked, and only with the late floors and the Ward as a normal level (ward_place); the game's rooms ask for it (`ward_call=0`).
+var ward_call: bool
+## WC1: the web (the last parameter; sim/ward/state.gd `web`): a caught player is hung at a hang point and a crewmate's
+## loud cut frees them. Off unless asked, and only with the late floors; the game's rooms ask for it (`ward_web=0`).
+var ward_web: bool
+## WG1: the Ward's layout from the seed (see the header; the parameter after ward_web_). Read by net/host.gd ward_layout().
+var ward_layout: bool
+## The Orderly fix (OR2, the parameter after ward_layout_; sim/run.gd with_orderly_fix): off unless asked. The game's rooms ask for
+## it: the Orderly keeps coming as it swipes, a second chases another player its own way, and both start in the
+## Clinic's dirty part.
+var orderly_fix: bool
+## The owner's playtest of 20 Nov (see the header; the last three parameters, after orderly_fix_): MA1, DR1 (only with downs), PN2 and PN3.
+var minder_calm: bool
+var down_ring: bool
+var pn_fixes: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -227,8 +260,18 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		deep_pockets_: bool = false, second_wind_: bool = false, soft_shoes_: bool = false, flare_: bool = false, lamp_: bool = false, badge_search_: bool = false, quick_fingers_: bool = false, long_burn_: bool = false, field_dressing_: bool = false, doorway_shadow_: bool = false, steady_gaze_: bool = false, throwing_arm_: bool = false,
 		nerve_passive_: bool = false, annex_drag_: bool = false, minder_hunt_: bool = false, late_floors_: bool = false,
 		party_table_: bool = false, tenant_timer_: bool = false, second_orderly_: bool = false, cycles_: bool = false,
-		ward_place_: bool = false, reactor_place_: bool = false, pressures_: bool = false) -> void:
+		ward_place_: bool = false, reactor_place_: bool = false, pressures_: bool = false, ward_call_: bool = false,
+		ward_web_: bool = false, ward_layout_: bool = false, orderly_fix_: bool = false,
+		minder_calm_: bool = false, down_ring_: bool = false, pn_fixes_: bool = false) -> void:
+	orderly_fix = orderly_fix_
+	minder_calm = minder_calm_
+	down_ring = down_ring_ and downs_
+	pn_fixes = pn_fixes_
 	ward_place = ward_place_ and late_floors_
+	ward_layout = ward_layout_ and late_floors_
+	# Both need the Ward drawn by the main game (ward_place): the old swapped-in Ward has neither the station nor the web.
+	ward_call = ward_call_ and ward_place
+	ward_web = ward_web_ and ward_place
 	pressures = pressures_ and cycles_ and late_floors_
 	tenant_timer = tenant_timer_
 	reactor_place = reactor_place_ and late_floors_
@@ -380,6 +423,12 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		s = Run.with_minder_hunt(s)
 	if party_table and not s.party_table:
 		s = Run.with_party_table(s)
+	if minder_calm and not s.minder_calm:
+		s = Run.with_minder_calm(s)
+	if down_ring and s.downs and not s.down_ring:
+		s = Run.with_down_ring(s)
+	if pn_fixes and not s.pn_fixes:
+		s = Run.with_pn_fixes(s)
 	# The day lock needs something to earn: only with days and the floor quota on (so never with the
 	# resident off, and never with the test switch quota=0).
 	if day_lock and s.days and s.quota and not s.day_lock:
@@ -435,6 +484,9 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 	# A second Orderly (T9b): last, so its start settles with every other rule already on. Never with the resident off.
 	if second_orderly and _entity_on and not s.second_orderly:
 		s = Run.with_second_orderly(s)
+	# OR2: after the second, so both Orderlies' starts are the fix's.
+	if orderly_fix and _entity_on and not s.orderly_fix:
+		s = Run.with_orderly_fix(s)
 	if cycles and _depth > Places.CYCLE_FLOORS:
 		# A run started past the first cycle (the floor picker's floor 8): the cycles above it count as done.
 		s = s.copy()
@@ -475,6 +527,21 @@ static func pressures_by_arg() -> bool:
 
 static func garden_admission_by_arg() -> bool:
 	return not OS.get_cmdline_user_args().has("garden_admission=0")
+
+## WC1: the Ward's call and web unless `ward_call=0` / `ward_web=0` (an argument after `--`, or the web page's query).
+static func ward_call_by_arg() -> bool:
+	return not _arg_off("ward_call")
+
+static func ward_web_by_arg() -> bool:
+	return not _arg_off("ward_web")
+
+static func _arg_off(name: String) -> bool:
+	for raw in OS.get_cmdline_user_args():
+		if raw.trim_prefix("--") == name + "=0":
+			return true
+	if OS.has_feature("web"):
+		return str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('%s') ?? ''" % name, true)) == "0"
+	return false
 
 ## WN1: `ward_place=0` on the command line falls back to FL1's scene swap for the Ward (no new build needed).
 static func ward_place_off_by_arg() -> bool:

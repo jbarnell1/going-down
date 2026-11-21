@@ -166,6 +166,9 @@ const WHY_CALL := &"call"
 const WHY_TOY := &"toy"
 ## Freeing the party table (with_party; see the section at the end), the fetcher's.
 const WHY_FETCH := &"fetch"
+## MA1 (with_calm): getting into a hide, and opening something (a drawer, a box).
+const WHY_HIDE := &"hide"
+const WHY_OPEN := &"open"
 
 static var SIGHT_COS := 0.0
 static var GAP_COS := 0.0
@@ -230,6 +233,8 @@ class SeekInput:
 	var light: Light = null
 	## F held this tick (with_party: at the party table it fetches).
 	var hold: bool = false
+	## MA1 (with_calm): they began opening something this tick (a drawer, a box: the run's "searchStart").
+	var opened: bool = false
 
 	static func make(id_: String, body_: Move.Body, gait_: StringName = &"walk") -> SeekInput:
 		var i := SeekInput.new()
@@ -477,9 +482,12 @@ class SeekState:
 	## The hold's length, stamped as it began (the host's party.free_time then): a hold already under way ends
 	## when its "fetchStart" said, whatever is changed meanwhile.
 	var fetch_len: float = FETCH_TIME
+	## MA1 (with_calm; see the section at the end). Off: every rule above is as before.
+	var calm: bool = false
 
 	func copy() -> SeekState:
 		var s := SeekState.new()
+		s.calm = calm
 		s.hunt = hunt
 		s.party = party
 		s.fetch_by = fetch_by
@@ -749,6 +757,7 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 
 	# 3. Players: moving, hides in and out, noises.
 	var noisy := {}  # player id -> this tick's provocations, in order (Array[StringName])
+	var calm_gain := {}  # MA1: player id -> anger this tick from getting into a hide or opening something
 	var moved_of := {}
 	var level := 0.0
 	# The party table: with someone seated, F at the table frees them and gets nobody into a hide.
@@ -767,6 +776,8 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 			_note(noisy, p.id, WHY_TOY)
 		if p.status != &"ok":
 			continue
+		if s.calm and inp.opened:
+			_calm_note(calm_gain, p.id, calm_open_anger(_live), WHY_OPEN)
 		var flap := false
 		match p.phase:
 			&"out":
@@ -783,6 +794,8 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 							p.seen_entering = false
 							events.append({"type": "hideStart", "t": t, "playerId": p.id, "hide": h.id, "fast": inp.fast})
 							flap = inp.fast
+							if s.calm:
+								_calm_note(calm_gain, p.id, calm_hide_anger(_live), WHY_HIDE)
 			&"entering":
 				p.body = inp.body
 				p.phase_left -= dt
@@ -855,7 +868,7 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 
 	# 4. Provocations: one tick of any starts a count (T15m: they fill the anger bar, and a full bar does).
 	if s.tuned:
-		_tuned_provoke(s, t, dt, noisy, moved_of, input_of, fl, events)
+		_tuned_provoke(s, t, dt, noisy, moved_of, input_of, fl, events, calm_gain)
 	elif _may_provoke(s, t, fl) and not noisy.is_empty():
 		for p in s.players:
 			if noisy.has(p.id):
@@ -885,6 +898,8 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 		_seek_step(s, m, input_of, dt, events, tuning)
 	elif s.tuned and (m.mode == &"grab" or m.mode == &"drag"):
 		_drag_step(s, m, t, dt, events)
+	elif s.tuned and s.calm and _stalk_step(s, m, input_of, dt):
+		pass
 	else:
 		_wander_step(s, m, dt)
 	m.speed = M.hypot2(m.body.x - before.x, m.body.z - before.z) / maxf(dt, EPS)
@@ -997,6 +1012,9 @@ static func _end_count(s: SeekState, t: float, events: Array[Dictionary]) -> voi
 	s.counting = false
 	s.ended += 1
 	s.calm_until = t + CALM_TIME
+	if s.calm and s.tuned:
+		# MA1: the one place the bar comes down: a hunt over, it restarts from a floor that rises each hunt.
+		s.anger = calm_after_hunt(_live, s.ended)
 	if s.last:
 		s.done = true
 	s.reasons = PackedInt32Array()
@@ -1471,7 +1489,7 @@ static func tuned_hide(tuning: Settings.Values, counts: int, last: bool) -> floa
 
 ## Step 4 with T15m on: the hint events, then the anger, and a count when it is full.
 static func _tuned_provoke(s: SeekState, t: float, dt: float, noisy: Dictionary, moved_of: Dictionary, input_of: Dictionary,
-		fl: FloorInput, events: Array[Dictionary]) -> void:
+		fl: FloorInput, events: Array[Dictionary], calm_gain: Dictionary = {}) -> void:
 	if not s.arrived and not fl.riding:
 		s.arrived = true
 		events.append({"type": "playroomArrived", "t": t, "depth": s.floor.plan.depth})
@@ -1490,6 +1508,9 @@ static func _tuned_provoke(s: SeekState, t: float, dt: float, noisy: Dictionary,
 		s.anger = 1.0
 		return
 	if s.ended >= 1 and t < s.calm_until - EPS:
+		if s.calm:
+			# MA1: the bar holds where the hunt's end left it (calm_after_hunt); it never drains.
+			return
 		# The party table: the bar never cools by itself afterwards, so the calm's drain reaches empty on its own
 		# last tick (one tick sooner) rather than leaving the last tick's crumb.
 		var left := s.calm_until - t - (dt if s.party else 0.0)
@@ -1501,6 +1522,15 @@ static func _tuned_provoke(s: SeekState, t: float, dt: float, noisy: Dictionary,
 	var level := s.anger
 	var gained := false
 	for p in s.players:
+		# MA1: getting into a hide or opening something, before the noises.
+		if calm_gain.has(p.id):
+			var cg: Array = calm_gain[p.id]
+			if float(cg[0]) > 0.0:
+				gained = true
+				level += float(cg[0])
+				if level >= 1.0 - EPS:
+					_start_count(s, t, p.id, cg[1], false, events)
+					return
 		if not noisy.has(p.id):
 			continue
 		for why: StringName in noisy[p.id]:
@@ -1516,7 +1546,7 @@ static func _tuned_provoke(s: SeekState, t: float, dt: float, noisy: Dictionary,
 
 ## The anger after a quiet tick: cooled by anger_cool, or (the party table) never by itself.
 static func _cooled(s: SeekState, level: float, dt: float) -> float:
-	if s.party:
+	if s.party or s.calm:
 		return level
 	return maxf(0.0, level - anger_cool(_live) * dt)
 
@@ -1762,3 +1792,104 @@ static func _fetch_step(s: SeekState, input_of: Dictionary, t: float, dt: float,
 	s.fetch_by = ""
 	s.fetch_from = -1.0
 	_note(noisy, by, WHY_FETCH)
+
+# ---------------------------------------------------------------------------------------------
+# MA1, the owner's playtest of 20 Nov (on only for a state made with with_calm(): sim/run.gd minder_calm, which the
+# game's rooms turn on with the tuned Playroom; off, nothing of this happens). "I don't want the cool down mechanism
+# at all. It should only ever go up or stay the same. Any time hiding takes place, a drawer is opened, etc it should
+# aggro a bit. If it sees a user it should start walking towards them, and if close enough should take them down
+# when not aggrod. It shouldn't be fast, and if it loses eyesight of a player, it should go back to wandering."
+#   - the anger bar never cools and never drains over the calm after a count. The one time it comes down is the
+#     tick a count ends: it restarts from calm_after_hunt (CALM_AFTER_HUNT in 100 for each count ended so far, at
+#     most CALM_AFTER_MAX), so it never sits full and starts the next count at once, and each hunt leaves it angrier;
+#   - getting into a hide adds CALM_HIDE_ANGER, and opening something (the run's "searchStart") CALM_OPEN_ANGER;
+#     either can start a count, as a noise can ("why" "hide" or "open");
+#   - between counts, a player out of a hide and in its view (in_view: SIGHT_RANGE, the cone, a clear line) is walked
+#     to at CALM_STALK_SPEED, slower than a walking player, its face on them (the goal "stalk"; its mode stays
+#     "wander"). Within GRAB_RANGE the T15m grab takes them. Out of its view, it goes back to its round.
+
+## Each count ended leaves the bar at this much more (0 to 1), up to CALM_AFTER_MAX (never full).
+const CALM_AFTER_HUNT := 0.15
+const CALM_AFTER_MAX := 0.6
+## Getting into a hide, and opening something: what each adds to the bar (0 to 1).
+const CALM_HIDE_ANGER := 0.1
+const CALM_OPEN_ANGER := 0.1
+## Walking to a player it sees between counts (m/s): under a walk (sim/stamina.gd WALK_SPEED 3), over a creep (1.2).
+const CALM_STALK_SPEED := 1.5
+
+## The state with MA1 on (a copy).
+static func with_calm(s0: SeekState) -> SeekState:
+	var s := s0.copy()
+	s.calm = true
+	return s
+
+## Live settings: minder.after_hunt (in 100 a count ended), minder.anger_hide and minder.anger_open (in 100), and
+## minder.stalk (m/s); today's constants when the host has not set them.
+static func calm_after_hunt(tuning: Settings.Values, ended: int) -> float:
+	var step := Settings.f(tuning, &"minder.after_hunt", CALM_AFTER_HUNT * 100.0) / 100.0
+	return clampf(step * float(ended), 0.0, CALM_AFTER_MAX)
+
+static func calm_hide_anger(tuning: Settings.Values = null) -> float:
+	return Settings.f(tuning, &"minder.anger_hide", CALM_HIDE_ANGER * 100.0) / 100.0
+
+static func calm_open_anger(tuning: Settings.Values = null) -> float:
+	return Settings.f(tuning, &"minder.anger_open", CALM_OPEN_ANGER * 100.0) / 100.0
+
+static func calm_stalk_speed(tuning: Settings.Values = null) -> float:
+	return Settings.f(tuning, &"minder.stalk", CALM_STALK_SPEED)
+
+static func _calm_note(gain: Dictionary, id: String, amount: float, why: StringName) -> void:
+	if gain.has(id):
+		var g: Array = gain[id]
+		gain[id] = [float(g[0]) + amount, g[1]]
+	else:
+		gain[id] = [amount, why]
+
+## Step 5 between counts with MA1 on: the nearest player out of a hide in its view, walked to with its face on them.
+## Returns false (and lets go of a stalk) when nobody is in its view: the wander goes on.
+static func _stalk_step(s: SeekState, m: MinderState, input_of: Dictionary, dt: float) -> bool:
+	var plan := s.floor.plan
+	var best := -1
+	var best_d := INF
+	for i in s.players.size():
+		var p := s.players[i]
+		if not _hunted(p, input_of) or p.phase == &"inside":
+			continue
+		if not in_view(plan, m.body, m.yaw, p.body):
+			continue
+		var d := M.hypot2(p.body.x - m.body.x, p.body.z - m.body.z)
+		if d < best_d:
+			best = i
+			best_d = d
+	if best < 0:
+		if m.goal_kind == &"stalk":
+			m.goal_kind = &""
+			m.goal_cell = null
+			m.path = []
+		return false
+	m.mode = &"wander"
+	m.anim = &"walk"
+	m.timer = 0.0
+	_goal_body(plan, m, &"stalk", best, s.players[best].body)
+	var from := m.body
+	var speed := calm_stalk_speed(_live)
+	_walk(plan, m, speed, dt, true)
+	# "It shouldn't be fast": never more than its speed in a tick. Move.move_with_collision pushes a step that grazes a
+	# wall back out sideways (_push_out), so a tick along a wall can land a hair past the budget (seen on prop_seek's
+	# floor 9: 1.5026 m/s for one tick). Then the same net move is shrunk until it fits, or it stands this tick.
+	var most := speed * dt
+	var dx := m.body.x - from.x
+	var dz := m.body.z - from.z
+	var d := M.hypot2(dx, dz)
+	if d > most + 1e-12:
+		var f := most / d
+		var fitted := from
+		for _k in 8:
+			var back := Move.move_with_collision(plan, from, dx * f, dz * f, MINDER_RADIUS)
+			var got := M.hypot2(back.x - from.x, back.z - from.z)
+			if got <= most + 1e-12:
+				fitted = back
+				break
+			f *= most / got * 0.999
+		m.body = fitted
+	return true

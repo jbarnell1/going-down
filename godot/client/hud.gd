@@ -101,9 +101,11 @@ var party_note := ""
 ## call button is in reach or a refusal flashes; its tone ("count", "met", "refused").
 var quota_line := ""
 var quota_tone := ""
-## Down first, then out (client/down_view.gd). Down: the timer in big red ("DOWN  7"), how much of it is
-## left (0..1, a bar that drains; below 0 not shown), a line of what can happen now, a second line (what
-## you can do), and how far a heal has got (0..1, or -1 for none). Out: the screen goes dark and says so.
+## Down first, then out (client/down_view.gd). Down: `down_head` non-empty says you are down (DR1, the owner on 20
+## Nov: "Instead of text, float an O in the center of player screen that slowly runs out": its words are no longer
+## drawn); how much of the time is left (0..1) is a red ring in the centre that empties clockwise from the top (below
+## 0 not shown); a line of what can happen now, a second line (what you can do), and how far a heal has got (0..1, or
+## -1 for none). Out: the screen goes dark and says so.
 var down_head := ""
 var down_left := -1.0
 var down_line := ""
@@ -310,20 +312,30 @@ func _draw_quota(px: float, now: int) -> void:
 		ink = Color("#ff7a6a") if (now / 160) % 2 == 0 else Color("#7a2a22")
 	PixelFont.draw_shadowed(self, quota_line, qp, px, ink)
 
-## Down: the timer big and red near the top with a bar draining under it, then the lines under the middle
-## (where a prompt would be) and, while a crewmate holds F beside you, their hold's bar.
+## DR1: the down ring's radius and line width, in HUD pixels (times px).
+const RING_RADIUS := 18.0
+const RING_WIDTH := 3.0
+
+## DR1: the arc of the down ring still left, as [start, end] angles (radians, Godot's: 0 along +x, growing
+## clockwise on screen): full is the whole circle from the top; it empties clockwise from the top, so the arc left
+## always ends at the top and starts `1 - left` of a turn round from it. Empty (left 0) is [end, end].
+static func ring_arc(left: float) -> PackedFloat64Array:
+	var f := clampf(left, 0.0, 1.0)
+	var top := -PI * 0.5
+	return PackedFloat64Array([top + TAU * (1.0 - f), top + TAU])
+
+## Down: the ring in the centre of the screen, draining (DR1: no words, no number), then the lines under it
+## and, while a crewmate holds F beside you, their hold's bar.
 func _draw_down(px: float) -> void:
 	var red := Color("#ff7a6a")
-	var p2 := px * 2.0
-	var hw := PixelFont.width(down_head) * p2
-	var hp := Vector2(floorf((size.x - hw) * 0.5), floorf(size.y * 0.2))
-	PixelFont.draw_shadowed(self, down_head, hp, p2, red)
+	var centre := Vector2(floorf(size.x * 0.5), floorf(size.y * 0.5))
+	var r := RING_RADIUS * px
 	if down_left >= 0.0:
-		var bw := 90.0 * px
-		var bar := Rect2(Vector2(floorf((size.x - bw) * 0.5), hp.y + 20 * px), Vector2(bw, 3 * px))
-		draw_rect(bar.grow(px), Color(0, 0, 0, 0.6))
-		draw_rect(Rect2(bar.position, Vector2(bw * clampf(down_left, 0.0, 1.0), bar.size.y)), red)
-	var y := floorf(size.y * 0.5)
+		draw_arc(centre, r, 0.0, TAU, 64, Color(0, 0, 0, 0.55), (RING_WIDTH + 2.0) * px, true)
+		var arc := ring_arc(down_left)
+		if arc[1] - arc[0] > 1e-4:
+			draw_arc(centre, r, arc[0], arc[1], maxi(2, ceili(64.0 * (arc[1] - arc[0]) / TAU)), red, RING_WIDTH * px, true)
+	var y := floorf(centre.y + r + 10 * px)
 	for l: String in [down_line, down_line2]:
 		if l == "":
 			continue
@@ -526,6 +538,8 @@ func menu_rows() -> Array[Array]:
 		rows.insert(at, F6_ROW)
 	rows.append(["H", "HINTS: ON" if hints_on else "HINTS: OFF"])
 	rows.append(["B", "BRIGHTNESS"])
+	# MU1: every player's own MASTER, MUSIC and EFFECTS (the settings panel's YOUR SOUND page).
+	rows.append(["V", "SOUND: MASTER MUSIC EFFECTS"])
 	return rows
 
 func _draw_menu() -> void:

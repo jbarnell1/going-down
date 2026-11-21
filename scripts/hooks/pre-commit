@@ -7,8 +7,17 @@ staged=$(git diff --cached --name-only)
 if echo "$staged" | grep -qE '^(src/|tests/|public/|hub/|scripts/|index\.html|package(-lock)?\.json|vite\.config|tsconfig|playwright)'; then
   npm run --silent check || { echo "Commit blocked: npm run check failed."; exit 1; }
 fi
-# The Godot game: the one-minute quick set (every test file, first seeds). The full set is
-# `npm run godot:test`, run by hand before a build is handed to anyone.
+# The Godot game: the quick set (every test file, first seeds), split over several engines at once
+# (--shards=auto: half the processors, at most 6; GD_TEST_SHARDS=N overrides, GD_TEST_SHARDS=1 is one
+# engine as before). The full set is `npm run godot:test`, run by hand before a build is handed to anyone.
 if echo "$staged" | grep -q '^godot/'; then
-  npm run --silent godot:test -- --quick || { echo "Commit blocked: the Godot quick tests failed."; exit 1; }
+  stamp="$(git rev-parse --git-dir)/going-down-quick-green"
+  npm run --silent godot:test -- --quick --shards=auto || { echo "Commit blocked: the Godot quick tests failed."; exit 1; }
+  # Green: remember the tree that was tested, so godot/tools/hotfix.mjs need not test it again. Only when
+  # what was tested (the working folder) is what is being committed (the index) under godot/.
+  if git diff --quiet -- godot ':!godot/default_bus_layout.tres' && [ -z "$(git ls-files --others --exclude-standard -- godot)" ]; then
+    echo "$(git write-tree) $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$stamp" && echo "tests: green stamp written for tree $(git write-tree) ($stamp)"
+  else
+    echo "tests: no green stamp: godot/ has changes that are not in this commit"
+  fi
 fi

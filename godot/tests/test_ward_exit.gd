@@ -12,6 +12,8 @@ const Main = preload("res://client/main.gd")
 const PlayLink = preload("res://client/play_link.gd")
 const LocalRoom = preload("res://net/local_room.gd")
 const Ward = preload("res://sim/ward/state.gd")
+## WG1: a block's layout options (sim/ward/layout.gd from_wire), so the test builds the host's Ward.
+const WardLayout = preload("res://sim/ward/layout.gd")
 const Session = preload("res://net/session.gd")
 const Places = preload("res://sim/places.gd")
 const HostRules = preload("res://net/host_rules.gd")
@@ -93,7 +95,7 @@ func _enter(t: T) -> Dictionary:
 		_leave(out)
 		return {}
 	out["view"] = view
-	out["door"] = Ward.new(int(room.client.latest.ward.seed)).lift_door()
+	out["door"] = Ward.new(int(room.client.latest.ward.seed), WardLayout.from_wire(room.client.latest.ward.get("layout"))).lift_door()
 	return out
 
 static func _leave(w: Dictionary) -> void:

@@ -61,6 +61,17 @@ const LIFT_DEPTH := 3.0
 
 var seed_value: int
 var walk_model: Ward
+## WL1: the look round the layout (railings, hangers, the roof, the lift car, the doors): client/ward/dress.gd.
+const Dress = preload("res://client/ward/dress.gd")
+## WL1: the cavern's roof (world y), where every line is fixed.
+var roof_y := 25.0
+## WL1: the game's lift car (client/lift.gd), its doors open while the lift waits.
+var lift_car: Lift
+## WL1: each house's front door on its hinge (0 shut, Dress.DOOR_SWING open) and where it is turning to.
+var door_hinges: Array[Node3D] = []
+var _door_swing: Array[float] = []
+## WL1: the drawbridge's own dressing (hidden with it while it is raised).
+var bridge_dress: Node3D
 ## WN4: the walk's wire rounding and the refused-step check (client/ward/net_walk.gd).
 const NetWalk = preload("res://client/ward/net_walk.gd")
 var net_walk := NetWalk.new()
@@ -120,20 +131,27 @@ var own_camera := true
 var own_environment := true
 var environment: Environment
 
-func _init(seed_: int, spawn_: Vector3) -> void:
+## WG1: `layout` the Ward block's layout options ([] today's Ward; sim/ward/layout.gd from_wire).
+func _init(seed_: int, spawn_: Vector3, layout: Array = []) -> void:
 	seed_value = seed_
-	walk_model = Ward.new(seed_)
+	walk_model = Ward.new(seed_, Layout.from_wire(layout))
 	spawn = spawn_
 	figures_new = new_figures()
 
 func _ready() -> void:
 	var layout := walk_model.layout
 	_setup_world()
+	roof_y = Dress.roof_y(layout)
 	for site: Dictionary in layout.houses:
 		_build_house(site)
 	for edge: Dictionary in layout.bridges:
 		_build_bridge(edge)
 	_build_lift()
+	# WL1: the railings, the walkways' stringers and hangers, and the cavern's roof (client/ward/dress.gd).
+	var docked := Dress.docked_sides(layout)
+	for site: Dictionary in layout.houses:
+		Dress.gallery_rail(self, site, docked.get(int(site.id), []), lift_spot.x if int(site.id) == 0 else INF)
+	Dress.cavern_roof(self, layout, roof_y)
 	_build_crew()
 	_build_rigger()
 	_build_hud()
@@ -148,12 +166,24 @@ func show_host(ward: Dictionary, host_now: float, id: String, crew: Array) -> vo
 		walk_model.requested_doors[i] = not closed
 		if door_houses[i].visible != closed:
 			_set_solid(door_houses[i], closed)
+		if i < _door_swing.size():
+			_door_swing[i] = 0.0 if closed else Dress.DOOR_SWING
 	var phase: String = ward.phase
 	var close_gate := phase == "away" or phase == "departed"
 	if lift_gate.visible != close_gate:
 		_set_solid(lift_gate, close_gate)
+	if lift_car != null:
+		# WL1: the car's doors as on every floor: open while the lift waits for the crew, shut while it is away.
+		lift_car.set_doors(not close_gate, local_phase == "")
 	local_phase = phase
 	caught = ward.caught.has(id)
+	var extras: Dictionary = ward.get("extras", {})
+	shown_lift = ward.get("lift", {})
+	called = extras.get("called", false) == true
+	var webbed_rows: Dictionary = extras.get("web", {})
+	webbed_me = webbed_rows.has(id)
+	_show_station(extras)
+	_show_web(extras, host_now, id, crew)
 	var text := "STEP OUT OF THE LIFT"
 	match phase:
 		"away":
@@ -168,23 +198,283 @@ func show_host(ward: Dictionary, host_now: float, id: String, crew: Array) -> vo
 				text = "LEFT BEHIND"
 			else:
 				text = "LIFT DEPARTED"
+	if called:
+		# WC1: every floor's lift, called from the station: no clock to show.
+		text = called_line(ward.get("lift", {}), phase, ward, id, station_name)
 	hud.text = text
 	var winch := _at_winch()
 	var door := _by_door()
 	prompt.text = ""
-	if caught:
+	cut_fill = -1.0
+	if webbed_me:
+		# WC1: hung in the web; the screen's own sequence (client/ward/web_view.gd) shows it.
+		prompt.text = "WRAPPED IN WEB. A CREWMATE CAN CUT YOU DOWN"
+	elif caught:
 		if caught_at < 0.0:
 			caught_at = host_now
 		prompt.text = "THE HAND CAUGHT YOU"
 		if host_now - caught_at >= WATCH_DELAY:
 			prompt.text = _watch(watch_targets(crew, ward, id), crew)
 	elif phase != "departed":
-		if not winch.is_empty():
+		var cut := _cut_prompt(extras, host_now, id)
+		if cut != "":
+			prompt.text = cut
+		elif not winch.is_empty():
 			prompt.text = "F   RAISE BRIDGE" if bridge_is_open else "F   LOWER BRIDGE"
 		elif door >= 0:
 			prompt.text = "F   CLOSE DOOR" if ward.doors[door] else "F   OPEN DOOR"
 	_show_rigger(ward, host_now)
 	_show_crew(crew, id)
+
+## WC1: the lift called from the station (net/host_rules.gd ward_call; the block's extras), this player hung in the web,
+## the station's house as a name, and the cut's progress for the HUD's bar (-1: none).
+var called := false
+var webbed_me := false
+var station_name := ""
+var cut_fill := -1.0
+var station_node: Node3D = null
+var station_light: ShaderMaterial = null
+var car_paint: Node3D = null
+## Cocoons drawn, by the hung player's id.
+var cocoons := {}
+## The bundle the hand carries while a catch is carried to its hang point.
+var carried: Node3D = null
+
+## WC1: the HUD's line for the Ward's lift when it is called (every floor's words where they are true). `lift`: the run's
+## own lift as the snapshot has it (client/main.gd: phase, floorsAway, bellLeft).
+static func called_line(lift: Dictionary, ward_phase: String, ward: Dictionary, id: String, house_name: String) -> String:
+	var phase := str(lift.get("phase", ward_phase))
+	match phase:
+		"arriving", "unloading":
+			return "STEP OUT OF THE LIFT"
+		"away":
+			return "THE LIFT'S CALL BUTTON IS IN THE %s" % house_name if house_name != "" else "CALL THE LIFT FROM THE FAR HOUSE"
+		"coming":
+			var away: Variant = lift.get("floorsAway")
+			if away != null and int(away) > 0:
+				return "LIFT COMING: %d FLOOR%s AWAY" % [int(away), "" if int(away) == 1 else "S"]
+			return "LIFT COMING"
+		"boarding":
+			return "DOORS CLOSE IN %d   LEFT: BANK   RIGHT: DOWN" % maxi(0, ceili(float(lift.get("bellLeft", 0.0))))
+	if (ward.get("boarded", []) as Array).has(id):
+		return "ABOARD"
+	if (ward.get("leftBehind", []) as Array).has(id):
+		return "LEFT BEHIND"
+	return "LIFT DEPARTED"
+
+## A house's style as words: "lampkeepers_cottage" is "LAMPKEEPERS COTTAGE".
+static func house_words(style: String) -> String:
+	return style.replace("_", " ").to_upper()
+
+## WC1: the call button at the station: the landing's own (client/lift.gd: a dark plate and its orange button, lit
+## while the car comes) on an iron post; and BANK and DOWN painted on the car's floor, as every car has.
+func _show_station(extras: Dictionary) -> void:
+	if not called:
+		if station_node != null:
+			station_node.visible = false
+		if car_paint != null:
+			car_paint.visible = false
+		return
+	if station_node == null and extras.get("station") is Array:
+		var p: Array = extras["station"]
+		station_node = Node3D.new()
+		station_node.name = "CallStation"
+		add_child(station_node)
+		station_node.position = Vector3(float(p[0]), float(p[1]), float(p[2]))
+		_box(station_node, Vector3(0, 0.6, 0), Vector3(0.08, 1.2, 0.08), "iron")
+		var dark := StandardMaterial3D.new()
+		dark.albedo_color = Color("#1b1b18")
+		var plate := MeshInstance3D.new()
+		var plate_mesh := BoxMesh.new()
+		plate_mesh.size = Vector3(0.14, 0.26, 0.03)
+		plate.mesh = plate_mesh
+		plate.material_override = dark
+		plate.position = Vector3(0, 1.12, 0.055)
+		station_node.add_child(plate)
+		station_light = Level.glow_material(Color(1.0, 0.55, 0.15), 0.25)
+		var button := MeshInstance3D.new()
+		var button_mesh := BoxMesh.new()
+		button_mesh.size = Vector3(0.06, 0.06, 0.02)
+		button.mesh = button_mesh
+		button.material_override = station_light
+		button.position = Vector3(0, 1.12, 0.075)
+		station_node.add_child(button)
+		var house := int(extras.get("stationHouse", -1))
+		if house >= 0 and house < walk_model.layout.houses.size():
+			station_name = house_words(str(walk_model.layout.houses[house].style))
+			# The plate faces the room's door it stands behind.
+			var fixture: House = walk_model.houses[house]
+			var door := fixture.to_world(fixture.room_doors[1])
+			var flat := Vector3(door.x, station_node.position.y, door.z)
+			if flat.distance_to(station_node.position) > 0.05:
+				station_node.look_at(flat, Vector3.UP, true)
+	if station_light != null:
+		station_light.set_shader_parameter("energy", 1.6 if local_phase == "away" and str(shown_lift.get("phase", "")) == "coming" else 0.25)
+	if car_paint == null:
+		car_paint = Node3D.new()
+		car_paint.name = "CarPaint"
+		add_child(car_paint)
+		car_paint.position = walk_model.lift_door()
+		for side: float in [-1.0, 1.0]:
+			var half := MeshInstance3D.new()
+			var q := PlaneMesh.new()
+			q.size = Vector2(0.62, 2.6)
+			half.mesh = q
+			var m := StandardMaterial3D.new()
+			m.albedo_color = Color("#e8a21c") if side < 0.0 else Color("#b8231c")
+			half.material_override = m
+			half.position = Vector3(side * 0.33, 0.012, -1.55)
+			car_paint.add_child(half)
+			var word := Label3D.new()
+			word.text = "BANK" if side < 0.0 else "DOWN"
+			word.font_size = 64
+			word.pixel_size = 0.004
+			word.modulate = Color("#2a1a05") if side < 0.0 else Color("#f6efe6")
+			word.rotation = Vector3(-PI * 0.5, 0.0, 0.0)
+			word.position = Vector3(side * 0.33, 0.02, -1.55)
+			car_paint.add_child(word)
+	car_paint.visible = true
+
+## The run's lift as client/main.gd last gave it (the block's "lift").
+var shown_lift := {}
+
+## WC1: the web as every screen draws it from the host's times: while a catch is carried (caughtAt to hangAt) a wrapped
+## bundle at the hand; from hangAt a cocoon hanging from the ceiling at the hang point, swaying slowly; gone once cut.
+func _show_web(extras: Dictionary, host_now: float, _id: String, _crew: Array) -> void:
+	var rows: Dictionary = extras.get("web", {})
+	var points: Array = extras.get("hangPoints", [])
+	var carrying := false
+	for wid: String in rows:
+		var row: Dictionary = rows[wid]
+		var k := int(row.point)
+		if host_now < float(row.hangAt):
+			carrying = true
+			continue
+		if not cocoons.has(wid) and k < points.size():
+			var c := make_cocoon(colors)
+			c.name = "Cocoon_%s" % wid
+			add_child(c)
+			var p: Array = points[k]
+			c.position = Vector3(float(p[0]), float(p[1]) + House.HEIGHT - 0.02, float(p[2]))
+			cocoons[wid] = c
+	for wid: String in cocoons.keys():
+		if not rows.has(wid):
+			(cocoons[wid] as Node3D).queue_free()
+			cocoons.erase(wid)
+			continue
+		var c: Node3D = cocoons[wid]
+		var phase := float(hash(wid) % 628) / 100.0
+		c.rotation = Vector3(sin(host_now * 0.55 + phase) * 0.03, host_now * 0.05 + phase, cos(host_now * 0.7 + phase) * 0.035)
+	if carrying and hand != null and hand.visible:
+		if carried == null:
+			carried = make_cocoon(colors, 0.55)
+			carried.name = "CarriedBundle"
+			add_child(carried)
+		carried.visible = true
+		carried.position = hand.global_position + Vector3.UP * 0.6
+	elif carried != null:
+		carried.visible = false
+
+## WC1: the cocoon, built here from nothing: an upside-down wrapped body (the feet bound together at the top, tied to the
+## ceiling by a few strands, the head a rounded bulge at the bottom), pale silk with darker wound strands round it. Its
+## origin is the tie at the ceiling; it hangs 2.05 m below (scaled by `size`). No flat sprites.
+static func make_cocoon(palette: Dictionary, size := 1.0) -> Node3D:
+	var root := Node3D.new()
+	var silk := StandardMaterial3D.new()
+	silk.albedo_color = Color("#d9d3c4")
+	silk.roughness = 0.95
+	var strand := StandardMaterial3D.new()
+	strand.albedo_color = Color("#a59e8c")
+	strand.roughness = 1.0
+	var length := 2.05 * size
+	# The body: a lathe of rings from the tie (top) down to the head (bottom).
+	var rings := 18
+	var sides := 12
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var profile: Array[Vector2] = []
+	for i in rings + 1:
+		var f := float(i) / rings
+		# Narrow at the bound feet, fuller at the hips and shoulders, a waist at the neck, round at the head.
+		var r := 0.06 + 0.25 * sin(PI * clampf(f * 1.05, 0.0, 1.0)) ** 0.7
+		if f > 0.72:
+			r = lerpf(r, 0.17, smoothstep(0.72, 0.8, f)) * (1.0 - 0.1 * sin(PI * (f - 0.72) / 0.28))
+		if f > 0.97:
+			r *= (1.0 - f) / 0.03
+		profile.append(Vector2(r * size, -length * f))
+	for i in rings:
+		for j in sides:
+			var a0 := TAU * j / sides
+			var a1 := TAU * (j + 1) / sides
+			var p00 := Vector3(cos(a0) * profile[i].x, profile[i].y, sin(a0) * profile[i].x)
+			var p01 := Vector3(cos(a1) * profile[i].x, profile[i].y, sin(a1) * profile[i].x)
+			var p10 := Vector3(cos(a0) * profile[i + 1].x, profile[i + 1].y, sin(a0) * profile[i + 1].x)
+			var p11 := Vector3(cos(a1) * profile[i + 1].x, profile[i + 1].y, sin(a1) * profile[i + 1].x)
+			for v: Vector3 in [p00, p10, p01, p01, p10, p11]:
+				st.set_normal(Vector3(v.x, 0.0, v.z).normalized() if Vector2(v.x, v.z).length() > 0.001 else Vector3.DOWN)
+				st.add_vertex(v)
+	var body := MeshInstance3D.new()
+	body.name = "Wrap"
+	body.mesh = st.commit()
+	body.material_override = silk
+	root.add_child(body)
+	# Wound strands: thin tori round the body at a slant, and a few lines up to the ceiling.
+	for k in 7:
+		var f := 0.12 + 0.11 * k
+		var i := clampi(int(f * rings), 0, rings)
+		var band := MeshInstance3D.new()
+		var torus := TorusMesh.new()
+		torus.inner_radius = profile[i].x + 0.004
+		torus.outer_radius = profile[i].x + 0.02 * size
+		torus.rings = 12
+		torus.ring_segments = 4
+		band.mesh = torus
+		band.material_override = strand
+		band.position = Vector3(0.0, profile[i].y, 0.0)
+		band.rotation = Vector3(0.35 * (1.0 if k % 2 == 0 else -1.0), float(k) * 0.9, 0.2)
+		root.add_child(band)
+	for k in 3:
+		var line := MeshInstance3D.new()
+		var stick := CylinderMesh.new()
+		stick.top_radius = 0.006
+		stick.bottom_radius = 0.006
+		stick.height = 0.3 * size
+		line.mesh = stick
+		line.material_override = strand
+		var a := TAU * k / 3.0
+		line.position = Vector3(cos(a) * 0.04, -0.12 * size, sin(a) * 0.04)
+		line.rotation = Vector3(sin(a) * 0.25, 0.0, cos(a) * 0.25)
+		root.add_child(line)
+	return root
+
+## WC1: "HOLD F  CUT DOWN" under a hung crewmate (sim/ward/state.gd CUT_REACH, a little inside it), with the cut's
+## progress from the host's cut times on the HUD's bar.
+func _cut_prompt(extras: Dictionary, host_now: float, id: String) -> String:
+	var rows: Dictionary = extras.get("web", {})
+	if rows.is_empty() or caught:
+		return ""
+	var going: Variant = (extras.get("cuts", {}) as Dictionary).get(id)
+	if going is Dictionary:
+		cut_fill = clampf((host_now - float(going.from)) / maxf(0.01, float(going.done) - float(going.from)), 0.0, 1.0)
+		return "CUTTING THEM DOWN. KEEP HOLDING F"
+	var points: Array = extras.get("hangPoints", [])
+	var feet := player.position
+	for wid: String in rows:
+		var row: Dictionary = rows[wid]
+		if wid == id or host_now < float(row.hangAt) or int(row.point) >= points.size():
+			continue
+		var p: Array = points[int(row.point)]
+		if Vector2(feet.x - float(p[0]), feet.z - float(p[2])).length() <= Ward.CUT_REACH - 0.05 and absf(feet.y - float(p[1])) <= Ward.CUT_RISE:
+			cut_fill = 0.0
+			return "HOLD F  CUT %s DOWN" % str(names.get(wid, "THEM")).to_upper()
+	return ""
+
+## WL1: the house doors swing to where the host says, and the lift's doors slide, as on every floor.
+func _process(delta: float) -> void:
+	for i in door_hinges.size():
+		door_hinges[i].rotation.y = move_toward(door_hinges[i].rotation.y, _door_swing[i], delta * Dress.DOOR_SPEED)
+	if lift_car != null:
+		lift_car.update(delta)
 
 ## The crewmates a caught player can watch: connected, not caught, not this player; in a fixed order.
 static func watch_targets(crew: Array, ward: Dictionary, my_id: String) -> Array[String]:
@@ -351,6 +641,17 @@ func play_event(event: Dictionary) -> void:
 		load_sound.global_position = support.global_position
 		load_sound.play()
 		return
+	if event.type == "ward_hung" or event.type == "ward_cut":
+		# WC1: the lines creak as the cocoon is hung, and as it is cut (the loaded line's own take, on its own player).
+		var creak := AudioStreamPlayer3D.new()
+		creak.stream = load_sound.stream
+		creak.unit_size = load_sound.unit_size
+		creak.max_distance = load_sound.max_distance
+		add_child(creak)
+		creak.global_position = Vector3(float(event.get("x", 0.0)), float(event.get("y", 0.0)) + 2.0, float(event.get("z", 0.0)))
+		creak.finished.connect(creak.queue_free)
+		creak.play()
+		return
 	var cues := {"ward_departed":"ward_lift_departed", "ward_last_minute":"ward_lift_last_minute",
 		"ward_returned":"ward_lift_returned", "ward_final_call":"ward_lift_final_call", "ward_closed":"ward_lift_closed"}
 	var cue := str(cues.get(event.type, ""))
@@ -376,6 +677,13 @@ func _setup_world() -> void:
 			material.emission_enabled = true
 			material.emission = Color(shades[key])
 		colors[key] = material
+	# WL1: the door's leaf, its raised panels and casing, the knob, and the cavern's rock (the prison's concrete, as
+	# the game's other rough surfaces).
+	colors["door"] = Level.prop_material(Color("#5a3a28"))
+	colors["panel"] = Level.prop_material(Color("#6e4a33"))
+	colors["trim"] = Level.prop_material(Color("#3e2a1e"))
+	colors["brass"] = Level.prop_material(Color("#b08a3c"))
+	colors["rock"] = Level.prop_material(Color("#4a4440"), load("res://assets/textures/prison_concrete.png") as Texture2D, false, 0.0, 0.0, true)
 	for key: String in ["plaster", "brick", "wood"]:
 		var material := ShaderMaterial.new()
 		material.shader = Surfaces
@@ -481,7 +789,8 @@ func _build_house(site: Dictionary) -> void:
 	var root := Node3D.new()
 	add_child(root)
 	root.position = fixture.to_world(Vector3.ZERO)
-	root.rotation.y = -PI * 0.5 if site.id == 0 else 0.0
+	# WG1: the house's own facing (today's: the parlour -PI/2, the rest 0).
+	root.rotation.y = fixture.yaw()
 	var deck := Node3D.new()
 	add_child(deck)
 	deck.position = Vector3(site.x, site.z + 0.15, site.y)
@@ -507,6 +816,11 @@ func _build_house(site: Dictionary) -> void:
 	var leaf := _box(root, door.get_center(), door.size, "wood", true) as StaticBody3D
 	door_houses.append(leaf)
 	_set_solid(leaf, false)
+	# WL1: the shut door's body stays for sight lines only; the door seen is the leaf on its hinge (client/ward/dress.gd).
+	(leaf.get_child(0) as Node3D).visible = false
+	door_hinges.append(Dress.door_leaf(self, root, door))
+	_door_swing.append(Dress.DOOR_SWING)
+	door_hinges[-1].rotation.y = Dress.DOOR_SWING
 	for room: StringName in fixture.areas:
 		var at: Vector3 = fixture.areas[room]
 		_lamp(root, Vector3(at.x, 2.45, at.z))
@@ -518,10 +832,11 @@ func _build_house(site: Dictionary) -> void:
 			if lines.size() == fixture.loaded_support_index():
 				lines.append(_load_bearing_support(deck, edge))
 			else:
-				lines.append(_beam(deck, edge - Vector3.UP * 18.0, edge + Vector3.UP * 25.0, 0.07, 0.07, "rope"))
+				# WL1: up to the cavern's roof, where each line is fixed.
+				lines.append(_beam(deck, edge - Vector3.UP * 18.0, Vector3(edge.x, roof_y - deck.position.y, edge.z), 0.07, 0.07, "rope"))
 	var support := lines[fixture.loaded_support_index()]
 	var ties := _interior_ties(root, fixture, root.to_local(support.global_position))
-	houses.append({"fixture": fixture, "lines": lines, "support": support, "root": root, "ties": ties})
+	houses.append({"fixture": fixture, "lines": lines, "support": support, "root": root, "ties": ties, "deck": deck})
 
 ## The suspension shoe feeds a tie through the frame of each storey to the rear wall.
 ## The weighted take-up lever swings on its iron pin when the line bears weight.
@@ -690,8 +1005,15 @@ func _build_bridge(edge: Dictionary) -> void:
 		for flip: float in [-1.0, 1.0]:
 			_beam(root, rail_from + side * flip + Vector3.UP * 0.9, rail_to + side * flip + Vector3.UP * 0.9, 0.07, 0.07, "rope", true)
 			_beam(root, rail_from + side * flip + Vector3.UP * 0.52, rail_to + side * flip + Vector3.UP * 0.52, 0.07, 0.08, "rope", true)
+	# WL1: stringers, threshold plates, posts and hangers (client/ward/dress.gd), in a node of their own: the bridge's
+	# root holds only its solid parts (_set_bridge).
+	var dressing := Node3D.new()
+	dressing.name = "WalkwayDress"
+	add_child(dressing)
+	Dress.walkway(self, dressing, path, roof_y)
 	if edge.kind == "winch":
 		bridge = root
+		bridge_dress = dressing
 		for end: int in [0, 1]:
 			var point := _path_point(path[0 if end == 0 else path.size() - 1])
 			var other := _path_point(path[1 if end == 0 else path.size() - 2])
@@ -705,6 +1027,8 @@ func _build_bridge(edge: Dictionary) -> void:
 func _set_bridge(lowered: bool) -> void:
 	bridge_is_open = lowered
 	bridge.visible = lowered
+	if bridge_dress != null:
+		bridge_dress.visible = lowered
 	for child: Node in bridge.get_children():
 		_set_solid(child as StaticBody3D, lowered)
 
@@ -719,13 +1043,18 @@ func _build_lift() -> void:
 	box.position = foyer.to_world(Vector3(foyer.floor_bounds.position.x - 0.12, 0.15, foyer.floor_bounds.get_center().y))
 	lift_spot = box.to_global(Vector3(0, 0, -LIFT_DEPTH * 0.5))
 	_box(box, Vector3(0, -0.12, -LIFT_DEPTH * 0.5), Vector3(1.35, 0.22, LIFT_DEPTH), "iron", true)
-	_box(box, Vector3(0, 2.26, -LIFT_DEPTH * 0.5), Vector3(1.35, 0.12, LIFT_DEPTH), "iron", true)
+	# WL1: the car seen is the game's own (client/lift.gd, built by client/ward/dress.gd); these walls, roof and gate
+	# stay as bodies for sight lines, unseen.
+	var shell: Array[Node3D] = [_box(box, Vector3(0, 2.26, -LIFT_DEPTH * 0.5), Vector3(1.35, 0.12, LIFT_DEPTH), "iron", true)]
 	for side: float in [-1.0, 1.0]:
-		_box(box, Vector3(side * 0.72, 1.1, -LIFT_DEPTH * 0.5), Vector3(0.11, 2.20, LIFT_DEPTH), "iron", true)
-	_box(box, Vector3(0, 1.1, -LIFT_DEPTH), Vector3(1.55, 2.2, 0.12), "iron", true)
+		shell.append(_box(box, Vector3(side * 0.72, 1.1, -LIFT_DEPTH * 0.5), Vector3(0.11, 2.20, LIFT_DEPTH), "iron", true))
+	shell.append(_box(box, Vector3(0, 1.1, -LIFT_DEPTH), Vector3(1.55, 2.2, 0.12), "iron", true))
 	lift_gate = _box(box, Vector3(0, 1.09, 0), Vector3(1.24, 2.18, 0.08), "iron", true)
 	_set_solid(lift_gate, false)
-	_lamp(box, Vector3(0, 2.04, -LIFT_DEPTH + 0.1))
+	shell.append(lift_gate)
+	for part: Node3D in shell:
+		(part.get_child(0) as Node3D).visible = false
+	lift_car = Dress.build_lift(self, walk_model.lift_door(), roof_y)
 
 func _build_crew() -> void:
 	player.floor_snap_length = 0.27

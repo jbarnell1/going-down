@@ -17,7 +17,7 @@
 #   5. The announcer: a second after the moment, the "tenant" line (quota not met) or "tenant_met" (met), once per
 #      event, with its subtitle; not for another floor's event nor beside the Ward's clock. Both lines are recorded
 #      in both voices, and the slam is a recording on the Scare bus.
-#   6. Over WebSockets (127.0.0.1:4620, one room, its real HostRules): two clients show the same remaining time
+#   6. Over WebSockets (127.0.0.1 on a port of the test block, one room, its real HostRules): two clients show the same remaining time
 #      within one tick, a late joiner's screen agrees, and with the clock set to 2 minutes both get the moment once.
 extends RefCounted
 
@@ -41,7 +41,8 @@ const Session = preload("res://net/session.gd")
 
 const DT := 0.05
 const SECRET := "tenant-test-passphrase"
-const PORT := 4620
+const TestPorts = preload("res://tests/test_ports.gd")
+static var PORT: int = TestPorts.port(TestPorts.TENANT)
 
 ## The game's rules with the Tenant clock `on` (the resident and the quota on, the deck the game's).
 static func rules(on: bool, entity_on := true, days := false) -> HostRules:

@@ -8,6 +8,8 @@ const OPENING_HEIGHT := 2.19
 const STAIR_WIDTH := 1.0
 const LANDING_EDGE := 0.34
 const SLAB_THICKNESS := 0.14
+## The gallery round every house (sim/ward/layout.gd GALLERY).
+const GALLERY := 1.6
 
 class Stair:
 	var from: Vector3
@@ -37,21 +39,43 @@ var room_doors := PackedVector3Array()
 var _guides := PackedVector3Array()
 var _seed: int
 var _transform: Transform3D
+## WG1: which way the front door faces (0 south, 1 east, 2 north, 3 west) and whether the stair runs the other way.
+var facing := 0
+var mirror := false
+## WG1: a generated layout's house picks its loaded line by where its corner really is (today's: the fixed pick).
+var _corner_by_facing := false
+
+## The turn of the house about the vertical, as the view draws its root (today's parlour -PI/2, the rest 0).
+func yaw() -> float:
+	return 0.0 if facing == 0 else -PI * 0.5 * facing
 
 func _init(house: Dictionary, ward_seed: int) -> void:
 	_seed = ward_seed * 31 + int(house.id) * 997
 	var rng := RandomNumberGenerator.new()
 	rng.seed = _seed
 	var parlour: bool = house.id == 0
-	var width := float(house.d) if parlour else float(house.w)
-	var depth := float(house.w) if parlour else float(house.d)
+	# WG1 (sim/ward/layout.gd generate_v2): a house may face any of four ways and run its stair the other way. Without
+	# those fields, today's: the parlour's door east (facing 1), every other door south (facing 0).
+	facing = int(house.get("facing", 1 if parlour else 0))
+	mirror = bool(house.get("mirror", false))
+	_corner_by_facing = house.has("facing")
+	var turned := facing % 2 == 1
+	var width := float(house.d) if turned else float(house.w)
+	var depth := float(house.w) if turned else float(house.d)
 	var origin := Vector3(house.x, house.z, house.y)
-	if parlour:
-		origin.x += depth * 0.5
-		_transform = Transform3D(Basis(Vector3.UP, -PI * 0.5), origin)
-	else:
-		origin.z -= depth * 0.5
-		_transform = Transform3D(Basis.IDENTITY, origin)
+	match facing:
+		1:
+			origin.x += depth * 0.5
+			_transform = Transform3D(Basis(Vector3.UP, -PI * 0.5), origin)
+		2:
+			origin.z += depth * 0.5
+			_transform = Transform3D(Basis(Vector3.UP, -PI), origin)
+		3:
+			origin.x -= depth * 0.5
+			_transform = Transform3D(Basis(Vector3.UP, -PI * 1.5), origin)
+		_:
+			origin.z -= depth * 0.5
+			_transform = Transform3D(Basis.IDENTITY, origin)
 	var half := width * 0.5
 	var wall := WALL_THICKNESS
 	floor_bounds = Rect2(-half, 0.0, width, depth)
@@ -101,6 +125,8 @@ func _build_storeys(count: int, width: float, depth: float) -> void:
 			continue
 		var stair := Stair.new()
 		var sign_dir := 1.0 if index % 2 == 1 else -1.0
+		if mirror:
+			sign_dir = -sign_dir
 		var lane := depth - 0.61 if index % 2 == 1 else 0.61
 		var edge := half - LANDING_EDGE
 		stair.from = Vector3(-edge * sign_dir, float(index - 1) * HEIGHT, lane)
@@ -175,7 +201,25 @@ func _partition(z: float, half_width: float, opening_x: float, opening_width: fl
 
 ## Lines are ordered west-front, west-back, east-front, east-back on each deck.
 func loaded_support_index() -> int:
-	return 2 if window_side > 0 else 0
+	if not _corner_by_facing:
+		return 2 if window_side > 0 else 0
+	# WG1: the deck corner at the front of the house on the window's side (the west side for a house without
+	# one), wherever the house faces. The same pick as today's for a house facing south.
+	var corner := _transform.basis * Vector3(1.0 if window_side > 0 else -1.0, 0.0, -1.0)
+	return (2 if corner.x > 0.0 else 0) + (1 if corner.z > 0.0 else 0)
+
+## Whether this house comes from a generated layout (WG1), whose fields say how it faces.
+func generated() -> bool:
+	return _corner_by_facing
+
+## The loaded line's corner of the deck in world space at deck height (the view's support line, lines ordered as
+## loaded_support_index), for a site of the layout (sim/ward/layout.gd houses).
+func support_corner(site: Dictionary, inset := 0.13) -> Vector3:
+	var index := loaded_support_index()
+	var east := 1.0 if index >= 2 else -1.0
+	var north := 1.0 if index % 2 == 1 else -1.0
+	return Vector3(float(site.x) + east * (float(site.w) * 0.5 + GALLERY - inset), float(site.z) + 0.17,
+		float(site.y) + north * (float(site.d) * 0.5 + GALLERY - inset))
 
 func make_arm(extra_walls: Array[AABB] = []) -> ArmSearch:
 	var blockers := walls.duplicate()

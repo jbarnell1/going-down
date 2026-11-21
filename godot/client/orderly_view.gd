@@ -527,7 +527,7 @@ func voice(delta: float, o: Dictionary, ear: Vector3) -> void:
 	var cut := 1500.0 if muffled else 20500.0
 	_v_wheel.attenuation_filter_cutoff_hz = cut
 	_v_roll.attenuation_filter_cutoff_hz = cut
-	var wdb := Sfx.BASE_DB + Sfx.APPROACH_DB - 3.0 * (1.0 - g) + (Sfx.MUFFLED_DB if muffled else 0.0)
+	var wdb := Sfx.BASE_DB + Sfx.trolley_db(g, muffled)
 	var pitch := clampf(0.75 + 0.25 * float(o.get("speed", Sfx.HUNT_SPEED)) / Sfx.HUNT_SPEED, 0.8, 1.05)
 	_v_wheel.pitch_scale = pitch
 	_v_roll.pitch_scale = pitch

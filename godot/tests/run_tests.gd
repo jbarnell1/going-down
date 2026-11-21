@@ -3,6 +3,8 @@
 #   godot --headless --path godot --script res://tests/run_tests.gd -- ref_rng prop_clinic   (only these files)
 #   godot --headless --path godot --script res://tests/run_tests.gd -- --full                (full-size property runs)
 #   godot --headless --path godot --script res://tests/run_tests.gd -- --quick               (about a minute: first seeds only)
+#   ... -- --port-base=N   the first of the ports this engine's socket tests may open (tests/test_ports.gd);
+#       tools/godot.mjs test passes one to every engine it starts, and splits the files over several with --shards=
 #   godot --headless --path godot --script res://tests/run_tests.gd -- --golden [files] [--full]
 #       records the goldens instead of comparing (npm run godot:golden: see tests/README.md); never
 #       part of a test run. ref_* and test_jsmath run at the default size, prop_* at the quick and the
@@ -38,6 +40,7 @@ const FILES: Array[String] = [
 	"prop_second_orderly",
 	"prop_cycles",
 	"prop_pressures",
+	"prop_orderly_fix",
 	"test_cycle_entry",
 	"prop_station",
 	"prop_station_crews",
@@ -62,6 +65,15 @@ const FILES: Array[String] = [
 	"test_prison_deck",
 	"test_intercom",
 	"test_crew_watch",
+	"test_test_ports",
+	"prop_ward_call",
+	"test_ward_web_view",
+	"test_music",
+	"prop_ward_layout",
+	"test_ward_dress",
+	"prop_minder_calm",
+	"prop_down_ring",
+	"prop_pn_fixes",
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).

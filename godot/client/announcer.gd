@@ -120,6 +120,9 @@ var tenant_latest: Variant = null
 ## The late floor shown ("ward", "reactor" or ""; client/main.gd sets it from the snapshot's blocks each frame): the
 ## Ward's and the Reactor's plan may carry another place's name.
 var late_floor := ""
+## WC1: the Ward's lift is called from its station (net/host_rules.gd ward_call; client/main.gd sets it from the Ward's
+## block): every floor's call lines are true there again ("you may now call the car", "CALL READY").
+var ward_called := false
 ## The ride-up reel or the prison's cassette is playing on this screen (client/main.gd, each frame): chatter waits.
 var hold_chatter := false
 ## The floor quota still locks the call (from on_events' quota block).
@@ -272,7 +275,7 @@ func on_events(events: Array, first_depth := 1, floor_quota: Variant = null) -> 
 				request("bank_refused", EXPIRE_LONG_MS, DayCaption.caption(e))
 			"dayMet":
 				var matching: Variant = floor_met_ticks.get(e.get("t", 0.0))
-				if not day_lock_on or late_floor == "ward":
+				if not day_lock_on or (late_floor == "ward" and not ward_called):
 					# The Ward's lift comes on its clock: no "CALL READY" and no call still needed under the day's line.
 					request("day_met", EXPIRE_BOARD_MS, DayCaption.caption(e))
 				elif matching is Dictionary:
@@ -346,7 +349,7 @@ func on_events(events: Array, first_depth := 1, floor_quota: Variant = null) -> 
 				# The floor quota (North Star C9): the call button now works. Without a recording, a caption.
 				if day_met_ticks.has(e.get("t", 0.0)):
 					pass   # the paired day line captions both facts
-				elif late_floor == "ward":
+				elif late_floor == "ward" and not ward_called:
 					pass   # the Ward's lift comes on its clock: "you may now call the car" would be false
 				elif by_moment.has("quota"):
 					request("quota", EXPIRE_LONG_MS, _floor_caption(e) if day_lock_on else "")

@@ -39,7 +39,15 @@
 //   node godot/tools/play_late.mjs [--port=4740] [--seed=late-1]
 //        [--fallback=1] [--main=1] [--lift-minutes=1] [--quick=1] [--save-logs=DIR] [--break=clock|split]
 // Ports: P server, P+1..P+3 the main session's test channels, P+6 / P+7 fallback A, P+8 / P+9 fallback B; all
-// in 4740-4819. Stops every process it starts, also on failure.
+// in 4740-4879. Stops every process it starts, also on failure.
+// WC1: the server now plays the Ward with its lift called from a far house and the web (net/host_rules.gd ward_call,
+// ward_web; `ward_call=0 ward_web=0` on the server's line turn them off). With the call on, the main session checks
+// the Ward's lift as every floor's: it leaves once the crew is out, the same on both screens, no clock; the same
+// station (house and button) and HUD line on both; Ann calls the car at the station (the prompt every floor has) and
+// both see the same call; the press loads the Rigger's line at the station's house; the car arrives at the same host
+// time on both; both stand on DOWN and ride to the Reactor (the same bell on both). If anyone is caught on the Ward,
+// both screens must agree on the web (the hang point and times) and the other cuts them down with F held (the same cut
+// on both, then "healed"); nobody caught is NOT COVERED, never a failure.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
@@ -67,7 +75,7 @@ const quick = arg('quick', '0') === '1';
 const godot = process.env.GODOT || join(root, 'tools', 'godot', 'Godot_v4.7.2-stable_win64_console.exe');
 if (!existsSync(godot)) throw new Error(`no engine at ${godot}: set GODOT`);
 const P = { server: port, A: port + 1, B: port + 2, C: port + 3, fa: port + 6, fa1: port + 7, fb: port + 8, fb1: port + 9 };
-for (const p of [...(doMain ? [P.server, P.A, P.B, P.C] : []), ...(doFallback ? [P.fa, P.fa1, P.fb, P.fb1] : [])]) if (!(p >= 4740 && p <= 4859)) throw new Error(`port ${p} is outside 4740-4859`);
+for (const p of [...(doMain ? [P.server, P.A, P.B, P.C] : []), ...(doFallback ? [P.fa, P.fa1, P.fb, P.fb1] : [])]) if (!(p >= 4740 && p <= 4879)) throw new Error(`port ${p} is outside 4740-4879`);
 if (!(liftMinutes >= 1 && liftMinutes <= 20 && Number.isInteger(liftMinutes))) throw new Error(`--lift-minutes=${liftMinutes}: a whole number from 1 to 20 (the setting's range)`);
 const SECRET = 'test-passphrase';
 
@@ -488,6 +496,37 @@ function startMedic(cs) {
   return m;
 }
 
+/** WC1: the web through the real room. If one of the two is hung in the web, both screens must hold the same web row
+ * (hang point, catch and hang times); the other walks under the cocoon and holds F until the host cuts them down, and
+ * both screens must see the same cut and the player healed. Nobody caught: NOT COVERED (the Rigger decides). */
+async function webRescue(A, B) {
+  let [la, lb] = [await A.late(), await B.late()];
+  const web = la.ward?.extras?.web ?? {};
+  const ids = Object.keys(web);
+  if (!ids.length) { skip('Ward (web): a crewmate hung and cut down', 'nobody was caught on this run'); return; }
+  const id = ids[0];
+  const rescuer = la.me === id ? B : A;
+  const other = rescuer === A ? B : A;
+  const ra = web[id];
+  const rb = (lb.ward?.extras?.web ?? {})[id];
+  check('Ward (web): both screens hold the same web: the hang point and the catch and hang times', rb && J(ra) === J(rb), `A ${J(ra)} B ${J(rb)}`);
+  const pts = la.ward.extras.hangPoints ?? [];
+  const hp = pts[ra.point];
+  if (!hp || ids.length > 1) { finding('both caught, or no hang point', J(web)); return; }
+  await until(rescuer.late, (x) => (x.hostNow ?? 0) >= ra.hangAt, 10000, 100);
+  const go = await wardGo(rescuer, hp[0], hp[2], 90000, 0.8);
+  log(`  ${rescuer.label} under the cocoon of ${id} at ${J(hp)}: ${J({ ok: go.ok, why: go.why })}`);
+  await rescuer.cmd('use 1');
+  const cut = await until(rescuer.late, (x) => evOf(x, 'ward_cut').some((e) => e.id === id) || !x.ward, 12000, 100);
+  await rescuer.cmd('use 0');
+  [la, lb] = [await until(A.late, (x) => evOf(x, 'ward_cut').length > 0, 3000, 50), await until(B.late, (x) => evOf(x, 'ward_cut').length > 0, 3000, 50)];
+  const ca = evOf(la, 'ward_cut')[0];
+  const cb = evOf(lb, 'ward_cut')[0];
+  const healed = evOf(await other.late(), 'healed').find((e) => e.playerId === id && e.cut === true);
+  check('Ward (web): cut down with F held: the same cut on both screens, and they stand (healed)', ca && cb && J(ca) === J(cb) && healed && !(cut.ward?.caught ?? []).includes(id),
+    `A ${J(ca)} B ${J(cb)}, healed ${J(healed)}`);
+}
+
 // ======================================================================================================
 async function mainSession() {
   const url = `ws://127.0.0.1:${P.server}`;
@@ -510,6 +549,12 @@ async function mainSession() {
     check('Ward: the same seed and the same houses on both', la.ward.seed === lb.ward.seed && la.wardModel.seed === la.ward.seed && J(la.wardModel.layoutHouses) === J(lb.wardModel.layoutHouses) && J(la.wardModel.switches) === J(lb.wardModel.switches),
       `seed A ${la.ward.seed} B ${lb.ward.seed}, run seed ${la.seed}; ${la.wardModel.houses} houses, ${la.wardModel.switches.length} winch switches`);
     const door = la.wardModel.liftDoor;
+    // WC1: the lift called from the station (the server's default), or the old clock.
+    const wardCalled = la.ward?.extras?.called === true;
+    // Every floor's lift events are in the screens' lists from floor 5 on: the Ward's are those from its arrival.
+    const wardT0 = (evOf(la, 'rodeDown').find((e) => e.depth === 6) ?? { t: 0 }).t;
+    const evW = (x, ty) => evOf(x, ty).filter((e) => e.t >= wardT0);
+    log(`  the Ward's lift is ${wardCalled ? 'called from the station in house ' + la.ward.extras.stationHouse + ' at ' + J(la.ward.extras.station) : 'on its clock'}`);
     check('Ward: the lift waits with the crew in it (unloading on both)', la.ward.phase === 'unloading' && lb.ward.phase === 'unloading', `A ${la.ward.phase}, B ${lb.ward.phase}`);
     // Ann out first; Bob stays in the car.
     const outA = await wardGo(A, door[0] - 0.3, door[2] + 2.6, 20000);
@@ -520,19 +565,34 @@ async function mainSession() {
     const outB = await wardGo(B, door[0] + 0.5, door[2] + 2.6, 20000);
     [la, lb] = [await until(A.late, (x) => x.ward?.phase === 'away', 5000, 50), await until(B.late, (x) => x.ward?.phase === 'away', 5000, 50)];
     check('Ward: both clear: the lift leaves (away on both)', outB.ok && la.ward.phase === 'away' && lb.ward.phase === 'away', `Bob ${r2(outB.at?.[2] - door[2])} m past the doors; A ${la.ward.phase} B ${lb.ward.phase}`);
-    const dep = [evOf(la, 'ward_departed')[0], evOf(lb, 'ward_departed')[0]];
-    check('Ward: the departure is the same host event on both', dep[0] && dep[1] && dep[0].t === dep[1].t, `A t ${dep[0]?.t}, B t ${dep[1]?.t}`);
-    check(`Ward: the lift is due back ${liftMinutes} min after it left (ward.lift_minutes), the same collectionAt on both`,
-      dep[0] && Math.abs(la.ward.collectionAt - dep[0].t - liftMinutes * 60) < 1e-6 && la.ward.collectionAt === lb.ward.collectionAt,
-      `departed ${dep[0]?.t}, collectionAt A ${la.ward.collectionAt} B ${lb.ward.collectionAt}: ${r2(la.ward.collectionAt - (dep[0]?.t ?? 0))} s`);
-    await sleep(1200);
-    const pair = await sameTick(A, B);
-    const ca = clockSecs(pair.a.clockLine);
-    const cb = clockSecs(pair.b.clockLine);
-    const left = pair.a.ward.collectionAt - pair.a.hostNow;
-    const sameClock = pair.a.ward.collectionAt === pair.b.ward.collectionAt && Math.abs(ca - cb) <= 1;
-    check('Ward: both see the same LIFT RETURNS clock (same collectionAt, lines within a second, read on ticks within one)', breakClock ? !sameClock : sameClock && Math.abs(ca - left) <= 1.5 && pair.gap <= 1,
-      `A "${pair.a.clockLine}" B "${pair.b.clockLine}", collectionAt A ${pair.a.ward.collectionAt} B ${pair.b.ward.collectionAt}, host left ${r2(left)} s, ticks ${pair.a.tick}/${pair.b.tick}`);
+    if (wardCalled) {
+      const gone = [evW(la, 'carLeft').find((e) => e.reason === 'unloaded'), evW(lb, 'carLeft').find((e) => e.reason === 'unloaded')];
+      check('Ward (called): the lift leaves the crew as on every floor, the same host event on both, and no clock',
+        gone[0] && gone[1] && gone[0].t === gone[1].t && !evOf(la, 'ward_departed').length && la.ward.collectionAt < 0,
+        `A ${J(gone[0])} B ${J(gone[1])}, collectionAt ${la.ward.collectionAt}`);
+      await sleep(1200);
+      const pair = await sameTick(A, B);
+      const ea = pair.a.ward.extras ?? {};
+      const eb = pair.b.ward.extras ?? {};
+      const same = J(ea.station) === J(eb.station) && ea.stationHouse === eb.stationHouse && pair.a.clockLine === pair.b.clockLine;
+      check('Ward (called): both see the same station (house and button) and the same HUD line, with no clock on it',
+        breakClock ? !same : same && ea.stationHouse > 0 && /CALL/.test(pair.a.clockLine ?? '') && !/RETURNS/.test(pair.a.clockLine ?? ''),
+        `station A ${J(ea.station)} (house ${ea.stationHouse}) B ${J(eb.station)} (house ${eb.stationHouse}); lines "${pair.a.clockLine}" / "${pair.b.clockLine}"`);
+    } else {
+      const dep = [evOf(la, 'ward_departed')[0], evOf(lb, 'ward_departed')[0]];
+      check('Ward: the departure is the same host event on both', dep[0] && dep[1] && dep[0].t === dep[1].t, `A t ${dep[0]?.t}, B t ${dep[1]?.t}`);
+      check(`Ward: the lift is due back ${liftMinutes} min after it left (ward.lift_minutes), the same collectionAt on both`,
+        dep[0] && Math.abs(la.ward.collectionAt - dep[0].t - liftMinutes * 60) < 1e-6 && la.ward.collectionAt === lb.ward.collectionAt,
+        `departed ${dep[0]?.t}, collectionAt A ${la.ward.collectionAt} B ${lb.ward.collectionAt}: ${r2(la.ward.collectionAt - (dep[0]?.t ?? 0))} s`);
+      await sleep(1200);
+      const pair = await sameTick(A, B);
+      const ca = clockSecs(pair.a.clockLine);
+      const cb = clockSecs(pair.b.clockLine);
+      const left = pair.a.ward.collectionAt - pair.a.hostNow;
+      const sameClock = pair.a.ward.collectionAt === pair.b.ward.collectionAt && Math.abs(ca - cb) <= 1;
+      check('Ward: both see the same LIFT RETURNS clock (same collectionAt, lines within a second, read on ticks within one)', breakClock ? !sameClock : sameClock && Math.abs(ca - left) <= 1.5 && pair.gap <= 1,
+        `A "${pair.a.clockLine}" B "${pair.b.clockLine}", collectionAt A ${pair.a.ward.collectionAt} B ${pair.b.ward.collectionAt}, host left ${r2(left)} s, ticks ${pair.a.tick}/${pair.b.tick}`);
+    }
     if (breakClock || breakSplit) throw new Error('--break: the session stops after the Ward clock check');
     // The winch: Ann goes to a switch on a house other than the parlour (Bob waits in the parlour).
     const sw = la.wardModel.switches.map((s, k) => ({ ...s, k, d: Math.hypot(s.position[0] - door[0], s.position[2] - door[2]) })).sort((x, y) => (x.house === 0) - (y.house === 0) || x.d - y.d);
@@ -598,6 +658,31 @@ async function mainSession() {
       `encounter ${enc} (house ${la.ward.house}); Ann's readings on A ${J(rA.map((e) => [e.playerId, e.value, e.t]))}, on B ${J(rB.map((e) => [e.playerId, e.value, e.t]))}; tapes A ${J(sa.tapes)} B ${J(sb.tapes)}`);
     const caught = [la.ward.caught, lb.ward.caught];
     if (caught[0].length) log(`  caught on the Ward: ${J(caught[0])}`);
+    // WC1: Ann calls the car at the station, then everyone goes back to the lift (a web on the way is cut down).
+    let calledAt = null;
+    if (wardCalled) {
+      const st = la.ward.extras.station;
+      let go = await wardGo(A, st[0], st[2], 90000, 1.2);
+      for (let k = 0; k < 4 && !go.ok; k++) {
+        await until(A.late, (x) => x.ward?.encounter === 'idle' || !x.ward, 20000, 250);
+        go = await wardGo(A, st[0], st[2], 90000, 1.2);
+      }
+      const s1 = await until(A.state, (x) => x.me?.canCall === true, 6000, 100);
+      const lp = await A.late();
+      log(`  Ann at the station (house ${la.ward.extras.stationHouse}): ${J({ ok: go.ok, why: go.why })}, canCall ${s1.me?.canCall}, prompt "${lp.prompt}"`);
+      await A.cmd('call');
+      [la, lb] = [await until(A.late, (x) => evW(x, 'called').length > 0, 5000, 50), await until(B.late, (x) => evW(x, 'called').length > 0, 5000, 50)];
+      const cA = evW(la, 'called')[0];
+      const cB = evW(lb, 'called')[0];
+      check('Ward (called): Ann calls the car at the station (the prompt every floor has), the same call on both screens',
+        s1.me?.canCall === true && cA && cB && cA.t === cB.t && cA.floorsAway === cB.floorsAway,
+        `canCall ${s1.me?.canCall}, prompt "${lp.prompt}"; A ${J(cA)} B ${J(cB)}`);
+      calledAt = cA?.t ?? null;
+      const heard = await until(A.late, (x) => evOf(x, 'ward_line_loaded').some((e) => e.t >= (calledAt ?? 0) - 1e-6), 3000, 50);
+      const line0 = evOf(heard, 'ward_line_loaded').filter((e) => e.t >= (calledAt ?? 0) - 1e-6)[0];
+      if (line0 && line0.house === la.ward.extras.stationHouse) check('Ward (called): the press is heard: the Rigger\'s line loads at the station\'s house', true, J(line0));
+      else finding('the call at the station did not load his line at its house (he may have been busy with another noise)', `line ${J(line0)}, encounter ${heard.ward?.encounter} house ${heard.ward?.house}`);
+    }
     // Back to the parlour beside the lift to wait.
     // Back to the lift. A house whose Rigger is searching holds its door as the arm does (sim/ward/state.gd
     // walk_clear): when there is no way out, wait for the encounter to end and try again.
@@ -613,28 +698,45 @@ async function mainSession() {
       const lw = await A.late();
       finding('Ann could not get back to the Ward lift', `encounter ${lw.ward?.encounter} house ${lw.ward?.house}, doors ${J(lw.ward?.doors)}, caught ${J(lw.ward?.caught)}, at ${J([lw.localBody?.x, lw.localBody?.z].map(r2))}, host time ${lw.hostNow}`);
     }
-    log(`  Ann back by the lift: ${J({ ok: backA.ok, why: backA.why })}; waiting for the lift (${r2(la.ward.collectionAt - la.hostNow)} s)`);
+    log(`  Ann back by the lift: ${J({ ok: backA.ok, why: backA.why })}; waiting for the lift (${wardCalled ? 'called' : r2(la.ward.collectionAt - la.hostNow) + ' s'})`);
+    if (wardCalled) await webRescue(A, B);
     // The host's panel (Ann is the host): the Reactor's lights hold the game's 45 s (left as is).
     la = await until(A.late, (x) => x.ward?.phase === 'boarding' || !x.ward, liftMinutes * 60000 + 60000, 500);
     lb = await until(B.late, (x) => x.ward?.phase === 'boarding' || !x.ward, 5000, 50);
     if (!la.ward || !lb.ward) throw Object.assign(new Error(), { stop: true, message: `the Ward was over before Ann was back by the lift (A depth ${la.depth}, B depth ${lb.depth}): the rest of the session cannot run` });
-    const ret = [evOf(la, 'ward_returned')[0], evOf(lb, 'ward_returned')[0]];
-    check('Ward: the lift returns on the same host time on both', la.ward.phase === 'boarding' && lb.ward.phase === 'boarding' && ret[0] && ret[1] && ret[0].t === ret[1].t && Math.abs(ret[0].t - la.ward.collectionAt) < 1e-6,
-      `A ${la.ward.phase} t ${ret[0]?.t}, B ${lb.ward.phase} t ${ret[1]?.t}, collectionAt ${la.ward.collectionAt}, departAt A ${la.ward.departAt} B ${lb.ward.departAt}`);
-    const lm = [evOf(la, 'ward_last_minute'), evOf(lb, 'ward_last_minute')];
-    check(liftMinutes > 1 ? 'Ward: the one-minute reminder, the same host time on both, a minute before the return' : 'Ward: at a one-minute return there is no separate one-minute reminder (on both)',
-      liftMinutes > 1 ? lm[0].length === 1 && J(lm[0]) === J(lm[1]) && Math.abs(lm[0][0].t - (la.ward.collectionAt - 60)) < 1e-6 : lm[0].length === 0 && lm[1].length === 0,
-      `A ${J(lm[0])} B ${J(lm[1])}, collectionAt ${la.ward.collectionAt}`);
+    if (wardCalled) {
+      const arr = [evW(la, 'carArrived')[0], evW(lb, 'carArrived')[0]];
+      check('Ward (called): the car arrives on the same host time on both, as on every floor (no clock line)',
+        la.ward.phase === 'boarding' && lb.ward.phase === 'boarding' && arr[0] && arr[1] && arr[0].t === arr[1].t && !evOf(la, 'ward_returned').length,
+        `A ${la.ward.phase} ${J(arr[0])}, B ${lb.ward.phase} ${J(arr[1])}, called at ${calledAt}`);
+    } else {
+      const ret = [evOf(la, 'ward_returned')[0], evOf(lb, 'ward_returned')[0]];
+      check('Ward: the lift returns on the same host time on both', la.ward.phase === 'boarding' && lb.ward.phase === 'boarding' && ret[0] && ret[1] && ret[0].t === ret[1].t && Math.abs(ret[0].t - la.ward.collectionAt) < 1e-6,
+        `A ${la.ward.phase} t ${ret[0]?.t}, B ${lb.ward.phase} t ${ret[1]?.t}, collectionAt ${la.ward.collectionAt}, departAt A ${la.ward.departAt} B ${lb.ward.departAt}`);
+      const lm = [evOf(la, 'ward_last_minute'), evOf(lb, 'ward_last_minute')];
+      check(liftMinutes > 1 ? 'Ward: the one-minute reminder, the same host time on both, a minute before the return' : 'Ward: at a one-minute return there is no separate one-minute reminder (on both)',
+        liftMinutes > 1 ? lm[0].length === 1 && J(lm[0]) === J(lm[1]) && Math.abs(lm[0][0].t - (la.ward.collectionAt - 60)) < 1e-6 : lm[0].length === 0 && lm[1].length === 0,
+        `A ${J(lm[0])} B ${J(lm[1])}, collectionAt ${la.ward.collectionAt}`);
+    }
     const wardOrder = (x) => (x.events ?? []).filter((e) => String(e.type).startsWith('ward_')).map((e) => [e.type, e.t]);
     check('Ward: the same Ward events in the same order on both screens', J(wardOrder(la)) === J(wardOrder(lb)), `A ${J(wardOrder(la))} B ${J(wardOrder(lb))}`);
-    const inA = wardGo(A, door[0] - 0.25, door[2] - 1.3, 30000);
-    const inB = wardGo(B, door[0] + 0.25, door[2] - 1.9, 30000);
+    // WC1: called, the car is every floor's: DOWN is the right half walking in (x past the doors' middle).
+    const inA = wardGo(A, door[0] + (wardCalled ? 0.3 : -0.25), door[2] - 1.3, 30000);
+    const inB = wardGo(B, door[0] + (wardCalled ? 0.3 : 0.25), door[2] - (wardCalled ? 2.1 : 1.9), 30000);
     const [ia, ib] = await Promise.all([inA, inB]);
-    [la, lb] = [await until(A.late, (x) => x.ward == null || x.ward.phase === 'departed' || x.depth === 7, 60000, 100), await B.late()];
-    const closedA = evOf(la, 'ward_closed')[0];
-    const closedB = evOf(lb, 'ward_closed')[0];
-    check('Ward: both board, the lift closes with both aboard on both screens', closedA && closedB && closedA.t === closedB.t && J(closedA.boarded?.slice().sort()) === J([la.me, lb.me].sort()),
-      `in: Ann ${ia.ok} Bob ${ib.ok}; closed A ${J(closedA)} B ${J(closedB)}`);
+    [la, lb] = [await until(A.late, (x) => x.ward == null || x.ward.phase === 'departed' || x.depth === 7, 90000, 100), await B.late()];
+    if (wardCalled) {
+      const bells = [evW(la, 'bell')[0], evW(lb, 'bell')[0]];
+      const shut = [evW(la, 'doorsClosed').at(-1), evW(lb, 'doorsClosed').at(-1)];
+      check('Ward (called): both on DOWN, the same bell on both, and the car rides on with both aboard',
+        bells[0] && bells[1] && J(bells[0]) === J(bells[1]) && bells[0].outcome === 'ride' && shut[0] && J(shut[0].aboard?.slice().sort()) === J([la.me, lb.me].sort()),
+        `in: Ann ${ia.ok} Bob ${ib.ok}; bell A ${J(bells[0])} B ${J(bells[1])}; doors ${J(shut[0])}`);
+    } else {
+      const closedA = evOf(la, 'ward_closed')[0];
+      const closedB = evOf(lb, 'ward_closed')[0];
+      check('Ward: both board, the lift closes with both aboard on both screens', closedA && closedB && closedA.t === closedB.t && J(closedA.boarded?.slice().sort()) === J([la.me, lb.me].sort()),
+        `in: Ann ${ia.ok} Bob ${ib.ok}; closed A ${J(closedA)} B ${J(closedB)}`);
+    }
     // ---------------- The Reactor.
     [la, lb] = [await until(A.late, (x) => x.depth === 7 && x.reactor && x.station, 90000, 150), await until(B.late, (x) => x.depth === 7 && x.reactor && x.station, 30000, 100)];
     check('Reactor: both ride on to floor 7, a native station drawn by the main game', la.depth === 7 && lb.depth === 7 && la.reactor?.native === true && lb.reactor?.native === true && la.place === 'reactor',

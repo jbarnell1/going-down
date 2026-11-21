@@ -32,6 +32,7 @@ const LocalRoom = preload("res://net/local_room.gd")
 const Client = preload("res://net/client.gd")
 const Session = preload("res://net/session.gd")
 const Protocol = preload("res://net/protocol.gd")
+const AirSound = preload("res://client/air_sound.gd")
 const Pose = preload("res://net/pose.gd")
 const PlanDump = preload("res://client/plan_dump.gd")
 const Run = preload("res://sim/run.gd")
@@ -98,6 +99,9 @@ var body: Move.Body = null
 ## WN1: the floor's own walk, in place of the floor plan's (client/ward/floor.gd walk: the Hanging Ward played as a
 ## normal level). Called with (body, dx, dz), returns the body after the step. Empty: the plan's walk, as always.
 var walker := Callable()
+## WC1: on the Hanging Ward with its call (net/host_rules.gd ward_call), the station's button (feet), set by client/main.gd
+## each frame from the Ward's block; null everywhere else, where the call is at the car's doors.
+var call_spot: Variant = null
 var tank: Stamina.Stamina = Stamina.fresh_stamina()
 var gait: StringName = &"walk"
 ## Seconds left on the crawl's "creep to crawl in" prompt (RN3); 0 when the mouth has not stopped you lately.
@@ -623,7 +627,7 @@ func _snapshot(c: Client, f: Client.Frame, latest: Dictionary, me_row: Variant, 
 			var drawn := _orderly_tpl.copy()
 			drawn.body = Pose.pose_body(pd)
 			drawn.moving = true
-			var a := Entity.audibility(plan, drawn, vb, eye)
+			var a := AirSound.audibility(plan, drawn, vb, eye)
 			squeak = {"gain": a.gain, "muffled": a.muffled}
 	var distance := M.hypot2(vb.x - ox, vb.z - oz)
 	# The instrument and the tapes.
@@ -692,7 +696,7 @@ func _snapshot(c: Client, f: Client.Frame, latest: Dictionary, me_row: Variant, 
 			"stamina": tank.level,
 			"winded": tank.winded,
 			"exertion": Stamina.exertion(tank),
-			"canCall": phase == "away" and body != null and vb.level == car.level and not in_car_now and M.hypot2(vb.x - car.door_x, vb.z - car.door_z) <= Run.CALL_REACH - 0.05,
+			"canCall": _can_call(phase, vb, in_car_now),
 			"nearHold": phase == "boarding" and in_car_now and M.hypot2(local_uv[0] - 0.3, local_uv[1] - HOLD_BUTTON_V) <= 0.75,
 			"cell": Floor.pos_plain(Move.cell_of(plan, vb)),
 		},
@@ -995,3 +999,13 @@ func debug_info() -> Dictionary:
 	return {"phase": String(h.state.phase), "t": h.state.t, "tick": h.tick, "orderly": {"x": o.body.x, "z": o.body.z, "level": o.body.level,
 		"mode": String(o.mode), "speed": o.speed}, "softCatches": (rc as LocalRoom).rules.soft_catches,
 		"emotesRelayed": h.emotes_relayed, "emotesDropped": h.emotes_dropped}
+
+## Whether this player can press the call now: in reach of the car's doors, or of the Ward's station (call_spot), the
+## car away (sim/run.gd _at_call, the host's own check, a little inside it).
+func _can_call(phase: String, vb: Move.Body, in_car_now: bool) -> bool:
+	if phase != "away" or body == null:
+		return false
+	if call_spot is Vector3:
+		var at: Vector3 = call_spot
+		return M.hypot2(vb.x - at.x, vb.z - at.z) <= Run.CALL_REACH - 0.05 and absf(vb.y - at.y) <= Run.WARD_CALL_RISE
+	return vb.level == car.level and not in_car_now and M.hypot2(vb.x - car.door_x, vb.z - car.door_z) <= Run.CALL_REACH - 0.05
