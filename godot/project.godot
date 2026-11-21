@@ -43,7 +43,10 @@ window/stretch/mode="disabled"
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/canvas_textures/default_texture_filter=0
-limits/opengl/max_lights_per_object=16
+; LT1: a mesh meeting more lights than this loses some, in no useful order, and which ones changes as
+; lights change: pools of light came and went on the Clinic floor. tests/test_light_pairs.gd keeps every
+; floor's meshes 4 under it. The 3D picture is 480x270, so a longer light loop per pixel costs little.
+limits/opengl/max_lights_per_object=40
 limits/opengl/max_renderable_lights=256
 lights_and_shadows/positional_shadow/atlas_size=2048
 lights_and_shadows/positional_shadow/atlas_size.mobile=2048

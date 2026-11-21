@@ -37,6 +37,17 @@ const BUMPER_COLOURS: Array[Color] = [
 ]
 ## How many lights nearest the camera cast shadows at the "full" quality level.
 const SHADOW_LIGHTS := 4
+## The render layer of the lower storey's chunk meshes, and the cull mask of a lamp under the upper
+## ceiling that leaves them out (split_storeys). Every camera draws all twenty layers.
+const LOWER_LAYER := 1 << 10
+const UPPER_LAMP_MASK := 0xFFFFF & ~LOWER_LAYER
+## The Clinic's ceiling lamps. 70 degrees (was 78): at 7.5 m reach a lamp 3.1 m over the floor lights
+## nothing past about 65 degrees, and the wider cone only widened the box the renderer pairs it by.
+const LAMP_ANGLE := 70.0
+## A lamp fades out between these distances from the camera (was 16 to 22 m: a pool across the big
+## room dimmed and came back as the player walked). Past 30 m the fog has most of it anyway.
+const LAMP_FADE_BEGIN := 30.0
+const LAMP_FADE_LENGTH := 10.0
 const PRISON_VIEW := preload("res://client/prison_view.gd")
 const ANNEX_VIEW := preload("res://client/annex_view.gd")
 const Hides = preload("res://sim/hides.gd")
@@ -80,7 +91,6 @@ var _rng := RandomNumberGenerator.new()
 var _t := 0.0
 var _level := 1.0
 var _emergency := 0.0
-var _shadow_clock := 0.0
 var props_placed := 0
 var props_overturned := 0
 ## Where each prop went (tests): room, cell, the wall it stands against, its floor footprint (x, z, w, d).
@@ -123,6 +133,31 @@ static func _shader(path: String) -> Shader:
 	return _shared[path]
 
 func build(p: Dictionary, seed_text: String, source_plan: FloorLib.FloorPlan = null, source_hides: Array[PlayroomLib.Hide] = []) -> void:
+	_build_place(p, seed_text, source_plan, source_hides)
+	split_storeys()
+
+## LT1: keeps the upper storey's lamps off the lower storey's meshes. A lamp under the upper ceiling
+## points down through the slab it hangs over; without this every one of them also paired with the
+## chunks below, so a lower floor chunk met up to 46 spot lights. The Compatibility renderer lights
+## each mesh with the first `limits/opengl/max_lights_per_object` lights paired with it, in no useful
+## order, and the pairing order changes whenever any light changes (a carried lamp moving, a shadow
+## switched): pools of light came and went on the floor as the player walked. A lamp over an opening
+## (the atrium, a stair) still lights the storey below.
+func split_storeys() -> void:
+	for c in get_children():
+		if c is MeshInstance3D and String(c.name).begins_with("0_"):
+			(c as MeshInstance3D).layers = LOWER_LAYER
+	for c in get_children():
+		var l := c as Light3D
+		if l == null or l.position.y < LH + 0.1 or W == 0:
+			continue
+		var x := int(floor(l.position.x / S))
+		var y := int(floor(l.position.z / S))
+		var k := kind(1, x, y)
+		if k != "atriumOpen" and k != "stair":
+			l.light_cull_mask = UPPER_LAMP_MASK
+
+func _build_place(p: Dictionary, seed_text: String, source_plan: FloorLib.FloorPlan = null, source_hides: Array[PlayroomLib.Hide] = []) -> void:
 	plan = p
 	W = int(p.width)
 	H = int(p.height)
@@ -642,7 +677,7 @@ func _build_lights() -> void:
 				var light := SpotLight3D.new()
 				light.position = pos - Vector3(0, 0.05, 0)
 				light.rotation_degrees = Vector3(-90, 0, 0)
-				light.spot_angle = 78.0
+				light.spot_angle = LAMP_ANGLE
 				light.spot_angle_attenuation = 0.6
 				light.spot_range = 10.5 if open_above else 7.5
 				light.light_color = col
@@ -652,8 +687,8 @@ func _build_lights() -> void:
 				light.shadow_enabled = false
 				light.shadow_bias = 0.04
 				light.distance_fade_enabled = true
-				light.distance_fade_begin = 16.0
-				light.distance_fade_length = 6.0
+				light.distance_fade_begin = LAMP_FADE_BEGIN
+				light.distance_fade_length = LAMP_FADE_LENGTH
 				light.distance_fade_shadow = 12.0
 				add_child(light)
 				main_lights.append(light)
@@ -672,15 +707,14 @@ func _build_lights() -> void:
 					o.omni_range = 4.5
 					o.omni_attenuation = 1.4
 					o.distance_fade_enabled = true
-					o.distance_fade_begin = 20.0
-					o.distance_fade_length = 5.0
+					o.distance_fade_begin = LAMP_FADE_BEGIN
+					o.distance_fade_length = LAMP_FADE_LENGTH
 					o.visible = false
 					add_child(o)
 					emergency_lights.append(o)
-	# Shadows on the nearest few from the start, so the browser compiles those variants while loading.
-	if shadows:
-		for i in mini(SHADOW_LIGHTS, main_lights.size()):
-			main_lights[i].shadow_enabled = true
+	# LT1: the ceiling lamps never cast shadows. Shadows used to go to the four lamps nearest the
+	# camera, picked again every quarter second, so shadows (and the light a lamp threw through the slab
+	# below it) switched on and off as the player walked.
 
 ## The lights as one dial: 1 every light as built; lower is the lights failing (blink warnings, the
 ## dark). Panels die faster than the room, as in src/render/lighting.ts.
@@ -705,7 +739,7 @@ func set_emergency(k: float) -> void:
 		o.visible = on
 		o.light_energy = 0.55 * k
 
-func update_lights(delta: float, cam_pos: Vector3) -> void:
+func update_lights(delta: float, _cam_pos: Vector3) -> void:
 	_t += delta
 	var pk := 1.0 if _level >= 1.0 else _level * _level
 	var lit := _level > 0.02
@@ -729,26 +763,7 @@ func update_lights(delta: float, cam_pos: Vector3) -> void:
 		var e: float = (0.15 if p.dead else p.k) * pk
 		if not is_equal_approx(p.mat.get_shader_parameter("energy"), e):
 			p.mat.set_shader_parameter("energy", e)
-	if shadows:
-		_shadow_clock -= delta
-		if _shadow_clock <= 0.0:
-			_shadow_clock = 0.25
-			_pick_shadow_lights(cam_pos)
-
-# Shadows only from the few lights nearest the player.
-func _pick_shadow_lights(cam_pos: Vector3) -> void:
-	var order := []
-	for i in main_lights.size():
-		order.append([main_lights[i].global_position.distance_squared_to(cam_pos), i])
-	order.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
-	var want := {}
-	for j in mini(SHADOW_LIGHTS, order.size()):
-		want[order[j][1]] = true
-	for i in main_lights.size():
-		var on := want.has(i)
-		if main_lights[i].shadow_enabled != on:
-			main_lights[i].shadow_enabled = on
-
+	# (LT1: no shadow re-pick by camera distance here any more: see _build_lights.)
 # --- signs and stains -------------------------------------------------------------------------
 
 func _build_signs_and_decals() -> void:

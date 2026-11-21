@@ -33,7 +33,9 @@ func update(level: Node3D, rows: Variant, my_id: String) -> void:
 				beam.spot_angle = Lamp.HALF_DEG
 				beam.light_color = Color(1.0, 0.90, 0.71)
 				beam.light_energy = 4.0
-				beam.shadow_enabled = true
+				# LT1: no shadow. The beam moves every frame, so a shadowed one drew its shadow map
+				# again every frame, and its texels crawled over the walls (the shimmer the owner saw).
+				beam.shadow_enabled = false
 				level.add_child(beam)
 				beams[id] = beam
 			beam.position = Vector3(float(row.x), float(row.y), float(row.z))
