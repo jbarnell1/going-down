@@ -2118,6 +2118,7 @@ func _process(delta: float) -> void:
 		hud.note = ""
 	settings_panel.rc = link.rc if link != null else null
 	_host_tools_hud()
+	StartScreen.menu_in_front(hud, start, menu_overlay, mode != "game")
 	hide_view.tuning = link.client().tuning if link != null and link.client() != null else null
 	if link == null:
 		hud.menu_on = menu_overlay

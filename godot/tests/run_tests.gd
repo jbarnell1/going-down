@@ -25,6 +25,7 @@ const FILES: Array[String] = [
 	"prop_downs", "prop_down_view", "prop_watchers", "prop_relocate", "prop_hides", "prop_owner_0833", "prop_lonely", "prop_annex_drag", "prop_playroom_tuned", "prop_minder_hunt", "prop_minder_hunt_view", "test_minder_v2","prop_party_table",
 	"prop_settings", "prop_settings_net", "prop_tenant", "prop_hints", "prop_tapes", "prop_telemetry", "prop_day_view", "prop_furniture", "prop_ready", "prop_ready_screen", "test_local_bots", "test_solo_diagnostics",
 	"prop_orientation", "prop_flare", "prop_lamp", "prop_nerve", "prop_shaken",
+	"test_start_layout",
 	"prop_hearing", "prop_arboretum", "prop_garden_cones", "prop_garden_search", "test_garden_recordings", "test_keeper_figure", "prop_ward_net",
 	"test_data_check",
 	"prop_brightness", "prop_brightness_curve",

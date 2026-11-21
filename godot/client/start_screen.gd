@@ -75,6 +75,13 @@ const AFTER_TAPE_GUARD := 0.5
 const MAX_ADDRESS := 200
 const MAX_NAME := 16
 const MAX_PASS := 128
+## The title screen's places, in steps of the screen's scale from the middle of the window (title_layout).
+const TAG_LINE := "A CO-OP HORROR ON TAPE"
+const TITLE_AT := 56.0
+const TAG_AT := 24.0
+const FIRST_BUTTON_AT := 0.0   # PLAY ALONE in the very middle (scripted playthroughs click there)
+const BUTTON_STEP := 19.0
+const ESC_AT := 66.0
 const PALE := Color("#f4f4ec")
 const AMBER := Color("#ffd27a")
 const DIM := Color("#8f958f")
@@ -116,6 +123,8 @@ var face_code := ""
 var face_next := ""
 var editor: FaceEditor = null
 var _hover := -1
+## The Esc card is open in front of this screen (menu_in_front): only the dim is drawn, no item is clickable.
+var under_menu := false
 ## The focusable items on the screen drawn last: [{kind: "button"|"field", id, rect}].
 var _items: Array[Dictionary] = []
 var _caret_t := 0.0
@@ -435,7 +444,7 @@ func _type(id: String, text: String) -> void:
 # --- drawing --------------------------------------------------------------------------------------
 
 func _scale() -> float:
-	return maxf(2.0, floor(minf(size.x / 240.0, size.y / 150.0)))
+	return scale_for(size)
 
 func _text(t: String, p: Vector2, px: float, col: Color) -> void:
 	PixelFont.draw_shadowed(self, t, p, px, col)
@@ -443,10 +452,47 @@ func _text(t: String, p: Vector2, px: float, col: Color) -> void:
 func _centred(t: String, y: float, px: float, col: Color) -> void:
 	_text(t, Vector2(floorf((size.x - PixelFont.width(t) * px) * 0.5), y), px, col)
 
-func _button(id: String, label: String, centre: Vector2, px: float, wide: float = 0.0) -> void:
+static func button_rect(label: String, centre: Vector2, px: float, wide: float = 0.0) -> Rect2:
 	var w := maxf(PixelFont.width(label) + 16, wide) * px
 	var h := 15.0 * px
-	var r := Rect2(Vector2(floorf(centre.x - w * 0.5), floorf(centre.y - h * 0.5)), Vector2(w, h))
+	return Rect2(Vector2(floorf(centre.x - w * 0.5), floorf(centre.y - h * 0.5)), Vector2(w, h))
+
+## A line of pixel text's rectangle as drawn (7 rows and the one-step shadow).
+static func text_rect(t: String, at: Vector2, px: float) -> Rect2:
+	return Rect2(at, Vector2((PixelFont.width(t) + 1) * px, 8 * px))
+
+## The screen's scale for a window of this size: whole steps, so 240 x 150 steps always fit.
+static func scale_for(sz: Vector2) -> float:
+	return maxf(2.0, floor(minf(sz.x / 240.0, sz.y / 150.0)))
+
+## Where the title screen's pieces go, in window pixels: [{id, rect}] for the title, the tag line, the
+## buttons, the error's rows and the ESC line. Every place is counted in steps of `px` from the middle of
+## the window, never as a share of its height, so the pieces keep their places relative to each other at
+## every window size and in fullscreen (the owner: the tag line went under PLAY ALONE in fullscreen).
+static func title_layout(sz: Vector2, px: float, playtest: bool, error_rows: int) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var cx := sz.x * 0.5
+	var cy := floorf(sz.y * 0.5)
+	var tp := px * 3.0
+	var title := "GOING DOWN"
+	out.append({"id": "title", "rect": text_rect(title, Vector2(floorf(cx - PixelFont.width(title) * tp * 0.5), cy - TITLE_AT * px), tp)})
+	out.append({"id": "tag", "rect": text_rect(TAG_LINE, Vector2(floorf(cx - PixelFont.width(TAG_LINE) * px * 0.5), cy - TAG_AT * px), px)})
+	var buttons: Array = [["alone", "PLAY ALONE"], ["join", "JOIN FRIENDS"]]
+	if playtest:
+		buttons.append(["playtest", "HOST PLAYTEST"])
+	var by := cy - FIRST_BUTTON_AT * px
+	for b: Array in buttons:
+		out.append({"id": b[0], "label": b[1], "rect": button_rect(b[1], Vector2(cx, by), px, 110)})
+		by += BUTTON_STEP * px
+	var ey := by - BUTTON_STEP * px + 10 * px
+	for i in error_rows:
+		out.append({"id": "error%d" % i, "rect": Rect2(Vector2(0, ey + i * 9 * px), Vector2(sz.x, 8 * px))})
+	var esc := "ESC  CONTROLS"
+	out.append({"id": "esc", "rect": text_rect(esc, Vector2(floorf(cx - PixelFont.width(esc) * px * 0.5), cy + ESC_AT * px), px)})
+	return out
+
+func _button(id: String, label: String, centre: Vector2, px: float, wide: float = 0.0) -> void:
+	var r := button_rect(label, centre, px, wide)
 	var on: bool = focused_id() == id or (_hover >= 0 and _hover < _items.size() and _items[_hover]["id"] == id)
 	draw_rect(r, Color(0.02, 0.02, 0.025, 0.85))
 	draw_rect(r, AMBER if on else DIM, false, px)
@@ -481,21 +527,30 @@ func _draw() -> void:
 		return   # the editor (or the tape) draws the whole screen
 	var px := _scale()
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.35))
+	if under_menu:
+		return   # the controls (the HUD's Esc card) are up in front: nothing of the menu shows through them
 	var big := px * 2.0
-	var top := size.y * 0.14
-	if screen != "lobby" and screen != "playtest":   # Ready-up lays out its own, smaller title (_draw_ready)
-		_centred("GOING DOWN", top, big * (1.5 if screen == "title" else 1.0), AMBER)
-	var cy := size.y * 0.5
+	var cy := floorf(size.y * 0.5)
+	var top := cy - 64 * px   # the join form's title: the form fills the 150 steps under it
+	if screen != "lobby" and screen != "playtest" and screen != "title":   # Ready-up lays out its own, smaller title (_draw_ready); the title screen's is in title_layout
+		_centred("GOING DOWN", top, big, AMBER)
 	match screen:
 		"title":
-			_centred("A CO-OP HORROR ON TAPE", top + 18 * big + 4 * px, px, DIM)
-			_button("alone", "PLAY ALONE", Vector2(size.x * 0.5, cy), px, 110)
-			_button("join", "JOIN FRIENDS", Vector2(size.x * 0.5, cy + 22 * px), px, 110)
-			if playtest_available:
-				_button("playtest", "HOST PLAYTEST", Vector2(size.x * 0.5, cy + 44 * px), px, 110)
-			if error != "":
-				_wrapped(error, cy + (59 if playtest_available else 38) * px, px, WARN)
-			_centred("ESC  CONTROLS", size.y - 16 * px, px, DIM)
+			var rows := _error_rows()
+			for piece: Dictionary in title_layout(size, px, playtest_available, rows.size()):
+				var r: Rect2 = piece["rect"]
+				match str(piece["id"]):
+					"title":
+						_text("GOING DOWN", r.position, px * 3.0, AMBER)
+					"tag":
+						_text(TAG_LINE, r.position, px, DIM)
+					"esc":
+						_text("ESC  CONTROLS", r.position, px, DIM)
+					"alone", "join", "playtest":
+						_button(str(piece["id"]), str(piece["label"]), r.get_center(), px, 110)
+					_:
+						var i := int(str(piece["id"]).trim_prefix("error"))
+						_centred(rows[i], r.position.y, px, WARN)
 		"playtest":
 			draw_rect(Rect2(Vector2.ZERO, size), Color(0.018, 0.015, 0.02, 0.97))
 			px = maxf(1.0, minf(px, size.y / (playtest_choices.size() * 19.0 + 64.0)))
@@ -528,6 +583,24 @@ func _draw() -> void:
 			_draw_ready(px)
 		"tape":
 			pass
+
+## The title screen's error, wrapped to the window (at most two rows: the ESC line is under them).
+func _error_rows() -> PackedStringArray:
+	if error == "":
+		return PackedStringArray()
+	return PixelFont.wrap(error, int(size.x / _scale() / 6.0) - 4).slice(0, 2)
+
+## The start screen's Esc card (the HUD's controls menu) in front of the menu: the HUD sits under the start
+## screen in the scene, so while the card is open there it is lifted over it, and the start screen draws
+## nothing but its dim (`under_menu`) and takes no clicks. Back down when the card closes. main.gd calls
+## this every frame with whether the card is open and whether this is the start screen (not the run).
+static func menu_in_front(hud: CanvasItem, start: StartScreen, menu_on: bool, on_start: bool) -> void:
+	var lift := menu_on and on_start
+	hud.z_index = 1 if lift else 0
+	if start.under_menu != lift:
+		start.under_menu = lift
+		start._hover = -1
+		start.queue_redraw()
 
 func _wrapped(text: String, y: float, px: float, col: Color) -> void:
 	var rows := PixelFont.wrap(text, int(size.x / px / 6.0) - 4)
