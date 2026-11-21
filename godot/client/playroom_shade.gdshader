@@ -16,6 +16,20 @@ render_mode diffuse_lambert, specular_disabled;
 
 uniform sampler2D albedo_tex : source_color, filter_nearest_mipmap, repeat_enable, hint_default_white;
 uniform float mode = 1.0;
+uniform sampler2D photo_tex : source_color, filter_linear_mipmap, repeat_enable, hint_default_white;
+uniform float photo = 0.0;
+uniform float photo_scale = 0.5;
+uniform float corr_fixed = 0.0;
+// Mode 4: the ready-made models' colour maps are darker than the floor's bleached paint; this lifts them to it.
+uniform float photo_gain = 1.0;
+uniform sampler2D detail_tex : filter_linear_mipmap, repeat_enable, hint_default_white;
+uniform float detail_amt = 0.0;
+uniform float detail_scale = 0.5;
+uniform sampler2D grime_tex : filter_linear_mipmap, repeat_enable, hint_default_white;
+uniform float grime_amt = 0.0;
+uniform float grime_scale = 0.25;
+// 1: the dirt only at hand height and under the ceiling line of each 3.2 m storey (walls), the paint clean between.
+uniform float grime_band = 0.0;
 uniform float triplanar = 0.0;
 uniform float scissor = 0.0;
 uniform float self_light = 0.5;
@@ -47,7 +61,16 @@ void fragment() {
 		vec3 n = abs(wnorm);
 		uv = n.y > 0.5 ? wpos.xz * 0.5 : (n.x > n.z ? wpos.zy * 0.5 : wpos.xy * 0.5);
 	}
+	vec3 an = abs(wnorm);
+	vec2 wuv = an.y > 0.5 ? wpos.xz : (an.x > an.z ? wpos.zy : wpos.xy);
 	vec4 t = texture(albedo_tex, uv);
+	if (photo > 0.5) {
+		t = texture(photo_tex, wuv * photo_scale);
+	}
+	if (mode > 3.5) {
+		t = texture(photo_tex, UV);
+		t.rgb *= photo_gain;
+	}
 	if (scissor > 0.0 && t.a < scissor) discard;
 	vec3 c = t.rgb;
 	float corr = 0.0;
@@ -61,10 +84,23 @@ void fragment() {
 		corr = COLOR.r;
 		float k = floor((wpos.x + wpos.z) * 0.5 + 0.013);
 		c = mix(c, c * palette(k), t.a);
-	} else {
+	} else if (mode < 3.5) {
 		corr = COLOR.r;
 		vec2 q = floor(wpos.xz);
 		c *= palette(q.x + 2.0 * q.y + floor(q.y * 0.5));
+	} else {
+		corr = corr_fixed;
+	}
+	if (detail_amt > 0.0) {
+		c *= mix(1.0, texture(detail_tex, wuv * detail_scale).r * 2.0, detail_amt);
+	}
+	if (grime_amt > 0.0) {
+		float ga = grime_amt;
+		if (grime_band > 0.5) {
+			float hy = mod(wpos.y + 0.01, 3.2);
+			ga *= clamp(1.0 - smoothstep(0.5, 1.15, hy) + smoothstep(2.65, 3.15, hy), 0.0, 1.0);
+		}
+		c *= mix(vec3(1.0), texture(grime_tex, wuv * grime_scale).rgb * 2.0, ga);
 	}
 	float b = smoothstep(0.25, 1.0, corr) * bleach;
 	float l = dot(c, vec3(0.3, 0.59, 0.11));

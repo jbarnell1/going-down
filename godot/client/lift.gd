@@ -60,6 +60,17 @@ const PARTY_COLS := 20
 const PARTY_PX := Vector2i(PARTY_COLS * 6 + 4, 32)
 const PARTY_SIZE := Vector2(1.0, 1.0 * 32.0 / (PARTY_COLS * 6 + 4))
 const PARTY_AT := Vector2(1.45, 1.45)
+## HUD1b (the owner, 21 Nov: "put somewhere on paper that each level only gets ten min before tenant arrives"; the
+## rates "Lift and tab"): a paper notice on the car's right-hand wall inside, printed in the company's words. The
+## minutes are the host's own clock (its "tenant" block's len), so it stays true if the host changes it. On a floor
+## with printed rates (the Playroom's anger and health), the same paper lists them under the notice.
+const NOTICE_COLS := 22
+const NOTICE_ROWS := 18
+const NOTICE_PX := Vector2i(NOTICE_COLS * 6 + 8, NOTICE_ROWS * 10 + 8)
+const NOTICE_SIZE := Vector2(0.9, 0.9 * float(NOTICE_ROWS * 10 + 8) / float(NOTICE_COLS * 6 + 8))
+const NOTICE_Y := 1.4
+const NOTICE_PAPER := Color("#e9e2cc")
+const NOTICE_INK := Color("#2a2620")
 const LOSS_PX := Vector2i(286, 94)
 const LOSS_SIZE := Vector2(2.8, 2.8 * LOSS_PX.y / LOSS_PX.x)
 
@@ -128,6 +139,56 @@ var _party_tex: ImageTexture
 var _bank_open_mat: ShaderMaterial
 var _bank_locked_mat: ShaderMaterial
 
+## HUD1b: the notice's rows as printed ("" rows are gaps), [] for no notice (no Tenant clock: minutes 0).
+static func notice_rows(minutes: int, rates: PackedStringArray = PackedStringArray()) -> PackedStringArray:
+	if minutes <= 0:
+		return PackedStringArray()
+	var out := PackedStringArray(["NOTICE TO ALL CREWS", ""])
+	out.append_array(PixelFont.wrap("EACH LEVEL ALLOWS %d MINUTE%s BEFORE THE TENANT ARRIVES. PLAN YOUR VISIT ACCORDINGLY." % [minutes, "" if minutes == 1 else "S"], NOTICE_COLS))
+	for r: String in rates:
+		if r != "":
+			out.append("")
+			out.append_array(PixelFont.wrap(r, NOTICE_COLS))
+	out.append("")
+	out.append("- THE MANAGEMENT")
+	return out.slice(0, NOTICE_ROWS)
+
+var notice_lines := PackedStringArray()
+var _notice_img: Image
+var _notice_tex: ImageTexture
+var _notice: MeshInstance3D
+
+## HUD1b: prints the notice (notice_rows); none hides the paper.
+func show_notice(minutes: int, rates: PackedStringArray = PackedStringArray()) -> void:
+	var rows := notice_rows(minutes, rates)
+	if rows == notice_lines or _notice == null:
+		return
+	notice_lines = rows
+	_notice.visible = not rows.is_empty()
+	if rows.is_empty():
+		return
+	_notice_img.fill(NOTICE_PAPER)
+	for i in rows.size():
+		var ink := Color("#8a1c12") if i == 0 else NOTICE_INK
+		PixelFont.blit(_notice_img, rows[i], Vector2i(4, 4 + i * 10), ink)
+	_notice_tex.update(_notice_img)
+
+func _build_notice() -> void:
+	_notice_img = Image.create(NOTICE_PX.x, NOTICE_PX.y, false, Image.FORMAT_RGBA8)
+	_notice_img.fill(NOTICE_PAPER)
+	_notice_tex = ImageTexture.create_from_image(_notice_img)
+	var q := QuadMesh.new()
+	q.size = NOTICE_SIZE
+	_notice = MeshInstance3D.new()
+	_notice.name = "TenantNotice"
+	_notice.mesh = q
+	_notice.material_override = Level.prop_material(Color.WHITE, _notice_tex)
+	# On the right-hand wall inside, facing into the car, its text reading toward the doors.
+	_notice.position = Vector3(half - 0.006, NOTICE_Y, -depth * 0.45)
+	_notice.rotation = Vector3(0, -PI / 2.0, 0)
+	_notice.visible = false
+	add_child(_notice)
+
 ## Builds the lift for the rules' car (plan.car). `left_wall`: the landing cell has a wall on its left as
 ## you face the lift (Level.lift_left_wall), so the call button goes on it.
 func build(car: Dictionary, left_wall := false) -> void:
@@ -147,6 +208,7 @@ func build(car: Dictionary, left_wall := false) -> void:
 	_box(Vector3(-half - 0.02, CAR_H * 0.5, -depth * 0.5), Vector3(0.04, CAR_H, depth), steel)
 	_box(Vector3(half + 0.02, CAR_H * 0.5, -depth * 0.5), Vector3(0.04, CAR_H, depth), steel)
 	_box(Vector3(0, CAR_H + 0.02, -depth * 0.5), Vector3(half * 2, 0.04, depth), ceil)
+	_build_notice()
 	# Handrail at the back.
 	_box(Vector3(0, 0.95, -depth + 0.06), Vector3(half * 1.8, 0.05, 0.05), dark)
 	# Front wall inside face, around the door opening.

@@ -553,7 +553,11 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 		# so the first snapshot already carries its block.
 		s = s.copy()
 		Run._sync_station(s)
-	return Run.with_orientation(s, true) if orientation_prelude else s
+	if not orientation_prelude:
+		return s
+	# VC3: the prelude is a fresh run of its own; with the voice on it has the voice too (meter and noise alike).
+	var o := Run.with_orientation(s, true)
+	return Run.with_voice(o) if voice else o
 
 ## SR1: split reality unless `split=0` (an argument after `--`, or the web page's ?split=0).
 static func split_on_by_arg() -> bool:

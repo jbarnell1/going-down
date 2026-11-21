@@ -74,6 +74,8 @@ const FLOOR_FILES: Array[String] = [
 	"assets/ward/surfaces/brick.webp", "assets/ward/surfaces/plaster.webp", "assets/ward/surfaces/planks.webp",
 	"assets/ward/surfaces/floorboards.webp", "assets/ward/surfaces/slates.webp", "assets/ward/surfaces/rock.webp",
 	"assets/ward/surfaces/iron.webp", "assets/ward/surfaces/doorwood.webp", "assets/ward/surfaces/paper.webp",
+	# PR1: the Playroom's two Meshy pieces (client/playroom_view.gd loads them by name) and their colour maps.
+	"assets/playroom/slide.glb", "assets/playroom/slide_Image_0.webp", "assets/playroom/frame.glb", "assets/playroom/frame_Image_0.webp",
 ]
 const TAPE := {"Web": "assets/station/tape/crew23_web.ogv", "Windows": "assets/station/tape/crew23.ogv"}
 ## MU1: the owner's five music tracks (client/music.gd), loaded by name rather than preloaded, so named here.

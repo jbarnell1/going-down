@@ -910,9 +910,6 @@ func hide_camera(row: Dictionary, latest: Dictionary, id: String, want_yaw: floa
 	var off := slot_offset(h, latest, id)
 	var gy := gap_yaw(h)
 	var half := deg_to_rad(float(h.gap_half))
-	var eye_h := h.eye / 100.0
-	if h.kind == &"pit":
-		eye_h = PIT_PEEK_EYE
 	var yaw := want_yaw
 	if half < PI - 1e-3:
 		var rel := wrapf(want_yaw - gy, -PI, PI)
@@ -920,17 +917,34 @@ func hide_camera(row: Dictionary, latest: Dictionary, id: String, want_yaw: floa
 	var pitch := clampf(want_pitch, -PEEK_PITCH, PEEK_PITCH)
 	var gx := float(Floor.dir_dx(h.gap))
 	var gz := float(Floor.dir_dy(h.gap))
-	var x := ins.x + off.x
-	var z := ins.z + off.y
-	var y := ins.y + eye_h
-	if not peek:
-		# Sat back: lower, and back from the gap (in the pit, down at the balls' tops; in a cabinet or under a
-		# desk only as far as its back panel allows).
-		y = ins.y + (PIT_SAT_EYE if h.kind == &"pit" else maxf(0.25, eye_h - SAT_DROP))
-		var back := 0.0 if h.kind == &"pit" else (0.12 if h.kind == &"cabinet" else (0.2 if h.kind == &"desk" else SAT_BACK))
-		x -= gx * back
-		z -= gz * back
+	var eye := eye_local(h.kind, h.eye, peek)
+	var x := ins.x + off.x + gx * eye.z
+	var z := ins.z + off.y + gz * eye.z
+	var y := ins.y + eye.y
 	return {"x": x, "y": y, "z": z, "yaw": yaw, "pitch": pitch, "peek": peek, "hide": hid, "kind": String(h.kind), "gapYaw": gy, "gapHalf": half}
+
+## How far back from the inside spot (away from the gap) the camera sits back, by kind: always inside the
+## hide's own walls, which are all that frames the view (MH1b: nothing is drawn over the picture). In the
+## pit not at all; a cabinet, a chest, a shed or a bench only as far as its back allows; a desk to its panel.
+static func sat_back(kind: StringName) -> float:
+	match kind:
+		&"pit", &"log":
+			return 0.0
+		&"chest":
+			return 0.1
+		&"cabinet", &"shed", &"bench", &"under":
+			return 0.12
+		&"desk", &"den":
+			return 0.2
+	return SAT_BACK
+
+## The camera in a hide's own frame, from its inside spot: y up, z towards the gap (negative: back from it).
+## Peeking, at the hide's eye; sat back, lower (in the pit, down at the balls' tops) and sat_back(kind) back.
+static func eye_local(kind: StringName, eye_cm: int, peek: bool) -> Vector3:
+	var eye_h := PIT_PEEK_EYE if kind == &"pit" else eye_cm / 100.0
+	if peek:
+		return Vector3(0, eye_h, 0)
+	return Vector3(0, PIT_SAT_EYE if kind == &"pit" else maxf(0.25, eye_h - SAT_DROP), -sat_back(kind))
 
 ## Where the camera is drawn from, for a snapshot's `me`: the feet raised by this frame's eye height.
 ## main.gd places the camera here; it is the eye point of the client's frame (what the rules are sent).

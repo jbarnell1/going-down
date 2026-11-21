@@ -861,3 +861,33 @@ as image files only (1k jpg) and reduced by `assets_src/ward_textures.py` into `
 
 Rule learned: lay a photograph in world metres at its own real size (Poly Haven lists it), never per box, so one
 brick is one size on every wall.
+
+## The Playroom's slides, towers, photographs and murals (PR1, 2026-11-21)
+
+The owner, 21 Nov: "It's currently very rough and blocky. Textures will help, meshy AI will help and free resources
+for packs that are cc0 will help", and "I really love the Meshy AI playroom stuff." Every outside asset on the floor
+(also in `godot/assets/playroom/SOURCES.md`):
+
+| Name | Library | Page | Licence | Date |
+| --- | --- | --- | --- | --- |
+| Office Ceiling 001 | ambientCG | https://ambientcg.com/a/OfficeCeiling001 | CC0 | 2026-11-21 |
+| Painted Plaster Wall | Poly Haven | https://polyhaven.com/a/painted_plaster_wall | CC0 | 2026-11-21 |
+| Dirty Concrete | Poly Haven | https://polyhaven.com/a/dirty_concrete | CC0 | 2026-11-21 |
+| Tube slide (`slide.glb`) | Meshy, the owner's paid plan, from Fable's concept picture | | the owner's | 2026-11-21 |
+| Soft-play tower (`frame.glb`) | Meshy, the owner's paid plan (second try, solid panels) | | the owner's | 2026-11-21 |
+
+The first frame try (`playroom-frame`, netting as loose squares) was not used. The photographs were cut to 512 px by
+`assets_src/playroom_textures.py`; the plaster and the dirt are grey detail maps the Playroom shader multiplies over
+the walls, mats, walkways and ceiling in world metres, so the floor's faded primaries stay. The two Meshy pieces were
+decimated to 9,000 and 14,000 triangles with 1024 px colour by `assets_src/blender/playroom/build_playroom_meshy.py`
+and are drawn 2.8 m tall (near the 3.2 m ceiling) with their backs to plain walls in the toddler rooms, decks and
+nooks: a tower first, then a slide by a way in, at most 12 a floor, placed from the seed, each over two cells along
+the wall (a tower two deep), every one of them walkable, in its room and clear of hides, hides' fronts, squeakers and
+doors. The wall dirt sits only at hand height and under the ceiling line, so the pale paint stays clean between.
+The four murals (sun and rainbow, balloons, the sea, night houses), 3.4 by 1.7 m on every plain wall of 6 m or more
+in the big play rooms, are painted by `assets_src/playroom_murals.py`: original shapes, faded and worn through.
+
+Rule learned:
+
+46. **A model the owner likes goes where it can be seen whole.** A slide or tower backed against a long plain wall
+    reads at once; the same piece in the middle of a room hides the room and invites hiding where the rules have none.

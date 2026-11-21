@@ -64,6 +64,13 @@ const C_DEAD := Color(0.62, 0.6, 0.55)
 const C_STICK := Color(0.72, 0.68, 0.58)
 const C_IRON := Color(0.1, 0.12, 0.11)
 const C_WOOD := Color(0.4, 0.3, 0.2)
+## The garden shed hide: across, tall, deep (m).
+const SHED := Vector3(0.9, 1.9, 0.58)
+## Its two door leaves' width and the crack left between them (m).
+const SHED_LEAF := 0.33
+const SHED_CRACK := 0.1
+## The slit in the dark skirt under the bandstand: its bottom and top (m), round the hide's 30 cm eye.
+const UNDER_SLIT := Vector2(0.2, 0.42)
 const C_STONE := Color(0.55, 0.55, 0.52)
 const C_GLASS := Color(0.5, 0.62, 0.55, 0.22)
 
@@ -573,6 +580,16 @@ func _bramble(x: int, y: int) -> void:
 
 # --- what stands on the ground: trunks, dead trees, lamp posts, the small landmarks' pieces, the hides -----
 
+## The garden shed's boards in its own frame (the inside spot at the origin, the door towards +z):
+## [size, bottom middle]. A back, two sides, a floor and a top; the door ajar is its front.
+static func shed_walls() -> Array:
+	var w := SHED.x
+	var ht := SHED.y
+	var d := SHED.z
+	var t := 0.03
+	return [[Vector3(w, ht, t), Vector3(0, 0, -d * 0.5 + t * 0.5)], [Vector3(t, ht, d), Vector3(-w * 0.5 + t * 0.5, 0, 0)],
+		[Vector3(t, ht, d), Vector3(w * 0.5 - t * 0.5, 0, 0)], [Vector3(w, t, d), Vector3.ZERO], [Vector3(w, t, d), Vector3(0, ht - t, 0)]]
+
 func _pieces() -> void:
 	_photo("bark", BARK_MAP, 1.0)
 	_photo("iron", IRON_MAP, 0.72).albedo_color = Color(1.35, 1.35, 1.35)
@@ -609,8 +626,15 @@ func _pieces() -> void:
 				_box("iron", Vector3(0.03, 0.26, 0.3), at + Vector3(0, 1.02, 0), C_IRON * 2.5, true, 0, Vector3(0.5, 0, 0))
 			&"shed":
 				var f := _facing(p.facing)
-				_box("wood", Vector3(0.9, 1.9, 0.58), at, C_WOOD, true, atan2(f.x, f.z))
-				_box("wood", Vector3(0.74, 1.7, 0.04), at + f * 0.3 + Vector3(0, 0.06, 0), C_WOOD * 0.55, true, atan2(f.x, f.z) + 0.16)
+				# Hollow (MH1b): back, sides, floor and top, so the camera sat in it (play_link.gd hide_camera)
+				# has the shed's own boards round it and the door ajar to look out of; nothing is drawn over it.
+				var sy := atan2(f.x, f.z)
+				var sb := Basis.from_euler(Vector3(0, sy, 0))
+				for wall: Array in shed_walls():
+					_box("wood", wall[0], at + sb * (wall[1] as Vector3), C_WOOD, true, sy)
+				# Its two doors stand ajar with a crack between them: the gap you look out of from inside.
+				for side: float in [-1.0, 1.0]:
+					_box("wood", Vector3(SHED_LEAF, 1.7, 0.04), at + f * 0.3 + sb * Vector3(side * (SHED_CRACK + SHED_LEAF) * 0.5, 0.06, 0), C_WOOD * 0.55, true, sy - side * 0.12)
 				_box("wood", Vector3(1.0, 0.07, 0.72), at + Vector3(0, 1.9, 0), C_WOOD * 0.7, true, atan2(f.x, f.z), Vector3(0.12, 0, 0))
 			&"bench":
 				var f := _facing(p.facing)
@@ -621,13 +645,18 @@ func _pieces() -> void:
 				_box("wood", Vector3(1.8, 0.4, 0.03), at + f * 0.29 + Vector3(0, 0.38, 0), Color(0.16, 0.17, 0.13), true, yaw)   # sacking hung across the front
 			&"under":
 				var f := _facing(p.facing)
-				_box("wood", Vector3(1.2, 0.5, 0.06), at + f * 0.24, Color(0.015, 0.012, 0.01), true, atan2(f.x, f.z))
+				# The bandstand's deck runs out over the hide (its underside is what is overhead in there), and
+				# the dark skirt below it has a slit at the hide's eye (30 cm) to look out of (MH1b).
+				_box("wood", Vector3(1.3, 0.06, 0.6), at + f * 0.02 + Vector3(0, 0.49, 0), C_WOOD * 0.8, true, atan2(f.x, f.z))
+				_box("wood", Vector3(1.2, UNDER_SLIT.x, 0.06), at + f * 0.24, Color(0.015, 0.012, 0.01), true, atan2(f.x, f.z))
+				_box("wood", Vector3(1.2, 0.5 - UNDER_SLIT.y, 0.06), at + f * 0.24 + Vector3(0, UNDER_SLIT.y, 0), Color(0.015, 0.012, 0.01), true, atan2(f.x, f.z))
 			&"log":
 				# A hollow log lying along the thicket: a ring of bark round a dark mouth.
 				var f := _facing(p.facing)
 				var yaw := atan2(f.x, f.z)
 				var b := Basis.from_euler(Vector3(0, yaw, 0))
-				for k in 8:
+				# The stave facing the gap is missing (MH1b): the split you look out of from inside.
+				for k in range(1, 8):
 					var a := k * TAU / 8.0
 					_box("bark", Vector3(1.6, 0.11, 0.22), at + Vector3(0, 0.27, 0) + b * Vector3(0, sin(a) * 0.22, cos(a) * 0.2), C_BARK * 1.5, false, yaw, Vector3(a, 0, 0))
 				_box("bark", Vector3(1.5, 0.3, 0.3), at + Vector3(0, 0.12, 0), Color(0.012, 0.01, 0.008), true, yaw)

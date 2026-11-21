@@ -403,6 +403,8 @@ var _unload_since := -1
 ## HUD1: the Tenant clock's moments on this screen (client/tenant_clock.gd step), and a scripted run's held Tab.
 var tenant_beats := TenantClock.new()
 var t_display := false
+## HUD1b: the minutes the lift's notice prints (the host's Tenant clock length; 0: no clock seen, no notice).
+var _notice_minutes := 0
 var lifetime := 0.0
 var tick_acc := 0.0
 var event_counts: Dictionary = {}
@@ -2557,6 +2559,14 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		announcer.tenant_beat(str(beat["moment"]), roundi(float(tl.get("len", 600.0)) / 60.0))
 	hud.place = str(s.get("depth", "")) + str(s.get("place", ""))
 	hud.display = _display_held()
+	if inv_view != null:
+		inv_view.display = hud.display
+	# HUD1b: the lift's paper notice: the floor's minutes from the host's clock (kept through a ride), and the rates
+	# printed on this floor (the Playroom's).
+	if lc != null and lc.latest is Dictionary and (lc.latest as Dictionary).get("tenant") is Dictionary:
+		_notice_minutes = roundi(float(((lc.latest as Dictionary)["tenant"] as Dictionary).get("len", 0.0)) / 60.0)
+	if lift != null and is_instance_valid(lift):
+		lift.show_notice(_notice_minutes, PackedStringArray([hud.anger_rates, hud.health_rates]))
 	_deal_frame(s)
 	if reel != null and bool(s.get("playing", true)):
 		# The picture stays in the car. The subtitle remains legible through the camcorder
@@ -4536,7 +4546,7 @@ func _test_state() -> Dictionary:
 		"quota": {"host": link.client().quota() if link.client() != null else null, "panel": lift.quota_text, "tone": lift.quota_tone,
 			"hud": hud.quota_line, "floorHud": hud.floor_quota_line, "floorMet": hud.floor_quota_met, "carWaiting": car_waiting, "view": quota_view.describe(), "at": [lift.quota_point().x, lift.quota_point().y, lift.quota_point().z]},
 		"dayLock": {"host": link.client().day_lock() if link.client() != null else null, "tick": int((link.client().latest as Dictionary)["tick"]) if link.client() != null and link.client().latest is Dictionary else -1,
-			"view": day_view.describe(), "viewTick": _day_view_tick, "hudLine": hud.day_line, "hudMet": hud.day_met, "monitor": lift.day_rows, "bankLocked": lift.bank_locked,
+			"view": day_view.describe(), "viewTick": _day_view_tick, "hudLine": hud.day_line, "hudMet": hud.day_met, "monitor": lift.day_rows, "notice": Array(lift.notice_lines),"bankLocked": lift.bank_locked,
 			"monitorAt": [lift.day_point().x, lift.day_point().y, lift.day_point().z], "subtitle": announcer.shown(link.client().quota() if link.client() != null else null),
 			"said": announcer.history.filter(func(h: Dictionary) -> bool: return str(h.moment) in ["bank_refused", "day_met", "ride", "hint_day", "hint_bank_locked", "hint_floor_not_day", "hint_stakes"])},
 		"watch": crew_watch.describe(),

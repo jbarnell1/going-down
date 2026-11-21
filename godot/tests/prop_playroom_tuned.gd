@@ -2,9 +2,9 @@
 # point proved with the tune on and, as the control, off (every stored result has it off):
 #   1. Time to hide: 30, 35, 40, 45 s (45 after that; the last count 30 s), then a 30 s search; the count
 #      event carries "hide" and every screen's clock (net/client.gd count_clock) reads it. Off: 6 s, no "hide".
-#   2. A view out of the Playroom's hides (client/hide_view.gd HideOverlay.layout, client/play_link.gd): sat
-#      back in the ball pit nothing is drawn over the picture but a few balls at the bottom edge, and the camera
-#      is at the balls; in every other Playroom hide the gap stays open. Off the Playroom sat back stays dark.
+#   2. A view out of the Playroom's hides (client/hide_view.gd HideOverlay.layout, client/play_link.gd): nothing
+#      is drawn over the picture in any hide (MH1b: the hide's own 3D frames the view), and in the ball pit the
+#      camera is at the balls.
 #   3. The anger bar: provocations fill it at their printed rates, it cools when nobody provokes, a count
 #      starts the tick it is full, it is full through the count and drains to empty over the 15 s after; the
 #      host's number goes to every screen in the seek block. Off: one tick starts a count, no anger on the wire.
@@ -214,29 +214,20 @@ func test_t15m_the_last_count_through_the_run(t: T) -> void:
 func test_t15m_a_view_out_of_the_hides(t: T) -> void:
 	var w := 640.0
 	var h := 360.0
-	var lay := HideView.HideOverlay.layout("sat", "pit", true, w, h)
-	var covered := 0.0
-	if int(lay["balls"]) > 0:
-		var br: Rect2 = lay["ballRect"]
-		covered = br.intersection(Rect2(0, 0, w, h)).get_area() / (w * h)
-	t.check(float(lay["dark"]) == 0.0 and lay["hole"] == null and int(lay["balls"]) <= 8 and (lay["ballRect"] as Rect2).position.y >= h * 0.9 - 1e-6,
-		"sat back in the ball pit: nothing over the view but a few balls at the bottom edge: %s" % str(lay))
-	var peek := HideView.HideOverlay.layout("peek", "pit", true, w, h)
-	t.check(int(peek["balls"]) <= 8 and (peek["ballRect"] as Rect2).position.y >= h * 0.9 - 1e-6, "peeking from the ball pit: a few balls at the edge at most")
-	var open := {}
-	for kind: String in ["slide", "den", "playhouse", "table", "chest", "cubby"]:
-		var l := HideView.HideOverlay.layout("sat", kind, true, w, h)
-		var hole: Variant = l["hole"]
-		var frac := (hole as Rect2).get_area() / (w * h) if hole is Rect2 else 0.0
-		open[kind] = snappedf(frac, 0.01)
-		t.check(float(l["dark"]) == 0.0 and frac >= 0.05, "sat back in the %s: the gap stays open (%.2f of the picture, no dark over it)" % [kind, frac])
+	# MH1b (the owner, 21 Nov): no mask over the camera in any hide. The view out is the 3D round the camera
+	# (the real balls, the hide's own walls and gap: tests/test_hide_inside.gd), so nothing is drawn over it,
+	# sat back or peeking. This replaces the drawn balls and gap frames this test checked before.
+	for kind: String in ["pit", "slide", "den", "playhouse", "table", "chest", "cubby"]:
+		for mode: String in ["sat", "peek"]:
+			var l := HideView.HideOverlay.layout(mode, kind, true, w, h)
+			t.check(float(l["dark"]) == 0.0 and l["hole"] == null and int(l["balls"]) == 0, "%s in the %s: the view out kept, nothing drawn over it: %s" % [mode, kind, l])
 	# The camera: down at the balls (their top layer is 0.33 to 0.49 m), under the peeking eye.
 	t.check(PlayLink.PIT_SAT_EYE >= 0.38 and PlayLink.PIT_SAT_EYE <= PlayLink.PIT_PEEK_EYE, "the pit's sat-back eye %.2f m is at the balls" % PlayLink.PIT_SAT_EYE)
-	# The control: off the Playroom (blind by sim/hiding.gd's rules) sat back stays dark.
+	# Off the Playroom the drawn dark is gone too (the owner's words above): the camera sits back inside the
+	# bed, cabinet or desk and the hide's own 3D is what it sees.
 	for kind: String in ["bed", "cabinet", "desk"]:
 		var l2 := HideView.HideOverlay.layout("sat", kind, false, w, h)
-		t.check(float(l2["dark"]) >= 0.9, "off the Playroom, sat back in the %s stays dark" % kind)
-	t.note("ball pit: %.0f%% of the picture under balls; gaps open: %s" % [covered * 100.0, str(open)])
+		t.check(float(l2["dark"]) == 0.0 and l2["hole"] == null, "off the Playroom, sat back in the %s: nothing drawn over the picture" % kind)
 
 # ---------------------------------------------------------------------------------------------
 # 3. The anger bar.

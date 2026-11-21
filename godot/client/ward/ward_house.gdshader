@@ -20,6 +20,8 @@ uniform float floor_tile = 2.0;
 uniform float board_tile = 2.0;
 uniform float paper_tile = 1.0;
 uniform float wood_tile = 1.0;
+// The second wallpaper: an old rose gone dirty and faded toward brown-grey (it read as a strong pink).
+const vec3 WARD_PAPER_ROSE = vec3(0.50, 0.44, 0.41);
 varying vec3 world_position;
 varying vec3 world_normal;
 
@@ -65,7 +67,7 @@ void fragment() {
 			float stripe = smoothstep(0.42, 0.5, fract(wall_uv.x * 3.0)) * (1.0 - smoothstep(0.92, 1.0, fract(wall_uv.x * 3.0)));
 			vec2 cell = fract(wall_uv * vec2(3.0, 2.5)) - vec2(0.2, 0.5);
 			float figure = 1.0 - smoothstep(0.06, 0.1, length(cell * vec2(1.0, 1.5)));
-			vec3 ground = pick(variant, vec3(0.0), vec3(0.62, 0.58, 0.42), vec3(0.0), vec3(0.55, 0.42, 0.40));
+			vec3 ground = pick(variant, vec3(0.0), vec3(0.62, 0.58, 0.42), vec3(0.0), WARD_PAPER_ROSE);
 			upper = ground * (0.6 + 0.6 * grime) * mix(0.88, 1.0, stripe) * mix(1.0, 0.88, figure);
 		}
 		vec3 dado = plaster * pick(variant, vec3(0.24, 0.34, 0.27), vec3(0.42, 0.18, 0.15), vec3(0.34, 0.25, 0.18), vec3(0.20, 0.24, 0.32));

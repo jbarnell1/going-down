@@ -14,6 +14,11 @@ const HudScript = preload("res://client/hud.gd")
 const TenantClock = preload("res://client/tenant_clock.gd")
 const AnnouncerScript = preload("res://client/announcer.gd")
 const Main = preload("res://client/main.gd")
+const LiftScript = preload("res://client/lift.gd")
+const InventoryViewScript = preload("res://client/inventory_view.gd")
+const Run = preload("res://sim/run.gd")
+const Clinic = preload("res://sim/clinic.gd")
+const PlanDump = preload("res://client/plan_dump.gd")
 
 func test_the_fade_helper(t: T) -> void:
 	t.eq(HudFade.alpha(1000, 1000, false), 1.0, "full when it changes")
@@ -117,6 +122,48 @@ func test_the_tenant_clock_at_its_moments(t: T) -> void:
 	for m: String in AnnouncerScript.TENANT_BEAT_LINES:
 		t.eq((AnnouncerScript.TENANT_BEAT_LINES[m] as Array).size(), 3, "three lines for %s" % m)
 	a.free()
+
+## HUD1b: the lift's paper notice: the host's minutes, the floor's rates, and on the built car's wall.
+func test_the_lift_notice_prints_the_hosts_minutes(t: T) -> void:
+	var ten := " ".join(LiftScript.notice_rows(10))
+	t.check(ten.contains("ALLOWS 10 MINUTES BEFORE THE TENANT ARRIVES"), "ten minutes on paper: " + ten)
+	t.check(" ".join(LiftScript.notice_rows(7)).contains("ALLOWS 7 MINUTES"), "the host's seven when it is seven")
+	t.eq(LiftScript.notice_rows(0).size(), 0, "no Tenant clock: no notice")
+	var rates := "SPRINT 1 S OR 2 NOISES FILL IT. ONLY A SEARCH EMPTIES IT"
+	var with_rates := LiftScript.notice_rows(10, PackedStringArray([rates, ""]))
+	t.check(" ".join(with_rates).replace("  ", " ").contains("ONLY A SEARCH EMPTIES IT"), "the floor's rates printed under it: %s" % [with_rates])
+	t.check(with_rates.size() <= LiftScript.NOTICE_ROWS and with_rates[-1] == "- THE MANAGEMENT", "it all fits the paper")
+	var car := Run.car_geometry(Clinic.generate_clinic("notice", 1))
+	var lift: Node3D = LiftScript.new()
+	lift.call("build", PlanDump.car_plain(car))
+	var paper := lift.get_node("TenantNotice") as MeshInstance3D
+	t.check(paper != null and not paper.visible, "the paper is up only once a clock is known")
+	lift.call("show_notice", 10, PackedStringArray())
+	t.check(paper.visible and (lift.get("notice_lines") as PackedStringArray) == LiftScript.notice_rows(10), "printed with the clock's minutes")
+	t.check(absf(paper.position.x - float(car.width) * 0.5) < 0.05 and paper.position.z < 0.0, "inside the car, on its right-hand wall")
+	lift.free()
+
+## HUD1b: the inventory squares dim at rest; IN HAND for 2 s after a change.
+func test_the_squares_dim_and_in_hand_is_brief(t: T) -> void:
+	var inv: Control = InventoryViewScript.new()
+	inv.set("block", {})
+	inv.set("slots", [["juice", 1], ["", 0], ["", 0], ["", 0]])
+	inv.set("sel", 0)
+	t.eq(inv.call("row_alpha", 0), 1.0, "full on arrival")
+	t.eq(inv.call("held_alpha", 0), 1.0, "IN HAND shows on arrival")
+	t.eq(inv.call("held_text"), "IN HAND: " + InventoryViewScript.Inventory.long_name("juice"), "with the item's name")
+	t.eq(inv.call("held_alpha", 2000), 1.0, "for 2 s")
+	t.eq(inv.call("held_alpha", 3100), 0.0, "then gone")
+	t.eq(inv.call("row_alpha", 10000), InventoryViewScript.IDLE_ALPHA, "the squares dim at rest, never vanish")
+	inv.set("sel", 1)
+	t.eq(inv.call("row_alpha", 11000), 1.0, "a change of hand: full again")
+	t.eq(inv.call("held_alpha", 11000), 0.0, "an empty hand: no IN HAND line")
+	inv.set("sel", 0)
+	inv.call("row_alpha", 12000)
+	inv.set("display", true)
+	t.eq(inv.call("row_alpha", 30000), 1.0, "Tab: full")
+	t.eq(inv.call("held_alpha", 30000), 1.0, "Tab: IN HAND too")
+	inv.free()
 
 func test_car_waiting_is_for_a_crew(t: T) -> void:
 	var text := "CAR WAITING FOR: YOU"

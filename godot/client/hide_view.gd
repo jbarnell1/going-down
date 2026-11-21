@@ -33,8 +33,12 @@
 # paper hats too (drawn here, over their figures).
 #
 # Off the Playroom (the Clinic and the Annex, sim/hiding.gd; T19b) only the hiding is shown: the prompts for
-# a bed, a cabinet, the meeting table (F) and a desk (Ctrl and walk in), the dark inside and the gap's
-# frame (the cabinet's slats, the bed's frame). No count, no tune, no health, and no odds printed.
+# a bed, a cabinet, the meeting table (F) and a desk (Ctrl and walk in). No count, no tune, no health, and
+# no odds printed.
+#
+# MH1b (the owner, 21 Nov): nothing is drawn over the picture while you hide, on any floor. The camera is in
+# the hide and its own 3D (the den's netting, the cabinet's slats, the bed's underside, the chest's lid) is
+# the frame round the view out; HideOverlay draws only the catch's mask and the party hat's brim.
 #
 # Sounds (client/sfx.gd plays them): the found-you sting when you are found; going down, yours or
 # another's where they fell; getting into and out of hides (each kind its own); the Minder's huff at an
@@ -583,7 +587,7 @@ func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id
 	hud.seek_note = note
 	hud.health = float(row["health"]) if row is Dictionary and shows_health(seek, count_phase, hunt) and status == "ok" else -1.0
 	hud.health_rates = health_rates_text(hunt, tuning)
-	# The overlay: the dark inside, the gap's frame, the catch, the hat.
+	# The overlay: the hiding state (nothing drawn for it), the catch, the hat.
 	overlay.mode = ov_mode
 	overlay.kind = ov_kind
 	overlay.view_out = true
@@ -687,16 +691,19 @@ func describe() -> Dictionary:
 		"overlay": overlay.mode if overlay != null else "", "overlayKind": overlay.kind if overlay != null else "", "hat": overlay.hat if overlay != null else false,
 		"hats": _hats.keys(), "break": test_break, "viewOut": overlay.view_out if overlay != null else false}
 
-## Drawn over the picture, under the HUD: the dark inside a hide with its gap, the gap's frame when
-## peeking, the Minder's mask filling the screen at the catch, the brim of your own paper hat.
+## Drawn over the picture, under the HUD: the Minder's mask filling the screen at the catch and the brim of
+## your own paper hat. Nothing while you hide (MH1b; the owner, 21 Nov: "The camera correctly being placed in
+## the hiding spot means you don't need to add stuff as a mask over the camera itself, the objects do it for
+## you."): the camera sits inside the hide (client/play_link.gd hide_camera) and the hide's own 3D walls,
+## slats, netting, coats, lid and frame are what you see round its gap. `mode`, `kind` and `view_out` stay
+## as the state (the playthroughs read them); none of them draws anything.
 class HideOverlay:
 	extends Control
 	var mode := ""       # "" | "sat" | "peek"
 	var kind := ""
 	var catch_k := 0.0
 	var hat := false
-	## The Playroom (T15m): sat back you still see out (its rules never ask what you can see). Off the
-	## Playroom a sat-back player is blind by the rules (sim/hiding.gd), so the dark stays.
+	## The Playroom (T15m): sat back you still see out. Kept as state only: no hiding state draws over the picture.
 	var view_out := false
 
 	func _ready() -> void:
@@ -712,16 +719,8 @@ class HideOverlay:
 	func _draw() -> void:
 		var w := size.x
 		var h := size.y
-		var ink := Color(0.01, 0.01, 0.015)
-		var lay := layout(mode, kind, view_out, w, h)
-		if float(lay["dark"]) > 0.0:
-			draw_rect(Rect2(Vector2.ZERO, size), Color(ink, float(lay["dark"])))
-		if lay["hole"] is Rect2:
-			_hole(lay["hole"], Color(ink, float(lay["holeAlpha"])))
-			if bool(lay["frame"]):
-				_frame(lay["hole"], w, h, ink)
-		if int(lay["balls"]) > 0:
-			_balls(lay["ballRect"], float(lay["ballAlpha"]), int(lay["balls"]))
+		if not draws_anything(mode, catch_k, hat):
+			return
 		if catch_k > 0.0:
 			_mask(catch_k)
 		if hat:
@@ -729,113 +728,16 @@ class HideOverlay:
 			var c := Color(0.95, 0.35, 0.55, 0.85)
 			draw_colored_polygon(PackedVector2Array([Vector2(w * 0.38, 0), Vector2(w * 0.62, 0), Vector2(w * 0.5, h * 0.035)]), c)
 
-	## The kind's frame round the gap `hole`: the netting, the coats, the slats, the bed's frame.
-	func _frame(hole: Rect2, w: float, h: float, ink: Color) -> void:
-		match kind:
-			"den":
-				for i in range(1, 12):
-					draw_line(Vector2(hole.position.x + hole.size.x * i / 12.0, hole.position.y), Vector2(hole.position.x + hole.size.x * i / 12.0, hole.end.y), Color(0.75, 0.75, 0.72, 0.35), maxf(1.0, h / 270.0))
-				for j in range(1, 6):
-					draw_line(Vector2(hole.position.x, hole.position.y + hole.size.y * j / 6.0), Vector2(hole.end.x, hole.position.y + hole.size.y * j / 6.0), Color(0.75, 0.75, 0.72, 0.35), maxf(1.0, h / 270.0))
-			"pit":
-				_balls(Rect2(0, h * 0.78, w, h * 0.22), 0.9, 22)
-			"cubby":
-				draw_rect(Rect2(0, 0, w * 0.3, h), Color(0.15, 0.2, 0.35, 0.92))
-				draw_rect(Rect2(w * 0.7, 0, w * 0.3, h), Color(0.35, 0.12, 0.1, 0.92))
-			"cabinet":
-				# The door's slats across the gap.
-				for j in range(1, 9):
-					var y := hole.position.y + hole.size.y * j / 9.0
-					draw_rect(Rect2(hole.position.x, y - h * 0.012, hole.size.x, h * 0.024), Color(ink, 0.88))
-			"bed":
-				# The mattress's edge above, the frame's legs at the sides.
-				draw_rect(Rect2(0, hole.position.y, w, h * 0.04), Color(0.2, 0.22, 0.24, 0.95))
-				draw_rect(Rect2(w * 0.03, hole.position.y, w * 0.025, hole.size.y), Color(0.32, 0.34, 0.36, 0.95))
-				draw_rect(Rect2(w * 0.945, hole.position.y, w * 0.025, hole.size.y), Color(0.32, 0.34, 0.36, 0.95))
+	## Whether the overlay draws anything: only the catch's mask and the hat's brim, never a hiding state
+	## (sat back or peeking, in any kind of hide). Tests read it (tests/test_hide_inside.gd).
+	static func draws_anything(_mode: String, catch_k_: float, hat_: bool) -> bool:
+		return catch_k_ > 0.0 or hat_
 
-	## What the overlay draws, as a pure function (tests/prop_playroom_tuned.gd reads it): `dark`, ink over
-	## the whole picture (alpha); `hole`, the gap (a Rect2, or null) with everything round it inked at
-	## `holeAlpha`, and its kind's `frame`; `balls` balls in `ballRect` at `ballAlpha`.
-	static func layout(mode_: String, kind_: String, view_out_: bool, w: float, h: float) -> Dictionary:
-		var out := {"dark": 0.0, "hole": null, "holeAlpha": 0.0, "frame": false, "balls": 0, "ballRect": Rect2(), "ballAlpha": 0.0}
-		if mode_ == "sat" and view_out_:
-			# The Playroom, sat back (T15m, owner: "Part of the anticipation is seeing a monster looking for
-			# you"): the view out is kept. In the ball pit the camera is down at the balls with a few at the
-			# bottom edge; elsewhere the room through the gap, its frame round it, darker than peeking.
-			if kind_ == "pit":
-				out["balls"] = 7
-				out["ballRect"] = Rect2(0, h * 0.93, w, h * 0.12)
-				out["ballAlpha"] = 0.95
-			else:
-				out["hole"] = gap_rect(kind_, w, h)
-				out["holeAlpha"] = 0.9
-				out["frame"] = true
-		elif mode_ == "sat":
-			# Sat back: the dark inside, and a thin line of the room through the gap.
-			out["dark"] = 0.9
-			if kind_ == "pit":
-				out["balls"] = 46
-				out["ballRect"] = Rect2(0, 0, w, h)
-				out["ballAlpha"] = 0.55
-			else:
-				out["hole"] = gap_rect(kind_, w, h)
-				out["holeAlpha"] = 0.9
-		elif mode_ == "peek":
-			out["hole"] = gap_rect(kind_, w, h).grow(h * 0.12)
-			out["holeAlpha"] = 0.82
-			if kind_ == "pit" and view_out_:
-				# Head up over the balls: a few at the very edge.
-				out["balls"] = 5
-				out["ballRect"] = Rect2(0, h * 0.95, w, h * 0.1)
-				out["ballAlpha"] = 0.95
-			else:
-				out["frame"] = true
-		return out
-
-	## The gap as a rectangle on the screen, by kind: a slit for a lid or a hem, a window for a shutter.
-	func _gap_rect(w: float, h: float) -> Rect2:
-		return gap_rect(kind, w, h)
-
-	static func gap_rect(kind_: String, w: float, h: float) -> Rect2:
-		match kind_:
-			"chest":
-				return Rect2(w * 0.08, h * 0.44, w * 0.84, h * 0.1)
-			"table":
-				return Rect2(0, h * 0.58, w, h * 0.16)
-			"playhouse":
-				return Rect2(w * 0.28, h * 0.3, w * 0.44, h * 0.36)
-			"cubby":
-				return Rect2(w * 0.38, h * 0.1, w * 0.24, h * 0.8)
-			"slide":
-				return Rect2(w * 0.3, h * 0.25, w * 0.4, h * 0.5)
-			"den":
-				return Rect2(w * 0.15, h * 0.2, w * 0.7, h * 0.6)
-			"bed":
-				return Rect2(0, h * 0.5, w, h * 0.24)
-			"cabinet":
-				return Rect2(w * 0.33, h * 0.22, w * 0.34, h * 0.42)
-			"desk":
-				return Rect2(w * 0.2, h * 0.3, w * 0.6, h * 0.55)
-		return Rect2(w * 0.1, h * 0.35, w * 0.8, h * 0.3)
-
-	## Everything but `r`, filled.
-	func _hole(r: Rect2, col: Color) -> void:
-		draw_rect(Rect2(0, 0, size.x, r.position.y), col)
-		draw_rect(Rect2(0, r.end.y, size.x, size.y - r.end.y), col)
-		draw_rect(Rect2(0, r.position.y, r.position.x, r.size.y), col)
-		draw_rect(Rect2(r.end.x, r.position.y, size.x - r.end.x, r.size.y), col)
-
-	## Balls right in front of the eyes, in the pit: dim primaries.
-	func _balls(r: Rect2, a: float, count: int) -> void:
-		var rng := RandomNumberGenerator.new()
-		rng.seed = 77
-		var cols: Array[Color] = [Color(0.6, 0.22, 0.2), Color(0.66, 0.55, 0.2), Color(0.2, 0.32, 0.55), Color(0.24, 0.45, 0.25)]
-		for i in count:
-			var rad := size.y * rng.randf_range(0.07, 0.14)
-			var p := Vector2(r.position.x + rng.randf() * r.size.x, r.position.y + rng.randf() * r.size.y)
-			var c: Color = cols[i % 4]
-			draw_circle(p, rad, Color(c.r * 0.5, c.g * 0.5, c.b * 0.5, a))
-			draw_circle(p - Vector2(rad * 0.3, rad * 0.3), rad * 0.35, Color(c.r, c.g, c.b, a * 0.5))
+	## What the overlay draws for a hiding state, as a pure function (tests/prop_playroom_tuned.gd and
+	## tests/test_hide_inside.gd read it): no dark, no gap, no frame, no balls, for every mode and kind. The
+	## view out, and the dark inside, are the hide's own 3D.
+	static func layout(_mode: String, _kind: String, _view_out: bool, _w: float, _h: float) -> Dictionary:
+		return {"dark": 0.0, "hole": null, "holeAlpha": 0.0, "frame": false, "balls": 0, "ballRect": Rect2(), "ballAlpha": 0.0}
 
 	## The Minder's card mask, filling the screen as it bends for the catch: a pale glowing card, two
 	## dots and a curve, its edge running off the screen.

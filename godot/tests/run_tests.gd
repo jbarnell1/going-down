@@ -28,6 +28,7 @@ const FILES: Array[String] = [
 	"test_start_layout",
 	"prop_hearing", "prop_arboretum", "prop_garden_cones", "prop_garden_search", "test_garden_recordings", "test_keeper_figure", "prop_ward_net",
 	"test_data_check",
+	"test_hide_inside",
 	"prop_brightness", "prop_brightness_curve",
 	"prop_findables", "prop_badge_search", "prop_search", "prop_search_view", "test_findables_data",
 	"prop_inventory", "prop_inventory_net",
@@ -35,6 +36,7 @@ const FILES: Array[String] = [
 	"test_temp_v2",
 	"prop_furniture_layout",
 	"prop_resident_navigation", "test_floor_materials", "test_action_sfx", "test_sfx_ear", "prop_host_playtest", "test_host_tools",
+	"prop_resident_navigation", "test_floor_materials", "test_playroom_look", "test_action_sfx", "prop_host_playtest", "test_host_tools",
 	"prop_cabinet", "prop_shop", "prop_shop_net", "prop_deep_pockets", "prop_second_wind", "prop_soft_shoes", "prop_quick_fingers", "prop_long_burn", "prop_field_dressing", "prop_steady_gaze", "prop_throwing_arm", "test_reactor",
 	"prop_late_floors",
 	"test_floor_entry",
@@ -98,6 +100,7 @@ const FILES: Array[String] = [
 	"test_light_pairs",
 	"test_lamp_beam",
 	"test_hud_quiet",
+	"test_mic_shown",
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).

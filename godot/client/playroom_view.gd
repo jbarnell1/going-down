@@ -29,6 +29,15 @@ const AnnexView = preload("res://client/annex_view.gd")
 
 const S := 2.0
 const LH := 3.2
+## A tube slide's climb up the wall starts this high on its mouth's tube (whose top is at 0.88 m).
+const SLIDE_CLIMB := 0.86
+## A toy chest's size and its lid's open crack (radians up from shut), the crack you look out of (MH1b).
+const CHEST := Vector3(0.9, 0.5, 0.56)
+const CHEST_WALL := 0.03
+const CHEST_LID := 0.3
+const CHEST_SLOT := Vector3(0.32, 0.43, 0.17)
+## The party table's cloth on its gap side stops this far off the floor: under it is the view out (MH1b).
+const TABLE_HEM := 0.4
 const WALL_T := 0.14
 const DOOR_H := 2.1
 const LIGHT_LIMIT := 256
@@ -70,6 +79,52 @@ const LETTER_PX := 0.07
 ## Tests only: the deliberate breaks the walk tool proves its checks with. "sign": a sign's number is
 ## guessed from its zone's kind instead of taken from the rules; "squeak": one squeaker tile is left out.
 static var test_break := ""
+## CC0 photographs (godot/assets/playroom/SOURCES.md, made by assets_src/playroom_textures.py) and the metres
+## each one covers on a surface.
+const CEILING_PHOTO := preload("res://assets/playroom/ceiling.webp")
+const PLASTER_PHOTO := preload("res://assets/playroom/plaster.webp")
+const GRIME_PHOTO := preload("res://assets/playroom/grime.webp")
+const CEILING_M := 3.6
+const PLASTER_M := 2.5
+const GRIME_M := 6.0
+## How strongly the plaster and the dirt show (0 none, 1 full).
+const WALL_PLASTER := 0.3
+const WALL_GRIME := 0.2
+const FLOOR_GRIME := 0.35
+const CEIL_GRIME := 0.25
+## The ready-made soft-play pieces (Meshy, the owner's paid plan; assets_src/blender/playroom/): [path, scale,
+## depth off the wall and length along it, both after scaling]. The slide is 2.05 by 1.13 m and 2 m tall as
+## built, the tower 2.18 by 2.15 m and 2.3 m tall; both are drawn 2.8 m tall, near the 3.2 m ceiling, so a
+## tower stands over its room. Each covers the cells under it (all walkable, in its room, clear of hides).
+const PIECES := {
+	&"slide": ["res://assets/playroom/slide.glb", 1.4, 1.58, 2.87],
+	&"frame": ["res://assets/playroom/frame.glb", 1.22, 2.62, 2.66],
+}
+## Room kinds that get pieces against their walls, in this order, and how many at most in one room; and at
+## most MAX_PIECES on a floor (each piece is one draw of about 9,000 to 14,000 triangles).
+const PIECE_ROOMS := {"toddler": 3, "deck": 1, "nook": 1}
+## And at most this many of one room kind on a floor, so the upper deck gets its share.
+const PIECE_KIND_CAP := {"toddler": 7, "deck": 3, "nook": 2}
+const MAX_PIECES := 12
+## The wall murals (assets_src/playroom_murals.py): four pictures of 2 by 1 in a 2 by 2 sheet, painted above
+## the padding, one on every plain wall of a play room long enough for it but the cut-out words' wall.
+const MURALS := preload("res://assets/playroom/murals.png")
+const MURAL_ROOMS: Array[String] = ["lobby", "ballpit", "toddler", "party"]
+const MURAL_H := 1.7
+const MURAL_Y := 2.1
+## Only a wall this long (metres of plain wall) is "large" enough for a mural.
+const MURAL_WALL := 6.0
+## Murals drawn: {room, level, pos, facing, picture}.
+var murals: Array[Dictionary] = []
+## Clear space kept between the piece and its wall.
+const PIECE_GAP := 0.06
+## The Meshy colour maps average about 0.33 (sRGB); this brings them up to the floor's faded paint (the tower less: its
+## panels are pale and went white under the bleach).
+const PIECE_GAIN := {&"slide": 2.8, &"frame": 2.0}
+## Pieces drawn: {kind, level, cell (Vector2i), pos, facing}.
+var pieces: Array[Dictionary] = []
+static var _piece_cache := {}
+
 const GUESS := {&"ballpit": 3, &"frame": 3, &"upper": 3, &"deck": 4, &"party": 3, &"toddler": 2, &"cloak": 4, &"nook": 2}
 
 var lv: Level
@@ -113,6 +168,7 @@ var mat_strip: ShaderMaterial
 var mat_star: ShaderMaterial
 var mat_line: ShaderMaterial
 var mat_exit: ShaderMaterial
+var mat_mural: ShaderMaterial
 
 static var _tex := {}
 ## The sign atlas: text -> Rect2i, filled as signs are made.
@@ -409,6 +465,25 @@ func _materials() -> void:
 	mat_mat = _shade(mat_tex(), 3, SELF_FLOOR)
 	mat_walk = _shade(laminate_tex(), 0, SELF_FLOOR)
 	mat_ceil = _shade(ceiling_tex(), 0, SELF_CEIL)
+	# CC0 photographs (godot/assets/playroom/SOURCES.md): the ceiling's real tiles, plaster and dirt over
+	# the walls, dirt trodden into the mats and walkways. Laid in world metres.
+	mat_ceil.set_shader_parameter("photo", 1.0)
+	mat_ceil.set_shader_parameter("photo_tex", CEILING_PHOTO)
+	mat_ceil.set_shader_parameter("photo_scale", 1.0 / CEILING_M)
+	for m: ShaderMaterial in [mat_wall, mat_mat, mat_walk, mat_ceil]:
+		m.set_shader_parameter("detail_tex", PLASTER_PHOTO)
+		m.set_shader_parameter("grime_tex", GRIME_PHOTO)
+	mat_wall.set_shader_parameter("detail_amt", WALL_PLASTER)
+	mat_wall.set_shader_parameter("detail_scale", 1.0 / PLASTER_M)
+	mat_wall.set_shader_parameter("grime_amt", WALL_GRIME)
+	mat_wall.set_shader_parameter("grime_scale", 1.0 / GRIME_M)
+	mat_wall.set_shader_parameter("grime_band", 1.0)
+	mat_mat.set_shader_parameter("grime_amt", FLOOR_GRIME)
+	mat_mat.set_shader_parameter("grime_scale", 1.0 / GRIME_M)
+	mat_walk.set_shader_parameter("grime_amt", FLOOR_GRIME)
+	mat_walk.set_shader_parameter("grime_scale", 1.0 / GRIME_M)
+	mat_ceil.set_shader_parameter("grime_amt", CEIL_GRIME)
+	mat_ceil.set_shader_parameter("grime_scale", 1.0 / GRIME_M)
 	mat_props = _shade(null, 1, SELF_PROPS)
 	mat_decal = _shade(null, 1, 0.62)
 	mat_net = _shade(net_tex(), 1, 0.5, 0.5)
@@ -418,6 +493,11 @@ func _materials() -> void:
 	mat_star = _glow_mat(STAR_LIT, null, false, STAR_DARK, 0.85, 1.5)
 	mat_line = _glow_mat(LINE_LIT, null, false, LINE_DARK, 0.75, 1.35)
 	mat_exit = _glow_mat(Color(1.1, 1.1, 1.1), null, false, Color(1.0, 1.25, 1.05), 1.0, 1.3)
+	mat_mural = _shade(MURALS, 1, SELF_WALL, 0.3)
+	mat_mural.set_shader_parameter("grime_tex", GRIME_PHOTO)
+	mat_mural.set_shader_parameter("grime_amt", WALL_GRIME)
+	mat_mural.set_shader_parameter("grime_scale", 1.0 / GRIME_M)
+	mat_mural.set_shader_parameter("grime_band", 1.0)
 
 func _commit() -> void:
 	mat_decal.set_shader_parameter("albedo_tex", atlas_tex())
@@ -443,6 +523,7 @@ func _commit() -> void:
 			"pstar": mi.material_override = mat_star
 			"pline": mi.material_override = mat_line
 			"pexit": mi.material_override = mat_exit
+			"pmural": mi.material_override = mat_mural
 		lv.add_child(mi)
 	lv._chunks.clear()
 
@@ -472,7 +553,8 @@ func _boxes(level: int, xf: Transform3D, boxes: Array, what := "pprops") -> void
 		AnnexView.box(st, xf, b[0], b[1], _tone(b[2], xf * (b[1] as Vector3)))
 
 ## A primitive mesh (cylinder, sphere) drawn into a chunk by `xf`, one colour.
-func _prim(level: int, mesh: PrimitiveMesh, xf: Transform3D, col: Color, what := "pprops") -> void:
+## `inward`: the faces turned to look inwards (the inside of a tube you sit in: MH1b, no mask over the camera).
+func _prim(level: int, mesh: PrimitiveMesh, xf: Transform3D, col: Color, what := "pprops", inward := false) -> void:
 	var st := lv._st(level, xf.origin.x, xf.origin.z, what)
 	var arr := mesh.get_mesh_arrays()
 	var vs: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
@@ -480,11 +562,20 @@ func _prim(level: int, mesh: PrimitiveMesh, xf: Transform3D, col: Color, what :=
 	var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
 	var nb := xf.basis.inverse().transposed()
 	var c := _tone(col, xf.origin)
-	for i in idx:
-		st.set_normal((nb * ns[i]).normalized())
+	for k in idx.size():
+		# Inward: each triangle's winding reversed and its normals flipped.
+		var i := idx[k - 2 * (k % 3) + 2] if inward else idx[k]
+		st.set_normal((nb * ns[i]).normalized() * (-1.0 if inward else 1.0))
 		st.set_color(c)
 		st.set_uv(Vector2.ZERO)
 		st.add_vertex(xf * vs[i])
+
+## A tube without its end caps (the inside of a slide's mouth).
+static func _tube(r: float, h: float, seg := 12) -> CylinderMesh:
+	var c := _cyl(r, r, h, seg)
+	c.cap_top = false
+	c.cap_bottom = false
+	return c
 
 static func _cyl(top: float, bottom: float, h: float, seg := 12) -> CylinderMesh:
 	var c := CylinderMesh.new()
@@ -889,13 +980,16 @@ func _pit(h: Playroom.Hide, xf: Transform3D) -> Array:
 func _slide(h: Playroom.Hide, xf: Transform3D, col: Color, col2: Color) -> Array:
 	var r := 0.4
 	var tube_xf := xf * Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, 0.48, 0))
-	_prim(h.level, _cyl(r, r, 0.9, 14), tube_xf, col)
-	# A flared mouth ring and a dark inside.
-	_prim(h.level, _cyl(r + 0.06, r + 0.06, 0.06, 14), xf * Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, 0.48, 0.45)), col2)
-	_prim(h.level, _cyl(r - 0.04, r - 0.04, 0.02, 14), xf * Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, 0.48, 0.47)), DARK)
+	_prim(h.level, _tube(r, 0.9, 14), tube_xf, col)
+	# Its dark inside, faced inwards and open at both ends: from the room the mouth is dark, and sat in it
+	# (the camera at the hide's eye) the tube's own wall is round the view out (MH1b: no mask drawn).
+	_prim(h.level, _tube(r - 0.03, 0.9, 14), tube_xf, DARK, "pprops", true)
+	# A flared mouth ring.
+	_prim(h.level, _tube(r + 0.06, 0.06, 14), xf * Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, 0.48, 0.45)), col2)
 	if h.level == 0:
+		# The climb starts on top of the mouth's tube, never down through it (the camera sits in there).
 		var top := _ceiling_y(0, int(xf.origin.x / S), int(xf.origin.z / S)) - xf.origin.y
-		_prim(h.level, _cyl(r * 0.85, r * 0.85, top - 0.6, 14), xf * Transform3D(Basis.IDENTITY, Vector3(0, 0.6 + (top - 0.6) * 0.5, -0.12)), col)
+		_prim(h.level, _cyl(r * 0.85, r * 0.85, top - SLIDE_CLIMB, 14), xf * Transform3D(Basis.IDENTITY, Vector3(0, SLIDE_CLIMB + (top - SLIDE_CLIMB) * 0.5, -0.12)), col)
 		for k in int((top - 0.8) / 0.6):
 			_prim(h.level, _cyl(r * 0.9, r * 0.9, 0.05, 14), xf * Transform3D(Basis.IDENTITY, Vector3(0, 1.0 + k * 0.6, -0.12)), col2)
 	else:
@@ -971,7 +1065,7 @@ func _table(h: Playroom.Hide, xf: Transform3D, seat_list: Array[Playroom.Seat]) 
 	var body: Array = [_b(len, 0.05, wid, 0, ht - 0.05, 0, WHITE)]
 	_boxes(h.level, xf, body + [_b(len + 0.08, 0.02, wid + 0.08, 0, ht - 0.01, 0, CLOTH)])
 	for side: float in [-1.0, 1.0]:
-		var hem := 0.1 if side > 0.0 else 0.03
+		var hem := TABLE_HEM if side > 0.0 else 0.03
 		_tablecloth_edge(h.level, xf, Vector3.BACK * side, len * 0.5, wid * 0.5, ht, hem)
 		_tablecloth_edge(h.level, xf, Vector3.RIGHT * side, wid * 0.5, len * 0.5, ht, 0.03)
 	for i in 8:
@@ -1024,16 +1118,30 @@ func _tablecloth_edge(level: int, xf: Transform3D, out: Vector3, across: float, 
 
 ## A toy chest: a painted box, its lid open a crack on the gap side, TOYS on the front.
 func _chest(h: Playroom.Hide, xf: Transform3D, col: Color, col2: Color) -> Array:
-	var w := 0.9
-	var d := 0.56
-	var ht := 0.5
-	var body: Array = [_b(w, ht, d, 0, 0, 0, col)]
-	var trim: Array = [_b(w + 0.02, 0.05, d + 0.02, 0, 0.0, 0, col2), _b(w + 0.02, 0.04, d + 0.02, 0, ht - 0.06, 0, col2)]
+	var w := CHEST.x
+	var d := CHEST.z
+	var ht := CHEST.y
+	# Hollow (MH1b): a floor and four walls, so sat in it the camera has the chest's own inside round it
+	# and the lid's crack to look out of; a solid box would vanish round a camera inside it.
+	var t := CHEST_WALL
+	# The front has the chest's carrying slot cut in it (CHEST_SLOT: its bottom, top and half width): sat
+	# back below the rim, that slot is the view out; peeking, the lid's crack above the rim.
+	var fz := d * 0.5 - t * 0.5
+	var sw := w * 0.5 - CHEST_SLOT.z
+	var body: Array = [_b(w, t, d, 0, 0, 0, col), _b(w, ht, t, 0, 0, -d * 0.5 + t * 0.5, col),
+		_b(w, CHEST_SLOT.x, t, 0, 0, fz, col), _b(w, ht - CHEST_SLOT.y, t, 0, CHEST_SLOT.y, fz, col),
+		_b(sw, CHEST_SLOT.y - CHEST_SLOT.x, t, -w * 0.5 + sw * 0.5, CHEST_SLOT.x, fz, col), _b(sw, CHEST_SLOT.y - CHEST_SLOT.x, t, w * 0.5 - sw * 0.5, CHEST_SLOT.x, fz, col),
+		_b(t, ht, d - t * 2.0, -w * 0.5 + t * 0.5, 0, 0, col), _b(t, ht, d - t * 2.0, w * 0.5 - t * 0.5, 0, 0, col)]
+	# The painted bands round it, outside the walls only (a band across the whole top would be a ceiling inside).
+	var trim: Array = []
+	for band: Vector2 in [Vector2(0.0, 0.05), Vector2(ht - 0.06, 0.04)]:
+		trim.append_array([_b(w + 0.02, band.y, 0.01, 0, band.x, -d * 0.5 - 0.005, col2), _b(w + 0.02, band.y, 0.01, 0, band.x, d * 0.5 + 0.005, col2),
+			_b(0.01, band.y, d, -w * 0.5 - 0.005, band.x, 0, col2), _b(0.01, band.y, d, w * 0.5 + 0.005, band.x, 0, col2)])
 	_boxes(h.level, xf, body + trim)
-	var lid := xf * Transform3D(Basis(Vector3.RIGHT, -0.07), Vector3(0, ht, -d * 0.5))
+	var lid := xf * Transform3D(Basis(Vector3.RIGHT, -CHEST_LID), Vector3(0, ht, -d * 0.5))
 	_boxes(h.level, lid, [_b(w + 0.04, 0.06, d + 0.04, 0, 0, d * 0.5, col2)])
 	var st := lv._st(h.level, xf.origin.x, xf.origin.z, "pdecal")
-	var front := xf * Vector3(0, ht * 0.55, d * 0.5 + 0.003)
+	var front := xf * Vector3(0, CHEST_SLOT.x * 0.55, d * 0.5 + 0.003)   # under the slot
 	AnnexView.picture(st, front, (xf.basis * Vector3.BACK).normalized(), 0.4, 0.16, atlas_uv(A_TOYS), _tone(Color.WHITE, xf.origin))
 	return body
 
@@ -1053,8 +1161,9 @@ func _cubby(h: Playroom.Hide, xf: Transform3D, deep: bool) -> Array:
 	if deep:
 		# A rail, two coats and a hat on the shelf.
 		extra.append(_b(w - 0.1, 0.025, 0.025, 0, 1.55, -0.05, GREY))
-		extra.append(_b(0.36, 0.85, 0.16, -0.14, 0.7, -0.1, BLUE))
-		extra.append(_b(0.34, 0.75, 0.14, 0.16, 0.8, 0.02, RED))
+		# Two coats with a hand's width between them: the gap you look out of (MH1b: no mask drawn).
+		extra.append(_b(0.3, 0.85, 0.16, -0.2, 0.7, -0.14, BLUE))
+		extra.append(_b(0.28, 0.75, 0.14, 0.2, 0.8, 0.02, RED))
 		extra.append(_b(w - 0.1, 0.03, d - 0.05, 0, 1.6, 0, WOOD))
 		extra.append(_b(0.3, 0.12, 0.25, 0.1, 1.63, -0.1, YELLOW))
 	else:
@@ -1124,6 +1233,7 @@ func _dress_rooms() -> void:
 	for d: Floor.Door in fp.doors:
 		avoid[Vector3i(d.level, d.ax, d.ay)] = true
 		avoid[Vector3i(d.level, d.bx, d.by)] = true
+	_place_pieces(avoid)
 	for r: Dictionary in lv.plan.rooms:
 		var kind := str(r.kind)
 		var level := int(r.level)
@@ -1133,6 +1243,8 @@ func _dress_rooms() -> void:
 			var corr := lv.corruption(level, int(r.x) + int(r.w) / 2, int(r.y) + int(r.h) / 2)
 			var word := WORDS[mini(int(corr * 4.0), 3)] if kind != "lobby" else WORDS[0]
 			_word(r, word)
+		if kind in MURAL_ROOMS:
+			_mural(r)
 		match kind:
 			"lobby":
 				_lobby(r)
@@ -1151,11 +1263,209 @@ func _dress_rooms() -> void:
 					avoid[Vector3i(level, cx, cy)] = true
 					_soft_shape(level, lv.cell_center(level, cx, cy) + Vector3(rng.randf_range(-0.3, 0.3), 0, rng.randf_range(-0.3, 0.3)), rng)
 
-## The longest stretch of plain wall in a room: [side (0 n 1 e 2 s 3 w), first cell, cell count].
-func _plain_wall(r: Dictionary) -> Array:
+## A ready-made piece: [mesh, colour texture], loaded once.
+static func piece_mesh(kind: StringName) -> Array:
+	if _piece_cache.has(kind):
+		return _piece_cache[kind]
+	var scene: PackedScene = load(str(PIECES[kind][0]))
+	var root := scene.instantiate()
+	var found: Array = [null, null]
+	var stack: Array[Node] = [root]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
+			var mi := n as MeshInstance3D
+			found[0] = mi.mesh
+			var m := mi.get_active_material(0)
+			if m is BaseMaterial3D:
+				found[1] = (m as BaseMaterial3D).albedo_texture
+			break
+		stack.append_array(n.get_children())
+	root.free()
+	_piece_cache[kind] = found
+	return found
+
+## The soft-play slides and towers: ready-made pieces stood with their backs to a plain wall in the bigger
+## play rooms, in cells clear of every hide, its front, the squeakers and the doors (`avoid`, which this
+## extends). Chosen by the floor's seed, so every player sees the same. They are dressing only: where a
+## player walks and hides is the rules' (they stand in the back of a cell, as the soft shapes do).
+func _place_pieces(avoid: Dictionary) -> void:
+	var rng := RandomNumberGenerator.new()
+	var mats := {}
+	var rooms: Array = []
+	for kind: String in PIECE_ROOMS:
+		for r: Dictionary in lv.plan.rooms:
+			if str(r.kind) == kind:
+				rooms.append(r)
+	var per_kind := {}
+	for r: Dictionary in rooms:
+		var kind := str(r.kind)
+		if int(r.w) < 3 or int(r.h) < 3:
+			continue
+		var level := int(r.level)
+		rng.seed = hash(str(lv.plan.seed) + ":pieces:" + str(r.id))
+		# The room's door cells, for putting a slide where a player comes in.
+		var doors: Array[Vector2i] = []
+		for dr: Floor.Door in fp.doors:
+			if dr.level != level:
+				continue
+			for c: Vector2i in [Vector2i(dr.ax, dr.ay), Vector2i(dr.bx, dr.by)]:
+				if _in_room(r, c):
+					doors.append(c)
+		# Every wall cell of the room with a plain wall behind it: [cell, side, door distance, shuffle].
+		var spots: Array = []
+		for y in range(int(r.y), int(r.y) + int(r.h)):
+			for x in range(int(r.x), int(r.x) + int(r.w)):
+				if avoid.has(Vector3i(level, x, y)) or not lv.walkable(level, x, y):
+					continue
+				if level == lv.landing.x and Vector2i(x, y) == Vector2i(lv.landing.y, lv.landing.z):
+					continue
+				for side in 4:
+					var dd: Vector2i = AnnexView.DIRS[side]
+					if _edge_kind(level, x, y, dd) == "wall":
+						var near := 99
+						for dc in doors:
+							near = mini(near, absi(dc.x - x) + absi(dc.y - y))
+						spots.append([Vector2i(x, y), side, near, 0])
+		# A shuffle by the seed.
+		for i in range(spots.size() - 1, 0, -1):
+			var j := rng.randi_range(0, i)
+			var tmp: Variant = spots[i]
+			spots[i] = spots[j]
+			spots[j] = tmp
+		for i in spots.size():
+			spots[i][3] = i
+		var by_door := spots.duplicate()
+		by_door.sort_custom(func(a: Array, b: Array) -> bool: return int(a[2]) * 10000 + int(a[3]) < int(b[2]) * 10000 + int(b[3]))
+		var want: int = mini(int(PIECE_ROOMS[kind]), maxi(1, int(r.w) * int(r.h) / 12))
+		var placed := 0
+		while placed < want and pieces.size() < MAX_PIECES and int(per_kind.get(kind, 0)) < int(PIECE_KIND_CAP[kind]):
+			# A tower first (it needs the most room), then a slide by a way in, by turns; whichever fits.
+			var order: Array = [&"frame", &"slide"] if placed % 2 == 0 else [&"slide", &"frame"]
+			var pk: StringName = &""
+			var spec: Array = []
+			var got: Array = []
+			var found: Array = []
+			for k: StringName in order:
+				spec = PIECES[k]
+				got = piece_mesh(k)
+				if got[0] == null:
+					continue
+				for s: Array in (by_door if k == &"slide" else spots):
+					var cells := _piece_cells(r, s[0], int(s[1]), float(spec[3]), float(spec[2]))
+					if cells.is_empty():
+						continue
+					var clear := true
+					for c: Vector2i in cells:
+						if avoid.has(Vector3i(level, c.x, c.y)):
+							clear = false
+							break
+					if clear:
+						found = [s, cells]
+						break
+				if not found.is_empty():
+					pk = k
+					break
+			if found.is_empty():
+				break
+			var cell: Vector2i = found[0][0]
+			var d: Vector2i = AnnexView.DIRS[int(found[0][1])]
+			var out := Vector3(d.x, 0, d.y)
+			var depth: float = spec[2]
+			var at := lv.cell_center(level, cell.x, cell.y) + out * (S * 0.5 - WALL_T * 0.5 - PIECE_GAP - depth * 0.5)
+			at += Vector3(absi(d.y), 0, absi(d.x)) * (S * 0.5)
+			at.y = level * LH
+			# The piece's long side runs along the wall; it faces into the room.
+			var xf := piece_xf(at, -out)
+			xf.basis = xf.basis.scaled_local(Vector3.ONE * float(spec[1]))
+			var mi := MeshInstance3D.new()
+			mi.name = "Piece_%s_%d" % [pk, pieces.size()]
+			mi.mesh = got[0]
+			mi.transform = xf
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mi.visibility_range_end = 34.0
+			# One material per kind and bleach step (further in, the colour goes), each dimmed by the dark.
+			var corr := snappedf(lv.corruption_at(at), 0.1)
+			var key := "%s:%.2f" % [pk, corr]
+			if not mats.has(key):
+				var m := _shade(null, 4, SELF_PROPS)
+				m.set_shader_parameter("photo_tex", got[1])
+				m.set_shader_parameter("corr_fixed", corr)
+				m.set_shader_parameter("photo_gain", float(PIECE_GAIN[pk]))
+				m.set_shader_parameter("grime_tex", GRIME_PHOTO)
+				m.set_shader_parameter("grime_amt", 0.15)
+				m.set_shader_parameter("grime_scale", 1.0 / GRIME_M)
+				mats[key] = m
+			mi.material_override = mats[key]
+			lv.add_child(mi)
+			var covered: Array = found[1]
+			for c: Vector2i in covered:
+				avoid[Vector3i(level, c.x, c.y)] = true
+			pieces.append({"kind": String(pk), "level": level, "cell": cell, "cells": covered, "pos": at, "facing": -out})
+			placed += 1
+			per_kind[kind] = int(per_kind.get(kind, 0)) + 1
+
+func _in_room(r: Dictionary, c: Vector2i) -> bool:
+	return c.x >= int(r.x) and c.y >= int(r.y) and c.x < int(r.x) + int(r.w) and c.y < int(r.y) + int(r.h)
+
+## The cells a piece `length` along the wall and `depth` into the room stands over, backed to `side` of `cell`
+## and the next cell along it (the piece's middle on the line between the two); empty if any of them is outside
+## the room, not walkable, or the landing, or the piece is longer than two cells.
+func _piece_cells(r: Dictionary, cell: Vector2i, side: int, length: float, depth: float) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	var level := int(r.level)
+	var d: Vector2i = AnnexView.DIRS[side]
+	var along := Vector2i(absi(d.y), absi(d.x))
+	# Two cells along the wall (the piece stands over the line between them), as deep as it needs.
+	var deep := maxi(int(ceil((depth + PIECE_GAP + WALL_T * 0.5 - 0.05) / S)), 1)
+	if length > 2.0 * S - 0.1:
+		return out
+	for a in 2:
+		for k in deep:
+			var c := cell + along * a - d * k
+			if not _in_room(r, c) or not lv.walkable(level, c.x, c.y):
+				return [] as Array[Vector2i]
+			if level == lv.landing.x and c == Vector2i(lv.landing.y, lv.landing.z):
+				return [] as Array[Vector2i]
+			out.append(c)
+	return out
+
+## A faded mural on the room's longest plain wall but one (the longest has the cut-out words).
+func _mural(r: Dictionary) -> void:
+	var word_side: int = _plain_wall(r)[0]
+	var level := int(r.level)
+	var width := MURAL_H * 2.0
+	for side in 4:
+		if side == word_side:
+			continue
+		var w := _plain_wall(r, -1, side)
+		var run: int = w[2]
+		if run * S < MURAL_WALL:
+			continue
+		var d: Vector2i = AnnexView.DIRS[side]
+		var mid_i: float = int(w[1]) + run * 0.5
+		var base := Vector3(int(r.x) * S, level * LH, int(r.y) * S)
+		var p: Vector3
+		match side:
+			0: p = base + Vector3(mid_i * S, 0, 0)
+			1: p = base + Vector3(int(r.w) * S, 0, mid_i * S)
+			2: p = base + Vector3(mid_i * S, 0, int(r.h) * S)
+			_: p = base + Vector3(0, 0, mid_i * S)
+		var into := -Vector3(d.x, 0, d.y)
+		var at := p + into * (WALL_T * 0.5 + 0.014) + Vector3(0, MURAL_Y, 0)
+		var pic := absi(hash(str(lv.plan.seed) + ":mural:" + str(r.id) + ":" + str(side))) % 4
+		var uv := Rect2((pic % 2) * 0.5, (pic / 2) * 0.5, 0.5, 0.5)
+		AnnexView.picture(lv._st(level, at.x, at.z, "pmural"), at, into, width, MURAL_H, uv, _tone(Color.WHITE, at))
+		murals.append({"room": int(r.id), "level": level, "pos": at, "facing": into, "picture": pic})
+
+## The longest stretch of plain wall in a room: [side (0 n 1 e 2 s 3 w), first cell, cell count]; `skip`
+## leaves one side out, `only` looks at one side alone.
+func _plain_wall(r: Dictionary, skip := -1, only := -1) -> Array:
 	var best: Array = [0, 0, 0]
 	var level := int(r.level)
 	for side in 4:
+		if side == skip or (only >= 0 and side != only):
+			continue
 		var d: Vector2i = AnnexView.DIRS[side]
 		var count := int(r.w) if side % 2 == 0 else int(r.h)
 		var run := 0

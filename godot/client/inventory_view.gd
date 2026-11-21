@@ -56,8 +56,34 @@ var demo_sel := -1
 ## Hidden behind the black cut, the end screen, the menu.
 var hidden_now := false
 
+## HUD1b (the screen plan, stage 1): the squares dim to IDLE_ALPHA after the fade's 4 s with nothing changed, and are
+## full again on any change (an item, a count, the hand) or while Tab (DISPLAY) is held; IN HAND shows HELD_MS after a
+## change, then fades. Only how visible they are changes, never what they say.
+const HudFade = preload("res://client/hud_fade.gd")
+const IDLE_ALPHA := 0.3
+const HELD_MS := 2000
+var display := false
+var _fade := HudFade.new()
+
 var _meshes := {}
 var _last_spill := {}
+
+## How visible the row of squares is at `now` (ms): IDLE_ALPHA at rest, 1 on change or Tab.
+func row_alpha(now: int) -> float:
+	return maxf(IDLE_ALPHA, _fade.see("row", str(drawn_slots()) + "|" + str(drawn_sel()), now, false, display))
+
+## The IN HAND line's words ("" for none), and how visible it is at `now` (ms).
+func held_text() -> String:
+	var list := drawn_slots()
+	var hand := drawn_sel()
+	if hand >= 0 and hand < list.size() and int(list[hand][1]) > 0:
+		return "IN HAND: " + Inventory.long_name(str(list[hand][0]))
+	return ""
+
+func held_alpha(now: int) -> float:
+	var held := held_text()
+	var a := _fade.see("held", held, now, false, display, HELD_MS)
+	return a if held != "" else 0.0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -265,13 +291,16 @@ func _draw() -> void:
 	var total := Inventory.SLOTS * box + (Inventory.SLOTS - 1) * gap
 	var x0 := floorf((size.x - total) * 0.5)
 	var y0 := floorf(size.y - box - 3.0 * px)
+	var now_ms := Time.get_ticks_msec()
+	var ra := row_alpha(now_ms)
+	var sh := Color(0, 0, 0, 0.55 * ra)
 	for k in Inventory.SLOTS:
 		var r := Rect2(Vector2(x0 + k * (box + gap), y0), Vector2(box, box))
 		var on := k == hand
-		draw_rect(r, Color(0.02, 0.02, 0.025, 0.72 if on else 0.5))
-		draw_rect(r, AMBER if on else Color(0.62, 0.64, 0.6, 0.8), false, px * (2.0 if on else 1.0))
+		draw_rect(r, Color(0.02, 0.02, 0.025, (0.72 if on else 0.5) * ra))
+		draw_rect(r, Color(AMBER if on else Color(0.62, 0.64, 0.6, 0.8), (1.0 if on else 0.8) * ra), false, px * (2.0 if on else 1.0))
 		# The key's number, top left.
-		PixelFont.draw(self, str(k + 1), r.position + Vector2(2, 2) * px, px, Color(0.75, 0.76, 0.72, 0.8))
+		PixelFont.draw(self, str(k + 1), r.position + Vector2(2, 2) * px, px, Color(0.75, 0.76, 0.72, 0.8 * ra))
 		var item := str(list[k][0]) if k < list.size() else ""
 		var n := int(list[k][1]) if k < list.size() else 0
 		if n > 0 and item != "":
@@ -279,24 +308,23 @@ func _draw() -> void:
 			var lw := PixelFont.width(label) * px
 			var sc := px if lw <= box - 4.0 * px else maxf(1.0, px * 0.5)
 			lw = PixelFont.width(label) * sc
-			PixelFont.draw_shadowed(self, label, Vector2(floorf(r.position.x + (box - lw) * 0.5), floorf(r.position.y + box * 0.5 - 3.0 * sc)), sc, AMBER if on else PALE)
+			PixelFont.draw_shadowed(self, label, Vector2(floorf(r.position.x + (box - lw) * 0.5), floorf(r.position.y + box * 0.5 - 3.0 * sc)), sc, Color(AMBER if on else PALE, ra), sh)
 			if n > 1:
 				var cnt := "x%d" % n
-				PixelFont.draw_shadowed(self, cnt, r.position + Vector2(box - PixelFont.width(cnt) * px - 2.0 * px, box - 9.0 * px), px, PALE)
+				PixelFont.draw_shadowed(self, cnt, r.position + Vector2(box - PixelFont.width(cnt) * px - 2.0 * px, box - 9.0 * px), px, Color(PALE, ra), sh)
 		if on:
 			# The notch over the square in the hand.
 			var cx := r.position.x + box * 0.5
-			draw_colored_polygon(PackedVector2Array([Vector2(cx - 3.0 * px, y0 - 4.0 * px), Vector2(cx + 3.0 * px, y0 - 4.0 * px), Vector2(cx, y0 - 1.0 * px)]), AMBER)
-	# What is in the hand, over the row.
-	var held := ""
-	if hand >= 0 and hand < list.size() and int(list[hand][1]) > 0:
-		held = "IN HAND: " + Inventory.long_name(str(list[hand][0]))
-	if held != "":
+			draw_colored_polygon(PackedVector2Array([Vector2(cx - 3.0 * px, y0 - 4.0 * px), Vector2(cx + 3.0 * px, y0 - 4.0 * px), Vector2(cx, y0 - 1.0 * px)]), Color(AMBER, ra))
+	# What is in the hand, over the row: for HELD_MS after a change (HUD1b), and on Tab.
+	var held := held_text()
+	var ha := held_alpha(now_ms)
+	if held != "" and ha > 0.01:
 		if str(list[hand][0]) == "pinecone":
 			held += "  [MIDDLE MOUSE: THROW]"
-		PixelFont.draw_shadowed(self, held, Vector2(x0 + total + 6.0 * px, floorf(y0 + box * 0.5 - 3.0 * px)), px, PALE)
+		PixelFont.draw_shadowed(self, held, Vector2(x0 + total + 6.0 * px, floorf(y0 + box * 0.5 - 3.0 * px)), px, Color(PALE, ha), Color(0, 0, 0, 0.55 * ha))
 	var line_y := y0 - 16.0 * px
-	var msg := message_now(Time.get_ticks_msec())
+	var msg := message_now(now_ms)
 	if msg != "":
 		var mw := PixelFont.width(msg) * px
 		var mp := Vector2(floorf((size.x - mw) * 0.5), line_y)

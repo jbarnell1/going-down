@@ -661,6 +661,8 @@ func menu_rows() -> Array[Array]:
 	rows.append(["B", "BRIGHTNESS"])
 	# MU1: every player's own MASTER, MUSIC and EFFECTS (the settings panel's YOUR SOUND page).
 	rows.append(["V", "SOUND: MASTER MUSIC EFFECTS"])
+	# VC3: the microphone's own key (client/main.gd, client/mic.gd).
+	rows.append(["M", "MICROPHONE ON / OFF"])
 	return rows
 
 func _draw_menu() -> void:

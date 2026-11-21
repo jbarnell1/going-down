@@ -43,7 +43,8 @@ var noise := NoiseMeter.new()
 var _hits: Array = []
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# VC3: anchors AND offsets, so a layer made in code is the whole screen (anchors alone left it 0x0, off screen).
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func consent_open() -> bool:
