@@ -135,10 +135,11 @@ await it('one engine (no --shards): the engine\'s own lines and exit code; a dea
 });
 
 await it('ports: two runs at once never get the same block; a held --port-base is refused', async () => {
+  // Two runs of two blocks each: four blocks must fit the 80-port test range whatever PORT_BLOCK grows to (20 at most).
   process.env.GD_TEST_PORT_RANGE = '4920-4999';
-  const a = await takePorts(3, undefined, [4920, 4999]);
-  const b = await takePorts(3, undefined, [4920, 4999]);
-  assert.ok(Math.abs(a - b) >= 3 * PORT_BLOCK, `${a} and ${b} overlap`);
+  const a = await takePorts(2, undefined, [4920, 4999]);
+  const b = await takePorts(2, undefined, [4920, 4999]);
+  assert.ok(Math.abs(a - b) >= 2 * PORT_BLOCK, `${a} and ${b} overlap`);
   await assert.rejects(takePorts(1, a, [4920, 4999]), /reserved by another test run/);
   releasePorts();
   assert.equal(await takePorts(1, a, [4920, 4999]), a, 'free again once released');
