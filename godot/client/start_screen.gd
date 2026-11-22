@@ -109,6 +109,12 @@ var my_ready := false
 var without_ok := false
 var run_depth := -1
 var run_practice := false
+## HP1: the room's START ON (server/room.gd: -1, the normal start), the floors it offers ([{depth, label}],
+## main.gd start_on_choices; the normal start first) and whether this player may change it (the room's host).
+signal start_on_pressed(depth: int)
+var start_on := -1
+var start_on_choices: Array[Dictionary] = []
+var start_on_host := false
 ## The orientation tape: seen by this player on this PC; kept in TAPE_SAVE (false under automation: never
 ## read or written, like the hints' record); the player while it plays.
 var tape_seen := false
@@ -288,6 +294,8 @@ func _order() -> Array[String]:
 			return ["back"]
 		"lobby":
 			var o: Array[String] = ["ready"]
+			if start_on_host and start_on_choices.size() > 1 and run_depth < 0:
+				o.append("starton")
 			if without_ok and stragglers() > 0 and run_depth < 0:
 				o.append("without")
 			o.append_array(["watch", "leave"])
@@ -319,6 +327,8 @@ func press(id: String) -> void:
 			back_pressed.emit()
 		"start", "without":
 			start_pressed.emit()
+		"starton":
+			step_start_on(1)
 		"ready":
 			if _caret_t - _tape_ended_at < AFTER_TAPE_GUARD:
 				return
@@ -385,6 +395,9 @@ func key(k: InputEventKey) -> void:
 		return
 	var id := focused_id()
 	var field := id in ["address", "name", "pass"]
+	if id == "starton" and (k.keycode == KEY_LEFT or k.keycode == KEY_RIGHT):
+		step_start_on(-1 if k.keycode == KEY_LEFT else 1)
+		return
 	match k.keycode:
 		KEY_TAB:
 			focus = posmod(focus + (-1 if k.shift_pressed else 1), o.size())
@@ -631,6 +644,37 @@ func status_line() -> String:
 		return "GOING DOWN IN %d" % maxi(1, ceili(count_left))
 	return ""
 
+## HP1: the host moves START ON one floor along the room's choices (wrapping); the room decides (main.gd sends it).
+func step_start_on(by: int) -> void:
+	if not start_on_host or start_on_choices.size() < 2:
+		return
+	var at := 0
+	for i in start_on_choices.size():
+		if int(start_on_choices[i]["depth"]) == start_on:
+			at = i
+	start_on_pressed.emit(int(start_on_choices[posmod(at + by, start_on_choices.size())]["depth"]))
+
+## The place of a START ON choice as its label reads ("" when the room's choice is not in the list).
+static func start_on_place(depth: int, choices: Array[Dictionary]) -> String:
+	for c: Dictionary in choices:
+		if int(c["depth"]) == depth:
+			return str(c["label"])
+	return ""
+
+## The host's button: < START ON: FLOOR 6 >, or < START ON: NORMAL > for the normal start.
+static func start_on_button(depth: int) -> String:
+	if depth < 0:
+		return "< START ON: NORMAL >"
+	return "< START ON: THE PRISON >" if depth == 0 else "< START ON: FLOOR %d >" % depth
+
+## The line every player in the room sees while the host has chosen a floor ("" for the normal start).
+static func start_on_notice(depth: int, choices: Array[Dictionary]) -> String:
+	if depth < 0:
+		return ""
+	var place := start_on_place(depth, choices)
+	var where := "IN THE PRISON" if depth == 0 else ("ON FLOOR %d" % depth + (", " + place if place != "" else ""))
+	return "HOST PLAYTEST: STARTING %s. NOTHING IS SAVED TO ANYONE'S CAMPAIGN." % where
+
 ## The card's rows as drawn: [key, action line] with long actions wrapped onto a second row.
 static func card_lines() -> Array[Array]:
 	var out: Array[Array] = []
@@ -665,6 +709,11 @@ func _draw_ready(_screen_px: float) -> void:
 	var line := status_line()
 	if line != "":
 		_centred(line, top + 22 * px, px * (2.0 if count_left >= 0.0 and run_depth < 0 else 1.0), AMBER if run_depth < 0 else pale)
+	# HP1: the host's chosen floor, for everyone, before anyone readies (the normal start shows nothing).
+	var notice := start_on_notice(start_on, start_on_choices) if run_depth < 0 else ""
+	if notice != "":
+		var rows := PixelFont.wrap(notice, int(size.x / px / 6.0) - 4)
+		_wrapped(notice, size.y - (rows.size() * 10 + 10) * px, px, AMBER)
 	# The card, left.
 	var o := Vector2(floorf(size.x * 0.04), top + 40 * px)
 	draw_rect(Rect2(o, Vector2(card_w, card_h) * px), Color(0.02, 0.02, 0.025, 0.88))
@@ -710,6 +759,14 @@ func _draw_ready(_screen_px: float) -> void:
 	# The host's valve, the tape again, and the way out.
 	var bx := cx + 50 * px
 	var by := maxf(cy + 12 * px, o.y + (card_h - 40) * px)
+	# HP1: the host's START ON, its left edge on the crew column, the place under it.
+	if "starton" in _order():
+		var sl := start_on_button(start_on)
+		var sw := maxf(PixelFont.width(sl) + 16, 96) * px
+		_button("starton", sl, Vector2(cx + sw * 0.5, by), px, 96)
+		var place := "THE NORMAL START" if start_on < 0 else start_on_place(start_on, start_on_choices)
+		_text(place, Vector2(cx + 4 * px, by + 10 * px), px, PALE)
+		by += 30 * px
 	if "without" in _order():
 		_button("without", "START WITHOUT %d" % stragglers(), Vector2(bx, by), px, 96)
 		by += 20 * px

@@ -5,6 +5,7 @@
 #   settings   SOUND AND VOICE, MICROPHONE, BRIGHTNESS, HINTS ON/OFF, CAUGHT SCENES FULL/SOFT, BACK
 #   controls   the key list, read-only: the HUD's own card (client/hud.gd menu_rows), drawn by the HUD
 #   leave/quit a confirm with STAY chosen first
+#   end        HP1b: END RUN: BACK TO THE LOBBY, the host of a host-playtest run only; a confirm with STAY first
 # The menu owns only where it is (page and row). Every setting keeps its one home: the sound page, the microphone
 # rows and the caught scenes on the settings panel's YOUR SOUND page (client/settings_panel.gd), brightness on its
 # card (client/brightness_card.gd), the hints on the announcer (client/hints.gd); the game (client/main.gd) does what a
@@ -21,6 +22,7 @@ const FOOT := "UP DOWN: CHOOSE   ENTER: OPEN   ESC: BACK"
 const LEAVE_ASK := "LEAVE THIS RUN? YOUR CREW CARRIES ON WITHOUT YOU."
 const QUIT_ASK := "QUIT TO DESKTOP? THIS RUN ENDS FOR YOU."
 const QUIT_ASK_START := "QUIT TO DESKTOP?"
+const END_ASK := "END THIS PLAYTEST? EVERYONE RETURNS TO THE LOBBY."
 const MARGIN := 16.0
 const LINE := 14
 const AMBER := Color("#ffd27a")
@@ -33,6 +35,8 @@ var sel := 0
 ## What the game is doing (set by client/main.gd every frame).
 var in_run := true
 var is_host := false
+## HP1b: the run on is a host playtest of a shared room (the room's lobby says "playtest").
+var playtest := false
 var web := OS.has_feature("web")
 var hints_on := true
 var caught_soft := false
@@ -61,6 +65,9 @@ func rows() -> Array[Dictionary]:
 			out.append({"id": "controls", "label": "CONTROLS"})
 			if in_run and is_host:
 				out.append({"id": "host", "label": "HOST TOOLS"})
+			# HP1b: the host of a host-playtest run (never a campaign run) can end it for everyone.
+			if in_run and is_host and playtest:
+				out.append({"id": "end_ask", "label": "END RUN: BACK TO THE LOBBY"})
 			if in_run:
 				out.append({"id": "leave_ask", "label": "LEAVE RUN"})
 			if not web:
@@ -78,6 +85,9 @@ func rows() -> Array[Dictionary]:
 		"quit":
 			out.append({"id": "back", "label": "STAY"})
 			out.append({"id": "quit", "label": "QUIT GAME"})
+		"end":
+			out.append({"id": "back", "label": "STAY"})
+			out.append({"id": "end", "label": "END RUN"})
 	return out
 
 func _heading() -> String:
@@ -88,6 +98,8 @@ func _heading() -> String:
 			return LEAVE_ASK
 		"quit":
 			return QUIT_ASK if in_run else QUIT_ASK_START
+		"end":
+			return END_ASK
 	# Nothing to pause on the start screen.
 	return TITLE if in_run else "MENU"
 
@@ -125,6 +137,10 @@ func activate() -> void:
 		"quit_ask":
 			_top_sel = sel
 			page = "quit"
+			sel = 0   # STAY first
+		"end_ask":
+			_top_sel = sel
+			page = "end"
 			sel = 0   # STAY first
 		"back":
 			back()
@@ -164,7 +180,7 @@ func key(k: InputEventKey) -> bool:
 				activate()
 			return true
 		KEY_LEFT, KEY_RIGHT, KEY_A, KEY_D:
-			if page in ["leave", "quit"]:
+			if page in ["leave", "quit", "end"]:
 				move(1 if k.physical_keycode in [KEY_RIGHT, KEY_D] else -1)
 				return true
 			var r := rows()
@@ -255,7 +271,7 @@ func _draw() -> void:
 			draw_rect(box, AMBER, false, sc)
 		var label: String = r[i]["label"]
 		var col := AMBER if on else PALE
-		if str(r[i]["id"]) in ["leave_ask", "quit_ask", "leave", "quit"] and not on:
+		if str(r[i]["id"]) in ["leave_ask", "quit_ask", "leave", "quit", "end_ask", "end"] and not on:
 			col = Color("#d8a090")
 		PixelFont.draw_shadowed(self, label, Vector2(box.position.x + floorf((box.size.x - PixelFont.width(label) * sc) * 0.5), box.position.y + 3 * sc), sc, col)
 	PixelFont.draw_shadowed(self, FOOT, lay["foot"], sc, GREY)

@@ -33,6 +33,11 @@
 #                     m|{"t":"ping"}         keeps a lobby connection alive (any message does)
 #                     m|{"t":"tune",...}     live settings: the host's change (see the block at the end; the
 #                                            server answers with "tune" to everyone or "tuneNo" to the sender)
+#                     m|{"t":"startOn","depth":D}   HP1: the host's START ON (the lobby's floor picker; see the
+#                                            block at the end: D is -1 for the normal start or one of
+#                                            start_on_destinations(); refused with "startOnNo" to the sender)
+#                     m|{"t":"endRun"}       HP1b: the host ends a host-playtest run for everyone (the block
+#                                            at the end; refused with "endRunNo" to the sender)
 #                     n<E>|<protocol text>   input, join, leave, ping, emote or face change ("C") of run E
 #                                            (the host passes emotes on to the others, rate limited; a
 #                                            join may carry the player's drawn face, which the host passes
@@ -91,6 +96,7 @@ const HostRules = preload("res://net/host_rules.gd")
 const Places = preload("res://sim/places.gd")
 const WsServer = preload("res://net/ws_server.gd")
 const TuningDesk = preload("res://net/tuning_desk.gd")
+const LocalRoom = preload("res://net/local_room.gd")
 
 ## Seconds after a bank or a wipe before the room goes back to the lobby.
 const END_LINGER := 10.0
@@ -238,6 +244,10 @@ var _day_logged := 1
 var desk: TuningDesk
 var _tune_host := ""
 var profiles: Profiles
+## HP1: the host's START ON (see the block at the end): the floor the next run starts on as a host playtest, or
+## -1 for the normal start. And whether the run on now was started that way (no profiles, no prelude).
+var start_on := -1
+var playtest_run := false
 
 func configure_campaign_trades(args: Dictionary) -> void:
 	badge_search = args.get("badge_search", "1") == "1"
@@ -309,6 +319,12 @@ func _lobby_text(now: float) -> String:
 		lobby["orientationPrelude"] = true
 	if host != null and host.state.orientation_paid > 0:
 		lobby["orientationPaid"] = host.state.orientation_paid
+	# HP1: only while the host has chosen a floor (the normal start sends nothing new).
+	if start_on >= 0:
+		lobby["startOn"] = start_on
+	# HP1b: the run on is a host playtest (the host's Esc menu offers END RUN only then).
+	if host != null and playtest_run:
+		lobby["playtest"] = true
 	return "m|" + JSON.stringify(lobby)
 
 func _player_trade(id: String) -> String:
@@ -336,6 +352,8 @@ func _pick_host() -> void:
 		break
 	if first != host_id:
 		host_id = first
+		# HP1: a new host (or an empty room) starts from the normal start again.
+		start_on = -1
 		_dirty = true
 
 ## Ready-up between runs: everyone ready runs the count; it stops the moment that is no longer so.
@@ -457,8 +475,12 @@ func _start(now: float) -> void:
 		seed = Crypto.new().generate_random_bytes(6).hex_encode()
 	# The game's deck: the third floor down is the Annex, the fourth the Playroom (sim/places.gd).
 	var q := quota and not HostRules.quota_off_by_arg(false)
+	# HP1: the host's START ON starts this run as a playtest on that floor, as the solo sandbox does
+	# (net/local_room.gd start_playtest): the floor's own deck; the prison (0) arrives home first.
+	playtest_run = start_on >= 0 and start_on_destinations().has(start_on)
+	var depth := maxi(1, start_on) if playtest_run else first_depth
 	# The day quota's lock goes with the floor quota (net/host_rules.gd): quota=0 turns both off.
-	rules = HostRules.new(not (ward_review or reactor_review), first_depth, Places.deck_for_start_depth(first_depth, HostRules.garden_admission_by_arg()), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop, nightly_reels, true, true, deep_pockets and not (ward_review or reactor_review), second_wind, soft_shoes, HostRules.flare_on_by_arg() and not (ward_review or reactor_review), HostRules.lamp_on_by_arg() and not (ward_review or reactor_review), badge_search and not (ward_review or reactor_review), quick_fingers and not (ward_review or reactor_review), long_burn and not (ward_review or reactor_review), field_dressing and not (ward_review or reactor_review), HostRules.doorway_shadow_on_by_arg() and not (ward_review or reactor_review or orientation_review), steady_gaze and not (ward_review or reactor_review or orientation_review), throwing_arm and not (ward_review or reactor_review or orientation_review),
+	rules = HostRules.new(not (ward_review or reactor_review), depth, Places.deck_for_start_depth(depth, HostRules.garden_admission_by_arg()), days, q, downs, watchers and not HostRules.watchers_off_by_arg(), relocation, long_dark, paced, car_waits, lonely, playroom_tuned, q, furniture, findables, inventory, furniture_layout, true, shop, nightly_reels, true, true, deep_pockets and not (ward_review or reactor_review), second_wind, soft_shoes, HostRules.flare_on_by_arg() and not (ward_review or reactor_review), HostRules.lamp_on_by_arg() and not (ward_review or reactor_review), badge_search and not (ward_review or reactor_review), quick_fingers and not (ward_review or reactor_review), long_burn and not (ward_review or reactor_review), field_dressing and not (ward_review or reactor_review), HostRules.doorway_shadow_on_by_arg() and not (ward_review or reactor_review or orientation_review), steady_gaze and not (ward_review or reactor_review or orientation_review), throwing_arm and not (ward_review or reactor_review or orientation_review),
 		nerve_passive and not (ward_review or reactor_review or orientation_review),
 		HostRules.annex_drag_on_by_arg() and not (ward_review or reactor_review or orientation_review),
 		playroom_tuned, late_floors and not (ward_review or reactor_review or orientation_review), playroom_tuned, true, not (ward_review or reactor_review or orientation_review), cycles and late_floors and not (ward_review or reactor_review or orientation_review),
@@ -477,12 +499,14 @@ func _start(now: float) -> void:
 		not (ward_review or reactor_review or orientation_review) and HostRules.voice_by_arg())
 	if orientation_review:
 		rules.enable_orientation()
-	elif orientation_campaign:
+	elif orientation_campaign and not playtest_run:
 		rules.enable_orientation_prelude()
 	_transport = RoomTransport.new(self)
 	_day_logged = 1
-	host = Host.new(_transport, seed, roster, now, Callable(rules, "prepare"), Callable(rules, "step"))
-	if profiles != null and not orientation_review:
+	var prepare := Callable(self, "_prepare_playtest_prison") if playtest_run and start_on == 0 else Callable(rules, "prepare")
+	host = Host.new(_transport, seed, roster, now, prepare, Callable(rules, "step"))
+	# HP1: a playtest run neither reads nor writes anyone's campaign profile (credits, upgrades, day).
+	if profiles != null and not orientation_review and not playtest_run:
 		for id in roster:
 			host.state = profiles.apply_for(host.state, id, str(people[id]))
 	if ward_review:
@@ -490,13 +514,17 @@ func _start(now: float) -> void:
 	elif reactor_review:
 		host.start_reactor_review(seed.hash(), true, reactor_archive_path)
 	elif rules.late_floors:
-		host.enable_late_floors(late_archive_path(seed))
+		# HP1: a playtest keeps the Reactor's tape in memory, as the solo sandbox does.
+		host.enable_late_floors("" if playtest_run else late_archive_path(seed))
 	# Live settings: everything asked for is in force from the first tick.
 	desk.run_started()
 	host.on_tick = Callable(self, "_tune_tick")
 	host.set_tuning(desk.in_force(), desk.rev)
 	_dirty = true
-	_log.call("run %d started with %d players" % [epoch, roster.size()])
+	if playtest_run:
+		_log.call("run %d started with %d players: a host playtest on floor %d" % [epoch, roster.size(), start_on])
+	else:
+		_log.call("run %d started with %d players" % [epoch, roster.size()])
 
 ## START WITHOUT: from the host only, ready for WITHOUT_AFTER seconds, with no run on. Otherwise ignored.
 func _start_without(id: String, now: float) -> bool:
@@ -518,6 +546,10 @@ func _on_message(id: String, data: String, now: float) -> void:
 			_ws.kick(id, WsServer.CLOSE_PROTOCOL, "bad message")
 			return
 		match String(p["t"]):
+			"startOn":
+				_on_start_on(id, p)
+			"endRun":
+				_on_end_run(id)
 			"rxFilm":
 				if (reactor_review or (rules != null and rules.late_floors)) and host!=null and p.get("epoch")==epoch and p.get("op") in ["watch","skip","end"] and (p.get("ticket") is float or p.get("ticket") is int):
 					host.reactor_screening(id,p.op,int(p.ticket))
@@ -630,7 +662,7 @@ func _tune_tick(events: Array) -> void:
 		_tune_send_all(desk.message(_tune_host))
 
 func _checkpoint_profiles(events: Array) -> void:
-	if host == null or profiles == null:
+	if host == null or profiles == null or playtest_run:
 		return
 	var changed := Profiles.changed(events)
 	for id: String in people:
@@ -671,3 +703,78 @@ func _on_tune(id: String, p: Dictionary, now: float) -> void:
 	_tune_send_all(desk.message(_tune_host, note))
 	if host != null:
 		host.set_tuning(desk.in_force(), desk.rev, note)
+
+# =============================================================================================
+# HP1: the host's START ON, the floor picker of a shared room's Ready-up screen.
+#   client -> server  m|{"t":"startOn","depth":D}   D: -1, the normal start, or one of start_on_destinations()
+#   server -> client  the lobby's "startOn":D while a floor is chosen (absent for the normal start), and
+#                     m|{"t":"startOnNo","depth":D,"why":"host"|"depth"|"running"|"room"}   to the sender alone
+# The choice is the room's: it applies to the next run started, and goes back to the normal start when the host
+# changes or the room empties (_pick_host). A run started from it is a host playtest (playtest_run), as the solo
+# sandbox's (net/local_room.gd start_playtest): it starts on that floor with that floor's deck and everything a
+# normal run of this room has there (the late floors' Ward and Reactor), no orientation prelude, no profile read
+# or written (each player starts with nothing; their own campaign stays as it was), the Reactor's tape kept in
+# memory. A refused choice changes nothing and never closes the connection.
+
+## The floors START ON offers: the solo picker's (net/local_room.gd playtest_destinations) for the game's deck,
+## without the late floors when this room has none. None in a review or practice room.
+func start_on_destinations() -> Array[int]:
+	var out: Array[int] = []
+	if ward_review or reactor_review or orientation_review:
+		return out
+	for d: Dictionary in LocalRoom.playtest_destinations(fixed_seed, Places.FULL):
+		var depth := int(d["depth"])
+		if depth >= HostRules.WARD_DEPTH and not late_floors:
+			continue
+		if not out.has(depth):
+			out.append(depth)
+	return out
+
+func _on_start_on(id: String, p: Dictionary) -> void:
+	# A whole number only (JSON numbers arrive as floats): 2.5 is not floor 2.
+	var raw: Variant = p.get("depth")
+	var depth := int(raw) if (raw is int or (raw is float and is_equal_approx(float(raw), roundf(float(raw))) and absf(float(raw)) < 1000.0)) else -2
+	var why := ""
+	if id != _settings_host_id():
+		why = "host"
+	elif host != null:
+		why = "running"
+	elif ward_review or reactor_review or orientation_review:
+		why = "room"
+	elif depth != -1 and not start_on_destinations().has(depth):
+		why = "depth"
+	if why != "":
+		_ws.send(id, "m|" + JSON.stringify({"t": "startOnNo", "depth": depth, "why": why}))
+		return
+	if depth != start_on:
+		start_on = depth
+		# A changed floor stops the count, so nobody rides down somewhere they did not see first.
+		start_at = -1.0
+		_dirty = true
+		_log.call("the host chose %s" % ("the normal start" if depth < 0 else "floor %d for a playtest" % depth))
+
+# HP1b: the host's END RUN of a host-playtest run.
+#   client -> server  m|{"t":"endRun"}
+#   server -> client  m|{"t":"endRunNo","why":"host"|"none"|"campaign"}   to the sender alone
+# Only the host, only while a run is on, and only a host-playtest run (playtest_run): a campaign run is never ended
+# for everyone, so nobody's progress is lost. It takes the room's own way back to the lobby (_end_run, the same as a
+# finished run's or an emptied room's); the START ON choice stays, so the host can start again or pick another floor.
+func _on_end_run(id: String) -> void:
+	var why := ""
+	if id != _settings_host_id():
+		why = "host"
+	elif host == null:
+		why = "none"
+	elif not playtest_run:
+		why = "campaign"
+	if why != "":
+		_ws.send(id, "m|" + JSON.stringify({"t": "endRunNo", "why": why}))
+		return
+	_log.call("the host ended the playtest run %d" % epoch)
+	_end_run()
+
+func _prepare_playtest_prison(initial: Run.RunState) -> Run.RunState:
+	var s := rules.prepare(initial)
+	var events: Array[Dictionary] = []
+	Run._arrive_home(s, s.players, s.t, events)
+	return s

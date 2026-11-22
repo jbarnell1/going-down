@@ -69,6 +69,7 @@ const FILES: Array[String] = [
 	"test_figures",
 	"prop_late_admit",
 	"prop_leave_net",
+	"prop_host_start_on",
 	"test_prison_deck",
 	"test_intercom",
 	"test_crew_watch",

@@ -31,6 +31,12 @@ var without_at := -1.0
 var run_depth := -1
 var orientation_active := false
 var orientation_paid := 0
+## HP1: the room's START ON as the last lobby said (-1: the normal start), and the host's refused choices.
+var start_on := -1
+var start_on_refusals: Array[Dictionary] = []
+## HP1b: the run on is a host playtest (the lobby's "playtest"), and the host's refused END RUNs ("why" each).
+var playtest_on := false
+var end_run_refusals: Array[String] = []
 ## What this client last said: ready, and watching the tape.
 var my_ready := false
 var my_tape := false
@@ -110,6 +116,24 @@ func set_ready(on: bool, tape: bool = false) -> void:
 		m["tape"] = true
 	_queue("m|" + JSON.stringify(m))
 	_flush(_now)
+
+## HP1: the host's START ON (server/room.gd): the floor the next run starts on as a host playtest, -1 for the
+## normal start. False (nothing sent) unless this player is the host. Refusals land in start_on_refusals.
+func set_start_on(depth: int) -> bool:
+	if not is_host():
+		return false
+	_queue("m|" + JSON.stringify({"t": "startOn", "depth": depth}))
+	_flush(_now)
+	return true
+
+## HP1b: the host's END RUN of a host-playtest run (server/room.gd: everyone back to the lobby). False (nothing
+## sent) unless this player is the host.
+func end_run() -> bool:
+	if not is_host():
+		return false
+	_queue("m|" + JSON.stringify({"t": "endRun"}))
+	_flush(_now)
+	return true
 
 ## The face shown beside this player's name on the Ready-up list.
 func _send_lobby_face() -> void:
@@ -255,6 +279,10 @@ func _on_text(text: String, now: float) -> void:
 				_take_tune(p)
 			"tuneNo":
 				tune_refusals.append({"id": str(p.get("id", "")), "why": str(p.get("why", ""))})
+			"endRunNo":
+				end_run_refusals.append(str(p.get("why", "")))
+			"startOnNo":
+				start_on_refusals.append({"depth": int(p.get("depth", -2)) if (p.get("depth") is float or p.get("depth") is int) else -2, "why": str(p.get("why", ""))})
 			"lobby":
 				people = p["people"]
 				epoch = int(p["epoch"])
@@ -270,6 +298,8 @@ func _on_text(text: String, now: float) -> void:
 				run_depth = int(p.get("depth", -1))
 				orientation_active = p.get("orientationPrelude") == true
 				orientation_paid = maxi(0, int(p.get("orientationPaid", 0)))
+				playtest_on = p.get("playtest") == true
+				start_on = int(p["startOn"]) if (p.get("startOn") is float or p.get("startOn") is int) else -1
 				if was_on and not run_on:
 					# Back on the Ready-up screen: the server has forgotten everyone's ready.
 					my_ready = false

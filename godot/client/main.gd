@@ -948,6 +948,7 @@ func _build_view() -> void:
 	start.leave_pressed.connect(_leave_room)
 	start.screen_shown.connect(_on_screen_shown)
 	start.ready_pressed.connect(_on_ready_pressed)
+	start.start_on_pressed.connect(_on_start_on_pressed)
 	start.watch_tape_pressed.connect(_watch_tape)
 	start.tape_finished.connect(_on_tape_finished)
 	kiosk = FaceKiosk.new()
@@ -1007,7 +1008,7 @@ func _on_screen_shown(which: String) -> void:
 ## The host's tools (PT6): what F6 and F8 do, said once to the host as a game starts and on the controls card.
 const HOST_KEYS_ALONE := "F6 JUMP TO A FLOOR   F8 SETTINGS"
 const HOST_KEYS_ROOM := "YOU ARE THE HOST. F8 CHANGES SETTINGS"
-const F6_IN_ROOM := "THE FLOOR PICKER IS ON THE TITLE: HOST PLAYTEST"
+const F6_IN_ROOM := "THE FLOOR PICKER IS IN THE LOBBY: START ON"
 const HOST_KEYS_MS := 6000
 
 ## A game played alone on this machine (Play Alone, with or without bots, or the sandbox), in a run.
@@ -1223,6 +1224,20 @@ func _lobby_start() -> void:
 	if link != null:
 		link.rc.start_run()
 
+## HP1: the host's START ON in a shared room (the room checks it is the host's and a floor it offers).
+func _on_start_on_pressed(depth: int) -> void:
+	if link != null and not link.local:
+		link.rc.set_start_on(depth)
+
+## HP1: START ON's choices: the normal start, then the solo picker's floors for the game's deck
+## (net/local_room.gd playtest_destinations, so the two never drift), labelled as the solo picker labels them.
+static func start_on_choices() -> Array[Dictionary]:
+	var out: Array[Dictionary] = [{"depth": -1, "label": "THE NORMAL START"}]
+	for destination in LocalRoom.playtest_destinations("", Places.FULL):
+		var depth := int(destination["depth"])
+		out.append({"depth": depth, "label": "THE " + playtest_area(destination["place"])})
+	return out
+
 ## I'M READY (or undone) on the card.
 func _on_ready_pressed(on: bool) -> void:
 	if link != null:
@@ -1277,6 +1292,12 @@ func _pre_run(rc: RoomClient, now: float) -> void:
 	start.without_ok = rc.host_id == rc.my_id and rc.without_at >= 0.0 and now >= rc.without_at and not rc.run_on
 	start.run_depth = rc.run_depth if rc.run_on else -1
 	start.run_practice = rc.run_on and rc.orientation_active
+	# HP1: a shared room's START ON (a solo room has the title's HOST PLAYTEST instead).
+	var shared := link != null and not link.local
+	if shared and start.start_on_choices.is_empty():
+		start.start_on_choices = start_on_choices()
+	start.start_on = int(rc.get("start_on")) if shared and rc.get("start_on") != null else -1
+	start.start_on_host = shared and rc.host_id == rc.my_id and not rc.run_on
 
 func _leave_room() -> void:
 	_back_to_title()
@@ -4726,6 +4747,7 @@ func _sync_esc_menu() -> void:
 		menu_overlay = true
 	esc_menu.in_run = mode == "game"
 	esc_menu.is_host = link != null and bool(link.rc.is_host())
+	esc_menu.playtest = link != null and not link.local and link.rc.get("playtest_on") == true
 	esc_menu.hints_on = announcer.hints.enabled
 	esc_menu.caught_soft = caught_pref.soft
 	esc_menu.shown = hud.menu_on if mode == "game" else (menu_overlay and not start.screen in ["face", "tape", "lobby", "playtest"])
@@ -4768,6 +4790,15 @@ func _esc_chose(id: String) -> void:
 		"host":
 			if not settings_panel.is_open():
 				settings_panel.open()
+			# HP1: in a shared room the floor picker is the lobby's START ON; say so once.
+			if link != null and not link.local:
+				hud.note = F6_IN_ROOM
+				_note_until = Time.get_ticks_msec() + 4000
+		"end":
+			# HP1b: the host ends a host-playtest run for everyone; the room sends the crew back to the lobby.
+			if link != null and not link.local:
+				link.rc.end_run()
+			_esc_resume()
 		"leave":
 			_esc_menu = false
 			t_menu = false
