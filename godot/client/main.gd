@@ -43,6 +43,7 @@ const AirSound = preload("res://client/air_sound.gd")
 const Session = preload("res://net/session.gd")
 const DoorShadow = preload("res://client/door_shadow.gd")
 const Places = preload("res://sim/places.gd")
+const Noises = preload("res://sim/noise.gd")
 const GroundskeeperView = preload("res://client/groundskeeper_view.gd")
 const OrientationView = preload("res://client/orientation_view.gd")
 const MarksView = preload("res://client/marks_view.gd")
@@ -2109,6 +2110,7 @@ func _process(delta: float) -> void:
 	_music_frame()
 	if mic_hud != null:
 		mic_hud.voice_on = mode == "game" and _mic_list() != null
+		_feed_own_noise()
 	if start.screen == "playtest":
 		return
 	frames += 1
@@ -3298,6 +3300,25 @@ func _name_tags(s: Dictionary, dark: bool) -> void:
 			tags.append(tag)
 	hud.tags = tags
 
+## VC4: the noise meter's steps (client/own_noise.gd) from the host's row for this player, on a floor of a run (not
+## the prison, not riding): the gait's loudness on the ground under them, Soft Shoes as the rules apply them.
+func _feed_own_noise() -> void:
+	var plan: Variant = link.plan if link != null else null
+	var me: Variant = snap.get("me")
+	var on_floor: bool = mode == "game" and plan != null and me is Dictionary and plan.place != Places.PRISON and str(snap.get("phase", "")) != "riding"
+	mic_hud.in_run = on_floor
+	if not on_floor:
+		mic_hud.own.steps = 0
+		return
+	var surface := Noises.NONE
+	if level != null and level.has_meta(&"arboretum"):
+		var garden: Object = level.get_meta(&"arboretum")
+		surface = maxi(0, Noises.SURFACE_NAMES.find(str(garden.call(&"surface_at", float(me.get("x", 0.0)), float(me.get("z", 0.0))))))
+	var shoes: Variant = snap.get("shoes")
+	var soft := shoes is Dictionary and (shoes as Dictionary).has(link.my_id())
+	var lc := link.client()
+	mic_hud.own.feed_me(me as Dictionary, Time.get_ticks_msec(), surface, plan.place, soft, lc.tuning if lc != null else null)
+
 ## VC1: the host's list of players whose microphone is listening (Protocol "mic"), or null in a run without the voice.
 func _mic_list() -> Variant:
 	if link == null:
@@ -3397,6 +3418,8 @@ func _present(events: Array, now: int) -> void:
 	announcer.on_events(events, 1, client.quota() if client != null else null)
 	var my := link.my_id()
 	quota_view.on_events(events, my, sfx, now)
+	if mic_hud != null:
+		mic_hud.own.on_events(events, my, Time.get_ticks_msec(), client.tuning if client != null else null)
 	for e: Dictionary in events:
 		var ty := str(e["type"])
 		event_counts[ty] = int(event_counts.get(ty, 0)) + 1
@@ -3937,6 +3960,11 @@ func _command(c: String) -> String:
 			if p.size() >= 2:
 				mic.fake_level = -1 if p[1] == "off" else clampi(int(p[1]), 0, 15)
 			return JSON.stringify(mic.describe())
+		"meter":
+			# VC4: the noise meter's numbers now: the shown level, each source's, whether it is drawn.
+			if mic_hud == null:
+				return "no meter"
+			return JSON.stringify({"level": mic_hud.noise.level, "sources": mic_hud.noise.levels, "inRun": mic_hud.in_run, "alpha": mic_hud.modulate.a})
 		"emote":
 			if p.size() < 2 or not p[1] in Protocol.EMOTES:
 				return "unknown emote"

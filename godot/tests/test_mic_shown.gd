@@ -42,9 +42,24 @@ func test_layer_fills_the_screen(t: T) -> void:
 		t.check(screen.encloses(r), "%dx%d: the mic layer lies inside the screen" % [sz.x, sz.y])
 		# Where the meter's box and the consent card's middle land, by the same sums _draw uses.
 		var px := maxf(2.0, floorf(r.size.y / 320.0))
-		var bar_right := r.size.x - 6.0 * px
-		t.check(bar_right - 15.0 * 4.0 * px > 0.0 and bar_right <= screen.size.x, "%dx%d: the meter's bar is on screen" % [sz.x, sz.y])
+		# The meter's row in the top left (VC4), with its longest hint, inside the screen.
+		var hud: MicHud = MicHud.new()
+		for hint: String in ["TALKING", MicHud.hint_text("none"), MicHud.hint_text("off")]:
+			t.check(screen.encloses(hud.meter_rect(px, hint)), "%dx%d: the meter's row with %s is on screen" % [sz.x, sz.y, hint])
+		hud.free()
 		t.check(screen.has_point(r.size * 0.5), "%dx%d: the consent card's centre is on screen" % [sz.x, sz.y])
+
+## VC4: the meter's row clears the Playroom's ANGER bar and its rate line (client/hud.gd _draw_anger: its own
+## margin, 6 % of the screen in from the top left) at the window sizes players use.
+func test_the_meter_clears_the_anger_bar(t: T) -> void:
+	var hud: MicHud = MicHud.new()
+	for sz: Vector2 in [Vector2(1280, 720), Vector2(1600, 900), Vector2(1920, 1080), Vector2(2560, 1440)]:
+		var px := maxf(2.0, floorf(sz.y / 320.0))
+		var margin := Vector2(maxf(sz.x * 0.06, 16.0), maxf(sz.y * 0.06, 12.0))
+		var anger := Rect2(margin - Vector2(px, 2.0 * px), Vector2(200.0 * px, 26.0 * px))
+		for hint: String in ["TALKING", MicHud.hint_text("none"), MicHud.hint_text("off")]:
+			t.check(not hud.meter_rect(px, hint).intersects(anger), "%dx%d: the meter (%s) is clear of ANGER" % [sz.x, sz.y, hint])
+	hud.free()
 
 func test_the_esc_card_names_m(t: T) -> void:
 	var hud: Control = load("res://client/hud.gd").new()

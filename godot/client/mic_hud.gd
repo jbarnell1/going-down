@@ -1,5 +1,5 @@
 # VC1: the microphone on screen (client/mic.gd). Two things, over the HUD:
-#   - In a run with the voice on, a small meter in the top right corner: MIC and a bar of 15 steps, lit to the level
+#   - In a run (VC4: in the top LEFT corner, with or without the voice), a small meter: MIC and a bar of 15 steps, lit to the level
 #     this machine sends the host (the instrument never lies: the same number), with a mark at the whisper (level 1)
 #     and the talk mark (level 5), W and T under them. Nothing says who hears or how far. Beside it the state: MIC (on,
 #     listening), MIC OFF (turned off; M turns it on), NO MIC (none found or no signal).
@@ -14,6 +14,7 @@ extends Control
 
 const MicMeter = preload("res://client/mic_meter.gd")
 const NoiseMeter = preload("res://client/noise_meter.gd")
+const OwnNoise = preload("res://client/own_noise.gd")
 
 const INK := Color(0.96, 0.96, 0.92)
 const DIM := Color(0.55, 0.56, 0.52)
@@ -38,8 +39,15 @@ const CONSENT_LINES: Array[String] = [
 var mic: Node = null
 ## The run has the voice on (the world's "mic" list is there): the meter shows.
 var voice_on := false
-## The meter's state: a level 0 to 15 from each named source (today &"voice"), the bands' colours and the flash.
+## VC4: the player is on a floor of a run (set by client/main.gd): the noise meter may show, with or without a mic.
+var in_run := false
+## VC4: show the meter even when quiet (the hold-Tab view sets it).
+var force_show := false
+## The meter's state: a level 0 to 15 from each named source (&"voice", &"steps", &"open"), the bands' colours and
+## the flash.
 var noise := NoiseMeter.new()
+## VC4: this player's steps and opens at the rules' loudness (client/own_noise.gd), fed by client/main.gd.
+var own := OwnNoise.new()
 var _hits: Array = []
 
 func _ready() -> void:
@@ -55,8 +63,12 @@ func calib_open() -> bool:
 
 func _process(_dt: float) -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP if consent_open() or calib_open() else Control.MOUSE_FILTER_IGNORE
-	if mic != null:
-		noise.feed(&"voice", int(mic.call(&"level")), Time.get_ticks_msec())
+	var now := Time.get_ticks_msec()
+	noise.feed(&"voice", int(mic.call(&"level")) if mic != null and voice_on else 0, now)
+	noise.feed(&"steps", own.steps if in_run else 0, now)
+	noise.feed(&"open", own.pulse_level(now) if in_run else 0, now)
+	var cards := consent_open() or calib_open()
+	modulate.a = 1.0 if cards else noise.alpha(now, force_show)
 	queue_redraw()
 
 ## The consent card's keys (Y, N, H). True when it took the key; while it is up it takes every key.
@@ -130,8 +142,6 @@ func _text(t: String, at: Vector2, px: float, col: Color) -> void:
 
 func _draw() -> void:
 	_hits = []
-	if mic == null:
-		return
 	var px := _px()
 	if consent_open():
 		_draw_consent(px)
@@ -139,25 +149,31 @@ func _draw() -> void:
 	if calib_open():
 		_draw_calib(px)
 		return
-	if voice_on:
+	if in_run or voice_on:
 		_draw_meter(px)
 
 ## The meter: the state word, then 15 cells, the whisper and talk marks under them.
 func _draw_meter(px: float) -> void:
-	var st := str(mic.get(&"status"))
-	var listening: bool = mic.call(&"listening")
-	var word := "MIC" if listening else ("NO MIC" if st == "none" else "MIC OFF")
-	var col := GREEN if listening else (AMBER if st == "none" else DIM)
+	# Without the voice in this run (or no microphone object) the meter is the steps' and opens' alone: NOISE.
+	var with_mic := voice_on and mic != null
+	var st := str(mic.get(&"status")) if with_mic else "none"
+	var listening: bool = with_mic and bool(mic.call(&"listening"))
+	var word := "NOISE" if not with_mic else ("MIC" if listening else ("NO MIC" if st == "none" else "MIC OFF"))
+	var col := DIM if not with_mic else (GREEN if listening else (AMBER if st == "none" else DIM))
 	var cell := 3.0 * px
 	var gap := px
 	var bar_w := 15.0 * (cell + gap)
-	var word_w := PixelFont.width(word) * px
-	var right := size.x - 6.0 * px
-	var top := 6.0 * px
-	var bar_x := right - bar_w
-	_text(word, Vector2(bar_x - word_w - 4.0 * px, top), px, col)
+	# VC4: the top LEFT corner (the top right holds the tape's PLAY and the floor's counts, and the hint under the
+	# meter ran off the right edge). The word sits in a column as wide as the widest word, so the bar never moves.
+	var word_col := 0.0
+	for w: String in ["NOISE", "MIC", "NO MIC", "MIC OFF"]:
+		word_col = maxf(word_col, PixelFont.width(w) * px)
+	var left := 6.0 * px
+	var top := 5.0 * px
+	var bar_x := left + word_col + 4.0 * px
+	_text(word, Vector2(left, top), px, col)
 	var lv := noise.level
-	var talking: bool = mic.call(&"talking")
+	var talking: bool = with_mic and bool(mic.call(&"talking"))
 	var box := Rect2(Vector2(bar_x - px, top - px), Vector2(bar_w + px, 9.0 * px))
 	draw_rect(box, Color(0, 0, 0, 0.45))
 	# The filled part in the colour of the band the level is in (green, yellow, red); unlit cells dim.
@@ -170,12 +186,28 @@ func _draw_meter(px: float) -> void:
 		draw_rect(box.grow(px), noise.flash_color(), false, 2.0 * px)
 	for mark: Array in [[MicMeter.WHISPER_AT, "W"], [MicMeter.TALK_AT, "T"]]:
 		var x := bar_x + float(int(mark[0]) - 1) * (cell + gap) - gap * 0.5
+		# The whisper and talk marks: ticks through the bar (one row, so the Playroom's ANGER under it stays clear).
 		draw_rect(Rect2(Vector2(x - px * 0.5, top - 2.0 * px), Vector2(px, 11.0 * px)), INK)
-		_text(str(mark[1]), Vector2(x - 2.0 * px, top + 10.0 * px), px, DIM)
+	# One row: TALKING, or what to do about the microphone, right of the bar.
+	var after := Vector2(bar_x + bar_w + 4.0 * px, top)
 	if talking:
-		_text("TALKING", Vector2(bar_x, top + 10.0 * px + 9.0 * px), px, AMBER)
-	if not listening:
-		_text("M: MIC ON" if st != "none" else "NO MICROPHONE SIGNAL", Vector2(bar_x - word_w - 4.0 * px, top + 19.0 * px), px, DIM)
+		_text("TALKING", after, px, AMBER)
+	elif with_mic and not listening:
+		_text(hint_text(st), after, px, DIM)
+
+## VC4: the meter's whole row, for the no-overlap test (`st`: the microphone's status, or "" for none).
+func meter_rect(px: float, hint: String) -> Rect2:
+	var word_col := 0.0
+	for w: String in ["NOISE", "MIC", "NO MIC", "MIC OFF"]:
+		word_col = maxf(word_col, PixelFont.width(w) * px)
+	var left := 6.0 * px
+	var top := 5.0 * px
+	var bar_w := 15.0 * 4.0 * px
+	var right := left + word_col + 4.0 * px + bar_w + 4.0 * px + PixelFont.width(hint) * px
+	return Rect2(Vector2(left - px, top - 2.0 * px), Vector2(right - left + px, 11.0 * px))
+
+static func hint_text(st: String) -> String:
+	return "M: MIC ON" if st != "none" else "NO SIGNAL"
 
 func _draw_calib(px: float) -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.72))
