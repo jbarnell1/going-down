@@ -140,6 +140,16 @@ const HANG_LIFT := 1.0
 func _f(id: StringName, fallback: float) -> float:
 	return Settings.f(tuning, id, fallback)
 
+## WH1c: who is in a home's hiding place (the run flag ward_homes): {id: {"house", "hide" (its index in House.hides),
+## "heard": a noise the Rigger heard came from that hide since they got in}}. The approved rule (21 Nov): the hand finds
+## someone in a hide only if the noise that brought it came from that hide; a player who got in quietly is safe there.
+var hidden := {}
+## How near a hide (flat, to its furniture) a player must stand to get in; how far from it they may move before they
+## are out; how near an inner door to shut or open it.
+const HIDE_REACH := 0.9
+const HIDE_LEAVE := 1.3
+const INNER_DOOR_REACH := 0.9
+
 ## WG1: the layout's options (sim/ward/layout.gd generate): {} today's Ward; the host's run flag `ward_layout` gives
 ## Layout.options(tuning), and the snapshot carries them (layout_wire) so every screen builds the same.
 var layout_options := {}
@@ -225,6 +235,20 @@ func _place_station(seed_value: int) -> void:
 	rng.seed = seed_value * 7919 + 4721
 	station_house = pool[rng.randi_range(0, pool.size() - 1)]
 	var fixture := houses[station_house]
+	if fixture.homes():
+		# WH1: in a home, the ground-floor room farthest from the front door, at its probe or the next room's.
+		var spots: Array[Vector3] = []
+		for room: StringName in fixture.areas:
+			spots.append(fixture.areas[room])
+		var front := fixture.door.get_center()
+		spots.sort_custom(func(a: Vector3, b: Vector3) -> bool: return a.distance_squared_to(front) > b.distance_squared_to(front))
+		for local in spots:
+			var at := fixture.to_world(Vector3(local.x, 0.0, local.z))
+			if walk_clear(at, at):
+				station = at
+				return
+		station = fixture.to_world(Vector3(spots[0].x, 0.0, spots[0].z))
+		return
 	var door := fixture.room_doors[1]
 	var rear: Vector3 = fixture.areas[&"rear"]
 	var tries: Array[Vector3] = [Vector3(door.x * 0.35, 0.0, door.z + 0.8), Vector3(door.x, 0.0, door.z + 0.7), Vector3(rear.x, 0.0, rear.z)]
@@ -253,6 +277,12 @@ func _place_hang_points(seed_value: int) -> void:
 		if hang_points.size() >= HANG_POINTS:
 			break
 		var fixture := houses[i]
+		if fixture.homes():
+			# WH1: the middle of the room the front door opens into.
+			var first: Vector3 = fixture.areas[fixture.openings()[0].room]
+			var where := fixture.to_world(Vector3(first.x, 0.0, first.z))
+			hang_points.append({"house": i, "at": where, "hang": where + Vector3.UP * HANG_LIFT})
+			continue
 		var entry: Vector3 = fixture.areas[&"entry"]
 		var spot := fixture.to_world(Vector3(entry.x, 0.0, fixture.room_doors[0].z * 0.5))
 		if not walk_clear(spot, spot):
@@ -439,7 +469,17 @@ func step(now: float, delta: float, boarding_seconds: float, crew: Dictionary) -
 			continue
 		var at: Vector3 = member.position
 		if member.get("use", false) and not at_web.has(id):
-			_use_near(at, now, crew, events)
+			_use_near(at, now, crew, events, bool(member.get("sprint", false)))
+		# WH1c: the hide key in a home; a hidden player's noises come from their hide.
+		if member.get("hide", false):
+			toggle_hide(id, at, bool(member.get("hide_fast", false)) or bool(member.get("sprint", false)), now, events)
+		if hidden.has(id):
+			var spot := hide_feet(id)
+			if Vector2(at.x - spot.x, at.z - spot.z).length() > HIDE_LEAVE:
+				hidden.erase(id)
+				events.append({"kind": &"hide_out", "at": now, "id": id})
+			else:
+				at = spot
 		var was: Vector3 = _last_pos.get(id, at)
 		_last_pos[id] = at
 		var moving := delta > 0.0 and Vector2(at.x - was.x, at.z - was.z).length() / delta >= MOVING_SPEED
@@ -448,6 +488,7 @@ func step(now: float, delta: float, boarding_seconds: float, crew: Dictionary) -
 		if member.get("sprint", false) and now >= float(_sprint_at.get(id, -INF)):
 			_sprint_at[id] = now + 0.65
 			_hear_point(at, now, events, true, id)
+			_heard_from_hide(id)
 		elif moving and not member.get("creep", false) and not member.get("sprint", false) and now >= float(_step_at.get(id, -INF)):
 			_step_at[id] = now + STEP_EVERY
 			var reach := _f(&"rigger.steps_reach", STEPS_REACH)
@@ -464,6 +505,7 @@ func step(now: float, delta: float, boarding_seconds: float, crew: Dictionary) -
 			if voice_reach > 0.0 and _flat(at, lair) <= voice_reach:
 				_voice_at[id] = now + STEP_EVERY
 				_hear_point(at, now, events, false, id if voice_r >= _f(&"noise.voice_shout", VOICE_SHOUT) - 1e-9 else "")
+				_heard_from_hide(id)
 		if member.get("recording", false) and encounter == &"searching" and arm != null and arm.points.size() > 1:
 			var reach := _f(&"rigger.click_reach", CLICK_REACH)
 			if reach > 0.0 and (at + Vector3.UP * 1.25).distance_to(houses[resident_house].to_world(arm.points[-1])) <= reach:
@@ -521,7 +563,7 @@ func _hear_point(at: Vector3, now: float, events: Array[Dictionary], _loud := tr
 			near = gap
 			best = i
 	if best >= 0:
-		_hear(best, &"entry", now, events, at)
+		_hear(best, houses[best].front_room(), now, events, at)
 
 ## WN2: a noise the run made at a point (a flare's burst, a toy's rattle; sim/run.gd step_ward_kit) is heard the same
 ## way, at the same times step hears a sprint (the lift gone and not yet left again). Returns the cues it raised.
@@ -536,21 +578,29 @@ func hear_at(at: Vector3, now: float) -> Array[Dictionary]:
 func throw_landing(from: Vector3, motion: Vector2) -> Vector3:
 	return walk(from, motion)
 
-func _use_near(at: Vector3, now: float, crew: Dictionary, events: Array[Dictionary]) -> void:
+func _use_near(at: Vector3, now: float, crew: Dictionary, events: Array[Dictionary], fast := false) -> void:
 	for button in switches:
 		if at.distance_to(button.position) <= WINCH_REACH:
 			if bridge_lowered and _shortcut_occupied(crew):
 				return
 			bridge_lowered = not bridge_lowered
 			events.append({"kind": &"bridge", "at": now, "house": button.house, "lowered": bridge_lowered})
-			_hear(button.house, &"entry", now, events)
+			_hear(button.house, houses[button.house].front_room(), now, events)
 			return
+	# WH1c: an inner door of a home within reach, nearer than its front door, is the one used.
+	var inner := _inner_door_near(at)
+	if inner[0] >= 0:
+		use_inner_door(inner[0], inner[1], fast, now, events, crew)
+		return
 	for i in houses.size():
 		var near := houses[i].to_local(at)
+		# WH1: a home's front door need not be in the middle of its front wall.
+		if houses[i].homes():
+			near.x -= houses[i].door.get_center().x
 		if Vector2(near.x, near.z).length() < 1.12 and absf(near.y) < 0.6:
 			requested_doors[i] = not bool(requested_doors.get(i, true))
 			if _f(&"rigger.door_heard", DOOR_HEARD) >= 0.5:
-				_hear(i, &"entry", now, events)
+				_hear(i, houses[i].front_room(), now, events)
 			return
 
 func _shortcut_occupied(crew: Dictionary) -> bool:
@@ -603,9 +653,10 @@ func _pursue(now: float, delta: float, crew: Dictionary, events: Array[Dictionar
 		var member: Dictionary = crew[id]
 		if not member.get("active", true) or member.get("aboard", false):
 			continue
-		var local := house.to_local(member.position + Vector3.UP * 1.25)
-		if house.area_at(local) != &"":
+		var local: Variant = arm_contact(id, member, resident_house)
+		if local != null and house.area_at(local) != &"":
 			contacts[id] = local
+	sync_inner_doors()
 	arm.step(delta, contacts, bool(requested_doors.get(resident_house, true)))
 	for id: String in arm.contacts:
 		if not caught.has(id):
@@ -719,6 +770,13 @@ func _walk_piece(from: Vector3, motion: Vector2) -> Vector3:
 ## WC1: the block's extras, only with the call or the web on (empty with both off, so the block is what it was).
 func extras() -> Dictionary:
 	var out := {}
+	# WH1c: the homes' shut inner doors and who is hidden where (only in a Ward of homes).
+	if not houses.is_empty() and houses[0].homes():
+		out["inner"] = inner_doors_wire()
+		var rows := {}
+		for id: String in hidden:
+			rows[id] = [int(hidden[id].house), int(hidden[id].hide)]
+		out["hidden"] = rows
 	if called:
 		out["called"] = true
 		out["station"] = [snappedf(station.x, 0.01), snappedf(station.y, 0.01), snappedf(station.z, 0.01)]
@@ -744,6 +802,160 @@ func snapshot(clock := 0.0) -> Dictionary:
 	if roam != null:
 		out["rigger"] = roam.snapshot()
 	return out
+
+# ------------------------------------------------------------------------------------------------
+# WH1c: hiding places and inner doors in the Ward's homes (the run flag ward_homes; sim/ward/house.gd, sim/hides.gd).
+# Nothing here acts on today's houses: they have no hides and no inner doors.
+
+## Get into the nearest free hide within reach of a player (feet) in a home, or out of the one they are in. Getting in
+## fast (sprint held) is a noise from that hide, so the hand can find them there.
+func toggle_hide(id: String, feet: Vector3, fast: bool, now: float, events: Array[Dictionary]) -> bool:
+	if hidden.has(id):
+		hidden.erase(id)
+		events.append({"kind": &"hide_out", "at": now, "id": id})
+		return true
+	var best := [-1, -1]
+	var near := HIDE_REACH
+	for i in houses.size():
+		var h := houses[i]
+		if h.hides.is_empty():
+			continue
+		var local := h.to_local(feet)
+		for k in h.hides.size():
+			var hide: Dictionary = h.hides[k]
+			var box: AABB = hide.box
+			if absf(local.y - box.position.y) > 0.6:
+				continue
+			var flat := Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
+			var gap := (Vector2(local.x, local.z) - Vector2(local.x, local.z).clamp(flat.position, flat.end)).length()
+			if gap <= near and _hide_room(i, k) < int(hide.capacity):
+				near = gap
+				best = [i, k]
+	if best[0] < 0:
+		return false
+	hidden[id] = {"house": best[0], "hide": best[1], "heard": false}
+	events.append({"kind": &"hide_in", "at": now, "id": id, "house": best[0], "hide": best[1], "fast": fast})
+	if fast:
+		_hear_point(hide_feet(id), now, events, true, id)
+		_heard_from_hide(id)
+	return true
+
+## How many are in a hide now.
+func _hide_room(house: int, hide: int) -> int:
+	var n := 0
+	for row: Dictionary in hidden.values():
+		if int(row.house) == house and int(row.hide) == hide:
+			n += 1
+	return n
+
+## A noise the Rigger heard came from where this hidden player is: from now the hand can find them there.
+func _heard_from_hide(id: String) -> void:
+	if hidden.has(id):
+		hidden[id].heard = true
+
+## Where a hidden player's hand-search point is (local, arm height): over a low hide (bed, table, bath), or before the
+## door of a tall one (wardrobe), on the side of its room.
+func hide_reach_local(house: int, hide: int) -> Vector3:
+	var h := houses[house]
+	var row: Dictionary = h.hides[hide]
+	var box: AABB = row.box
+	var y := box.position.y + House.ARM_HEIGHT
+	var centre := Vector3(box.get_center().x, y, box.get_center().z)
+	if box.end.y < y - House.ArmSearch.PALM_RADIUS:
+		return centre
+	var probes: Dictionary = h.areas if int(row.level) == 0 else h.upper_areas(int(row.level))
+	var room: Vector3 = probes.get(row.room, centre)
+	var out := room - centre
+	var x_side := absf(out.x) * box.size.z > absf(out.z) * box.size.x
+	if x_side:
+		centre.x = (box.end.x if out.x > 0.0 else box.position.x) + signf(out.x) * 0.3
+	else:
+		centre.z = (box.end.z if out.z > 0.0 else box.position.z) + signf(out.z) * 0.3
+	return centre
+
+## A hidden player's feet for noises (world): under their hide's search point.
+func hide_feet(id: String) -> Vector3:
+	var row: Dictionary = hidden[id]
+	var local := hide_reach_local(int(row.house), int(row.hide))
+	local.y -= House.ARM_HEIGHT
+	return houses[int(row.house)].to_world(local)
+
+## The point (local to `house`) where the arm touches a player, or null when it cannot: a player in a hide is touched
+## only when a noise from that hide was heard, and then at the hide (today's: their torso, as always).
+func arm_contact(id: String, member: Dictionary, house: int) -> Variant:
+	if hidden.has(id):
+		var row: Dictionary = hidden[id]
+		if int(row.house) != house or not bool(row.heard):
+			return null
+		return hide_reach_local(house, int(row.hide))
+	return houses[house].to_local(member.position + Vector3.UP * 1.25)
+
+## The inner door of a home nearest a player (feet) within reach and nearer than that home's front door: [house, door],
+## or [-1, -1].
+func _inner_door_near(at: Vector3) -> Array:
+	var best := [-1, -1]
+	var near := INNER_DOOR_REACH
+	for i in houses.size():
+		var h := houses[i]
+		if h.inner_doors.is_empty():
+			continue
+		var local := h.to_local(at)
+		var front := Vector2(local.x - h.door.get_center().x, local.z).length()
+		for k in h.inner_doors.size():
+			var door_at: Vector3 = h.inner_doors[k].at
+			if absf(local.y - door_at.y) > 0.6:
+				continue
+			var d := Vector2(local.x - door_at.x, local.z - door_at.z).length()
+			if d <= near and d < front:
+				near = d
+				best = [i, k]
+	return best
+
+## Shut or open a home's inner door. A shut door stops the arm and walkers; it cannot be shut on the arm or on a
+## player in the doorway (then nothing happens). Shutting it fast (sprint held) is a noise at the door.
+func use_inner_door(house: int, door: int, fast: bool, now: float, events: Array[Dictionary], crew := {}) -> bool:
+	var h := houses[house]
+	var leaf: AABB = h.inner_doors[door].leaf
+	var open := h.inner_open[door] == 1
+	if open:
+		if arm != null and resident_house == house:
+			for i in range(1, arm.points.size()):
+				if House.ArmSearch._hits_box(arm.points[i - 1], arm.points[i], leaf, House.ArmSearch.PALM_RADIUS):
+					return false
+		for row: Dictionary in crew.values():
+			if not row.get("active", true):
+				continue
+			var waist := h.to_local((row.position as Vector3) + Vector3.UP * 0.84)
+			if House.ArmSearch._hits_box(waist, waist, leaf, 0.15):
+				return false
+	h.inner_open[door] = 0 if open else 1
+	events.append({"kind": &"inner_door", "at": now, "house": house, "door": door, "open": not open, "fast": fast})
+	if open and fast:
+		_hear_point(h.to_world(h.inner_doors[door].at), now, events, true)
+	sync_inner_doors()
+	return true
+
+## The arm sees its house's inner doors as they stand now.
+func sync_inner_doors() -> void:
+	if arm != null and resident_house >= 0 and houses[resident_house].homes():
+		arm.inner_doors_open(houses[resident_house].inner_open)
+
+## The homes' inner doors for the Ward block: one number per house, bit k set for each shut door k.
+func inner_doors_wire() -> Array:
+	var out := []
+	for h in houses:
+		var mask := 0
+		for k in h.inner_open.size():
+			if h.inner_open[k] == 0:
+				mask |= 1 << k
+		out.append(mask)
+	return out
+
+## A screen's walk model takes the block's inner doors.
+func set_inner_doors_wire(masks: Array) -> void:
+	for i in mini(masks.size(), houses.size()):
+		for k in houses[i].inner_open.size():
+			houses[i].inner_open[k] = 0 if (int(masks[i]) >> k) & 1 == 1 else 1
 
 func _snapshot(clock := 0.0) -> Dictionary:
 	var points: Array = []

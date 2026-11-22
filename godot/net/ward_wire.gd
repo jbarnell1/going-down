@@ -55,12 +55,15 @@ static func decode(raw: Variant) -> Dictionary:
 			return {}
 	if layout_at >= 0:
 		var lay: Variant = s[layout_at]
-		# RL1: a fourth element, 1, only with the run flag ward_lift_clear (sim/ward/layout.gd to_wire).
-		if lay.size() != 3 and lay.size() != 4:
+		# RL1: a fourth element, 1, only with the run flag ward_lift_clear (sim/ward/layout.gd to_wire). WH1: a fifth
+		# element, 1, only with the run flag ward_homes, and then the fourth is always there (0 or 1).
+		if lay.size() < 3 or lay.size() > 5:
 			return {}
 		if not _integer(lay[0], 2, 2) or not _integer(lay[1], 50, 300) or not _integer(lay[2], 0, 500):
 			return {}
 		if lay.size() == 4 and not _integer(lay[3], 1, 1):
+			return {}
+		if lay.size() == 5 and (not _integer(lay[3], 0, 1) or not _integer(lay[4], 1, 1)):
 			return {}
 	if extras_at >= 0 and not _extras_ok(s[extras_at]):
 		return {}
@@ -88,8 +91,8 @@ static func decode(raw: Variant) -> Dictionary:
 		out["native"] = true
 	if layout_at >= 0:
 		out["layout"] = [int(s[layout_at][0]), int(s[layout_at][1]), int(s[layout_at][2])]
-		if (s[layout_at] as Array).size() == 4:
-			out["layout"].append(1)
+		for extra in range(3, (s[layout_at] as Array).size()):
+			(out["layout"] as Array).append(int(s[layout_at][extra]))
 	if extras_at >= 0:
 		var extras: Dictionary = (s[extras_at] as Dictionary).duplicate()
 		if extras.has("rigger"):
@@ -104,10 +107,24 @@ static func _extras_ok(e: Variant) -> bool:
 	if not e is Dictionary:
 		return false
 	for key: Variant in e:
-		if not key in ["called", "station", "stationHouse", "hangPoints", "web", "cuts", "rigger"]:
+		if not key in ["called", "station", "stationHouse", "hangPoints", "web", "cuts", "rigger", "inner", "hidden"]:
 			return false
 	if e.has("rigger") and _rigger(e["rigger"]).is_empty():
 		return false
+	# WH1c: the homes' shut inner doors (a mask a house) and who is hidden in which hide.
+	if e.has("inner"):
+		if not e["inner"] is Array or e["inner"].size() > 8:
+			return false
+		for mask: Variant in e["inner"]:
+			if not _integer(mask, 0, 65535):
+				return false
+	if e.has("hidden"):
+		if not e["hidden"] is Dictionary or e["hidden"].size() > 8:
+			return false
+		for id: Variant in e["hidden"]:
+			var row: Variant = e["hidden"][id]
+			if not id is String or id.length() > 64 or not row is Array or row.size() != 2 or not _integer(row[0], 0, 7) or not _integer(row[1], 0, 63):
+				return false
 	if e.has("called") and not e["called"] is bool:
 		return false
 	if e.has("station") and not _point(e["station"]):

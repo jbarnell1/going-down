@@ -139,12 +139,17 @@
 #    switches it off): each player's microphone level (0 to 15, an input element; no audio is ever sent) becomes a noise
 #    where they were, in three bands (noise.voice_whisper, voice_talk, voice_shout), heard by the Groundskeeper, the
 #    Minder, the Rigger and the Reactor's four, each by its own live setting (0: deaf). sim/run.gd "VC1".
-#  - RL1, `ward_lift_clear`, the last parameter, after `voice` (off unless asked, and only with `ward_layout`; the game's
+#  - RL1, `ward_lift_clear`, the parameter after `voice` (off unless asked, and only with `ward_layout`; the game's
 #    rooms ask for it wherever they ask for the layout, `ward_lift_clear=0` switches it off). The owner, 21 Nov: "I'm ok
 #    with making the lift never the lowest house". The Rigger lives below the lowest house; with this the generated
 #    Ward never makes that the lift's own (sim/ward/layout.gd LIFT_CLEAR). Seeds where another house is already lower
 #    are the same Ward. net/host.gd puts it in the layout's options, so the block carries it and every screen builds
 #    the same Ward. The agreed tail: ..., voice_, ward_lift_clear_, ward_homes_ (WH1).
+#  - WH1, `ward_homes`, the last parameter, after `ward_lift_clear` (off unless asked, and only with `ward_layout`; the game's rooms
+#    ask for it only when started with `ward_homes=1`): the Hanging Ward's houses are built from six house types
+#    (data/ward_homes.json, sim/ward/homes.gd) with rooms, furniture, inner doors and hiding places, and the Rigger's
+#    arm bends round their walls and furniture by itself (sim/ward/house.gd, sim/ward/arm.gd). Run.with_ward_homes marks
+#    the run; net/host.gd puts it in the Ward's layout options so every screen builds the same.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -276,8 +281,10 @@ var split: bool
 var economy_fix: bool
 ## VC1, the microphone (the last parameter, after economy_fix_; see the header).
 var voice: bool
-## RL1, the lift's house never the lowest (the last parameter, after voice_; see the header). Only with ward_layout.
+## RL1, the lift's house never the lowest (after voice_; see the header). Only with ward_layout.
 var ward_lift_clear: bool
+## WH1, the Ward's real homes (the last parameter, after ward_lift_clear_; see the header).
+var ward_homes: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -308,9 +315,11 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		ward_web_: bool = false, rigger_roam_: bool = false, ward_layout_: bool = false, orderly_fix_: bool = false,
 		minder_calm_: bool = false, down_ring_: bool = false, pn_fixes_: bool = false, last_stand_: bool = false,
 		deal_: bool = false, split_: bool = false, economy_fix_: bool = false, voice_: bool = false,
-		ward_lift_clear_: bool = false) -> void:
+		ward_lift_clear_: bool = false, ward_homes_: bool = false) -> void:
 	voice = voice_
 	ward_lift_clear = ward_lift_clear_ and ward_layout_ and late_floors_
+	# WH1: only with the Ward laid out from the seed (the homes need its cells).
+	ward_homes = ward_homes_ and ward_layout_ and late_floors_
 	last_stand = last_stand_
 	deal = deal_
 	split = split_
@@ -460,6 +469,9 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 	# VC1: a player's microphone level becomes a noise where they were (sim/run.gd "VC1").
 	if voice and not s.voice:
 		s = Run.with_voice(s)
+	# WH1: the Ward's homes (net/host.gd reads this flag as the Ward starts).
+	if ward_homes and not s.ward_homes:
+		s = Run.with_ward_homes(s)
 	if quota and _entity_on and not s.quota:
 		s = Run.with_quota(s)
 	if downs and not s.downs:
@@ -636,6 +648,13 @@ static func voice_by_arg() -> bool:
 ## `?ward_lift_clear=0` on the web page).
 static func ward_lift_clear_by_arg() -> bool:
 	return not _arg_off("ward_lift_clear")
+
+## WH1: the Ward's homes only when the game was started with `ward_homes=1` (off by default for now).
+static func ward_homes_on_by_arg() -> bool:
+	for raw in OS.get_cmdline_user_args():
+		if raw.trim_prefix("--") == "ward_homes=1":
+			return true
+	return false
 
 static func _arg_off(name: String) -> bool:
 	for raw in OS.get_cmdline_user_args():

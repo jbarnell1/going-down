@@ -1,0 +1,377 @@
+{
+  "about": "WH1: the Hanging Ward's six house types (sim/ward/house.gd with the run flag ward_homes). Plan metres: x from the left outer wall's inner face to the right (the seed may mirror it), z from the front wall to the back. Rooms are rectangles [x0, z0, x1, z1] that tile each storey. A door joins two rooms on their shared edge; its centre is drawn from the seed in `at` (along that edge). Windows are where the Rigger's hand can come in: `wall` left, right, front or back, `at` the middle of the hole along that wall. A stair on storey s climbs from storey s-1 along `axis` x or z, at `lane`, from `from` (bottom) to `to` (top). Furniture `at` lists the places it may stand [x0, z0, x1, z1], one drawn from the seed; `h` its height; `hide` the kind of hiding place it makes.",
+  "types": [
+    {
+      "id": "parlour",
+      "styles": ["parlour_cottage"],
+      "about": "The lift's house keeps today's footprint, as the house stands: 6.2 m along its front, 6.8 m deep, the lift on its left wall.",
+      "w": 6.2, "d": 6.8,
+      "variants": [
+        {
+          "id": "parlour",
+          "door": {"at": [4.9, 4.9], "w": 1.24},
+          "storeys": [
+            {
+              "rooms": [
+                {"name": "parlour", "kind": "parlour", "rect": [0.0, 0.0, 3.6, 4.6]},
+                {"name": "lobby", "kind": "lobby", "rect": [3.6, 0.0, 6.2, 2.2]},
+                {"name": "kitchen", "kind": "kitchen", "rect": [3.6, 2.2, 6.2, 6.8]},
+                {"name": "bedroom", "kind": "bedroom", "rect": [0.0, 4.6, 3.6, 6.8]}
+              ],
+              "doors": [
+                {"rooms": ["parlour", "lobby"], "w": 1.0, "at": [0.9, 1.3]},
+                {"rooms": ["lobby", "kitchen"], "w": 1.0, "at": [4.4, 5.4]},
+                {"rooms": ["parlour", "bedroom"], "w": 1.0, "at": [2.0, 2.7]}
+              ],
+              "windows": [
+                {"wall": "front", "at": 1.8, "room": "parlour"},
+                {"wall": "right", "at": 5.0, "room": "kitchen"},
+                {"wall": "back", "at": 1.6, "room": "bedroom"}
+              ],
+              "furniture": [
+                {"kind": "hearth", "room": "parlour", "h": 1.1, "at": [[3.1, 2.6, 3.52, 3.8]]},
+                {"kind": "armchair", "room": "parlour", "h": 0.9, "at": [[2.2, 2.8, 2.8, 3.4], [2.2, 1.5, 2.8, 2.1]]},
+                {"kind": "hooks", "room": "lobby", "h": 1.8, "at": [[5.85, 0.3, 6.12, 1.6]]},
+                {"kind": "range", "room": "kitchen", "h": 0.9, "at": [[5.4, 6.1, 6.12, 6.72]]},
+                {"kind": "dresser", "room": "kitchen", "h": 2.0, "at": [[3.7, 4.0, 4.15, 5.5]]},
+                {"kind": "sink", "room": "kitchen", "h": 0.85, "at": [[5.7, 4.4, 6.12, 5.2]]},
+                {"kind": "table", "room": "kitchen", "h": 0.75, "hide": "table", "at": [[4.4, 3.0, 5.4, 3.8], [4.4, 4.3, 5.4, 5.1]]},
+                {"kind": "bed", "room": "bedroom", "h": 0.55, "hide": "bed", "at": [[0.15, 4.8, 1.15, 6.7]]},
+                {"kind": "wardrobe", "room": "bedroom", "h": 2.0, "hide": "wardrobe", "at": [[2.8, 6.1, 3.5, 6.7]]},
+                {"kind": "drawers", "room": "bedroom", "h": 0.9, "at": [[2.1, 6.3, 2.65, 6.7]]}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "two_room",
+      "styles": ["lampkeepers_cottage"],
+      "w": 6.0, "d": 5.0,
+      "variants": [
+        {
+          "id": "two_room",
+          "door": {"at": [2.6, 3.2], "w": 1.06},
+          "storeys": [
+            {
+              "rooms": [
+                {"name": "living", "kind": "kitchen", "rect": [0.0, 0.0, 6.0, 2.8]},
+                {"name": "bedroom", "kind": "bedroom", "rect": [0.0, 2.8, 3.6, 5.0]},
+                {"name": "washroom", "kind": "bathroom", "rect": [3.6, 2.8, 6.0, 5.0]}
+              ],
+              "doors": [
+                {"rooms": ["living", "bedroom"], "w": 1.0, "at": [1.9, 2.6]},
+                {"rooms": ["living", "washroom"], "w": 1.0, "at": [4.3, 5.2]}
+              ],
+              "windows": [
+                {"wall": "left", "at": 1.4, "room": "living"},
+                {"wall": "back", "at": 1.8, "room": "bedroom"}
+              ],
+              "furniture": [
+                {"kind": "range", "room": "living", "h": 0.9, "at": [[0.15, 2.1, 0.95, 2.7]]},
+                {"kind": "table", "room": "living", "h": 0.75, "hide": "table", "at": [[3.9, 0.9, 5.1, 1.7], [4.2, 0.6, 5.4, 1.4]]},
+                {"kind": "shelf", "room": "living", "h": 1.6, "at": [[5.55, 0.2, 5.92, 1.3]]},
+                {"kind": "bed", "room": "bedroom", "h": 0.55, "hide": "bed", "at": [[0.15, 3.0, 1.15, 4.9]]},
+                {"kind": "wardrobe", "room": "bedroom", "h": 2.0, "hide": "wardrobe", "at": [[2.95, 3.6, 3.52, 4.3]]},
+                {"kind": "bath", "room": "washroom", "h": 0.6, "hide": "bath", "at": [[4.4, 4.15, 5.9, 4.92]]},
+                {"kind": "toilet", "room": "washroom", "h": 0.8, "at": [[3.72, 4.4, 4.15, 4.92]]}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "terrace",
+      "styles": ["weavers_terrace", "hoist_rowhouse", "attic_workshop"],
+      "w": 4.8, "d": 8.0,
+      "variants": [
+        {
+          "id": "terrace",
+          "styles": ["weavers_terrace"],
+          "door": {"at": [2.2, 2.6], "w": 1.06},
+          "storeys": [
+            {
+              "rooms": [
+                {"name": "front_room", "kind": "parlour", "rect": [0.0, 0.0, 4.8, 2.6]},
+                {"name": "hall", "kind": "hall", "rect": [0.0, 2.6, 4.8, 4.6]},
+                {"name": "kitchen", "kind": "kitchen", "rect": [0.0, 4.6, 4.8, 6.8]},
+                {"name": "bathroom", "kind": "bathroom", "rect": [0.0, 6.8, 4.8, 8.0]}
+              ],
+              "doors": [
+                {"rooms": ["front_room", "hall"], "w": 1.0, "at": [0.8, 1.1]},
+                {"rooms": ["hall", "kitchen"], "w": 1.0, "at": [0.75, 0.9]},
+                {"rooms": ["kitchen", "bathroom"], "w": 1.0, "at": [1.9, 2.5]}
+              ],
+              "windows": [
+                {"wall": "right", "at": 5.7, "room": "kitchen"}
+              ],
+              "furniture": [
+                {"kind": "armchair", "room": "front_room", "h": 0.9, "at": [[3.6, 1.0, 4.2, 1.6], [0.3, 0.4, 0.9, 1.0]]},
+                {"kind": "cabinet", "room": "front_room", "h": 1.1, "at": [[3.7, 2.05, 4.7, 2.5]]},
+                {"kind": "sink", "room": "kitchen", "h": 0.85, "at": [[4.25, 5.3, 4.72, 6.1]]},
+                {"kind": "range", "room": "kitchen", "h": 0.9, "at": [[0.1, 6.05, 0.9, 6.72]]},
+                {"kind": "table", "room": "kitchen", "h": 0.75, "hide": "table", "at": [[1.8, 5.0, 3.2, 5.9], [1.6, 5.0, 3.0, 5.9]]},
+                {"kind": "bath", "room": "bathroom", "h": 0.6, "hide": "bath", "at": [[3.2, 6.95, 4.72, 7.92]]},
+                {"kind": "toilet", "room": "bathroom", "h": 0.8, "at": [[0.1, 7.45, 0.55, 7.92]]}
+              ]
+            },
+            {
+              "stair": {"axis": "x", "lane": 4.0, "from": 1.45, "to": 4.45},
+              "rooms": [
+                {"name": "front_bedroom", "kind": "bedroom", "rect": [0.0, 0.0, 4.8, 3.2]},
+                {"name": "landing", "kind": "landing", "rect": [0.0, 3.2, 4.8, 5.4]},
+                {"name": "back_bedroom", "kind": "bedroom", "rect": [0.0, 5.4, 4.8, 8.0]}
+              ],
+              "doors": [
+                {"rooms": ["front_bedroom", "landing"], "w": 1.0, "at": [0.7, 0.8]},
+                {"rooms": ["landing", "back_bedroom"], "w": 1.0, "at": [1.5, 2.6]}
+              ],
+              "windows": [
+                {"wall": "front", "at": 2.4, "room": "front_bedroom"},
+                {"wall": "back", "at": 2.4, "room": "back_bedroom"}
+              ],
+              "furniture": [
+                {"kind": "bed", "room": "front_bedroom", "h": 0.55, "hide": "bed", "at": [[2.9, 0.6, 4.7, 2.6]]},
+                {"kind": "drawers", "room": "front_bedroom", "h": 0.9, "at": [[0.1, 0.1, 0.95, 0.55]]},
+                {"kind": "bed", "room": "back_bedroom", "h": 0.55, "hide": "bed", "at": [[0.1, 6.0, 1.0, 7.92]]},
+                {"kind": "bed", "room": "back_bedroom", "h": 0.55, "hide": "bed", "at": [[3.8, 6.1, 4.72, 7.92]]},
+                {"kind": "wardrobe", "room": "back_bedroom", "h": 2.0, "hide": "wardrobe", "at": [[3.3, 5.5, 4.72, 5.95]]}
+              ]
+            }
+          ]
+        },
+        {
+          "id": "hoist",
+          "styles": ["hoist_rowhouse"],
+          "copy": "terrace",
+          "upper_windows": [
+            {"wall": "front", "at": 1.1, "room": "front_bedroom"},
+            {"wall": "front", "at": 3.6, "room": "front_bedroom"},
+            {"wall": "back", "at": 2.4, "room": "back_bedroom"}
+          ]
+        },
+        {
+          "id": "attic",
+          "styles": ["attic_workshop"],
+          "copy": "terrace",
+          "upper_rooms": {"back_bedroom": "workshop"},
+          "upper_furniture": [
+            {"kind": "bed", "room": "front_bedroom", "h": 0.55, "hide": "bed", "at": [[2.9, 0.6, 4.7, 2.6]]},
+            {"kind": "drawers", "room": "front_bedroom", "h": 0.9, "at": [[0.1, 0.1, 0.95, 0.55]]},
+            {"kind": "bench", "room": "back_bedroom", "h": 0.9, "at": [[0.1, 6.0, 0.8, 7.92]]},
+            {"kind": "tool_wall", "room": "back_bedroom", "h": 2.0, "at": [[4.3, 6.2, 4.72, 7.6]]},
+            {"kind": "wardrobe", "room": "back_bedroom", "h": 2.0, "hide": "wardrobe", "at": [[3.3, 5.5, 4.72, 5.95]]}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shop_flat",
+      "styles": ["laundry_maisonette"],
+      "w": 8.6, "d": 5.0,
+      "variants": [
+        {
+          "id": "laundry",
+          "door": {"at": [2.6, 3.0], "w": 1.06},
+          "storeys": [
+            {
+              "rooms": [
+                {"name": "laundry", "kind": "shop", "rect": [0.0, 0.0, 5.6, 5.0]},
+                {"name": "counting_room", "kind": "office", "rect": [5.6, 0.0, 8.6, 2.2]},
+                {"name": "scullery", "kind": "kitchen", "rect": [5.6, 2.2, 8.6, 5.0]}
+              ],
+              "doors": [
+                {"rooms": ["laundry", "counting_room"], "w": 1.0, "at": [1.1, 1.4]},
+                {"rooms": ["laundry", "scullery"], "w": 1.0, "at": [2.9, 3.3]}
+              ],
+              "windows": [
+                {"wall": "left", "at": 2.0, "room": "laundry"}
+              ],
+              "furniture": [
+                {"kind": "copper", "room": "laundry", "h": 1.0, "at": [[0.1, 0.1, 1.2, 0.95]]},
+                {"kind": "drying_rack", "room": "laundry", "h": 1.8, "at": [[1.7, 1.3, 3.5, 1.6], [2.0, 2.4, 3.8, 2.7]]},
+                {"kind": "mangle", "room": "laundry", "h": 1.2, "at": [[4.3, 0.1, 5.3, 0.6]]},
+                {"kind": "table", "room": "laundry", "h": 0.8, "hide": "table", "at": [[0.3, 2.8, 1.5, 3.6]]},
+                {"kind": "desk", "room": "counting_room", "h": 0.75, "at": [[7.6, 0.2, 8.5, 1.2]]},
+                {"kind": "sink", "room": "scullery", "h": 0.9, "at": [[7.85, 4.2, 8.5, 4.92]]},
+                {"kind": "coal_bin", "room": "scullery", "h": 0.8, "at": [[5.75, 4.3, 6.6, 4.92]]}
+              ]
+            },
+            {
+              "stair": {"axis": "x", "lane": 4.4, "from": 4.6, "to": 1.0},
+              "rooms": [
+                {"name": "kitchen_diner", "kind": "kitchen", "rect": [0.0, 0.0, 8.6, 2.4]},
+                {"name": "landing", "kind": "landing", "rect": [0.0, 2.4, 4.8, 5.0]},
+                {"name": "bedroom", "kind": "bedroom", "rect": [4.8, 2.4, 7.0, 5.0]},
+                {"name": "bathroom", "kind": "bathroom", "rect": [7.0, 2.4, 8.6, 5.0]}
+              ],
+              "doors": [
+                {"rooms": ["kitchen_diner", "landing"], "w": 1.0, "at": [1.6, 3.6]},
+                {"rooms": ["landing", "bedroom"], "w": 1.0, "at": [3.1, 3.3]},
+                {"rooms": ["kitchen_diner", "bathroom"], "w": 1.0, "at": [7.7, 7.85]}
+              ],
+              "windows": [
+                {"wall": "front", "at": 5.5, "room": "kitchen_diner"},
+                {"wall": "back", "at": 5.6, "room": "bedroom"}
+              ],
+              "furniture": [
+                {"kind": "range", "room": "kitchen_diner", "h": 0.9, "at": [[0.1, 0.1, 0.9, 0.7]]},
+                {"kind": "table", "room": "kitchen_diner", "h": 0.75, "hide": "table", "at": [[3.0, 0.6, 4.6, 1.5], [6.3, 0.6, 7.6, 1.5]]},
+                {"kind": "dresser", "room": "kitchen_diner", "h": 2.0, "at": [[8.05, 0.2, 8.52, 1.8]]},
+                {"kind": "bed", "room": "bedroom", "h": 0.55, "hide": "bed", "at": [[4.95, 4.0, 6.85, 4.92]]},
+                {"kind": "wardrobe", "room": "bedroom", "h": 2.0, "hide": "wardrobe", "at": [[6.3, 2.5, 6.92, 3.3]]},
+                {"kind": "bath", "room": "bathroom", "h": 0.6, "hide": "bath", "at": [[7.85, 3.2, 8.52, 4.8]]}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bedsits",
+      "styles": ["underbridge_bedsits"],
+      "w": 6.0, "d": 6.0,
+      "variants": [
+        {
+          "id": "bedsits",
+          "door": {"at": [1.7, 1.8], "w": 1.06},
+          "storeys": [
+            {
+              "rooms": [
+                {"name": "hall", "kind": "hall", "rect": [0.0, 0.0, 2.4, 6.0]},
+                {"name": "kitchen", "kind": "kitchen", "rect": [2.4, 0.0, 6.0, 3.0]},
+                {"name": "bathroom", "kind": "bathroom", "rect": [2.4, 3.0, 6.0, 6.0]}
+              ],
+              "doors": [
+                {"rooms": ["hall", "kitchen"], "w": 1.0, "at": [1.2, 1.9]},
+                {"rooms": ["hall", "bathroom"], "w": 1.0, "at": [4.3, 5.0]}
+              ],
+              "windows": [
+                {"wall": "right", "at": 1.5, "room": "kitchen"}
+              ],
+              "furniture": [
+                {"kind": "shelf", "room": "hall", "h": 1.3, "at": [[0.1, 4.8, 0.45, 5.8]]},
+                {"kind": "range", "room": "kitchen", "h": 0.9, "at": [[5.3, 2.3, 5.92, 2.92]]},
+                {"kind": "table", "room": "kitchen", "h": 0.75, "hide": "table", "at": [[3.4, 0.8, 4.6, 1.6], [3.6, 1.5, 4.8, 2.3]]},
+                {"kind": "bath", "room": "bathroom", "h": 0.6, "hide": "bath", "at": [[4.45, 5.2, 5.92, 5.92]]},
+                {"kind": "toilet", "room": "bathroom", "h": 0.8, "at": [[5.45, 3.1, 5.92, 3.55]]}
+              ]
+            },
+            {
+              "stair": {"axis": "z", "lane": 0.6, "from": 0.5, "to": 4.1},
+              "rooms": [
+                {"name": "landing_1", "kind": "landing", "rect": [0.0, 0.0, 2.4, 6.0]},
+                {"name": "bedsit_a", "kind": "bedsit", "rect": [2.4, 0.0, 4.2, 4.6]},
+                {"name": "bedsit_b", "kind": "bedsit", "rect": [4.2, 0.0, 6.0, 4.6]},
+                {"name": "passage_1", "kind": "landing", "rect": [2.4, 4.6, 6.0, 6.0]}
+              ],
+              "doors": [
+                {"rooms": ["landing_1", "passage_1"], "w": 0.9, "at": [5.25, 5.3]},
+                {"rooms": ["passage_1", "bedsit_a"], "w": 0.9, "at": [3.1, 3.4]},
+                {"rooms": ["passage_1", "bedsit_b"], "w": 0.9, "at": [4.9, 5.3]}
+              ],
+              "windows": [
+                {"wall": "front", "at": 3.3, "room": "bedsit_a"},
+                {"wall": "right", "at": 2.3, "room": "bedsit_b"}
+              ],
+              "furniture": [
+                {"kind": "bed", "room": "bedsit_a", "h": 0.55, "hide": "bed", "at": [[2.55, 1.6, 3.45, 3.5]]},
+                {"kind": "stove", "room": "bedsit_a", "h": 0.9, "at": [[3.55, 3.0, 4.12, 3.6]]},
+                {"kind": "bed", "room": "bedsit_b", "h": 0.55, "hide": "bed", "at": [[5.0, 0.1, 5.92, 2.0]]},
+                {"kind": "wardrobe", "room": "bedsit_b", "h": 2.0, "hide": "wardrobe", "at": [[4.3, 0.1, 4.9, 0.8]]}
+              ]
+            },
+            {
+              "stair": {"axis": "z", "lane": 1.7, "from": 4.6, "to": 1.6},
+              "rooms": [
+                {"name": "landing_2", "kind": "landing", "rect": [0.0, 0.0, 2.4, 6.0]},
+                {"name": "passage_2", "kind": "landing", "rect": [2.4, 0.0, 6.0, 1.4]},
+                {"name": "bedsit_c", "kind": "bedsit", "rect": [2.4, 1.4, 4.2, 6.0]},
+                {"name": "bedsit_d", "kind": "bedsit", "rect": [4.2, 1.4, 6.0, 6.0]}
+              ],
+              "doors": [
+                {"rooms": ["landing_2", "passage_2"], "w": 0.9, "at": [0.7, 0.7]},
+                {"rooms": ["passage_2", "bedsit_c"], "w": 0.9, "at": [3.1, 3.5]},
+                {"rooms": ["passage_2", "bedsit_d"], "w": 0.9, "at": [4.85, 5.3]}
+              ],
+              "windows": [
+                {"wall": "back", "at": 3.3, "room": "bedsit_c"},
+                {"wall": "right", "at": 4.2, "room": "bedsit_d"}
+              ],
+              "furniture": [
+                {"kind": "bed", "room": "bedsit_c", "h": 0.55, "hide": "bed", "at": [[2.55, 3.6, 3.45, 5.5]]},
+                {"kind": "wardrobe", "room": "bedsit_c", "h": 2.0, "hide": "wardrobe", "at": [[3.55, 2.6, 4.12, 3.4]]},
+                {"kind": "bed", "room": "bedsit_d", "h": 0.55, "hide": "bed", "at": [[5.0, 3.0, 5.92, 4.9]]},
+                {"kind": "stove", "room": "bedsit_d", "h": 0.9, "at": [[4.3, 5.3, 4.9, 5.92]]}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "boarding",
+      "styles": ["boarders_flat"],
+      "w": 7.6, "d": 6.0,
+      "variants": [
+        {
+          "id": "boarding",
+          "door": {"at": [2.0, 2.4], "w": 1.06},
+          "storeys": [
+            {
+              "rooms": [
+                {"name": "hall", "kind": "hall", "rect": [0.0, 0.0, 4.8, 3.0]},
+                {"name": "bathroom", "kind": "bathroom", "rect": [4.8, 0.0, 7.6, 3.0]},
+                {"name": "dining_room", "kind": "dining", "rect": [0.0, 3.0, 4.8, 6.0]},
+                {"name": "kitchen", "kind": "kitchen", "rect": [4.8, 3.0, 7.6, 6.0]}
+              ],
+              "doors": [
+                {"rooms": ["hall", "dining_room"], "w": 1.0, "at": [4.1, 4.1]},
+                {"rooms": ["hall", "bathroom"], "w": 1.0, "at": [0.9, 1.3]},
+                {"rooms": ["dining_room", "kitchen"], "w": 1.0, "at": [4.4, 5.2]}
+              ],
+              "windows": [
+                {"wall": "back", "at": 2.0, "room": "dining_room"}
+              ],
+              "furniture": [
+                {"kind": "hooks", "room": "hall", "h": 1.8, "at": [[0.1, 0.3, 0.45, 1.5]]},
+                {"kind": "bath", "room": "bathroom", "h": 0.6, "hide": "bath", "at": [[6.0, 2.2, 7.52, 2.92]]},
+                {"kind": "toilet", "room": "bathroom", "h": 0.8, "at": [[7.05, 0.1, 7.52, 0.55]]},
+                {"kind": "long_table", "room": "dining_room", "h": 0.75, "hide": "table", "at": [[1.2, 3.9, 3.8, 5.1], [1.0, 4.0, 3.6, 5.2]]},
+                {"kind": "sideboard", "room": "dining_room", "h": 1.0, "at": [[3.4, 5.45, 4.65, 5.92]]},
+                {"kind": "clock", "room": "dining_room", "h": 2.0, "at": [[0.1, 3.15, 0.45, 3.55]]},
+                {"kind": "range", "room": "kitchen", "h": 0.9, "at": [[6.8, 5.3, 7.52, 5.92]]},
+                {"kind": "sink", "room": "kitchen", "h": 0.9, "at": [[7.05, 3.6, 7.52, 4.6]]}
+              ]
+            },
+            {
+              "stair": {"axis": "x", "lane": 2.4, "from": 0.4, "to": 3.6},
+              "rooms": [
+                {"name": "upper_landing", "kind": "landing", "rect": [0.0, 0.0, 7.6, 3.0]},
+                {"name": "dormitory", "kind": "bedroom", "rect": [0.0, 3.0, 4.8, 6.0]},
+                {"name": "landlords_room", "kind": "bedroom", "rect": [4.8, 3.0, 7.6, 6.0]}
+              ],
+              "doors": [
+                {"rooms": ["upper_landing", "dormitory"], "w": 1.0, "at": [4.1, 4.1]},
+                {"rooms": ["upper_landing", "landlords_room"], "w": 1.0, "at": [5.9, 6.8]}
+              ],
+              "windows": [
+                {"wall": "left", "at": 4.5, "room": "dormitory"},
+                {"wall": "back", "at": 6.2, "room": "landlords_room"}
+              ],
+              "furniture": [
+                {"kind": "bed", "room": "dormitory", "h": 0.55, "hide": "bed", "at": [[0.1, 3.3, 1.0, 5.2]]},
+                {"kind": "bed", "room": "dormitory", "h": 0.55, "hide": "bed", "at": [[1.4, 3.3, 2.3, 5.2]]},
+                {"kind": "lockers", "room": "dormitory", "h": 1.8, "at": [[2.9, 5.45, 4.65, 5.92]]},
+                {"kind": "bed", "room": "landlords_room", "h": 0.55, "hide": "bed", "at": [[6.55, 3.9, 7.52, 5.92]]},
+                {"kind": "desk", "room": "landlords_room", "h": 0.75, "at": [[4.95, 5.3, 5.9, 5.92]]}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

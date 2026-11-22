@@ -497,7 +497,8 @@ func _start(now: float) -> void:
 		HostRules.split_on_by_arg() and not (ward_review or reactor_review or orientation_review),
 		not (ward_review or reactor_review or orientation_review) and HostRules.economy_fix_by_arg(),
 		not (ward_review or reactor_review or orientation_review) and HostRules.voice_by_arg(),
-		ward_layout and late_floors and not (ward_review or reactor_review or orientation_review) and HostRules.ward_lift_clear_by_arg())
+		ward_layout and late_floors and not (ward_review or reactor_review or orientation_review) and HostRules.ward_lift_clear_by_arg(),
+		ward_layout and late_floors and not (ward_review or reactor_review or orientation_review) and HostRules.ward_homes_on_by_arg())
 	if orientation_review:
 		rules.enable_orientation()
 	elif orientation_campaign and not playtest_run:

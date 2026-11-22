@@ -169,6 +169,10 @@ func _sync(ward: Dictionary) -> void:
 	var doors: Array = ward.get("doors", [])
 	for i in doors.size():
 		model.requested_doors[i] = bool(doors[i])
+	# WH1c: a home's shut inner doors stop this screen's walker as they stop the host's.
+	var inner: Variant = (ward.get("extras", {}) as Dictionary).get("inner")
+	if inner is Array:
+		model.set_inner_doors_wire(inner)
 
 ## The lift's line without the view (the same words as client/ward/view.gd show_host).
 static func lift_line(ward: Dictionary, host_now: float, id: String) -> String:

@@ -214,7 +214,7 @@ func _find_route(target: Vector3) -> PackedVector3Array:
 		visited[current] = 1
 		for next in graph.size():
 			var proposed := best + graph[current].distance_to(graph[next])
-			if visited[next] == 0 and proposed <= reach and proposed < costs[next] and segment_clear(graph[current], graph[next], PALM_RADIUS):
+			if visited[next] == 0 and proposed <= reach and proposed < costs[next] and (_graph_clear(current, next) if not _graph.is_empty() and next != end and current != end else segment_clear(graph[current], graph[next], PALM_RADIUS)):
 				costs[next] = proposed
 				parents[next] = current
 	return PackedVector3Array()
@@ -262,7 +262,105 @@ func segment_clear(from: Vector3, to: Vector3, radius: float = PALM_RADIUS) -> b
 	for wall in _walls:
 		if _hits_box(from, to, wall, radius):
 			return false
+	# WH1: a Ward home's inner doors stop the arm while shut (none in today's houses).
+	for k in _inner.size():
+		if _inner_open[k] == 0 and _hits_box(from, to, _inner[k], radius):
+			return false
 	return door_open or not _hits_box(from, to, _door, radius)
+
+# ------------------------------------------------------------------------------------------------
+# WH1: a Ward home's arm (sim/ward/house.gd _homes_arm). Its bend points are worked out from the walls and furniture
+# (corner_guides), not placed by hand; its inner doors stop it while shut; and the clear lines between its shoulder
+# and its bend points are worked out once (build_graph) so a search costs no more than today's. Today's arms use none
+# of this: no inner doors, no graph, and every route found exactly as before.
+
+## How far past the palm's own size a bend point stands off a corner (today's hand-placed ones stand 0.26-0.29 m off).
+const GUIDE_GAP := 0.08
+
+var _inner: Array[AABB] = []
+var _inner_open := PackedByteArray()
+## For each pair of graph points (the shoulder, then the guides), 0 when walls stand between them, else 1 plus bit 1
+## when the front door's leaf is in the way and bit 2+k when inner door k is.
+var _graph := PackedInt32Array()
+
+## The bend points round a set of boxes at a height: each corner of every box the palm meets there, stood off by the
+## palm's size and GUIDE_GAP, kept where `keep` says, clear of every box and not within 10 cm of one already kept.
+static func corner_guides(boxes: Array[AABB], y: float, keep: Callable) -> PackedVector3Array:
+	var plane: Array[AABB] = []
+	for b in boxes:
+		if b.position.y - PALM_RADIUS <= y and b.end.y + PALM_RADIUS >= y:
+			plane.append(b)
+	var r := PALM_RADIUS + GUIDE_GAP
+	var out := PackedVector3Array()
+	for b in plane:
+		for cx: float in [b.position.x - r, b.end.x + r]:
+			for cz: float in [b.position.z - r, b.end.z + r]:
+				var p := Vector3(cx, y, cz)
+				if not keep.call(p):
+					continue
+				var free := true
+				for o in plane:
+					if _hits_box(p, p, o, PALM_RADIUS + 0.01):
+						free = false
+						break
+				if not free:
+					continue
+				var near := false
+				for q in out:
+					if q.distance_squared_to(p) < 0.01:
+						near = true
+						break
+				if not near:
+					out.append(p)
+	return out
+
+## The inner doors' openings (local) and which stand open (shared with the house, so a shut door is seen at once).
+func set_inner_doors(leaves: Array[AABB], open: PackedByteArray) -> void:
+	_inner = leaves.duplicate()
+	_inner_open = open
+
+func inner_doors_open(open: PackedByteArray) -> void:
+	_inner_open = open
+
+## The clear lines between the shoulder and every bend point (see _graph).
+func build_graph() -> PackedInt32Array:
+	var nodes := PackedVector3Array([_shoulder])
+	nodes.append_array(_guides)
+	var n := nodes.size()
+	var out := PackedInt32Array()
+	out.resize(n * n)
+	for i in n:
+		for j in range(i + 1, n):
+			var v := 1
+			for wall in _walls:
+				if _hits_box(nodes[i], nodes[j], wall, PALM_RADIUS):
+					v = 0
+					break
+			if v != 0:
+				if _hits_box(nodes[i], nodes[j], _door, PALM_RADIUS):
+					v |= 2
+				for k in _inner.size():
+					if _hits_box(nodes[i], nodes[j], _inner[k], PALM_RADIUS):
+						v |= 4 << k
+			out[i * n + j] = v
+			out[j * n + i] = v
+	return out
+
+func use_graph(graph: PackedInt32Array) -> void:
+	var n := _guides.size() + 1
+	_graph = graph if graph.size() == n * n else PackedInt32Array()
+
+## segment_clear for two graph points, from the graph.
+func _graph_clear(i: int, j: int) -> bool:
+	var v := _graph[i * (_guides.size() + 1) + j]
+	if v == 0:
+		return false
+	if (v & 2) != 0 and not door_open:
+		return false
+	for k in _inner.size():
+		if (v & (4 << k)) != 0 and _inner_open[k] == 0:
+			return false
+	return true
 
 # Expanding the obstacle on all axes is conservative for a finite-radius sweep,
 # including at corners. The slab test covers the whole segment in one step.

@@ -37,7 +37,7 @@ static func _dock(h: Dictionary, side: String) -> Array:
 static func generate(seed_value: int, options: Dictionary = {}) -> Dictionary:
 	if int(options.get("version", 1)) == 2:
 		return generate_v2(seed_value, float(options.get("spread", SPREAD)), float(options.get("rise", RISE)),
-			options.get("lift_clear", false) == true)
+			options.get("lift_clear", false) == true, int(options.get("homes", 0)) == 1)
 	return _generate_v1(seed_value)
 
 static func _generate_v1(seed_value: int) -> Dictionary:
@@ -142,6 +142,7 @@ static func _generate_v1(seed_value: int) -> Dictionary:
 # house's facing (0 door south, 1 east, 2 north, 3 west), mirror and cell; the layout's loop, spread and rise.
 
 const Settings = preload("res://sim/settings.gd")
+const Homes = preload("res://sim/ward/homes.gd")
 const PARLOUR := ["parlour_cottage", 1, 6.8, 6.2]
 ## The lattice: COLS x ROWS cells, CELL metres apart times the live setting ward.spread (today's SPREAD).
 const COLS := 4
@@ -167,22 +168,34 @@ static func options(tuning: Settings.Values, lift_clear := false) -> Dictionary:
 	return out
 
 ## The options as the Ward block carries them (net/ward_wire.gd): [version, spread in hundredths, rise in cm], and a
-## fourth element 1 only with RL1's lift_clear (without it, the three they always were).
+## fourth element 1 only with RL1's lift_clear (without it, the three they always were). WH1: the homes (the run flag
+## ward_homes) ride as a fifth element 1, after a fourth that is then always there (1 with lift_clear, else 0); with
+## the homes off the wire is exactly RL1's.
 static func to_wire(opts: Dictionary) -> Array:
 	var out := [int(opts.get("version", 2)), roundi(float(opts.get("spread", SPREAD)) * 100.0), roundi(float(opts.get("rise", RISE)) * 100.0)]
-	if opts.get("lift_clear", false) == true:
+	var lift_clear: bool = opts.get("lift_clear", false) == true
+	var homes := int(opts.get("homes", 0)) == 1
+	if lift_clear or homes:
+		out.append(1 if lift_clear else 0)
+	if homes:
 		out.append(1)
 	return out
 
-## Back from the wire; {} (today's Ward) for anything else.
+## Back from the wire; {} (today's Ward) for anything else. Three fields; four with the fourth 1 (lift_clear); or five
+## with the fourth 0 or 1 (lift_clear) and the fifth 1 (WH1's homes).
 static func from_wire(raw: Variant) -> Dictionary:
-	if not raw is Array or (raw as Array).size() < 3 or (raw as Array).size() > 4:
+	if not raw is Array or (raw as Array).size() < 3 or (raw as Array).size() > 5:
+		return {}
+	var size := (raw as Array).size()
+	if size == 4 and int(raw[3]) != 1:
+		return {}
+	if size == 5 and ((int(raw[3]) != 0 and int(raw[3]) != 1) or int(raw[4]) != 1):
 		return {}
 	var out := {"version": int(raw[0]), "spread": float(raw[1]) / 100.0, "rise": float(raw[2]) / 100.0}
-	if (raw as Array).size() == 4:
-		if int(raw[3]) != 1:
-			return {}
+	if size >= 4 and int(raw[3]) == 1:
 		out["lift_clear"] = true
+	if size == 5:
+		out["homes"] = 1
 	return out
 
 static func _cell_links(cells: Array[Vector2i]) -> Array[Dictionary]:
@@ -257,7 +270,9 @@ static func _clear_the_lift(houses: Array, links: Array[Dictionary], tree: Array
 			return
 	houses[order[0]].z = target
 
-static func generate_v2(seed_value: int, spread: float, rise: float, lift_clear := false) -> Dictionary:
+## WH1: `homes` (the run flag ward_homes, layout option "homes": 1): each house gets its type's footprint and storeys
+## (sim/ward/homes.gd, data/ward_homes.json) and a "plan" field naming the type; no random draw is added or moved.
+static func generate_v2(seed_value: int, spread: float, rise: float, lift_clear := false, homes := false) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
 	var styles := STYLES.duplicate()
@@ -305,12 +320,23 @@ static func generate_v2(seed_value: int, spread: float, rise: float, lift_clear 
 			jy = 0.0
 		var w := float(style[2])
 		var d := float(style[3])
+		var floors := int(style[1])
 		if i > 0 and facing % 2 == 1:
 			w = float(style[3])
 			d = float(style[2])
-		houses.append({"id": i, "style": style[0], "floors": style[1], "w": w, "d": d,
+		# WH1: the type's footprint (width along the front wall, depth), turned as the house faces; the parlour's is
+		# today's (its plan is drawn as the house stands, 6.2 m along its front and 6.8 m deep).
+		if homes and i > 0:
+			var size := Homes.size_for_style(str(style[0]))
+			w = size.y if facing % 2 == 1 else size.x
+			d = size.x if facing % 2 == 1 else size.y
+		if homes:
+			floors = Homes.floors_for_style(str(style[0]))
+		houses.append({"id": i, "style": style[0], "floors": floors, "w": w, "d": d,
 			"x": float(cell.x - start.x) * pitch + jx, "y": -3.1 + float(cell.y - start.y) * pitch + jy, "z": 0.0,
 			"facing": facing, "mirror": mirror, "cell": [cell.x, cell.y]})
+		if homes:
+			houses[-1]["plan"] = Homes.type_for_style(str(style[0])).id
 	_shuffle(links, rng)
 	var tilts: Array[float] = []
 	for link: Dictionary in links:
@@ -405,5 +431,8 @@ static func generate_v2(seed_value: int, spread: float, rise: float, lift_clear 
 	while walk >= 0:
 		loop.push_front(walk)
 		walk = int(parent[walk])
-	return {"version": 2, "seed": seed_value, "houses": houses, "bridges": bridges, "loop": loop,
+	var out := {"version": 2, "seed": seed_value, "houses": houses, "bridges": bridges, "loop": loop,
 		"spread": spread, "rise": rise}
+	if homes:
+		out["homes"] = 1
+	return out

@@ -1,5 +1,5 @@
 # RL1: the lift's house is never the lowest house of the generated Ward (sim/ward/layout.gd LIFT_CLEAR, behind the run
-# flag `ward_lift_clear`, the last parameter of net/host_rules.gd _init). The owner, 21 Nov: "I'm ok with making the
+# flag `ward_lift_clear`, the parameter of net/host_rules.gd _init after voice_). The owner, 21 Nov: "I'm ok with making the
 # lift never the lowest house". The design (docs/floors/hanging-ward.md): the Rigger "lives below the lowest house.
 # He climbs only when he senses prey." On about one seed in eleven the lowest was the lift's own, so a crew walking out
 # of the car was heard at once. Checked here:
@@ -273,23 +273,25 @@ func test_the_wire_and_the_rooms(t: T) -> void:
 	t.eq(Layout.from_wire(back.layout), _on(), "and is the host's options")
 	t.eq(Digest.line(183025962, Layout.from_wire(back.layout)), Digest.line(183025962, _on()), "a screen builds the host's Ward")
 	t.check(Digest.line(183025962, _on()) != Digest.line(183025962, _off()), "late-2's Ward differs with the flag")
-	for wrong: Array in [[2, 110, 150, 0], [2, 110, 150, 2], [2, 110, 150, 1, 1]]:
+	# WH1 (merged after RL1) put its homes in a fifth option, so a fifth is refused unless it is 1 and the fourth 0 or 1.
+	for wrong: Array in [[2, 110, 150, 0], [2, 110, 150, 2], [2, 110, 150, 1, 0], [2, 110, 150, 2, 1], [2, 110, 150, 1, 1, 1]]:
 		var raw := WardWire.encode(block)
 		raw[14] = wrong
 		t.eq(WardWire.decode(raw), {}, "a block with options %s is refused" % str(wrong))
 	t.eq(Layout.from_wire([2, 110, 150, 0]), {}, "from_wire refuses a fourth option that is not 1")
-	# The flag by position: the last, after voice_; only with ward_layout and the late floors.
+	# The flag by position: after voice_, followed only by WH1's ward_homes_ (the agreed tail); only with ward_layout
+	# and the late floors.
 	var names: Array[String] = []
 	for m: Dictionary in (HostRules as Script).get_script_method_list():
 		if m["name"] == "_init":
 			for a: Dictionary in m["args"]:
 				names.append(str(a["name"]))
-	t.eq(names.slice(names.size() - 2), ["voice_", "ward_lift_clear_"] as Array[String], "ward_lift_clear_ is the last parameter, after voice_")
+	t.eq(names.slice(names.size() - 3), ["voice_", "ward_lift_clear_", "ward_homes_"] as Array[String], "ward_lift_clear_ comes after voice_, then only WH1's ward_homes_")
 	var args: Array = WardLayoutProps.rules_args(true, true)
 	t.eq(names[args.size() - 1], "ward_layout_", "rules_args gives every parameter up to ward_layout_")
 	while args.size() < names.size():
 		args.append(false)
-	args[names.size() - 1] = true
+	args[names.find("ward_lift_clear_")] = true
 	t.check((HostRules.new.callv(args) as HostRules).ward_lift_clear, "on with the late floors and the layout")
 	args[49] = false
 	t.check(not (HostRules.new.callv(args) as HostRules).ward_lift_clear, "never without the layout")
@@ -298,8 +300,8 @@ func test_the_wire_and_the_rooms(t: T) -> void:
 	t.check(not (HostRules.new.callv(args) as HostRules).ward_lift_clear, "never without the late floors")
 	t.check(HostRules.ward_lift_clear_by_arg(), "no ward_lift_clear=0 on this command line: the rooms ask for it")
 	var room := FileAccess.get_file_as_string("res://server/room.gd")
-	t.check(room.contains("ward_layout and late_floors and not (ward_review or reactor_review or orientation_review) and HostRules.ward_lift_clear_by_arg())"), "server/room.gd passes it last, with the layout")
+	t.check(room.contains("ward_layout and late_floors and not (ward_review or reactor_review or orientation_review) and HostRules.ward_lift_clear_by_arg(),"), "server/room.gd passes it, with the layout (WH1's ward_homes_ follows it)")
 	var local := FileAccess.get_file_as_string("res://net/local_room.gd")
-	t.check(local.contains("late_floors_on() and not _orientation_playtest and ward_layout and HostRules.ward_lift_clear_by_arg())"), "net/local_room.gd passes it last, with the layout")
+	t.check(local.contains("late_floors_on() and not _orientation_playtest and ward_layout and HostRules.ward_lift_clear_by_arg(),"), "net/local_room.gd passes it, with the layout (WH1's ward_homes_ follows it)")
 	var host := FileAccess.get_file_as_string("res://net/host.gd")
 	t.check(host.contains("WardLayout.options(state.tuning, ward_lift_clear())") and host.contains("WardLayout.options(state.tuning if state != null else null, ward_lift_clear())"), "net/host.gd builds both of its Wards with it")

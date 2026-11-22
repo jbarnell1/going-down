@@ -870,6 +870,9 @@ func start_ward_review(review_seed: int, place_crew := false) -> void:
 	# WG1: with the run flag ward_layout (net/host_rules.gd) the layout comes from the seed and the host's live
 	# settings in force now (ward.spread, ward.rise); the snapshot carries them so every screen builds the same.
 	var options := WardLayout.options(state.tuning if state != null else null, ward_lift_clear()) if ward_layout() else {}
+	# WH1: the homes (net/host_rules.gd ward_homes) ride in the layout's options, so every screen builds the same.
+	if ward_homes():
+		options["homes"] = 1
 	_ward_review = Ward.new(review_seed, options)
 	# RR1: the solid, crawling Rigger (net/host_rules.gd rigger_roam); off, the Ward is exactly as before. His graph
 	# was started on a worker thread with the late floors (_prebuild_roam); wait for it rather than build it twice.
@@ -908,6 +911,10 @@ func _step_ward_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> Run.R
 		row.sprint = i.gait == &"sprint"
 		# WD1: a creeping walker is never heard; an instrument recording (ticking) may be (sim/ward/state.gd).
 		row.creep = i.gait == &"creep"
+		# WH1c: the hide key in a Ward home (the press every floor's hides take; sprint held is the fast way).
+		if i.hide_use:
+			row.hide = true
+			row.hide_fast = i.hide_fast
 		# PY1 (the run's economy_fix): Soft Shoes shortens how far he hears a walk (sim/ward/state.gd rigger.steps_reach).
 		if s.economy_fix and Run.owns_soft_shoes(s, i.id):
 			row.soft = true
@@ -1949,6 +1956,8 @@ func _prebuild_roam() -> void:
 		return
 	# The layout's options as start_ward_review will make them (WG1), so the graph built now is the one it uses.
 	var options := WardLayout.options(state.tuning, ward_lift_clear()) if ward_layout() else {}
+	if ward_homes():
+		options["homes"] = 1
 	_roam_ward = Ward.new(late_seed(state), options)
 	_roam_build = RiggerRoam.begin_graph(_roam_ward)
 
@@ -1992,6 +2001,11 @@ func ward_layout() -> bool:
 func ward_lift_clear() -> bool:
 	var rules: Object = _step_fn.get_object() if _step_fn.is_valid() else null
 	return rules != null and bool(rules.get("ward_lift_clear"))
+
+## WH1: whether the rules stepping this run build the Ward's houses from the homes' plans (net/host_rules.gd ward_homes).
+func ward_homes() -> bool:
+	var rules: Object = _step_fn.get_object() if _step_fn.is_valid() else null
+	return rules != null and bool(rules.get("ward_homes"))
 
 ## The Tenant clock's block from the rules stepping this run (net/host_rules.gd tenant_block), or null: the plain
 ## run's step, or rules without the clock.

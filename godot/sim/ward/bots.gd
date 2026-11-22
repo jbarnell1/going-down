@@ -148,10 +148,12 @@ static func build_graph(w: Ward) -> Graph:
 		mids.append({"south": ring["s"], "north": ring["n"], "east": ring["e"], "west": ring["w"]})
 		g.rings.append(ring)
 		# The front door: outside on the gallery, just inside, then the three ground-floor rooms in a line.
-		var out_p := h.to_world(Vector3(0, 0, -0.75))
+		# WH1: a home's front door need not be in the middle of its front wall.
+		var door_x := h.door.get_center().x if h.homes() else 0.0
+		var out_p := h.to_world(Vector3(door_x, 0, -0.75))
 		out_p.y = gy
 		var dout := g.add(out_p)
-		var din := g.add(h.to_world(Vector3(0, 0, 0.35)))
+		var din := g.add(h.to_world(Vector3(door_x, 0, 0.35)))
 		g.link(dout, din)
 		var best_mid := -1
 		var bd := INF
@@ -163,6 +165,9 @@ static func build_graph(w: Ward) -> Graph:
 		g.link(dout, best_mid)
 		g.door_out.append(dout)
 		g.door_in.append(din)
+		if h.homes():
+			_home_rooms(g, i, h, din)
+			continue
 		var r := {}
 		for area: StringName in [&"entry", &"middle", &"rear"]:
 			var a: Vector3 = h.areas[area]
@@ -207,7 +212,7 @@ static func build_graph(w: Ward) -> Graph:
 	var parlour: House = w.houses[0]
 	var inside := parlour.to_local(ld + Vector3(0, 0, 0.45) + Vector3.UP * 1.25)
 	var area := parlour.area_at(inside)
-	g.link(g.lift_mouth, g.rooms[0][area if area != &"" else &"middle"])
+	g.link(g.lift_mouth, g.rooms[0][area if area != &"" and (g.rooms[0] as Dictionary).has(area) else &"middle"])
 	# Bridges: chained path points; the ends join the side's gallery middle.
 	for edge: Dictionary in layout.bridges:
 		var path: Array = edge.path
@@ -220,6 +225,56 @@ static func build_graph(w: Ward) -> Graph:
 			prev = node
 		g.link(prev, mids[int(edge.b)][edge.b_side])
 	return g
+
+## WH1: a home's ground-floor rooms (each at its probe), joined through its inner doorways, the front door into the room
+## behind it, and its first stair. The bots' plans name today's three rooms: entry is the room behind the front door,
+## rear the room farthest from it, middle another (each home's own rooms are there by name too).
+static func _home_rooms(g: Graph, i: int, h: House, din: int) -> void:
+	var nodes := {}
+	for room: Dictionary in h.rooms_by_level[0]:
+		var probe: Vector3 = h.areas[room.name]
+		var n := g.add(h.to_world(Vector3(probe.x, 0, probe.z)))
+		g.room[n] = [i, room.name]
+		nodes[room.name] = n
+	for d: Dictionary in h.inner_doors:
+		if int(d.level) != 0:
+			continue
+		var dn := g.add(h.to_world(d.at))
+		g.room[dn] = [i, d.rooms[1]]
+		g.link(nodes[d.rooms[0]], dn)
+		g.link(dn, nodes[d.rooms[1]])
+	var front := h.front_room()
+	g.link(din, nodes[front])
+	var r := nodes.duplicate()
+	var far := front
+	var middle := front
+	var best := -1.0
+	for name: StringName in nodes:
+		var e := (h.areas[name] as Vector3).distance_to(h.door.get_center())
+		if e > best:
+			best = e
+			far = name
+	for name: StringName in nodes:
+		if name != front and name != far:
+			middle = name
+			break
+	r[&"entry"] = nodes[front]
+	r[&"middle"] = nodes[middle]
+	r[&"rear"] = nodes[far]
+	g.rooms.append(r)
+	g.corner.append(din)
+	if h.stairs.size() > 0:
+		var st: House.Stair = h.stairs[0]
+		var run := Vector3(st.to.x - st.from.x, 0, st.to.z - st.from.z).normalized()
+		var foot := g.add(h.to_world(st.from - run * 0.3))
+		var below := h.room_at(0, st.from)
+		g.room[foot] = [i, below]
+		g.link(foot, nodes.get(below, nodes[front]))
+		var top := g.add(h.to_world(st.to - run * 0.3))
+		g.link(foot, top)
+		g.upstairs.append(top)
+	else:
+		g.upstairs.append(-1)
 
 # ------------------------------------------------------------------------------------------------
 # One bot.

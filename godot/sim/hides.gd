@@ -62,6 +62,33 @@ const NO_HIDES: Array[StringName] = [&"lobby"]
 ## position; "no_top_up" skips the top-up cabinets.
 static var test_break := ""
 
+# ---------------------------------------------------------------------------------------------
+# WH1c: the Hanging Ward's homes (the run flag ward_homes; sim/ward/house.gd). The Ward is not a grid plan, so its
+# hides are made from a home's furniture: every piece the data names a hide (data/ward_homes.json) is one, in the
+# furniture's order, the same on the host and every screen. The approved kinds (21 Nov): under a bed, in a wardrobe,
+# behind a bath's curtain, under the table. [capacity, eye height metres]. Being found follows the approved rule (the
+# hand finds someone in a hide only if the noise that brought it came from that hide; sim/ward/state.gd).
+const WARD_SPEC := {
+	&"bed": [1, 0.2],
+	&"wardrobe": [2, 1.5],
+	&"bath": [1, 0.6],
+	&"table": [2, 0.3],
+}
+
+## A home's hides from its furniture (sim/ward/house.gd furniture: {"kind", "room", "level", "box", "hide"}): each
+## {"kind", "capacity", "eye", "level", "room", "box" (local), "inside" (local feet: the middle of its floor)}.
+static func ward_home_hides(furniture: Array) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for piece: Dictionary in furniture:
+		var kind := StringName(piece.get("hide", ""))
+		if not WARD_SPEC.has(kind):
+			continue
+		var box: AABB = piece.box
+		var spec: Array = WARD_SPEC[kind]
+		out.append({"kind": kind, "capacity": int(spec[0]), "eye": float(spec[1]), "level": int(piece.level),
+			"room": piece.room, "box": box, "inside": Vector3(box.get_center().x, box.position.y, box.get_center().z)})
+	return out
+
 ## Every hiding place on the floor, in id order. `floor_seed` "" means plan.seed.
 static func hides_for(plan: Floor.FloorPlan, floor_seed: String = "") -> Array[Playroom.Hide]:
 	var sd := floor_seed if floor_seed != "" else plan.seed

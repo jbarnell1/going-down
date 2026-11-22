@@ -81,6 +81,10 @@ func _init(house: Dictionary, ward_seed: int) -> void:
 	var half := width * 0.5
 	var wall := WALL_THICKNESS
 	floor_bounds = Rect2(-half, 0.0, width, depth)
+	# WH1: a house from the homes' plans (the run flag ward_homes; sim/ward/layout.gd adds "plan" to its site).
+	if house.has("plan"):
+		_init_homes(house, ward_seed)
+		return
 
 	var entry_width := 1.24 if parlour else 1.06
 	_partition(0.0, half, 0.0, entry_width)
@@ -180,6 +184,9 @@ func locally_supported(local: Vector3) -> Array[float]:
 			var stair := floor.outgoing
 			if stair.shaft.has_point(flat):
 				var t := clampf(inverse_lerp(stair.from.x, stair.to.x, local.x), 0.0, 1.0)
+				# WH1: a homes' stair may run front to back (along z); today's all run along x.
+				if stair.from.x == stair.to.x:
+					t = clampf(inverse_lerp(stair.from.z, stair.to.z, local.z), 0.0, 1.0)
 				out.append(lerpf(stair.from.y, stair.to.y, t))
 	return out
 
@@ -224,6 +231,8 @@ func support_corner(site: Dictionary, inset := 0.13) -> Vector3:
 		float(site.y) + north * (float(site.d) * 0.5 + GALLERY - inset))
 
 func make_arm(extra_walls: Array[AABB] = []) -> ArmSearch:
+	if homes():
+		return make_arm_at(openings()[0], extra_walls)
 	var blockers := walls.duplicate()
 	if search_window.has_volume():
 		var face := AABB(Vector3(search_window.position.x, 0, 0),
@@ -247,6 +256,8 @@ func make_arm(extra_walls: Array[AABB] = []) -> ArmSearch:
 ## index, kind (&"door" or &"window"), side (a window's wall, -1 or 1; 0 the door), shoulder (local: where the arm leaves
 ## him, 0.6 m outside the opening at arm height), inward (local: into the house), hole (a window's opening, local).
 func openings() -> Array[Dictionary]:
+	if homes():
+		return _home_openings
 	var out: Array[Dictionary] = []
 	out.append({"index": 0, "kind": &"door", "side": 0, "shoulder": Vector3(0.0, ARM_HEIGHT, -0.6), "inward": Vector3.BACK, "hole": AABB()})
 	var half := floor_bounds.size.x * 0.5
@@ -272,6 +283,8 @@ func openings() -> Array[Dictionary]:
 
 ## RR1 stage 2: the rooms of an upper storey (its two halves, front and back of the jamb wall), {name: probe point}.
 func upper_areas(level: int) -> Dictionary:
+	if homes():
+		return _probes[level] if level < _probes.size() else {}
 	var depth := floor_bounds.size.y
 	var base := float(level) * HEIGHT
 	return {StringName("up%d_front" % level): Vector3(0.0, base + ARM_HEIGHT, depth * 0.27),
@@ -280,6 +293,10 @@ func upper_areas(level: int) -> Dictionary:
 ## RR1 stage 2: the room a point (local) is in on any storey: area_at on the ground floor, an upper storey's half above.
 ## area_at itself is unchanged (the Ward without the flag knows only the ground floor's rooms).
 func area_at_any(point: Vector3) -> StringName:
+	if homes():
+		if not floor_bounds.has_point(Vector2(point.x, point.z)) or point.y < 0.0:
+			return &""
+		return room_at(int(floorf(point.y / HEIGHT)), point)
 	var ground := area_at(point)
 	if ground != &"":
 		return ground
@@ -299,6 +316,8 @@ func probes_for(opening: Dictionary) -> Dictionary:
 ## RR1: the arm for an opening (openings): the walls with that window's hole cut (as make_arm cuts the laundry's sash),
 ## the guides round its jambs, entering by the door only for the door. Its reach is opening_reach's.
 func make_arm_at(opening: Dictionary, extra_walls: Array[AABB] = []) -> ArmSearch:
+	if homes():
+		return _homes_arm(opening, extra_walls)
 	var blockers: Array[AABB] = []
 	var guides := _guides.duplicate()
 	var hole: AABB = opening.hole
@@ -438,6 +457,8 @@ func to_local(point: Vector3) -> Vector3:
 func area_at(point: Vector3) -> StringName:
 	if not floor_bounds.has_point(Vector2(point.x, point.z)) or point.y < 0.0 or point.y >= HEIGHT:
 		return &""
+	if homes():
+		return room_at(0, point)
 	# Rooms are bounded by the two partitions, even away from their probe points.
 	if point.z < room_doors[0].z:
 		return &"entry"
@@ -471,4 +492,339 @@ func walk_clear(from: Vector3, to: Vector3, door_open: bool, parlour: bool) -> b
 		for wall in floor.partitions:
 			if ArmSearch._hits_box(a, b, wall, RADIUS):
 				return false
+	if homes():
+		return _homes_walk_clear(a, b, RADIUS)
 	return true
+
+# ------------------------------------------------------------------------------------------------
+# WH1: a house built from the homes' plans (the run flag ward_homes; sim/ward/homes.gd resolves the plan from the seed).
+# The same fields as today's house, so the walk, the footing, the Rigger's climbing graph and his arm read it as they
+# read today's: `walls` the ground floor's outer and inner walls, each storey's `partitions` its inner walls, the same
+# outer envelope, slabs and stairs (a stair may also run front to back). New: the rooms of every storey, the furniture
+# (solid to walkers and, where it stands tall enough, to the arm), the inner doors, the windows as openings, and the
+# arm's bend points worked out from the walls and furniture (ArmSearch.corner_guides) in place of hand-placed ones.
+
+const Homes = preload("res://sim/ward/homes.gd")
+const Hides = preload("res://sim/hides.gd")
+## A walker's knees, metres above their feet: furniture lower than the waist still stops them.
+const KNEE := 0.3
+## The cupboard under a stair starts where the treads are this high, and stands this high.
+const UNDER_STAIR_FROM := 1.2
+const UNDER_STAIR_HEIGHT := 1.0
+
+## The resolved plan (sim/ward/homes.gd resolve); {} for today's house.
+var plan := {}
+## Each storey's rooms, [{"name", "kind", "rect": Rect2 (local x, z)}].
+var rooms_by_level: Array = []
+## Every piece of furniture: {"kind", "room", "level", "box": AABB (local), "hide"}.
+var furniture: Array[Dictionary] = []
+## Every inner door: {"level", "rooms": [a, b], "leaf": AABB (local, the doorway's opening), "at": Vector3}.
+var inner_doors: Array[Dictionary] = []
+## Which inner doors stand open (1) or are shut (0); players shut them (sim/ward/state.gd use_inner_door).
+var inner_open := PackedByteArray()
+## WH1c: the home's hiding places (sim/hides.gd ward_home_hides), in furniture order.
+var hides: Array[Dictionary] = []
+var _home_openings: Array[Dictionary] = []
+## Each storey's rooms' probe points, {name: local point}; [0] is `areas`.
+var _probes: Array = []
+## The arm's graph per opening (ArmSearch.build_graph), worked out once.
+var _graph_cache := {}
+
+func homes() -> bool:
+	return not plan.is_empty()
+
+## The room a noise outside the house or at its door is heard in: today's entry, a home's room behind its front door.
+func front_room() -> StringName:
+	return _home_openings[0].room if homes() else &"entry"
+
+## The room of a storey a point (local) is in, &"" outside every room.
+func room_at(level: int, point: Vector3) -> StringName:
+	if level < 0 or level >= rooms_by_level.size():
+		return &""
+	var flat := Vector2(point.x, point.z)
+	for room: Dictionary in rooms_by_level[level]:
+		if (room.rect as Rect2).has_point(flat):
+			return room.name
+	for room: Dictionary in rooms_by_level[level]:
+		if (room.rect as Rect2).grow(0.01).has_point(flat):
+			return room.name
+	return &""
+
+func _init_homes(site: Dictionary, ward_seed: int) -> void:
+	plan = Homes.resolve(site, ward_seed)
+	var width := floor_bounds.size.x
+	var depth := floor_bounds.size.y
+	var half := width * 0.5
+	var wall := WALL_THICKNESS
+	var door_x := float(plan.door.x)
+	var door_w := float(plan.door.w)
+	_partition(0.0, half, door_x, door_w)
+	door = AABB(Vector3(door_x - door_w * 0.5, 0.0, -wall * 0.5), Vector3(door_w, OPENING_HEIGHT, wall))
+	shoulder = Vector3(door_x, ARM_HEIGHT, -0.6)
+	walls.append(AABB(Vector3(-half - wall, 0.0, 0.0), Vector3(wall, HEIGHT, depth)))
+	walls.append(AABB(Vector3(half, 0.0, 0.0), Vector3(wall, HEIGHT, depth)))
+	walls.append(AABB(Vector3(-half - wall, 0.0, depth), Vector3(width + wall * 2.0, HEIGHT, wall)))
+	walls.append(AABB(Vector3(-half, -wall, 0.0), Vector3(width, wall, depth)))
+	var plans: Array = plan.storeys
+	for index in plans.size():
+		var floor := Storey.new()
+		floor.height = float(index) * HEIGHT
+		storeys.append(floor)
+		if index == 0:
+			continue
+		var s: Dictionary = plans[index].stair
+		var stair := Stair.new()
+		var below := float(index - 1) * HEIGHT
+		if s.axis == &"x":
+			stair.from = Vector3(float(s.from), below, float(s.lane))
+			stair.to = Vector3(float(s.to), floor.height, float(s.lane))
+			stair.shaft = Rect2(minf(stair.from.x, stair.to.x) - 0.03, float(s.lane) - STAIR_WIDTH * 0.53,
+				absf(stair.to.x - stair.from.x) + 0.06, STAIR_WIDTH * 1.06)
+		else:
+			stair.from = Vector3(float(s.lane), below, float(s.from))
+			stair.to = Vector3(float(s.lane), floor.height, float(s.to))
+			stair.shaft = Rect2(float(s.lane) - STAIR_WIDTH * 0.53, minf(stair.from.z, stair.to.z) - 0.03,
+				STAIR_WIDTH * 1.06, absf(stair.to.z - stair.from.z) + 0.06)
+		stairs.append(stair)
+		floor.incoming = stair
+		storeys[index - 1].outgoing = stair
+		floor.slab = _slab_around(stair.shaft, floor.height)
+		upper_envelope.append(AABB(Vector3(-half - wall, floor.height, 0.0), Vector3(wall, HEIGHT, depth)))
+		upper_envelope.append(AABB(Vector3(half, floor.height, 0.0), Vector3(wall, HEIGHT, depth)))
+		for end: float in [0.0, depth]:
+			upper_envelope.append(AABB(Vector3(-half, floor.height, end - wall * 0.5), Vector3(width, HEIGHT, wall)))
+	var roof_at := float(plans.size()) * HEIGHT
+	storeys.append(Storey.new())
+	storeys[-1].height = roof_at
+	storeys[-1].slab.append(AABB(Vector3(-half, roof_at - SLAB_THICKNESS, 0), Vector3(width, SLAB_THICKNESS, depth)))
+	_home_openings.append({"index": 0, "kind": &"door", "side": 0, "wall": &"front", "room": &"",
+		"shoulder": shoulder, "inward": Vector3.BACK, "hole": AABB()})
+	for index in plans.size():
+		var p: Dictionary = plans[index]
+		var base := float(index) * HEIGHT
+		rooms_by_level.append(p.rooms)
+		var into: Array[AABB] = walls if index == 0 else storeys[index].partitions
+		var rooms: Array = p.rooms
+		for i in rooms.size():
+			for j in range(i + 1, rooms.size()):
+				var edge := _shared_edge(rooms[i].rect, rooms[j].rect)
+				if edge.is_empty():
+					continue
+				var gaps: Array = []
+				for d: Dictionary in p.doors:
+					if (d.a == rooms[i].name and d.b == rooms[j].name) or (d.a == rooms[j].name and d.b == rooms[i].name):
+						gaps.append([float(d.at) - float(d.w) * 0.5, float(d.at) + float(d.w) * 0.5])
+						var at := Vector3(float(d.pos), base, float(d.at)) if edge.line == &"x" else Vector3(float(d.at), base, float(d.pos))
+						var leaf := AABB(Vector3(at.x - wall * 0.5, base, at.z - float(d.w) * 0.5), Vector3(wall, OPENING_HEIGHT, float(d.w))) \
+							if edge.line == &"x" else AABB(Vector3(at.x - float(d.w) * 0.5, base, at.z - wall * 0.5), Vector3(float(d.w), OPENING_HEIGHT, wall))
+						inner_doors.append({"level": index, "rooms": [d.a, d.b], "leaf": leaf, "at": at})
+						inner_open.append(1)
+						if index == 0:
+							room_doors.append(Vector3(at.x, 0.0, at.z))
+				_inner_wall(edge, gaps, base, into)
+		for piece: Dictionary in p.furniture:
+			var r: Rect2 = piece.rect
+			furniture.append({"kind": piece.kind, "room": piece.room, "level": index, "hide": piece.hide,
+				"box": AABB(Vector3(r.position.x, base, r.position.y), Vector3(r.size.x, float(piece.h), r.size.y))})
+		for win: Dictionary in p.windows:
+			var at := float(win.at)
+			var o := {"index": _home_openings.size(), "kind": &"window", "side": 0, "wall": win.wall, "room": win.room}
+			match win.wall:
+				&"left":
+					o.side = -1
+					o.hole = AABB(Vector3(-half - wall - 0.01, base + 0.82, at - 0.71), Vector3(wall + 0.02, 1.25, 1.42))
+					o.shoulder = Vector3(-half - wall - 0.6, base + ARM_HEIGHT, at)
+					o.inward = Vector3.RIGHT
+				&"right":
+					o.side = 1
+					o.hole = AABB(Vector3(half - 0.01, base + 0.82, at - 0.71), Vector3(wall + 0.02, 1.25, 1.42))
+					o.shoulder = Vector3(half + wall + 0.6, base + ARM_HEIGHT, at)
+					o.inward = Vector3.LEFT
+				&"front":
+					o.hole = AABB(Vector3(at - 0.71, base + 0.82, -wall), Vector3(1.42, 1.25, wall * 2.0))
+					o.shoulder = Vector3(at, base + ARM_HEIGHT, -wall * 0.5 - 0.6)
+					o.inward = Vector3.BACK
+				_:
+					o.hole = AABB(Vector3(at - 0.71, base + 0.82, depth - wall * 0.5 - 0.01), Vector3(1.42, 1.25, wall * 1.5 + 0.02))
+					o.shoulder = Vector3(at, base + ARM_HEIGHT, depth + wall + 0.6)
+					o.inward = Vector3.FORWARD
+			if index > 0:
+				o.storey = index
+			_home_openings.append(o)
+	# Under every stair's higher part, the cupboard it makes: solid, so nobody walks under the treads.
+	for stair in stairs:
+		var start := stair.from.lerp(stair.to, UNDER_STAIR_FROM / HEIGHT)
+		var lo := Vector3(minf(start.x, stair.to.x), stair.from.y, minf(start.z, stair.to.z))
+		var hi := Vector3(maxf(start.x, stair.to.x), stair.from.y + UNDER_STAIR_HEIGHT, maxf(start.z, stair.to.z))
+		if stair.from.x == stair.to.x:
+			lo.x = stair.shaft.position.x
+			hi.x = stair.shaft.end.x
+		else:
+			lo.z = stair.shaft.position.y
+			hi.z = stair.shaft.end.y
+		var level := int(roundf(stair.from.y / HEIGHT))
+		furniture.append({"kind": &"under_stair", "room": room_at(level, (lo + hi) * 0.5), "level": level, "hide": &"",
+			"box": AABB(lo, hi - lo)})
+	hides = Hides.ward_home_hides(furniture)
+	for index in plans.size():
+		_probes.append(_room_probes(index))
+	areas = _probes[0]
+	_home_openings[0].room = room_at(0, Vector3(door_x, 1.0, 0.3))
+
+## Where two rooms' rectangles meet: {"line": &"x" (a wall along z at x = pos) or &"z", "pos", "lo", "hi"}, {} apart.
+static func _shared_edge(a: Rect2, b: Rect2) -> Dictionary:
+	for pair: Array in [[a, b], [b, a]]:
+		var p: Rect2 = pair[0]
+		var q: Rect2 = pair[1]
+		if absf(p.end.x - q.position.x) < Homes.EPS:
+			var lo := maxf(p.position.y, q.position.y)
+			var hi := minf(p.end.y, q.end.y)
+			if hi - lo > 0.05:
+				return {"line": &"x", "pos": p.end.x, "lo": lo, "hi": hi}
+		if absf(p.end.y - q.position.y) < Homes.EPS:
+			var lo := maxf(p.position.x, q.position.x)
+			var hi := minf(p.end.x, q.end.x)
+			if hi - lo > 0.05:
+				return {"line": &"z", "pos": p.end.y, "lo": lo, "hi": hi}
+	return {}
+
+## An inner wall along an edge with its doorways cut (a lintel over each), as _partition builds today's.
+func _inner_wall(edge: Dictionary, gaps: Array, base: float, into: Array[AABB]) -> void:
+	gaps.sort_custom(func(x: Array, y: Array) -> bool: return x[0] < y[0])
+	var t := WALL_THICKNESS
+	var cursor := float(edge.lo) - t * 0.5
+	var pieces: Array = []
+	for g: Array in gaps:
+		pieces.append([cursor, float(g[0]), base, HEIGHT])
+		pieces.append([float(g[0]), float(g[1]), base + OPENING_HEIGHT, HEIGHT - OPENING_HEIGHT])
+		cursor = float(g[1])
+	pieces.append([cursor, float(edge.hi) + t * 0.5, base, HEIGHT])
+	var pos := float(edge.pos)
+	for piece: Array in pieces:
+		var a: float = piece[0]
+		var b: float = piece[1]
+		if b - a <= 0.001:
+			continue
+		if edge.line == &"x":
+			into.append(AABB(Vector3(pos - t * 0.5, piece[2], a), Vector3(t, piece[3], b - a)))
+		else:
+			into.append(AABB(Vector3(a, piece[2], pos - t * 0.5), Vector3(b - a, piece[3], t)))
+
+## Every wall, slab, partition and piece of furniture of the house (local).
+func solid_boxes() -> Array[AABB]:
+	var out: Array[AABB] = walls.duplicate()
+	out.append_array(upper_envelope)
+	for floor in storeys:
+		out.append_array(floor.slab)
+		out.append_array(floor.partitions)
+	for piece in furniture:
+		out.append(piece.box)
+	return out
+
+## The boxes the arm meets at a height (the walls and the furniture tall enough to reach it, by the palm's size).
+static func boxes_at(boxes: Array[AABB], y: float) -> Array[AABB]:
+	var out: Array[AABB] = []
+	for b in boxes:
+		if b.position.y - ArmSearch.PALM_RADIUS <= y and b.end.y + ArmSearch.PALM_RADIUS >= y:
+			out.append(b)
+	return out
+
+## Each room's probe point on a storey: its middle at arm height, or the clear spot nearest it (palm room from walls and
+## tall furniture), {name: local point}.
+func _room_probes(level: int) -> Dictionary:
+	var y := float(level) * HEIGHT + ARM_HEIGHT
+	var plane := boxes_at(solid_boxes(), y)
+	var out := {}
+	for room: Dictionary in rooms_by_level[level]:
+		var r: Rect2 = room.rect
+		var centre := Vector3(r.get_center().x, y, r.get_center().y)
+		var best := centre
+		var best_d := INF
+		var inner := r.grow(-0.3)
+		var nx := maxi(1, floori(inner.size.x / 0.2))
+		var nz := maxi(1, floori(inner.size.y / 0.2))
+		for i in nx + 1:
+			for j in nz + 1:
+				var p := Vector3(inner.position.x + inner.size.x * float(i) / nx, y, inner.position.y + inner.size.y * float(j) / nz)
+				var d := p.distance_squared_to(centre)
+				if d >= best_d:
+					continue
+				var free := true
+				for b in plane:
+					if ArmSearch._hits_box(p, p, b, ArmSearch.PALM_RADIUS + 0.05):
+						free = false
+						break
+				if free:
+					best = p
+					best_d = d
+		out[room.name] = best
+	return out
+
+## Furniture is solid (North Star V33): a walker's knees meet the furniture their waist passes over.
+func _homes_walk_clear(a: Vector3, b: Vector3, radius: float) -> bool:
+	var knee_a := a + Vector3.DOWN * (0.84 - KNEE)
+	var knee_b := b + Vector3.DOWN * (0.84 - KNEE)
+	for piece in furniture:
+		if ArmSearch._hits_box(knee_a, knee_b, piece.box, radius):
+			return false
+	# WH1c: a shut inner door stops a walker as a wall does.
+	for k in inner_doors.size():
+		if inner_open[k] == 0 and ArmSearch._hits_box(a, b, inner_doors[k].leaf, radius):
+			return false
+	return true
+
+## The parts of a box outside a hole through it (up to six), for cutting a window out of a wall.
+static func _subtract(box: AABB, hole: AABB) -> Array[AABB]:
+	var out: Array[AABB] = []
+	if not box.intersects(hole):
+		out.append(box)
+		return out
+	var lo := box.position
+	var hi := box.end
+	for axis in 3:
+		if lo[axis] < hole.position[axis]:
+			var top := hi
+			top[axis] = hole.position[axis]
+			out.append(AABB(lo, top - lo))
+			lo[axis] = hole.position[axis]
+		if hi[axis] > hole.end[axis]:
+			var bottom := lo
+			bottom[axis] = hole.end[axis]
+			out.append(AABB(bottom, hi - bottom))
+			hi[axis] = hole.end[axis]
+	return out
+
+## The arm for an opening of a homes house: every solid box (with a window's hole cut), the bend points from the
+## corners of those boxes at the opening's storey, that storey's rooms; entering by the door only for the door.
+func _homes_arm(opening: Dictionary, extra_walls: Array[AABB]) -> ArmSearch:
+	var level := int(opening.get("storey", 0))
+	var hole: AABB = opening.hole
+	var blockers: Array[AABB] = []
+	for b in solid_boxes():
+		if hole.has_volume():
+			blockers.append_array(_subtract(b, hole))
+		else:
+			blockers.append(b)
+	blockers.append_array(extra_walls)
+	var y := float(level) * HEIGHT + ARM_HEIGHT
+	var inside := floor_bounds
+	var mouth: Vector3 = hole.get_center() if hole.has_volume() else door.get_center()
+	# Bend points inside the house, and just outside its own opening (round its jambs); never round the outside.
+	var keep := func(p: Vector3) -> bool:
+		return inside.has_point(Vector2(p.x, p.z)) or Vector2(p.x - mouth.x, p.z - mouth.z).length() < 1.0
+	var guides := ArmSearch.corner_guides(blockers, y, keep)
+	var leaves: Array[AABB] = []
+	for d in inner_doors:
+		leaves.append(d.leaf)
+	var arm := ArmSearch.new(opening.shoulder, door, blockers, guides, probes_for(opening), _seed + 13 * int(opening.index), opening.kind == &"door")
+	arm.set_inner_doors(leaves, inner_open)
+	var index := int(opening.index)
+	if not extra_walls.is_empty():
+		arm.use_graph(arm.build_graph())
+		arm.reach = opening_reach(opening)
+		return arm
+	if not _graph_cache.has(index):
+		_graph_cache[index] = arm.build_graph()
+	arm.use_graph(_graph_cache[index])
+	arm.reach = opening_reach(opening)
+	return arm

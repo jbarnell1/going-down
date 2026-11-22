@@ -21,10 +21,27 @@ const House = preload("res://sim/ward/house.gd")
 const SAMPLE := 0.15
 const Layout = preload("res://sim/ward/layout.gd")
 ## The two layouts: today's fixed one, and one made from the seed (WG1) with the host's options as today's settings make them.
-const LAYOUTS := ["fixed", "generated"]
+## WH1: and the homes (the run flag ward_homes) on the seeded layout.
+## IN1: and the homes with RL1's lift_clear (both on in a game room started with ward_homes=1), on the seeds where
+## lift_clear lowers a house (tests/prop_ward_homes.gd lift_clear_seeds), so the two flags are checked where they meet.
+const LAYOUTS := ["fixed", "generated", "homes", "homes_lift_clear"]
+const HomesProps = preload("res://tests/prop_ward_homes.gd")
 
 static func _options(layout: String) -> Dictionary:
+	if layout == "homes" or layout == "homes_lift_clear":
+		var o := Layout.options(null, layout == "homes_lift_clear")
+		o["homes"] = 1
+		return o
 	return Layout.options(null) if layout == "generated" else {}
+
+## The seeds a check walks for a layout: 1 to `count`, or for homes_lift_clear the first `count` where it matters.
+static func _seed_list(layout: String, count: int) -> Array[int]:
+	if layout == "homes_lift_clear":
+		return HomesProps.lift_clear_seeds(count)
+	var out: Array[int] = []
+	for k in count:
+		out.append(1 + k)
+	return out
 
 static func _ward(seed_value: int, layout: String) -> Ward:
 	return Ward.new(seed_value, _options(layout))
@@ -34,7 +51,7 @@ static func _graph(seed_value: int, layout := "fixed") -> G:
 
 func test_the_graph_is_the_same_for_a_seed(t: T) -> void:
 	for layout: String in LAYOUTS:
-		for seed_value: int in [8143, 2]:
+		for seed_value: int in (HomesProps.lift_clear_seeds(2) if layout == "homes_lift_clear" else [8143, 2]):
 			var w := _ward(seed_value, layout)
 			var a := G.build(w.layout, w.houses, w.lift_door()) as G
 			var again := _ward(seed_value, layout)
@@ -81,8 +98,7 @@ func _never_through(t: T, layout: String) -> void:
 	var worst := INF
 	var bad: Array[String] = []
 	var kinds := {}
-	for k in seeds:
-		var seed_value := 1 + k
+	for seed_value: int in _seed_list(layout, seeds):
 		var g := _graph(seed_value, layout)
 		for i in g.pos.size():
 			if not g.joined(i):
@@ -127,8 +143,7 @@ func _joined(t: T, layout: String) -> void:
 	var joined := 0
 	var slack := 0.0
 	var unjoined := {}
-	for k in seeds:
-		var seed_value := 1 + k
+	for seed_value: int in _seed_list(layout, seeds):
 		var w := _ward(seed_value, layout)
 		var g := _graph(seed_value, layout)
 		for h in w.houses.size():
@@ -164,8 +179,8 @@ func _safe_room(t: T, layout: String) -> void:
 	var failing: Array[String] = []
 	var shortened := 0
 	var checked := 0
-	for k in seeds:
-		var w := _ward(1 + k, layout)
+	for seed_value: int in _seed_list(layout, seeds):
+		var w := _ward(seed_value, layout)
 		for h in w.houses.size():
 			var fixture := w.houses[h]
 			for o: Dictionary in fixture.openings():
@@ -174,12 +189,15 @@ func _safe_room(t: T, layout: String) -> void:
 				if fixture.opening_reach(o) < House.ArmSearch.REACH:
 					shortened += 1
 				if reach.size() >= fixture.probes_for(o).size():
-					failing.append("seed %d house %d (%s) %s %d" % [1 + k, h, w.layout.houses[h].style, o.kind, int(o.side)])
+					failing.append("seed %d house %d (%s) %s %d" % [seed_value, h, w.layout.houses[h].style, o.kind, int(o.side)])
 	t.check(failing.is_empty(), "%s: from every opening at least one room is out of reach: %s" % [layout, str(failing.slice(0, 8))])
 	# Behaviour: a full search from each opening, every room heard, never touches a player in the safe room.
 	var touched: Array[String] = []
 	var searches := 0
-	for seed_value: int in ([8143] if t.quick else [8143, 1, 2, 3]):
+	var searched: Array = [8143] if t.quick else [8143, 1, 2, 3]
+	if layout == "homes_lift_clear":
+		searched = HomesProps.lift_clear_seeds(searched.size())
+	for seed_value: int in searched:
 		var w := _ward(seed_value, layout)
 		for h in w.houses.size():
 			var fixture := w.houses[h]

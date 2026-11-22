@@ -18,6 +18,10 @@ func _init() -> void:
 			seeds.append(int(a))
 		elif a == "--layout=2":
 			options = Layout.options(null)
+		elif a == "--homes":
+			# WH1: the homes (the run flag ward_homes) on the generated layout.
+			options = Layout.options(null)
+			options["homes"] = 1
 	for s in seeds:
 		print(line(s, options))
 	quit()
@@ -55,6 +59,16 @@ static func parts_of(w: Ward) -> Array[String]:
 			houses += "s" + _v(s.from) + _v(s.to) + ";"
 		for d: Vector3 in h.room_doors:
 			houses += "d" + _v(d) + ";"
+		# WH1: a home's furniture, room probes and openings too (nothing for today's houses).
+		if h.homes():
+			for f: Dictionary in h.furniture:
+				houses += "F%s%s;" % [f.kind, _b(f.box)]
+			for o: Dictionary in h.openings():
+				houses += "O%s%s;" % [o.kind, _v(o.shoulder)]
+			for level in h.rooms_by_level.size():
+				var probes := h.upper_areas(level) if level > 0 else h.areas
+				for room: StringName in probes:
+					houses += "A%s%s;" % [room, _v(probes[room])]
 	var fixtures := _v(w.lift_door())
 	for sw: Dictionary in w.switches:
 		fixtures += "|%d %s" % [int(sw.house), _v(sw.position)]

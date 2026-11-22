@@ -191,6 +191,10 @@ func show_host(ward: Dictionary, host_now: float, id: String, crew: Array) -> vo
 	local_phase = phase
 	caught = ward.caught.has(id)
 	var extras: Dictionary = ward.get("extras", {})
+	# WH1c: a home's inner doors, shut or open, in the walk model and on the screen.
+	if extras.get("inner") is Array:
+		walk_model.set_inner_doors_wire(extras["inner"])
+		_show_inner_doors()
 	shown_lift = ward.get("lift", {})
 	called = extras.get("called", false) == true
 	var webbed_rows: Dictionary = extras.get("web", {})
@@ -953,17 +957,21 @@ func _build_house(site: Dictionary) -> void:
 		_box(deck, Vector3(side * (half_w + Layout.GALLERY * 0.5), -0.12, 0), Vector3(Layout.GALLERY, 0.24, deep), "wood", true)
 		_box(deck, Vector3(0, -0.12, side * (half_d + Layout.GALLERY * 0.5)), Vector3(float(site.w), 0.24, Layout.GALLERY), "wood", true)
 	var bounds := fixture.floor_bounds
-	for wall: AABB in fixture.walls:
-		var outside := wall.size.y > 2.9 and wall.size.z >= bounds.size.y - 0.01 and wall.size.x < 0.2
-		if outside and site.id == 0 and wall.position.x < bounds.position.x:
-			_lift_wall(root, wall)
-		elif outside:
-			_window_wall(root, wall, fixture.search_window.has_volume() and is_equal_approx(wall.position.x, fixture.search_window.position.x))
-		else:
-			# AW1: one material for every wall and slab: each face brick or the room's plaster (client/ward/skin.gd).
-			_box(root, wall.get_center(), wall.size, "house", true)
-	_dress_house(root, site, fixture)
-	WardSkin.dress_house(self, root, site, fixture, seed_value)
+	if fixture.homes():
+		# WH1: a home (the run flag ward_homes): its walls, rooms, stairs and plain box furniture (dressing is stage 2).
+		_build_home(root, site, fixture)
+	else:
+		for wall: AABB in fixture.walls:
+			var outside := wall.size.y > 2.9 and wall.size.z >= bounds.size.y - 0.01 and wall.size.x < 0.2
+			if outside and site.id == 0 and wall.position.x < bounds.position.x:
+				_lift_wall(root, wall)
+			elif outside:
+				_window_wall(root, wall, fixture.search_window.has_volume() and is_equal_approx(wall.position.x, fixture.search_window.position.x))
+			else:
+				# AW1: one material for every wall and slab: each face brick or the room's plaster (client/ward/skin.gd).
+				_box(root, wall.get_center(), wall.size, "house", true)
+		_dress_house(root, site, fixture)
+		WardSkin.dress_house(self, root, site, fixture, seed_value)
 	var door := fixture.door
 	var leaf := _box(root, door.get_center(), door.size, "wood", true) as StaticBody3D
 	door_houses.append(leaf)
@@ -973,9 +981,10 @@ func _build_house(site: Dictionary) -> void:
 	door_hinges.append(Dress.door_leaf(self, root, door))
 	_door_swing.append(Dress.DOOR_SWING)
 	door_hinges[-1].rotation.y = Dress.DOOR_SWING
-	for room: StringName in fixture.areas:
-		var at: Vector3 = fixture.areas[room]
-		_lamp(root, Vector3(at.x, 2.45, at.z))
+	if not fixture.homes():
+		for room: StringName in fixture.areas:
+			var at: Vector3 = fixture.areas[room]
+			_lamp(root, Vector3(at.x, 2.45, at.z))
 	var lines: Array[Node3D] = []
 	for x: float in [-1.0, 1.0]:
 		for z: float in [-1.0, 1.0]:
@@ -987,7 +996,9 @@ func _build_house(site: Dictionary) -> void:
 				# WL1: up to the cavern's roof, where each line is fixed.
 				lines.append(_beam(deck, edge - Vector3.UP * 18.0, Vector3(edge.x, roof_y - deck.position.y, edge.z), 0.07, 0.07, "rope"))
 	var support := lines[fixture.loaded_support_index()]
-	var ties := _interior_ties(root, fixture, root.to_local(support.global_position), int(site.id) == 0)
+	var ties: Array[Node3D] = []
+	if not fixture.homes():
+		ties = _interior_ties(root, fixture, root.to_local(support.global_position), int(site.id) == 0)
 	houses.append({"fixture": fixture, "lines": lines, "support": support, "root": root, "ties": ties, "deck": deck})
 
 ## The suspension shoe feeds a tie through the frame of each storey to the rear wall.
@@ -1028,6 +1039,87 @@ func _interior_ties(root: Node3D, fixture: House, shoe: Vector3, lift_house := f
 	ties.append(entry_lever)
 	return ties
 
+
+## WH1: a home drawn plainly from its rules (sim/ward/house.gd with the run flag ward_homes): every wall, slab and
+## partition with its windows cut, the lift's wall as today's, the stairs, a lintel and posts at each inner doorway,
+## each piece of furniture a plain box where the rules have it, one lamp in every room, and a roof. Stage 2 dresses it.
+func _build_home(root: Node3D, site: Dictionary, fixture: House) -> void:
+	var bounds := fixture.floor_bounds
+	var holes: Array[AABB] = []
+	for o: Dictionary in fixture.openings():
+		if (o.hole as AABB).has_volume():
+			holes.append(o.hole)
+	var boxes: Array[AABB] = fixture.walls.duplicate()
+	boxes.append_array(fixture.upper_envelope)
+	for storey: House.Storey in fixture.storeys:
+		boxes.append_array(storey.slab)
+		boxes.append_array(storey.partitions)
+	for box: AABB in boxes:
+		var outside := box.size.y > 2.9 and box.size.z >= bounds.size.y - 0.01 and box.size.x < 0.2 and box.position.y < 0.01
+		if outside and int(site.id) == 0 and box.position.x < bounds.position.x:
+			_lift_wall(root, box)
+			continue
+		var pieces: Array[AABB] = [box]
+		for hole in holes:
+			var next: Array[AABB] = []
+			for piece in pieces:
+				next.append_array(House._subtract(piece, hole))
+			pieces = next
+		for piece in pieces:
+			if piece.size.x > 0.001 and piece.size.y > 0.001 and piece.size.z > 0.001:
+				_box(root, piece.get_center(), piece.size, "house", true)
+	for hole in holes:
+		var frame := hole.grow(0.02)
+		_box(root, Vector3(frame.get_center().x, frame.position.y, frame.get_center().z), Vector3(frame.size.x, 0.06, frame.size.z), "wood")
+	for stair: House.Stair in fixture.stairs:
+		_dress_home_stair(root, stair)
+	for door: Dictionary in fixture.inner_doors:
+		var leaf: AABB = door.leaf
+		var along_x := leaf.size.x > leaf.size.z
+		for end: float in [0.0, 1.0]:
+			var post := leaf.get_center()
+			if along_x:
+				post.x = lerpf(leaf.position.x, leaf.end.x, end)
+			else:
+				post.z = lerpf(leaf.position.z, leaf.end.z, end)
+			post.y = leaf.position.y + House.OPENING_HEIGHT * 0.5
+			_box(root, post, Vector3(0.08 if along_x else 0.18, House.OPENING_HEIGHT, 0.18 if along_x else 0.08), "wood")
+	# WH1c: each inner door's leaf, drawn (and solid) while the rules have it shut (_show_inner_doors).
+	for k in fixture.inner_doors.size():
+		var leaf_box: AABB = fixture.inner_doors[k].leaf
+		var leaf := _box(root, leaf_box.get_center(), leaf_box.size, "wood", true) as StaticBody3D
+		_set_solid(leaf, false)
+		inner_leaves.append({"house": houses.size(), "door": k, "node": leaf})
+	for piece: Dictionary in fixture.furniture:
+		var box: AABB = piece.box
+		var color := "iron" if [&"range", &"copper", &"stove", &"mangle"].has(piece.kind) else ("plaster" if [&"bath", &"sink", &"toilet"].has(piece.kind) else "wood")
+		_box(root, box.get_center(), box.size, color, true)
+	for level in fixture.rooms_by_level.size():
+		var probes: Dictionary = fixture.areas if level == 0 else fixture.upper_areas(level)
+		for room: StringName in probes:
+			var at: Vector3 = probes[room]
+			_lamp(root, Vector3(at.x, float(level) * House.HEIGHT + 2.45, at.z))
+	var roof_y := House.HEIGHT * float(fixture.rooms_by_level.size())
+	_box(root, Vector3(0, roof_y, bounds.get_center().y), Vector3(bounds.size.x + 0.4, 0.18, bounds.size.y + 0.48), "iron")
+
+## WH1c: the homes' inner door leaves ({house, door, node}); shown where the walk model has them shut.
+var inner_leaves: Array[Dictionary] = []
+
+func _show_inner_doors() -> void:
+	for row: Dictionary in inner_leaves:
+		var shut := walk_model.houses[int(row.house)].inner_open[int(row.door)] == 0
+		if (row.node as Node3D).visible != shut:
+			_set_solid(row.node, shut)
+
+## WH1: a home's stair, along x or along z (a home's may run front to back).
+func _dress_home_stair(root: Node3D, stair: House.Stair) -> void:
+	const TREADS := 18
+	var along_z := stair.from.x == stair.to.x
+	var run_length := absf(stair.to.z - stair.from.z) if along_z else absf(stair.to.x - stair.from.x)
+	for tread in TREADS:
+		var where := stair.from.lerp(stair.to, (float(tread) + 0.5) / TREADS)
+		var size := Vector3(House.STAIR_WIDTH, 0.13, run_length / TREADS + 0.008) if along_z else Vector3(run_length / TREADS + 0.008, 0.13, House.STAIR_WIDTH)
+		_box(root, where - Vector3.UP * 0.065, size, "wood")
 
 func _take_up_lever(mount: Node3D) -> Node3D:
 	var joint := Node3D.new()

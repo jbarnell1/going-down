@@ -16,6 +16,7 @@ const Report = preload("res://sim/report.gd")
 const Upgrades = preload("res://sim/upgrades.gd")
 const Findables = preload("res://sim/findables.gd")
 const Inventory = preload("res://sim/inventory.gd")
+const Homes = preload("res://sim/ward/homes.gd")
 
 ## Every data file the rules (sim/, net/, server/) read at run time.
 const FILES: Array[String] = [
@@ -24,6 +25,7 @@ const FILES: Array[String] = [
 	"res://data/upgrades.json",  # sim/upgrades.gd: the upgrade tree
 	"res://data/poems.json",  # sim/findables.gd: the poem notes and lore pages found by searching
 	"res://data/items.json",  # sim/inventory.gd: the items a slot can hold
+	"res://data/ward_homes.json",  # sim/ward/homes.gd: the Hanging Ward's house types (WH1, ward_homes)
 ]
 
 ## How much of `path` the rules' own loader read: the count of its entries (templates, awards, nodes);
@@ -43,6 +45,8 @@ static func read(path: String) -> int:
 			return (Findables.data().get("poems", []) as Array).size()
 		"res://data/items.json":
 			return (Inventory.data().get("items", []) as Array).size()
+		"res://data/ward_homes.json":
+			return Homes.types().size()
 	return -1
 
 ## Reads every file in FILES. Returns {"ok": bool, "files": int (read), "missing": "<file name>" (the

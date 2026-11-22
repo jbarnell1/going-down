@@ -450,7 +450,7 @@ static func _nearest_reachable(fixture: House, index: int, point: Vector3) -> St
 		if best == &"" or e < d:
 			best = area
 			d = e
-	return best if best != &"" else &"entry"
+	return best if best != &"" else fixture.front_room()
 
 func _search_step(now: float, delta: float, crew: Dictionary, events: Array[Dictionary]) -> void:
 	var w: Variant = ward
@@ -462,9 +462,11 @@ func _search_step(now: float, delta: float, crew: Dictionary, events: Array[Dict
 		var member: Dictionary = crew[id]
 		if not member.get("active", true) or member.get("aboard", false):
 			continue
-		var local := house.to_local(member.position + Vector3.UP * 1.25)
-		if house.area_at_any(local) != &"":
+		# WH1c: a player in a home's hide is touched only as the hide's rule allows (sim/ward/state.gd arm_contact).
+		var local: Variant = w.arm_contact(id, member, w.resident_house)
+		if local != null and house.area_at_any(local) != &"":
 			contacts[id] = local
+	w.sync_inner_doors()
 	w.arm.step(delta, contacts, bool(w.requested_doors.get(w.resident_house, true)))
 	for id: String in w.arm.contacts:
 		if not w.caught.has(id):
@@ -613,7 +615,7 @@ func _chase_step(now: float, delta: float, crew: Dictionary, speeds_by_id: Dicti
 		w.encounter = &"lingering"
 		var h: House = w.houses[inside]
 		var area := h.area_at_any(h.to_local(feet + Vector3.UP * 1.25))
-		_go_to_house(inside, area if area != &"" else &"entry", feet, now, events, true)
+		_go_to_house(inside, area if area != &"" else h.front_room(), feet, now, events, true)
 		return
 	var torso := feet + Vector3.UP * 1.25
 	var speed_t := float(speeds_by_id.get(chase_id, 0.0))
@@ -674,7 +676,7 @@ func _rear_step(now: float, crew: Dictionary, events: Array[Dictionary]) -> void
 		var h: House = w.houses[inside]
 		var area := h.area_at_any(h.to_local(feet + Vector3.UP * 1.25))
 		w.encounter = &"lingering"
-		_go_to_house(inside, area if area != &"" else &"entry", feet, now, events, true)
+		_go_to_house(inside, area if area != &"" else h.front_room(), feet, now, events, true)
 		return
 	# The arm is always fast enough out of doors.
 	var hand := feet + Vector3.UP * 1.25
