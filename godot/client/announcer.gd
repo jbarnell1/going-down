@@ -139,7 +139,13 @@ var hushes := 0
 var _hush_until := -1
 var _last_hush := -1
 
-var voice := "bella"
+## ES1a: the voice the next line is read in: the player's own ANNOUNCER VOICE (client/voice_pref.gd sets it; Brian
+## for a player who never chose). A line it has no recording of is read in the first manifest voice that has one
+## (voice_path), so the Bella-only tape and the Ward's lift lines still play.
+var voice := "brian"
+const VOICE_DIR := "res://assets/voice"
+## The manifest's voices in its order (use_manifest), the fallbacks for a line the chosen voice lacks.
+var voice_ids: Array = ["bella"]
 var lines := {}          # id -> {moment, plain}
 var by_moment := {}      # moment -> [ids]
 var priority := {}       # moment -> int
@@ -246,6 +252,12 @@ func _ready() -> void:
 
 ## The manifest's moments and lines (res://assets/voice/manifest.json; tests pass it in).
 func use_manifest(m: Dictionary) -> void:
+	var ids: Array = []
+	for v: Variant in m.get("voices", []):
+		if v is Dictionary and str(v.get("id", "")) != "":
+			ids.append(str(v["id"]))
+	if not ids.is_empty():
+		voice_ids = ids
 	for mo: String in m.moments:
 		priority[mo] = int(m.moments[mo].priority)
 	for l: Dictionary in m.lines:
@@ -253,6 +265,19 @@ func use_manifest(m: Dictionary) -> void:
 		if not by_moment.has(l.moment):
 			by_moment[l.moment] = []
 		by_moment[l.moment].append(l.id)
+
+## ES1a: line `id`'s recording under `dir` (<dir>/<voice>/<id>.mp3) in the chosen voice, or in the first manifest
+## voice that has it when the chosen one does not (the Bella-only tape, the Ward's Bella-only lift lines); the chosen
+## voice's path when none has it (a caption only, as before).
+func voice_path(id: String, dir: String = VOICE_DIR) -> String:
+	var mine := "%s/%s/%s.mp3" % [dir, voice, id]
+	if ResourceLoader.exists(mine):
+		return mine
+	for v: Variant in voice_ids:
+		var other := "%s/%s/%s.mp3" % [dir, str(v), id]
+		if ResourceLoader.exists(other):
+			return other
+	return mine
 
 func _log(d: Dictionary) -> void:
 	hint_log.append(d)
@@ -575,7 +600,7 @@ func say_count(line: String, text: String, ms: int, number := -1, length := 0, l
 	if fake:
 		_fake_until[which] = now + _length_ms(id, ms)
 	else:
-		var path := "res://assets/voice/%s/%s.mp3" % [voice, id]
+		var path := voice_path(id)
 		if not ResourceLoader.exists(path):
 			return
 		var p := number_player if line == "number" else count_player
@@ -639,7 +664,7 @@ func no_power_said() -> void:
 ## Plays recorded clip `id` (res://assets/voice/<voice>/<id>.mp3) on its own player; returns its length in ms (0 when
 ## the file is missing or the announcer is a test double).
 func play_clip(id: String) -> int:
-	var path := "res://assets/voice/%s/%s.mp3" % [voice, id]
+	var path := voice_path(id)
 	var found := ResourceLoader.exists(path)
 	clips.append({"id": id, "path": path, "found": found, "at": _ms()})
 	if fake or not found or clip_player == null:
@@ -696,7 +721,7 @@ func ward_line(cue: String) -> void:
 	if not WARD_LINES.has(cue):
 		return
 	if not lines.has(cue) or not lines[cue].has("path"):
-		lines[cue] = {"id": cue, "moment": cue, "plain": WARD_LINES[cue], "path": "res://assets/ward/voice/%s/%s.mp3" % [voice, cue]}
+		lines[cue] = {"id": cue, "moment": cue, "plain": WARD_LINES[cue], "dir": "res://assets/ward/voice", "path": voice_path(cue, "res://assets/ward/voice")}
 		by_moment[cue] = [cue]
 		priority[cue] = WARD_PRIORITY
 	request(cue, EXPIRE_LONG_MS)
@@ -715,7 +740,7 @@ func tenant_beat(moment: String, minutes: int) -> String:
 	var text := str(options[pick][1]).replace("{m}", str(minutes))
 	var now := _ms()
 	tenant_said.append({"moment": moment, "id": id, "text": text, "at": now})
-	var path := "res://assets/voice/%s/%s.mp3" % [voice, id]
+	var path := voice_path(id)
 	var recorded := not fake and ResourceLoader.exists(path) and (moment != "tenant_doors" or minutes == 10)
 	if recorded:
 		if not lines.has(id):
@@ -965,7 +990,8 @@ func update() -> void:
 	if fake:
 		_fake_until["main"] = now + _length_ms(str(next.id), 2000)
 	else:
-		var path := str(lines.get(next.id, {}).get("path", "res://assets/voice/%s/%s.mp3" % [voice, next.id]))
+		# ES1a: the path is worked out as the line starts, so a voice chosen since it was queued reads it.
+		var path := voice_path(str(next.id), str(lines.get(next.id, {}).get("dir", VOICE_DIR)))
 		var stream: Resource = load(path) if ResourceLoader.exists(path) else null
 		if stream == null:
 			return

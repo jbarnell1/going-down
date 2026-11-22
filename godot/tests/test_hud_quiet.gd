@@ -143,10 +143,31 @@ func test_the_lift_notice_prints_the_hosts_minutes(t: T) -> void:
 	# The Playroom's real rate lines, on their own sheets, whole, with their numbers exact.
 	var tuned := HideView.anger_rates_text(null, true, true)
 	var health := HideView.health_rates_text(true)
-	for rate: String in [HideView.ANGER_RATES, tuned, health, HideView.health_rates_text(false)]:
-		var sheets: Array = LiftScript.rate_sheets(PackedStringArray([rate]))
-		var printed := " ".join(sheets[0] as PackedStringArray) if not sheets.is_empty() else ""
-		t.check(sheets.size() == 1 and printed == " ".join(rate.split(" ", false)), "the rate whole on one sheet: %s / %s" % [rate, sheets])
+	# PL1: under a first line naming its bar in the HUD bar's word (ANGER, HEALTH), whichever rates the floor has.
+	var health_hunt := HideView.health_rates_text(true, null)
+	for pair: Array in [[HideView.ANGER_RATES, 0], [tuned, 0], [HideView.anger_rates_text(null, true, false), 0],
+			[health, 1], [health_hunt, 1], [HideView.health_rates_text(false), 1]]:
+		var rate := str(pair[0])
+		var both := PackedStringArray(["", ""])
+		both[int(pair[1])] = rate
+		var sheets: Array = LiftScript.rate_sheets(both)
+		var rows := sheets[0] as PackedStringArray if not sheets.is_empty() else PackedStringArray()
+		var head: String = ["ANGER", "HEALTH"][int(pair[1])]
+		t.check(sheets.size() == 1 and rows.size() > 1 and rows[0] == head, "the %s rates' sheet starts %s: %s" % [head, head, rows])
+		var printed := " ".join(rows.slice(1))
+		t.check(printed == " ".join(rate.split(" ", false)), "the rate whole under its heading: %s / %s" % [rate, rows])
+		t.check(rows.size() <= LiftScript.NOTICE_ROWS, "the heading and the rate fit the sheet: %d lines" % rows.size())
+		for r: String in rows:
+			t.check(r.length() <= LiftScript.NOTICE_COLS, "a line fits the sheet's width: " + r)
+	t.check(LiftScript.NOTICE_GLYPH_M >= 0.09, "the letters stay at least 0.09 m: %.3f" % LiftScript.NOTICE_GLYPH_M)
+	# The heading is the HUD bar's own word: the HUD's lines say ANGER and HEALTH.
+	var hud_words: Control = HudScript.new()
+	hud_words.set("anger", 0.2)
+	hud_words.set("health", 80.0)
+	hud_words.set("osd_on", false)
+	var shown := Array(hud_words.call("visible_lines", 0))
+	t.check(shown.has(LiftScript.RATE_HEADINGS[0]) and shown.has(LiftScript.RATE_HEADINGS[1]), "the HUD's bars are called %s: %s" % [LiftScript.RATE_HEADINGS, shown])
+	hud_words.free()
 	t.eq(LiftScript.rate_sheets(PackedStringArray(["", ""])).size(), 0, "no rates: no rate sheets")
 	var car := Run.car_geometry(Clinic.generate_clinic("notice", 1))
 	var lift: Node3D = LiftScript.new()

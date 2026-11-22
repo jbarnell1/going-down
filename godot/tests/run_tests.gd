@@ -75,6 +75,8 @@ const FILES: Array[String] = [
 	"prop_ward_call",
 	"test_ward_web_view",
 	"test_music",
+	"test_announcer_voice",
+	"test_esc_card",
 	"prop_ward_layout",
 	"test_ward_dress",
 	"test_ward_skin",

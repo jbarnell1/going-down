@@ -130,6 +130,7 @@ const TenantClock = preload("res://client/tenant_clock.gd")
 ## CS1: each resident's caught scene on the caught player's screen, and the player's own FULL / SOFT for it.
 const CaughtScene = preload("res://client/caught_scene.gd")
 const CaughtPref = preload("res://client/caught_pref.gd")
+const VoicePref = preload("res://client/voice_pref.gd")
 const Mic = preload("res://client/mic.gd")
 const MicHud = preload("res://client/mic_hud.gd")
 
@@ -385,6 +386,8 @@ var caught_at := -1
 ## screen's own catch at caught_at plays a scene and had the down rule then, and the Minder's take already shown.
 var caught_scene: Node3D = null
 var caught_pref := CaughtPref.new()
+## ES1a: the player's own ANNOUNCER VOICE (client/voice_pref.gd; Brian until they choose).
+var voice_pref := VoicePref.new()
 ## VC1: the microphone's loudness (client/mic.gd) and its meter and consent card (client/mic_hud.gd).
 var mic: Mic = null
 var mic_hud: MicHud = null
@@ -618,6 +621,11 @@ func _ready() -> void:
 	# CS1: the player's own CAUGHT SCENES (a test plays FULL).
 	caught_pref.persist = not automated
 	caught_pref.load_saved()
+	# ES1a: the player's own ANNOUNCER VOICE, told to the announcer at once (a test hears the default, Brian).
+	voice_pref.persist = not automated
+	voice_pref.target = announcer
+	voice_pref.load_saved()
+	settings_panel.voice_pref = voice_pref
 	# VC1: the microphone, opened only after the player says yes, never in a scripted run or the browser.
 	mic = Mic.new()
 	mic.name = "Mic"
@@ -2121,6 +2129,7 @@ func _process(delta: float) -> void:
 	if OS.has_feature("web") and frames == 3:
 		JavaScriptBridge.eval("window.gdReady = true; window.gdFirstFrameMs = performance.now();", true)
 	hud.menu_foot = "CLICK TO PLAY" if mode == "game" else "ESC TO GO BACK"
+	hud.menu_note = hud.RUN_NOTE if mode == "game" else ""
 	hud.hints_on = announcer.hints.enabled
 	if Time.get_ticks_msec() > _note_until:
 		hud.note = ""
@@ -2560,10 +2569,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		var tl: Dictionary = (lc.latest as Dictionary)["tenant"]
 		announcer.tenant_beat(str(beat["moment"]), roundi(float(tl.get("len", 600.0)) / 60.0))
 	hud.place = str(s.get("depth", "")) + str(s.get("place", ""))
-	hud.display = _display_held()
-	if inv_view != null:
-		inv_view.display = hud.display
-	# HUD1b: the lift's paper notice: the floor's minutes from the host's clock (kept through a ride), and the rates
+	_sync_display()	# HUD1b: the lift's paper notice: the floor's minutes from the host's clock (kept through a ride), and the rates
 	# printed on this floor (the Playroom's).
 	if lc != null and lc.latest is Dictionary and (lc.latest as Dictionary).get("tenant") is Dictionary:
 		_notice_minutes = roundi(float(((lc.latest as Dictionary)["tenant"] as Dictionary).get("len", 0.0)) / 60.0)
@@ -3072,6 +3078,15 @@ static func car_waiting_shown(text: String, latest: Variant) -> String:
 		if bool(p.get("active", false)):
 			crew += 1
 	return text if crew > 1 else ""
+
+## HUD1: Tab (DISPLAY) held shows every count; the inventory and (PL1) the noise meter follow it, the meter even in
+## silence.
+func _sync_display() -> void:
+	hud.display = _display_held()
+	if inv_view != null:
+		inv_view.display = hud.display
+	if mic_hud != null:
+		mic_hud.force_show = hud.display
 
 ## HUD1: Tab (DISPLAY) held, in a run, with no panel or card taking the keys; or a scripted run's "display 1".
 func _display_held() -> bool:
@@ -3960,11 +3975,19 @@ func _command(c: String) -> String:
 			if p.size() >= 2:
 				mic.fake_level = -1 if p[1] == "off" else clampi(int(p[1]), 0, 15)
 			return JSON.stringify(mic.describe())
+		"micui":
+			# PL1: `micui consent|calib|off`: draws the microphone's consent or calibration card over the game for a
+			# photograph, from a stand-in microphone: the player's settings file is never read or written and the real
+			# microphone never opened. The test channel (testport=) only.
+			if _test_port <= 0 or mic_hud == null:
+				return "micui needs testport"
+			mic_hud.show_card(p[1] if p.size() > 1 else "off")
+			return JSON.stringify({"card": mic_hud.card, "consent": mic_hud.consent_open(), "calib": mic_hud.calib_open()})
 		"meter":
 			# VC4: the noise meter's numbers now: the shown level, each source's, whether it is drawn.
 			if mic_hud == null:
 				return "no meter"
-			return JSON.stringify({"level": mic_hud.noise.level, "sources": mic_hud.noise.levels, "inRun": mic_hud.in_run, "alpha": mic_hud.modulate.a})
+			return JSON.stringify({"level": mic_hud.noise.level, "sources": mic_hud.noise.levels, "inRun": mic_hud.in_run, "alpha": mic_hud.modulate.a, "forceShow": mic_hud.force_show})
 		"emote":
 			if p.size() < 2 or not p[1] in Protocol.EMOTES:
 				return "unknown emote"

@@ -66,6 +66,10 @@ var f8_row := ""
 var hints_on := true
 ## The line under the menu (the start screen says how to go back instead).
 var menu_foot := "CLICK TO PLAY"
+## ES1b: the line under the card's title in a run: the game goes on behind the menu, alone or with friends, and the
+## card says so (client/main.gd sets "" on the start screen, where there is no run).
+const RUN_NOTE := "THE RUN DOES NOT PAUSE"
+var menu_note := RUN_NOTE
 ## Name tags over other players: [{text, pos (window pixels, the text's bottom centre), alpha}].
 var tags: Array = []
 ## The emote wheel: open, the labels clockwise from the top, the one aimed at (-1: none).
@@ -572,13 +576,20 @@ func _draw_nerve(px: float) -> void:
 	for i in range(1, lines.size()):
 		PixelFont.draw_shadowed(self, lines[i], Vector2(x, y + (6 + i * 9) * px), px, Color("#d8ddd9"))
 
+## PL1: where the anger bar's label starts: 6 % of the screen in from the top left, and never higher than ANGER_BELOW
+## pixel-font rows, so the noise meter's row above it (client/mic_hud.gd: 5 rows down, 11 tall with its marks, so its
+## last row is 14) stays clear at every size (at 480x270 the 6 % margin alone put ANGER on the meter).
+const ANGER_BELOW := 17.0
+static func anger_at(sz: Vector2, px: float) -> Vector2:
+	return Vector2(maxf(sz.x * 0.06, 16.0), maxf(maxf(sz.y * 0.06, 12.0), ANGER_BELOW * px))
+
 ## The anger bar (T15m), top left (clear of the count's lines in the middle and the tape's PLAY): ANGER and the number out of 100, the bar (amber, red and pulsing once nearly full or while it
 ## counts), and what fills it under it.
 func _draw_anger(px: float) -> void:
-	var margin := Vector2(maxf(size.x * 0.06, 16.0), maxf(size.y * 0.06, 12.0))
 	var bar_w := 80.0 * px
-	var x := margin.x
-	var y := margin.y
+	var at := anger_at(size, px)
+	var x := at.x
+	var y := at.y
 	var hot := anger >= 0.75
 	# HUD1: the bar shows when it moves and stays from 75 and during a count; what fills it only on Tab.
 	var aa := float(_a.get("anger", 1.0))
@@ -660,42 +671,59 @@ func menu_rows() -> Array[Array]:
 	rows.append(["H", "HINTS: ON" if hints_on else "HINTS: OFF"])
 	rows.append(["B", "BRIGHTNESS"])
 	# MU1: every player's own MASTER, MUSIC and EFFECTS (the settings panel's YOUR SOUND page).
-	rows.append(["V", "SOUND: MASTER MUSIC EFFECTS"])
+	# ES1a: the announcer's voice is chosen on the same page.
+	rows.append(["V", "SOUND AND ANNOUNCER VOICE"])
 	# VC3: the microphone's own key (client/main.gd, client/mic.gd).
 	rows.append(["M", "MICROPHONE ON / OFF"])
 	return rows
 
-func _draw_menu() -> void:
+## ES1b: the controls card's size in font pixels (w, h), its scale and its rectangle in a window of `at_size`
+## (the drawing and tests/test_esc_card.gd use the same numbers).
+func menu_card(at_size: Vector2) -> Dictionary:
 	var key_w := 0
 	var act_w := 0
 	var all_rows := menu_rows()
 	for row: Array in all_rows:
-		var key: String = row[0]
-		var act: String = row[1]
-		key_w = maxi(key_w, PixelFont.width(key))
-		act_w = maxi(act_w, PixelFont.width(act))
+		key_w = maxi(key_w, PixelFont.width(str(row[0])))
+		act_w = maxi(act_w, PixelFont.width(str(row[1])))
+	var note_rows := 1 if menu_note != "" else 0
+	var w := maxi(maxi(key_w + 10 + act_w + 16, PixelFont.width(menu_note) + 16), PixelFont.width(menu_foot) + 16)
+	var h := (all_rows.size() + 4 + note_rows) * 12 + 8
+	var sc := maxf(1.0, floor(minf(at_size.x * 0.92 / w, at_size.y * 0.86 / h)))
+	var origin := Vector2(floorf((at_size.x - w * sc) * 0.5), floorf((at_size.y - h * sc) * 0.5))
+	return {"w": w, "h": h, "sc": sc, "origin": origin, "key_w": key_w, "rows": all_rows, "note_rows": note_rows,
+		"rect": Rect2(origin, Vector2(w, h) * sc)}
+
+func _draw_menu() -> void:
+	var card := menu_card(size)
+	var all_rows: Array = card["rows"]
+	var key_w: int = card["key_w"]
 	var title := "CONTROLS"
 	var foot := menu_foot
 	var gap := 10
-	var w := key_w + gap + act_w + 16
+	var note := menu_note
+	var note_rows: int = card["note_rows"]
+	var w: int = card["w"]
 	var line := 12
-	var h := (all_rows.size() + 4) * line + 8
-	var sc := maxf(1.0, floor(minf(size.x * 0.92 / w, size.y * 0.86 / h)))
-	var origin := Vector2(floorf((size.x - w * sc) * 0.5), floorf((size.y - h * sc) * 0.5))
+	var h: int = card["h"]
+	var sc: float = card["sc"]
+	var origin: Vector2 = card["origin"]
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.5))
 	draw_rect(Rect2(origin, Vector2(w, h) * sc), Color(0.02, 0.02, 0.025, 0.88))
 	var amber := Color("#ffd27a")
 	var pale := Color("#f4f4ec")
 	PixelFont.draw_shadowed(self, title, origin + Vector2(floorf((w - PixelFont.width(title)) / 2.0), 6) * sc, sc, amber)
+	if note != "":
+		PixelFont.draw_shadowed(self, note, origin + Vector2(floorf((w - PixelFont.width(note)) / 2.0), 6 + line) * sc, sc, Color(0.62, 0.64, 0.6))
 	for i in all_rows.size():
 		var row: Array = all_rows[i]
 		var key: String = row[0]
 		var act: String = row[1]
-		var y := 6 + (i + 2) * line
+		var y := 6 + (i + 2 + note_rows) * line
 		PixelFont.draw_shadowed(self, key, origin + Vector2(8 + key_w - PixelFont.width(key), y) * sc, sc, amber)
 		PixelFont.draw_shadowed(self, act, origin + Vector2(8 + key_w + gap, y) * sc, sc, pale)
 	if (Time.get_ticks_msec() / 600) % 2 == 0:
-		PixelFont.draw_shadowed(self, foot, origin + Vector2(floorf((w - PixelFont.width(foot)) / 2.0), 6 + (all_rows.size() + 3) * line) * sc, sc, amber)
+		PixelFont.draw_shadowed(self, foot, origin + Vector2(floorf((w - PixelFont.width(foot)) / 2.0), 6 + (all_rows.size() + 3 + note_rows) * line) * sc, sc, amber)
 
 ## The subtitle's rows as drawn (upper case, only the font's characters, wrapped).
 func _subtitle_rows() -> PackedStringArray:

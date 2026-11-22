@@ -66,8 +66,13 @@ const PARTY_AT := Vector2(1.45, 1.45)
 ## with printed rates (the Playroom's anger and health), each rate goes on a sheet of its own beside it.
 ## HUD1c (Fable's window look: only the heading read through the 480x270 tape from the middle of the car): big
 ## letters, at most NOTICE_COLS characters a line and NOTICE_ROWS lines a sheet, each sheet NOTICE_W wide.
+## PL1 (Fable's window look: "ONLY A SEARCH EMPTIES IT" with nothing saying what "it" is): each rate sheet's first line
+## names its bar in the HUD bar's own word (RATE_HEADINGS, client/hud.gd _draw_anger and _draw_health), so a sheet
+## grew to seven lines; the letters stay the same size (the width sets them).
 const NOTICE_COLS := 16
-const NOTICE_ROWS := 6
+const NOTICE_ROWS := 7
+## The rate sheets' headings, in the order client/main.gd passes the rates: the anger bar's, then the health bar's.
+const RATE_HEADINGS: Array[String] = ["ANGER", "HEALTH"]
 const NOTICE_PX := Vector2i(NOTICE_COLS * 6 + 4, NOTICE_ROWS * 10 + 4)
 const NOTICE_W := 1.3
 const NOTICE_SIZE := Vector2(NOTICE_W, NOTICE_W * float(NOTICE_ROWS * 10 + 4) / float(NOTICE_COLS * 6 + 4))
@@ -152,12 +157,15 @@ static func notice_rows(minutes: int) -> PackedStringArray:
 		"THEN THE TENANT", "COMES.", "- THE MANAGEMENT"])
 
 ## HUD1c: each printed rate on a sheet of its own, wrapped to the sheet (the words and numbers exactly as on Tab).
+## PL1: under a first line naming its bar (RATE_HEADINGS by the rate's place in `rates`).
 static func rate_sheets(rates: PackedStringArray) -> Array[PackedStringArray]:
 	var out: Array[PackedStringArray] = []
-	for r: String in rates:
-		var clean := " ".join(r.split(" ", false))
+	for i in rates.size():
+		var clean := " ".join(rates[i].split(" ", false))
 		if clean != "":
-			out.append(PixelFont.wrap(clean, NOTICE_COLS).slice(0, NOTICE_ROWS))
+			var rows := PackedStringArray([RATE_HEADINGS[i] if i < RATE_HEADINGS.size() else ""])
+			rows.append_array(PixelFont.wrap(clean, NOTICE_COLS).slice(0, NOTICE_ROWS - 1))
+			out.append(rows)
 	return out.slice(0, 2)
 
 var notice_lines := PackedStringArray()
@@ -179,7 +187,7 @@ func show_notice(minutes: int, rates: PackedStringArray = PackedStringArray()) -
 	rate_lines = Array(sheets)
 	_print_sheet(0, rows, true)
 	for i in 2:
-		_print_sheet(1 + i, sheets[i] if i < sheets.size() else PackedStringArray(), false)
+		_print_sheet(1 + i, sheets[i] if i < sheets.size() else PackedStringArray(), true)
 
 func _print_sheet(i: int, rows: PackedStringArray, heading: bool) -> void:
 	var mi: MeshInstance3D = _sheets[i][0]

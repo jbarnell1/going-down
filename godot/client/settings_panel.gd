@@ -74,6 +74,9 @@ var caught_pref: Object = null
 ## same level the host is sent, the whisper and talk marks on it), and C to calibrate (3 s quiet, 4 s a line read aloud).
 var mic: Node = null
 const MIC_ROWS := 3
+## ES1a: the player's own ANNOUNCER VOICE (client/voice_pref.gd), set by the game; null for none (no row then). Its
+## row comes after CAUGHT SCENES: left and right or a click on a voice's name choose, Backspace goes back to Brian.
+var voice_pref: Object = null
 const NoiseMeterColors = preload("res://client/noise_meter.gd")
 
 func _ready() -> void:
@@ -353,11 +356,39 @@ func caught_set(soft_on: bool) -> bool:
 	return was != soft_on
 
 func _sound_rows_n() -> int:
-	return Volume.ROWS.size() + (1 if caught_pref != null else 0) + (MIC_ROWS if mic != null else 0)
+	return Volume.ROWS.size() + (1 if caught_pref != null else 0) + (1 if voice_pref != null else 0) + (MIC_ROWS if mic != null else 0)
+
+## ES1a: the ANNOUNCER VOICE row's index on the sound page (after CAUGHT SCENES), -1 when there is none.
+func voice_row_index() -> int:
+	return Volume.ROWS.size() + (1 if caught_pref != null else 0) if voice_pref != null else -1
+
+## ES1a: the announcer's voice to `id` (one of the manifest's), saved at once; the next line is read in it.
+func voice_set(id: String) -> bool:
+	if voice_pref == null:
+		return false
+	var changed: bool = voice_pref.choose(id)
+	voice_pref.save()
+	return changed
+
+## ES1a: the voice row's buttons, [id, label] per manifest voice in its order (none without a voice_pref).
+func voice_buttons() -> Array:
+	var out: Array = []
+	if voice_pref != null:
+		for v: Dictionary in voice_pref.voices:
+			out.append([str(v["id"]), str(v["name"]).to_upper()])
+	return out
+
+## ES1a: the next or previous manifest voice, saved at once.
+func voice_step(dir: int) -> bool:
+	if voice_pref == null:
+		return false
+	var changed: bool = voice_pref.step(dir)
+	voice_pref.save()
+	return changed
 
 ## VC1: the first microphone row's index on the sound page, -1 when there is none.
 func mic_row_index() -> int:
-	return Volume.ROWS.size() + (1 if caught_pref != null else 0) if mic != null else -1
+	return Volume.ROWS.size() + (1 if caught_pref != null else 0) + (1 if voice_pref != null else 0) if mic != null else -1
 
 ## VC1: calibrate again: the panel closes and the calibration card (client/mic_hud.gd) runs over the game.
 func _mic_calibrate() -> void:
@@ -398,6 +429,7 @@ func _sound_let_go() -> void:
 
 func _sound_key(k: InputEventKey) -> void:
 	var on_caught := _sound_row == caught_row_index()
+	var on_voice := voice_pref != null and _sound_row == voice_row_index()
 	var mic_r := _sound_row - mic_row_index() if mic != null and _sound_row >= mic_row_index() else -1
 	if mic_r >= 0 and k.pressed and not k.echo and k.physical_keycode == KEY_C:
 		_mic_calibrate()
@@ -416,6 +448,8 @@ func _sound_key(k: InputEventKey) -> void:
 		if k.pressed and not k.echo:
 			if on_caught:
 				caught_set(false)
+			elif on_voice:
+				voice_set(voice_pref.default_voice())
 			else:
 				sound_set(_sound_row, Volume.DEFAULT)
 		return
@@ -437,6 +471,9 @@ func _sound_key(k: InputEventKey) -> void:
 			if on_caught:
 				if not k.echo:
 					caught_set(k.physical_keycode == KEY_RIGHT)
+			elif on_voice:
+				if not k.echo:
+					voice_step(1 if k.physical_keycode == KEY_RIGHT else -1)
 			else:
 				sound_nudge(_sound_row, -1 if k.physical_keycode == KEY_LEFT else 1, n)
 
@@ -540,6 +577,11 @@ func click(pos: Vector2, shift: bool = false) -> bool:
 				caught_set(h[1] == "caught_soft")
 			"caught_row":
 				_sound_row = caught_row_index()
+			"voice_pick":
+				_sound_row = voice_row_index()
+				voice_set(str(h[2]))
+			"voice_row":
+				_sound_row = voice_row_index()
 			"mic_row":
 				_sound_row = mic_row_index() + int(h[2])
 			"mic_minus", "mic_plus":
@@ -663,6 +705,7 @@ func describe() -> Dictionary:
 		"runRev": int(rc.get("client").get("tune_rev")) if rc != null and rc.get("client") != null else 0,
 		"sound": {"open": _sound, "row": _sound_row, "rows": sound_rows(), "foot": foot_line(),
 			"caught": caught_pref.text() if caught_pref != null else "",
+			"voice": str(voice_pref.voice) if voice_pref != null else "", "voices": voice_pref.ids() if voice_pref != null else [],
 			"mic": mic.call(&"describe") if mic != null else {}}}
 
 static func _plain(d: Dictionary) -> Dictionary:
@@ -760,6 +803,23 @@ func _draw_sound(at: Vector2, rw: float, px: float, lh: float, right: float) -> 
 		_hits.append([soft_r, "caught_soft", 0])
 		_text("SOFT: NO SNAP, HALF THE FLASH AND NOISE", Vector2(rx + 6 * px, vy + lh), px, GREY)
 		ry += row_h + lh + 4 * px
+	if voice_pref != null:
+		# ES1a: the announcer's voice, one button per manifest voice.
+		var on := _sound_row == voice_row_index()
+		var row_h := lh * 2.0 + 2 * px
+		if on:
+			draw_rect(Rect2(Vector2(rx - 4 * px, ry - 3 * px), Vector2(rw + 8 * px, row_h)), Color(1, 1, 1, 0.06))
+		_hits.append([Rect2(Vector2(rx, ry - 3 * px), Vector2(rw, row_h)), "voice_row", 0])
+		_text(voice_pref.NAME, Vector2(rx, ry), px, INK if on else Color(0.85, 0.86, 0.82))
+		var vy := ry + lh
+		_text(str(voice_pref.text()), Vector2(rx + 6 * px, vy), px, INK)
+		var bx := rx + 6 * px + 8 * 6 * px
+		for v: Array in voice_buttons():
+			var chosen := str(v[0]) == str(voice_pref.voice)
+			var b := _button(str(v[1]), Vector2(bx, vy), px, AMBER if chosen else INK)
+			_hits.append([b, "voice_pick", str(v[0])])
+			bx = b.end.x + 6 * px
+		ry += row_h + 4 * px
 	if mic != null:
 		ry = _draw_mic(Vector2(rx, ry), rw, px, lh)
 	_text("NOT SENT TO ANYONE. THE HOST'S SETTINGS ARE ON THE LEFT.", Vector2(rx, ry + 2 * px), px, GREY)
