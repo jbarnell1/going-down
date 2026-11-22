@@ -63,12 +63,17 @@ const PARTY_AT := Vector2(1.45, 1.45)
 ## HUD1b (the owner, 21 Nov: "put somewhere on paper that each level only gets ten min before tenant arrives"; the
 ## rates "Lift and tab"): a paper notice on the car's right-hand wall inside, printed in the company's words. The
 ## minutes are the host's own clock (its "tenant" block's len), so it stays true if the host changes it. On a floor
-## with printed rates (the Playroom's anger and health), the same paper lists them under the notice.
-const NOTICE_COLS := 22
-const NOTICE_ROWS := 18
-const NOTICE_PX := Vector2i(NOTICE_COLS * 6 + 8, NOTICE_ROWS * 10 + 8)
-const NOTICE_SIZE := Vector2(0.9, 0.9 * float(NOTICE_ROWS * 10 + 8) / float(NOTICE_COLS * 6 + 8))
-const NOTICE_Y := 1.4
+## with printed rates (the Playroom's anger and health), each rate goes on a sheet of its own beside it.
+## HUD1c (Fable's window look: only the heading read through the 480x270 tape from the middle of the car): big
+## letters, at most NOTICE_COLS characters a line and NOTICE_ROWS lines a sheet, each sheet NOTICE_W wide.
+const NOTICE_COLS := 16
+const NOTICE_ROWS := 6
+const NOTICE_PX := Vector2i(NOTICE_COLS * 6 + 4, NOTICE_ROWS * 10 + 4)
+const NOTICE_W := 1.3
+const NOTICE_SIZE := Vector2(NOTICE_W, NOTICE_W * float(NOTICE_ROWS * 10 + 4) / float(NOTICE_COLS * 6 + 4))
+const NOTICE_Y := 1.45
+## A glyph's height on the wall, in metres (the font is 7 texels tall).
+const NOTICE_GLYPH_M := 7.0 * NOTICE_W / float(NOTICE_COLS * 6 + 4)
 const NOTICE_PAPER := Color("#e9e2cc")
 const NOTICE_INK := Color("#2a2620")
 const LOSS_PX := Vector2i(286, 94)
@@ -139,55 +144,80 @@ var _party_tex: ImageTexture
 var _bank_open_mat: ShaderMaterial
 var _bank_locked_mat: ShaderMaterial
 
-## HUD1b: the notice's rows as printed ("" rows are gaps), [] for no notice (no Tenant clock: minutes 0).
-static func notice_rows(minutes: int, rates: PackedStringArray = PackedStringArray()) -> PackedStringArray:
+## HUD1b/c: the notice's rows as printed, [] for no notice (no Tenant clock: minutes 0).
+static func notice_rows(minutes: int) -> PackedStringArray:
 	if minutes <= 0:
 		return PackedStringArray()
-	var out := PackedStringArray(["NOTICE TO ALL CREWS", ""])
-	out.append_array(PixelFont.wrap("EACH LEVEL ALLOWS %d MINUTE%s BEFORE THE TENANT ARRIVES. PLAN YOUR VISIT ACCORDINGLY." % [minutes, "" if minutes == 1 else "S"], NOTICE_COLS))
+	return PackedStringArray(["NOTICE", "EACH LEVEL:", "%d MINUTE%s," % [minutes, "" if minutes == 1 else "S"],
+		"THEN THE TENANT", "COMES.", "- THE MANAGEMENT"])
+
+## HUD1c: each printed rate on a sheet of its own, wrapped to the sheet (the words and numbers exactly as on Tab).
+static func rate_sheets(rates: PackedStringArray) -> Array[PackedStringArray]:
+	var out: Array[PackedStringArray] = []
 	for r: String in rates:
-		if r != "":
-			out.append("")
-			out.append_array(PixelFont.wrap(r, NOTICE_COLS))
-	out.append("")
-	out.append("- THE MANAGEMENT")
-	return out.slice(0, NOTICE_ROWS)
+		var clean := " ".join(r.split(" ", false))
+		if clean != "":
+			out.append(PixelFont.wrap(clean, NOTICE_COLS).slice(0, NOTICE_ROWS))
+	return out.slice(0, 2)
 
 var notice_lines := PackedStringArray()
-var _notice_img: Image
-var _notice_tex: ImageTexture
+## HUD1c: the rate sheets as printed (tests, state).
+var rate_lines: Array = []
+## The sheets: [mesh, image, texture]; 0 the notice, 1 and 2 the rates.
+var _sheets: Array = []
 var _notice: MeshInstance3D
 
-## HUD1b: prints the notice (notice_rows); none hides the paper.
+## HUD1b/c: prints the notice and the rate sheets; none hides each paper.
 func show_notice(minutes: int, rates: PackedStringArray = PackedStringArray()) -> void:
-	var rows := notice_rows(minutes, rates)
-	if rows == notice_lines or _notice == null:
+	if _sheets.is_empty():
+		return
+	var rows := notice_rows(minutes)
+	var sheets := rate_sheets(rates) if not rows.is_empty() else ([] as Array[PackedStringArray])
+	if rows == notice_lines and str(sheets) == str(rate_lines):
 		return
 	notice_lines = rows
-	_notice.visible = not rows.is_empty()
+	rate_lines = Array(sheets)
+	_print_sheet(0, rows, true)
+	for i in 2:
+		_print_sheet(1 + i, sheets[i] if i < sheets.size() else PackedStringArray(), false)
+
+func _print_sheet(i: int, rows: PackedStringArray, heading: bool) -> void:
+	var mi: MeshInstance3D = _sheets[i][0]
+	var img: Image = _sheets[i][1]
+	mi.visible = not rows.is_empty()
 	if rows.is_empty():
 		return
-	_notice_img.fill(NOTICE_PAPER)
-	for i in rows.size():
-		var ink := Color("#8a1c12") if i == 0 else NOTICE_INK
-		PixelFont.blit(_notice_img, rows[i], Vector2i(4, 4 + i * 10), ink)
-	_notice_tex.update(_notice_img)
+	img.fill(NOTICE_PAPER)
+	for r in rows.size():
+		var ink := Color("#8a1c12") if heading and r == 0 else NOTICE_INK
+		PixelFont.blit(img, rows[r], Vector2i(2, 2 + r * 10), ink)
+	(_sheets[i][2] as ImageTexture).update(img)
 
 func _build_notice() -> void:
-	_notice_img = Image.create(NOTICE_PX.x, NOTICE_PX.y, false, Image.FORMAT_RGBA8)
-	_notice_img.fill(NOTICE_PAPER)
-	_notice_tex = ImageTexture.create_from_image(_notice_img)
-	var q := QuadMesh.new()
-	q.size = NOTICE_SIZE
-	_notice = MeshInstance3D.new()
-	_notice.name = "TenantNotice"
-	_notice.mesh = q
-	_notice.material_override = Level.prop_material(Color.WHITE, _notice_tex)
-	# On the right-hand wall inside, facing into the car, its text reading toward the doors.
-	_notice.position = Vector3(half - 0.006, NOTICE_Y, -depth * 0.45)
-	_notice.rotation = Vector3(0, -PI / 2.0, 0)
-	_notice.visible = false
-	add_child(_notice)
+	# The notice on the right-hand wall toward the back, the first rate sheet beside it toward the doors (both facing
+	# into the car, reading toward the doors); the second rate sheet on the left-hand wall opposite.
+	var gap := 0.12
+	var spots := [
+		[Vector3(half - 0.006, NOTICE_Y, -depth + 0.15 + NOTICE_W * 0.5), -PI / 2.0, "TenantNotice"],
+		[Vector3(half - 0.006, NOTICE_Y, -depth + 0.15 + NOTICE_W * 1.5 + gap), -PI / 2.0, "RateSheet1"],
+		[Vector3(-half + 0.006, NOTICE_Y, -depth * 0.5), PI / 2.0, "RateSheet2"],
+	]
+	for s: Array in spots:
+		var img := Image.create(NOTICE_PX.x, NOTICE_PX.y, false, Image.FORMAT_RGBA8)
+		img.fill(NOTICE_PAPER)
+		var tex := ImageTexture.create_from_image(img)
+		var q := QuadMesh.new()
+		q.size = NOTICE_SIZE
+		var mi := MeshInstance3D.new()
+		mi.name = str(s[2])
+		mi.mesh = q
+		mi.material_override = Level.prop_material(Color.WHITE, tex)
+		mi.position = s[0]
+		mi.rotation = Vector3(0, float(s[1]), 0)
+		mi.visible = false
+		add_child(mi)
+		_sheets.append([mi, img, tex])
+	_notice = _sheets[0][0]
 
 ## Builds the lift for the rules' car (plan.car). `left_wall`: the landing cell has a wall on its left as
 ## you face the lift (Level.lift_left_wall), so the call button goes on it.

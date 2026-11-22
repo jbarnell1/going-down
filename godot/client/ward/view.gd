@@ -214,6 +214,19 @@ func show_host(ward: Dictionary, host_now: float, id: String, crew: Array) -> vo
 	if called:
 		# WC1: every floor's lift, called from the station: no clock to show.
 		text = called_line(ward.get("lift", {}), phase, ward, id, station_name)
+		# The intercom says the call's two moments once each as the lift's phase changes.
+		var lift_phase := str((ward.get("lift", {}) as Dictionary).get("phase", ""))
+		if lift_phase != _spoken_lift_phase:
+			_spoken_lift_phase = lift_phase
+			if say.is_valid():
+				if lift_phase == "away" and station_name != "":
+					say.call("ward_station")
+				elif lift_phase == "coming":
+					say.call("ward_called")
+	var left_out: bool = (ward.get("leftBehind", []) as Array).has(id)
+	if left_out and not _left_said and say.is_valid():
+		say.call("ward_left_behind")
+	_left_said = left_out
 	hud.text = text
 	var winch := _at_winch()
 	var door := _by_door()
@@ -243,6 +256,8 @@ func show_host(ward: Dictionary, host_now: float, id: String, crew: Array) -> vo
 ## the station's house as a name, and the cut's progress for the HUD's bar (-1: none).
 var called := false
 var webbed_me := false
+var _spoken_lift_phase := ""
+var _left_said := false
 var station_name := ""
 var cut_fill := -1.0
 var station_node: Node3D = null
@@ -786,6 +801,8 @@ func play_event(event: Dictionary) -> void:
 		creak.global_position = Vector3(float(event.get("x", 0.0)), float(event.get("y", 0.0)) + 2.0, float(event.get("z", 0.0)))
 		creak.finished.connect(creak.queue_free)
 		creak.play()
+		if say.is_valid():
+			say.call("ward_hung" if event.type == "ward_hung" else "ward_cut")
 		return
 	var cues := {"ward_departed":"ward_lift_departed", "ward_last_minute":"ward_lift_last_minute",
 		"ward_returned":"ward_lift_returned", "ward_final_call":"ward_lift_final_call", "ward_closed":"ward_lift_closed"}

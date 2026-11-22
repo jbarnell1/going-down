@@ -23,7 +23,7 @@ const manifestFile = path.join(PUBLIC, 'manifest.json');
 const manifest = existsSync(manifestFile) ? JSON.parse(readFileSync(manifestFile, 'utf8')) : { lines: [] };
 const ledgerFile = path.join(HERE, 'ledger.json');
 const ledger = existsSync(ledgerFile) ? JSON.parse(readFileSync(ledgerFile, 'utf8')) : { total: 0, entries: [] };
-const CAP = 50_000;
+const CAP = 100_000;
 
 const WORDS_PER_SECOND = 2.5;
 const PAUSE = { '[short pause]': 0.5, '[pause]': 1.6, '[long pause]': 2.5 };

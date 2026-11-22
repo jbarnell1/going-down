@@ -13,6 +13,8 @@
 import { spawn } from 'node:child_process';
 import { connect } from 'node:net';
 import { dirname, resolve } from 'node:path';
+import { orderlyCell, watchSpots } from './orderly_spot.mjs';
+import { chooseHide, getIn as carefulGetIn, hideForTheWait, hidesOf } from './careful.mjs';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -142,20 +144,24 @@ check('call before the quota: refused, and the announcer says hint_call_dead', s
 
 // ---- 2. Record until the quota is met (as play_quota.mjs).
 const S = 2;
-const es = plan.entityStart;
-const along = plan.sightlines
-  .filter((sl) => sl.level === es.level && ((sl.x1 === sl.x2 && sl.x1 === es.x && es.y >= Math.min(sl.y1, sl.y2) && es.y <= Math.max(sl.y1, sl.y2)) || (sl.y1 === sl.y2 && sl.y1 === es.y && es.x >= Math.min(sl.x1, sl.x2) && es.x <= Math.max(sl.x1, sl.x2))))
-  .sort((a, b) => b.length - a.length)[0];
-let spot = null;
-if (along) {
-  const cells = [];
-  for (let x = Math.min(along.x1, along.x2); x <= Math.max(along.x1, along.x2); x++)
-    for (let y = Math.min(along.y1, along.y2); y <= Math.max(along.y1, along.y2); y++) cells.push({ x, y, d: Math.hypot(x - es.x, y - es.y) * S });
-  spot = cells.filter((c) => c.d <= 10).sort((a, b) => b.d - a.d)[0];
-}
+// Where the Orderly really starts: the rules' body (a seeded cell deep in the dirty part since the Orderly fix, OR2),
+// not the plan's entityStart; the cells to watch it from are tools/orderly_spot.mjs's (the rules say which sees it).
+s = await state();
+const es = orderlyCell(s, S);
+const watchFrom = watchSpots(plan, es);
+console.log('watch the Orderly from', JSON.stringify(watchFrom.slice(0, 3)), `(${watchFrom.length} spots)`);
 let met = null;
 for (let round = 0; round < 5 && !met; round++) {
-  if (spot && round === 0) await cmd(`teleport ${es.level} ${spot.x} ${spot.y}`);
+  if (round === 0) {
+    for (const [i, p] of watchFrom.slice(0, 12).entries()) {
+      await cmd(`teleport ${es.level} ${p.x} ${p.y}`);
+      await wait(200);
+      const now = (await state()).orderly;
+      await cmd(`face ${now.x} ${now.z} ${(now.pose?.y ?? es.level * 3.2) + 1.4}`);
+      s = await until((s) => s.orderly.seeing === true, i === 0 ? 3000 : 1500, 50);
+      if (s.orderly.seeing === true) break;
+    }
+  }
   await wait(200);
   s = await state();
   await cmd(`face ${s.orderly.x} ${s.orderly.z} ${(s.orderly.pose?.y ?? es.level * 3.2) + 1.4}`);
@@ -176,17 +182,13 @@ if (!met) await finish();
 
 // ---- 3. Call once met: the car comes; on arrival hint_board in place of "arrived". First past the hide
 // nearest the lift (its prompt says hint_hide now, not while the car comes), then the call, then into it.
-const hide = JSON.parse(await cmd('hides')).filter((h) => h.level === plan.landing.level)
-  .sort((p, q) => Math.hypot(p.front[0] - car.doorX, p.front[1] - car.doorZ) - Math.hypot(q.front[0] - car.doorX, q.front[1] - car.doorZ))[0];
+// The hide to wait in is chosen the careful way (tools/careful.mjs: well clear of the Orderly, which is awake and
+// near by now, not the one nearest the lift): in its view the entry gives the hide a reason and it looks in.
+s = await state();
+const hide = chooseHide(await hidesOf({ cmd }), s);
 // Every wait for the gate is spent inside the hide, where the Orderly cannot take you.
 const hideHeard = (s) => (s.client.hintLog ?? []).some((e) => e.moment === 'hint_hide' && e.what === 'started') || starts.some((e) => e.moment === 'hint_hide');
-const getIn = async () => {
-  await walk(hide.level, Math.floor(hide.front[0] / S), Math.floor(hide.front[1] / S), 9);
-  await cmd(`face ${hide.inside[0]} ${hide.inside[1]}`);
-  await wait(300);
-  await cmd('hide');
-  return until((s) => s.mySeek?.phase === 'inside', 4000, 50);
-};
+const getIn = () => carefulGetIn({ cmd, state, wait, until }, hide, 9);
 const getOut = async () => {
   await cmd('hide');
   return until((s) => (s.mySeek?.phase ?? 'out') === 'out', 4000, 50);
@@ -215,19 +217,19 @@ if (!hide) s = await quietGate();
 await cmd('call');
 s = await until((s) => s.phase === 'coming', 3000, 50);
 check('call once met: the car is coming', s.phase === 'coming');
-// The call is loud and the Orderly comes: back into the hide (sim/hiding.gd: safe unless it saw you get
-// in) to wait; without one, keep it watched (it holds still while seen).
-// Watch it from the hide's front; when the lights go (it cannot see you get in then), get in.
-if (hide) await walk(hide.level, Math.floor(hide.front[0] / S), Math.floor(hide.front[1] / S), 9);
+// The call is loud and the Orderly comes (now from its far start, hunting): wait for the car the careful way
+// (tools/careful.mjs, as playthrough.mjs does): watch it in the light, and get into a hide well clear of it,
+// where it did not see you get in. The script's own old hide (the one nearest the lift, entered and left
+// before, in the Orderly's view) had a reason on it, and the Orderly rightly looked in and caught.
+const ctx = { cmd, state, wait, until };
 await cmd('timescale 2');
-const comeEnd = Date.now() + 120000;
+const hid = await hideForTheWait(ctx);
+console.log(`  waiting for the car: ${hid.hide ? `in ${hid.hide.kind} ${hid.hide.id}, ${hid.note}` : `no hide, ${hid.note}`}`);
 s = await state();
+const comeEnd = Date.now() + 120000;
 while (s.phase === 'coming' && Date.now() < comeEnd) {
-  if (hide && s.dark && (s.mySeek?.phase ?? 'out') === 'out') {
-    await cmd(`face ${hide.inside[0]} ${hide.inside[1]}`);
-    await cmd('hide');
-    s = await until((s) => s.mySeek?.phase === 'inside', 3000, 30);
-    console.log(`  in the dark, hid in ${hide.kind} ${hide.id}: ${s.mySeek?.phase ?? 'not hidden'}`);
+  if (hid.hide && (s.mySeek?.phase ?? 'out') === 'out' && s.me.status === 'ok' && s.dark) {
+    s = await carefulGetIn(ctx, hid.hide);
   } else if ((s.mySeek?.phase ?? 'out') === 'out') {
     await cmd(`face ${s.orderly.x} ${s.orderly.z} ${(s.orderly.pose?.y ?? 0) + 1.4}`);
   }

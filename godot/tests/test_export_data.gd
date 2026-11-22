@@ -57,6 +57,9 @@ const FLOOR_FILES: Array[String] = [
 	"assets/ward/voice/bella/ward_lift_departed.mp3", "assets/ward/voice/bella/ward_lift_last_minute.mp3",
 	"assets/ward/voice/bella/ward_lift_returned.mp3", "assets/ward/voice/bella/ward_lift_final_call.mp3",
 	"assets/ward/voice/bella/ward_lift_closed.mp3", "assets/sfx/playroom/net_flap.ogg",
+	"assets/ward/voice/bella/ward_station.mp3", "assets/ward/voice/bella/ward_called.mp3",
+	"assets/ward/voice/bella/ward_hung.mp3", "assets/ward/voice/bella/ward_cut.mp3",
+	"assets/ward/voice/bella/ward_left_behind.mp3",
 	"assets/station/crew_zombie.glb", "assets/station/faces/seat-1.png", "assets/station/faces/seat-2.png",
 	"assets/station/faces/seat-3.png", "assets/station/faces/seat-4.png",
 	# MT1: the Temp's new figure (figures=new), loaded by name rather than preloaded, so named here.

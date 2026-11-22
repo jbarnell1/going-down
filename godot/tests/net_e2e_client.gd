@@ -109,7 +109,7 @@ func _player(t: float) -> void:
 		rc.frame(t, _local())
 		return
 	var latest: Dictionary = c.latest
-	var plan := Session.plan_for(c.seed, c.local_depth)
+	var plan := Session.plan_for(c.seed, c.local_depth, c.placed_deck(), c.garden_dense)
 	var car := Session.car_for(plan)
 	var phase: String = latest["phase"]
 	var f := rc.frame(t, _local())

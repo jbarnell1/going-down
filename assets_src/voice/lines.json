@@ -72,6 +72,26 @@
       "title": "The Tenant clock",
       "about": "The ten-minute clock on every floor below the prison (TT1, the owner on 19 Nov: \"a Timer that says Tenant arrives in: xx:xx\"). When it runs out a door slams somewhere above, and about a second later the announcer says the time is up: tenant_1 when the floor's quota was not met, tenant_met_1 when it was (the line never lies). Dealt by moment by godot/client/announcer.gd.",
       "audition": "One take each. Cheerful corporate bad news: the time is up and that is somehow good news."
+    },
+    "deal": {
+      "title": "The elevator deal",
+      "about": "sim/deal.gd: the intercom reads each offer and says how it went. By line id, not dealt (client/announcer.gd deal_say). Names are not recorded; the caption keeps them.",
+      "audition": "One take each."
+    },
+    "reactor": {
+      "title": "The Reactor lift",
+      "about": "The refused call with no power (sim/run.gd POWER_REFUSED_LINE).",
+      "audition": "One take each."
+    },
+    "ward2": {
+      "title": "The Ward call station, web and left behind",
+      "about": "Spoken companions to the HUD lines of client/ward/view.gd. By line id (client/ward/view.gd play_event, announcer.ward_line).",
+      "audition": "One take each."
+    },
+    "hush": {
+      "title": "The hush",
+      "about": "VC2: the intercom clears its throat when a crew is noisy; plays in place of the silent caption (client/announcer.gd hush()).",
+      "audition": "One take each."
     }
   },
   "moments": {
@@ -342,6 +362,38 @@
     "tenant_met": {
       "priority": 4,
       "when": "the floor's Tenant clock reaches zero and the floor's quota is already met (about a second after the door slam)"
+    },
+    "deal_offer": {
+      "priority": 3,
+      "when": "by line id: deal_offer"
+    },
+    "deal_out": {
+      "priority": 3,
+      "when": "by line id: deal_out"
+    },
+    "reactor_no_power": {
+      "priority": 3,
+      "when": "by line id: reactor_no_power"
+    },
+    "ward_call": {
+      "priority": 3,
+      "when": "by line id: ward_call"
+    },
+    "ward_web": {
+      "priority": 3,
+      "when": "by line id: ward_web"
+    },
+    "ward_left": {
+      "priority": 3,
+      "when": "by line id: ward_left"
+    },
+    "hush": {
+      "priority": 3,
+      "when": "by line id: hush"
+    },
+    "tenant_beat": {
+      "priority": 3,
+      "when": "by line id: the Tenant clock beats (doors, five, two, one minute)"
     }
   },
   "lines": [
@@ -2527,6 +2579,475 @@
       },
       "takes": 1,
       "note": "Proud of the crew, then a cheerful shrug: rules are rules."
+    },
+    {
+      "id": "deal_offer_squeak",
+      "moment": "deal_offer",
+      "group": "deal",
+      "text": "[warmly] Today's complimentary offer: Squeaky Soles. [short pause] Whoever takes it first wears them. Odds are on the back.",
+      "plain": "Today's complimentary offer: Squeaky Soles. Whoever takes it first wears them. Odds are on the back.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "sim/deal.gd read_line squeak"
+    },
+    {
+      "id": "deal_offer_torch",
+      "moment": "deal_offer",
+      "group": "deal",
+      "text": "[warmly] Today's offer: the Novelty Torch. [short pause] The crew chooses who holds it. Odds are on the back.",
+      "plain": "Today's offer: the Novelty Torch. The crew chooses who holds it. Odds are on the back.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "read_line torch"
+    },
+    {
+      "id": "deal_offer_second",
+      "moment": "deal_offer",
+      "group": "deal",
+      "text": "[warmly] Today's offer: a Second Opinion. [short pause] The risk goes to whoever is hoarding flares. Odds are on the back.",
+      "plain": "Today's offer: a Second Opinion. The risk goes to whoever is hoarding flares. Odds are on the back.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "read_line second"
+    },
+    {
+      "id": "deal_offer_dark",
+      "moment": "deal_offer",
+      "group": "deal",
+      "text": "[warmly] Today's offer: Lights Out. [short pause] Hazard pay may apply. Whoever takes it first takes the blame.",
+      "plain": "Today's offer: Lights Out. Hazard pay may apply. Whoever takes it first takes the blame.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "read_line dark"
+    },
+    {
+      "id": "deal_offer_express",
+      "moment": "deal_offer",
+      "group": "deal",
+      "text": "[warmly] Today's offer: the Express. [short pause] Fewer floors, more money. The crew chooses who answers for it.",
+      "plain": "Today's offer: the Express. Fewer floors, more money. The crew chooses who answers for it.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "read_line express"
+    },
+    {
+      "id": "deal_out_hazard",
+      "moment": "deal_out",
+      "group": "deal",
+      "text": "[delighted] Congratulations. [short pause] Hazard pay is now in effect.",
+      "plain": "Congratulations, %s. Hazard pay is now in effect.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "outcome hazard; caption keeps the carrier name (%s), built in code"
+    },
+    {
+      "id": "deal_out_squeak",
+      "moment": "deal_out",
+      "group": "deal",
+      "text": "[sympathetic] Commiserations. [short pause] Your new shoes are very expressive.",
+      "plain": "Commiserations, %s. Your new shoes are very expressive.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "outcome squeak; name in caption only"
+    },
+    {
+      "id": "deal_out_torch",
+      "moment": "deal_out",
+      "group": "deal",
+      "text": "[warmly] A Novelty Torch has been issued. [short pause] Please return it in working order.",
+      "plain": "%s has been issued a Novelty Torch. Please return it in working order.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "outcome torch; name in caption only"
+    },
+    {
+      "id": "deal_out_second",
+      "moment": "deal_out",
+      "group": "deal",
+      "text": "[reassuring] A Second Opinion is available on the next floor. [short pause] It may be used once.",
+      "plain": "A Second Opinion is available on the next floor. It may be used once.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "outcome second"
+    },
+    {
+      "id": "deal_out_dark_pay",
+      "moment": "deal_out",
+      "group": "deal",
+      "text": "[delighted] Lights Out has been approved. [short pause] Hazard pay applies to everything.",
+      "plain": "Lights Out has been approved. Hazard pay applies to everything.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "outcome dark_pay"
+    },
+    {
+      "id": "deal_out_dark",
+      "moment": "deal_out",
+      "group": "deal",
+      "text": "[delighted] Lights Out has been approved. [short pause] Hazard pay has not.",
+      "plain": "Lights Out has been approved. Hazard pay has not.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "outcome dark"
+    },
+    {
+      "id": "deal_out_express",
+      "moment": "deal_out",
+      "group": "deal",
+      "text": "[professional] Express service confirmed. [short pause] Please do not wave at the floor we skip.",
+      "plain": "Express service confirmed. Please do not wave at the floor we skip.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "outcome express"
+    },
+    {
+      "id": "deal_out_express_awake",
+      "moment": "deal_out",
+      "group": "deal",
+      "text": "[professional] Express service confirmed. [short pause] The next floor has been told you are coming.",
+      "plain": "Express service confirmed. The next floor has been told you are coming.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "outcome express_awake"
+    },
+    {
+      "id": "deal_passed",
+      "moment": "deal_out",
+      "group": "deal",
+      "text": "[warmly] Offer declined. [short pause] The company respects your caution, and has noted it.",
+      "plain": "Offer declined. The company respects your caution and has noted it.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "passed_line"
+    },
+    {
+      "id": "deal_double",
+      "moment": "deal_out",
+      "group": "deal",
+      "text": "[curious] Feeling lucky? [short pause] The offer may be doubled. [mischievously] Or not.",
+      "plain": "Feeling lucky? The offer may be doubled. Or not.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "double_line"
+    },
+    {
+      "id": "reactor_no_power",
+      "moment": "reactor_no_power",
+      "group": "reactor",
+      "text": "[professional] The car cannot be called without power. [short pause] It will return when power is restored.",
+      "plain": "The car cannot be called without power. It will return when power is restored.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "sim/run.gd POWER_REFUSED_LINE (caption stays the screen label)"
+    },
+    {
+      "id": "ward_station",
+      "moment": "ward_call",
+      "group": "ward2",
+      "text": "[warmly] The call button is in another house. [short pause] Do enjoy the neighbourhood.",
+      "plain": "The call button is in another house. Do enjoy the neighbourhood.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "view.gd called_line, phase away"
+    },
+    {
+      "id": "ward_called",
+      "moment": "ward_call",
+      "group": "ward2",
+      "text": "[delighted] Your lift has been called. [short pause] Please wait where you are.",
+      "plain": "Your lift has been called. Please wait where you are.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "host event \"called\" (host.gd:985)"
+    },
+    {
+      "id": "ward_hung",
+      "moment": "ward_web",
+      "group": "ward2",
+      "text": "[warmly] A colleague is currently on hold. [short pause] Please cut them down at your convenience.",
+      "plain": "A colleague is currently on hold. Please cut them down at your convenience.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "event ward_hung (view.gd:779)"
+    },
+    {
+      "id": "ward_cut",
+      "moment": "ward_web",
+      "group": "ward2",
+      "text": "[delighted] Welcome back, colleague. [short pause] Your hold has ended.",
+      "plain": "Welcome back, colleague. Your hold has ended.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "event ward_cut"
+    },
+    {
+      "id": "ward_left_behind",
+      "moment": "ward_left",
+      "group": "ward2",
+      "text": "[delighted] The lift has departed. [short pause] You are, of course, welcome to stay.",
+      "plain": "The lift has departed. You are, of course, welcome to stay.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "view.gd:211, floor.gd:187; this player is in ward.leftBehind"
+    },
+    {
+      "id": "hush_1",
+      "moment": "hush",
+      "group": "hush",
+      "text": "[clears throat] [warmly] Thank you. As I was saying.",
+      "plain": "AHEM. THANK YOU. AS I WAS SAYING.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "VC2 ticket"
+    },
+    {
+      "id": "hush_2",
+      "moment": "hush",
+      "group": "hush",
+      "text": "[clears throat] [professional] One moment. [short pause] The company is speaking.",
+      "plain": "AHEM. THE COMPANY IS SPEAKING.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "VC2 ticket"
+    },
+    {
+      "id": "hush_3",
+      "moment": "hush",
+      "group": "hush",
+      "text": "[clears throat] [whispers] Shh. [short pause] [warmly] Thank you, colleagues.",
+      "plain": "AHEM. THANK YOU, COLLEAGUES.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "slow": 1.9,
+      "note": "VC2 ticket"
+    },
+    {
+      "id": "tenant_doors_1",
+      "moment": "tenant_beat",
+      "group": "tenant",
+      "text": "[warmly] Doors open. The Tenant is expected in ten minutes. Do keep busy.",
+      "plain": "Doors open. The Tenant is expected in ten minutes. Do keep busy.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Tenant clock beat line; wired by another builder (TENANT_BEAT_LINES)"
+    },
+    {
+      "id": "tenant_doors_2",
+      "moment": "tenant_beat",
+      "group": "tenant",
+      "text": "[professional] Welcome to the floor. You have ten minutes before the Tenant comes down. The company suggests you use them.",
+      "plain": "Welcome to the floor. You have ten minutes before the Tenant comes down. The company suggests you use them.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Tenant clock beat line; wired by another builder (TENANT_BEAT_LINES)"
+    },
+    {
+      "id": "tenant_doors_3",
+      "moment": "tenant_beat",
+      "group": "tenant",
+      "text": "[warmly] This floor allows ten minutes before the Tenant arrives. The clock started when the doors did.",
+      "plain": "This floor allows ten minutes before the Tenant arrives. The clock started when the doors did.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Tenant clock beat line; wired by another builder (TENANT_BEAT_LINES)"
+    },
+    {
+      "id": "tenant_five_1",
+      "moment": "tenant_beat",
+      "group": "tenant",
+      "text": "[delighted] Five minutes until the Tenant arrives. An excellent time to look productive.",
+      "plain": "Five minutes until the Tenant arrives. An excellent time to look productive.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Tenant clock beat line; wired by another builder (TENANT_BEAT_LINES)"
+    },
+    {
+      "id": "tenant_five_2",
+      "moment": "tenant_beat",
+      "group": "tenant",
+      "text": "[professional] The Tenant arrives in five minutes. Anything worth recording is worth recording now.",
+      "plain": "The Tenant arrives in five minutes. Anything worth recording is worth recording now.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Tenant clock beat line; wired by another builder (TENANT_BEAT_LINES)"
+    },
+    {
+      "id": "tenant_five_3",
+      "moment": "tenant_beat",
+      "group": "tenant",
+      "text": "[warmly] Five minutes remain before the Tenant. The company thanks you for your continued effort.",
+      "plain": "Five minutes remain before the Tenant. The company thanks you for your continued effort.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Tenant clock beat line; wired by another builder (TENANT_BEAT_LINES)"
+    },
+    {
+      "id": "tenant_two_1",
+      "moment": "tenant_beat",
+      "group": "tenant",
+      "text": "[professional] Two minutes until the Tenant arrives. Sensible crews are already thinking about the lift.",
+      "plain": "Two minutes until the Tenant arrives. Sensible crews are already thinking about the lift.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Tenant clock beat line; wired by another builder (TENANT_BEAT_LINES)"
+    },
+    {
+      "id": "tenant_two_2",
+      "moment": "tenant_beat",
+      "group": "tenant",
+      "text": "[delighted] The Tenant arrives in two minutes. The company does not reimburse lateness.",
+      "plain": "The Tenant arrives in two minutes. The company does not reimburse lateness.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Tenant clock beat line; wired by another builder (TENANT_BEAT_LINES)"
+    },
+    {
+      "id": "tenant_two_3",
+      "moment": "tenant_beat",
+      "group": "tenant",
+      "text": "[warmly] Two minutes remain. Do wrap up whatever it is you are doing.",
+      "plain": "Two minutes remain. Do wrap up whatever it is you are doing.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Tenant clock beat line; wired by another builder (TENANT_BEAT_LINES)"
+    },
+    {
+      "id": "tenant_one_1",
+      "moment": "tenant_beat",
+      "group": "tenant",
+      "text": "[professional] Tenant arrives in one minute. I'd hurry up if I were you.",
+      "plain": "Tenant arrives in one minute. I'd hurry up if I were you.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Tenant clock beat line; wired by another builder (TENANT_BEAT_LINES)"
+    },
+    {
+      "id": "tenant_one_2",
+      "moment": "tenant_beat",
+      "group": "tenant",
+      "text": "[warmly] One minute until the Tenant arrives. Consider this your final courtesy notice.",
+      "plain": "One minute until the Tenant arrives. Consider this your final courtesy notice.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Tenant clock beat line; wired by another builder (TENANT_BEAT_LINES)"
+    },
+    {
+      "id": "tenant_one_3",
+      "moment": "tenant_beat",
+      "group": "tenant",
+      "text": "[delighted] The Tenant arrives in one minute. The company wishes you a brisk walk to the lift.",
+      "plain": "The Tenant arrives in one minute. The company wishes you a brisk walk to the lift.",
+      "settings": {
+        "stability": 0.35,
+        "similarity_boost": 0.75
+      },
+      "takes": 1,
+      "note": "Tenant clock beat line; wired by another builder (TENANT_BEAT_LINES)"
     }
   ]
 }

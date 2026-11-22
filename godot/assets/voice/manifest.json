@@ -212,6 +212,30 @@
     },
     "tenant_met": {
       "priority": 4
+    },
+    "deal_offer": {
+      "priority": 3
+    },
+    "deal_out": {
+      "priority": 3
+    },
+    "reactor_no_power": {
+      "priority": 3
+    },
+    "ward_call": {
+      "priority": 3
+    },
+    "ward_web": {
+      "priority": 3
+    },
+    "ward_left": {
+      "priority": 3
+    },
+    "hush": {
+      "priority": 3
+    },
+    "tenant_beat": {
+      "priority": 3
     }
   },
   "lines": [
@@ -1114,6 +1138,186 @@
       "id": "tenant_met_1",
       "moment": "tenant_met",
       "plain": "Time's up! Your quota was met, well done. The Tenant is here all the same."
+    },
+    {
+      "id": "deal_offer_squeak",
+      "moment": "deal_offer",
+      "plain": "Today's complimentary offer: Squeaky Soles. Whoever takes it first wears them. Odds are on the back."
+    },
+    {
+      "id": "deal_offer_torch",
+      "moment": "deal_offer",
+      "plain": "Today's offer: the Novelty Torch. The crew chooses who holds it. Odds are on the back."
+    },
+    {
+      "id": "deal_offer_second",
+      "moment": "deal_offer",
+      "plain": "Today's offer: a Second Opinion. The risk goes to whoever is hoarding flares. Odds are on the back."
+    },
+    {
+      "id": "deal_offer_dark",
+      "moment": "deal_offer",
+      "plain": "Today's offer: Lights Out. Hazard pay may apply. Whoever takes it first takes the blame."
+    },
+    {
+      "id": "deal_offer_express",
+      "moment": "deal_offer",
+      "plain": "Today's offer: the Express. Fewer floors, more money. The crew chooses who answers for it."
+    },
+    {
+      "id": "deal_out_hazard",
+      "moment": "deal_out",
+      "plain": "Congratulations, %s. Hazard pay is now in effect."
+    },
+    {
+      "id": "deal_out_squeak",
+      "moment": "deal_out",
+      "plain": "Commiserations, %s. Your new shoes are very expressive."
+    },
+    {
+      "id": "deal_out_torch",
+      "moment": "deal_out",
+      "plain": "%s has been issued a Novelty Torch. Please return it in working order."
+    },
+    {
+      "id": "deal_out_second",
+      "moment": "deal_out",
+      "plain": "A Second Opinion is available on the next floor. It may be used once."
+    },
+    {
+      "id": "deal_out_dark_pay",
+      "moment": "deal_out",
+      "plain": "Lights Out has been approved. Hazard pay applies to everything."
+    },
+    {
+      "id": "deal_out_dark",
+      "moment": "deal_out",
+      "plain": "Lights Out has been approved. Hazard pay has not."
+    },
+    {
+      "id": "deal_out_express",
+      "moment": "deal_out",
+      "plain": "Express service confirmed. Please do not wave at the floor we skip."
+    },
+    {
+      "id": "deal_out_express_awake",
+      "moment": "deal_out",
+      "plain": "Express service confirmed. The next floor has been told you are coming."
+    },
+    {
+      "id": "deal_passed",
+      "moment": "deal_out",
+      "plain": "Offer declined. The company respects your caution and has noted it."
+    },
+    {
+      "id": "deal_double",
+      "moment": "deal_out",
+      "plain": "Feeling lucky? The offer may be doubled. Or not."
+    },
+    {
+      "id": "reactor_no_power",
+      "moment": "reactor_no_power",
+      "plain": "The car cannot be called without power. It will return when power is restored."
+    },
+    {
+      "id": "ward_station",
+      "moment": "ward_call",
+      "plain": "The call button is in another house. Do enjoy the neighbourhood."
+    },
+    {
+      "id": "ward_called",
+      "moment": "ward_call",
+      "plain": "Your lift has been called. Please wait where you are."
+    },
+    {
+      "id": "ward_hung",
+      "moment": "ward_web",
+      "plain": "A colleague is currently on hold. Please cut them down at your convenience."
+    },
+    {
+      "id": "ward_cut",
+      "moment": "ward_web",
+      "plain": "Welcome back, colleague. Your hold has ended."
+    },
+    {
+      "id": "ward_left_behind",
+      "moment": "ward_left",
+      "plain": "The lift has departed. You are, of course, welcome to stay."
+    },
+    {
+      "id": "hush_1",
+      "moment": "hush",
+      "plain": "AHEM. THANK YOU. AS I WAS SAYING."
+    },
+    {
+      "id": "hush_2",
+      "moment": "hush",
+      "plain": "AHEM. THE COMPANY IS SPEAKING."
+    },
+    {
+      "id": "hush_3",
+      "moment": "hush",
+      "plain": "AHEM. THANK YOU, COLLEAGUES."
+    },
+    {
+      "id": "tenant_doors_1",
+      "moment": "tenant_beat",
+      "plain": "Doors open. The Tenant is expected in ten minutes. Do keep busy."
+    },
+    {
+      "id": "tenant_doors_2",
+      "moment": "tenant_beat",
+      "plain": "Welcome to the floor. You have ten minutes before the Tenant comes down. The company suggests you use them."
+    },
+    {
+      "id": "tenant_doors_3",
+      "moment": "tenant_beat",
+      "plain": "This floor allows ten minutes before the Tenant arrives. The clock started when the doors did."
+    },
+    {
+      "id": "tenant_five_1",
+      "moment": "tenant_beat",
+      "plain": "Five minutes until the Tenant arrives. An excellent time to look productive."
+    },
+    {
+      "id": "tenant_five_2",
+      "moment": "tenant_beat",
+      "plain": "The Tenant arrives in five minutes. Anything worth recording is worth recording now."
+    },
+    {
+      "id": "tenant_five_3",
+      "moment": "tenant_beat",
+      "plain": "Five minutes remain before the Tenant. The company thanks you for your continued effort."
+    },
+    {
+      "id": "tenant_two_1",
+      "moment": "tenant_beat",
+      "plain": "Two minutes until the Tenant arrives. Sensible crews are already thinking about the lift."
+    },
+    {
+      "id": "tenant_two_2",
+      "moment": "tenant_beat",
+      "plain": "The Tenant arrives in two minutes. The company does not reimburse lateness."
+    },
+    {
+      "id": "tenant_two_3",
+      "moment": "tenant_beat",
+      "plain": "Two minutes remain. Do wrap up whatever it is you are doing."
+    },
+    {
+      "id": "tenant_one_1",
+      "moment": "tenant_beat",
+      "plain": "Tenant arrives in one minute. I'd hurry up if I were you."
+    },
+    {
+      "id": "tenant_one_2",
+      "moment": "tenant_beat",
+      "plain": "One minute until the Tenant arrives. Consider this your final courtesy notice."
+    },
+    {
+      "id": "tenant_one_3",
+      "moment": "tenant_beat",
+      "plain": "The Tenant arrives in one minute. The company wishes you a brisk walk to the lift."
     }
   ]
 }

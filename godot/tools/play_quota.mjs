@@ -11,13 +11,16 @@
 //      where the panel starts again at RECORDED 0 OF N although the tape recorded on floor 1 is still held.
 // On every state read the panel's words must be the host's quota block's (or the refusal's flash).
 // Pictures (export/shots/quota/): the panel before the quota is met, the NOT YET flash, the panel once met.
-// Usage: node godot/tools/play_quota.mjs [--port=4462] [--quota=20] [--editor]
+// Usage: node godot/tools/play_quota.mjs [--port=4462] [--quota=20] [--editor | --headless]
+//   --headless is --editor with no window (so no mouse grab); the pictures are not taken.
 //   --editor runs the engine on the project ($GODOT) instead of export/windows/GoingDown.exe.
 // Start .local/guard-mouse.ps1 beside it. Exit code 0 only if every check passes.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
+import { orderlyCell, watchSpots } from './orderly_spot.mjs';
+import { getIn as carefulGetIn, getOut, hideForTheWait } from './careful.mjs';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -25,7 +28,8 @@ const project = resolve(here, '..');
 const arg = (k, d) => (process.argv.find((a) => a.startsWith(`--${k}=`)) ?? `--${k}=${d}`).split('=')[1];
 const port = Number(arg('port', 4462));
 const cap = Number(arg('quota', 20));
-const editor = process.argv.includes('--editor');
+const headless = process.argv.includes('--headless'); // the engine on the project with no window (pictures are then empty)
+const editor = headless || process.argv.includes('--editor');
 const shots = resolve(project, 'export/shots/quota');
 mkdirSync(shots, { recursive: true });
 
@@ -34,7 +38,7 @@ let pre = [];
 let cwd;
 if (editor) {
   exe = process.env.GODOT || resolve(project, '..', 'tools', 'godot', 'Godot_v4.7.2-stable_win64_console.exe');
-  pre = ['--path', project];
+  pre = [...(headless ? ['--headless'] : []), '--path', project];
   cwd = project;
 } else {
   cwd = resolve(project, 'export/windows');
@@ -180,23 +184,26 @@ check('the flash ends and the panel reads RECORDED 0 OF N again', s.quota.panel 
 
 // ---- 3. Record: the Orderly's corridor, back turned with the instrument up, look when it is close.
 const S = 2;
-const es = plan.entityStart;
-const ePos = { x: (es.x + 0.5) * S, z: (es.y + 0.5) * S };
-const along = plan.sightlines
-  .filter((sl) => sl.level === es.level && ((sl.x1 === sl.x2 && sl.x1 === es.x && es.y >= Math.min(sl.y1, sl.y2) && es.y <= Math.max(sl.y1, sl.y2)) || (sl.y1 === sl.y2 && sl.y1 === es.y && es.x >= Math.min(sl.x1, sl.x2) && es.x <= Math.max(sl.x1, sl.x2))))
-  .sort((a, b) => b.length - a.length)[0];
-let spot = null;
-if (along) {
-  const cells = [];
-  for (let x = Math.min(along.x1, along.x2); x <= Math.max(along.x1, along.x2); x++)
-    for (let y = Math.min(along.y1, along.y2); y <= Math.max(along.y1, along.y2); y++) cells.push({ x, y, d: Math.hypot(x - es.x, y - es.y) * S });
-  spot = cells.filter((c) => c.d <= 10).sort((a, b) => b.d - a.d)[0];
-}
+// Where the Orderly really starts: the rules' body (a seeded cell deep in the dirty part since the Orderly fix, OR2),
+// not the plan's entityStart; the cells to watch it from are tools/orderly_spot.mjs's (the rules say which sees it).
+s = await state();
+const es = orderlyCell(s, S);
+const watchFrom = watchSpots(plan, es);
+console.log('watch the Orderly from', JSON.stringify(watchFrom.slice(0, 3)), `(${watchFrom.length} spots)`);
 let met = null;
 const metSpoken = [];
 for (let round = 0; round < 4 && !met; round++) {
   s = await state();
-  if (spot && round === 0) await cmd(`teleport ${es.level} ${spot.x} ${spot.y}`);
+  if (round === 0) {
+    for (const [i, p] of watchFrom.slice(0, 12).entries()) {
+      await cmd(`teleport ${es.level} ${p.x} ${p.y}`);
+      await wait(200);
+      const now = (await state()).orderly;
+      await cmd(`face ${now.x} ${now.z} ${(now.pose?.y ?? es.level * 3.2) + 1.4}`);
+      s = await until((s) => s.orderly.seeing === true, i === 0 ? 3000 : 1500, 50);
+      if (s.orderly.seeing === true) break;
+    }
+  }
   await wait(200);
   s = await state();
   await cmd(`face ${s.orderly.x} ${s.orderly.z} ${(s.orderly.pose?.y ?? es.level * 3.2) + 1.4}`);
@@ -237,9 +244,21 @@ s = await until((s) => s.phase === 'coming', 3000, 50);
 check('call once met: accepted, the car is coming, no refusal', s.phase === 'coming' && (s.events.called ?? 0) === 1 && (s.events.callRefused ?? 0) === refused1, `phase ${s.phase}, called ${s.events.called ?? 0}, refusals ${s.events.callRefused ?? 0}`);
 
 // ---- 5. Ride DOWN: on floor 2 the panel starts again from nothing recorded there.
-await cmd('timescale 6');
-s = await until((s) => s.phase !== 'coming', 120000, 100);
+// The call is loud and the Orderly comes from its far start, hunting. Waiting at the lift in the open ends in a
+// catch and the wipe to the prison, so wait for the car the careful way (tools/careful.mjs, as playthrough.mjs):
+// watch it in the light and get into a hide well clear of it, where it did not see you get in; out again when the car is here.
+const ctx = { cmd, state, wait, until };
+await cmd('timescale 2');
+const hid = await hideForTheWait(ctx);
+console.log(`  waiting for the car: ${hid.hide ? `in ${hid.hide.kind} ${hid.hide.id}, ${hid.note}` : `no hide, ${hid.note}`}`);
+s = await state();
+for (const end = Date.now() + 120000; s.phase === 'coming' && Date.now() < end;) {
+  if (hid.hide && (s.mySeek?.phase ?? 'out') === 'out' && s.me.status === 'ok' && s.dark) s = await carefulGetIn(ctx, hid.hide);
+  await wait(30);
+  s = await state();
+}
 await cmd('timescale 1');
+if (hid.hide && (s.mySeek?.phase ?? 'out') !== 'out') s = await getOut(ctx);
 if (s.client.noise) s = await until((s) => !s.client.noise, 4000);
 // Taken while the car came (a soft catch): the tape is on the floor where it happened. Get it back, so
 // floor 2 starts with a tape held (what the floor-2 check is about).

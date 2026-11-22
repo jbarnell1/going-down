@@ -111,6 +111,11 @@ const WARD_LINES := {
 	"ward_lift_returned": "Your lift is here. Step aboard, please.",
 	"ward_lift_final_call": "Ten seconds to departure. Mind the doors.",
 	"ward_lift_closed": "Doors closed.",
+	"ward_station": "The call button is in another house. Do enjoy the neighbourhood.",
+	"ward_called": "Your lift has been called. Please wait where you are.",
+	"ward_hung": "A colleague is currently on hold. Please cut them down at your convenience.",
+	"ward_cut": "Welcome back, colleague. Your hold has ended.",
+	"ward_left_behind": "The lift has departed. You are, of course, welcome to stay.",
 }
 const WARD_PRIORITY := 3
 ## Lines whose words are no longer true anywhere: "Welcome back to the surface" (the prison is under the lid) and
@@ -127,7 +132,9 @@ const HUSH_INTO_MS := 500
 const HUSH_MS := 1800
 const HUSH_GAP_MS := 60000
 const HUSH_NEVER := ["slip", "resume", "tape"]
-const HUSH_CAPTIONS := ["AHEM. QUIET PLEASE, COLLEAGUES.", "AHEM. THE COMPANY IS SPEAKING.", "AHEM. THANK YOU. AS I WAS SAYING."]
+## In the order of the recordings hush_1 to hush_3 (assets_src/voice/lines.json).
+const HUSH_CAPTIONS := ["AHEM. THANK YOU. AS I WAS SAYING.", "AHEM. THE COMPANY IS SPEAKING.", "AHEM. THANK YOU, COLLEAGUES."]
+const DealRules = preload("res://sim/deal.gd")
 var hushes := 0
 var _hush_until := -1
 var _last_hush := -1
@@ -228,6 +235,10 @@ func _ready() -> void:
 	number_player.bus = "Voice"
 	number_player.volume_db = -5.0
 	add_child(number_player)
+	clip_player = AudioStreamPlayer.new()
+	clip_player.bus = "Voice"
+	clip_player.volume_db = -5.0
+	add_child(clip_player)
 	var m: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://assets/voice/manifest.json"))
 	if m is Dictionary:
 		use_manifest(m)
@@ -342,6 +353,8 @@ func on_events(events: Array, first_depth := 1, floor_quota: Variant = null) -> 
 				# Refused for the Reactor's power, not the quota: no quota line (the panel's buzz is the answer).
 				if str(e.get("reason", "")) != "power" and not FloorQuota.floor_met(floor_quota):
 					hint("hint_call_dead")
+				elif str(e.get("reason", "")) == "power":
+					no_power_said()
 			"blinkStart":
 				if e.blackout:
 					blackout_on = true
@@ -578,19 +591,72 @@ func say_count(line: String, text: String, ms: int, number := -1, length := 0, l
 ## under any recorded line that is playing. The lines to record are the ticket's (sim/deal.gd read_line, outcome_line).
 const DEAL_LINE_MS := 4500
 var _deal_lines: Array[String] = []
+var _deal_ids: Array[String] = []
 var _deal_caption := ""
 var _deal_until := 0
+## Recorded clips played on their own player (the deal's lines, the Reactor's no-power line, the hush): {id, path,
+## found, at}. A clip whose file is missing is a caption only (tests read this).
+var clip_player: AudioStreamPlayer
+var clips: Array = []
+const DEAL_FACES: Array[StringName] = [&"hazard", &"squeak", &"torch", &"second", &"dark_pay", &"dark", &"express", &"express_awake"]
+const DEAL_CARDS: Array[StringName] = [&"squeak", &"torch", &"second", &"dark", &"express"]
+const NO_POWER_GAP_MS := 8000
+var _last_no_power := -100000
 
-func deal_say(text: String) -> void:
+## The recorded line's id for one of the deal's spoken lines (sim/deal.gd), "" when none is recorded. A line with the
+## carrier's name matches around the name: the recording never says it, the caption keeps it.
+static func deal_line_id(text: String) -> String:
+	for card in DEAL_CARDS:
+		if DealRules.read_line(card) == text:
+			return "deal_offer_%s" % card
+	for face in DEAL_FACES:
+		var tpl := DealRules.outcome_line(face, "\u0001")
+		var parts := tpl.split("\u0001")
+		if parts.size() == 2:
+			if text.begins_with(parts[0]) and text.ends_with(parts[1]) and text.length() > parts[0].length() + parts[1].length():
+				return "deal_out_%s" % face
+		elif tpl == text:
+			return "deal_out_%s" % face
+	if text == DealRules.passed_line():
+		return "deal_passed"
+	if text == DealRules.double_line():
+		return "deal_double"
+	return ""
+
+func deal_say(text: String, id := "") -> void:
 	if text != "":
 		_deal_lines.append(text)
+		_deal_ids.append(id if id != "" else deal_line_id(text))
+
+## The Reactor's refused call for want of power (callRefused, reason "power"): said once, the panel keeps its label.
+func no_power_said() -> void:
+	var now := _ms()
+	if now - _last_no_power < NO_POWER_GAP_MS:
+		return
+	_last_no_power = now
+	deal_say("The car cannot be called without power. It will return when power is restored.", "reactor_no_power")
+
+## Plays recorded clip `id` (res://assets/voice/<voice>/<id>.mp3) on its own player; returns its length in ms (0 when
+## the file is missing or the announcer is a test double).
+func play_clip(id: String) -> int:
+	var path := "res://assets/voice/%s/%s.mp3" % [voice, id]
+	var found := ResourceLoader.exists(path)
+	clips.append({"id": id, "path": path, "found": found, "at": _ms()})
+	if fake or not found or clip_player == null:
+		return 0
+	var stream: AudioStream = load(path)
+	clip_player.stream = stream
+	clip_player.play()
+	return int(stream.get_length() * 1000.0)
 
 ## The deal's line on screen now ("" for none).
 func deal_shown() -> String:
 	var now := _ms()
 	if now >= _deal_until and not _deal_lines.is_empty():
 		_deal_caption = _deal_lines.pop_front()
-		_deal_until = now + maxi(DEAL_LINE_MS, 55 * _deal_caption.length())
+		var id: String = _deal_ids.pop_front()
+		var length := play_clip(id) if id != "" else 0
+		_deal_until = now + maxi(maxi(DEAL_LINE_MS, 55 * _deal_caption.length()), length + 600)
 	return _deal_caption if now < _deal_until else ""
 
 ## The subtitle to show: the announcer's own line, else the count's caption while it lasts. The deal's line goes
@@ -629,7 +695,7 @@ func bell_soon() -> void:
 func ward_line(cue: String) -> void:
 	if not WARD_LINES.has(cue):
 		return
-	if not lines.has(cue):
+	if not lines.has(cue) or not lines[cue].has("path"):
 		lines[cue] = {"id": cue, "moment": cue, "plain": WARD_LINES[cue], "path": "res://assets/ward/voice/%s/%s.mp3" % [voice, cue]}
 		by_moment[cue] = [cue]
 		priority[cue] = WARD_PRIORITY
@@ -701,7 +767,7 @@ func hushable() -> bool:
 		return false
 	if int(current.get("priority", 1)) > 3 or DANGER.has(str(current.moment)) or HUSH_NEVER.has(str(current.moment)):
 		return false
-	if str(current.moment).begins_with("ward_lift") or _busy("count") or _busy("number"):
+	if str(current.moment).begins_with("ward_") or _busy("count") or _busy("number"):
 		return false
 	if _last_hush >= 0 and now - _last_hush < HUSH_GAP_MS:
 		return false
@@ -721,6 +787,9 @@ func hush() -> bool:
 	_sort_queue()
 	_hush_until = now + HUSH_MS
 	_last_hush = now
+	# The recorded throat clear and request (hush_1 to hush_3): the silence lasts as long as it does.
+	var hush_ms := play_clip("hush_%d" % (hushes % HUSH_CAPTIONS.size() + 1))
+	_hush_until = now + maxi(HUSH_MS, hush_ms + 300)
 	subtitle = HUSH_CAPTIONS[hushes % HUSH_CAPTIONS.size()]
 	hushes += 1
 	_log({"what": "hush", "id": again.id, "moment": again.moment, "at": now})

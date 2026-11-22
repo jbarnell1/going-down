@@ -19,6 +19,7 @@ const InventoryViewScript = preload("res://client/inventory_view.gd")
 const Run = preload("res://sim/run.gd")
 const Clinic = preload("res://sim/clinic.gd")
 const PlanDump = preload("res://client/plan_dump.gd")
+const HideView = preload("res://client/hide_view.gd")
 
 func test_the_fade_helper(t: T) -> void:
 	t.eq(HudFade.alpha(1000, 1000, false), 1.0, "full when it changes")
@@ -126,21 +127,45 @@ func test_the_tenant_clock_at_its_moments(t: T) -> void:
 ## HUD1b: the lift's paper notice: the host's minutes, the floor's rates, and on the built car's wall.
 func test_the_lift_notice_prints_the_hosts_minutes(t: T) -> void:
 	var ten := " ".join(LiftScript.notice_rows(10))
-	t.check(ten.contains("ALLOWS 10 MINUTES BEFORE THE TENANT ARRIVES"), "ten minutes on paper: " + ten)
-	t.check(" ".join(LiftScript.notice_rows(7)).contains("ALLOWS 7 MINUTES"), "the host's seven when it is seven")
+	t.check(ten.contains("EACH LEVEL: 10 MINUTES, THEN THE TENANT COMES."), "ten minutes on paper: " + ten)
+	t.check(" ".join(LiftScript.notice_rows(7)).contains("7 MINUTES"), "the host's seven when it is seven")
 	t.eq(LiftScript.notice_rows(0).size(), 0, "no Tenant clock: no notice")
-	var rates := "SPRINT 1 S OR 2 NOISES FILL IT. ONLY A SEARCH EMPTIES IT"
-	var with_rates := LiftScript.notice_rows(10, PackedStringArray([rates, ""]))
-	t.check(" ".join(with_rates).replace("  ", " ").contains("ONLY A SEARCH EMPTIES IT"), "the floor's rates printed under it: %s" % [with_rates])
-	t.check(with_rates.size() <= LiftScript.NOTICE_ROWS and with_rates[-1] == "- THE MANAGEMENT", "it all fits the paper")
+	t.check(LiftScript.notice_rows(10).size() <= LiftScript.NOTICE_ROWS, "the notice fits its sheet")
+	for r: String in LiftScript.notice_rows(10):
+		t.check(r.length() <= LiftScript.NOTICE_COLS, "a line fits the sheet's width: " + r)
+	# HUD1c: readable at 1.5 m. The picture is 270 px tall over the camera's 70 degree vertical view (client/main.gd
+	# VFOV), so at 1.5 m one screen pixel is 2 * 1.5 * tan(35 deg) / 270 m tall. The font is 7 rows: a glyph must cover
+	# at least 1.5 screen pixels a row (10.5 px), and be at least twice the first notice's 0.045 m.
+	var px_m := 2.0 * 1.5 * tan(deg_to_rad(Main.VFOV * 0.5)) / 270.0
+	var min_m := maxf(7.0 * 1.5 * px_m, 2.0 * 0.045)
+	t.check(LiftScript.NOTICE_GLYPH_M >= min_m, "glyphs %.3f m tall, readable minimum at 1.5 m %.3f m" % [LiftScript.NOTICE_GLYPH_M, min_m])
+	t.check(LiftScript.NOTICE_SIZE.x <= 1.35 and LiftScript.NOTICE_SIZE.y <= 1.5, "a sheet is at most about 1.2 by 1.5 m: %s" % [LiftScript.NOTICE_SIZE])
+	# The Playroom's real rate lines, on their own sheets, whole, with their numbers exact.
+	var tuned := HideView.anger_rates_text(null, true, true)
+	var health := HideView.health_rates_text(true)
+	for rate: String in [HideView.ANGER_RATES, tuned, health, HideView.health_rates_text(false)]:
+		var sheets: Array = LiftScript.rate_sheets(PackedStringArray([rate]))
+		var printed := " ".join(sheets[0] as PackedStringArray) if not sheets.is_empty() else ""
+		t.check(sheets.size() == 1 and printed == " ".join(rate.split(" ", false)), "the rate whole on one sheet: %s / %s" % [rate, sheets])
+	t.eq(LiftScript.rate_sheets(PackedStringArray(["", ""])).size(), 0, "no rates: no rate sheets")
 	var car := Run.car_geometry(Clinic.generate_clinic("notice", 1))
 	var lift: Node3D = LiftScript.new()
 	lift.call("build", PlanDump.car_plain(car))
 	var paper := lift.get_node("TenantNotice") as MeshInstance3D
+	var sheet1 := lift.get_node("RateSheet1") as MeshInstance3D
+	var sheet2 := lift.get_node("RateSheet2") as MeshInstance3D
 	t.check(paper != null and not paper.visible, "the paper is up only once a clock is known")
-	lift.call("show_notice", 10, PackedStringArray())
+	lift.call("show_notice", 10, PackedStringArray(["", ""]))
 	t.check(paper.visible and (lift.get("notice_lines") as PackedStringArray) == LiftScript.notice_rows(10), "printed with the clock's minutes")
-	t.check(absf(paper.position.x - float(car.width) * 0.5) < 0.05 and paper.position.z < 0.0, "inside the car, on its right-hand wall")
+	t.check(not sheet1.visible and not sheet2.visible, "no rates on this floor: no rate sheets")
+	lift.call("show_notice", 10, PackedStringArray([tuned, health]))
+	t.check(sheet1.visible and sheet2.visible and (lift.get("rate_lines") as Array).size() == 2, "the Playroom: both rate sheets up")
+	var w := float(car.width) * 0.5
+	var d := float(car.depth)
+	for mi: MeshInstance3D in [paper, sheet1, sheet2]:
+		var zs := [mi.position.z - LiftScript.NOTICE_W * 0.5, mi.position.z + LiftScript.NOTICE_W * 0.5]
+		t.check(absf(absf(mi.position.x) - w) < 0.05 and zs[0] > -d and zs[1] < -LiftScript.FRONT, "%s inside the car on a side wall" % mi.name)
+	t.check(absf(paper.position.z - sheet1.position.z) >= LiftScript.NOTICE_W, "the notice and the first rate sheet do not overlap")
 	lift.free()
 
 ## HUD1b: the inventory squares dim at rest; IN HAND for 2 s after a change.
