@@ -677,27 +677,55 @@ func menu_rows() -> Array[Array]:
 	rows.append(["M", "MICROPHONE ON / OFF"])
 	return rows
 
-## ES1b: the controls card's size in font pixels (w, h), its scale and its rectangle in a window of `at_size`
-## (the drawing and tests/test_esc_card.gd use the same numbers).
-func menu_card(at_size: Vector2) -> Dictionary:
-	var key_w := 0
-	var act_w := 0
+## ES1c: the controls card keeps this many window pixels clear on every side.
+const MENU_MARGIN := 16.0
+const MENU_COL_GAP := 16
+
+## ES1c: the card's rows in `cols` columns (1 or 2, the first column the longer): [{rows, key_w, act_w, x}] and the
+## card's size in font pixels.
+func menu_card_dims(cols: int) -> Dictionary:
 	var all_rows := menu_rows()
-	for row: Array in all_rows:
-		key_w = maxi(key_w, PixelFont.width(str(row[0])))
-		act_w = maxi(act_w, PixelFont.width(str(row[1])))
+	var per := ceili(all_rows.size() / float(cols))
+	var out: Array = []
+	var x := 8
+	for c in cols:
+		var part := all_rows.slice(c * per, mini(all_rows.size(), (c + 1) * per))
+		var key_w := 0
+		var act_w := 0
+		for row: Array in part:
+			key_w = maxi(key_w, PixelFont.width(str(row[0])))
+			act_w = maxi(act_w, PixelFont.width(str(row[1])))
+		out.append({"rows": part, "key_w": key_w, "act_w": act_w, "x": x})
+		x += key_w + 10 + act_w + MENU_COL_GAP
 	var note_rows := 1 if menu_note != "" else 0
-	var w := maxi(maxi(key_w + 10 + act_w + 16, PixelFont.width(menu_note) + 16), PixelFont.width(menu_foot) + 16)
-	var h := (all_rows.size() + 4 + note_rows) * 12 + 8
-	var sc := maxf(1.0, floor(minf(at_size.x * 0.92 / w, at_size.y * 0.86 / h)))
+	var w := maxi(maxi(x - MENU_COL_GAP + 8, PixelFont.width(menu_note) + 16), PixelFont.width(menu_foot) + 16)
+	var h := (per + 4 + note_rows) * 12 + 8
+	return {"cols": out, "w": w, "h": h, "note_rows": note_rows, "per": per}
+
+## The largest whole scale at which `dims` fits a window of `at_size` with MENU_MARGIN clear (0 when none).
+static func menu_scale_for(dims: Dictionary, at_size: Vector2) -> float:
+	return floor(minf((at_size.x - 2.0 * MENU_MARGIN) / float(dims["w"]), (at_size.y - 2.0 * MENU_MARGIN) / float(dims["h"])))
+
+## ES1b/ES1c: the controls card in a window of `at_size`: one column, or two when two read larger (at 1280x720 one
+## column only fits at scale 1, too small to read). The largest whole scale that fits with MENU_MARGIN clear, never
+## under 1. {w, h, sc, origin, rect, cols, note_rows, per} (the drawing and tests/test_esc_card.gd use these).
+func menu_card(at_size: Vector2) -> Dictionary:
+	var one := menu_card_dims(1)
+	var two := menu_card_dims(2)
+	var s1 := menu_scale_for(one, at_size)
+	var s2 := menu_scale_for(two, at_size)
+	var d := two if s2 > s1 else one
+	var sc := maxf(1.0, maxf(s1, s2))
+	var w: int = d["w"]
+	var h: int = d["h"]
 	var origin := Vector2(floorf((at_size.x - w * sc) * 0.5), floorf((at_size.y - h * sc) * 0.5))
-	return {"w": w, "h": h, "sc": sc, "origin": origin, "key_w": key_w, "rows": all_rows, "note_rows": note_rows,
-		"rect": Rect2(origin, Vector2(w, h) * sc)}
+	d["sc"] = sc
+	d["origin"] = origin
+	d["rect"] = Rect2(origin, Vector2(w, h) * sc)
+	return d
 
 func _draw_menu() -> void:
 	var card := menu_card(size)
-	var all_rows: Array = card["rows"]
-	var key_w: int = card["key_w"]
 	var title := "CONTROLS"
 	var foot := menu_foot
 	var gap := 10
@@ -715,15 +743,19 @@ func _draw_menu() -> void:
 	PixelFont.draw_shadowed(self, title, origin + Vector2(floorf((w - PixelFont.width(title)) / 2.0), 6) * sc, sc, amber)
 	if note != "":
 		PixelFont.draw_shadowed(self, note, origin + Vector2(floorf((w - PixelFont.width(note)) / 2.0), 6 + line) * sc, sc, Color(0.62, 0.64, 0.6))
-	for i in all_rows.size():
-		var row: Array = all_rows[i]
-		var key: String = row[0]
-		var act: String = row[1]
-		var y := 6 + (i + 2 + note_rows) * line
-		PixelFont.draw_shadowed(self, key, origin + Vector2(8 + key_w - PixelFont.width(key), y) * sc, sc, amber)
-		PixelFont.draw_shadowed(self, act, origin + Vector2(8 + key_w + gap, y) * sc, sc, pale)
+	for col: Dictionary in card["cols"]:
+		var key_w: int = col["key_w"]
+		var cx: int = col["x"]
+		var rows: Array = col["rows"]
+		for i in rows.size():
+			var row: Array = rows[i]
+			var key: String = row[0]
+			var act: String = row[1]
+			var y := 6 + (i + 2 + note_rows) * line
+			PixelFont.draw_shadowed(self, key, origin + Vector2(cx + key_w - PixelFont.width(key), y) * sc, sc, amber)
+			PixelFont.draw_shadowed(self, act, origin + Vector2(cx + key_w + gap, y) * sc, sc, pale)
 	if (Time.get_ticks_msec() / 600) % 2 == 0:
-		PixelFont.draw_shadowed(self, foot, origin + Vector2(floorf((w - PixelFont.width(foot)) / 2.0), 6 + (all_rows.size() + 3 + note_rows) * line) * sc, sc, amber)
+		PixelFont.draw_shadowed(self, foot, origin + Vector2(floorf((w - PixelFont.width(foot)) / 2.0), 6 + (int(card["per"]) + 3 + note_rows) * line) * sc, sc, amber)
 
 ## The subtitle's rows as drawn (upper case, only the font's characters, wrapped).
 func _subtitle_rows() -> PackedStringArray:

@@ -582,6 +582,9 @@ func click(pos: Vector2, shift: bool = false) -> bool:
 				voice_set(str(h[2]))
 			"voice_row":
 				_sound_row = voice_row_index()
+			"snd_more":
+				if int(h[2]) >= 0:
+					_sound_row = int(h[2])
 			"mic_row":
 				_sound_row = mic_row_index() + int(h[2])
 			"mic_minus", "mic_plus":
@@ -652,7 +655,8 @@ func top_line() -> String:
 ## The foot: for the host, how to change a value first (PT6: the panel says how it works on first open).
 func foot_line() -> String:
 	if _sound:
-		return "UP DOWN: CHOOSE    LEFT RIGHT OR DRAG: CHANGE    BACKSPACE: 100    S: BACK    F8: CLOSE"
+		# ES1c: short enough to stay inside the card at 1024 wide.
+		return "UP DOWN: CHOOSE  LEFT RIGHT: CHANGE  BACKSPACE: RESET  S: BACK  F8: CLOSE"
 	if is_host():
 		return "LEFT RIGHT OR CLICK: CHANGE    TAB: NEXT    HOLD BACKSPACE: RESET ALL %d    F8: CLOSE" % changed_count()
 	return "S: YOUR SOUND    F8: CLOSE" if volume != null else "F8: CLOSE"
@@ -726,7 +730,7 @@ func select(section: StringName) -> bool:
 # Drawing.
 
 func _px() -> float:
-	return maxf(2.0, floor(size.y / 320.0))
+	return px_at(size)
 
 func _text(t: String, at: Vector2, px: float, col: Color) -> void:
 	PixelFont.draw_shadowed(self, t, at, px, col)
@@ -748,110 +752,251 @@ func _button(label: String, at: Vector2, px: float, col: Color) -> Rect2:
 	_text(label, at, px, col)
 	return r
 
-## MU1: the sound page's three rows at `at` (the right side; `right` is the card's inner right edge): the name, the
-## value, - slider +, RESET. Live for every player: the host's grey never applies here.
-func _draw_sound(at: Vector2, rw: float, px: float, lh: float, right: float) -> void:
-	var ry := at.y
-	var rx := at.x
-	var rows := sound_rows()
-	for r in rows.size():
-		var row: Dictionary = rows[r]
-		var on := r == _sound_row
-		var row_h := lh * 2.0 + 2 * px
-		if on:
-			draw_rect(Rect2(Vector2(rx - 4 * px, ry - 3 * px), Vector2(rw + 8 * px, row_h)), Color(1, 1, 1, 0.06))
-		_hits.append([Rect2(Vector2(rx, ry - 3 * px), Vector2(rw, row_h)), "snd_row", r])
-		var changed := int(row["pct"]) != Volume.DEFAULT
-		_text(str(row["name"]), Vector2(rx, ry), px, INK if on else Color(0.85, 0.86, 0.82))
-		var vy := ry + lh
-		if changed:
-			draw_rect(Rect2(Vector2(rx, vy + 2 * px), Vector2(3 * px, 3 * px)), AMBER)
-		_text(str(row["text"]), Vector2(rx + 6 * px, vy), px, AMBER if changed else INK)
-		var reset_w := _w("RESET", px) + 4 * px
-		var reset_at := Vector2(right - reset_w + 2 * px, vy)
-		var reset_r := _button("RESET", reset_at, px, INK if changed else DIM)
-		_hits.append([reset_r, "snd_reset", r])
-		var plus_at := Vector2(reset_at.x - 14 * px, vy)
-		var slider_end := plus_at.x - 6 * px
-		var minus_at := Vector2(rx + 6 * px + 8 * 6 * px, vy)
-		var minus_r := _button("-", minus_at, px, INK if int(row["pct"]) > 0 else DIM)
-		_hits.append([minus_r, "snd_minus", r])
-		var plus_r := _button("+", plus_at, px, INK if int(row["pct"]) < 100 else DIM)
-		_hits.append([plus_r, "snd_plus", r])
-		var track := Rect2(Vector2(minus_r.end.x + 5 * px, vy + 3 * px), Vector2(maxf(10 * px, slider_end - minus_r.end.x - 10 * px), px))
-		draw_rect(track, GREY)
-		var fv := float(row["pct"]) / 100.0
-		draw_rect(Rect2(Vector2(track.position.x + track.size.x * fv - 2 * px, vy), Vector2(4 * px, 7 * px)), AMBER if changed else INK)
-		_hits.append([Rect2(Vector2(track.position.x, vy - 2 * px), Vector2(track.size.x, 11 * px)), "snd_slider", r])
-		ry += row_h + 4 * px
-	if caught_pref != null:
-		# CS1: the caught scenes, FULL or SOFT.
-		var on := _sound_row == caught_row_index()
-		var row_h := lh * 2.0 + 2 * px
-		if on:
-			draw_rect(Rect2(Vector2(rx - 4 * px, ry - 3 * px), Vector2(rw + 8 * px, row_h)), Color(1, 1, 1, 0.06))
-		_hits.append([Rect2(Vector2(rx, ry - 3 * px), Vector2(rw, row_h)), "caught_row", 0])
-		var is_soft: bool = caught_pref.soft
-		_text(caught_pref.NAME, Vector2(rx, ry), px, INK if on else Color(0.85, 0.86, 0.82))
-		var vy := ry + lh
-		if is_soft:
-			draw_rect(Rect2(Vector2(rx, vy + 2 * px), Vector2(3 * px, 3 * px)), AMBER)
-		_text(caught_pref.text(), Vector2(rx + 6 * px, vy), px, AMBER if is_soft else INK)
-		var full_r := _button("FULL", Vector2(rx + 6 * px + 8 * 6 * px, vy), px, INK if is_soft else AMBER)
-		_hits.append([full_r, "caught_full", 0])
-		var soft_r := _button("SOFT", Vector2(full_r.end.x + 6 * px, vy), px, AMBER if is_soft else INK)
-		_hits.append([soft_r, "caught_soft", 0])
-		_text("SOFT: NO SNAP, HALF THE FLASH AND NOISE", Vector2(rx + 6 * px, vy + lh), px, GREY)
-		ry += row_h + lh + 4 * px
-	if voice_pref != null:
-		# ES1a: the announcer's voice, one button per manifest voice.
-		var on := _sound_row == voice_row_index()
-		var row_h := lh * 2.0 + 2 * px
-		if on:
-			draw_rect(Rect2(Vector2(rx - 4 * px, ry - 3 * px), Vector2(rw + 8 * px, row_h)), Color(1, 1, 1, 0.06))
-		_hits.append([Rect2(Vector2(rx, ry - 3 * px), Vector2(rw, row_h)), "voice_row", 0])
-		_text(voice_pref.NAME, Vector2(rx, ry), px, INK if on else Color(0.85, 0.86, 0.82))
-		var vy := ry + lh
-		_text(str(voice_pref.text()), Vector2(rx + 6 * px, vy), px, INK)
-		var bx := rx + 6 * px + 8 * 6 * px
-		for v: Array in voice_buttons():
-			var chosen := str(v[0]) == str(voice_pref.voice)
-			var b := _button(str(v[1]), Vector2(bx, vy), px, AMBER if chosen else INK)
-			_hits.append([b, "voice_pick", str(v[0])])
-			bx = b.end.x + 6 * px
-		ry += row_h + 4 * px
-	if mic != null:
-		ry = _draw_mic(Vector2(rx, ry), rw, px, lh)
-	_text("NOT SENT TO ANYONE. THE HOST'S SETTINGS ARE ON THE LEFT.", Vector2(rx, ry + 2 * px), px, GREY)
+## ES1c: the panel's card in a window of `at_size`, and the font pixel there (the drawing and the tests use these).
+static func card_rect(at_size: Vector2) -> Rect2:
+	return Rect2(Vector2(at_size.x * 0.05, at_size.y * 0.09), Vector2(at_size.x * 0.9, at_size.y * 0.86))
 
-## VC1: the microphone's three rows and its live test bar. Returns the y under them.
-func _draw_mic(at: Vector2, rw: float, px: float, lh: float) -> float:
+static func px_at(at_size: Vector2) -> float:
+	# The width counts too: at 1280x1024 the height alone gave 3 and the rows ran off the card's right edge.
+	return maxf(2.0, floor(minf(at_size.y / 320.0, at_size.x / 480.0)))
+
+## ES1c: the sound page's blocks top to bottom, [kind, row on the page or -1, height in font pixels]: the three
+## sliders, CAUGHT SCENES, ANNOUNCER VOICE, the three microphone rows, the microphone's test bar and calibrate
+## button, and the closing note.
+func _sound_blocks() -> Array:
+	var out: Array = []
+	for r in Volume.ROWS.size():
+		out.append(["slider", r, 28.0])
+	if caught_pref != null:
+		out.append(["caught", caught_row_index(), 39.0])
+	if voice_pref != null:
+		out.append(["voice", voice_row_index(), 28.0])
+	if mic != null:
+		for r in MIC_ROWS:
+			out.append(["mic", mic_row_index() + r, 28.0])
+		out.append(["mic_test", -1, 57.0])
+	out.append(["note", -1, 13.0])
+	return out
+
+## ES1c (the owner's sound page overflowed its card at 1280x720 once it had the voice row): where every block of the
+## sound page goes in a window of `at_size`. The page scrolls with the chosen row: the blocks that fit between the
+## page's title and the foot's line are shown, always the chosen one (with the test bar under a microphone row
+## when it fits too); "more" says whether some are hidden above or below.
+## {area: Rect2, title_at: Vector2, blocks: [{kind, row, rect, shown}], above: bool, below: bool, foot: Rect2}
+func sound_layout(at_size: Vector2) -> Dictionary:
+	var px := px_at(at_size)
+	var card := card_rect(at_size)
+	var lh := 11.0 * px
+	var m := 8.0 * px
+	var x0 := card.position.x + m
+	var y := card.position.y + m + lh + 2 * px + 6 * px
+	var rx := x0 + 24.0 * 6.0 * px + 10 * px
+	var right := card.end.x - m
+	var title_at := Vector2(rx, y)
+	var top := y + lh + 5 * px
+	var bottom := card.end.y - 16 * px - 4 * px
+	var area := Rect2(Vector2(rx - 4 * px, top - 3 * px), Vector2(right - rx + 8 * px, bottom - top + 3 * px))
+	var blocks := _sound_blocks()
+	var tops: Array = []
+	var acc := 0.0
+	for b: Array in blocks:
+		tops.append(acc)
+		acc += float(b[2]) * px
+	var avail := bottom - top
+	# The chosen row's block (and the test bar after the last microphone row, when the two fit together).
+	var sel := 0
+	for i in blocks.size():
+		if int(blocks[i][1]) == _sound_row:
+			sel = i
+	var last := sel
+	if str(blocks[sel][0]) == "mic" and sel + 1 < blocks.size():
+		var k := sel
+		while k + 1 < blocks.size() and str(blocks[k + 1][0]) in ["mic", "mic_test"]:
+			k += 1
+		if float(tops[k]) + float(blocks[k][2]) * px - float(tops[sel]) <= avail:
+			last = k
+	var end_of := func(i: int) -> float: return float(tops[i]) + float(blocks[i][2]) * px
+	var off := maxf(0.0, end_of.call(last) - avail)
+	off = minf(off, float(tops[sel]))
+	var out: Array = []
+	var above := false
+	var below := false
+	for i in blocks.size():
+		var y0 := top + float(tops[i]) - off
+		var h := float(blocks[i][2]) * px
+		var shown := y0 >= top - 0.01 and y0 + h - 4 * px <= bottom + 0.01
+		if not shown:
+			if y0 < top:
+				above = true
+			else:
+				below = true
+		out.append({"kind": str(blocks[i][0]), "row": int(blocks[i][1]), "rect": Rect2(Vector2(rx, y0), Vector2(right - rx, h - 4 * px)), "shown": shown})
+	return {"area": area, "title_at": title_at, "blocks": out, "above": above, "below": below, "px": px, "lh": lh,
+		"right": right, "foot": Rect2(Vector2(x0, card.end.y - 11 * px), Vector2(_w(foot_line(), px), 7 * px)), "card": card}
+
+## The words over the page's top right when rows are hidden ("" when every row shows).
+static func more_words(lay: Dictionary) -> String:
+	if bool(lay["below"]):
+		return "MORE BELOW"
+	if bool(lay["above"]):
+		return "MORE ABOVE"
+	return ""
+
+## The row a click on MORE chooses: the first hidden row below, else the last hidden row above.
+static func more_target(lay: Dictionary) -> int:
+	var above := -1
+	var seen_shown := false
+	for b: Dictionary in lay["blocks"]:
+		if bool(b["shown"]):
+			seen_shown = true
+		elif int(b["row"]) >= 0:
+			if seen_shown:
+				return int(b["row"])
+			above = int(b["row"])
+	if bool(lay["below"]):
+		# Only the test bar or the note hidden below: the last row shows them.
+		var last := -1
+		for b: Dictionary in lay["blocks"]:
+			if int(b["row"]) >= 0:
+				last = int(b["row"])
+		return last
+	return above
+
+## MU1: the sound page (the right side of the card): the sliders (the name, the value, - slider +, RESET), CAUGHT
+## SCENES, ANNOUNCER VOICE and the microphone, as many as fit (ES1c, sound_layout). Live for every player: the
+## host's grey never applies here.
+func _draw_sound(lay: Dictionary) -> void:
+	var px: float = lay["px"]
+	var lh: float = lay["lh"]
+	var right: float = lay["right"]
+	var more := more_words(lay)
+	if more != "":
+		# A click shows the hidden rows (the chosen row moves to the first of them).
+		var mr := _button(more, Vector2(right - _w(more, px) - 2 * px, (lay["title_at"] as Vector2).y), px, AMBER)
+		_hits.append([mr, "snd_more", more_target(lay)])
+	for b: Dictionary in lay["blocks"]:
+		if not bool(b["shown"]):
+			continue
+		var r: Rect2 = b["rect"]
+		var at := r.position
+		var rw := r.size.x
+		match str(b["kind"]):
+			"slider":
+				_draw_slider(int(b["row"]), at, rw, px, lh, right)
+			"caught":
+				_draw_caught(at, rw, px, lh)
+			"voice":
+				_draw_voice(at, rw, px, lh)
+			"mic":
+				_draw_mic_row(int(b["row"]) - mic_row_index(), at, rw, px, lh)
+			"mic_test":
+				_draw_mic_test(at, px, lh)
+			"note":
+				_text("NOT SENT. HOST SETTINGS: ON THE LEFT.", at + Vector2(0, 2 * px), px, GREY)
+
+func _row_back(on: bool, at: Vector2, rw: float, px: float, row_h: float) -> void:
+	if on:
+		draw_rect(Rect2(Vector2(at.x - 4 * px, at.y - 3 * px), Vector2(rw + 8 * px, row_h)), Color(1, 1, 1, 0.06))
+
+func _draw_slider(r: int, at: Vector2, rw: float, px: float, lh: float, right: float) -> void:
+	var rx := at.x
+	var ry := at.y
+	var row: Dictionary = sound_rows()[r]
+	var on := r == _sound_row
+	var row_h := lh * 2.0 + 2 * px
+	_row_back(on, at, rw, px, row_h)
+	_hits.append([Rect2(Vector2(rx, ry - 3 * px), Vector2(rw, row_h)), "snd_row", r])
+	var changed := int(row["pct"]) != Volume.DEFAULT
+	_text(str(row["name"]), Vector2(rx, ry), px, INK if on else Color(0.85, 0.86, 0.82))
+	var vy := ry + lh
+	if changed:
+		draw_rect(Rect2(Vector2(rx, vy + 2 * px), Vector2(3 * px, 3 * px)), AMBER)
+	_text(str(row["text"]), Vector2(rx + 6 * px, vy), px, AMBER if changed else INK)
+	var reset_w := _w("RESET", px) + 4 * px
+	var reset_at := Vector2(right - reset_w + 2 * px, vy)
+	var reset_r := _button("RESET", reset_at, px, INK if changed else DIM)
+	_hits.append([reset_r, "snd_reset", r])
+	var plus_at := Vector2(reset_at.x - 14 * px, vy)
+	var slider_end := plus_at.x - 6 * px
+	var minus_at := Vector2(rx + 6 * px + 8 * 6 * px, vy)
+	var minus_r := _button("-", minus_at, px, INK if int(row["pct"]) > 0 else DIM)
+	_hits.append([minus_r, "snd_minus", r])
+	var plus_r := _button("+", plus_at, px, INK if int(row["pct"]) < 100 else DIM)
+	_hits.append([plus_r, "snd_plus", r])
+	var track := Rect2(Vector2(minus_r.end.x + 5 * px, vy + 3 * px), Vector2(maxf(10 * px, slider_end - minus_r.end.x - 10 * px), px))
+	draw_rect(track, GREY)
+	var fv := float(row["pct"]) / 100.0
+	draw_rect(Rect2(Vector2(track.position.x + track.size.x * fv - 2 * px, vy), Vector2(4 * px, 7 * px)), AMBER if changed else INK)
+	_hits.append([Rect2(Vector2(track.position.x, vy - 2 * px), Vector2(track.size.x, 11 * px)), "snd_slider", r])
+
+## CS1: the caught scenes, FULL or SOFT.
+func _draw_caught(at: Vector2, rw: float, px: float, lh: float) -> void:
+	var rx := at.x
+	var ry := at.y
+	var on := _sound_row == caught_row_index()
+	var row_h := lh * 2.0 + 2 * px
+	_row_back(on, at, rw, px, row_h)
+	_hits.append([Rect2(Vector2(rx, ry - 3 * px), Vector2(rw, row_h)), "caught_row", 0])
+	var is_soft: bool = caught_pref.soft
+	_text(caught_pref.NAME, Vector2(rx, ry), px, INK if on else Color(0.85, 0.86, 0.82))
+	var vy := ry + lh
+	if is_soft:
+		draw_rect(Rect2(Vector2(rx, vy + 2 * px), Vector2(3 * px, 3 * px)), AMBER)
+	_text(caught_pref.text(), Vector2(rx + 6 * px, vy), px, AMBER if is_soft else INK)
+	var full_r := _button("FULL", Vector2(rx + 6 * px + 8 * 6 * px, vy), px, INK if is_soft else AMBER)
+	_hits.append([full_r, "caught_full", 0])
+	var soft_r := _button("SOFT", Vector2(full_r.end.x + 6 * px, vy), px, AMBER if is_soft else INK)
+	_hits.append([soft_r, "caught_soft", 0])
+	_text("SOFT: NO SNAP, HALF THE FLASH AND NOISE", Vector2(rx + 6 * px, vy + lh), px, GREY)
+
+## ES1a: the announcer's voice, one button per manifest voice.
+func _draw_voice(at: Vector2, rw: float, px: float, lh: float) -> void:
+	var rx := at.x
+	var ry := at.y
+	var on := _sound_row == voice_row_index()
+	var row_h := lh * 2.0 + 2 * px
+	_row_back(on, at, rw, px, row_h)
+	_hits.append([Rect2(Vector2(rx, ry - 3 * px), Vector2(rw, row_h)), "voice_row", 0])
+	_text(voice_pref.NAME, Vector2(rx, ry), px, INK if on else Color(0.85, 0.86, 0.82))
+	var vy := ry + lh
+	_text(str(voice_pref.text()), Vector2(rx + 6 * px, vy), px, INK)
+	var bx := rx + 6 * px + 8 * 6 * px
+	for v: Array in voice_buttons():
+		var chosen := str(v[0]) == str(voice_pref.voice)
+		var b := _button(str(v[1]), Vector2(bx, vy), px, AMBER if chosen else INK)
+		_hits.append([b, "voice_pick", str(v[0])])
+		bx = b.end.x + 6 * px
+
+## VC1: one of the microphone's three rows (0 on/off, 1 headphones/speakers, 2 sensitivity).
+func _draw_mic_row(r: int, at: Vector2, rw: float, px: float, lh: float) -> void:
 	var rx := at.x
 	var ry := at.y
 	var m: Object = mic.get(&"meter")
-	var d: Dictionary = mic.call(&"describe")
-	var st := str(d["status"])
 	var rows: Array = [
 		["MICROPHONE", "ON" if bool(m.get(&"enabled")) else "OFF", "OFF", "ON"],
 		["HEADPHONES OR SPEAKERS", "SPEAKERS" if bool(m.get(&"speakers")) else "HEADPHONES", "HEADPHONES", "SPEAKERS"],
 		["MIC SENSITIVITY", "%d" % int(m.get(&"sensitivity")), "-", "+"],
 	]
-	for r in rows.size():
-		var row: Array = rows[r]
-		var on := _sound_row == mic_row_index() + r
-		var row_h := lh * 2.0 + 2 * px
-		if on:
-			draw_rect(Rect2(Vector2(rx - 4 * px, ry - 3 * px), Vector2(rw + 8 * px, row_h)), Color(1, 1, 1, 0.06))
-		_hits.append([Rect2(Vector2(rx, ry - 3 * px), Vector2(rw, row_h)), "mic_row", r])
-		_text(str(row[0]), Vector2(rx, ry), px, INK if on else Color(0.85, 0.86, 0.82))
-		var vy := ry + lh
-		_text(str(row[1]), Vector2(rx + 6 * px, vy), px, AMBER)
-		var b1 := _button(str(row[2]), Vector2(rx + 6 * px + 12 * 6 * px, vy), px, INK)
-		_hits.append([b1, "mic_minus", r])
-		var b2 := _button(str(row[3]), Vector2(b1.end.x + 6 * px, vy), px, INK)
-		_hits.append([b2, "mic_plus", r])
-		ry += row_h + 4 * px
-	# The live test bar: the level the host is sent, with the whisper and talk marks.
+	var row: Array = rows[r]
+	var on := _sound_row == mic_row_index() + r
+	var row_h := lh * 2.0 + 2 * px
+	_row_back(on, at, rw, px, row_h)
+	_hits.append([Rect2(Vector2(rx, ry - 3 * px), Vector2(rw, row_h)), "mic_row", r])
+	_text(str(row[0]), Vector2(rx, ry), px, INK if on else Color(0.85, 0.86, 0.82))
+	var vy := ry + lh
+	_text(str(row[1]), Vector2(rx + 6 * px, vy), px, AMBER)
+	var b1 := _button(str(row[2]), Vector2(rx + 6 * px + 12 * 6 * px, vy), px, INK)
+	_hits.append([b1, "mic_minus", r])
+	var b2 := _button(str(row[3]), Vector2(b1.end.x + 6 * px, vy), px, INK)
+	_hits.append([b2, "mic_plus", r])
+
+## VC1: the microphone's live test bar (the level the host is sent, with the whisper and talk marks), C to
+## calibrate, and what is sent.
+func _draw_mic_test(at: Vector2, px: float, lh: float) -> void:
+	var rx := at.x
+	var ry := at.y
+	var d: Dictionary = mic.call(&"describe")
+	var st := str(d["status"])
 	var state := "LISTENING" if bool(d["listening"]) else ("NO MICROPHONE SIGNAL" if st == "none" else "OFF")
 	_text("TEST: " + state + ("   TALKING" if bool(d["talking"]) else ""), Vector2(rx, ry), px, INK)
 	var by := ry + lh
@@ -871,8 +1016,7 @@ func _draw_mic(at: Vector2, rw: float, px: float, lh: float) -> float:
 	var cal_r := _button("C: CALIBRATE AGAIN" if cal.is_empty() else "C: CALIBRATE AGAIN  " + cal, Vector2(rx, ry), px, AMBER if not cal.is_empty() else INK)
 	_hits.append([cal_r, "mic_cal", 0])
 	ry += lh + 4 * px
-	_text("ONLY HOW LOUD YOU ARE IS SENT. M TURNS IT ON OR OFF.", Vector2(rx, ry), px, GREY)
-	return ry + lh
+	_text("ONLY HOW LOUD YOU ARE IS SENT. M: ON / OFF.", Vector2(rx, ry), px, GREY)
 
 func _draw() -> void:
 	var px := _px()
@@ -888,7 +1032,7 @@ func _draw() -> void:
 func _draw_panel(px: float, now: float) -> void:
 	_hits = []
 	var host := is_host()
-	var card := Rect2(Vector2(size.x * 0.05, size.y * 0.09), Vector2(size.x * 0.9, size.y * 0.86))
+	var card := card_rect(size)
 	draw_rect(card, CARD)
 	draw_rect(card, Color(1, 1, 1, 0.12), false, px * 0.5)
 	var lh := 11.0 * px
@@ -953,7 +1097,7 @@ func _draw_panel(px: float, now: float) -> void:
 	_text("YOUR SOUND: ON THIS COMPUTER ONLY" if _sound else _printable(str(_sections[_sel]["title"])), Vector2(rx, ry), px, INK)
 	ry += lh + 5 * px
 	if _sound:
-		_draw_sound(Vector2(rx, ry), rw, px, lh, card.end.x - m)
+		_draw_sound(sound_layout(size))
 	elif rows.is_empty():
 		_text("NOTHING IS CHANGED TONIGHT" if _sel == 0 else "NOTHING HERE YET", Vector2(rx, ry), px, GREY)
 	for r in rows.size():
