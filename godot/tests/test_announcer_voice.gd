@@ -5,7 +5,7 @@
 #   2. the YOUR SOUND page offers every voice in the manifest, in its order, and left/right, a click and Backspace
 #      choose (Backspace: back to Brian), saved at once;
 #   3. choosing tells the announcer at once, and the next line's file is in the chosen voice; a line the chosen voice
-#      has no recording of (the Bella-only tape, the Ward's lift lines) is read in a voice that has one;
+#      has no recording of is read in a voice that has one; Brian reads every tape beat and every Ward line;
 #   4. Brian's recordings are in the game for every line the manifest gives him.
 extends RefCounted
 
@@ -121,9 +121,45 @@ func test_choosing_changes_the_announcers_voice(t: T) -> void:
 	t.eq(str(a.voice), "bella", "choosing Bella tells the announcer at once")
 	t.eq(a.voice_path("arrived_1"), "res://assets/voice/bella/arrived_1.mp3", "the next line is Bella's")
 	v.choose("brian")
-	t.eq(a.voice_path("tape_orient_a"), "res://assets/voice/bella/tape_orient_a.mp3", "the Bella-only tape falls back to Bella")
-	t.eq(a.voice_path("ward_station", "res://assets/ward/voice"), "res://assets/ward/voice/bella/ward_station.mp3", "a Ward line Brian lacks falls back to Bella")
+	# 21 Nov ("Record the male voice lines."): Brian reads the tape and the Ward's lines too, so these are his now.
+	t.eq(a.voice_path("tape_orient_a"), "res://assets/voice/brian/tape_orient_a.mp3", "Brian reads the tape")
+	t.eq(a.voice_path("ward_station", "res://assets/ward/voice"), "res://assets/ward/voice/brian/ward_station.mp3", "Brian reads the Ward's call station")
+	# A voice with no recording of a line falls back to the first manifest voice that has one.
+	a.voice = "nobody"
+	t.eq(a.voice_path("tape_orient_a"), "res://assets/voice/bella/tape_orient_a.mp3", "a voice without the tape falls back to Bella's")
+	t.eq(a.voice_path("ward_lift_closed", "res://assets/ward/voice"), "res://assets/ward/voice/bella/ward_lift_closed.mp3", "a voice without the Ward's lines falls back to Bella's")
+	a.voice = "brian"
 	t.eq(a.voice_path("no_such_line"), "res://assets/voice/brian/no_such_line.mp3", "a line nobody recorded: the chosen voice's path (a caption only)")
+	a.free()
+
+## Every Ward line (announcer.gd WARD_LINES, played by ward_line from res://assets/ward/voice) resolves to the chosen
+## voice's own file: Brian's with Brian chosen, Bella's (exactly as before) with Bella chosen.
+func test_every_ward_line_is_read_in_the_chosen_voice(t: T) -> void:
+	var a: Node = AnnouncerScript.new()
+	a.use_manifest(_manifest())
+	var dir := "res://assets/ward/voice"
+	t.eq(AnnouncerScript.WARD_LINES.size(), 10, "the Ward has ten spoken lines")
+	for voice: String in ["brian", "bella"]:
+		a.voice = voice
+		for cue: String in AnnouncerScript.WARD_LINES:
+			var want := "%s/%s/%s.mp3" % [dir, voice, cue]
+			t.check(ResourceLoader.exists(want), "%s's %s is in the game" % [voice, cue])
+			t.eq(a.voice_path(cue, dir), want, "%s with %s chosen" % [cue, voice])
+	# Through the queue, as the Ward plays it: the line queued has Brian's recording.
+	a.voice = "brian"
+	a.ward_line("ward_lift_departed")
+	t.eq(str(a.lines["ward_lift_departed"]["path"]), dir + "/brian/ward_lift_departed.mp3", "the Ward's departure line queued in Brian")
+	a.free()
+
+## Brian chosen: every beat of the orientation tape is a Brian recording.
+func test_every_tape_beat_is_read_in_brian(t: T) -> void:
+	var a: Node = AnnouncerScript.new()
+	a.use_manifest(_manifest())
+	a.voice = "brian"
+	for b: String in ["a", "b", "c", "d", "e"]:
+		var id := "tape_orient_" + b
+		t.eq(a.voice_path(id), "res://assets/voice/brian/%s.mp3" % id, "%s in Brian" % id)
+		t.check(ResourceLoader.exists("res://assets/voice/brian/%s.mp3" % id), "Brian's %s is in the game" % id)
 	a.free()
 
 func test_brians_recordings_are_in_the_game(t: T) -> void:

@@ -27,7 +27,7 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 
 /** Ports per engine. Must equal SIZE in godot/tests/test_ports.gd. */
-export const PORT_BLOCK = 12;
+export const PORT_BLOCK = 13;
 /** Where a run looks for free ports when not given --port-base= (GD_TEST_PORT_RANGE=LO-HI overrides). */
 export const PORT_RANGE = [5200, 5999];
 /** Run first and alone, before anything else (AGENTS.md: they "stay first"). */

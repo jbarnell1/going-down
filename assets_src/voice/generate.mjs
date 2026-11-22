@@ -10,6 +10,7 @@
 //                                                               there, copied to godot/assets/voice/ (the Godot game's res://assets/voice)
 //   A line's own "takes" overrides the file's default number of takes.
 //   node assets_src/voice/generate.mjs --page                   rewrite audition.html from lines.json (free)
+//   --only a,b   with --all or --publish: only these line ids are made and published (the manifest is still written whole)
 //   --budget N   refuse a batch that would take the ledger's total over N characters (default: the game's cap)
 //
 // THE KEY. The environment variable GD_ELEVENLABS_ENV names the file that holds the line
@@ -51,6 +52,8 @@ const opt = (f) => {
 };
 const dryRun = has('--dry-run');
 const budget = Math.min(CAP, Number(opt('--budget') ?? CAP));
+/** --only a,b: the line ids a run is limited to; null for every line. */
+const only = opt('--only') ? new Set(opt('--only').split(',').map((x) => x.trim()).filter(Boolean)) : null;
 
 function stop(msg, code = 2) {
   console.error(`STOP: ${msg}`);
@@ -251,6 +254,7 @@ function publish(cfg) {
     mkdirSync(dir, { recursive: true });
     for (const line of cfg.lines) {
       if (!readBy(cfg, line, name)) continue;
+      if (only && !only.has(line.id)) continue;
       // Take 1 unless lines.json "chosen" names another: chosen[<voice>][<id>] = take number.
       const take = cfg.chosen?.[slug(name)]?.[line.id] ?? 1;
       const src = takePath(name, line.id, take);
@@ -374,7 +378,8 @@ if (has('--voices')) {
   const want = opt('--voice');
   const voice = want ? cfg.voices.shortlist.find((v) => v.name.toLowerCase() === want.toLowerCase()) : cfg.voices.default;
   if (!voice) stop(want ? `no shortlisted voice called ${want}.` : 'no default voice in lines.json.');
-  await batch(cfg, jobsFor(cfg, [voice], cfg.lines.map((l) => l.id)), `full set in ${voice.name}`);
+  if (only) for (const id of only) if (!cfg.lines.some((l) => l.id === id)) stop(`--only names ${id}, which lines.json does not have.`);
+  await batch(cfg, jobsFor(cfg, [voice], cfg.lines.map((l) => l.id).filter((id) => !only || only.has(id))), only ? `${only.size} line(s) in ${voice.name}` : `full set in ${voice.name}`);
   if (!dryRun) {
     publish(cfg);
     writePage(cfg);

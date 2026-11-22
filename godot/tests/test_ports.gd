@@ -10,7 +10,7 @@
 extends RefCounted
 
 ## Ports in one engine process's block. tools/godot.mjs's PORT_BLOCK must equal this.
-const SIZE := 12
+const SIZE := 13
 ## The block when nothing names one: a test run straight from the engine (`godot --script res://tests/run_tests.gd`).
 const DEFAULT_BASE := 4910
 
@@ -27,6 +27,7 @@ const LATE_FLOORS := 8 # prop_late_floors
 const LATE_ADMIT := 9 # prop_late_admit
 const CREW_WATCH := 10 # test_crew_watch: a Clinic floor
 const CREW_WATCH_REACTOR := 11 # test_crew_watch: the Reactor
+const LEAVE := 12 # prop_leave_net: a player leaving mid-run
 
 static var _base := -1
 

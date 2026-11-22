@@ -9,7 +9,9 @@
 #     part-way, the design's "then"); the shots tile the tape; the whole is 60 to 75 s; every beat's
 #     recording is 0.7 to 1.4 times its shots' target seconds and sits inside its shots;
 #   - each beat's subtitles, joined, are word for word the recording's text in the voice manifest, the
-#     recording exists, and the manifest gives it Bella only;
+#     recording exists, and the manifest gives it Bella and Brian;
+#   - the voices (21 Nov): Bella chosen, her recordings, cues and timeline exactly as recorded; Brian chosen, his
+#     recordings and his own cues, under the same timing rules; a voice with no cues plays Bella's;
 #   - skipping: a tap (held under 0.6 s) never skips; a 0.6 s hold skips on any shot; `finished` fires
 #     once, skipped, and never again;
 #   - played to the end: `finished` fires once, not skipped, at the tape's length, never again; each
@@ -23,6 +25,8 @@ const Protocol = preload("res://net/protocol.gd")
 const T = preload("res://tests/t.gd")
 const OrientationTape = preload("res://client/orientation_tape.gd")
 const TapeSymbols = preload("res://client/tape_symbols.gd")
+const StartScreen = preload("res://client/start_screen.gd")
+const VoicePref = preload("res://client/voice_pref.gd")
 
 ## Words the tape must not say: the residents, the places, the rules (docs/floors/story.md: "What it
 ## does not [give away]: any body, any place, any rule, the blackout by name, ... hiding").
@@ -57,6 +61,10 @@ func test_every_shot_has_a_subtitle_and_a_symbol(t: T) -> void:
 
 func test_timing(t: T) -> void:
 	var tape := _tape()
+	_check_timing(t, tape)
+	tape.free()
+
+func _check_timing(t: T, tape: OrientationTape) -> void:
 	t.check(tape.measured, "the tape is laid out from the recordings' cues (godot/tools/tape_cues.mjs), not the design's fallback seconds")
 	var lo := 999.0
 	var hi := 0.0
@@ -88,8 +96,7 @@ func test_timing(t: T) -> void:
 		t.check(dur >= 0.7 * target and dur <= 1.4 * target, "beat %s's recording is %.2f s against %.1f s of shots (0.7 to 1.4 times)" % [b, dur, target])
 		var at: float = tape.audio_at[b]
 		t.check(at >= tape.starts[first] and at + dur <= tape.starts[last] + tape.lengths[last] + 1e-6, "beat %s's recording plays inside its shots" % b)
-	t.note("21 shots, %.2f s; shots %.2f to %.2f s" % [tape.total, lo, hi])
-	tape.free()
+	t.note("%s: 21 shots, %.2f s; shots %.2f to %.2f s" % [tape.voice if tape.voice != "" else "bella", tape.total, lo, hi])
 
 func test_subtitles_are_the_recordings(t: T) -> void:
 	var tape := _tape()
@@ -111,8 +118,86 @@ func test_subtitles_are_the_recordings(t: T) -> void:
 			if str(s["beat"]) == b:
 				parts.append(str(s["subtitle"]))
 		t.eq(" ".join(parts), str(plain.get(id, "(no such line in the manifest)")), "beat %s's subtitles against %s" % [b, id])
-		t.eq(str(voices.get(id, [])), str(["bella"]), "%s is read by Bella only" % id)
+		# 21 Nov ("Record the male voice lines."): the tape is read by Bella (the data's own beat) and by every voice
+		# tapes.json gives its own recording and cues (Brian).
+		var readers: Array = ["bella"]
+		for v: String in (beat.get("voices", {}) as Dictionary):
+			readers.append(v)
+		t.eq(str(voices.get(id, [])), str(readers), "%s is read by %s" % [id, str(readers)])
+		t.eq(str(readers), str(["bella", "brian"]), "beat %s: Bella and Brian read it" % b)
 		t.check(ResourceLoader.exists(str(beat["audio"])), "%s exists" % str(beat["audio"]))
+	tape.free()
+
+## Bella's tape exactly as recorded on 17 Nov: her recordings and her cue times, chosen or by default.
+const BELLA_CUES := {"a": [0.0, 2.805, 6.975, 9.355], "b": [0.0, 4.157, 8.25], "c": [0.0, 3.55, 6.672, 8.469, 11.003],
+	"d": [0.0, 1.971, 5.086, 6.784], "e": [0.0, 4.7, 7.351, 9.578]}
+const BELLA_DURATIONS := {"a": 10.684, "b": 10.684, "c": 15.308, "d": 10.841, "e": 12.278}
+
+func test_bella_chosen_nothing_changed(t: T) -> void:
+	var plain := _tape()
+	var tape := _tape()
+	tape.use_voice("bella")
+	for b: String in BELLA_CUES:
+		var beat: Dictionary = tape.beats[b]
+		t.eq(str(beat["audio"]), "res://assets/voice/bella/tape_orient_%s.mp3" % b, "beat %s: Bella's recording" % b)
+		t.eq(str(beat["cues"]), str(BELLA_CUES[b]), "beat %s: Bella's cues" % b)
+		t.eq(float(beat["duration"]), float(BELLA_DURATIONS[b]), "beat %s: Bella's length" % b)
+		t.eq(str((plain.beats[b] as Dictionary)["cues"]), str(BELLA_CUES[b]), "beat %s: the tape with no voice chosen is Bella's" % b)
+	t.eq(str(tape.starts), str(plain.starts), "Bella's shots start where they always did")
+	t.eq(tape.total, plain.total, "and the tape is as long")
+	plain.free()
+	tape.free()
+
+func test_brian_reads_with_his_own_cues(t: T) -> void:
+	var tape := _tape()
+	tape.use_voice("brian")
+	var differ := 0
+	for b: String in tape.data_beats:
+		var beat: Dictionary = tape.beats[b]
+		var his: Dictionary = (tape.data_beats[b] as Dictionary)["voices"]["brian"]
+		t.eq(str(beat["audio"]), "res://assets/voice/brian/tape_orient_%s.mp3" % b, "beat %s: Brian's recording" % b)
+		t.check(ResourceLoader.exists(str(beat["audio"])), "beat %s: Brian's recording is in the game" % b)
+		t.eq(str(beat["cues"]), str(his["cues"]), "beat %s: Brian's own cues" % b)
+		t.eq(float(beat["duration"]), float(his["duration"]), "beat %s: Brian's own length" % b)
+		if str(his["cues"]) != str(BELLA_CUES[b]):
+			differ += 1
+	t.check(differ >= 3, "Brian's cues are his own, not Bella's (%d of 5 beats differ)" % differ)
+	# The same timing rules hold for his tape (shot lengths, pictures, the whole, each recording inside its shots).
+	_check_timing(t, tape)
+	tape.free()
+
+## The start screen plays the tape in the player's ANNOUNCER VOICE (client/voice_pref.gd, as main.gd hands it over).
+func test_the_start_screen_plays_the_tape_in_the_players_voice(t: T) -> void:
+	for v: String in ["brian", "bella"]:
+		var pref := VoicePref.new()
+		pref.persist = false
+		pref.load_saved()
+		pref.choose(v)
+		var screen: Control = StartScreen.new()
+		screen.persist_tape = false
+		screen.voice_pref = pref
+		screen.play_tape()
+		t.eq(str(screen.tape.voice), v, "the tape is read in %s" % v)
+		t.eq(str((screen.tape.beats["c"] as Dictionary)["audio"]), "res://assets/voice/%s/tape_orient_c.mp3" % v, "beat c in %s" % v)
+		screen.free()
+
+func test_a_voice_without_cues_falls_back(t: T) -> void:
+	var plain := _tape()
+	var tape := _tape()
+	tape.use_voice("charlie")
+	for b: String in tape.beats:
+		t.eq(str((tape.beats[b] as Dictionary)["audio"]), str((plain.beats[b] as Dictionary)["audio"]), "beat %s: a voice with no cues plays the first voice's recording" % b)
+		t.eq(str((tape.beats[b] as Dictionary)["cues"]), str((plain.beats[b] as Dictionary)["cues"]), "beat %s: and its cues" % b)
+	t.eq(str(tape.starts), str(plain.starts), "the first voice's timeline")
+	# A voice listed with no cue times, or with a recording that is not in the game, also falls back.
+	var raw := {"a": {"line": "tape_orient_a", "audio": "res://assets/voice/bella/tape_orient_a.mp3", "cues": [0, 1.0], "duration": 3.0,
+		"voices": {"brian": {"audio": "res://assets/voice/brian/tape_orient_a.mp3", "cues": [], "duration": 3.0},
+			"ghost": {"audio": "res://assets/voice/ghost/tape_orient_a.mp3", "cues": [0, 1.2], "duration": 3.2}}}}
+	for v: String in ["brian", "ghost", ""]:
+		var got: Dictionary = OrientationTape.beats_for(raw, v)["a"]
+		t.eq(str(got["audio"]), "res://assets/voice/bella/tape_orient_a.mp3", "'%s' without usable cues: the first voice's recording" % v)
+		t.eq(str(got["cues"]), str([0, 1.0]), "'%s': the first voice's cues" % v)
+	plain.free()
 	tape.free()
 
 func test_skip(t: T) -> void:

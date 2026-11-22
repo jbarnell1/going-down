@@ -114,6 +114,8 @@ var run_practice := false
 var tape_seen := false
 var persist_tape := true
 var tape: OrientationTape = null
+## ES1a: the player's ANNOUNCER VOICE (client/voice_pref.gd, set by main.gd): the tape is read in it; null: Bella's.
+var voice_pref: Object = null
 var _tape_ended_at := -INF
 var _faces := {}  # face code -> texture (the crew list)
 var focus := 0
@@ -159,6 +161,7 @@ func play_tape() -> void:
 		tape.finished.connect(_on_tape_finished)
 		add_child(tape)
 	tape.visible = true
+	tape.use_voice(str(voice_pref.get(&"voice")) if voice_pref != null else "")
 	tape.start()
 	show_screen("tape")
 

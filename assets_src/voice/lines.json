@@ -62,9 +62,10 @@
     },
     "tape": {
       "title": "The orientation tape",
-      "about": "Continuance's induction video (docs/floors/story.md section 2), played once on joining by godot/client/orientation_tape.gd, by line id, never dealt by moment. One recording per beat; the tape's shots share it. A tape is an object in the world, recorded once, so only Bella reads it.",
+      "about": "Continuance's induction video (docs/floors/story.md section 2), played once on joining by godot/client/orientation_tape.gd, by line id, never dealt by moment. One recording per beat; the tape's shots share it. A tape is an object in the world; it is read in each shipped voice so it plays in the voice each player chose (owner, 21 Nov: \"Record the male voice lines.\"). Each voice has its own cue times in godot/data/tapes.json.",
       "voices": [
-        "Bella"
+        "Bella",
+        "Brian"
       ],
       "audition": "One take of each beat. The tape cuts its pictures on the pauses between sentences, so a re-take needs the cue times rebuilt (node godot/tools/tape_cues.mjs)."
     },

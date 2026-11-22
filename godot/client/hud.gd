@@ -32,6 +32,9 @@ var tape_text := ""
 ## The menu shown while the mouse is free (Esc, or before the first click): the controls.
 ## The game does not stop behind it; with friends in the run it cannot.
 var menu_on := false
+## EM1: the Esc menu's page (client/esc_menu.gd): the key list below is drawn only on its CONTROLS page ("controls",
+## the default, also when the HUD is used alone).
+var menu_page := "controls"
 const MENU_ROWS: Array[Array] = [
 	["W A S D", "WALK"],
 	["SHIFT", "SPRINT"],
@@ -310,7 +313,7 @@ func _draw() -> void:
 		if tape_text != "" and tpa > 0.01:
 			if not blink_off:
 				PixelFont.draw_shadowed(self, tape_text, Vector2(size.x - margin.x - PixelFont.width(tape_text) * px, by - 12 * px), px, _fa(Color("#f4f4ec"), tpa), _fa(Color(0, 0, 0, 0.55), tpa))
-	if prompt != "" and not black:
+	if prompt != "" and not black and not menu_on:
 		var pw := PixelFont.width(prompt) * px
 		var pp := Vector2((size.x - pw) * 0.5, _prompt_y(px))
 		draw_rect(Rect2(pp - Vector2(4, 3) * px, Vector2(pw + 8 * px, 13 * px)), Color(0, 0, 0, 0.45))
@@ -377,7 +380,7 @@ func _draw() -> void:
 	if click_to_look and not menu_on and not black and end_lines.is_empty():
 		var cl := "CLICK TO LOOK"
 		PixelFont.draw_shadowed(self, cl, Vector2(floorf((size.x - PixelFont.width(cl) * px) * 0.5), floorf(size.y * 0.42)), px, Color("#f4f4ec"))
-	if menu_on and not black:
+	if menu_on and not black and menu_page == "controls":
 		_draw_menu()
 
 func _draw_quota_corner(px: float, margin: Vector2) -> void:

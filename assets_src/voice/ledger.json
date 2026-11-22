@@ -1,7 +1,7 @@
 {
   "about": "Every ElevenLabs request the game has made. Never edit by hand.",
   "cap": 50000,
-  "total": 50865,
+  "total": 51823,
   "entries": [
     {
       "id": "arrived_1",
@@ -6723,6 +6723,61 @@
       "time": "2026-11-21T23:38:02.592Z",
       "hash": "2c0f5dfdfab257ec34ac748d",
       "file": "assets_src/voice/takes/brian/tenant_one_3/take-1.mp3"
+    },
+    {
+      "id": "tape_orient_a",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 189,
+      "billed": 83,
+      "time": "2026-11-22T02:02:10.345Z",
+      "hash": "0942f0a3274779d1c9953e9f",
+      "file": "assets_src/voice/takes/brian/tape_orient_a/take-1.mp3"
+    },
+    {
+      "id": "tape_orient_b",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 151,
+      "billed": 66,
+      "time": "2026-11-22T02:02:12.870Z",
+      "hash": "061bd5779ce7786c3ad42c3c",
+      "file": "assets_src/voice/takes/brian/tape_orient_b/take-1.mp3"
+    },
+    {
+      "id": "tape_orient_c",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 246,
+      "billed": 108,
+      "time": "2026-11-22T02:02:16.385Z",
+      "hash": "c9177d20e59b94cbc7876480",
+      "file": "assets_src/voice/takes/brian/tape_orient_c/take-1.mp3"
+    },
+    {
+      "id": "tape_orient_d",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 192,
+      "billed": 84,
+      "time": "2026-11-22T02:02:18.780Z",
+      "hash": "6d89e411e3ecd182b7963776",
+      "file": "assets_src/voice/takes/brian/tape_orient_d/take-1.mp3"
+    },
+    {
+      "id": "tape_orient_e",
+      "voice": "Brian",
+      "voiceId": "nPczCjzI2devNBz1zQrb",
+      "take": 1,
+      "characters": 180,
+      "billed": 79,
+      "time": "2026-11-22T02:02:21.494Z",
+      "hash": "661436ac1785e52aed947b2b",
+      "file": "assets_src/voice/takes/brian/tape_orient_e/take-1.mp3"
     }
   ]
 }

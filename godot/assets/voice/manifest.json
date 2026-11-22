@@ -1039,7 +1039,8 @@
       "moment": "tape",
       "plain": "Hello! And welcome to Continuance. This is Lidgate, our city. Everything is measured from here. Below Lidgate, there is nothing. Almost nothing.",
       "voices": [
-        "bella"
+        "bella",
+        "brian"
       ]
     },
     {
@@ -1047,7 +1048,8 @@
       "moment": "tape",
       "plain": "This is you. You have been sentenced. Congratulations! This is your crew. Draw your own face. We insist. Each morning, the car takes you down.",
       "voices": [
-        "bella"
+        "bella",
+        "brian"
       ]
     },
     {
@@ -1055,7 +1057,8 @@
       "moment": "tape",
       "plain": "Every floor has a resident. We do not know what they are. Point your instrument at it. Record what it does. Readings become credits. Credits keep the lights on upstairs. Each resident keeps one rule. We may not tell you what it is.",
       "voices": [
-        "bella"
+        "bella",
+        "brian"
       ]
     },
     {
@@ -1063,7 +1066,8 @@
       "moment": "tape",
       "plain": "Meet the quota. Call the car. The car is not quiet. The floor will notice. Be aboard when the doors close. Please do not stay late. Staying late is... discouraged.",
       "voices": [
-        "bella"
+        "bella",
+        "brian"
       ]
     },
     {
@@ -1071,7 +1075,8 @@
       "moment": "tape",
       "plain": "Then choose. Up, to bank your day. Or down, for more. Bank enough, and your sentence will end. Many crews are well on their way! Continuance. Leave it with us.",
       "voices": [
-        "bella"
+        "bella",
+        "brian"
       ]
     },
     {

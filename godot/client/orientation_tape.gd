@@ -6,8 +6,9 @@
 # announcer's black strip, and HOLD SPACE TO SKIP with a ring that fills.
 #
 # The shots, captions, subtitles and timing are data (data/tapes.json "orientation"). One recording per
-# beat (assets_src/voice/lines.json group tape, Bella); a beat's shots share it, each cut placed on the
-# pause before its sentence (godot/tools/tape_cues.mjs). Without the cues it plays to the design's seconds.
+# beat and voice (assets_src/voice/lines.json group tape: Bella and Brian); a beat's shots share it, each cut
+# placed on the pause before its sentence in that voice's recording (godot/tools/tape_cues.mjs; use_voice picks
+# the player's voice, Bella's cues when a voice has none). Without the cues it plays to the design's seconds.
 #
 # Use: add it full screen, call start(), wait for `finished`. Holding Space, Enter or the mouse button
 # for 0.6 s skips; a tap does nothing. Played alone: res://client/tape_demo.tscn, or `-- scene=tape`.
@@ -36,7 +37,13 @@ const PICTURES: Array[String] = ["mark_rise", "city_up", "drop_below", "floors_u
 	"remission", "long_bar", "mark_end", "rewind"]
 
 var shots: Array = []
+## The beats the tape plays: the data's own (the first voice's: Bella's recording and cues) unless use_voice()
+## chose another voice that has its own recording and cues.
 var beats: Dictionary = {}
+## The beats exactly as data/tapes.json has them.
+var data_beats: Dictionary = {}
+## The voice the tape is read in ("" for the data's first voice).
+var voice := ""
 var title := ""
 ## Per shot: its start and length on the tape (seconds).
 var starts: Array[float] = []
@@ -71,11 +78,40 @@ func _init() -> void:
 	if d is Dictionary and (d as Dictionary).has("orientation"):
 		var o: Dictionary = (d as Dictionary)["orientation"]
 		shots = o["shots"]
-		beats = o["beats"]
+		data_beats = o["beats"]
+		beats = data_beats
 		title = str(o["title"])
 	build_timeline()
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+
+## The player's ANNOUNCER VOICE (client/voice_pref.gd): each beat is read in `v` when tapes.json gives that voice its
+## own recording and cue times (beats.<b>.voices.<v>, written by godot/tools/tape_cues.mjs), else in the first voice
+## with the first voice's cues, so the pictures always cut on the pauses of the recording that plays. Call before
+## start().
+func use_voice(v: String) -> void:
+	voice = v
+	beats = beats_for(data_beats, v)
+	build_timeline()
+
+## `raw` (tapes.json "beats") with each beat's recording, cues and length replaced by voice `v`'s where it has all
+## three and the recording is in the game; a beat `v` lacks keeps the first voice's.
+static func beats_for(raw: Dictionary, v: String) -> Dictionary:
+	var out := {}
+	for b: String in raw:
+		var beat: Dictionary = raw[b]
+		var own: Variant = (beat.get("voices", {}) as Dictionary).get(v) if v != "" and beat.get("voices") is Dictionary else null
+		if own is Dictionary and (own as Dictionary).get("cues") is Array and not ((own as Dictionary)["cues"] as Array).is_empty() \
+				and float((own as Dictionary).get("duration", 0.0)) > 0.0 and ResourceLoader.exists(str((own as Dictionary).get("audio", ""))):
+			var mine := beat.duplicate()
+			mine["audio"] = str(own["audio"])
+			mine["cues"] = own["cues"]
+			mine["duration"] = float(own["duration"])
+			mine["voice"] = v
+			out[b] = mine
+		else:
+			out[b] = beat
+	return out
 
 ## Lays the shots out on the tape: a beat's first shot starts LEAD before its recording, each other shot
 ## at its cue in the recording, and the beat ends TAIL after it. A shot with no beat runs its target.

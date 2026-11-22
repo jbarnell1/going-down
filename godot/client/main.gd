@@ -111,6 +111,8 @@ const FlareViewScript = preload("res://client/flare_view.gd")
 const LampViewScript = preload("res://client/lamp_view.gd")
 ## ED1: the elevator deal's card, its answer and its marks (client/deal_view.gd).
 const DealViewScript = preload("res://client/deal_view.gd")
+## EM1: the Esc menu (RESUME, SETTINGS, CONTROLS, HOST TOOLS, LEAVE RUN, QUIT GAME), over the HUD.
+const EscMenuScript = preload("res://client/esc_menu.gd")
 ## ED1: how dark a Lights Out floor is (a blackout's dark is 0.07), and how far a squeaky carrier walks between squeaks.
 const DEAL_DARK := 0.09
 const DEAL_SQUEAK_EVERY := 1.4
@@ -261,6 +263,9 @@ var skills_view: SkillsViewScript
 var flare_view: FlareViewScript
 var lamp_view: LampViewScript
 var deal_view: DealViewScript
+var esc_menu: EscMenuScript
+## EM1: a start-screen setting opened from the menu: the menu comes back when its card or page closes.
+var _overlay_back := false
 ## ED1: the squeaky carrier's last place and walk since the last squeak; whether this screen asked to watch a crewmate
 ## for the Second Opinion.
 var _squeak_at: Variant = null
@@ -626,6 +631,8 @@ func _ready() -> void:
 	voice_pref.target = announcer
 	voice_pref.load_saved()
 	settings_panel.voice_pref = voice_pref
+	# The orientation tape is read in the same voice (client/orientation_tape.gd use_voice).
+	start.voice_pref = voice_pref
 	# VC1: the microphone, opened only after the player says yes, never in a scripted run or the browser.
 	mic = Mic.new()
 	mic.name = "Mic"
@@ -920,6 +927,10 @@ func _build_view() -> void:
 	deal_view = DealViewScript.new()
 	deal_view.name = "DealView"
 	hud.add_child(deal_view)
+	esc_menu = EscMenuScript.new()
+	esc_menu.name = "EscMenu"
+	hud.add_child(esc_menu)
+	esc_menu.chose.connect(_esc_chose)
 	split_view = SplitViewScript.new()
 	split_view.name = "SplitView"
 	sub.add_child(split_view)
@@ -1524,6 +1535,8 @@ func _input(event: InputEvent) -> void:
 			_f6_pressed()
 			get_viewport().set_input_as_handled()
 			return
+	if _esc_menu_input(event):
+		return
 	if mode != "game":
 		# The start screen: Esc shows the controls (not on the face step, the tape or Ready-up, whose card is
 		# the controls); everything else is the screen's.
@@ -1531,6 +1544,7 @@ func _input(event: InputEvent) -> void:
 			var k0 := event as InputEventKey
 			if k0.pressed and not k0.echo and k0.physical_keycode == KEY_ESCAPE and not start.screen in ["face", "tape", "lobby"]:
 				menu_overlay = not menu_overlay
+				esc_menu.open_menu()
 			elif menu_overlay and k0.pressed and not k0.echo and k0.physical_keycode == KEY_H:
 				_set_hints(not announcer.hints.enabled)
 			elif menu_overlay and k0.pressed and not k0.echo and k0.physical_keycode == KEY_B:
@@ -1617,6 +1631,7 @@ func _input(event: InputEvent) -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 			wheel_open = false
 			_esc_menu = true
+			esc_menu.open_menu()
 		elif not hud.end_lines.is_empty() and Time.get_ticks_msec() - end_shown_at > 1200:
 			if _playtest_orientation:
 				_back_to_title()
@@ -2114,6 +2129,7 @@ func _poll_test() -> void:
 			peer.put_data((reply + "\n").to_utf8_buffer())
 
 func _process(delta: float) -> void:
+	_sync_esc_menu()
 	_poll_test()
 	_music_frame()
 	if mic_hud != null:
@@ -2128,7 +2144,7 @@ func _process(delta: float) -> void:
 		_ft_max = maxf(_ft_max, delta)
 	if OS.has_feature("web") and frames == 3:
 		JavaScriptBridge.eval("window.gdReady = true; window.gdFirstFrameMs = performance.now();", true)
-	hud.menu_foot = "CLICK TO PLAY" if mode == "game" else "ESC TO GO BACK"
+	hud.menu_foot = "ESC: BACK" if esc_menu.page == "controls" else ("CLICK TO PLAY" if mode == "game" else "ESC TO GO BACK")
 	hud.menu_note = hud.RUN_NOTE if mode == "game" else ""
 	hud.hints_on = announcer.hints.enabled
 	if Time.get_ticks_msec() > _note_until:
@@ -2239,7 +2255,7 @@ func _game_input(dt: float) -> Dictionary:
 		r = t_move[1]
 		sprint = t_move[2]
 		creep = t_move[3]
-	elif mode == "game" and not kiosk.is_open() and not settings_panel.is_open() and not bright_card.is_open():
+	elif mode == "game" and not kiosk.is_open() and not settings_panel.is_open() and not bright_card.is_open() and not _esc_menu_shown():
 		f = Input.get_action_strength("forward") - Input.get_action_strength("back")
 		r = Input.get_action_strength("right") - Input.get_action_strength("left")
 		sprint = Input.is_action_pressed("sprint")
@@ -4007,7 +4023,7 @@ func _command(c: String) -> String:
 		"move":
 			t_move = [float(p[1]), float(p[2]), p.size() > 3 and p[3] == "1", p.size() > 4 and p[4] == "1"]
 		"menu":
-			t_menu = p.size() > 1 and p[1] == "1"
+			return _menu_command(p)
 		"display":
 			# HUD1: "display 1" holds Tab (DISPLAY) for a scripted run, "display 0" lets go.
 			t_display = p.size() > 1 and p[1] == "1"
@@ -4691,3 +4707,128 @@ func _panel_command(p: PackedStringArray, _c: String) -> String:
 		_:
 			return "unknown panel command"
 	return "ok"
+
+# --- EM1: the Esc menu (client/esc_menu.gd) ---------------------------------------------------------------
+
+## Whether the Esc menu is on screen: the HUD's menu in a run, the overlay on the start screen.
+func _esc_menu_shown() -> bool:
+	return esc_menu != null and esc_menu.shown
+
+## Every frame (and after a test command): what the menu shows and for whom; the HUD draws the key list only on
+## the menu's CONTROLS page. A start-screen setting opened from the menu brings the menu back when it closes.
+func _sync_esc_menu() -> void:
+	if esc_menu == null:
+		return
+	if mode == "game":
+		_overlay_back = false
+	elif _overlay_back and not settings_panel.is_open() and not bright_card.is_open():
+		_overlay_back = false
+		menu_overlay = true
+	esc_menu.in_run = mode == "game"
+	esc_menu.is_host = link != null and bool(link.rc.is_host())
+	esc_menu.hints_on = announcer.hints.enabled
+	esc_menu.caught_soft = caught_pref.soft
+	esc_menu.shown = hud.menu_on if mode == "game" else (menu_overlay and not start.screen in ["face", "tape", "lobby", "playtest"])
+	if not esc_menu.shown and esc_menu.page != "top" and not settings_panel.is_open() and not bright_card.is_open():
+		esc_menu.open_menu()
+	hud.menu_page = esc_menu.page if esc_menu.shown else "controls"
+
+## The menu's keys and mouse while it shows; the keys it leaves (H, B, V, M, N, T, F6, F8 and the game's) go on.
+func _esc_menu_input(event: InputEvent) -> bool:
+	if not _esc_menu_shown():
+		return false
+	var used := false
+	if event is InputEventKey:
+		used = esc_menu.key(event as InputEventKey)
+	elif event is InputEventMouseButton or event is InputEventMouseMotion:
+		used = esc_menu.mouse(event)
+	if used:
+		get_viewport().set_input_as_handled()
+	return used
+
+## RESUME (and Esc at the top): the mouse is taken again, as a click on the old card did (never under automation).
+static func esc_resume_mode(is_automated: bool, current: Input.MouseMode) -> Input.MouseMode:
+	return current if is_automated else Input.MOUSE_MODE_CAPTURED
+
+func _esc_resume() -> void:
+	esc_menu.open_menu()
+	if mode == "game":
+		_esc_menu = false
+		t_menu = false
+		Input.mouse_mode = esc_resume_mode(automated, Input.mouse_mode)
+	else:
+		menu_overlay = false
+	_sync_esc_menu()
+
+## A row the game carries out. Each setting keeps its one home (the sound page, the brightness card, the hints).
+func _esc_chose(id: String) -> void:
+	match id:
+		"resume":
+			_esc_resume()
+		"host":
+			if not settings_panel.is_open():
+				settings_panel.open()
+		"leave":
+			_esc_menu = false
+			t_menu = false
+			esc_menu.open_menu()
+			_back_to_title()
+		"quit":
+			get_tree().quit()
+		"sound", "mic":
+			_overlay_back = mode != "game" and menu_overlay
+			_open_sound()
+			if id == "mic" and settings_panel.mic_row_index() >= 0:
+				settings_panel._sound_row = settings_panel.mic_row_index()
+		"brightness":
+			_overlay_back = mode != "game" and menu_overlay
+			_open_brightness()
+		"hints":
+			_set_hints(not announcer.hints.enabled)
+		"caught":
+			settings_panel.caught_set(not caught_pref.soft)
+	_sync_esc_menu()
+
+## Tests: menu 1 | 0 (shown in a run under automation, or not) | open | close | pick ID | page NAME | back |
+## key NAME | state. Each answers the menu's state.
+func _menu_command(p: PackedStringArray) -> String:
+	var what := p[1] if p.size() > 1 else "state"
+	match what:
+		"1", "0":
+			t_menu = what == "1"
+			if t_menu:
+				esc_menu.open_menu()
+		"open":
+			if mode == "game":
+				t_menu = true
+				_esc_menu = true
+			else:
+				menu_overlay = true
+			esc_menu.open_menu()
+		"close":
+			_esc_resume()
+		"pick":
+			var ids: Array = esc_menu.describe()["rows"]
+			var at := ids.find(p[2] if p.size() > 2 else "")
+			if at < 0:
+				return JSON.stringify({"error": "no row " + (p[2] if p.size() > 2 else "")})
+			esc_menu.sel = at
+			esc_menu.activate()
+		"page", "tab":
+			esc_menu.page = p[2] if p.size() > 2 else "top"
+			esc_menu.sel = 0
+		"back":
+			esc_menu.back()
+		"key":
+			var ev := InputEventKey.new()
+			ev.physical_keycode = OS.find_keycode_from_string(p[2] if p.size() > 2 else "")
+			ev.pressed = true
+			_sync_esc_menu()
+			_input(ev)
+	_sync_esc_menu()
+	var d := esc_menu.describe()
+	d["menu"] = hud.menu_on if mode == "game" else menu_overlay
+	d["mouse"] = Input.mouse_mode
+	d["panel"] = settings_panel.is_open()
+	d["bright"] = bright_card.is_open()
+	return JSON.stringify(d)

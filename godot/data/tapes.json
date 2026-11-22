@@ -12,7 +12,19 @@
           6.975,
           9.355
         ],
-        "duration": 10.684
+        "duration": 10.684,
+        "voices": {
+          "brian": {
+            "audio": "res://assets/voice/brian/tape_orient_a.mp3",
+            "cues": [
+              0,
+              2.867,
+              7.309,
+              9.674
+            ],
+            "duration": 10.841
+          }
+        }
       },
       "b": {
         "line": "tape_orient_b",
@@ -22,7 +34,18 @@
           4.157,
           8.25
         ],
-        "duration": 10.684
+        "duration": 10.684,
+        "voices": {
+          "brian": {
+            "audio": "res://assets/voice/brian/tape_orient_b.mp3",
+            "cues": [
+              0,
+              4.217,
+              8.329
+            ],
+            "duration": 10.684
+          }
+        }
       },
       "c": {
         "line": "tape_orient_c",
@@ -34,7 +57,20 @@
           8.469,
           11.003
         ],
-        "duration": 15.308
+        "duration": 15.308,
+        "voices": {
+          "brian": {
+            "audio": "res://assets/voice/brian/tape_orient_c.mp3",
+            "cues": [
+              0,
+              3.565,
+              6.643,
+              8.314,
+              10.584
+            ],
+            "duration": 14.759
+          }
+        }
       },
       "d": {
         "line": "tape_orient_d",
@@ -45,7 +81,19 @@
           5.086,
           6.784
         ],
-        "duration": 10.841
+        "duration": 10.841,
+        "voices": {
+          "brian": {
+            "audio": "res://assets/voice/brian/tape_orient_d.mp3",
+            "cues": [
+              0,
+              2.066,
+              5.222,
+              7.013
+            ],
+            "duration": 11.076
+          }
+        }
       },
       "e": {
         "line": "tape_orient_e",
@@ -56,7 +104,19 @@
           7.351,
           9.578
         ],
-        "duration": 12.278
+        "duration": 12.278,
+        "voices": {
+          "brian": {
+            "audio": "res://assets/voice/brian/tape_orient_e.mp3",
+            "cues": [
+              0,
+              4.75,
+              7.519,
+              9.843
+            ],
+            "duration": 12.513
+          }
+        }
       }
     },
     "shots": [
