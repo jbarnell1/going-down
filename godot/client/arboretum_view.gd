@@ -34,6 +34,9 @@ const GLASS_SHADER = preload("res://client/shaders/arboretum_glass.gdshader")
 
 const S := 2.0
 const SKY_H := 12.0
+## JS1: where the hall's painted north wall stands (metres): just behind the lift car's back wall (the car's
+## rect starts at z = 0 on this floor's north edge).
+const NORTH_WALL_Z := -0.05
 const CHUNK := 4
 const WALL_H := 3.0
 const DOOR_W := 1.1
@@ -903,7 +906,9 @@ func _sky() -> void:
 	# The hall's walls: the same painted dusk coming down to a dark horizon behind the hedge.
 	var x0 := (Arboretum.X0 - 1) * S
 	var x1 := (Arboretum.X1 + 2) * S
-	var z0 := (Arboretum.Y0 - 1) * S
+	# JS1: the north wall stands behind the lift's back wall, not across the car (the car fills rows 0 and 1; at
+	# row Y0 - 1 the painted wall, drawn from both sides and with nothing to stop a body, cut the car in half).
+	var z0 := minf((Arboretum.Y0 - 1) * S, NORTH_WALL_Z)
 	var z1 := (Arboretum.Y1 + 2) * S
 	for side: Array in [[Vector3(x0, 0, z0), Vector3(x1, 0, z0)], [Vector3(x1, 0, z0), Vector3(x1, 0, z1)], [Vector3(x1, 0, z1), Vector3(x0, 0, z1)], [Vector3(x0, 0, z1), Vector3(x0, 0, z0)]]:
 		var a: Vector3 = side[0]

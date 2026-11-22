@@ -887,6 +887,41 @@ func test_the_view_draws_the_hosts_garden(t: T) -> void:
 		level.free()
 	_cache = {}
 
+## JS1 (owner, 21 Nov: "there seemed to be a wall in the elevator you could walk through"): nothing the garden's
+## view draws stands inside the lift car, where nothing in the rules stops a body. Lights do not count.
+func test_nothing_drawn_inside_the_car(t: T) -> void:
+	for seed_: String in ["js1-a", "night", "seed-19", "23489", "garden-1"]:
+		var plan := Arboretum.generate_arboretum(seed_, 5)
+		var dump := PlanDump.dump(plan, Run.car_geometry(plan))
+		var level := LevelScript.new()
+		level.build(dump, plan.seed, plan)
+		var view := level.get_meta(&"arboretum") as Node3D
+		var r: Dictionary = (dump["car"] as Dictionary)["rect"]
+		var inside := AABB(Vector3(float(r["x0"]) + 0.3, 0.2, float(r["z0"]) + 0.3), Vector3(float(r["x1"]) - float(r["x0"]) - 0.6, 2.0, float(r["z1"]) - float(r["z0"]) - 0.6))
+		var hits: Array[String] = []
+		var stack: Array[Node] = [view]
+		while not stack.is_empty():
+			var n: Node = stack.pop_back()
+			stack.append_array(n.get_children())
+			if not n is GeometryInstance3D:
+				continue
+			var xf := Transform3D.IDENTITY
+			var p: Node = n
+			while p != null and p is Node3D:
+				xf = (p as Node3D).transform * xf
+				p = p.get_parent()
+			if not (xf * (n as GeometryInstance3D).get_aabb()).intersects(inside) or not n is MeshInstance3D or (n as MeshInstance3D).mesh == null:
+				continue
+			# A batched mesh's box spans half the garden: test its triangles.
+			var f := (n as MeshInstance3D).mesh.get_faces()
+			for i in range(0, f.size(), 3):
+				var tri := AABB(xf * f[i], Vector3.ZERO).expand(xf * f[i + 1]).expand(xf * f[i + 2])
+				if tri.intersects(inside):
+					hits.append("%s %s" % [n.name, tri])
+					break
+		t.check(hits.is_empty(), "%s: drawn inside the car %s: %s" % [seed_, inside, ", ".join(hits)])
+		level.free()
+
 func test_photographic_maps_are_small_and_bound_to_the_floor(t: T) -> void:
 	var plan := Arboretum.generate_arboretum("garden-1", 5)
 	var level := LevelScript.new()
