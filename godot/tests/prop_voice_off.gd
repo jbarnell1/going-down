@@ -29,9 +29,9 @@ func test_off_by_default_and_on_in_the_rooms(t: T) -> void:
 	t.check(Run.with_voice(Run.create_run("vc1", ids)).copy().voice, "copy() keeps it")
 	t.check(HostRules.voice_by_arg(), "no voice=0 on this command line: the rooms ask for it")
 	var src := FileAccess.get_file_as_string("res://server/room.gd")
-	t.check(src.contains("and HostRules.voice_by_arg())"), "server/room.gd passes it, last")
+	t.check(src.contains("and HostRules.voice_by_arg(),"), "server/room.gd passes it (RL1's ward_lift_clear_ follows it)")
 	src = FileAccess.get_file_as_string("res://net/local_room.gd")
-	t.check(src.contains("and HostRules.voice_by_arg())"), "net/local_room.gd passes it, last")
+	t.check(src.contains("and HostRules.voice_by_arg(),"), "net/local_room.gd passes it (RL1's ward_lift_clear_ follows it)")
 	var host := FileAccess.get_file_as_string("res://net/host.gd")
 	t.check(host.contains("if s.voice and not _ward_review.webbed.has(i.id):"), "net/host.gd gives the Rigger a voice only with the flag")
 

@@ -274,7 +274,7 @@ var _second_watch := false
 ## SR1: split reality on this screen only (client/split_view.gd): the tells and this player's own false sights.
 var split_view: SplitViewScript
 const NEAR_LIGHT_COLOR := Color(0.62, 0.72, 1.0)
-const BEAM_COLOR := Color(1.0, 0.90, 0.71)
+const BEAM_COLOR := LampViewScript.BEAM_COLOR
 var _testing_inventory_click := false
 var pending_inv_sel := -1
 var pending_inv_step := 0
@@ -927,9 +927,14 @@ func _build_view() -> void:
 	deal_view = DealViewScript.new()
 	deal_view.name = "DealView"
 	hud.add_child(deal_view)
+	# LK1: the Esc menu on its own layer, above the HUD's counters, the noise meter and the host's panel.
+	var menu_layer := CanvasLayer.new()
+	menu_layer.name = "EscMenuLayer"
+	menu_layer.layer = EscMenuScript.LAYER
+	add_child(menu_layer)
 	esc_menu = EscMenuScript.new()
 	esc_menu.name = "EscMenu"
-	hud.add_child(esc_menu)
+	menu_layer.add_child(esc_menu)
 	esc_menu.chose.connect(_esc_chose)
 	split_view = SplitViewScript.new()
 	split_view.name = "SplitView"
@@ -2469,7 +2474,11 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	level.set_emergency(emergency)
 	level.update_lights(dt, cam.global_position)
 	env.ambient_light_color = level.ambient_color(emergency)
-	env.ambient_light_energy = lerpf(0.12, 0.05, emergency) * maxf(light, emergency)
+	# LK1: a place may set its own lit fill (the Arboretum's cool dusk); it still goes with the lights.
+	env.ambient_light_energy = lerpf(float(level.get_meta(&"ambient_energy", 0.12)), 0.05, emergency) * maxf(light, emergency)
+	# LK1: a place whose fog is a lit dusk (the Arboretum's) gives a dark one too: the blackout's fog is not a glow.
+	if level.has_meta(&"fog_color_dark"):
+		env.fog_light_color = (level.get_meta(&"fog_color_dark") as Color).lerp(level.get_meta(&"fog_color") as Color, clampf(light, 0.0, 1.0))
 	# The near light: as much as it is dark (a place that is dark with its lamps on says how much: the Arboretum).
 	var near := clampf(maxf(1.0 - light, float(level.get_meta(&"near_light", 0.0))), 0.0, 1.0)
 	near_light.light_energy = NEAR_LIGHT_ENERGY * near * float(level.get_meta(&"near_light_gain", 1.0))
@@ -2668,7 +2677,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	for lamp_id: String in lamp_view.beams:
 		var beam: SpotLight3D = lamp_view.beams[lamp_id]
 		if is_instance_valid(beam):
-			beam.light_energy = 4.0 * (_torch_factor(float(s.get("hostNow", 0.0))) if lamp_id == torch_by else 1.0)
+			beam.light_energy = LampViewScript.BEAM_ENERGY * (_torch_factor(float(s.get("hostNow", 0.0))) if lamp_id == torch_by else 1.0)
 	if shop_view.is_open() and (station != "shop" or me_down or ended or _lights_out):
 		shop_view.close()
 	if skills_view.is_open() and (s.get("skills") == null or station != "skills" or me_down or ended or _lights_out or _wake_left(s) >= 0.0):
@@ -4661,7 +4670,8 @@ func _test_state() -> Dictionary:
 func _settings_input(event: InputEvent) -> bool:
 	if event is InputEventKey:
 		var k := event as InputEventKey
-		if k.pressed and not k.echo and k.physical_keycode == KEY_F8 and not kiosk.is_open():
+		# LK1: never over an open confirm (LEAVE, QUIT, END RUN): the confirm stays the top-most thing until answered.
+		if k.pressed and not k.echo and k.physical_keycode == KEY_F8 and not kiosk.is_open() and not (_esc_menu_shown() and esc_menu.page in EscMenuScript.CONFIRMS):
 			settings_panel.toggle()
 			if settings_panel.is_open() and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 				Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -4750,10 +4760,12 @@ func _sync_esc_menu() -> void:
 	esc_menu.playtest = link != null and not link.local and link.rc.get("playtest_on") == true
 	esc_menu.hints_on = announcer.hints.enabled
 	esc_menu.caught_soft = caught_pref.soft
-	esc_menu.shown = hud.menu_on if mode == "game" else (menu_overlay and not start.screen in ["face", "tape", "lobby", "playtest"])
+	esc_menu.shown = EscMenuScript.drawn_over(hud.menu_on if mode == "game" else (menu_overlay and not start.screen in ["face", "tape", "lobby", "playtest"]),
+		settings_panel.is_open(), bright_card.is_open())
 	if not esc_menu.shown and esc_menu.page != "top" and not settings_panel.is_open() and not bright_card.is_open():
 		esc_menu.open_menu()
-	hud.menu_page = esc_menu.page if esc_menu.shown else "controls"
+	# LK1: the HUD's key list is not drawn under the host's panel or the brightness card either.
+	hud.menu_page = esc_menu.page if esc_menu.shown else ("" if settings_panel.is_open() or bright_card.is_open() else "controls")
 
 ## The menu's keys and mouse while it shows; the keys it leaves (H, B, V, M, N, T, F6, F8 and the game's) go on.
 func _esc_menu_input(event: InputEvent) -> bool:

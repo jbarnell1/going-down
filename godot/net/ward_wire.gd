@@ -55,9 +55,12 @@ static func decode(raw: Variant) -> Dictionary:
 			return {}
 	if layout_at >= 0:
 		var lay: Variant = s[layout_at]
-		if lay.size() != 3:
+		# RL1: a fourth element, 1, only with the run flag ward_lift_clear (sim/ward/layout.gd to_wire).
+		if lay.size() != 3 and lay.size() != 4:
 			return {}
 		if not _integer(lay[0], 2, 2) or not _integer(lay[1], 50, 300) or not _integer(lay[2], 0, 500):
+			return {}
+		if lay.size() == 4 and not _integer(lay[3], 1, 1):
 			return {}
 	if extras_at >= 0 and not _extras_ok(s[extras_at]):
 		return {}
@@ -85,6 +88,8 @@ static func decode(raw: Variant) -> Dictionary:
 		out["native"] = true
 	if layout_at >= 0:
 		out["layout"] = [int(s[layout_at][0]), int(s[layout_at][1]), int(s[layout_at][2])]
+		if (s[layout_at] as Array).size() == 4:
+			out["layout"].append(1)
 	if extras_at >= 0:
 		var extras: Dictionary = (s[extras_at] as Dictionary).duplicate()
 		if extras.has("rigger"):

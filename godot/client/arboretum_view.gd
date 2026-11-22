@@ -42,10 +42,31 @@ const WALL_H := 3.0
 const DOOR_W := 1.1
 const DOOR_H := 2.1
 ## The ambient light, lit and in the blackout, and the fog (client/main.gd reads the level's).
-const AMBIENT_LIT := Color(0.42, 0.6, 1.35)
+## LK1: the floor was close to black on a darker monitor (a friend "just sees static" on it). The dark stays the mood,
+## but it is lit dusk, not nothing: a cool fill from the painted sky (AMBIENT_LIT at AMBIENT_ENERGY, read by
+## client/main.gd; it goes out with the lamps), the painted backdrop a little brighter than the ground so trees and
+## hedges stand against it (SKY_GLOW, WALL_GLOW), a faint cool light from high in the painted sky so tops read lighter
+## than sides (DUSK_*; no shadow, out with the lamps), a small warm practical light at each landmark's building
+## (PRACTICAL_*, so from the seed like the landmarks), and fog that lightens with distance towards the painted dusk
+## (FOG) and goes dark in the blackout (FOG_DARK). The rules' light (sim/) is not touched; the hides are as dark as
+## their walls make them (no practical stands in one).
+const AMBIENT_LIT := Color(0.5, 0.62, 1.0)
+const AMBIENT_ENERGY := 1.0
+const DUSK := Color(0.62, 0.72, 1.0)
+const DUSK_ENERGY := 0.42
+## Where the dusk comes from: pitch and yaw (degrees), high over the far end of the hall.
+const DUSK_FROM := Vector2(-58.0, 205.0)
 const AMBIENT_DARK := Color(0.03, 0.04, 0.09)
-const FOG := Color(0.004, 0.006, 0.014)
+const FOG := Color(0.085, 0.105, 0.17)
+const FOG_DARK := Color(0.004, 0.006, 0.014)
 const FOG_DENSITY := 0.02
+const SKY_GLOW := 0.7
+const WALL_GLOW := 0.6
+const PRACTICAL := Color(1.0, 0.68, 0.38)
+const PRACTICAL_ENERGY := 1.4
+const PRACTICAL_REACH := 2.4
+## A hide's half-width at most (a shed): a practical's reach stops this far short of a hide's middle.
+const HIDE_HALF := 0.6
 ## The near light's share on this floor even with the lamps on (it is dark everywhere but under them).
 const NEAR_LIGHT := 0.85
 const LAMP := Color(1.0, 0.72, 0.42)
@@ -100,6 +121,12 @@ var _own: AudioStreamPlayer
 var _walked := 0.0
 var _last_cam := Vector3.INF
 var _hush := 1.0
+## LK1: where the hides stand (the shed, the sacked bench, under the bandstand, the hollow log): no practical light
+## is put where it would reach one (unshadowed light goes through boards).
+const HIDE_PIECES: Array[StringName] = [&"shed", &"bench", &"under", &"log"]
+var _hide_spots: Array[Vector3] = []
+## LK1: the practical lights placed: [landmark kind, the light].
+var practicals: Array = []
 
 static var _tex := {}
 
@@ -117,7 +144,9 @@ func _dress(level: Level, rules_plan: Floor.FloorPlan) -> void:
 	level.set_meta(&"near_light", NEAR_LIGHT)
 	level.set_meta(&"near_light_gain", 1.7)
 	level.set_meta(&"fog_color", FOG)
+	level.set_meta(&"fog_color_dark", FOG_DARK)
 	level.set_meta(&"fog_density", FOG_DENSITY)
+	level.set_meta(&"ambient_energy", AMBIENT_ENERGY)
 	level.add_child(self)
 	level.shadows = false
 	level.ambient_lit = AMBIENT_LIT
@@ -167,7 +196,9 @@ func describe() -> Dictionary:
 		"start": [(fp.entity_start.x + 0.5) * S, (fp.entity_start.y + 0.5) * S]}
 
 func check() -> Dictionary:
-	return {"hash": Arboretum.floor_hash(fp), "lamps": lv.main_lights.size(), "landmarks": g.landmarks.size(), "drawn": drawn.duplicate(),
+	# "lamps": the landmarks' lamps and the pavilion's bulb (LK1: the practicals and the dusk are counted apart).
+	var lamps := lv.main_lights.filter(func(l: Light3D) -> bool: return l is OmniLight3D).size() - practicals.size()
+	return {"hash": Arboretum.floor_hash(fp), "lamps": lamps, "practicals": practicals.size(), "landmarks": g.landmarks.size(), "drawn": drawn.duplicate(),
 		"hush": snappedf(_hush, 0.01), "sounds": Array(GardenSound.names())}
 
 # --- materials and meshes ----------------------------------------------------------------------------
@@ -601,6 +632,8 @@ func _pieces() -> void:
 	for p in Furniture.pieces_for(fp):
 		var at := Vector3(p.x / 100.0, 0, p.y / 100.0)
 		var r := _hash01(p.x, p.y, 5)
+		if p.kind in HIDE_PIECES:
+			_hide_spots.append(at)
 		match p.kind:
 			&"trunk":
 				_tree(at, p.x, p.y, r, false)
@@ -818,6 +851,56 @@ func _landmarks() -> void:
 				for sx: float in [-1.0, 1.0]:
 					_box("wood", Vector3(1.25, 0.08, 2.3), at + Vector3(sx * 0.52, 2.72, 0), Color(0.1, 0.1, 0.11), false, 0, Vector3(0, 0, sx * 0.55))
 				_box("wood", Vector3(0.6, 0.7, 0.04), at + Vector3(0.3, 1.1, 1.0), Color(0.01, 0.012, 0.016))
+		_practical(l.kind, at)
+
+## LK1: a landmark building's own warm practical, so from the seed like the landmark: a lantern on the building (in
+## the glasshouse, under the bandstand's roof, on the shed row's and the gate lodge's walls) that reads from across the
+## garden, and a small pool of light off the building's far side from its hide. Every building has a hide beside it,
+## so the lantern hangs on the side away from it and its light reaches no hide (unshadowed light passes through
+## boards); a light that would is left out and only the lantern glows. The aviary stays empty and dark.
+const PRACTICAL_H := {&"greenhouse": 1.7, &"bandstand": 2.55, &"sheds": 2.0, &"lodge": 1.9}
+## How far out from the building's middle the lantern hangs and its light stands (m).
+const PRACTICAL_LANTERN_OUT := 1.07
+const PRACTICAL_LIGHT_OUT := 2.1
+
+func _practical(kind: StringName, at: Vector3) -> void:
+	if not PRACTICAL_H.has(kind):
+		return
+	var h := float(PRACTICAL_H[kind])
+	# Away from the nearest hide (towards +z when there is none near).
+	var away := Vector3(0, 0, 1)
+	var best := INF
+	for spot: Vector3 in _hide_spots:
+		var d := Vector2(spot.x - at.x, spot.z - at.z)
+		if d.length() < best and d.length() > 0.01:
+			best = d.length()
+			away = -Vector3(d.x, 0, d.y).normalized()
+	var inside := kind in [&"greenhouse", &"bandstand"]
+	var lantern := at + Vector3.UP * h + (Vector3.ZERO if inside else away * PRACTICAL_LANTERN_OUT)
+	if not _mats.has("practical"):
+		_mats["practical"] = _glow(PRACTICAL, 1.6, 0.0)
+	_box("practical", Vector3(0.14, 0.18, 0.14), lantern + Vector3.DOWN * 0.09, Color.WHITE)
+	drawn["lantern"] = int(drawn.get("lantern", 0)) + 1
+	var pos := at + Vector3.UP * h + away * PRACTICAL_LIGHT_OUT
+	for spot: Vector3 in _hide_spots:
+		if Vector2(spot.x - pos.x, spot.z - pos.z).length() < PRACTICAL_REACH + HIDE_HALF:
+			drawn["practical_skipped"] = int(drawn.get("practical_skipped", 0)) + 1
+			return
+	var o := OmniLight3D.new()
+	o.position = pos
+	o.light_color = PRACTICAL
+	o.light_energy = PRACTICAL_ENERGY
+	o.omni_range = PRACTICAL_REACH
+	o.omni_attenuation = 1.4
+	o.shadow_enabled = false
+	o.distance_fade_enabled = true
+	o.distance_fade_begin = 34.0
+	o.distance_fade_length = 8.0
+	add_child(o)
+	lv.main_lights.append(o)
+	lv._base_energy.append(PRACTICAL_ENERGY)
+	practicals.append([kind, o])
+	drawn["practical"] = int(drawn.get("practical", 0)) + 1
 
 func _greenhouse(at: Vector3) -> void:
 	var frame := Color(0.37, 0.43, 0.37)
@@ -895,13 +978,24 @@ func _pavilion() -> void:
 func _sky() -> void:
 	var w := Arboretum.W * S
 	var h := Arboretum.H * S
+	# LK1: the painted dusk's faint light from above (with the lamps: out in the blackout).
+	var dusk := DirectionalLight3D.new()
+	dusk.name = "Dusk"
+	dusk.light_color = DUSK
+	dusk.light_energy = DUSK_ENERGY
+	dusk.light_specular = 0.15
+	dusk.shadow_enabled = false
+	dusk.rotation_degrees = Vector3(DUSK_FROM.x, DUSK_FROM.y, 0.0)
+	add_child(dusk)
+	lv.main_lights.append(dusk)
+	lv._base_energy.append(DUSK_ENERGY)
 	var sky := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(w, h)
 	pm.flip_faces = true
 	sky.mesh = pm
 	sky.position = Vector3(w * 0.5, SKY_H, h * 0.5)
-	sky.material_override = _glow(Color(0.5, 0.62, 1.0), 0.42, 0.0, _sky_tex())
+	sky.material_override = _glow(Color(0.5, 0.62, 1.0), SKY_GLOW, 0.0, _sky_tex())
 	add_child(sky)
 	# The hall's walls: the same painted dusk coming down to a dark horizon behind the hedge.
 	var x0 := (Arboretum.X0 - 1) * S
@@ -920,7 +1014,7 @@ func _sky() -> void:
 		wall.position = (a + b) * 0.5 + Vector3(0, SKY_H * 0.5, 0)
 		var inward := Vector3(w * 0.5, 0, h * 0.5) - (a + b) * 0.5
 		wall.rotation.y = atan2(inward.x, inward.z)
-		wall.material_override = _glow(Color(0.42, 0.55, 1.0), 0.26, 0.0, _sky_tex())
+		wall.material_override = _glow(Color(0.42, 0.55, 1.0), WALL_GLOW, 0.0, _sky_tex())
 		add_child(wall)
 
 # --- the dark ------------------------------------------------------------------------------------------

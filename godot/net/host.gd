@@ -869,7 +869,7 @@ func start_ward_review(review_seed: int, place_crew := false) -> void:
 	_reactor_plan = null
 	# WG1: with the run flag ward_layout (net/host_rules.gd) the layout comes from the seed and the host's live
 	# settings in force now (ward.spread, ward.rise); the snapshot carries them so every screen builds the same.
-	var options := WardLayout.options(state.tuning if state != null else null) if ward_layout() else {}
+	var options := WardLayout.options(state.tuning if state != null else null, ward_lift_clear()) if ward_layout() else {}
 	_ward_review = Ward.new(review_seed, options)
 	# RR1: the solid, crawling Rigger (net/host_rules.gd rigger_roam); off, the Ward is exactly as before. His graph
 	# was started on a worker thread with the late floors (_prebuild_roam); wait for it rather than build it twice.
@@ -1948,7 +1948,7 @@ func _prebuild_roam() -> void:
 	if _roam_build != null or not rigger_roam() or state == null:
 		return
 	# The layout's options as start_ward_review will make them (WG1), so the graph built now is the one it uses.
-	var options := WardLayout.options(state.tuning) if ward_layout() else {}
+	var options := WardLayout.options(state.tuning, ward_lift_clear()) if ward_layout() else {}
 	_roam_ward = Ward.new(late_seed(state), options)
 	_roam_build = RiggerRoam.begin_graph(_roam_ward)
 
@@ -1986,6 +1986,12 @@ func ward_web_rule() -> bool:
 func ward_layout() -> bool:
 	var rules: Object = _step_fn.get_object() if _step_fn.is_valid() else null
 	return rules != null and bool(rules.get("ward_layout"))
+
+## RL1: whether the rules stepping this run keep the lift's house from being the lowest (net/host_rules.gd
+## ward_lift_clear; sim/ward/layout.gd LIFT_CLEAR). Only with ward_layout.
+func ward_lift_clear() -> bool:
+	var rules: Object = _step_fn.get_object() if _step_fn.is_valid() else null
+	return rules != null and bool(rules.get("ward_lift_clear"))
 
 ## The Tenant clock's block from the rules stepping this run (net/host_rules.gd tenant_block), or null: the plain
 ## run's step, or rules without the clock.

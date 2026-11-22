@@ -139,6 +139,12 @@
 #    switches it off): each player's microphone level (0 to 15, an input element; no audio is ever sent) becomes a noise
 #    where they were, in three bands (noise.voice_whisper, voice_talk, voice_shout), heard by the Groundskeeper, the
 #    Minder, the Rigger and the Reactor's four, each by its own live setting (0: deaf). sim/run.gd "VC1".
+#  - RL1, `ward_lift_clear`, the last parameter, after `voice` (off unless asked, and only with `ward_layout`; the game's
+#    rooms ask for it wherever they ask for the layout, `ward_lift_clear=0` switches it off). The owner, 21 Nov: "I'm ok
+#    with making the lift never the lowest house". The Rigger lives below the lowest house; with this the generated
+#    Ward never makes that the lift's own (sim/ward/layout.gd LIFT_CLEAR). Seeds where another house is already lower
+#    are the same Ward. net/host.gd puts it in the layout's options, so the block carries it and every screen builds
+#    the same Ward. The agreed tail: ..., voice_, ward_lift_clear_, ward_homes_ (WH1).
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -270,6 +276,8 @@ var split: bool
 var economy_fix: bool
 ## VC1, the microphone (the last parameter, after economy_fix_; see the header).
 var voice: bool
+## RL1, the lift's house never the lowest (the last parameter, after voice_; see the header). Only with ward_layout.
+var ward_lift_clear: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -299,8 +307,10 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		ward_place_: bool = false, reactor_place_: bool = false, pressures_: bool = false, ward_call_: bool = false,
 		ward_web_: bool = false, rigger_roam_: bool = false, ward_layout_: bool = false, orderly_fix_: bool = false,
 		minder_calm_: bool = false, down_ring_: bool = false, pn_fixes_: bool = false, last_stand_: bool = false,
-		deal_: bool = false, split_: bool = false, economy_fix_: bool = false, voice_: bool = false) -> void:
+		deal_: bool = false, split_: bool = false, economy_fix_: bool = false, voice_: bool = false,
+		ward_lift_clear_: bool = false) -> void:
 	voice = voice_
+	ward_lift_clear = ward_lift_clear_ and ward_layout_ and late_floors_
 	last_stand = last_stand_
 	deal = deal_
 	split = split_
@@ -621,6 +631,11 @@ static func economy_fix_by_arg() -> bool:
 ## VC1: the microphone counts in the game's rooms unless started with `voice=0` (or `?voice=0` on the web page).
 static func voice_by_arg() -> bool:
 	return not _arg_off("voice")
+
+## RL1: the lift's house is never the lowest in the game's rooms unless started with `ward_lift_clear=0` (or
+## `?ward_lift_clear=0` on the web page).
+static func ward_lift_clear_by_arg() -> bool:
+	return not _arg_off("ward_lift_clear")
 
 static func _arg_off(name: String) -> bool:
 	for raw in OS.get_cmdline_user_args():

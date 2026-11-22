@@ -28,6 +28,14 @@ const LINE := 14
 const AMBER := Color("#ffd27a")
 const PALE := Color("#f4f4ec")
 const GREY := Color(0.62, 0.64, 0.62)
+## LK1: the menu's own canvas layer (client/main.gd), above the HUD (layer 0), the noise meter and microphone cards
+## (49) and the host's settings panel (50): nothing the game draws shows over the card or a confirm.
+const LAYER := 52
+## LK1: the dim over the whole window, and the card itself: opaque, so no HUD counter shows through it.
+const DIM := Color(0, 0, 0, 0.7)
+const CARD := Color(0.02, 0.02, 0.025, 1.0)
+## The confirms: while one shows, it is the top-most thing and keeps the keys (F8 does not open the panel over it).
+const CONFIRMS: Array[String] = ["leave", "quit", "end"]
 
 ## "top", "settings", "controls", "leave", "quit".
 var page := "top"
@@ -164,6 +172,9 @@ func key(k: InputEventKey) -> bool:
 			back()
 			return true
 		return false
+	# LK1: a confirm stays the top-most thing: the host panel's F8 waits until it is answered.
+	if page in CONFIRMS and k.physical_keycode == KEY_F8:
+		return true
 	match k.physical_keycode:
 		KEY_ESCAPE, KEY_BACKSPACE:
 			if not k.echo:
@@ -244,6 +255,11 @@ func layout(s: Vector2) -> Dictionary:
 		"rows": rects, "foot": origin + Vector2(floorf((w - PixelFont.width(FOOT)) / 2.0), h - 6 - 9) * sc}
 
 func _process(_dt: float) -> void:
+	# LK1: on its own canvas layer it follows the window itself (as the HUD does).
+	var want := get_viewport_rect().size
+	if size != want:
+		position = Vector2.ZERO
+		size = want
 	if shown:
 		queue_redraw()
 
@@ -252,9 +268,9 @@ func _draw() -> void:
 		return
 	var lay := layout(size)
 	var sc: float = lay["sc"]
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.62))
+	draw_rect(Rect2(Vector2.ZERO, size), DIM)
 	var card: Rect2 = lay["rect"]
-	draw_rect(card, Color(0.02, 0.02, 0.025, 0.94))
+	draw_rect(card, CARD)
 	# The company's tape: an amber strip across the card's top.
 	draw_rect(Rect2(card.position, Vector2(card.size.x, 3 * sc)), AMBER)
 	PixelFont.draw_shadowed(self, _heading(), lay["title"], sc, AMBER)
@@ -275,6 +291,12 @@ func _draw() -> void:
 			col = Color("#d8a090")
 		PixelFont.draw_shadowed(self, label, Vector2(box.position.x + floorf((box.size.x - PixelFont.width(label) * sc) * 0.5), box.position.y + 3 * sc), sc, col)
 	PixelFont.draw_shadowed(self, FOOT, lay["foot"], sc, GREY)
+
+## LK1: whether the menu is drawn, given whether the game wants it, whether the host's settings panel (F8, HOST
+## TOOLS) is open and whether the brightness card is: a panel or card opened from the menu replaces it (the menu comes
+## back when it closes), so the menu's text never ghosts behind the panel.
+static func drawn_over(wanted: bool, panel_open: bool, card_open: bool) -> bool:
+	return wanted and not panel_open and not card_open
 
 ## Tests: where the menu is.
 func describe() -> Dictionary:

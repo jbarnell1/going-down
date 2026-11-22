@@ -3,6 +3,19 @@ extends Control
 const Lamp = preload("res://sim/lamp.gd")
 const AMBER := Color("#ffd27a")
 const PALE := Color("#f4f4ec")
+## LK1: the beam drawn as a torch, not a sticker: a bright centre falling off smoothly to nothing at the cone's edge
+## (SpotLight3D.spot_angle_attenuation: measured on this renderer, values above 1 soften the rim and below 1 harden it
+## into a flat disc; 3 gave the torch's falloff in the prison practice room), a gentle fall with distance so
+## a wall an arm's length away does not clip to white (spot_attenuation, the inverse-power exponent: below 1 is
+## gentler than the physical square), a warm-white tint, and an energy that is plainly useful in the Arboretum's dark
+## and only a warm pool in a lit room. Its reach and width are the rules' lamp (sim/lamp.gd), and it casts no shadow
+## (LT1). The faint wider spill is the soft outer part of the same cone: a second light per carried lamp would cost
+## a light slot on every mesh it meets (tests/test_light_pairs.gd keeps four for carried lamps) and frame time.
+const BEAM_COLOR := Color(1.0, 0.87, 0.68)
+const BEAM_ENERGY := 2.0
+const BEAM_DECAY := 0.4
+const BEAM_SOFT := 3.0
+const BEAM_SPECULAR := 0.35
 
 var beams := {}
 var own := {}
@@ -31,8 +44,11 @@ func update(level: Node3D, rows: Variant, my_id: String) -> void:
 				beam = SpotLight3D.new()
 				beam.name = "CarriedLamp"
 				beam.spot_angle = Lamp.HALF_DEG
-				beam.light_color = Color(1.0, 0.90, 0.71)
-				beam.light_energy = 4.0
+				beam.light_color = BEAM_COLOR
+				beam.light_energy = BEAM_ENERGY
+				beam.spot_attenuation = BEAM_DECAY
+				beam.spot_angle_attenuation = BEAM_SOFT
+				beam.light_specular = BEAM_SPECULAR
 				# LT1: no shadow. The beam moves every frame, so a shadowed one drew its shadow map
 				# again every frame, and its texels crawled over the walls (the shimmer the owner saw).
 				beam.shadow_enabled = false

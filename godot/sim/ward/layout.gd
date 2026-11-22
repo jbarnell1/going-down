@@ -36,7 +36,8 @@ static func _dock(h: Dictionary, side: String) -> Array:
 ## host's live settings and the host sends them in the Ward block, so every screen builds the same): generate_v2.
 static func generate(seed_value: int, options: Dictionary = {}) -> Dictionary:
 	if int(options.get("version", 1)) == 2:
-		return generate_v2(seed_value, float(options.get("spread", SPREAD)), float(options.get("rise", RISE)))
+		return generate_v2(seed_value, float(options.get("spread", SPREAD)), float(options.get("rise", RISE)),
+			options.get("lift_clear", false) == true)
 	return _generate_v1(seed_value)
 
 static func _generate_v1(seed_value: int) -> Dictionary:
@@ -156,19 +157,33 @@ const JITTER := 1.0
 const DIRS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 
 ## The options the host's live settings make (sim/settings.gd ward.spread, ward.rise), on the wire's hundredth.
-static func options(tuning: Settings.Values) -> Dictionary:
-	return {"version": 2, "spread": snappedf(Settings.f(tuning, &"ward.spread", SPREAD), 0.01),
+## RL1: `lift_clear` (the run flag ward_lift_clear, net/host_rules.gd) adds "lift_clear": true; off, the options are
+## exactly what they were.
+static func options(tuning: Settings.Values, lift_clear := false) -> Dictionary:
+	var out := {"version": 2, "spread": snappedf(Settings.f(tuning, &"ward.spread", SPREAD), 0.01),
 		"rise": snappedf(Settings.f(tuning, &"ward.rise", RISE), 0.01)}
+	if lift_clear:
+		out["lift_clear"] = true
+	return out
 
-## The options as the Ward block carries them (net/ward_wire.gd): [version, spread in hundredths, rise in cm].
+## The options as the Ward block carries them (net/ward_wire.gd): [version, spread in hundredths, rise in cm], and a
+## fourth element 1 only with RL1's lift_clear (without it, the three they always were).
 static func to_wire(opts: Dictionary) -> Array:
-	return [int(opts.get("version", 2)), roundi(float(opts.get("spread", SPREAD)) * 100.0), roundi(float(opts.get("rise", RISE)) * 100.0)]
+	var out := [int(opts.get("version", 2)), roundi(float(opts.get("spread", SPREAD)) * 100.0), roundi(float(opts.get("rise", RISE)) * 100.0)]
+	if opts.get("lift_clear", false) == true:
+		out.append(1)
+	return out
 
 ## Back from the wire; {} (today's Ward) for anything else.
 static func from_wire(raw: Variant) -> Dictionary:
-	if not raw is Array or (raw as Array).size() != 3:
+	if not raw is Array or (raw as Array).size() < 3 or (raw as Array).size() > 4:
 		return {}
-	return {"version": int(raw[0]), "spread": float(raw[1]) / 100.0, "rise": float(raw[2]) / 100.0}
+	var out := {"version": int(raw[0]), "spread": float(raw[1]) / 100.0, "rise": float(raw[2]) / 100.0}
+	if (raw as Array).size() == 4:
+		if int(raw[3]) != 1:
+			return {}
+		out["lift_clear"] = true
+	return out
 
 static func _cell_links(cells: Array[Vector2i]) -> Array[Dictionary]:
 	const SIDES := {Vector2i(1, 0): ["east", "west"], Vector2i(-1, 0): ["west", "east"],
@@ -201,7 +216,48 @@ static func _rise_ok(edge: Dictionary) -> bool:
 	var q: Array = edge.path[1]
 	return absf(p[2] - q[2]) <= SLOPE * Vector2(p[0], p[1]).distance_to(Vector2(q[0], q[1])) + 1e-6
 
-static func generate_v2(seed_value: int, spread: float, rise: float) -> Dictionary:
+## RL1 (the owner, 21 Nov: "I'm ok with making the lift never the lowest house"): the Rigger lives below the lowest
+## house, and on about one seed in eleven that was the lift's own, so a crew walking out of the car was heard at once.
+## With `lift_clear` (the run flag ward_lift_clear), when no other house's height came out below the parlour's, one
+## other house is put LIFT_CLEAR below the parlour: the lowest of them whose fixed walkways stay within SLOPE at that
+## height (the lowest first, ties by id), or, when none can, the lowest of all (the Ward is then flattened to fit, as
+## any too steep Ward is, which keeps the order of the heights). Nothing is drawn or redrawn, so a seed where another
+## house was already lower is the same Ward bit for bit; the walkways, the drawbridge and the flattening that follow
+## are worked out from the heights as always. LIFT_CLEAR is more than a step up the footing takes in one stride
+## (sim/ward/footing.gd MAX_STEP_UP 0.22 m), so the two decks are plainly at two levels.
+const LIFT_CLEAR := 0.3
+
+## The flat length of a walkway between two docks (as the heights' walk measures it).
+static func _flat_run(houses: Array, link: Dictionary) -> float:
+	var p := _dock(houses[link.a], link.a_side)
+	var q := _dock(houses[link.b], link.b_side)
+	return Vector2(p[0], p[1]).distance_to(Vector2(q[0], q[1]))
+
+static func _clear_the_lift(houses: Array, links: Array[Dictionary], tree: Array[int]) -> void:
+	var order: Array[int] = []
+	for i in range(1, houses.size()):
+		if float(houses[i].z) < float(houses[0].z):
+			return
+		order.append(i)
+	order.sort_custom(func(a: int, b: int) -> bool:
+		return float(houses[a].z) < float(houses[b].z) or (float(houses[a].z) == float(houses[b].z) and a < b))
+	var target := float(houses[0].z) - LIFT_CLEAR
+	for i: int in order:
+		var fits := true
+		for k: int in tree:
+			var link: Dictionary = links[k]
+			if link.a != i and link.b != i:
+				continue
+			var other: int = link.b if link.a == i else link.a
+			if absf(float(houses[other].z) - target) > SLOPE * _flat_run(houses, link) - 1e-6:
+				fits = false
+				break
+		if fits:
+			houses[i].z = target
+			return
+	houses[order[0]].z = target
+
+static func generate_v2(seed_value: int, spread: float, rise: float, lift_clear := false) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
 	var styles := STYLES.duplicate()
@@ -292,6 +348,8 @@ static func generate_v2(seed_value: int, spread: float, rise: float) -> Dictiona
 			var run := Vector2(near[0], near[1]).distance_to(Vector2(far[0], far[1]))
 			there.z = clampf(float(here.z) + tilts[k] * minf(SLOPE * run, 2.0 * rise), -rise, rise)
 			todo.append(other)
+	if lift_clear:
+		_clear_the_lift(houses, links, tree)
 	for link: Dictionary in links:
 		link.path = [_dock(houses[link.a], link.a_side), _dock(houses[link.b], link.b_side)]
 	var bridges: Array = []
