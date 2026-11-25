@@ -29,10 +29,20 @@ const House = preload("res://sim/ward/house.gd")
 ## Recorded from commit 6d03c6b (before RL1, HEAD's sim/ward/layout.gd copied aside) over the seeds "run-<k>".hash() for
 ## k in 0..499: the sha256 of every generated layout's JSON one after another, and of only those where another house was
 ## lower than the parlour (435 of the 500). Never re-recorded.
-const ALL_BEFORE := "4dd332286fe7c4f31040bd152f617ce2627c65e00c286d84ae9d595c41103333"
-const KEPT_BEFORE := "e0bdc0f0a24af9168225c7cacd17deda0491256f0d94b2cf74ae138d3499a0ff"
+##
+## 25 Nov: the text hashed changed once, from full-precision JSON to the rounded text of _text() below, because the
+## full-precision text differs between Windows and Linux in the last bits of a float and CI (Linux) failed on it. The
+## layouts were not re-recorded: at 1f45ac3 the full-precision digests (4dd33228..., e0bdc0f0..., e8e0f9cb...) still
+## matched on Windows, so flag off was still the Ward of 6d03c6b, and these are the rounded digests of those same layouts.
+const ALL_BEFORE := "aa6a7be0d4c3468d6161bd0b98b06369b59e310fe99447517b37814689285145"
+const KEPT_BEFORE := "41178bc43d8935cf7a39a5d3a0ffc955454ed69b21e1e44076a140a4bc656b1a"
 const KEPT_COUNT := 435
-const LATE2_BEFORE := "e8e0f9cb3a3955d99957a66d6817f0e874e014183971794509f60b0f440675a8"
+const LATE2_BEFORE := "85e4dbc02d3dc4cc039273ecd7832c20afe15edbbc68a836286993c03fcae9c8"
+
+## A layout as text for the recorded digests: floats rounded as tests/ward_digest.gd rounds them, so the same layout gives
+## the same text on Windows and on Linux (their maths libraries differ in the last bits of a float; CI is Linux).
+static func _text(l: Dictionary) -> String:
+	return JSON.stringify(Digest._plain(l))
 
 static func _off() -> Dictionary:
 	return Layout.options(null)
@@ -67,9 +77,9 @@ static func changed_seeds(n: int) -> Array[int]:
 func test_flag_off_is_the_recorded_ward(t: T) -> void:
 	var all := ""
 	for k in 500:
-		all += JSON.stringify(Layout.generate(_seed(k), _off()))
+		all += _text(Layout.generate(_seed(k), _off()))
 	t.eq(all.sha256_text(), ALL_BEFORE, "500 seeds, flag off: every generated layout as recorded before RL1")
-	t.eq(JSON.stringify(Layout.generate("late-2".hash(), _off())).sha256_text(), LATE2_BEFORE, "late-2, flag off: as recorded")
+	t.eq(_text(Layout.generate("late-2".hash(), _off())).sha256_text(), LATE2_BEFORE, "late-2, flag off: as recorded")
 	t.eq(Layout.options(null, false), _off(), "options without the flag are the options they were")
 	t.check(not _off().has("lift_clear"), "no lift_clear key without the flag")
 	t.eq(Layout.to_wire(_off()), [2, 110, 150], "the wire without the flag: the three fields it always was")
@@ -120,10 +130,10 @@ func test_seeds_with_a_lower_house_are_unchanged(t: T) -> void:
 		var off := Layout.generate(s, _off())
 		if _gap(off) >= 0.0:
 			continue
-		var text := JSON.stringify(Layout.generate(s, _on()))
+		var text := _text(Layout.generate(s, _on()))
 		kept += text
 		n += 1
-		if text != JSON.stringify(off):
+		if text != _text(off):
 			differ.append("run-%d" % k)
 	t.eq(n, KEPT_COUNT, "435 of the 500 seeds already have a house lower than the lift's")
 	t.check(differ.is_empty(), "flag on, each of them: the same layout as with it off: %s" % str(differ.slice(0, 8)))
