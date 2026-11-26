@@ -26,6 +26,8 @@ const InventoryView = preload("res://client/inventory_view.gd")
 const KeeperView = preload("res://client/groundskeeper_view.gd")
 const GardenSound = preload("res://client/garden_sound.gd")
 const Ferns = preload("res://client/arboretum_ferns.gd")
+## LA4: the landmarks' shapes and the thicket's cards (client/arboretum_dress.gd).
+const Dress = preload("res://client/arboretum_dress.gd")
 const BARK_MAP = preload("res://assets/arboretum/willow_bark.png")
 const LITTER_MAP = preload("res://assets/arboretum/leaf_litter.png")
 const IRON_MAP = preload("res://assets/arboretum/painted_iron.webp")
@@ -127,6 +129,13 @@ const HIDE_PIECES: Array[StringName] = [&"shed", &"bench", &"under", &"log"]
 var _hide_spots: Array[Vector3] = []
 ## LK1: the practical lights placed: [landmark kind, the light].
 var practicals: Array = []
+## LA4: the landmarks' shapes and the thicket's cards.
+var _dr: Dress
+## LA4, tests only (tests/test_arboretum_dress.gd): while `recording` is set, every quad and triangle drawn is kept here
+## as [tag, material, a, b, c, colour], with the tag client/arboretum_dress.gd sets round what it draws.
+static var recording := false
+var record_tag := ""
+var records: Array = []
 
 static var _tex := {}
 
@@ -155,6 +164,7 @@ func _dress(level: Level, rules_plan: Floor.FloorPlan) -> void:
 	fp = rules_plan if rules_plan != null else Arboretum.generate_arboretum(str(level.plan.seed), int(level.plan.depth))
 	g = Arboretum.garden_of(fp)
 	_rng.seed = hash("arboretum-view:%s:%d" % [fp.seed, fp.depth])
+	_dr = Dress.new(self, fp)
 	_ground()
 	_thicket_and_walls()
 	_pieces()
@@ -371,16 +381,21 @@ func _quad(mat: String, a: Vector3, b: Vector3, c: Vector3, d: Vector3, n: Vecto
 	var st := _tool(mat, (a + c) * 0.5)
 	var pts := [a, b, c, a, c, d]
 	var uv := [Vector2.ZERO, Vector2(uv_span.x, 0), uv_span, Vector2.ZERO, uv_span, Vector2(0, uv_span.y)]
+	if recording:
+		records.append([record_tag, mat, a, b, c, col])
+		records.append([record_tag, mat, a, c, d, col])
 	for i in 6:
 		st.set_normal(n)
 		st.set_color(col)
 		st.set_uv(uv_origin + uv[i])
 		st.add_vertex(pts[i])
 
-func _triangle(mat: String, a: Vector3, b: Vector3, c: Vector3, n: Vector3, col: Color) -> void:
+func _triangle(mat: String, a: Vector3, b: Vector3, c: Vector3, n: Vector3, col: Color, uvs := PackedVector2Array()) -> void:
 	var st := _tool(mat, (a + b + c) / 3.0)
 	var pts := [a, b, c]
-	var uv := [Vector2.ZERO, Vector2.RIGHT, Vector2.DOWN]
+	var uv: Array = Array(uvs) if uvs.size() == 3 else [Vector2.ZERO, Vector2.RIGHT, Vector2.DOWN]
+	if recording:
+		records.append([record_tag, mat, a, b, c, col])
 	for i in 3:
 		st.set_normal(n)
 		st.set_color(col)
@@ -576,7 +591,7 @@ func _thicket_and_walls() -> void:
 				continue
 			if not ((inside and g.thicket[y * W + x] == 1) or hedge):
 				continue
-			_bramble(x, y)
+			_dr.thicket(x, y)
 			drawn["thicket"] = int(drawn.get("thicket", 0)) + 1
 
 ## The hedge stays solid along the cell edge underfoot. The waist and crown pull in irregularly.
@@ -643,23 +658,11 @@ func _pieces() -> void:
 				drawn["dead_tree"] = int(drawn.get("dead_tree", 0)) + 1
 			&"lamp":
 				_lamp(at, true)
-			&"fountain":
-				for k in 4:
-					var a := k * PI * 0.5
-					_box("stone", Vector3(1.2, 0.42, 0.16), at + Vector3(sin(a), 0, cos(a)) * 0.52, C_STONE, true, a)
-				_box("stone", Vector3(0.3, 0.95, 0.3), at, C_STONE * 0.9)
-				_box("stone", Vector3(0.62, 0.1, 0.62), at + Vector3(0, 0.95, 0), C_STONE)
-				_fireflies(at + Vector3(0, 0.9, 0))
-			&"statue":
-				_box("stone", Vector3(0.62, 0.5, 0.56), at + Vector3(-0.26, 0, 0), C_STONE * 0.85)
-				_box("stone", Vector3(1.05, 0.3, 0.34), at + Vector3(0.12, 0.12, 0.06), C_STONE, true, 0.25, Vector3(0, 0, 0.12))
-				_box("stone", Vector3(0.24, 0.24, 0.24), at + Vector3(0.52, 0.02, -0.2), C_STONE * 1.1, true, 0.7)
-			&"arch":
-				_rose_arch(at, r)
-			&"sundial":
-				_box("stone", Vector3(0.36, 0.95, 0.36), at, C_STONE)
-				_box("stone", Vector3(0.74, 0.07, 0.74), at + Vector3(0, 0.95, 0), C_STONE * 1.1)
-				_box("iron", Vector3(0.03, 0.26, 0.3), at + Vector3(0, 1.02, 0), C_IRON * 2.5, true, 0, Vector3(0.5, 0, 0))
+			&"fountain", &"statue", &"arch", &"sundial":
+				# LA4: the small landmarks' shapes (client/arboretum_dress.gd).
+				_dr.small(p.kind, at, r)
+				if p.kind == &"fountain":
+					_fireflies(at + Vector3(0, 0.9, 0))
 			&"shed":
 				var f := _facing(p.facing)
 				# Hollow (MH1b): back, sides, floor and top, so the camera sat in it (play_link.gd hide_camera)
@@ -672,6 +675,7 @@ func _pieces() -> void:
 				for side: float in [-1.0, 1.0]:
 					_box("wood", Vector3(SHED_LEAF, 1.7, 0.04), at + f * 0.3 + sb * Vector3(side * (SHED_CRACK + SHED_LEAF) * 0.5, 0.06, 0), C_WOOD * 0.55, true, sy - side * 0.12)
 				_box("wood", Vector3(1.0, 0.07, 0.72), at + Vector3(0, 1.9, 0), C_WOOD * 0.7, true, atan2(f.x, f.z), Vector3(0.12, 0, 0))
+				_dr.shed_roof(at, f, p.id)
 			&"bench":
 				var f := _facing(p.facing)
 				var yaw := atan2(f.x, f.z)
@@ -823,34 +827,8 @@ func _landmarks() -> void:
 		if l.building < 0:
 			continue
 		var at := Vector3((l.building % W + 0.5) * S, 0, (l.building / W + 0.5) * S)
-		match l.kind:
-			&"greenhouse":
-				_greenhouse(at)
-			&"bandstand":
-				_box("wood", Vector3(S, 0.55, S), at, C_WOOD * 0.8)
-				for k in 4:
-					var a := k * PI * 0.5 + 0.785
-					_box("wood", Vector3(0.1, 2.2, 0.1), at + Vector3(sin(a), 0, cos(a)) * 1.3 + Vector3(0, 0.55, 0), Color(0.5, 0.48, 0.42))
-				for k in 4:
-					_box("wood", Vector3(2.5 - k * 0.6, 0.16, 2.5 - k * 0.6), at + Vector3(0, 2.75 + k * 0.16, 0), Color(0.1, 0.14, 0.12))
-			&"sheds":
-				_box("wood", Vector3(S, 2.3, S), at, C_WOOD * 0.9)
-				_box("wood", Vector3(2.3, 0.1, 2.3), at + Vector3(0, 2.3, 0), C_WOOD * 0.55, true, 0, Vector3(0.1, 0, 0))
-			&"aviary":
-				for k in 12:
-					var a := k * TAU / 12.0
-					_box("iron", Vector3(0.035, 3.0, 0.035), at + Vector3(sin(a), 0, cos(a)) * 0.95, C_IRON * 2.2)
-				for hy: float in [0.05, 1.5, 3.0]:
-					for k in 12:
-						var a := (k + 0.5) * TAU / 12.0
-						_box("iron", Vector3(0.52, 0.035, 0.035), at + Vector3(sin(a), 0, cos(a)) * 0.92 + Vector3(0, hy, 0), C_IRON * 2.2, false, a)
-				_box("iron", Vector3(0.03, 1.6, 0.03), at, C_IRON * 2.0)
-				_box("iron", Vector3(0.7, 0.03, 0.03), at + Vector3(0, 1.6, 0), C_IRON * 2.0, false)
-			&"lodge":
-				_box("stone", Vector3(S, 2.4, S), at, C_BRICK * 0.9)
-				for sx: float in [-1.0, 1.0]:
-					_box("wood", Vector3(1.25, 0.08, 2.3), at + Vector3(sx * 0.52, 2.72, 0), Color(0.1, 0.1, 0.11), false, 0, Vector3(0, 0, sx * 0.55))
-				_box("wood", Vector3(0.6, 0.7, 0.04), at + Vector3(0.3, 1.1, 1.0), Color(0.01, 0.012, 0.016))
+		# LA4: each building's shape (client/arboretum_dress.gd; the greenhouse is still _greenhouse below).
+		_dr.building(l, at)
 		_practical(l.kind, at)
 
 ## LK1: a landmark building's own warm practical, so from the seed like the landmark: a lantern on the building (in
