@@ -13,6 +13,13 @@
 # (client/ward/route.gd Route.find: the same walk model, 0.3 m steps, eight ways, half-metre heights), and it is cut
 # off only when that finds no walk into the car either. A walk the way-finder returns is a row of the walk model's
 # own steps, so it proves the way home; the grid still decides which spots are reached at all.
+#
+# 25 Nov, later (WH1, the 500-seed survey): on two Wards of 500 (run-87 and run-439, homes off, both bridges) the
+# way-finder found no walk out of a 3-storey bedsit either. Its search keeps one spot for each 0.3 m of floor, and
+# the way from the rear room to the front door is a doorway its kept spots catch on. A search in 0.1 m steps,
+# sixteen ways, walks out of both. So a spot the way-finder cannot walk home gets that finer look: from the spot,
+# 0.1 m steps of the walk model until one step lands exactly on feet the grid walks home from, and from those feet
+# the way-finder must walk into the car. Every link is a walk of the model, so the way home is still proved.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
@@ -27,6 +34,12 @@ const ROUTE_BUDGET := 12000
 const ROUTE_MISSES := 3
 ## Of the last stranded() or _cut_off(): the spots the grid alone could not walk home, before the way-finder was asked.
 static var grid_only := 0
+## The finer look: its step, the most spots it may search, and the most landings it may put to the way-finder.
+const FINE_STEP := 0.1
+const FINE_BUDGET := 8000
+const FINE_TRIES := 3
+## Of the last stranded() or _cut_off(): the spots the way-finder could not walk home but the finer look did.
+static var fine_only := 0
 
 ## The cells a walker can stand in, keyed by Vector2i, with their feet; and the walk edges between neighbours.
 static func _grid(w: Ward) -> Dictionary:
@@ -75,6 +88,40 @@ static func _walks_home(w: Ward, from: Vector3, car: Vector3) -> bool:
 	var route := Route.find(w, from, Vector2(car.x, car.z), 0.45, ROUTE_BUDGET)
 	return not route.is_empty() and absf((route[-1] as Vector3).y - car.y) < 0.3
 
+## True when FINE_STEP steps of the walk model, sixteen ways, lead from `from` to a spot one walk away from the kept
+## feet of a cell the grid walks home from (`home`), that walk lands on those feet, and the way-finder walks from
+## them into the car. A landing the way-finder cannot walk home is passed by (FINE_TRIES of them at most).
+static func _walks_home_fine(w: Ward, from: Vector3, car: Vector3, spots: Dictionary, home: Dictionary, lo: Vector2) -> bool:
+	var seen := {_fine_key(from): true}
+	var todo: Array[Vector3] = [from]
+	var head := 0
+	var tried: Array[Vector3] = []
+	while head < todo.size() and head < FINE_BUDGET and tried.size() < FINE_TRIES:
+		var q := todo[head]
+		head += 1
+		var k := _key(q, lo)
+		if home.has(k) and spots.has(k):
+			var feet: Vector3 = spots[k]
+			var fresh := true
+			for p in tried:
+				fresh = fresh and p.distance_to(feet) > 1.5
+			if fresh and w.walk(q, Vector2(feet.x - q.x, feet.z - q.z)).distance_to(feet) < 0.02:
+				if _walks_home(w, feet, car):
+					return true
+				tried.append(feet)
+		for d in 16:
+			var to := w.walk(q, Vector2.from_angle(d * PI / 8.0) * FINE_STEP)
+			if Vector2(to.x - q.x, to.z - q.z).length() < FINE_STEP * 0.5:
+				continue
+			var fk := _fine_key(to)
+			if not seen.has(fk):
+				seen[fk] = true
+				todo.append(to)
+	return false
+
+static func _fine_key(at: Vector3) -> Vector3i:
+	return Vector3i(roundi(at.x / FINE_STEP), roundi(at.z / FINE_STEP), roundi(at.y / 0.25))
+
 ## Of `spots` (a _reach from the car), those with no walk back into the car, the Ward as it stands now.
 static func _cut_off(w: Ward, car: Vector3, spots: Dictionary, lo: Vector2, raise_after := false) -> Array[Vector3]:
 	# Every walk between reached cells (all of a cell's walks stay in the reached set when nothing changed), then
@@ -98,10 +145,12 @@ static func _cut_off(w: Ward, car: Vector3, spots: Dictionary, lo: Vector2, rais
 	var home := {}
 	_spread_home(_key(car, lo), into, home)
 	grid_only = 0
+	fine_only = 0
 	for k: Vector3i in spots:
 		grid_only += int(not home.has(k) and not left.has(k))
-	# The grid is coarse (see the top of the file): what it could not walk home, the game's way-finder is asked.
-	# One walk found brings home every cell with a grid walk to that spot.
+	# The grid is coarse (see the top of the file): what it could not walk home, the game's way-finder is asked, and
+	# what that cannot walk home gets the finer look. One walk found brings home every cell with a grid walk to
+	# that spot.
 	var misses := 0
 	for k: Vector3i in spots:
 		if home.has(k) or left.has(k):
@@ -109,6 +158,9 @@ static func _cut_off(w: Ward, car: Vector3, spots: Dictionary, lo: Vector2, rais
 		if misses >= ROUTE_MISSES:
 			break
 		if _walks_home(w, spots[k], car):
+			_spread_home(k, into, home)
+		elif _walks_home_fine(w, spots[k], car, spots, home, lo):
+			fine_only += 1
 			_spread_home(k, into, home)
 		else:
 			misses += 1
@@ -184,8 +236,21 @@ func test_a_way_out_narrower_than_the_grid_is_not_a_strand(t: T) -> void:
 		t.check(grid_only > 0, "seed %d (%s): the grid alone misses the way home from %d spots, so the way-finder is what is checked here" % [f[0], f[3], grid_only])
 		t.note("seed %d (%s): the grid alone could not walk home %d spots; after the way-finder, %d" % [f[0], f[3], grid_only, bad.size()])
 
+## WH1, the 500-seed survey: the two Wards of 500 (homes off, as the game runs today) where the way-finder itself
+## found no walk out of a 3-storey bedsit (199 and 204 spots). The finer look walks out, so none is cut off; and
+## the way-finder alone still misses the way, so this is the finer look's check. The quick set: the first.
+func test_a_way_out_finer_than_the_way_finder_is_not_a_strand(t: T) -> void:
+	var floors: Array[int] = [441280502]
+	if t.size_key() != "quick":
+		floors.append(1677350247)
+	for seed_value in floors:
+		var bad := stranded(seed_value, true, true, false, Layout.options(null, true))
+		t.check(bad.is_empty(), "seed %d (bridge down): no reachable spot is cut off from the lift (%d)" % [seed_value, bad.size()])
+		t.check(grid_only > 0 and fine_only > 0, "seed %d: the grid alone misses the way home from %d spots and the way-finder from %d it was asked, so the finer look is what is checked here" % [seed_value, grid_only, fine_only])
+		t.note("seed %d: the grid alone could not walk home %d spots; the finer look was needed %d times; after it, %d" % [seed_value, grid_only, fine_only, bad.size()])
+
 ## A real strand is still reported: the crew spreads through the Ward with every door open, then every door is
-## shut. Those inside a house have no walk out (the grid and the way-finder agree); those outside still walk home.
+## shut. Those inside a house have no walk out (the grid, the way-finder and the finer look agree); those outside still walk home.
 func test_a_room_shut_behind_someone_is_reported(t: T) -> void:
 	var w := Ward.new(8143)
 	w.bridge_lowered = true
