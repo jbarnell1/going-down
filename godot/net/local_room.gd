@@ -376,7 +376,8 @@ func start_run() -> void:
 		Session.deck == Places.FULL and not _orientation_playtest and HostRules.economy_fix_by_arg(),
 		Session.deck == Places.FULL and not _orientation_playtest and HostRules.voice_by_arg(),
 		late_floors_on() and not _orientation_playtest and ward_layout and HostRules.ward_lift_clear_by_arg(),
-		late_floors_on() and not _orientation_playtest and ward_layout and (HostRules.ward_homes_on_by_arg() or TestSwitches.ward_homes))
+		late_floors_on() and not _orientation_playtest and ward_layout and (HostRules.ward_homes_on_by_arg() or TestSwitches.ward_homes),
+		late_floors_on() and not _orientation_playtest and ward_layout and HostRules.ward_stairs_by_arg())
 	if _orientation_playtest:
 		rules.enable_orientation()
 	elif orientation_campaign and _playtest_depth < 0:

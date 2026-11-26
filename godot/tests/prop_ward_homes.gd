@@ -367,7 +367,8 @@ func test_the_options_on_the_wire(t: T) -> void:
 	t.eq(Layout.to_wire(Layout.options(null)).size(), 3, "without them the three fields of today")
 	t.eq(Layout.from_wire([2, 110, 150, 2]), {}, "a fourth field that is not 1 is refused")
 	t.eq(Layout.from_wire([2, 110, 150, 0]), {}, "a fourth field 0 with no fifth is refused")
-	for wrong: Array in [[2, 110, 150, 0, 0], [2, 110, 150, 1, 2], [2, 110, 150, 2, 1], [2, 110, 150, 0, 1, 1]]:
+	# ST1's stairs ride as a sixth field 1 (tests/prop_ward_stairs.gd), so a sixth that is not 1, or a seventh, is refused.
+	for wrong: Array in [[2, 110, 150, 0, 0], [2, 110, 150, 1, 2], [2, 110, 150, 2, 1], [2, 110, 150, 0, 1, 0], [2, 110, 150, 0, 1, 1, 1]]:
 		t.eq(Layout.from_wire(wrong), {}, "from_wire refuses %s" % str(wrong))
 	var block := {"collectionAt": 1.0, "departAt": 2.0, "bridgeLowered": false, "phase": "away", "house": -1, "startedAt": 0.0,
 		"encounter": "idle", "armPoints": [], "doors": [true, true, true, true, true, true, true, true], "boarded": [], "leftBehind": [],
@@ -375,7 +376,7 @@ func test_the_options_on_the_wire(t: T) -> void:
 	var back := WardWire.decode(WardWire.encode(block))
 	t.check(not back.is_empty(), "the Ward block carries the homes' layout")
 	t.eq(Ward.new(8143, Layout.from_wire(back.get("layout", []))).houses[1].homes(), true, "and a screen builds the homes from it")
-	for wrong: Array in [[2, 110, 150, 0, 0], [2, 110, 150, 1, 2], [2, 110, 150, 2, 1], [2, 110, 150, 0, 1, 1], [2, 110, 150, 0]]:
+	for wrong: Array in [[2, 110, 150, 0, 0], [2, 110, 150, 1, 2], [2, 110, 150, 2, 1], [2, 110, 150, 0, 1, 0], [2, 110, 150, 0, 1, 1, 1], [2, 110, 150, 0]]:
 		var raw := WardWire.encode(block)
 		raw[14] = wrong
 		t.eq(WardWire.decode(raw), {}, "a Ward block with options %s is refused" % str(wrong))
@@ -412,19 +413,19 @@ func test_the_flag_reaches_the_rules(t: T) -> void:
 			count = (m.args as Array).size()
 			for a: Dictionary in m.args:
 				names.append(str(a.name))
-	# The agreed tail (RL1 merged first): ..., voice_, ward_lift_clear_, ward_homes_.
-	t.eq(names.slice(names.size() - 3), ["voice_", "ward_lift_clear_", "ward_homes_"] as Array[String], "ward_homes_ is the last parameter, after RL1's ward_lift_clear_")
+	# The agreed tail (RL1 merged first): ..., voice_, ward_lift_clear_, ward_homes_, then ST1's ward_stairs_.
+	t.eq(names.slice(names.size() - 4), ["voice_", "ward_lift_clear_", "ward_homes_", "ward_stairs_"] as Array[String], "ward_homes_ comes after RL1's ward_lift_clear_, followed only by ST1's ward_stairs_")
 	var args: Array = [true, 1, []]
 	while args.size() < count:
 		args.append(false)
 	args[38] = true # late_floors
 	args[49] = true # ward_layout
-	args[count - 1] = true # ward_homes, the last
+	args[names.find("ward_homes_")] = true # ward_homes (ST1's ward_stairs_ follows it)
 	t.check((HostRules.new.callv(args) as HostRules).ward_homes, "on with the seeded layout and the late floors")
 	args[49] = false
 	t.check(not (HostRules.new.callv(args) as HostRules).ward_homes, "never without the seeded layout")
 	args[49] = true
-	args[count - 1] = false
+	args[names.find("ward_homes_")] = false
 	t.check(not (HostRules.new.callv(args) as HostRules).ward_homes, "off when not asked")
 	t.check(not HostRules.ward_homes_on_by_arg(), "the game's rooms ask for it only with ward_homes=1")
 

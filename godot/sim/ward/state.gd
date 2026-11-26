@@ -159,11 +159,18 @@ var layout_options := {}
 func layout_wire() -> Array:
 	return [] if layout_options.is_empty() else Layout.to_wire(layout_options)
 
+## ST1: a stair has a body (the run flag ward_stairs, net/host_rules.gd; the layout's option "stairs": 1, which the Ward
+## block carries so every screen walks by the same rule). Off: today's walk, exactly.
+var stairs_solid := false
+
 func _init(seed_value: int, options: Dictionary = {}) -> void:
 	layout_options = options.duplicate()
+	stairs_solid = int(options.get("stairs", 0)) == 1
 	layout = Layout.generate(seed_value, options)
 	for site: Dictionary in layout.houses:
 		houses.append(House.new(site, seed_value))
+		if stairs_solid:
+			houses[-1].set_stairs_solid(WALK_CLEARANCE, Footing.MAX_STEP_UP)
 	footing = Footing.new(layout, lift_door(), houses)
 	_place_station(seed_value)
 	_place_hang_points(seed_value)
@@ -243,21 +250,22 @@ func _place_station(seed_value: int) -> void:
 		var front := fixture.door.get_center()
 		spots.sort_custom(func(a: Vector3, b: Vector3) -> bool: return a.distance_squared_to(front) > b.distance_squared_to(front))
 		for local in spots:
-			var at := fixture.to_world(Vector3(local.x, 0.0, local.z))
+			# ST1: with the stairs' bodies, a spot under a stair's low end is moved out along its side (else as it was).
+			var at := fixture.to_world(fixture.clear_of_stairs(Vector3(local.x, 0.0, local.z)))
 			if walk_clear(at, at):
 				station = at
 				return
-		station = fixture.to_world(Vector3(spots[0].x, 0.0, spots[0].z))
+		station = fixture.to_world(fixture.clear_of_stairs(Vector3(spots[0].x, 0.0, spots[0].z)))
 		return
 	var door := fixture.room_doors[1]
 	var rear: Vector3 = fixture.areas[&"rear"]
 	var tries: Array[Vector3] = [Vector3(door.x * 0.35, 0.0, door.z + 0.8), Vector3(door.x, 0.0, door.z + 0.7), Vector3(rear.x, 0.0, rear.z)]
 	for local in tries:
-		var at := fixture.to_world(local)
+		var at := fixture.to_world(fixture.clear_of_stairs(local))
 		if walk_clear(at, at):
 			station = at
 			return
-	station = fixture.to_world(tries[-1])
+	station = fixture.to_world(fixture.clear_of_stairs(tries[-1]))
 
 ## WC1: the web's hang points, from the seed: the middle of the entry room (ground floor, just inside its door, the
 ## ceiling HANG_LIFT above a hung player's feet) of HANG_POINTS different houses. Each a dict {"house", "at": the spot
@@ -280,13 +288,14 @@ func _place_hang_points(seed_value: int) -> void:
 		if fixture.homes():
 			# WH1: the middle of the room the front door opens into.
 			var first: Vector3 = fixture.areas[fixture.openings()[0].room]
-			var where := fixture.to_world(Vector3(first.x, 0.0, first.z))
+			# ST1: out from under a stair's low end along its side, with the stairs' bodies (else as it was).
+			var where := fixture.to_world(fixture.clear_of_stairs(Vector3(first.x, 0.0, first.z)))
 			hang_points.append({"house": i, "at": where, "hang": where + Vector3.UP * HANG_LIFT})
 			continue
 		var entry: Vector3 = fixture.areas[&"entry"]
-		var spot := fixture.to_world(Vector3(entry.x, 0.0, fixture.room_doors[0].z * 0.5))
+		var spot := fixture.to_world(fixture.clear_of_stairs(Vector3(entry.x, 0.0, fixture.room_doors[0].z * 0.5)))
 		if not walk_clear(spot, spot):
-			spot = fixture.to_world(Vector3(entry.x, 0.0, entry.z))
+			spot = fixture.to_world(fixture.clear_of_stairs(Vector3(entry.x, 0.0, entry.z)))
 		hang_points.append({"house": i, "at": spot, "hang": spot + Vector3.UP * HANG_LIFT})
 
 ## WC1: a loud noise at a point (the call at the station, a cut), heard exactly as a flare's burst is (hear_at) when it
@@ -745,7 +754,42 @@ func walk_clear(from: Vector3, to: Vector3) -> bool:
 	for wall in walls:
 		if Arm._hits_box(from + Vector3.UP * 0.84, to + Vector3.UP * 0.84, wall, WALK_CLEARANCE):
 			return false
+	# ST1: not into the space under a stair's low end, looked at every walk step's length along the way so a long move
+	# cannot pass under one. A walker already in it (put there by a test command, never walked there) may step on only
+	# nearer one of its ways out (across the side, down onto the treads, back to headroom), so they can always walk out
+	# and never stand still in it.
+	if stairs_solid:
+		var start := stair_ways(from)
+		var samples := maxi(1, ceili(Vector2(to.x - from.x, to.z - from.z).length() / Footing.WALK_STEP))
+		for i in range(1, samples + 1):
+			var ways := stair_ways(from.lerp(to, float(i) / samples))
+			if ways == Vector3.ZERO:
+				continue
+			if start == Vector3.ZERO or not (ways.x < start.x or ways.y < start.y or ways.z < start.z):
+				return false
 	return true
+
+## ST1: how deep a walker (feet) stands inside the space under a stair's low end (sim/ward/house.gd stair_depth), 0
+## outside it; the walker's body as the walk's (WALK_CLEARANCE).
+func stair_depth(feet: Vector3) -> float:
+	var deepest := 0.0
+	for house in houses:
+		var local := house.to_local(feet)
+		if not house.floor_bounds.grow(0.5).has_point(Vector2(local.x, local.z)):
+			continue
+		deepest = maxf(deepest, house.stair_depth(local, WALK_CLEARANCE, Footing.MAX_STEP_UP))
+	return deepest
+
+## ST1: the ways out of the forbidden space a walker (feet) is in (sim/ward/house.gd stair_ways), ZERO outside it.
+func stair_ways(feet: Vector3) -> Vector3:
+	for house in houses:
+		var local := house.to_local(feet)
+		if not house.floor_bounds.grow(0.5).has_point(Vector2(local.x, local.z)):
+			continue
+		var ways := house.stair_ways(local, WALK_CLEARANCE, Footing.MAX_STEP_UP)
+		if ways != Vector3.ZERO:
+			return ways
+	return Vector3.ZERO
 
 func walk(from: Vector3, motion: Vector2) -> Vector3:
 	var at := from

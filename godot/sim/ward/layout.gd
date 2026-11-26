@@ -170,32 +170,41 @@ static func options(tuning: Settings.Values, lift_clear := false) -> Dictionary:
 ## The options as the Ward block carries them (net/ward_wire.gd): [version, spread in hundredths, rise in cm], and a
 ## fourth element 1 only with RL1's lift_clear (without it, the three they always were). WH1: the homes (the run flag
 ## ward_homes) ride as a fifth element 1, after a fourth that is then always there (1 with lift_clear, else 0); with
-## the homes off the wire is exactly RL1's.
+## the homes off the wire is exactly RL1's. ST1: a stair's body (the run flag ward_stairs, option "stairs": 1) rides as a
+## sixth element 1, after a fourth and fifth that are then always there (0 or 1 each); with it off the wire is WH1's.
 static func to_wire(opts: Dictionary) -> Array:
 	var out := [int(opts.get("version", 2)), roundi(float(opts.get("spread", SPREAD)) * 100.0), roundi(float(opts.get("rise", RISE)) * 100.0)]
 	var lift_clear: bool = opts.get("lift_clear", false) == true
 	var homes := int(opts.get("homes", 0)) == 1
-	if lift_clear or homes:
+	var stairs := int(opts.get("stairs", 0)) == 1
+	if lift_clear or homes or stairs:
 		out.append(1 if lift_clear else 0)
-	if homes:
+	if homes or stairs:
+		out.append(1 if homes else 0)
+	if stairs:
 		out.append(1)
 	return out
 
-## Back from the wire; {} (today's Ward) for anything else. Three fields; four with the fourth 1 (lift_clear); or five
-## with the fourth 0 or 1 (lift_clear) and the fifth 1 (WH1's homes).
+## Back from the wire; {} (today's Ward) for anything else. Three fields; four with the fourth 1 (lift_clear); five
+## with the fourth 0 or 1 (lift_clear) and the fifth 1 (WH1's homes); or six with the fourth and fifth 0 or 1 and the
+## sixth 1 (ST1's stairs).
 static func from_wire(raw: Variant) -> Dictionary:
-	if not raw is Array or (raw as Array).size() < 3 or (raw as Array).size() > 5:
+	if not raw is Array or (raw as Array).size() < 3 or (raw as Array).size() > 6:
 		return {}
 	var size := (raw as Array).size()
 	if size == 4 and int(raw[3]) != 1:
 		return {}
 	if size == 5 and ((int(raw[3]) != 0 and int(raw[3]) != 1) or int(raw[4]) != 1):
 		return {}
+	if size == 6 and ((int(raw[3]) != 0 and int(raw[3]) != 1) or (int(raw[4]) != 0 and int(raw[4]) != 1) or int(raw[5]) != 1):
+		return {}
 	var out := {"version": int(raw[0]), "spread": float(raw[1]) / 100.0, "rise": float(raw[2]) / 100.0}
 	if size >= 4 and int(raw[3]) == 1:
 		out["lift_clear"] = true
-	if size == 5:
+	if size == 5 or (size == 6 and int(raw[4]) == 1):
 		out["homes"] = 1
+	if size == 6:
+		out["stairs"] = 1
 	return out
 
 static func _cell_links(cells: Array[Vector2i]) -> Array[Dictionary]:

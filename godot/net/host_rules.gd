@@ -150,6 +150,11 @@
 #    (data/ward_homes.json, sim/ward/homes.gd) with rooms, furniture, inner doors and hiding places, and the Rigger's
 #    arm bends round their walls and furniture by itself (sim/ward/house.gd, sim/ward/arm.gd). Run.with_ward_homes marks
 #    the run; net/host.gd puts it in the Ward's layout options so every screen builds the same.
+#  - ST1, `ward_stairs`, the last parameter, after `ward_homes` (off unless asked, and only with `ward_layout`; the game's
+#    rooms ask for it wherever they ask for the layout, `ward_stairs=0` switches it off): a stair on the Hanging Ward has
+#    a body. A walker cannot stand where a stair's underside is less than a standing player's eye height above their
+#    feet unless they stand on it (sim/ward/house.gd stair_depth, sim/ward/state.gd walk_clear). net/host.gd puts it in
+#    the layout's options ("stairs": 1), so the block carries it and every screen walks by the same rule.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -285,6 +290,8 @@ var voice: bool
 var ward_lift_clear: bool
 ## WH1, the Ward's real homes (the last parameter, after ward_lift_clear_; see the header).
 var ward_homes: bool
+## ST1, a stair's body on the Ward (the last parameter, after ward_homes_; see the header). Only with ward_layout.
+var ward_stairs: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -315,11 +322,13 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		ward_web_: bool = false, rigger_roam_: bool = false, ward_layout_: bool = false, orderly_fix_: bool = false,
 		minder_calm_: bool = false, down_ring_: bool = false, pn_fixes_: bool = false, last_stand_: bool = false,
 		deal_: bool = false, split_: bool = false, economy_fix_: bool = false, voice_: bool = false,
-		ward_lift_clear_: bool = false, ward_homes_: bool = false) -> void:
+		ward_lift_clear_: bool = false, ward_homes_: bool = false, ward_stairs_: bool = false) -> void:
 	voice = voice_
 	ward_lift_clear = ward_lift_clear_ and ward_layout_ and late_floors_
 	# WH1: only with the Ward laid out from the seed (the homes need its cells).
 	ward_homes = ward_homes_ and ward_layout_ and late_floors_
+	# ST1: only with the Ward laid out from the seed (its options carry the rule to every screen).
+	ward_stairs = ward_stairs_ and ward_layout_ and late_floors_
 	last_stand = last_stand_
 	deal = deal_
 	split = split_
@@ -655,6 +664,10 @@ static func ward_homes_on_by_arg() -> bool:
 		if raw.trim_prefix("--") == "ward_homes=1":
 			return true
 	return false
+
+## ST1: a stair has a body in the game's rooms unless started with `ward_stairs=0` (or `?ward_stairs=0` on the web page).
+static func ward_stairs_by_arg() -> bool:
+	return not _arg_off("ward_stairs")
 
 static func _arg_off(name: String) -> bool:
 	for raw in OS.get_cmdline_user_args():

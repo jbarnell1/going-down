@@ -287,7 +287,8 @@ func test_the_wire_and_the_rooms(t: T) -> void:
 	t.eq(Digest.line(183025962, Layout.from_wire(back.layout)), Digest.line(183025962, _on()), "a screen builds the host's Ward")
 	t.check(Digest.line(183025962, _on()) != Digest.line(183025962, _off()), "late-2's Ward differs with the flag")
 	# WH1 (merged after RL1) put its homes in a fifth option, so a fifth is refused unless it is 1 and the fourth 0 or 1.
-	for wrong: Array in [[2, 110, 150, 0], [2, 110, 150, 2], [2, 110, 150, 1, 0], [2, 110, 150, 2, 1], [2, 110, 150, 1, 1, 1]]:
+	# ST1 then put its stairs in a sixth (tests/prop_ward_stairs.gd), so six with a sixth 1 is good and seven are refused.
+	for wrong: Array in [[2, 110, 150, 0], [2, 110, 150, 2], [2, 110, 150, 1, 0], [2, 110, 150, 2, 1], [2, 110, 150, 1, 1, 2], [2, 110, 150, 1, 1, 1, 1]]:
 		var raw := WardWire.encode(block)
 		raw[14] = wrong
 		t.eq(WardWire.decode(raw), {}, "a block with options %s is refused" % str(wrong))
@@ -299,7 +300,7 @@ func test_the_wire_and_the_rooms(t: T) -> void:
 		if m["name"] == "_init":
 			for a: Dictionary in m["args"]:
 				names.append(str(a["name"]))
-	t.eq(names.slice(names.size() - 3), ["voice_", "ward_lift_clear_", "ward_homes_"] as Array[String], "ward_lift_clear_ comes after voice_, then only WH1's ward_homes_")
+	t.eq(names.slice(names.size() - 4), ["voice_", "ward_lift_clear_", "ward_homes_", "ward_stairs_"] as Array[String], "ward_lift_clear_ comes after voice_, then only WH1's ward_homes_ and ST1's ward_stairs_")
 	var args: Array = WardLayoutProps.rules_args(true, true)
 	t.eq(names[args.size() - 1], "ward_layout_", "rules_args gives every parameter up to ward_layout_")
 	while args.size() < names.size():

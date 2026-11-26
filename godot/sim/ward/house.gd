@@ -497,6 +497,125 @@ func walk_clear(from: Vector3, to: Vector3, door_open: bool, parlour: bool) -> b
 	return true
 
 # ------------------------------------------------------------------------------------------------
+# ST1: a stair has a body (the run flag ward_stairs, net/host_rules.gd; sim/ward/state.gd stairs_solid). A walker cannot
+# stand where a stair's underside is less than a standing player's eye height above their feet, unless they stand on
+# that stair or above it. So the high end of a stair can be walked under where there is headroom, the stair can be
+# walked up and down, and its low end cannot be walked into from the side or from behind.
+
+## A standing player's eyes above their feet: client/eye_height.gd STAND, the one number that places the camera and the
+## head others see (the server build has no client/ folder, so the rules keep the same number here;
+## tests/prop_ward_stairs.gd checks that the two agree). Creeping does not lower it in the rules.
+const STAND_EYE := 1.65
+## How far below the line of the treads a stair's body reaches: the drawn treads are 0.13 m thick and each is flat, so
+## the underside over any point is up to half a riser (HEIGHT / 18 / 2) lower again (client/ward/view.gd _dress_stairs).
+const STAIR_BODY := 0.22
+
+## How deep (flat metres) a walker whose feet are at `local` (this house's frame), with a body `radius` wide, stands
+## inside a stair's forbidden space: 0 outside it; inside, the shortest flat way out of it (across the stair's side,
+## down onto its treads, or back under its high end). `step` is the footing's highest step (sim/ward/footing.gd
+## MAX_STEP_UP): feet within it of the treads stand on the stair.
+func stair_depth(local: Vector3, radius: float, step: float) -> float:
+	var deepest := 0.0
+	for stair in stairs:
+		var ways := _stair_ways(stair, local, radius, step)
+		if ways != Vector3.ZERO:
+			deepest = maxf(deepest, maxf(minf(ways.x, minf(ways.y, ways.z)), 0.0001))
+	return deepest
+
+## ST1: for a walker inside a stair's forbidden space (the first stair whose space they are in), how far each way out
+## is (flat metres): x across the side, y down the run onto the treads, z up the run to headroom; ZERO outside every one.
+func stair_ways(local: Vector3, radius: float, step: float) -> Vector3:
+	for stair in stairs:
+		var ways := _stair_ways(stair, local, radius, step)
+		if ways != Vector3.ZERO:
+			return ways
+	return Vector3.ZERO
+
+func _stair_ways(stair: Stair, local: Vector3, radius: float, step: float) -> Vector3:
+	var along_x := stair.from.x != stair.to.x
+	var s0 := stair.from.x if along_x else stair.from.z
+	var s1 := stair.to.x if along_x else stair.to.z
+	var length := absf(s1 - s0)
+	var rise := stair.to.y - stair.from.y
+	if length < 0.01 or rise < 0.01:
+		return Vector3.ZERO
+	var a := ((local.x if along_x else local.z) - s0) * signf(s1 - s0)
+	var lane := stair.from.z if along_x else stair.from.x
+	var side := absf((local.z if along_x else local.x) - lane)
+	var half := STAIR_WIDTH * 0.5 + radius
+	if side >= half or a <= -radius or a >= length + radius:
+		return Vector3.ZERO
+	var feet := local.y
+	var on_line := stair.from.y + rise * clampf(a / length, 0.0, 1.0)
+	if feet >= on_line - step:
+		return Vector3.ZERO
+	var low := stair.from.y + rise * clampf((a - radius) / length, 0.0, 1.0) - STAIR_BODY
+	if low >= feet + STAND_EYE:
+		return Vector3.ZERO
+	# Inside. The ways out: across the side; down the run to where the feet meet the treads; up the run to where the
+	# underside over the whole body clears the eyes (or past the stair's high end). Each at least a tenth of a millimetre.
+	var out_side := half - side
+	var out_low := a - length * (feet + step - stair.from.y) / rise
+	var out_high := minf(radius + length * (feet + STAND_EYE + STAIR_BODY - stair.from.y) / rise, length + radius) - a
+	return Vector3(maxf(out_side, 0.0001), maxf(out_low, 0.0001), maxf(out_high, 0.0001))
+
+## ST1: whether this house's stairs have a body (sim/ward/state.gd sets it with the run flag ward_stairs), and the
+## walker's body and highest step it was set with (state.gd WALK_CLEARANCE, sim/ward/footing.gd MAX_STEP_UP).
+var stairs_solid := false
+var _stair_radius := 0.0
+var _stair_step := 0.0
+
+func set_stairs_solid(radius: float, step: float) -> void:
+	stairs_solid = true
+	_stair_radius = radius
+	_stair_step = step
+
+## ST1: a spot the rules or the tools need a walker to stand on (local, feet): with stairs_solid, when it is in a
+## stair's forbidden space, moved out across the stair's side (the nearer side first) to where a walker stands clear
+## of every wall and stair of the house, else out along the run to where there is headroom under its high end. Off, or
+## outside that space: the spot itself, exactly.
+func clear_of_stairs(local: Vector3) -> Vector3:
+	if not stairs_solid or stair_depth(local, _stair_radius, _stair_step) <= 0.0:
+		return local
+	const MARGIN := 0.05
+	for stair in stairs:
+		var along_x := stair.from.x != stair.to.x
+		var lane := stair.from.z if along_x else stair.from.x
+		var offset := (local.z if along_x else local.x) - lane
+		var out := STAIR_WIDTH * 0.5 + _stair_radius + MARGIN
+		var near := 1.0 if offset >= 0.0 else -1.0
+		var tries: Array[Vector3] = []
+		for side: float in [near, -near]:
+			var p := local
+			if along_x:
+				p.z = lane + side * out
+			else:
+				p.x = lane + side * out
+			tries.append(p)
+		# Out under the high end: where the underside over the whole body clears the eyes.
+		var s0 := stair.from.x if along_x else stair.from.z
+		var s1 := stair.to.x if along_x else stair.to.z
+		var length := absf(s1 - s0)
+		var rise := stair.to.y - stair.from.y
+		if length > 0.01 and rise > 0.01:
+			var a := _stair_radius + length * (local.y + STAND_EYE + STAIR_BODY - stair.from.y) / rise + MARGIN
+			var p := local
+			if along_x:
+				p.x = s0 + signf(s1 - s0) * a
+			else:
+				p.z = s0 + signf(s1 - s0) * a
+			tries.append(p)
+		for p in tries:
+			if not floor_bounds.grow(-0.2).has_point(Vector2(p.x, p.z)):
+				continue
+			if stair_depth(p, _stair_radius, _stair_step) > 0.0:
+				continue
+			var at := to_world(p)
+			if walk_clear(at, at, true, _parlour):
+				return p
+	return local
+
+# ------------------------------------------------------------------------------------------------
 # WH1: a house built from the homes' plans (the run flag ward_homes; sim/ward/homes.gd resolves the plan from the seed).
 # The same fields as today's house, so the walk, the footing, the Rigger's climbing graph and his arm read it as they
 # read today's: `walls` the ground floor's outer and inner walls, each storey's `partitions` its inner walls, the same

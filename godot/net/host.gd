@@ -873,6 +873,9 @@ func start_ward_review(review_seed: int, place_crew := false) -> void:
 	# WH1: the homes (net/host_rules.gd ward_homes) ride in the layout's options, so every screen builds the same.
 	if ward_homes():
 		options["homes"] = 1
+	# ST1: a stair's body (net/host_rules.gd ward_stairs) rides there too, so every screen walks by the same rule.
+	if ward_stairs():
+		options["stairs"] = 1
 	_ward_review = Ward.new(review_seed, options)
 	# RR1: the solid, crawling Rigger (net/host_rules.gd rigger_roam); off, the Ward is exactly as before. His graph
 	# was started on a worker thread with the late floors (_prebuild_roam); wait for it rather than build it twice.
@@ -1958,6 +1961,8 @@ func _prebuild_roam() -> void:
 	var options := WardLayout.options(state.tuning, ward_lift_clear()) if ward_layout() else {}
 	if ward_homes():
 		options["homes"] = 1
+	if ward_stairs():
+		options["stairs"] = 1
 	_roam_ward = Ward.new(late_seed(state), options)
 	_roam_build = RiggerRoam.begin_graph(_roam_ward)
 
@@ -2006,6 +2011,11 @@ func ward_lift_clear() -> bool:
 func ward_homes() -> bool:
 	var rules: Object = _step_fn.get_object() if _step_fn.is_valid() else null
 	return rules != null and bool(rules.get("ward_homes"))
+
+## ST1: whether the rules stepping this run give the Ward's stairs a body (net/host_rules.gd ward_stairs).
+func ward_stairs() -> bool:
+	var rules: Object = _step_fn.get_object() if _step_fn.is_valid() else null
+	return rules != null and bool(rules.get("ward_stairs"))
 
 ## The Tenant clock's block from the rules stepping this run (net/host_rules.gd tenant_block), or null: the plain
 ## run's step, or rules without the clock.

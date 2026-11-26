@@ -598,11 +598,12 @@ static func house_spot(fixture: House, spot: String) -> Vector3:
 	if spot == "corner":
 		var half := fixture.floor_bounds.size.x * 0.5
 		var side := -signf(fixture.room_doors[0].x) if fixture.room_doors[0].x != 0.0 else 1.0
-		return fixture.to_world(Vector3(side * (half - 0.42), 0, 0.5))
+		return fixture.to_world(fixture.clear_of_stairs(Vector3(side * (half - 0.42), 0, 0.5)))
 	if not fixture.areas.has(StringName(spot)):
 		return Vector3.INF
 	var at: Vector3 = fixture.areas[StringName(spot)]
-	return fixture.to_world(Vector3(at.x, 0, at.z))
+	# ST1: with the stairs' bodies (the run flag ward_stairs), a room's point under a stair's low end is moved out.
+	return fixture.to_world(fixture.clear_of_stairs(Vector3(at.x, 0, at.z)))
 
 ## The Ward block last shown (show_host), for describe_rigger.
 var shown_ward := {}

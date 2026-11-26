@@ -57,13 +57,16 @@ static func decode(raw: Variant) -> Dictionary:
 		var lay: Variant = s[layout_at]
 		# RL1: a fourth element, 1, only with the run flag ward_lift_clear (sim/ward/layout.gd to_wire). WH1: a fifth
 		# element, 1, only with the run flag ward_homes, and then the fourth is always there (0 or 1).
-		if lay.size() < 3 or lay.size() > 5:
+		# ST1: a sixth element, 1, only with the run flag ward_stairs, and then the fourth and fifth are always there.
+		if lay.size() < 3 or lay.size() > 6:
 			return {}
 		if not _integer(lay[0], 2, 2) or not _integer(lay[1], 50, 300) or not _integer(lay[2], 0, 500):
 			return {}
 		if lay.size() == 4 and not _integer(lay[3], 1, 1):
 			return {}
 		if lay.size() == 5 and (not _integer(lay[3], 0, 1) or not _integer(lay[4], 1, 1)):
+			return {}
+		if lay.size() == 6 and (not _integer(lay[3], 0, 1) or not _integer(lay[4], 0, 1) or not _integer(lay[5], 1, 1)):
 			return {}
 	if extras_at >= 0 and not _extras_ok(s[extras_at]):
 		return {}

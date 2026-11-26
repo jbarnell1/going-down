@@ -171,7 +171,8 @@ static func build_graph(w: Ward) -> Graph:
 		var r := {}
 		for area: StringName in [&"entry", &"middle", &"rear"]:
 			var a: Vector3 = h.areas[area]
-			r[area] = g.add(h.to_world(Vector3(a.x, 0, a.z)))
+			# ST1: with the stairs' bodies, a room's point under a stair's low end is moved out along its side.
+			r[area] = g.add(h.to_world(h.clear_of_stairs(Vector3(a.x, 0, a.z))))
 			g.room[r[area]] = [i, area]
 		var d0 := g.add(h.to_world(Vector3(h.room_doors[0].x, 0, h.room_doors[0].z)))
 		var d1 := g.add(h.to_world(Vector3(h.room_doors[1].x, 0, h.room_doors[1].z)))
@@ -188,7 +189,7 @@ static func build_graph(w: Ward) -> Graph:
 		# An entry corner away from the first room door (where a careful recorder stands).
 		var half := h.floor_bounds.size.x * 0.5
 		var side := -signf(h.room_doors[0].x) if h.room_doors[0].x != 0.0 else 1.0
-		var cn := g.add(h.to_world(Vector3(side * (half - 0.42), 0, 0.5)))
+		var cn := g.add(h.to_world(h.clear_of_stairs(Vector3(side * (half - 0.42), 0, 0.5))))
 		g.room[cn] = [i, &"entry"]
 		g.link(cn, r[&"entry"])
 		g.link(cn, din)
@@ -233,7 +234,7 @@ static func _home_rooms(g: Graph, i: int, h: House, din: int) -> void:
 	var nodes := {}
 	for room: Dictionary in h.rooms_by_level[0]:
 		var probe: Vector3 = h.areas[room.name]
-		var n := g.add(h.to_world(Vector3(probe.x, 0, probe.z)))
+		var n := g.add(h.to_world(h.clear_of_stairs(Vector3(probe.x, 0, probe.z))))
 		g.room[n] = [i, room.name]
 		nodes[room.name] = n
 	for d: Dictionary in h.inner_doors:
