@@ -99,6 +99,13 @@ var props_placed := 0
 const CEILING_LIT := 0.5
 const CEILING_DARK := 0.22
 var ceiling_lit := 0.0
+## LA5: the Clinic walls' own light with every lamp on (0: this floor's walls have none, as before), and none in the
+## dark. The downward lamps light a wall only low down and only beside a lamp, so above about 2.5 m, and on a wall a cell
+## or more from a lamp (the one facing the lift doors), the paint fell to the ambient alone. The corruption takes all
+## of it away by the far side (WALL_SELF_DIRT), where the walls read as they did.
+const WALL_LIT := 0.35
+const WALL_SELF_DIRT := 1.0
+var wall_lit := 0.0
 var props_overturned := 0
 ## Where each prop went (tests): room, cell, the wall it stands against, its floor footprint (x, z, w, d).
 var prop_spots: Array[Dictionary] = []
@@ -298,6 +305,11 @@ func _make_materials() -> void:
 		mat_ceiling.set_shader_parameter("self_light", CEILING_LIT)
 		# LA3: the wall paint's panels mirrored here and there and a second kind of mark mixed in (surface.gdshader).
 		mat_wall.set_shader_parameter("wall_vary", 1.0)
+		# LA5: near the lift the walls are evenly bright from skirting to ceiling, between the floor and the ceiling beside them; with the walk
+		# from the lift their own light goes, and it follows the lamps (update_lights).
+		wall_lit = WALL_LIT
+		mat_wall.set_shader_parameter("self_light", WALL_LIT)
+		mat_wall.set_shader_parameter("self_dirt", WALL_SELF_DIRT)
 	mat_rail = prop_material(Color(0.55, 0.6, 0.58))
 	mat_hide = prop_material(Color.WHITE, null, true)
 	mat_glow = glow_material(Color.WHITE, 1.0)
@@ -742,6 +754,11 @@ func _build_lights() -> void:
 func ceiling_self_light(pk: float, emergency: float) -> float:
 	return lerpf(CEILING_DARK, ceiling_lit, clampf(pk, 0.0, 1.0) * (1.0 - clampf(emergency, 0.0, 1.0)))
 
+## LA5: the Clinic walls' own light for the lamps' level `pk` and the emergency lighting: WALL_LIT with every lamp on,
+## none (what the walls always had) in the dark or the emergency light.
+func wall_self_light(pk: float, emergency: float) -> float:
+	return wall_lit * clampf(pk, 0.0, 1.0) * (1.0 - clampf(emergency, 0.0, 1.0))
+
 ## The lights as one dial: 1 every light as built; lower is the lights failing (blink warnings, the
 ## dark). Panels die faster than the room, as in src/render/lighting.ts.
 func set_light_level(k: float) -> void:
@@ -793,6 +810,10 @@ func update_lights(delta: float, _cam_pos: Vector3) -> void:
 		var self_lit := ceiling_self_light(pk, _emergency)
 		if not is_equal_approx(float(mat_ceiling.get_shader_parameter("self_light")), self_lit):
 			mat_ceiling.set_shader_parameter("self_light", self_lit)
+	if wall_lit > 0.0 and mat_wall != null:
+		var wall_self := wall_self_light(pk, _emergency)
+		if not is_equal_approx(float(mat_wall.get_shader_parameter("self_light")), wall_self):
+			mat_wall.set_shader_parameter("self_light", wall_self)
 	# (LT1: no shadow re-pick by camera distance here any more: see _build_lights.)
 # --- signs and stains -------------------------------------------------------------------------
 
