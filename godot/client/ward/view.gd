@@ -86,6 +86,8 @@ var lift_car: Lift
 ## WL1: each house's front door on its hinge (0 shut, Dress.DOOR_SWING open) and where it is turning to.
 var door_hinges: Array[Node3D] = []
 var _door_swing: Array[float] = []
+## WH2: each house's hinge turn with its door open (Dress.door_open of the jamb its plan hangs it on).
+var door_open_turn: Array[float] = []
 ## WL1: the drawbridge's own dressing (hidden with it while it is raised).
 var bridge_dress: Node3D
 ## WN4: the walk's wire rounding and the refused-step check (client/ward/net_walk.gd).
@@ -183,7 +185,7 @@ func show_host(ward: Dictionary, host_now: float, id: String, crew: Array) -> vo
 		if door_houses[i].visible != closed:
 			_set_solid(door_houses[i], closed)
 		if i < _door_swing.size():
-			_door_swing[i] = 0.0 if closed else Dress.DOOR_SWING
+			_door_swing[i] = 0.0 if closed else door_open_turn[i]
 	var phase: String = ward.phase
 	var close_gate := phase == "away" or phase == "departed"
 	if lift_gate.visible != close_gate:
@@ -1011,9 +1013,12 @@ func _build_house(site: Dictionary) -> void:
 	_set_solid(leaf, false)
 	# WL1: the shut door's body stays for sight lines only; the door seen is the leaf on its hinge (client/ward/dress.gd).
 	(leaf.get_child(0) as Node3D).visible = false
-	door_hinges.append(Dress.door_leaf(self, root, door))
-	_door_swing.append(Dress.DOOR_SWING)
-	door_hinges[-1].rotation.y = Dress.DOOR_SWING
+	# WH2: a home's plan may hang its leaf on the other jamb, so that it never stands open in another doorway's way.
+	var hinge_side := int(fixture.plan.door.get("hinge", -1)) if fixture.homes() else -1
+	door_hinges.append(Dress.door_leaf(self, root, door, hinge_side))
+	door_open_turn.append(Dress.door_open(hinge_side))
+	_door_swing.append(door_open_turn[-1])
+	door_hinges[-1].rotation.y = door_open_turn[-1]
 	if not fixture.homes():
 		for room: StringName in fixture.areas:
 			var at: Vector3 = fixture.areas[room]

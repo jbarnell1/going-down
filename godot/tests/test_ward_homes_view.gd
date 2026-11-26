@@ -26,6 +26,8 @@ const TestSwitches = preload("res://net/test_switches.gd")
 const Session = preload("res://net/session.gd")
 const HostRules = preload("res://net/host_rules.gd")
 const Move = preload("res://sim/move.gd")
+const Homes = preload("res://sim/ward/homes.gd")
+const Dress = preload("res://client/ward/dress.gd")
 const DT := 0.05
 
 static func _homes() -> Dictionary:
@@ -107,6 +109,37 @@ func test_the_homes_are_drawn_where_the_rules_have_them(t: T) -> void:
 						through.append("%s window %s" % [fixture.plan.type, o.wall])
 		t.check(missing.is_empty(), "seed %d: every piece of furniture is drawn as a box where the rules have it: %s" % [seed_value, str(missing.slice(0, 6))])
 		t.check(through.is_empty(), "seed %d: every window the hand comes in by is open on the screen: %s" % [seed_value, str(through.slice(0, 6))])
+		view.queue_free()
+
+## WH2: each home's front door leaf is drawn on the jamb its plan names (sim/ward/homes.gd front_leaf), and, open, it
+## stands where the rules say it does (tests/ward_home_clear.gd checks nothing else stands there and that it is in no
+## doorway's way); the lift's house hangs it on the right jamb, so it no longer stands across the parlour's doorway.
+func test_the_front_doors_leaf_is_drawn_where_the_rules_have_it(t: T) -> void:
+	for seed_value: int in [8143, 26]:
+		var view := _view(seed_value, Layout.to_wire(_homes()))
+		var wrong: Array[String] = []
+		for i in view.houses.size():
+			var fixture: House = view.houses[i].fixture
+			var side := int(fixture.plan.door.hinge)
+			var hinge: Node3D = view.door_hinges[i]
+			if not is_equal_approx(hinge.rotation.y, Dress.door_open(side)):
+				wrong.append("house %d: the leaf is not open into the house (%.2f)" % [i, hinge.rotation.y])
+			# The leaf itself: the hinge's first box, in the house's frame.
+			var anchor := hinge.get_child(0) as Node3D
+			var size := ((anchor.get_child(0) as MeshInstance3D).mesh as BoxMesh).size
+			var lo := Vector3(INF, INF, INF)
+			var hi := -lo
+			for corner in 8:
+				var c := anchor.position + Vector3(size.x * (0.5 if (corner & 1) != 0 else -0.5), size.y * (0.5 if (corner & 2) != 0 else -0.5), size.z * (0.5 if (corner & 4) != 0 else -0.5))
+				var p := hinge.transform * c
+				lo = lo.min(p)
+				hi = hi.max(p)
+			var drawn := Rect2(lo.x, lo.z, hi.x - lo.x, hi.z - lo.z)
+			var rest: Rect2 = Homes.front_leaf(fixture.door.get_center().x, fixture.door.size.x, side).rest
+			if not rest.grow(0.005).encloses(drawn):
+				wrong.append("house %d: the open leaf %s is drawn outside %s" % [i, str(drawn), str(rest)])
+		t.check(wrong.is_empty(), "seed %d: every front door's leaf is drawn, open, where the rules have it: %s" % [seed_value, str(wrong.slice(0, 4))])
+		t.eq(int(view.houses[0].fixture.plan.door.hinge), 1, "seed %d: the lift's house hangs its front door on the right jamb" % seed_value)
 		view.queue_free()
 
 # --- WH1d: the hides on the screen. ---

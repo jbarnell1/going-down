@@ -121,21 +121,24 @@ static func skirting(view: Node3D, root: Node3D, at: Vector3, length: float, gap
 # A house's door.
 
 ## A panelled leaf hung on the left jamb of `door` (the house's local door box) in `root` (the house's node), with a
-## cased frame round the opening. Returns the hinge (rotation.y 0 shut, DOOR_SWING open).
-static func door_leaf(view: Node3D, root: Node3D, door: AABB) -> Node3D:
+## cased frame round the opening. Returns the hinge (rotation.y 0 shut, door_open(side) open). WH2: `side` 1 hangs it on
+## the right jamb instead (a home whose plan says so, sim/ward/homes.gd front_leaf); it still opens into the house.
+static func door_leaf(view: Node3D, root: Node3D, door: AABB, side := -1) -> Node3D:
 	var width := door.size.x
 	var height := door.size.y
 	var hinge := Node3D.new()
 	hinge.name = "DoorHinge"
 	root.add_child(hinge)
-	hinge.position = Vector3(door.position.x + 0.01, 0.0, door.get_center().z)
+	hinge.position = Vector3(door.position.x + 0.01 if side < 0 else door.end.x - 0.01, 0.0, door.get_center().z)
 	var leaf_w := width - 0.02
-	view.call("_box", hinge, Vector3(leaf_w * 0.5, height * 0.5, 0), Vector3(leaf_w, height - 0.02, 0.05), "door")
+	# Along the leaf from its hinge: +x on the left jamb, -x on the right.
+	var run := 1.0 if side < 0 else -1.0
+	view.call("_box", hinge, Vector3(run * leaf_w * 0.5, height * 0.5, 0), Vector3(leaf_w, height - 0.02, 0.05), "door")
 	# Two raised panels each side and a brass knob, so the leaf reads as a door from either side.
 	for face: float in [-1.0, 1.0]:
 		for row: Array in [[0.62, 0.78], [1.52, 0.86]]:
-			view.call("_box", hinge, Vector3(leaf_w * 0.5, float(row[0]), face * 0.03), Vector3(leaf_w - 0.26, float(row[1]), 0.012), "panel")
-		view.call("_box", hinge, Vector3(leaf_w - 0.12, 1.0, face * 0.045), Vector3(0.06, 0.06, 0.05), "brass")
+			view.call("_box", hinge, Vector3(run * leaf_w * 0.5, float(row[0]), face * 0.03), Vector3(leaf_w - 0.26, float(row[1]), 0.012), "panel")
+		view.call("_box", hinge, Vector3(run * (leaf_w - 0.12), 1.0, face * 0.045), Vector3(0.06, 0.06, 0.05), "brass")
 	# The casing round the opening, on both faces of the wall.
 	for face: float in [-1.0, 1.0]:
 		var z := door.get_center().z + face * (House.WALL_THICKNESS * 0.5 + 0.015)
@@ -143,6 +146,10 @@ static func door_leaf(view: Node3D, root: Node3D, door: AABB) -> Node3D:
 			view.call("_box", root, Vector3(x, height * 0.5, z), Vector3(0.1, height + 0.05, 0.03), "trim")
 		view.call("_box", root, Vector3(door.get_center().x, height + 0.07, z), Vector3(width + 0.2, 0.12, 0.03), "trim")
 	return hinge
+
+## WH2: the hinge's turn with the leaf open, into the house: DOOR_SWING on the left jamb, the other way on the right.
+static func door_open(side := -1) -> float:
+	return DOOR_SWING if side < 0 else -DOOR_SWING
 
 # ------------------------------------------------------------------------------------------------
 # Galleries, walkways, the roof.

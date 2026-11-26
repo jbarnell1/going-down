@@ -219,7 +219,7 @@
               "furniture": [
                 {"kind": "range", "room": "kitchen_diner", "h": 0.9, "at": [[0.1, 0.1, 0.9, 0.7]]},
                 {"kind": "table", "room": "kitchen_diner", "h": 0.75, "hide": "table", "at": [[3.0, 0.6, 4.6, 1.5], [6.3, 0.6, 7.6, 1.5]]},
-                {"kind": "dresser", "room": "kitchen_diner", "h": 2.0, "at": [[8.05, 0.2, 8.52, 1.8]]},
+                {"kind": "dresser", "room": "kitchen_diner", "h": 2.0, "at": [[8.05, 0.1, 8.52, 1.7]]},
                 {"kind": "bed", "room": "bedroom", "h": 0.55, "hide": "bed", "at": [[4.95, 4.0, 6.85, 4.92]]},
                 {"kind": "wardrobe", "room": "bedroom", "h": 2.0, "hide": "wardrobe", "at": [[6.3, 2.5, 6.92, 3.3]]},
                 {"kind": "bath", "room": "bathroom", "h": 0.6, "hide": "bath", "at": [[7.85, 3.2, 8.52, 4.8]]}

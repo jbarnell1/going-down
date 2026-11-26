@@ -4507,12 +4507,26 @@ func _ward_test_command(p: PackedStringArray) -> String:
 ##     (client/ward/hides_view.gd stand_spot); `hide` then presses F.
 ##   warddoor [n]: the player stands 0.8 m from the n-th ground-floor inner door (inside the rules' 0.9 m reach), facing it; `use 1` then `use 0`
 ##     works it.
+##   warddoor at <house> <k> [flip]: the same at house <house>'s inner door <k> (sim/ward/house.gd inner_doors, any
+##     storey), on its first side that is clear (`flip`: the other side first).
 func _ward_homes_test_command(p: PackedStringArray, model: Variant, room: LocalRoom) -> String:
 	if not model.houses[0].homes():
 		return JSON.stringify({"ok": false, "error": "this Ward has no homes (start with ward_homes=1)"})
 	var n := int(p[2]) if p.size() > 2 and p[0] == "wardhide" else (int(p[1]) if p.size() > 1 and p[0] == "warddoor" else 0)
+	# WH2: one named door of one house, on any storey.
+	var only_house := -1
+	var only_door := -1
+	var sides: Array[float] = [-1.0, 1.0]
+	if p[0] == "warddoor" and p.size() > 3 and p[1] == "at":
+		only_house = int(p[2])
+		only_door = int(p[3])
+		n = 0
+		if p.size() > 4 and p[4] == "flip":
+			sides = [1.0, -1.0]
 	var seen := 0
 	for i: int in model.houses.size():
+		if only_house >= 0 and i != only_house:
+			continue
 		var h: Variant = model.houses[i]
 		if p[0] == "wardhide":
 			for k: int in h.hides.size():
@@ -4533,12 +4547,12 @@ func _ward_homes_test_command(p: PackedStringArray, model: Variant, room: LocalR
 				return JSON.stringify({"ok": true, "house": i, "hide": k, "kind": p[1] if p.size() > 1 else "", "feet": [feet.x, feet.y, feet.z]})
 		else:
 			for k: int in h.inner_doors.size():
-				if int(h.inner_doors[k].level) != 0:
+				if (only_door >= 0 and k != only_door) or (only_door < 0 and int(h.inner_doors[k].level) != 0):
 					continue
 				var leaf: AABB = h.inner_doors[k].leaf
 				var at: Vector3 = h.inner_doors[k].at
 				var across := Vector3(0, 0, 1.0) if leaf.size.x > leaf.size.z else Vector3(1.0, 0, 0)
-				for side: float in [-1.0, 1.0]:
+				for side: float in sides:
 					var feet: Vector3 = h.to_world(at + across * side * 0.8)
 					var y: float = model.footing.walking_height(Vector2(feet.x, feet.z), feet.y, model.bridge_lowered)
 					if not is_finite(y):

@@ -83,6 +83,7 @@ const FILES: Array[String] = [
 	"prop_ward_layout",
 	"prop_ward_lift_clear",
 	"prop_ward_homes",
+	"prop_ward_home_clear",
 	"prop_ward_arm_guides",
 	"prop_ward_hides",
 	"test_ward_homes_view",

@@ -66,12 +66,19 @@ const BEFORE_GENERATED := {
 	8143: "WARD 8143 87643ed8bcbb422a 61b29984 1a528042 d652f423 b9a928dd",
 	31827: "WARD 31827 1a683066436c8100 4043a166 6eb5aab0 34950359 174df3cf",
 }
-## Recorded with WH1 (the homes' Ward) by `ward_digest.gd -- --homes <seeds>`.
+## Recorded with WH1 (the homes' Ward) by `ward_digest.gd -- --homes <seeds>`; recorded again once by WH2 (no player
+## has had the homes), whose clear approaches shortened the laundry flat's dresser in every Ward (its one place stood in
+## the upstairs bathroom doorway's way) and slid seed 31827's boarding-house sideboard along its wall, off the kitchen
+## doorway. The other parts of each line (the layout, the lift and switches) did not move. WH1's:
+##   0: "WARD 0 79b7159dee007a39 75f6f862 d843cbf4 e42d34c0 48d883af",
+##   26: "WARD 26 46af0d5b0f64ff2b dab8372b 37099357 71250a5d 591f5e48",
+##   8143: "WARD 8143 e75e12c0ad58d6d3 a9cb15bb 94286b06 9c96b265 65f13c95",
+##   31827: "WARD 31827 4cce25cbd45a1c60 5b041a61 7720482d a309736b 07c21822",
 const HOMES_GOLDEN := {
-	0: "WARD 0 79b7159dee007a39 75f6f862 d843cbf4 e42d34c0 48d883af",
-	26: "WARD 26 46af0d5b0f64ff2b dab8372b 37099357 71250a5d 591f5e48",
-	8143: "WARD 8143 e75e12c0ad58d6d3 a9cb15bb 94286b06 9c96b265 65f13c95",
-	31827: "WARD 31827 4cce25cbd45a1c60 5b041a61 7720482d a309736b 07c21822",
+	0: "WARD 0 ba63a0af5bef225f 75f6f862 791b7537 e42d34c0 48d883af",
+	26: "WARD 26 9feb52a0f9fb9971 dab8372b f03273ce 71250a5d 591f5e48",
+	8143: "WARD 8143 1d7524ec0cb0d052 a9cb15bb a0eba943 9c96b265 65f13c95",
+	31827: "WARD 31827 6ffa9b43117999ec 5b041a61 63ef4e0b a309736b 8dfe9a89",
 }
 const SEEDS: Array[int] = [0, 26, 8143, 31827]
 
