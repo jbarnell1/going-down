@@ -468,6 +468,7 @@ func _search_step(now: float, delta: float, crew: Dictionary, events: Array[Dict
 			contacts[id] = local
 	w.sync_inner_doors()
 	w.arm.step(delta, contacts, bool(w.requested_doors.get(w.resident_house, true)))
+	w.door_rattle(now, events)
 	for id: String in w.arm.contacts:
 		if not w.caught.has(id):
 			w.caught.append(id)

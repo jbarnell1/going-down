@@ -54,6 +54,7 @@ const Move = preload("res://sim/move.gd")
 const Places = preload("res://sim/places.gd")
 const TuningDesk = preload("res://net/tuning_desk.gd")
 const CrewBot = preload("res://net/local_crew_bot.gd")
+const TestSwitches = preload("res://net/test_switches.gd")
 
 ## The file playing alone keeps the host's changes in (client/main.gd passes it unless automated).
 const SETTINGS_FILE := "user://settings.json"
@@ -375,7 +376,7 @@ func start_run() -> void:
 		Session.deck == Places.FULL and not _orientation_playtest and HostRules.economy_fix_by_arg(),
 		Session.deck == Places.FULL and not _orientation_playtest and HostRules.voice_by_arg(),
 		late_floors_on() and not _orientation_playtest and ward_layout and HostRules.ward_lift_clear_by_arg(),
-		late_floors_on() and not _orientation_playtest and ward_layout and HostRules.ward_homes_on_by_arg())
+		late_floors_on() and not _orientation_playtest and ward_layout and (HostRules.ward_homes_on_by_arg() or TestSwitches.ward_homes))
 	if _orientation_playtest:
 		rules.enable_orientation()
 	elif orientation_campaign and _playtest_depth < 0:

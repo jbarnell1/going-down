@@ -6,6 +6,9 @@ const Move = preload("res://sim/move.gd")
 const Footing = preload("res://sim/ward/footing.gd")
 const House = preload("res://sim/ward/house.gd")
 const Ward = preload("res://sim/ward/state.gd")
+## WH1d: the homes' hides (sim/hides.gd WARD_SPEC) and how a screen shows them (client/ward/hides_view.gd).
+const Hides = preload("res://sim/hides.gd")
+const HidesView = preload("res://client/ward/hides_view.gd")
 ## WF2: the main game's look: its mouse sensitivity, pitch limit and field of view.
 const Main = preload("res://client/main.gd")
 const RIGGER_PATH := "res://assets/ward/rigger.glb"
@@ -808,6 +811,9 @@ func play_event(event: Dictionary) -> void:
 		if say.is_valid():
 			say.call("ward_hung" if event.type == "ward_hung" else "ward_cut")
 		return
+	if event.type == "ward_door_rattle":
+		_door_rattle(event)
+		return
 	var cues := {"ward_departed":"ward_lift_departed", "ward_last_minute":"ward_lift_last_minute",
 		"ward_returned":"ward_lift_returned", "ward_final_call":"ward_lift_final_call", "ward_closed":"ward_lift_closed"}
 	var cue := str(cues.get(event.type, ""))
@@ -820,6 +826,32 @@ func play_event(event: Dictionary) -> void:
 	if ResourceLoader.exists(path):
 		cue_player.stream = load(path)
 		cue_player.play()
+## WH1d: a shut inner door the hand was stopped by rattles where it stands, for everyone near, in 3D, whether or not the
+## hand is in view (the cue carries the door's place). The recording is the library's metal door take (client/sfx.gd
+## search_locker); no new sound. Each rattle played: {house, door, at}, for the tests.
+const RATTLE_PATH := "res://assets/sfx/search/locker.ogg"
+const RATTLE_UNIT := 3.0
+const RATTLE_FAR := 30.0
+var rattles: Array[Dictionary] = []
+
+func _door_rattle(event: Dictionary) -> void:
+	var at := Vector3(float(event.get("x", 0.0)), float(event.get("y", 0.0)) + 1.0, float(event.get("z", 0.0)))
+	rattles.append({"house": int(event.get("house", -1)), "door": int(event.get("door", -1)), "at": at})
+	var player := AudioStreamPlayer3D.new()
+	player.name = "DoorRattle"
+	if ResourceLoader.exists(RATTLE_PATH):
+		player.stream = load(RATTLE_PATH)
+	player.bus = &"Effects"
+	player.unit_size = RATTLE_UNIT
+	player.max_distance = RATTLE_FAR
+	add_child(player)
+	player.global_position = at
+	player.finished.connect(player.queue_free)
+	if player.stream != null:
+		player.play()
+	else:
+		player.queue_free()
+
 func _setup_world() -> void:
 	for key: String in ["plaster", "brick", "wood", "rope", "iron", "light", "glass", "arm", "arm_v2"]:
 		var material := StandardMaterial3D.new()
@@ -1090,10 +1122,17 @@ func _build_home(root: Node3D, site: Dictionary, fixture: House) -> void:
 		var leaf := _box(root, leaf_box.get_center(), leaf_box.size, "wood", true) as StaticBody3D
 		_set_solid(leaf, false)
 		inner_leaves.append({"house": houses.size(), "door": k, "node": leaf})
+	var hide_index := 0
 	for piece: Dictionary in fixture.furniture:
 		var box: AABB = piece.box
 		var color := "iron" if [&"range", &"copper", &"stove", &"mangle"].has(piece.kind) else ("plaster" if [&"bath", &"sink", &"toilet"].has(piece.kind) else "wood")
-		_box(root, box.get_center(), box.size, color, true)
+		var body := _box(root, box.get_center(), box.size, color, true)
+		# WH1d: a hide (sim/hides.gd WARD_SPEC, in furniture order) keeps its solid box for sight lines, but is drawn
+		# hollow, so the camera inside it sees out through its real opening.
+		if Hides.WARD_SPEC.has(StringName(piece.get("hide", ""))):
+			(body.get_child(0) as Node3D).visible = false
+			_hide_piece(root, fixture, hide_index, color)
+			hide_index += 1
 	for level in fixture.rooms_by_level.size():
 		var probes: Dictionary = fixture.areas if level == 0 else fixture.upper_areas(level)
 		for room: StringName in probes:
@@ -1104,6 +1143,66 @@ func _build_home(root: Node3D, site: Dictionary, fixture: House) -> void:
 
 ## WH1c: the homes' inner door leaves ({house, door, node}); shown where the walk model has them shut.
 var inner_leaves: Array[Dictionary] = []
+
+## WH1d: a home's hide drawn hollow in plain boxes, the camera's frame from inside (client/ward/hides_view.gd): a bed on
+## legs with the gap beneath, a table on legs, a bath an open tub, a wardrobe a cabinet with a crack between its doors on
+## the side facing its room. Its pieces are kept under one node, {house, hide, kind, node}, in hide_pieces.
+var hide_pieces: Array[Dictionary] = []
+const BED_GAP := 0.32
+const LEG := 0.07
+const TOP := 0.05
+const PANEL := 0.04
+
+func _hide_piece(root: Node3D, fixture: House, hide: int, color: String) -> void:
+	var row: Dictionary = fixture.hides[hide]
+	var b: AABB = row.box
+	var kind := StringName(row.kind)
+	var node := Node3D.new()
+	node.name = "Hide%d" % hide
+	root.add_child(node)
+	hide_pieces.append({"house": houses.size(), "hide": hide, "kind": kind, "node": node})
+	var lo := b.position
+	var hi := b.end
+	var part := func(a: Vector3, z: Vector3) -> void:
+		_box(node, (a + z) * 0.5, z - a, color)
+	match kind:
+		&"bed", &"table":
+			var under := BED_GAP if kind == &"bed" else b.size.y - TOP
+			part.call(Vector3(lo.x, lo.y + under, lo.z), hi)
+			for x: float in [lo.x, hi.x - LEG]:
+				for z: float in [lo.z, hi.z - LEG]:
+					part.call(Vector3(x, lo.y, z), Vector3(x + LEG, lo.y + under, z + LEG))
+		&"bath":
+			part.call(lo, Vector3(hi.x, lo.y + PANEL, hi.z))
+			part.call(Vector3(lo.x, lo.y, lo.z), Vector3(lo.x + PANEL, hi.y, hi.z))
+			part.call(Vector3(hi.x - PANEL, lo.y, lo.z), hi)
+			part.call(Vector3(lo.x, lo.y, lo.z), Vector3(hi.x, hi.y, lo.z + PANEL))
+			part.call(Vector3(lo.x, lo.y, hi.z - PANEL), hi)
+		_:
+			# A wardrobe: every side but the one facing its room, and on that side two doors with a crack between them.
+			var d := HidesView.out_local(fixture, hide)
+			for axis: int in [0, 2]:
+				for side: float in [-1.0, 1.0]:
+					var a := lo
+					var z := hi
+					if side < 0.0:
+						z[axis] = lo[axis] + PANEL
+					else:
+						a[axis] = hi[axis] - PANEL
+					if d[axis] * side > 0.5:
+						# The doors: from each end of the front to the crack in its middle.
+						var across := 2 - axis
+						var mid := (lo[across] + hi[across]) * 0.5
+						var left_hi := z
+						left_hi[across] = mid - HidesView.CRACK * 0.5
+						var right_lo := a
+						right_lo[across] = mid + HidesView.CRACK * 0.5
+						part.call(a, left_hi)
+						part.call(right_lo, z)
+					else:
+						part.call(a, z)
+			part.call(lo, Vector3(hi.x, lo.y + PANEL, hi.z))
+			part.call(Vector3(lo.x, hi.y - PANEL, lo.z), hi)
 
 func _show_inner_doors() -> void:
 	for row: Dictionary in inner_leaves:

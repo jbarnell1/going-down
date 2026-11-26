@@ -82,7 +82,8 @@ const WHY := {"sprint": "SPRINTING", "squeaker": "A SQUEAKY TILE", "ballpit": "J
 	"fetch": "FREEING THE PARTY TABLE", "hide": "GETTING INTO A HIDE", "open": "OPENING SOMETHING"}
 const KIND_NAMES := {"pit": "BALL PIT", "slide": "TUBE SLIDE", "den": "CRAWL DEN", "playhouse": "PLAYHOUSE", "table": "UNDER THE TABLE",
 	"chest": "TOY CHEST", "cubby": "COAT CUBBY", "bed": "UNDER THE BED", "cabinet": "IN THE CABINET", "desk": "UNDER THE DESK",
-	"shed": "IN THE SHED", "bench": "UNDER THE BENCH", "under": "UNDER THE BANDSTAND", "log": "IN THE HOLLOW LOG"}
+	"shed": "IN THE SHED", "bench": "UNDER THE BENCH", "under": "UNDER THE BANDSTAND", "log": "IN THE HOLLOW LOG",
+	"wardrobe": "IN THE WARDROBE", "bath": "IN THE BATH"}
 const HEALTH_RATES := "WALK -3/S  SPRINT -8/S  STILL OR CREEP +1/S"
 ## PT1 (the Minder's hunt, sim/seek.gd): walking and sprinting cost health only while it searches.
 const HUNT_HEALTH_RATES := "WALK -3/S  SPRINT -8/S ONLY WHILE IT SEARCHES  STILL OR CREEP +1/S"
@@ -351,6 +352,21 @@ static func dark_at(ev: Dictionary, ht: float) -> float:
 func update(s: Dictionary, dt: float, local_now: float, names: Dictionary, my_id: String, sfx: Sfx, ann: Announcer, hud: Hud, level: Level, others: Array) -> Dictionary:
 	var k: Variant = s.get("seek")
 	var place := str((level.plan as Dictionary).get("place", "clinic")) if level != null and level.plan is Dictionary else ""
+	if s.get("wardHide") is Dictionary:
+		# WH1d: the Hanging Ward's homes (client/play_link.gd wardHide): their hides' prompts; no count.
+		if count_n != 0 or dark != 0.0 or not _hats.is_empty():
+			reset()
+		sfx.playroom(false, 0.0)
+		hud.health = -1.0
+		hud.anger = -1.0
+		hud.count_by = ""
+		hud.count_text = ""
+		hud.party_note = ""
+		party_line = ""
+		hud.seek_note = ward_note(s)
+		# Nothing is drawn over the picture in a Ward hide: the furniture round the camera is the frame.
+		show_nothing_over()
+		return {"on": false}
 	if place == "clinic" or place == "annex":
 		# Hiding off the Playroom (sim/hiding.gd): the hides' prompts, the dark inside and the gap; no count.
 		if count_n != 0 or dark != 0.0 or not _hats.is_empty():
@@ -634,6 +650,29 @@ func _hiding_only(s: Dictionary, hud: Hud) -> void:
 	overlay.mode = ov_mode
 	overlay.kind = ov_kind
 	overlay.view_out = false
+	overlay.catch_k = 0.0
+	overlay.hat = false
+	overlay.queue_redraw()
+
+## WH1d: the Ward homes' hide prompt, in the words of every floor's: in a hide, F gets you out (there is no leaning
+## out of these); by one, F gets you in, SHIFT+F quick but loud. "" otherwise.
+static func ward_note(s: Dictionary) -> String:
+	var wh: Variant = s.get("wardHide")
+	if not wh is Dictionary or str((s.get("me", {}) as Dictionary).get("status", "ok")) != "ok":
+		return ""
+	if bool((wh as Dictionary).get("in", false)):
+		return "F  GET OUT"
+	if int(s.get("nearHide", -1)) >= 0:
+		return "F  HIDE: %s    SHIFT+F  QUICK BUT LOUD" % str(KIND_NAMES.get(str(s.get("nearHideKind", "")), "HIDE"))
+	return ""
+
+## The overlay draws nothing: no hiding state, no catch, no hat.
+func show_nothing_over() -> void:
+	if overlay == null:
+		return
+	overlay.mode = ""
+	overlay.kind = ""
+	overlay.view_out = true
 	overlay.catch_k = 0.0
 	overlay.hat = false
 	overlay.queue_redraw()

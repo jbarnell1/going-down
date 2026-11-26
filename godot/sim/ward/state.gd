@@ -658,6 +658,7 @@ func _pursue(now: float, delta: float, crew: Dictionary, events: Array[Dictionar
 			contacts[id] = local
 	sync_inner_doors()
 	arm.step(delta, contacts, bool(requested_doors.get(resident_house, true)))
+	door_rattle(now, events)
 	for id: String in arm.contacts:
 		if not caught.has(id):
 			caught.append(id)
@@ -814,6 +815,19 @@ func toggle_hide(id: String, feet: Vector3, fast: bool, now: float, events: Arra
 		hidden.erase(id)
 		events.append({"kind": &"hide_out", "at": now, "id": id})
 		return true
+	var best := hide_in_reach(feet)
+	if best[0] < 0:
+		return false
+	hidden[id] = {"house": best[0], "hide": best[1], "heard": false}
+	events.append({"kind": &"hide_in", "at": now, "id": id, "house": best[0], "hide": best[1], "fast": fast})
+	if fast:
+		_hear_point(hide_feet(id), now, events, true, id)
+		_heard_from_hide(id)
+	return true
+
+## The hide a player (feet) not in one would get into: the nearest free one within reach in a home, as [house, hide],
+## or [-1, -1]. A screen asks it too (client/ward/hides_view.gd), with `hidden` taken from the block.
+func hide_in_reach(feet: Vector3) -> Array:
 	var best := [-1, -1]
 	var near := HIDE_REACH
 	for i in houses.size():
@@ -831,14 +845,17 @@ func toggle_hide(id: String, feet: Vector3, fast: bool, now: float, events: Arra
 			if gap <= near and _hide_room(i, k) < int(hide.capacity):
 				near = gap
 				best = [i, k]
-	if best[0] < 0:
-		return false
-	hidden[id] = {"house": best[0], "hide": best[1], "heard": false}
-	events.append({"kind": &"hide_in", "at": now, "id": id, "house": best[0], "hide": best[1], "fast": fast})
-	if fast:
-		_hear_point(hide_feet(id), now, events, true, id)
-		_heard_from_hide(id)
-	return true
+	return best
+
+## WH1d: a screen's walk model takes who is hidden where from the block's extras ({id: [house, hide]}), so it asks
+## hide_in_reach with the hides' room as the host has it.
+func set_hidden_wire(rows: Variant) -> void:
+	hidden.clear()
+	if not rows is Dictionary:
+		return
+	for id: Variant in rows:
+		var row: Array = rows[id]
+		hidden[str(id)] = {"house": int(row[0]), "hide": int(row[1]), "heard": false}
 
 ## How many are in a hide now.
 func _hide_room(house: int, hide: int) -> int:
@@ -876,9 +893,13 @@ func hide_reach_local(house: int, hide: int) -> Vector3:
 ## A hidden player's feet for noises (world): under their hide's search point.
 func hide_feet(id: String) -> Vector3:
 	var row: Dictionary = hidden[id]
-	var local := hide_reach_local(int(row.house), int(row.hide))
+	return hide_feet_at(int(row.house), int(row.hide))
+
+## The same for a hide (world): where the rules hold a player in it, and how far they may stand from it (HIDE_LEAVE).
+func hide_feet_at(house: int, hide: int) -> Vector3:
+	var local := hide_reach_local(house, hide)
 	local.y -= House.ARM_HEIGHT
-	return houses[int(row.house)].to_world(local)
+	return houses[house].to_world(local)
 
 ## The point (local to `house`) where the arm touches a player, or null when it cannot: a player in a hide is touched
 ## only when a noise from that hide was heard, and then at the hide (today's: their torso, as always).
@@ -934,6 +955,15 @@ func use_inner_door(house: int, door: int, fast: bool, now: float, events: Array
 		_hear_point(h.to_world(h.inner_doors[door].at), now, events, true)
 	sync_inner_doors()
 	return true
+
+## WH1d: after the arm's step, a shut inner door that stopped the hand is rattled: a cue at that door for every screen
+## (the hand cannot open it). Only a home's arm ever stops at one, so today's Ward never raises it.
+func door_rattle(now: float, events: Array[Dictionary]) -> void:
+	if arm == null or arm.door_stopped < 0 or resident_house < 0:
+		return
+	var at: Vector3 = houses[resident_house].to_world(houses[resident_house].inner_doors[arm.door_stopped].at)
+	events.append({"kind": &"door_rattle", "at": now, "house": resident_house, "door": arm.door_stopped,
+		"x": snappedf(at.x, 0.01), "y": snappedf(at.y, 0.01), "z": snappedf(at.z, 0.01)})
 
 ## The arm sees its house's inner doors as they stand now.
 func sync_inner_doors() -> void:

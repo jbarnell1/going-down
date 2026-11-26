@@ -99,6 +99,7 @@ func withdraw() -> void:
 
 func step(delta: float, player_contacts: Dictionary, requested_door_open: bool = true) -> void:
 	contacts.clear()
+	door_stopped = -1
 	door_held_open = false
 	door_open = requested_door_open
 	if not requested_door_open and _travel > EPSILON and (_enters_by_door or _touches_door()):
@@ -121,6 +122,8 @@ func step(delta: float, player_contacts: Dictionary, requested_door_open: bool =
 						if _route.is_empty():
 							_route = _find_route(_probes[search_area])
 					if _route.is_empty():
+						# WH1d: a shut inner door that alone stood in the way is rattled (none in today's houses).
+						_note_door_stopped()
 						_begin_next()
 					else:
 						_distances = PackedFloat64Array([0.0])
@@ -321,6 +324,23 @@ func set_inner_doors(leaves: Array[AABB], open: PackedByteArray) -> void:
 
 func inner_doors_open(open: PackedByteArray) -> void:
 	_inner_open = open
+
+## WH1d: the shut inner door the hand was stopped by in this step (the room it went for has no way in with that door
+## shut, and one with it open), or -1. Only a home's arm has inner doors; today's never sets it.
+var door_stopped := -1
+
+func _note_door_stopped() -> void:
+	if search_area == &"" or not _probes.has(search_area):
+		return
+	for k in _inner.size():
+		if _inner_open[k] != 0:
+			continue
+		_inner_open[k] = 1
+		var through := not _find_route(_probes[search_area]).is_empty()
+		_inner_open[k] = 0
+		if through:
+			door_stopped = k
+			return
 
 ## The clear lines between the shoulder and every bend point (see _graph).
 func build_graph() -> PackedInt32Array:

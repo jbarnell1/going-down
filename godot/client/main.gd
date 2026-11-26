@@ -54,6 +54,8 @@ const EyeHeight = preload("res://client/eye_height.gd")
 const WardFloor = preload("res://client/ward/floor.gd")
 ## PL3: the test channel's route through the Ward (`wardroute`, tools/play_late.mjs).
 const WardRoute = preload("res://client/ward/route.gd")
+## WH1d: the homes' hides (the test commands wardhide and warddoor).
+const WardHidesView = preload("res://client/ward/hides_view.gd")
 const RoomClient = preload("res://net/room_client.gd")
 const LocalRoom = preload("res://net/local_room.gd")
 const SoloDiagnostics = preload("res://client/solo_diagnostics.gd")
@@ -362,6 +364,8 @@ var pending_pick := false
 ## F pressed for a hide (the Playroom); tests: W held in a hide (peek), or null for the keyboard.
 var pending_hide := false
 var pending_hide_fast := false
+## WH1d: F was pressed for a Ward home's hide and is still held (it then works no door: _game_input).
+var _hide_f_held := false
 var _reel_skip_at: Variant
 ## Whether S was held in a desk last frame (a new press of S crawls out).
 var _desk_back := false
@@ -2296,8 +2300,20 @@ func _game_input(dt: float) -> Dictionary:
 	# The Playroom: F at a hide's front, or in a hide, is for the hide (the call wins at the lift).
 	var my_seek: Variant = snap.get("mySeek")
 	var in_hide := my_seek is Dictionary and str((my_seek as Dictionary)["phase"]) == "inside"
+	# WH1d: in a Ward home's hide (client/play_link.gd wardHide), F gets you out.
+	var ward_hide: Variant = snap.get("wardHide")
+	if ward_hide is Dictionary and bool((ward_hide as Dictionary).get("in", false)):
+		in_hide = true
 	var seated := my_seek is Dictionary and str(my_seek.get("status", "")) == "taken"
 	var hide: bool = pending_hide and not call and (int(snap.get("nearHide", -1)) >= 0 or in_hide or seated)
+	# WH1d: on the Ward F held also works a door; the press that got you into or out of a hide works none while held.
+	if ward_hide is Dictionary:
+		if hide:
+			_hide_f_held = true
+		if _hide_f_held and use:
+			use = false
+		else:
+			_hide_f_held = false
 	var hide_fast: bool = pending_hide_fast or sprint
 	# A desk (the Annex, sim/hiding.gd): no key press. Ctrl held and walking forward at its kneehole crawls
 	# under; inside one, S (a new press of it) or F crawls back out. Never fast: Ctrl is a creep.
@@ -2418,6 +2434,9 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		pitch = float(hc["pitch"])
 	var my_seek: Variant = s.get("mySeek")
 	var held := my_seek is Dictionary and (str((my_seek as Dictionary)["phase"]) != "out" or str((my_seek as Dictionary)["status"]) != "ok")
+	# WH1d: in a Ward home's hide the camera is the hide's, as in every floor's.
+	if hc.get("ward", false) == true:
+		held = true
 	cam.rotation = Vector3(pitch, yaw, 0)
 	if not held:
 		_eye_check(me)
@@ -3028,6 +3047,8 @@ func _enter_ward_floor(seed_value: int, c: Variant, layout_wire: Array = []) -> 
 		_ward_floor.view.say = announcer.ward_line
 	world.add_child(_ward_floor)
 	link.walker = _ward_floor.walk
+	# WH1d: the homes' hides (client/ward/hides_view.gd) read the same walk model.
+	link.ward_model = _ward_floor.model
 	_floor_media_missing = "" if media else "ward"
 	if not media:
 		_show_floor_media_line()
@@ -3036,6 +3057,7 @@ func _enter_ward_floor(seed_value: int, c: Variant, layout_wire: Array = []) -> 
 func _leave_ward_floor() -> void:
 	if link != null:
 		link.walker = Callable()
+		link.ward_model = null
 	if is_instance_valid(_ward_floor):
 		_ward_floor.queue_free()
 	_ward_floor = null
@@ -4412,7 +4434,7 @@ func _command(c: String) -> String:
 					mine["status"] = str(row.get("status", ""))
 					mine["aboard"] = row.get("aboard", false)
 			return JSON.stringify(mine)
-		"wardhouse", "wardbring", "wardlook":
+		"wardhouse", "wardbring", "wardlook", "wardhide", "warddoor":
 			return _ward_test_command(p)
 		_:
 			return "unknown command"
@@ -4447,6 +4469,8 @@ func _ward_test_command(p: PackedStringArray) -> String:
 	if not link.local or not link.rc is LocalRoom:
 		return JSON.stringify({"ok": false, "error": "%s is for playing alone" % p[0]})
 	var room := link.rc as LocalRoom
+	if p[0] == "wardhide" or p[0] == "warddoor":
+		return _ward_homes_test_command(p, model, room)
 	var house := -1
 	if p.size() > 1:
 		house = int(p[1]) if p[1].is_valid_int() else -1
@@ -4477,6 +4501,62 @@ func _ward_test_command(p: PackedStringArray) -> String:
 	return JSON.stringify({"ok": queued and phase in ["away", "boarding"], "queued": queued, "phase": phase,
 		"encounter": str(ward.get("encounter", "")) if ward is Dictionary else "", "at": [at.x, at.y, at.z],
 		"note": "" if phase in ["away", "boarding"] else "the Ward hears nothing until the lift has left"})
+
+## WH1d: the Ward homes' test commands (alone, testport= only, with the homes):
+##   wardhide <bed | wardrobe | table | bath> [n]: the player stands where F gets them into the n-th hide of that kind
+##     (client/ward/hides_view.gd stand_spot); `hide` then presses F.
+##   warddoor [n]: the player stands 0.8 m from the n-th ground-floor inner door (inside the rules' 0.9 m reach), facing it; `use 1` then `use 0`
+##     works it.
+func _ward_homes_test_command(p: PackedStringArray, model: Variant, room: LocalRoom) -> String:
+	if not model.houses[0].homes():
+		return JSON.stringify({"ok": false, "error": "this Ward has no homes (start with ward_homes=1)"})
+	var n := int(p[2]) if p.size() > 2 and p[0] == "wardhide" else (int(p[1]) if p.size() > 1 and p[0] == "warddoor" else 0)
+	var seen := 0
+	for i: int in model.houses.size():
+		var h: Variant = model.houses[i]
+		if p[0] == "wardhide":
+			for k: int in h.hides.size():
+				if p.size() < 2 or str(h.hides[k].kind) != p[1]:
+					continue
+				var feet: Vector3 = WardHidesView.stand_spot(model, i, k, link.client().latest)
+				if not feet.is_finite():
+					continue
+				if seen < n:
+					seen += 1
+					continue
+				var body := Move.Body.make(feet.x, feet.z, link.body.level, feet.y)
+				room.place(body)
+				link.body = body
+				var face_to: Vector3 = h.to_world(h.hides[k].box.get_center())
+				yaw = atan2(-(face_to.x - feet.x), -(face_to.z - feet.z))
+				pitch = -0.3
+				return JSON.stringify({"ok": true, "house": i, "hide": k, "kind": p[1] if p.size() > 1 else "", "feet": [feet.x, feet.y, feet.z]})
+		else:
+			for k: int in h.inner_doors.size():
+				if int(h.inner_doors[k].level) != 0:
+					continue
+				var leaf: AABB = h.inner_doors[k].leaf
+				var at: Vector3 = h.inner_doors[k].at
+				var across := Vector3(0, 0, 1.0) if leaf.size.x > leaf.size.z else Vector3(1.0, 0, 0)
+				for side: float in [-1.0, 1.0]:
+					var feet: Vector3 = h.to_world(at + across * side * 0.8)
+					var y: float = model.footing.walking_height(Vector2(feet.x, feet.z), feet.y, model.bridge_lowered)
+					if not is_finite(y):
+						continue
+					feet.y = y
+					if not model.walk_clear(feet, feet):
+						continue
+					if seen < n:
+						seen += 1
+						break
+					var body := Move.Body.make(feet.x, feet.z, link.body.level, feet.y)
+					room.place(body)
+					link.body = body
+					var door_at: Vector3 = h.to_world(at)
+					yaw = atan2(-(door_at.x - feet.x), -(door_at.z - feet.z))
+					pitch = 0.0
+					return JSON.stringify({"ok": true, "house": i, "door": k, "feet": [feet.x, feet.y, feet.z], "at": [door_at.x, door_at.y, door_at.z]})
+	return JSON.stringify({"ok": false, "error": "no such place", "seen": seen})
 
 ## PL1: a value as plain JSON (vectors and rects as number arrays, a body by its numbers).
 static func _late_plain(v: Variant) -> Variant:

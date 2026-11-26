@@ -55,6 +55,7 @@ const Seek = preload("res://sim/seek.gd")
 const Hides = preload("res://sim/hides.gd")
 const Furniture = preload("res://sim/furniture.gd")
 const SearchView = preload("res://client/search_view.gd")
+const WardHides = preload("res://client/ward/hides_view.gd")
 
 const PLAYER_RADIUS := 0.3
 ## The eyes of a player lying on their bunk (whole centimetres: it goes to the host as the frame's eye).
@@ -150,6 +151,10 @@ var seats: Array[Playroom.Seat] = []
 ## Seconds left of waiting for the host after a hide press (the body stays still meanwhile).
 var _hide_wait := 0.0
 var _hide_wait_phase := ""
+## WH1d: the Hanging Ward's walk model while the Ward is played as a level (client/ward/floor.gd model, set by
+## client/main.gd with `walker`), for its homes' hides (client/ward/hides_view.gd); null everywhere else.
+var ward_model: Object = null
+var _ward_was_in := false
 
 func _init(room: RoomClient, is_local: bool) -> void:
 	rc = room
@@ -222,11 +227,19 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	var seek_row: Variant = seek_row_of(latest, str(c.id))
 	var s_phase := str(seek_row["phase"]) if seek_row != null else "out"
 	var s_status := str(seek_row["status"]) if seek_row != null else "ok"
+	# WH1d: a Ward home's hide (the run flag ward_homes; client/ward/hides_view.gd): this player's [house, hide] from
+	# the Ward block, [] when in none. In one, the body stays where it was, as in every floor's hides.
+	var ward_hides := ward_model != null and seek_row == null and WardHides.on(latest)
+	var ward_in: Array = WardHides.hidden_of(latest, str(c.id)) if ward_hides else []
+	if ward_hides:
+		s_phase = "inside" if not ward_in.is_empty() else "out"
 	if _hide_wait > 0.0:
 		_hide_wait -= clampf(float(inp.get("dt", 0.0)), 0.0, 0.1)
 		if s_phase != _hide_wait_phase:
 			_hide_wait = 0.0
 	var held_here := seek_row != null and (s_phase != "out" or s_status != "ok" or _hide_wait > 0.0) and not crawling
+	if ward_hides and (not ward_in.is_empty() or _hide_wait > 0.0) and not crawling:
+		held_here = true
 	# Findables (FD10, client/search_view.gd): while the host has this player searching, the body is rooted.
 	var searching := SearchView.searching_in(latest.get("find"), str(c.id))
 	held_here = held_here or searching
@@ -311,6 +324,18 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 				want_eye = EyeHeight.to_cm(float(hide_cam["y"]) - body.y)
 				in_yaw = float(hide_cam["yaw"])
 				in_pitch = float(hide_cam["pitch"])
+	elif not ward_in.is_empty() and body != null and status == "ok":
+		# WH1d: the camera at the hide's eye inside the furniture, looking out of its open side (nothing drawn over it).
+		hide_cam = WardHides.camera(ward_model, int(ward_in[0]), int(ward_in[1]), in_yaw, in_pitch)
+		if not hide_cam.is_empty() and not _ward_was_in:
+			# Just got in: face straight out of the hide, as every floor turns you to a hide's gap.
+			hide_cam["yaw"] = hide_cam["gapYaw"]
+			hide_cam["pitch"] = 0.0
+		if not hide_cam.is_empty():
+			want_eye = EyeHeight.to_cm(float(hide_cam["y"]) - body.y)
+			in_yaw = float(hide_cam["yaw"])
+			in_pitch = float(hide_cam["pitch"])
+	_ward_was_in = not hide_cam.is_empty() and hide_cam.get("ward", false) == true
 	eye = _eye.update(BED_EYE if in_bed else want_eye, dt)
 	# F held (the bunk; beside a downed crewmate, the heal): only sent when the run has days or downs.
 	var use: bool = (day != null or downs_on) and playing and inp.get("use") == true
@@ -365,12 +390,21 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	# with sprint held; W held inside is a peek. The body waits for the host's answer before it moves.
 	# Off the Playroom (the Clinic and the Annex, sim/hiding.gd) the floor's hides are there before anyone
 	# has hidden (the host sends the seek block from the first press on).
-	var hides_here := seek_row != null or (not hides.is_empty() and status == "ok")
+	var hides_here := not ward_hides and (seek_row != null or (not hides.is_empty() and status == "ok"))
 	var near_hide := -1
 	if hides_here and body != null and s_status == "ok" and s_phase == "out":
 		near_hide = hide_in_reach(body)
+	# WH1d: on the Ward, the home's hide F would get this player into (the rules' own pick), or [-1, -1].
+	var ward_near := [-1, -1]
+	if ward_hides and ward_in.is_empty() and body != null and status == "ok":
+		ward_near = WardHides.near(ward_model, Vector3(body.x, body.y, body.z), latest)
 	if c.playing and not still and phase != "ended" and s_status == "taken" and inp.get("hide") == true:
 		lf.hide = true
+	elif ward_hides and playing and inp.get("hide") == true and (not ward_in.is_empty() or int(ward_near[0]) >= 0):
+		lf.hide = true
+		lf.hide_fast = inp.get("hideFast") == true
+		_hide_wait = HIDE_WAIT
+		_hide_wait_phase = s_phase
 	elif hides_here and playing and inp.get("hide") == true and s_status == "ok" and (s_phase == "inside" or near_hide >= 0):
 		lf.hide = true
 		lf.hide_fast = inp.get("hideFast") == true
@@ -450,6 +484,12 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	snap["nearHide"] = near_hide
 	snap["nearHideKind"] = String(hides[near_hide].kind) if near_hide >= 0 and near_hide < hides.size() else ""
 	snap["hideCam"] = hide_cam
+	# WH1d: on the Ward with homes, the hide in reach (house * 64 + hide, as the block numbers them) and whether this
+	# player is in one, for the prompt (client/hide_view.gd) and the F key (client/main.gd); absent elsewhere.
+	if ward_hides:
+		snap["nearHide"] = int(ward_near[0]) * 64 + int(ward_near[1]) if int(ward_near[0]) >= 0 else -1
+		snap["nearHideKind"] = String(WardHides.kind_of(ward_model, int(ward_near[0]), int(ward_near[1]))) if int(ward_near[0]) >= 0 else ""
+		snap["wardHide"] = {"in": not ward_in.is_empty(), "kind": str(hide_cam.get("kind", "")) if not ward_in.is_empty() else ""}
 	# Down first, then out (null in a run without it): the host's downs block, as client.gd downs() and
 	# spots() read it; its times are host times, counted against "hostNow" (client/down_view.gd).
 	snap["downs"] = latest.get("downs")
@@ -518,6 +558,7 @@ func _new_run(c: Client) -> void:
 	_bed_release = false
 	_hide_wait = 0.0
 	_hide_wait_phase = ""
+	_ward_was_in = false
 	_auto_gait = &"walk"
 
 func _use_floor(seed: String, depth: int, furniture_layout: bool, floor_deck: Array[StringName], garden_dense: bool) -> void:
@@ -778,6 +819,9 @@ func _others(f: Client.Frame, latest: Dictionary) -> Array:
 			"yaw": p["yaw"], "pitch": p["pitch"], "gait": p["gait"], "status": p["status"], "active": p["active"],
 			"raised": bool(raised.get(id, false)), "face": str(faces.get(id, ""))}
 		_seek_figure(o, latest)
+		# WH1d: a crewmate in a Ward home's hide is drawn in it.
+		if ward_model != null:
+			WardHides.place_figure(ward_model, latest, o)
 		if helping.has(id) and str(o["status"]) == "ok" and not o.has("crewPose"):
 			o["crewPose"] = "help"
 			o["helpTarget"] = helping[id]
