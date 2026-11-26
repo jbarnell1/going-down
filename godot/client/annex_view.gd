@@ -70,6 +70,7 @@ const Hides = preload("res://sim/hides.gd")
 const AnnexPlan = preload("res://sim/annex.gd")
 const FloorLib = preload("res://sim/floor.gd")
 const Furniture = preload("res://sim/furniture.gd")
+const Dress = preload("res://client/annex_dress.gd")
 
 var lv: Level
 var W := 0
@@ -86,6 +87,13 @@ var centre := Vector2.ZERO
 ## The floor's hiding places (sim/hides.gd), and the furniture drawn for them: {hide, kind, level, xf}.
 var hides: Array[Playroom.Hide] = []
 var hide_pieces: Array[Dictionary] = []
+## LA2 (client/annex_dress.gd): each room's picture layout (room id -> Layout), and the dressing placed ({level,
+## room, cell, type, xf, boxes}; Dress.world_boxes has them in the world).
+var layouts := {}
+var dressing: Array[Dictionary] = []
+## Each storey's hides as drawn (world x, z), which the dressing keeps out of.
+var hide_rects := [[], []]
+var _records_by_room := {}
 
 var mat_wall: ShaderMaterial
 var mat_floor: ShaderMaterial
@@ -130,6 +138,9 @@ static func dress(level: Level, source_plan: FloorLib.FloorPlan = null, source_h
 	preload("res://client/door_frames.gd").build(level, preload("res://client/door_frames.gd").ANNEX)
 	if level.props_on:
 		v._pictures()
+		# LA2: skirting, sockets, switches, hanging signs, cable trays and the atrium (client/annex_dress.gd).
+		if Dress.enabled:
+			Dress.dress(v)
 	v._commit()
 	return v
 
@@ -192,7 +203,18 @@ const ATLAS := {
 	"exit_man": Rect2i(192, 32, 64, 32),
 	"poster": Rect2i(0, 96, 48, 64), "map": Rect2i(64, 96, 64, 64), "clock": Rect2i(128, 96, 32, 32),
 	"whiteboard": Rect2i(160, 96, 96, 48),
+	# LA2: the fire notice, the staff notice, the pin board, the company's banner and the department boards.
+	"fire": Rect2i(0, 160, 48, 64), "notice": Rect2i(48, 160, 48, 64), "pinboard": Rect2i(96, 160, 64, 48),
+	"banner": Rect2i(0, 240, 256, 16), "socket": Rect2i(192, 0, 28, 16), "switch": Rect2i(224, 0, 16, 16),
+	"dept_lobby": Rect2i(0, 80, 64, 16), "dept_office": Rect2i(64, 80, 64, 16), "dept_cubicles": Rect2i(128, 80, 64, 16),
+	"dept_meeting": Rect2i(192, 80, 64, 16), "dept_copy": Rect2i(160, 160, 64, 16), "dept_store": Rect2i(160, 176, 64, 16),
+	"dept_break": Rect2i(160, 192, 64, 16), "dept_atrium": Rect2i(160, 208, 64, 16),
 }
+
+## LA2: the notices' words, in the tone of the lift's (client/lift.gd). The fire notice's heading is blue.
+const FIRE_LINES: Array[String] = ["IF YOU", "DISCOVER", "A FIRE,", "DO NOT", "USE THE", "LIFT."]
+const NOTICE_LINES: Array[String] = ["STAFF", "WILL BE", "AT THEIR", "DESKS", "AT ALL", "TIMES."]
+const BANNER_TEXT := "THANK YOU FOR YOUR CONTINUED SERVICE"
 
 static func plaque_rect(i: int) -> Rect2i:
 	return Rect2i(32 * i, 64, 32, 16)
@@ -281,9 +303,61 @@ static func atlas_tex() -> Texture2D:
 	for k in 5:
 		var y0 := wb.position.y + 8 + k * 7
 		img.fill_rect(Rect2i(wb.position.x + 8, y0, 30 + (k * 17) % 40, 2), Color(0.15, 0.25, 0.6) if k % 2 == 0 else Color(0.15, 0.15, 0.15))
+	_la2_atlas(img, slate, cream)
 	img.generate_mipmaps()
 	_tex["atlas"] = ImageTexture.create_from_image(img)
 	return _tex["atlas"]
+
+## LA2's atlas pictures: notices, the pin board, the banner and the department boards (no real-world words).
+static func _la2_atlas(img: Image, slate: Color, cream: Color) -> void:
+	var ink := Color(0.16, 0.15, 0.13)
+	var paper := Color(0.94, 0.93, 0.86)
+	var fr: Rect2i = ATLAS["fire"]
+	_frame(img, fr, Color(0.55, 0.55, 0.52), paper)
+	img.fill_rect(Rect2i(fr.position.x + 1, fr.position.y + 1, fr.size.x - 2, 11), Color(0.12, 0.25, 0.62))
+	PixelFont.blit(img, "FIRE", fr.position + Vector2i(12, 3), paper)
+	for i in FIRE_LINES.size():
+		PixelFont.blit(img, FIRE_LINES[i], fr.position + Vector2i(1, 15 + i * 8), ink)
+	var nt: Rect2i = ATLAS["notice"]
+	_frame(img, nt, Color(0.55, 0.55, 0.52), paper)
+	img.fill_rect(Rect2i(nt.position.x + 1, nt.position.y + 1, nt.size.x - 2, 11), Color(0.3, 0.3, 0.3))
+	PixelFont.blit(img, "NOTICE", nt.position + Vector2i(6, 3), paper)
+	for i in NOTICE_LINES.size():
+		PixelFont.blit(img, NOTICE_LINES[i], nt.position + Vector2i(1, 15 + i * 8), ink)
+	# The pin board: cork in a wooden frame, a few pinned sheets with lines on them and coloured pins.
+	var pb: Rect2i = ATLAS["pinboard"]
+	_frame(img, pb, Color(0.42, 0.32, 0.2), Color(0.66, 0.5, 0.32), 3)
+	var sheets: Array[Rect2i] = [Rect2i(6, 6, 14, 18), Rect2i(24, 5, 16, 12), Rect2i(44, 8, 13, 17), Rect2i(9, 28, 18, 13), Rect2i(31, 22, 12, 18)]
+	var pins: Array[Color] = [Color(0.15, 0.35, 0.7), Color(0.2, 0.55, 0.3), Color(0.9, 0.8, 0.2), Color(0.15, 0.35, 0.7), Color(0.95, 0.95, 0.95)]
+	for i in sheets.size():
+		var sr := Rect2i(pb.position + sheets[i].position, sheets[i].size)
+		img.fill_rect(sr, paper if i % 2 == 0 else Color(0.95, 0.9, 0.62))
+		for k in range(3, sr.size.y - 2, 3):
+			img.fill_rect(Rect2i(sr.position.x + 2, sr.position.y + k, sr.size.x - 4 - (k % 4), 1), Color(0.5, 0.5, 0.5))
+		img.fill_rect(Rect2i(sr.position.x + sr.size.x / 2 - 1, sr.position.y, 2, 2), pins[i])
+	# The company's banner: cream cloth, dark green words.
+	var bn: Rect2i = ATLAS["banner"]
+	_frame(img, bn, Color(0.12, 0.3, 0.2), Color(0.9, 0.87, 0.72), 1)
+	PixelFont.blit(img, BANNER_TEXT, bn.position + Vector2i((bn.size.x - PixelFont.width(BANNER_TEXT)) / 2, 4), Color(0.12, 0.3, 0.2))
+	# A double socket (two three-pin outlets and their rocker switches) and a light switch: cream plates.
+	var plate := Color(0.9, 0.88, 0.8)
+	var hole := Color(0.22, 0.21, 0.2)
+	var so: Rect2i = ATLAS["socket"]
+	_frame(img, so, Color(0.7, 0.68, 0.6), plate)
+	for x0: int in [3, 16]:
+		img.fill_rect(Rect2i(so.position.x + x0 + 3, so.position.y + 4, 2, 3), hole)
+		img.fill_rect(Rect2i(so.position.x + x0, so.position.y + 9, 2, 3), hole)
+		img.fill_rect(Rect2i(so.position.x + x0 + 6, so.position.y + 9, 2, 3), hole)
+		img.fill_rect(Rect2i(so.position.x + x0 + 1, so.position.y + 2, 7, 1), Color(0.78, 0.76, 0.68))
+	var sw: Rect2i = ATLAS["switch"]
+	_frame(img, sw, Color(0.7, 0.68, 0.6), plate)
+	img.fill_rect(Rect2i(sw.position.x + 5, sw.position.y + 3, 6, 10), Color(0.8, 0.78, 0.7))
+	img.fill_rect(Rect2i(sw.position.x + 5, sw.position.y + 3, 6, 4), Color(0.7, 0.68, 0.6))
+	for kind: String in Dress.DEPARTMENTS:
+		var d: Rect2i = ATLAS["dept_" + kind]
+		var word: String = Dress.DEPARTMENTS[kind]
+		_frame(img, d, cream, slate, 1)
+		PixelFont.blit(img, word, d.position + Vector2i((d.size.x - PixelFont.width(word)) / 2, 4), cream)
 
 # --- materials --------------------------------------------------------------------------------
 
@@ -319,6 +393,13 @@ func _materials() -> void:
 	mat_ceiling = _shade(ceiling_tex(), 0.62 * FLAT)
 	mat_props = _shade(null, 0.36 * FLAT, true)
 	mat_stair = _shade(carpet_tex(), 0.34 * FLAT, false, true)
+	# LA2: the carpet read as long streaks at 2 m a repeat (the judge's 12-floor). Now a smoothly filtered loop pile
+	# four repeats to a cell (half a metre), crossed with itself turned a quarter at three to a cell, so no streak runs
+	# along the floor; whole repeats to a cell, so every cell's carpet is the same.
+	if Dress.enabled:
+		for m: ShaderMaterial in [mat_floor, mat_stair]:
+			m.set_shader_parameter("carpet_tex", carpet_tex())
+			m.set_shader_parameter("carpet", 1.0)
 	mat_decal = _shade(atlas_tex(), 0.5 * FLAT)
 	mat_panel = _glow(PANEL_COL, null, HAZE)
 	lv.panels.append({"mat": mat_panel, "dead": false, "k": 1.0})
@@ -369,9 +450,11 @@ static func quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3
 const _AXES: Array[Vector3] = [Vector3.RIGHT, Vector3.LEFT, Vector3.UP, Vector3.DOWN, Vector3.BACK, Vector3.FORWARD]
 
 ## A box (size, centre in xf's space), vertex coloured.
-static func box(st: SurfaceTool, xf: Transform3D, size: Vector3, c: Vector3, col: Color) -> void:
+static func box(st: SurfaceTool, xf: Transform3D, size: Vector3, c: Vector3, col: Color, hidden := Vector3.ZERO) -> void:
 	var h := size * 0.5
 	for n: Vector3 in _AXES:
+		if n == hidden and hidden != Vector3.ZERO:
+			continue  # LA2: a face that is never seen (against a wall, on a desk top)
 		var t1 := Vector3(n.y, n.z, n.x).abs()
 		var t2 := n.abs().cross(t1)
 		var f := c + n * h
@@ -941,6 +1024,7 @@ static func catalogue() -> Dictionary:
 ## Wall pictures: size and the height of their middle.
 const DECALS := {
 	"poster": [0.6, 0.8, 1.55], "clock": [0.34, 0.34, 2.3], "map": [0.8, 0.8, 1.5], "whiteboard": [1.8, 0.9, 1.4],
+	"fire": [0.3, 0.4, 1.5], "notice": [0.3, 0.4, 1.5], "pinboard": [0.9, 0.62, 1.45],
 }
 
 ## One room being laid out, all in its canonical frame (metres).
@@ -959,6 +1043,8 @@ class Layout:
 	var pics: Array = []
 	## Pictures only (the furniture is the rules'): no prop is put down.
 	var pics_only := false
+	## LA2: the first of `pics` that the dressing added (client/annex_dress.gd), or -1.
+	var la2_from := -1
 
 static func _foot(type: String, at: Vector2, f: Vector2) -> Rect2:
 	var p: Dictionary = catalogue()[type]
@@ -1145,6 +1231,23 @@ static func layout_for(sh: Shape, kind: String, rng_seed: int, pre: Array[Rect2]
 			_wall(l, "plant", 0.3)
 			_pic(l, "map")
 			_pic(l, "clock")
+	# LA2: the fire notice, the staff notice, the pin boards and more of the same poster, after the pictures above so
+	# those stay where they were (client/annex_dress.gd).
+	if Dress.enabled:
+		l.la2_from = l.pics.size()
+		var more: Array = []
+		match kind:
+			"office": more = ["fire", "pinboard"]
+			"cubicles": more = ["fire", "pinboard", "poster", "notice"]
+			"meeting": more = ["fire"]
+			"copy": more = ["notice", "fire"]
+			"store": more = ["fire", "notice"]
+			"break": more = ["pinboard", "notice", "fire"]
+			"closet": more = ["notice"]
+			"atrium": more = ["poster", "fire", "notice", "poster"]
+			"lobby": more = ["fire", "notice", "poster"]
+		for type: String in more:
+			_pic(l, type)
 	return l
 
 static func _outward(l: Layout, m: Vector2) -> Vector2:
@@ -1167,10 +1270,18 @@ func _furniture(floor_plan: FloorLib.FloorPlan) -> void:
 		if pc.hide >= 0:
 			var h: Playroom.Hide = hides[pc.hide]
 			xf = hide_xf(h)
-			draw_hide_into_boxes(lv, h.level, xf, boxes, "aprops")
+			# LA2: drawn mirrored across its front in a room whose canonical frame is a mirror image, as the plain
+			# pieces are, so the desk's monitor (and what stands on it) is on the same side in every room of the shape.
+			# A hide's frame and footprint are symmetric across its front: only what stands on top moves.
+			var hxf := xf
+			if Dress.enabled and _mirrored(pc.room):
+				hxf = Transform3D(xf.basis * Basis.from_scale(Vector3(-1, 1, 1)), xf.origin)
+			draw_hide_into_boxes(lv, h.level, hxf, boxes, "aprops")
 			hide_pieces.append({"hide": h.id, "kind": String(h.kind), "level": h.level, "xf": xf})
 			type = "hide:" + type
-			lv.furniture_drawn.append({"piece": pc.id, "kind": String(pc.kind), "rect": boxes_rect(xf, boxes)})
+			lv.furniture_drawn.append({"piece": pc.id, "kind": String(pc.kind), "rect": boxes_rect(hxf, boxes)})
+			if Dress.enabled and lv.props_on:
+				Dress.draw_tops(self, pc.room, pc.level, type, hxf)
 		else:
 			var f := Vector2(FloorLib.dir_dx(pc.facing), FloorLib.dir_dy(pc.facing))
 			var centre := Vector2(pc.x / 100.0, pc.y / 100.0)
@@ -1191,9 +1302,20 @@ func _furniture(floor_plan: FloorLib.FloorPlan) -> void:
 			var dxf := Transform3D(basis, Vector3(centre.x - off.x, pc.level * LH, centre.y - off.z))
 			draw_hide_into_boxes(lv, pc.level, dxf, boxes, "aprops")
 			lv.furniture_drawn.append({"piece": pc.id, "kind": String(pc.kind), "rect": boxes_rect(dxf, boxes)})
+			if Dress.enabled and lv.props_on:
+				Dress.draw_tops(self, pc.room, pc.level, type, dxf)
 			lv.prop_spots.append({"room": pc.room, "level": pc.level, "type": type, "pos": [xf.origin.x, xf.origin.z]})
 			lv.props_placed += 1
 		records.append({"room": pc.room, "type": type, "xf": xf})
+
+## Whether room `rid`'s canonical frame is a mirror image of the world's.
+func _mirrored(rid: int) -> bool:
+	if rid < 0 or not shapes.has(rid):
+		return false
+	for r: Dictionary in lv.plan.rooms:
+		if int(r.id) == rid:
+			return room_xf(r, (shapes[rid] as Shape).sym).basis.determinant() < 0.0
+	return false
 
 ## The boxes drawn for a piece of the rules' list, in its own frame (its front towards -z): a hide's furniture
 ## (hide_boxes, the meeting table's own), a chair, or the catalogue's piece.
@@ -1228,9 +1350,11 @@ func _pictures() -> void:
 				continue
 			tall.append(local_to_canon(sh.sym, wm, hm, Vector2(pc.x / 100.0, pc.y / 100.0) - o))
 		var l := layout_for(sh, str(r.kind), sh.key.hash(), [], false, true, tall)
+		layouts[rid] = l
 		var rxf := room_xf(r, sh.sym)
 		var level := int(r.level)
-		for p: Array in l.pics:
+		for pi in l.pics.size():
+			var p: Array = l.pics[pi]
 			var type: String = p[0]
 			var m: Vector2 = p[1]
 			var n: Vector2 = p[2]
@@ -1239,7 +1363,8 @@ func _pictures() -> void:
 			var at := rxf * at3
 			var into := (rxf.basis * Vector3(-n.x, 0, -n.y)).normalized()
 			picture(lv._st(level, at.x, at.z, "adecal"), at, into, float(dims[0]), float(dims[1]), atlas_uv(ATLAS[type]))
-			records.append({"room": rid, "type": "picture:" + type, "xf": Transform3D(Basis.looking_at(-into, Vector3.UP), at)})
+			var tag := "dress:picture:" if l.la2_from >= 0 and pi >= l.la2_from else "picture:"
+			records.append({"room": rid, "type": tag + type, "xf": Transform3D(Basis.looking_at(-into, Vector3.UP), at)})
 
 # --- the hiding places -----------------------------------------------------------------------------
 
@@ -1363,13 +1488,19 @@ func _draw_hide(h: Playroom.Hide) -> void:
 func canonical_list(r: Dictionary, k: int) -> Array[String]:
 	var inv := room_xf(r, k).affine_inverse()
 	var out: Array[String] = []
-	for rec: Dictionary in records:
-		if int(rec.room) != int(r.id):
-			continue
+	if _records_by_room.is_empty() or int(_records_by_room.get(-2, -1)) != records.size():
+		_records_by_room = {-2: records.size()}
+		for rec: Dictionary in records:
+			if not _records_by_room.has(int(rec.room)):
+				_records_by_room[int(rec.room)] = []
+			(_records_by_room[int(rec.room)] as Array).append(rec)
+	for rec: Dictionary in _records_by_room.get(int(r.id), []):
 		var c: Transform3D = inv * (rec.xf as Transform3D)
 		var f := c.basis * Vector3.FORWARD
 		var ang := posmod(roundi(rad_to_deg(atan2(f.x, f.z))), 360)
-		out.append("%s %.2f %.2f %.2f %d" % [rec.type, c.origin.x, c.origin.y, c.origin.z, ang])
+		# Nudged a quarter of a centimetre (LA2): many sizes are in half centimetres, and a value on a rounding boundary
+		# printed differently in two rooms by the last bit of a float.
+		out.append("%s %.2f %.2f %.2f %d" % [rec.type, c.origin.x + 0.0025, c.origin.y + 0.0025, c.origin.z + 0.0025, ang])
 	out.sort()
 	return out
 

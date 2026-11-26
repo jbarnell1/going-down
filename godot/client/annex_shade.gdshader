@@ -15,6 +15,12 @@ uniform float self_light = 0.4;
 uniform float energy = 1.0;
 uniform vec4 haze : source_color = vec4(0.62, 0.6, 0.45, 1.0);
 uniform float haze_density = 0.03;
+// LA2: the carpet. Sampled smoothly (the nearest-texel look made long streaks on a floor seen at a slant), at
+// `carpet_scale` repeats to a 2 m cell, mixed with itself turned a quarter at one repeat fewer.
+uniform sampler2D carpet_tex : source_color, filter_linear_mipmap, repeat_enable, hint_default_white;
+uniform float carpet = 0.0;
+uniform float carpet_scale = 4.0;
+uniform float carpet_cross = 0.35;
 
 varying vec3 wpos;
 varying vec3 wnorm;
@@ -31,6 +37,11 @@ void fragment() {
 		uv = n.y > 0.5 ? wpos.xz * 0.5 : (n.x > n.z ? wpos.zy * 0.5 : wpos.xy * 0.5);
 	}
 	vec4 t = texture(albedo_tex, uv) * tint;
+	if (carpet > 0.5) {
+		vec4 a = texture(carpet_tex, uv * carpet_scale);
+		vec4 b = texture(carpet_tex, vec2(uv.y, -uv.x) * (carpet_scale - 1.0));
+		t = mix(a, b, carpet_cross) * tint;
+	}
 	if (scissor > 0.0 && t.a < scissor) discard;
 	vec3 c = t.rgb * mix(vec3(1.0), COLOR.rgb, use_vcol);
 	float glow = use_vcol * (1.0 - COLOR.a);
