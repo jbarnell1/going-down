@@ -9,6 +9,12 @@ uniform sampler2D stain_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform float stain_amount = 1.0;
 uniform float self_light = 0.0;
 uniform float tile_wear = 0.0;
+// LA1, the Clinic's ceiling (0 leaves a material as it was): `whiten` pulls the texture toward clean pale tiles near
+// the lift, fading out with the corruption; `grid_m` draws a suspended ceiling's grid of that pitch (metres) on a
+// level face; `self_dirt` is how much of the self light the corruption takes away.
+uniform float whiten = 0.0;
+uniform float grid_m = 0.0;
+uniform float self_dirt = 0.85;
 
 varying vec3 wpos;
 varying vec3 wnorm;
@@ -24,8 +30,18 @@ void fragment() {
 	vec3 base = texture(albedo_tex, UV).rgb;
 	float t = COLOR.r;
 	float dirt = smoothstep(0.2, 0.85, t);
+	if (whiten > 0.0) {
+		float lum = dot(base, vec3(0.2126, 0.7152, 0.0722));
+		vec3 clean = vec3(0.9, 0.92, 0.93) * (0.82 + 0.18 * lum / 0.6);
+		base = mix(base, clean, whiten * (1.0 - smoothstep(0.1, 0.7, t)));
+	}
 	vec3 grimy = base * vec3(0.74, 0.70, 0.52);
 	vec3 c = mix(base, grimy, dirt);
+	if (grid_m > 0.0 && abs(wnorm.y) > 0.5) {
+		vec2 g = abs(fract(wpos.xz / grid_m + 0.5) - 0.5) * grid_m;
+		float bar = 1.0 - smoothstep(0.008, 0.016, min(g.x, g.y));
+		c = mix(c, c * vec3(0.62, 0.62, 0.6), bar);
+	}
 	// Stains: wall plane coordinates (along the wall, height) or floor coordinates.
 	vec2 sp = abs(wnorm.y) > 0.5 ? wpos.xz : vec2(wpos.x + wpos.z, wpos.y);
 	vec2 cell = floor(sp / 1.7);
@@ -57,5 +73,5 @@ void fragment() {
 	ALBEDO = c;
 	ROUGHNESS = roughness;
 	SPECULAR = 0.3;
-	EMISSION = c * self_light * (1.0 - dirt * 0.85);
+	EMISSION = c * self_light * (1.0 - dirt * self_dirt);
 }

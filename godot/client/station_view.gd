@@ -186,6 +186,9 @@ func _dress(level: Level, source_plan: RefCounted) -> void:
 	_materials()
 	_floors_and_ceilings()
 	_walls()
+	# LA1: grey steel frames on the doorways (client/door_frames.gd).
+	var frames := preload("res://client/door_frames.gd")
+	frames.build(lv, frames.STEEL, Color(0, 0, 0, 0), frames.STEEL_TEX)
 	lv._build_stairs()
 	_battens()
 	_lamps()

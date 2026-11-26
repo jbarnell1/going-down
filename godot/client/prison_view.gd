@@ -135,6 +135,10 @@ func dress(level: Level) -> void:
 	lv._build_floors_and_ceilings()
 	_teller_side_shell()
 	lv._commit_chunks()
+	# LA1: the doorways the cells and the bank room do not frame themselves (the lobby's onto the hall) get the
+	# shared kit's frame, in the cells' dark steel (client/door_frames.gd).
+	var frames := preload("res://client/door_frames.gd")
+	frames.build(lv, STEEL_DARK, Color(0, 0, 0, 0), frames.STEEL_TEX, _framed_here)
 	_hall()
 	_kiosk()
 	var bunks := Prison.bunk_positions()
@@ -179,6 +183,14 @@ func _teller_side_shell() -> void:
 	lv.edges[0] = {"vertical": vertical, "horizontal": horizontal}
 	lv._build_walls()
 	lv.edges[0] = saved
+
+## Whether this file frames the doorway between cells a and b itself (_doorway: a cell's or the bank room's).
+func _framed_here(level: int, a: Vector2i, b: Vector2i) -> bool:
+	for c: Vector2i in [a, b]:
+		var r: int = lv.room_at[level][c.y * lv.W + c.x] if lv.kind(level, c.x, c.y) != "void" else -1
+		if r >= 0 and str(lv.plan.rooms[r].kind) in ["closet", "ward"]:
+			return true
+	return false
 
 # --- materials --------------------------------------------------------------------------------
 

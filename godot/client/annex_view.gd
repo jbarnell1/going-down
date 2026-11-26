@@ -126,6 +126,8 @@ static func dress(level: Level, source_plan: FloorLib.FloorPlan = null, source_h
 	v.hides = source_hides
 	# The furniture is the rules' (sim/furniture.gd): drawn whatever props_on says, since it blocks you.
 	v._furniture(source_plan)
+	# LA1: cream-painted wooden frames on the doorways, kept off the furniture (client/door_frames.gd).
+	preload("res://client/door_frames.gd").build(level, preload("res://client/door_frames.gd").ANNEX)
 	if level.props_on:
 		v._pictures()
 	v._commit()

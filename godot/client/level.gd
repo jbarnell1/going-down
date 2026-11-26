@@ -50,6 +50,7 @@ const LAMP_FADE_BEGIN := 30.0
 const LAMP_FADE_LENGTH := 10.0
 const PRISON_VIEW := preload("res://client/prison_view.gd")
 const ANNEX_VIEW := preload("res://client/annex_view.gd")
+const DOOR_FRAMES := preload("res://client/door_frames.gd")
 const Hides = preload("res://sim/hides.gd")
 const ClinicPlan = preload("res://sim/clinic.gd")
 const PlayroomLib = preload("res://sim/playroom.gd")
@@ -92,6 +93,11 @@ var _t := 0.0
 var _level := 1.0
 var _emergency := 0.0
 var props_placed := 0
+## LA1: the Clinic ceiling's own light with every lamp on (0: this floor's ceiling keeps CEILING_DARK), and in the
+## dark (what it always had). The downward lamps never reach the ceiling, so without it the tiles read near-black.
+const CEILING_LIT := 0.5
+const CEILING_DARK := 0.22
+var ceiling_lit := 0.0
 var props_overturned := 0
 ## Where each prop went (tests): room, cell, the wall it stands against, its floor footprint (x, z, w, d).
 var prop_spots: Array[Dictionary] = []
@@ -201,6 +207,8 @@ func _build_place(p: Dictionary, seed_text: String, source_plan: FloorLib.FloorP
 		return
 	_build_stairs()
 	_build_furniture()
+	# LA1: white enamel steel frames on the doorways, yellowing with the walk from the lift (client/door_frames.gd).
+	DOOR_FRAMES.build(self, DOOR_FRAMES.CLINIC, DOOR_FRAMES.CLINIC_GRIME)
 	_commit_chunks()
 	_build_lights()
 	_build_signs_and_decals()
@@ -276,7 +284,15 @@ func _make_materials() -> void:
 	mat_ceiling.set_shader_parameter("albedo_tex", _tex("ceiling_tile"))
 	mat_ceiling.set_shader_parameter("stain_tex", _tex("decal_rust_stain"))
 	mat_ceiling.set_shader_parameter("stain_amount", 0.8)
-	mat_ceiling.set_shader_parameter("self_light", 0.22)
+	mat_ceiling.set_shader_parameter("self_light", CEILING_DARK)
+	if str(plan.get("place", "clinic")) == "clinic":
+		# LA1: near the lift the ceiling reads as clean white tiles in a grid under lit panels; with the walk from
+		# the lift it yellows and dims as before. Its own light follows the lamps (update_lights).
+		ceiling_lit = CEILING_LIT
+		mat_ceiling.set_shader_parameter("whiten", 0.8)
+		mat_ceiling.set_shader_parameter("grid_m", 0.5)
+		mat_ceiling.set_shader_parameter("self_dirt", 0.97)
+		mat_ceiling.set_shader_parameter("self_light", CEILING_LIT)
 	mat_rail = prop_material(Color(0.55, 0.6, 0.58))
 	mat_hide = prop_material(Color.WHITE, null, true)
 	mat_glow = glow_material(Color.WHITE, 1.0)
@@ -716,6 +732,11 @@ func _build_lights() -> void:
 	# camera, picked again every quarter second, so shadows (and the light a lamp threw through the slab
 	# below it) switched on and off as the player walked.
 
+## LA1: the Clinic ceiling's own light for the lamps' level `pk` (1 all on) and the emergency lighting (1 fully on):
+## CEILING_LIT with every lamp on, the old CEILING_DARK in the dark or the emergency light.
+func ceiling_self_light(pk: float, emergency: float) -> float:
+	return lerpf(CEILING_DARK, ceiling_lit, clampf(pk, 0.0, 1.0) * (1.0 - clampf(emergency, 0.0, 1.0)))
+
 ## The lights as one dial: 1 every light as built; lower is the lights failing (blink warnings, the
 ## dark). Panels die faster than the room, as in src/render/lighting.ts.
 func set_light_level(k: float) -> void:
@@ -763,6 +784,10 @@ func update_lights(delta: float, _cam_pos: Vector3) -> void:
 		var e: float = (0.15 if p.dead else p.k) * pk
 		if not is_equal_approx(p.mat.get_shader_parameter("energy"), e):
 			p.mat.set_shader_parameter("energy", e)
+	if ceiling_lit > 0.0 and mat_ceiling != null:
+		var self_lit := ceiling_self_light(pk, _emergency)
+		if not is_equal_approx(float(mat_ceiling.get_shader_parameter("self_light")), self_lit):
+			mat_ceiling.set_shader_parameter("self_light", self_lit)
 	# (LT1: no shadow re-pick by camera distance here any more: see _build_lights.)
 # --- signs and stains -------------------------------------------------------------------------
 

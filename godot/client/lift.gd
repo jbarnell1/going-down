@@ -364,6 +364,288 @@ func build(car: Dictionary, left_wall := false) -> void:
 	_box(Vector3(HOLD_BUTTON.x, HOLD_BUTTON.y, -FRONT - 0.03), Vector3(0.14, 0.2, 0.03), dark)
 	_hold_mat = Level.glow_material(Color(0.4, 1.0, 0.5), 0.25)
 	_box(Vector3(HOLD_BUTTON.x, HOLD_BUTTON.y, -FRONT - 0.05), Vector3(0.06, 0.06, 0.02), _hold_mat)
+	_build_look()
+
+# --- LA1: the worn service lift (looks only) ------------------------------------------------------------------
+# Every piece below is named Look_*, sits inside the car's walls, and keeps off everything a player reads or uses
+# (the paper notices, the monitors, the hold button, the indicator, the floor paint): tests/test_lift_look.gd.
+# Nothing here is a rule and nothing here is random: the pictures are drawn from fixed numbers.
+
+## The steel lining stands this far inside the car's wall faces (the notices stand 6 mm off them).
+const LINE_OFF := 0.003
+## Lining panels about this wide (m); each wall takes a whole number of them, so seams meet the corners.
+const PANEL_M := 1.0
+## The side handrails: height of the bar's middle, its distance from the wall, its radius.
+const RAIL_Y := 0.86
+const RAIL_OFF := 0.06
+const RAIL_R := 0.019
+## The rails stop this far short of the back wall, clear of the screens there.
+const RAIL_BACK := 0.7
+## The ceiling fitting's outer size (m) at most, and the louvre bars' pitch across it.
+const FITTING := 1.56
+const LOUVRES := 6
+## The button panel round the hold button, and the inspection card on the front wall's other side: only where
+## the front wall beside the doorway is at least this wide (the game's car; not the Ward's narrow one).
+const SIDE_MIN := 0.45
+const BUTTON_PANEL := Vector2(0.3, 0.84)
+const CARD := Vector2(0.26, 0.34)
+const CARD_Y := 1.55
+## Steel and rubber tones of the details (vertex colours).
+const C_STEEL := Color(0.62, 0.64, 0.64)
+const C_STEEL_DARK := Color(0.2, 0.21, 0.22)
+const C_RUBBER := Color(0.09, 0.09, 0.09)
+
+static var _look_tex := {}
+
+## A repeatable 0..1 number for pixel (x, y) and stream k: the look's pictures have no chance in them.
+static func _h(x: int, y: int, k: int) -> float:
+	var n := (x * 374761393 + y * 668265263 + k * 2147483647) & 0x7fffffff
+	n = ((n ^ (n >> 13)) * 1274126177) & 0x7fffffff
+	return float(n % 10007) / 10007.0
+
+## One lining panel, PANEL_M wide and the car's height (top row is the ceiling): a black rubber kick strip, worn
+## blue-grey paint to the dado, a steel dado trim, brushed steel above, a seam and screws at its left edge.
+static func lining_texture() -> Texture2D:
+	if _look_tex.has("lining"):
+		return _look_tex["lining"]
+	var w := 64
+	var h := 160
+	var px_m := float(h) / CAR_H
+	var img := Image.create(w, h, false, Image.FORMAT_RGB8)
+	for y in h:
+		var up := (h - 0.5 - y) / px_m   # metres above the floor
+		for x in w:
+			var n := _h(x, y, 1)
+			var streak := _h(0, y, 2) * 0.06 + _h(x / 9, y, 3) * 0.03
+			var c: Color
+			if up < 0.12:
+				c = C_RUBBER.lightened(n * 0.05)
+			elif up < 0.9:
+				c = Color(0.34, 0.4, 0.42).darkened(0.04 + n * 0.05)
+				# Scuffs from boots and trolleys: short pale scratches low down.
+				if up < 0.45 and _h(x / 5, y / 2, 4) > 0.93:
+					c = c.lightened(0.22)
+			elif up < 0.97:
+				c = Color(0.7, 0.72, 0.71).darkened(0.08 if (up < 0.915 or up > 0.955) else 0.0)
+			else:
+				c = Color(0.55, 0.57, 0.58).lightened(streak).darkened(n * 0.04)
+				# A little grime gathers under the ceiling.
+				c = c.darkened(clampf((up - 2.25) * 0.8, 0.0, 0.18))
+			img.set_pixel(x, y, c)
+	for y in h:
+		img.set_pixel(0, y, Color(0.12, 0.12, 0.13))
+		img.set_pixel(1, y, Color(0.72, 0.74, 0.74) if y % 2 == 0 else Color(0.62, 0.64, 0.64))
+	for m: float in [0.3, 1.35, 2.35]:
+		var y := int(h - m * px_m)
+		for s: Vector2i in [Vector2i(4, y), Vector2i(w - 4, y)]:
+			img.set_pixel(s.x, s.y, Color(0.25, 0.25, 0.26))
+			img.set_pixel(s.x + 1, s.y, Color(0.8, 0.8, 0.8))
+	img.generate_mipmaps()
+	_look_tex["lining"] = ImageTexture.create_from_image(img)
+	return _look_tex["lining"]
+
+## The ceiling's steel, one metre square: darker brushed panels with a seam round each and a ring of screws.
+static func ceiling_texture() -> Texture2D:
+	if _look_tex.has("ceiling"):
+		return _look_tex["ceiling"]
+	var s := 64
+	var img := Image.create(s, s, false, Image.FORMAT_RGB8)
+	for y in s:
+		for x in s:
+			var c := Color(0.34, 0.36, 0.37).lightened(_h(0, y, 5) * 0.05).darkened(_h(x, y, 6) * 0.05)
+			if x == 0 or y == 0:
+				c = Color(0.1, 0.1, 0.11)
+			elif x == 1 or y == 1:
+				c = Color(0.48, 0.5, 0.5)
+			elif (x == 4 or x == s - 4) and (y % 15 == 7) or (y == 4 or y == s - 4) and (x % 15 == 7):
+				c = Color(0.18, 0.18, 0.19)
+			img.set_pixel(x, y, c)
+	img.generate_mipmaps()
+	_look_tex["ceiling"] = ImageTexture.create_from_image(img)
+	return _look_tex["ceiling"]
+
+## The lift's inspection card: a cream card in a frame with a dark title bar, ruled lines of blank print, a box of
+## ticks and a round stamp. No letters or numbers: nothing on it is meant to be read.
+static func card_texture() -> Texture2D:
+	if _look_tex.has("card"):
+		return _look_tex["card"]
+	var img := Image.create(39, 51, false, Image.FORMAT_RGB8)
+	img.fill(Color(0.86, 0.83, 0.72))
+	img.fill_rect(Rect2i(3, 3, 33, 6), Color(0.2, 0.24, 0.3))
+	for i in 7:
+		var y := 13 + i * 4
+		var len := 22 + int(_h(i, 0, 7) * 9.0)
+		img.fill_rect(Rect2i(4, y, len, 1), Color(0.45, 0.43, 0.38))
+	for i in 3:
+		img.fill_rect(Rect2i(4, 42 - 0 + i * 0, 5, 5), Color(0.3, 0.3, 0.3))
+		img.fill_rect(Rect2i(5 + i * 7, 43, 3, 3), Color(0.86, 0.83, 0.72))
+		img.set_pixel(6 + i * 7, 44, Color(0.2, 0.2, 0.25))
+	for y in 51:
+		for x in 39:
+			var d := Vector2(x - 28.5, y - 43.5).length()
+			if d > 4.0 and d < 6.0:
+				img.set_pixel(x, y, Color(0.55, 0.2, 0.15))
+	for x in 39:
+		img.set_pixel(x, 0, Color(0.3, 0.27, 0.2))
+		img.set_pixel(x, 50, Color(0.3, 0.27, 0.2))
+	for y in 51:
+		img.set_pixel(0, y, Color(0.3, 0.27, 0.2))
+		img.set_pixel(38, y, Color(0.3, 0.27, 0.2))
+	img.generate_mipmaps()
+	_look_tex["card"] = ImageTexture.create_from_image(img)
+	return _look_tex["card"]
+
+## A quad (four corners in order round it, uv per corner) into `st`, facing `n`.
+static func _look_quad(st: SurfaceTool, p: Array, uv: Array, n: Vector3) -> void:
+	var order: Array[int] = [0, 1, 2, 0, 2, 3]
+	if ((p[1] as Vector3) - (p[0] as Vector3)).cross((p[3] as Vector3) - (p[0] as Vector3)).dot(n) > 0.0:
+		order = [0, 3, 2, 0, 2, 1]
+	for i in order:
+		st.set_normal(n)
+		st.set_uv(uv[i])
+		st.add_vertex(p[i])
+
+## An upright lining sheet from `a` to `b` (floor points, the sheet facing `n`), from y0 to y1, its texture in
+## panels of about PANEL_M; `u0` where along the wall the sheet starts (m), so a wall split by the doorway lines up.
+static func _sheet(st: SurfaceTool, a: Vector3, b: Vector3, y0: float, y1: float, n: Vector3, u0 := 0.0, panel := PANEL_M) -> void:
+	var l := a.distance_to(b)
+	var p := [a + Vector3(0, y0, 0), b + Vector3(0, y0, 0), b + Vector3(0, y1, 0), a + Vector3(0, y1, 0)]
+	var ua := u0 / panel
+	var ub := (u0 + l) / panel
+	var uv := [Vector2(ua, 1.0 - y0 / CAR_H), Vector2(ub, 1.0 - y0 / CAR_H), Vector2(ub, 1.0 - y1 / CAR_H), Vector2(ua, 1.0 - y1 / CAR_H)]
+	_look_quad(st, p, uv, n)
+
+## An axis-aligned box of colour `col` into `st` (a vertex-coloured mesh of many small parts).
+static func _look_box(st: SurfaceTool, centre: Vector3, size: Vector3, col: Color) -> void:
+	var h := size * 0.5
+	for f: Array in [[Vector3.RIGHT, Vector3.BACK, Vector3.UP], [Vector3.LEFT, Vector3.BACK, Vector3.UP], [Vector3.UP, Vector3.RIGHT, Vector3.BACK],
+			[Vector3.DOWN, Vector3.RIGHT, Vector3.BACK], [Vector3.BACK, Vector3.RIGHT, Vector3.UP], [Vector3.FORWARD, Vector3.RIGHT, Vector3.UP]]:
+		var n: Vector3 = f[0]
+		var u: Vector3 = (f[1] as Vector3) * h
+		var v: Vector3 = (f[2] as Vector3) * h
+		var c := centre + n * h
+		st.set_color(col)
+		_look_quad(st, [c - u - v, c + u - v, c + u + v, c - u + v], [Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO], n)
+
+func _look_mesh(name: String, st: SurfaceTool, mat: Material) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.name = name
+	mi.mesh = st.commit()
+	mi.material_override = mat
+	add_child(mi)
+	return mi
+
+func _build_look() -> void:
+	var fw := half - door_half
+	var front := -FRONT - 0.02 - LINE_OFF   # the front wall's inside face, less the lining's stand-off
+	# The lining: brushed steel over a painted lower half, seams every panel. The panel width is fitted to each
+	# wall so the seams meet its corners.
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var back_w := half * 2.0
+	_sheet(st, Vector3(-half, 0, -depth + LINE_OFF), Vector3(half, 0, -depth + LINE_OFF), 0.0, CAR_H, Vector3.BACK, 0.0, back_w / maxf(1.0, roundf(back_w / PANEL_M)))
+	var side_l := depth + front
+	var side_p := side_l / maxf(1.0, roundf(side_l / PANEL_M))
+	_sheet(st, Vector3(-half + LINE_OFF, 0, -depth), Vector3(-half + LINE_OFF, 0, front), 0.0, CAR_H, Vector3.RIGHT, 0.0, side_p)
+	_sheet(st, Vector3(half - LINE_OFF, 0, front), Vector3(half - LINE_OFF, 0, -depth), 0.0, CAR_H, Vector3.LEFT, 0.0, side_p)
+	_sheet(st, Vector3(half, 0, front), Vector3(door_half, 0, front), 0.0, CAR_H, Vector3.FORWARD, 0.0, maxf(fw, 0.05))
+	_sheet(st, Vector3(-door_half, 0, front), Vector3(-half, 0, front), 0.0, CAR_H, Vector3.FORWARD, 0.0, maxf(fw, 0.05))
+	_sheet(st, Vector3(door_half, 0, front), Vector3(-door_half, 0, front), DOOR_H, CAR_H, Vector3.FORWARD, 0.0, door_half * 2.0)
+	_look_mesh("Look_Lining", st, Level.prop_material(Color.WHITE, lining_texture()))
+	# The ceiling's steel panels.
+	var cst := SurfaceTool.new()
+	cst.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var cy := CAR_H - LINE_OFF
+	_look_quad(cst, [Vector3(-half, cy, -depth), Vector3(half, cy, -depth), Vector3(half, cy, front), Vector3(-half, cy, front)],
+		[Vector2(-half, -depth), Vector2(half, -depth), Vector2(half, front), Vector2(-half, front)], Vector3.DOWN)
+	_look_mesh("Look_Ceiling", cst, Level.prop_material(Color.WHITE, ceiling_texture()))
+	# Checker plate under the BANK and DOWN paint: it shows at the paint's ends, and on a car whose paint is hidden.
+	var plate := PlaneMesh.new()
+	plate.size = Vector2(half * 2.0, depth + front)
+	var pm := StandardMaterial3D.new()
+	pm.albedo_texture = preload("res://assets/textures/metal_plate_sill_diff.webp")
+	pm.normal_enabled = true
+	pm.normal_texture = preload("res://assets/textures/metal_plate_sill_nor_gl.webp")
+	pm.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	pm.metallic = 0.28
+	pm.roughness = 0.7
+	pm.albedo_color = Color(0.72, 0.72, 0.7)
+	pm.uv1_scale = Vector3(half * 2.0 / 0.7, (depth + front) / 0.7, 1.0)
+	var fl := MeshInstance3D.new()
+	fl.name = "Look_FloorPlate"
+	fl.mesh = plate
+	fl.material_override = pm
+	fl.position = Vector3(0, 0.002, (-depth + front) * 0.5)
+	fl.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(fl)
+	# The small parts, one vertex-coloured mesh: handrail brackets, the ceiling light's frame and louvres, the
+	# button panel, the card's frame.
+	var parts := SurfaceTool.new()
+	parts.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Side handrails: a round steel bar on each side wall, on three brackets.
+	var r0 := -depth + RAIL_BACK
+	var r1 := front - 0.3
+	var rail_mat := Level.prop_material(Color(0.7, 0.71, 0.7))
+	for sgn: float in [-1.0, 1.0]:
+		var x := sgn * (half - RAIL_OFF)
+		var bar := CylinderMesh.new()
+		bar.top_radius = RAIL_R
+		bar.bottom_radius = RAIL_R
+		bar.height = r1 - r0
+		bar.radial_segments = 10
+		bar.rings = 1
+		var rail := MeshInstance3D.new()
+		rail.name = "Look_RailLeft" if sgn < 0.0 else "Look_RailRight"
+		rail.mesh = bar
+		rail.material_override = rail_mat
+		rail.position = Vector3(x, RAIL_Y, (r0 + r1) * 0.5)
+		rail.rotation = Vector3(PI / 2.0, 0, 0)
+		add_child(rail)
+		for z: float in [r0 + 0.08, (r0 + r1) * 0.5, r1 - 0.08]:
+			# The arm from the rail into the wall plate, the plate standing just off the lining (no shared faces).
+			_look_box(parts, Vector3(sgn * (half - (RAIL_OFF + 0.008) * 0.5), RAIL_Y, z), Vector3(RAIL_OFF - 0.008, 0.028, 0.03), C_STEEL_DARK)
+			_look_box(parts, Vector3(sgn * (half - 0.0085), RAIL_Y, z), Vector3(0.009, 0.07, 0.07), C_STEEL)
+	# The ceiling light: the old diffuser in a steel frame, with a louvre grid hung under it.
+	var lamp_c := Vector3(0, CAR_H, -depth * 0.5)
+	var outer := minf(FITTING, minf(half * 2.0, depth) - 0.2)
+	var inner := minf(1.4, outer - 0.12)
+	var ring := (outer - inner) * 0.5
+	for sgn: float in [-1.0, 1.0]:
+		_look_box(parts, lamp_c + Vector3(sgn * (inner + ring) * 0.5, -0.03, 0), Vector3(ring, 0.05, outer), C_STEEL_DARK)
+		_look_box(parts, lamp_c + Vector3(0, -0.03, sgn * (inner + ring) * 0.5), Vector3(inner - 0.004, 0.05, ring), C_STEEL_DARK)
+	for i in range(1, LOUVRES):
+		var o := -inner * 0.5 + inner * float(i) / LOUVRES
+		_look_box(parts, lamp_c + Vector3(o, -0.045, 0), Vector3(0.012, 0.03, inner - 0.006), C_STEEL)
+		_look_box(parts, lamp_c + Vector3(0, -0.05, o), Vector3(inner - 0.006, 0.016, 0.01), C_STEEL)
+	if fw >= SIDE_MIN:
+		# The button panel round the hold button: a brushed plate behind it, two rows of three plain, unlit
+		# buttons above (nothing to press: the hold button is the only one that lights), a key switch and a
+		# speaker grille below. Everything stands behind the hold button's own plate.
+		var pz := -FRONT - 0.02 - 0.006
+		var hb := HOLD_BUTTON
+		_look_box(parts, Vector3(hb.x, 1.22, pz), Vector3(BUTTON_PANEL.x, BUTTON_PANEL.y, 0.008), C_STEEL)
+		_look_box(parts, Vector3(hb.x, 1.22, pz + 0.003), Vector3(BUTTON_PANEL.x + 0.02, BUTTON_PANEL.y + 0.02, 0.006), C_STEEL_DARK)
+		for row in 3:
+			for col in 2:
+				var at := Vector3(hb.x - 0.06 + col * 0.12, 1.37 + row * 0.085, pz - 0.006)
+				_look_box(parts, at, Vector3(0.05, 0.05, 0.006), C_STEEL_DARK)
+				_look_box(parts, at + Vector3(0, 0, -0.005), Vector3(0.034, 0.034, 0.006), Color(0.4, 0.41, 0.4))
+		_look_box(parts, Vector3(hb.x + 0.07, 0.98, pz - 0.006), Vector3(0.04, 0.04, 0.008), C_STEEL_DARK)
+		for k in 4:
+			_look_box(parts, Vector3(hb.x - 0.04, 0.86 + k * 0.025, pz - 0.0045), Vector3(0.12, 0.008, 0.004), C_RUBBER)
+		# The inspection card on the other side of the doorway, in a frame.
+		var cx := -(door_half + fw * 0.5)
+		_look_box(parts, Vector3(cx, CARD_Y, pz + 0.001), Vector3(CARD.x + 0.04, CARD.y + 0.04, 0.008), C_STEEL_DARK)
+		var q := QuadMesh.new()
+		q.size = CARD
+		var card := MeshInstance3D.new()
+		card.name = "Look_Card"
+		card.mesh = q
+		card.material_override = Level.prop_material(Color.WHITE, card_texture())
+		card.position = Vector3(cx, CARD_Y, pz - 0.0045)
+		card.rotation = Vector3(0, PI, 0)
+		add_child(card)
+	_look_mesh("Look_Parts", parts, Level.prop_material(Color.WHITE, null, true))
 
 ## Tests: the car as DRAWN, measured from its meshes in the car's frame (x to the right walking in, z out
 ## of the car): "box" the AABB of everything inside the car (walls, ceiling, floor, monitor), "bank" and
@@ -448,7 +730,7 @@ func _floor_half(side: float, mat: ShaderMaterial) -> MeshInstance3D:
 
 # The floor paint (src/render/elevator.ts paintHalf): the word twice, stretched along the car, against
 # the dividing line, with a hazard edge along it. `hatched`: diagonal stripes over the fill (the locked BANK).
-func _paint(word: String, fill: Color, ink: Color, edge_left: bool, hatched := false) -> ImageTexture:
+func _paint(word: String, fill: Color, ink: Color, edge_left: bool, hatched := false, worn := true) -> ImageTexture:
 	var w := 48
 	var h := 92
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
@@ -459,6 +741,8 @@ func _paint(word: String, fill: Color, ink: Color, edge_left: bool, hatched := f
 			for x in w:
 				if posmod(x + y, 8) < 3:
 					img.set_pixel(x, y, stripe)
+	if worn:
+		wear_paint(img)
 	var ex := 0 if edge_left else w - 3
 	for y in range(0, h, 6):
 		var c := Color("#f2d43a") if (y / 6) % 2 == 0 else Color("#151515")
@@ -471,6 +755,24 @@ func _paint(word: String, fill: Color, ink: Color, edge_left: bool, hatched := f
 	PixelFont.blit(img, word, Vector2i(sx, 68), ink, Vector2i(1, 2), true)
 	var t := ImageTexture.create_from_image(img)
 	return t
+
+## LA1: the paint worn down over the car's steel: a faint mottle everywhere, rubbed thin by the doors where the crew
+## walks in (the image's bottom rows) and chipped along the walls. Only the paint's own field is touched: the hazard
+## edge, the dividing line and the word are drawn over it afterwards, exactly as before (tests/test_lift_look.gd).
+static func wear_paint(img: Image) -> void:
+	var w := img.get_width()
+	var h := img.get_height()
+	var bare := Color(0.42, 0.43, 0.42)
+	for y in h:
+		for x in w:
+			var c := img.get_pixel(x, y)
+			c = c.darkened(_h(x, y, 11) * 0.06)
+			var by_door := clampf((float(y) / h - 0.72) / 0.28, 0.0, 1.0)
+			var rub := by_door * 0.4 * _h(x / 3, y / 2, 12)
+			var chip := 0.0
+			if (x < 3 or x >= w - 3) and _h(x, y / 3, 13) > 0.8:
+				chip = 0.6
+			img.set_pixel(x, y, c.lerp(bare, maxf(rub, chip)))
 
 ## `label` up to two characters; `arrow` -1 down, 1 up, 0 none; `lit` bright, else a faint glow.
 func show_indicator(label: String, lit: bool, arrow: int) -> void:
