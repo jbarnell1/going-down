@@ -51,6 +51,7 @@ const LAMP_FADE_LENGTH := 10.0
 const PRISON_VIEW := preload("res://client/prison_view.gd")
 const ANNEX_VIEW := preload("res://client/annex_view.gd")
 const DOOR_FRAMES := preload("res://client/door_frames.gd")
+const CLINIC_DRESS := preload("res://client/clinic_dress.gd")
 const Hides = preload("res://sim/hides.gd")
 const ClinicPlan = preload("res://sim/clinic.gd")
 const PlayroomLib = preload("res://sim/playroom.gd")
@@ -209,6 +210,8 @@ func _build_place(p: Dictionary, seed_text: String, source_plan: FloorLib.FloorP
 	_build_furniture()
 	# LA1: white enamel steel frames on the doorways, yellowing with the walk from the lift (client/door_frames.gd).
 	DOOR_FRAMES.build(self, DOOR_FRAMES.CLINIC, DOOR_FRAMES.CLINIC_GRIME)
+	# LA3: the wall, ceiling and furniture-top dressing, kept out of every line of sight (client/clinic_dress.gd).
+	CLINIC_DRESS.build(self)
 	_commit_chunks()
 	_build_lights()
 	_build_signs_and_decals()
@@ -293,6 +296,8 @@ func _make_materials() -> void:
 		mat_ceiling.set_shader_parameter("grid_m", 0.5)
 		mat_ceiling.set_shader_parameter("self_dirt", 0.97)
 		mat_ceiling.set_shader_parameter("self_light", CEILING_LIT)
+		# LA3: the wall paint's panels mirrored here and there and a second kind of mark mixed in (surface.gdshader).
+		mat_wall.set_shader_parameter("wall_vary", 1.0)
 	mat_rail = prop_material(Color(0.55, 0.6, 0.58))
 	mat_hide = prop_material(Color.WHITE, null, true)
 	mat_glow = glow_material(Color.WHITE, 1.0)
@@ -855,17 +860,20 @@ func _build_furniture() -> void:
 		if pc.hide >= 0:
 			var h: PlayroomLib.Hide = hides[pc.hide]
 			ANNEX_VIEW.draw_hide_into(self, h, true, "hidef")
-			furniture_drawn.append({"piece": pc.id, "kind": String(pc.kind), "rect": ANNEX_VIEW.boxes_rect(ANNEX_VIEW.hide_xf(h), ANNEX_VIEW.hide_boxes(h.kind, true))})
+			furniture_drawn.append({"piece": pc.id, "kind": String(pc.kind), "rect": ANNEX_VIEW.boxes_rect(ANNEX_VIEW.hide_xf(h), ANNEX_VIEW.hide_boxes(h.kind, true)),
+				"top": _boxes_top(ANNEX_VIEW.hide_boxes(h.kind, true))})
 			continue
 		var f := Vector2(FloorLib.dir_dx(pc.facing), FloorLib.dir_dy(pc.facing))
 		var cx := pc.x / 100.0
 		var cz := pc.y / 100.0
 		var foot: Rect2
+		var top := 0.0
 		if pc.kind == &"bench" or pc.kind == &"planter":
 			var boxes: Array = ANNEX_VIEW.catalogue()[ANNEX_VIEW.catalogue_name(pc.kind)]["boxes"]
 			var xf := Transform3D(Basis(Vector3.UP, atan2(-f.x, -f.y)), Vector3(cx, pc.level * LH, cz))
 			ANNEX_VIEW.draw_hide_into_boxes(self, pc.level, xf, boxes, "hidef")
 			foot = ANNEX_VIEW.boxes_rect(xf, boxes)
+			top = _boxes_top(boxes)
 		else:
 			# The glb's front faces +z: turn it to the piece's facing.
 			var n := _make_prop(String(pc.kind), atan2(f.x, f.y), 0.0)
@@ -873,7 +881,8 @@ func _build_furniture() -> void:
 			n.position = Vector3(cx - (box.position.x + box.size.x * 0.5), pc.level * LH - box.position.y, cz - (box.position.z + box.size.z * 0.5))
 			add_child(n)
 			foot = Rect2(n.position.x + box.position.x, n.position.z + box.position.z, box.size.x, box.size.z)
-		furniture_drawn.append({"piece": pc.id, "kind": String(pc.kind), "rect": foot})
+			top = box.size.y
+		furniture_drawn.append({"piece": pc.id, "kind": String(pc.kind), "rect": foot, "top": top})
 		# The cell it stands in against its wall, and that wall's side (the scripted playthroughs look at a prop
 		# from inside its room and from beyond that wall: the `props` test command).
 		var wv := Vector2i(FloorLib.dir_dx(pc.wall), FloorLib.dir_dy(pc.wall)) if pc.wall != &"" else Vector2i.ZERO
@@ -885,6 +894,13 @@ func _build_furniture() -> void:
 		prop_spots.append({"room": pc.room, "level": pc.level, "piece": pc.id, "kind": String(pc.kind), "cx": cell.x, "cy": cell.y,
 			"wall": [wv.x, wv.y], "foot": [foot.position.x, foot.position.y, foot.size.x, foot.size.y], "tipped": false})
 		props_placed += 1
+
+## The height of the highest of some boxes ([size, centre, colour], as annex_view draws them) over their floor.
+static func _boxes_top(boxes: Array) -> float:
+	var top := 0.0
+	for b: Array in boxes:
+		top = maxf(top, (b[1] as Vector3).y + (b[0] as Vector3).y * 0.5)
+	return top
 
 static var _prop_scenes := {}
 static var _prop_mat_cache := {}

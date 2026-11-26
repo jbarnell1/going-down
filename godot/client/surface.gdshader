@@ -15,6 +15,11 @@ uniform float tile_wear = 0.0;
 uniform float whiten = 0.0;
 uniform float grid_m = 0.0;
 uniform float self_dirt = 0.85;
+// LA3, the Clinic's walls (0 leaves a material as it was): each 2 m panel of paint (one repeat of the texture) is
+// mirrored or not by a hash of where it is, so the scratches stop lining up in a row (a mirrored panel still meets its
+// neighbours seamlessly), and a second kind of mark is mixed in: short scuffs at trolley and shoulder height, a few
+// near the lift and more with the walk from it.
+uniform float wall_vary = 0.0;
 
 varying vec3 wpos;
 varying vec3 wnorm;
@@ -27,9 +32,39 @@ void vertex() {
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 
 void fragment() {
-	vec3 base = texture(albedo_tex, UV).rgb;
+	vec2 uv = UV;
 	float t = COLOR.r;
 	float dirt = smoothstep(0.2, 0.85, t);
+	float scuff = 0.0;
+	if (wall_vary > 0.0 && abs(wnorm.y) < 0.5) {
+		float panel = floor(uv.x);
+		vec2 pid = vec2(panel, floor(dot(wpos.xz, abs(wnorm.xz)) * 0.5 + 0.5));
+		if (hash(pid + 3.7) > 0.5) {
+			uv.x = panel + 1.0 - fract(uv.x);
+		}
+		float along = fract(UV.x) * 2.0;
+		float up = mod(wpos.y, 3.2);
+		for (int k = 0; k < 3; k++) {
+			float fk = float(k);
+			float pick = hash(pid + vec2(11.3 + fk * 7.1, 5.9));
+			if (pick > 0.35 + 0.55 * dirt) {
+				continue;
+			}
+			vec2 c = vec2(0.2 + 1.6 * hash(pid + vec2(fk, 1.3)), mix(0.3, 0.95, hash(pid + vec2(fk, 2.9))));
+			if (hash(pid + vec2(fk, 4.4)) > 0.6) {
+				c.y = 1.4 + 0.3 * hash(pid + vec2(fk, 6.6));
+			}
+			float len = 0.12 + 0.3 * hash(pid + vec2(fk, 8.8));
+			float slope = (hash(pid + vec2(fk, 9.9)) - 0.5) * 0.25;
+			vec2 d = vec2(along, up) - c;
+			float across = abs(d.y - d.x * slope);
+			float body = (1.0 - smoothstep(0.004, 0.012, across)) * (1.0 - smoothstep(len * 0.4, len * 0.5, abs(d.x)));
+			scuff = max(scuff, body * (0.45 + 0.3 * dirt));
+		}
+	}
+	// The unmirrored uv's slopes pick the mip level, so a mirrored panel's edge never shows a seam.
+	vec3 base = textureGrad(albedo_tex, uv, dFdx(UV), dFdy(UV)).rgb;
+	base *= 1.0 - 0.5 * scuff;
 	if (whiten > 0.0) {
 		float lum = dot(base, vec3(0.2126, 0.7152, 0.0722));
 		vec3 clean = vec3(0.9, 0.92, 0.93) * (0.82 + 0.18 * lum / 0.6);

@@ -100,6 +100,8 @@ var _mattress: ShaderMaterial
 var _blanket: ShaderMaterial
 var _pillow: ShaderMaterial
 var _glass: ShaderMaterial
+## LA3: what is in each cell beyond its bunk, cabinet and toilet (client/prison_dress.gd).
+var cell_dressing: RefCounted = preload("res://client/prison_dress.gd").new()
 
 ## The prison plan as the client builds it: the same shape as RulesBridge's plan dump (the plan itself,
 ## its wall edges, the lift's wall and car, the walking distance from the lift), for showing the hub
@@ -155,6 +157,7 @@ func dress(level: Level) -> void:
 			"ward":
 				_bank_room(r)
 	_commit_boxes()
+	cell_dressing.call("commit", lv)
 	if lv.shadows:
 		for i in mini(Level.SHADOW_LIGHTS, lv.main_lights.size()):
 			lv.main_lights[i].shadow_enabled = true
@@ -219,7 +222,7 @@ func _make_materials() -> void:
 	_brass_dark = Level.prop_material(BRASS_DARK)
 	_wood = Level.prop_material(WOOD_DARK)
 	_mattress = Level.prop_material(Color(0.5, 0.52, 0.48))
-	_blanket = Level.prop_material(Color(0.22, 0.27, 0.33))
+	_blanket = Level.prop_material(Color(0.4, 0.42, 0.42))
 	_pillow = Level.prop_material(Color(0.8, 0.78, 0.71))
 	_glass = ShaderMaterial.new()
 	_glass.shader = load("res://client/wire_glass.gdshader")
@@ -621,9 +624,7 @@ func _cell(r: Dictionary, number: int, bunk: Vector2i) -> void:
 		for lf: float in [-1.0, 1.0]:
 			_box(_steel, _w(mid, side, fwd, bs + ls * (bl * 0.5 - 0.04), bf + lf * (bd * 0.5 - 0.04), 0.19), _sz(side, fwd, 0.05, 0.05, 0.38))
 	_box(_steel, _w(mid, side, fwd, bs, bf, 0.42), _sz(side, fwd, bl, bd, 0.08))
-	_box(_mattress, _w(mid, side, fwd, bs, bf, 0.52), _sz(side, fwd, bl - 0.08, bd - 0.08, 0.12))
-	_box(_pillow, _w(mid, side, fwd, s_lo + 0.32, bf, 0.62), _sz(side, fwd, 0.42, bd - 0.2, 0.09))
-	_box(_blanket, _w(mid, side, fwd, bs + 0.3, bf + 0.02, 0.595), _sz(side, fwd, bl - 0.65, bd - 0.04, 0.03))
+	# LA3: the bedding (a thin mattress, the pillow, a grey blanket folded at the foot) is client/prison_dress.gd's.
 	bunk_centres[number - 1] = _w(mid, side, fwd, bs, bf, 0.5)
 	# The night light on the back wall over the bunk: a caged orange lamp, and its light.
 	var lp := _w(mid, side, fwd, bs, b_back - 0.07, NIGHT_LIGHT_Y)
@@ -660,6 +661,7 @@ func _cell(r: Dictionary, number: int, bunk: Vector2i) -> void:
 		_box(_steel, _w(mid, side, fwd, cs, back - cd - 0.014, k), _sz(side, fwd, 0.36, 0.008, 0.02))
 	_box(_brass, _w(mid, side, fwd, cs + 0.2, back - cd - 0.02, 1.0), _sz(side, fwd, 0.03, 0.02, 0.14))
 	cabinet_centres[number - 1] = _w(mid, side, fwd, cs, back - cd, 1.0)
+	cell_dressing.call("cell", self, number, mid, side, fwd, s_lo, s_hi, back, bs, bf, bl, bd, cs, cd, ts)
 
 # --- the bank room ----------------------------------------------------------------------------
 
