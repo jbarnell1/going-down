@@ -192,10 +192,13 @@ func test_changed_seeds_keep_the_wards_properties(t: T) -> void:
 	t.check(unjoined.is_empty(), "20 changed seeds: every house has an opening he can reach from his lair: %s" % str(unjoined.slice(0, 6)))
 	t.check(unsafe.is_empty(), "20 changed seeds: from every opening at least one room is out of the arm's reach: %s" % str(unsafe.slice(0, 6)))
 
-## The seeded Ward (WG1) already strands spots on some seeds with this flag off: 273673180 ("run-5") with the bridge
-## up, 1677347106 ("run-173") with it down (a separate ticket). The flag must add none: for each changed seed, bridge
-## up and down, prop_ward_reach's stranded spots with the flag on are no more than with it off. The quick set: late-2
-## and 273673180; the default run: every changed seed of the 500.
+## The flag must strand no spot: for each changed seed, bridge up and down, prop_ward_reach's stranded spots with the
+## flag on are no more than with it off. The quick set: late-2 and 273673180; the default run: every changed seed of
+## the 500.
+## 25 Nov (WH1): this test used to expect spots already stranded with the flag off on 273673180 ("run-5", bridge up)
+## and noted 1677347106 ("run-173", bridge down). Those were prop_ward_reach's own fault (its half-metre grid missed
+## a 0.3 m way out beside a stair; the game's way-finder walks home from them), so the named seed now expects none,
+## with the flag and without.
 const STRANDED_BEFORE := 273673180
 
 func test_the_flag_adds_no_stranded_spot(t: T) -> void:
@@ -221,8 +224,8 @@ func test_the_flag_adds_no_stranded_spot(t: T) -> void:
 				named_off = off
 				named_on = on
 	t.check(added.is_empty(), "%d changed seeds, bridge up and down: the flag strands no spot that was not stranded without it: %s" % [seeds.size(), "; ".join(added)])
-	t.check(named_off > 0 and named_on == named_off, "273673180, bridge up: the seeded Ward's own stranded spots, the same with the flag (%d off, %d on)" % [named_off, named_on])
-	t.note("already stranded with the flag off (WG1, a separate ticket): %s" % "; ".join(already))
+	t.check(named_off == 0 and named_on == 0, "273673180, bridge up: no spot is stranded, with the flag or without (%d off, %d on)" % [named_off, named_on])
+	t.check(already.is_empty(), "no spot is stranded with the flag off: %s" % "; ".join(already))
 
 # ------------------------------------------------------------------------------------------------
 # 5. Walking out of the car on late-2.

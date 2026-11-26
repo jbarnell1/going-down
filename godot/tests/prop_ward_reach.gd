@@ -4,11 +4,29 @@
 # The grid: cells of CELL metres on every standing surface, joined where state.walk carries a walker from one cell's
 # middle to the next (the screen's own 7 cm sliding steps), both ways tested separately. Also: a raise of the bridge
 # under someone is refused, so the lowered-then-raised case starts from the lowered reach.
+#
+# 25 Nov (WH1): the grid alone called spots cut off that a player walks out of. It keeps one pair of feet for each
+# half-metre cell and pushes along the two axes only, so a way out narrower than a cell is missed: at the foot of a
+# bedsit's stair (seeded Wards 273673180 and 1677347106; the homes Ward 190057) the only way off the landing is 0.3 m
+# of floor between the stair's side and the wall, and the cell's kept feet stand on the stair's line, where a push
+# back climbs the stair again. So a spot the grid cannot walk home is now put to the game's own way-finder
+# (client/ward/route.gd Route.find: the same walk model, 0.3 m steps, eight ways, half-metre heights), and it is cut
+# off only when that finds no walk into the car either. A walk the way-finder returns is a row of the walk model's
+# own steps, so it proves the way home; the grid still decides which spots are reached at all.
 extends RefCounted
 
 const T = preload("res://tests/t.gd")
 const Ward = preload("res://sim/ward/state.gd")
+const Layout = preload("res://sim/ward/layout.gd")
+const Route = preload("res://client/ward/route.gd")
 const CELL := 0.5
+## The most spots the way-finder may search for one walk home (the longest on the three floors above took 3,322).
+const ROUTE_BUDGET := 12000
+## After this many spots with no walk home found, the rest are reported as the grid left them: a real strand is a
+## whole room, and each search that fails runs to its budget.
+const ROUTE_MISSES := 3
+## Of the last stranded() or _cut_off(): the spots the grid alone could not walk home, before the way-finder was asked.
+static var grid_only := 0
 
 ## The cells a walker can stand in, keyed by Vector2i, with their feet; and the walk edges between neighbours.
 static func _grid(w: Ward) -> Dictionary:
@@ -45,7 +63,73 @@ static func _reach(w: Ward, start: Vector3, lo: Vector2) -> Dictionary:
 				todo.append(to)
 	return seen
 
-## Spots reached from the lift with no walk back into the car (within 1 m of where the crew stands in it).
+## Where the crew stands in the car: home.
+static func _car(w: Ward, lowered: bool) -> Vector3:
+	var car := w.lift_door() + Vector3(0, 0.0, -1.0)
+	car.y = w.footing.walking_height(Vector2(car.x, car.z), w.lift_door().y, lowered)
+	return car
+
+## True when the game's way-finder walks from `from` into the car (to within 0.45 m of where the crew stands, on the
+## car's floor), the Ward as it stands.
+static func _walks_home(w: Ward, from: Vector3, car: Vector3) -> bool:
+	var route := Route.find(w, from, Vector2(car.x, car.z), 0.45, ROUTE_BUDGET)
+	return not route.is_empty() and absf((route[-1] as Vector3).y - car.y) < 0.3
+
+## Of `spots` (a _reach from the car), those with no walk back into the car, the Ward as it stands now.
+static func _cut_off(w: Ward, car: Vector3, spots: Dictionary, lo: Vector2, raise_after := false) -> Array[Vector3]:
+	# Every walk between reached cells (all of a cell's walks stay in the reached set when nothing changed), then
+	# back from the car over them reversed: the cells with a walk home.
+	var into := {}
+	var dirs: Array[Vector2] = [Vector2(CELL, 0), Vector2(-CELL, 0), Vector2(0, CELL), Vector2(0, -CELL)]
+	var left := {}
+	for k: Vector3i in spots:
+		var at: Vector3 = spots[k]
+		if raise_after and not is_finite(w.footing.height_at(Vector2(at.x, at.z), false)):
+			left[k] = true # a raise with someone on the deck is refused (sim/ward/state.gd _shortcut_occupied)
+			continue
+		for d in dirs:
+			var to := w.walk(at, d)
+			if to.distance_to(at) < CELL * 0.5:
+				continue
+			var j := _key(to, lo)
+			if not into.has(j):
+				into[j] = []
+			(into[j] as Array).append(k)
+	var home := {}
+	_spread_home(_key(car, lo), into, home)
+	grid_only = 0
+	for k: Vector3i in spots:
+		grid_only += int(not home.has(k) and not left.has(k))
+	# The grid is coarse (see the top of the file): what it could not walk home, the game's way-finder is asked.
+	# One walk found brings home every cell with a grid walk to that spot.
+	var misses := 0
+	for k: Vector3i in spots:
+		if home.has(k) or left.has(k):
+			continue
+		if misses >= ROUTE_MISSES:
+			break
+		if _walks_home(w, spots[k], car):
+			_spread_home(k, into, home)
+		else:
+			misses += 1
+	var bad: Array[Vector3] = []
+	for k: Vector3i in spots:
+		if not home.has(k) and not left.has(k):
+			bad.append(spots[k])
+	return bad
+
+## Marks `from` and every cell with a walk into it (over `into`, the grid's walks reversed) as home.
+static func _spread_home(from: Vector3i, into: Dictionary, home: Dictionary) -> void:
+	home[from] = true
+	var todo: Array = [from]
+	while not todo.is_empty():
+		var k: Vector3i = todo.pop_back()
+		for f: Vector3i in into.get(k, []):
+			if not home.has(f):
+				home[f] = true
+				todo.append(f)
+
+## Spots reached from the lift with no walk back into the car (within 0.45 m of where the crew stands in it).
 ## `options` a generated layout's (WG1, sim/ward/layout.gd options; tests/prop_ward_layout.gd); {} today's Ward.
 static func stranded(seed_value: int, lowered: bool, doors_open: bool, raise_after := false, options: Dictionary = {}) -> Array[Vector3]:
 	var w := Ward.new(seed_value, options)
@@ -55,43 +139,11 @@ static func stranded(seed_value: int, lowered: bool, doors_open: bool, raise_aft
 	# Boarding: the car's gate is open, as when the lift has come back for the crew.
 	w.phase = &"boarding"
 	var g := _grid(w)
-	var car := w.lift_door() + Vector3(0, 0.0, -1.0)
-	car.y = w.footing.walking_height(Vector2(car.x, car.z), w.lift_door().y, lowered)
+	var car := _car(w, lowered)
 	var spots := _reach(w, car, g.lo)
 	if raise_after:
 		w.bridge_lowered = false
-	# Every walk between reached cells (all of a cell's walks stay in the reached set when nothing changed), then
-	# back from the car over them reversed: the cells with a walk home.
-	var into := {}
-	var dirs: Array[Vector2] = [Vector2(CELL, 0), Vector2(-CELL, 0), Vector2(0, CELL), Vector2(0, -CELL)]
-	for k: Vector3i in spots:
-		var at: Vector3 = spots[k]
-		if raise_after and not is_finite(w.footing.height_at(Vector2(at.x, at.z), false)):
-			continue # a raise with someone on the deck is refused (sim/ward/state.gd _shortcut_occupied)
-		for d in dirs:
-			var to := w.walk(at, d)
-			if to.distance_to(at) < CELL * 0.5:
-				continue
-			var j := _key(to, g.lo)
-			if not into.has(j):
-				into[j] = []
-			(into[j] as Array).append(k)
-	var home := {_key(car, g.lo): true}
-	var todo: Array = [_key(car, g.lo)]
-	while not todo.is_empty():
-		var k: Vector3i = todo.pop_back()
-		for f: Vector3i in into.get(k, []):
-			if not home.has(f):
-				home[f] = true
-				todo.append(f)
-	var bad: Array[Vector3] = []
-	for k: Vector3i in spots:
-		var spot: Vector3 = spots[k]
-		if raise_after and not is_finite(w.footing.height_at(Vector2(spot.x, spot.z), false)):
-			continue
-		if not home.has(k):
-			bad.append(spot)
-	return bad
+	return _cut_off(w, car, spots, g.lo, raise_after)
 
 func test_every_reachable_spot_walks_back_to_the_lift(t: T) -> void:
 	# The quick set: the reported floor and one more (about a minute); the default run: twenty floors.
@@ -116,6 +168,40 @@ func test_every_reachable_spot_walks_back_to_the_lift(t: T) -> void:
 	t.check(total == 0, "no reachable spot is cut off from the lift: %s" % "; ".join(lines))
 	t.note("%d seeds x bridge down/up x doors open/shut, and down-then-raised: %d stranded spots" % [seeds.size(), total])
 
+## WH1: the three floors where the grid alone reported a whole wing cut off (204, 207 and 127 spots) behind a way
+## out narrower than its cells. The way-finder walks home from them, so none is cut off; and the grid alone still
+## misses the way, so this is the way-finder's check and not the grid's. The quick set: the first.
+func test_a_way_out_narrower_than_the_grid_is_not_a_strand(t: T) -> void:
+	var homes := Layout.options(null, true)
+	homes["homes"] = 1
+	var floors: Array = [[273673180, false, Layout.options(null), "seeded Ward, bridge up"]]
+	if t.size_key() != "quick":
+		floors.append([1677347106, true, Layout.options(null), "seeded Ward, bridge down"])
+		floors.append([190057, true, homes, "Ward of homes, bridge down"])
+	for f: Array in floors:
+		var bad := stranded(int(f[0]), bool(f[1]), true, false, f[2])
+		t.check(bad.is_empty(), "seed %d (%s): no reachable spot is cut off from the lift (%d)" % [f[0], f[3], bad.size()])
+		t.check(grid_only > 0, "seed %d (%s): the grid alone misses the way home from %d spots, so the way-finder is what is checked here" % [f[0], f[3], grid_only])
+		t.note("seed %d (%s): the grid alone could not walk home %d spots; after the way-finder, %d" % [f[0], f[3], grid_only, bad.size()])
+
+## A real strand is still reported: the crew spreads through the Ward with every door open, then every door is
+## shut. Those inside a house have no walk out (the grid and the way-finder agree); those outside still walk home.
+func test_a_room_shut_behind_someone_is_reported(t: T) -> void:
+	var w := Ward.new(8143)
+	w.bridge_lowered = true
+	for i in w.houses.size():
+		w.requested_doors[i] = true
+	w.phase = &"boarding"
+	var g := _grid(w)
+	var car := _car(w, true)
+	var spots := _reach(w, car, g.lo)
+	for i in w.houses.size():
+		w.requested_doors[i] = false
+	var bad := _cut_off(w, car, spots, g.lo)
+	t.check(not bad.is_empty() and bad.size() == grid_only, "with the doors shut behind them, spots are cut off, and the way-finder finds no walk out of them either (%d of the grid's %d)" % [bad.size(), grid_only])
+	t.check(bad.size() < spots.size(), "and the spots outside the shut doors still walk home (%d cut off of %d reached)" % [bad.size(), spots.size()])
+	t.note("doors shut behind the crew: %d spots cut off of %d reached" % [bad.size(), spots.size()])
+
 ## The spot from the two-client run (seed late-1, Ward seed 183025961, bridge lowered, all doors open).
 func test_the_reported_spot_walks_back(t: T) -> void:
 	var w := Ward.new(183025961)
@@ -125,8 +211,6 @@ func test_the_reported_spot_walks_back(t: T) -> void:
 	var spot := Vector3(-0.94, 0.23, 15.32)
 	var y := w.footing.walking_height(Vector2(spot.x, spot.z), spot.y, true)
 	t.note("the reported spot: footing height %s (reported 0.23), standable by the walk model: %s" % [str(y), str(w.walk_clear(spot, spot))])
-	var car := w.lift_door() + Vector3(0, 0.0, -1.0)
-	car.y = w.footing.walking_height(Vector2(car.x, car.z), w.lift_door().y, true)
 	var back := _reach(w, Vector3(spot.x, y if is_finite(y) else spot.y, spot.z), g.lo)
 	# With the lift away its gate is shut: back to the mouth of the car (outside the gate) is home.
 	var mouth := w.lift_door() + Vector3(0, 0, 0.5)
