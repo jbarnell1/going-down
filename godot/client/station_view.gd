@@ -92,7 +92,8 @@ const TAPE_HALO := 0.5
 ## The cassette table's top above its foot (sim/station.gd PLINTH_TOP).
 const PLINTH_TOP := 0.9
 ## Tests only: one-line breaks the tests prove themselves with. "lights": the cut leaves the battens on;
-## "anchor": every anchored prop is drawn at the landing instead; "reach": prompts ignore the reach.
+## "anchor": every anchored prop is drawn at the landing instead; "reach": prompts ignore the reach; "fill": the side
+## rooms get no fill (the station as it was before LA8, for the checks that measure the difference).
 static var test_break := ""
 
 var lv: Level
@@ -200,6 +201,8 @@ func _dress(level: Level, source_plan: RefCounted) -> void:
 	dresser.build()
 	# LA7: the side rooms' own look, looks only (client/station_rooms.gd).
 	Rooms.dress(lv, self, dresser, anchors)
+	# LA8: the side rooms' walls, ceilings and dressing lit as their floors are, with the mains.
+	_side_fill()
 	_landing()
 	_plinth_table()
 	_crawl_trays()
@@ -540,6 +543,173 @@ func _lamps() -> void:
 		lamps.append({"light": o, "globe": gm, "emergency": em, "at": at})
 		_place("lamp", at)
 
+## LA8: the side rooms with the mains on. The battens are spots pointing straight down (BATTEN_ANGLE from the vertical),
+## so a wall is lit only low down and only near one, and the ceiling not at all. Near the lift the surfaces' own light
+## (SELF_LIT) covers that, but the walk from the lift takes most of it away (station_surface.gdshader: less with the
+## corruption, which also darkens the paint and the concrete), and the side rooms are the farthest part of the station:
+## under bright battens their upper walls and ceilings fell to near black. So each side room's walls (from FILL_FROM up,
+## all of it from FILL_TO) and ceiling get their own light topped up to what a lit room's read as: the light already on
+## them (the battens, the amber lamps, the ambient and their own, worked out here as the renderer adds it up) is brought
+## to WALL_TARGET and CEIL_TARGET on bare concrete, more where the grime has darkened the surface, nothing where a wall is
+## already that bright. The dressing (client/station_rooms.gd) takes FILL_PROPS of its room's wall fill. No light is
+## added: it is the surfaces' own light, in the materials the station already has, from one texel per cell (red the
+## walls', green the ceiling's; zero outside the side rooms). It goes with the battens on the same path (_apply): none in
+## the cut, and down with them in a blink. Floors, the fuse, the hall, the gallery, the landing, the crawl and the switch
+## room are as they were. The targets were set from LA8's real-window pictures.
+const WALL_TARGET := 0.57
+## A narrow room (two cells or less across: the closets) is seen from close up, through little of the station's haze, so
+## its walls take this share of the target (in the pictures a closet's wall at 1 m read brightest of all).
+const NARROW_SHARE := 0.88
+const CEIL_TARGET := 0.54
+## How much more a grimed room is given than the grime's tint alone takes away (its stains darken it further; the real-
+## window pictures had the dirtiest rooms reading darkest for the same worked-out light).
+const GRIME_POWER := 1.4
+const FILL_PROPS := 0.6
+const FILL_FROM := 0.6
+const FILL_TO := 2.0
+## The fill one full texel stands for.
+const FILL_REF := 1.5
+## A lamp's light as the renderer gives it against the surfaces' own light (energy x Lambert x pi: Godot's punctual
+## lights come with the Lambert term's 1/pi already taken out). The real-window pictures put the lit floors far brighter
+## against the walls than the plain sum did (tests/station_light.gd DIRECT_GAIN).
+const RENDER_GAIN := PI
+## The game's ambient energy with the lights on (client/main.gd).
+const AMBIENT_ENERGY := 0.12
+## Room id -> the light already on its walls between 1.5 and 2.5 m, with the mains (before the albedo).
+var fill_rooms := {}
+## Vector2i cell -> Vector2(the walls' texel, the ceiling's texel), 0..1 as stored.
+var fill_cells := {}
+## The fill's share now (1 with the mains and every light up, 0 in the cut).
+var fill_k := 0.0
+## [material, uniform, gain]: what _apply drives.
+var _fill_mats: Array = []
+var _fill_tex: ImageTexture
+
+static func _lum(c: Color) -> float:
+	var l := c.srgb_to_linear()
+	return l.r * 0.2126 + l.g * 0.7152 + l.b * 0.0722
+
+## The light one spot or omni light throws on point p of a surface facing n with the given energy, as the renderer adds
+## it up (no shadows on the station).
+static func light_on(l: Light3D, energy: float, p: Vector3, n: Vector3) -> float:
+	var rel := l.position - p
+	var d := rel.length()
+	var spot := l as SpotLight3D
+	var reach: float = spot.spot_range if spot else (l as OmniLight3D).omni_range
+	var decay: float = spot.spot_attenuation if spot else (l as OmniLight3D).omni_attenuation
+	if d < 1e-4 or d >= reach:
+		return 0.0
+	var ndl := maxf(n.dot(rel / d), 0.0)
+	if ndl <= 0.0:
+		return 0.0
+	var nd := pow(d / reach, 4.0)
+	var att := pow(maxf(1.0 - nd, 0.0), 2.0) * pow(d, -decay)
+	if spot:
+		var cutoff := cos(deg_to_rad(spot.spot_angle))
+		var scos := maxf((-rel / d).dot(-spot.transform.basis.z.normalized()), cutoff)
+		var rim := maxf(0.0001, (1.0 - scos) / (1.0 - cutoff))
+		att *= 1.0 - pow(rim, spot.spot_angle_attenuation)
+	return _lum(l.light_color) * energy * ndl * att * RENDER_GAIN
+
+## How much the corruption at t leaves of a surface's brightness (station_surface.gdshader: the grime's tint on a grey).
+static func grime(t: float) -> float:
+	var dirt := smoothstep(0.2, 0.85, t)
+	return lerpf(1.0, 0.74 * 0.2126 + 0.7 * 0.7152 + 0.52 * 0.0722, dirt)
+
+## The light on point p facing n with the mains on, before the albedo: battens, amber lamps, ambient, own (corruption t).
+func _lit_at(p: Vector3, n: Vector3, t: float) -> float:
+	var sum := AMBIENT_ENERGY * _lum(AMBIENT_LIT) + SELF_LIT * (1.0 - smoothstep(0.2, 0.85, t) * 0.85)
+	for i in lv.main_lights.size():
+		var l := lv.main_lights[i]
+		if l.position.y < LH:
+			sum += light_on(l, lv._base_energy[i], p, n)
+	for d: Dictionary in lamps:
+		sum += light_on(d["light"], LAMP_ENERGY, p, n)
+	return sum
+
+func _side_fill() -> void:
+	var img := Image.create(maxi(1, lv.W), maxi(1, lv.H), false, Image.FORMAT_RGB8)
+	img.fill(Color(0, 0, 0))
+	var steps: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	var vert: Array = lv.edges[0].vertical
+	var hor: Array = lv.edges[0].horizontal
+	for r: Dictionary in lv.plan.rooms:
+		if int(r.get("level", 0)) != 0 or not Rooms.KINDS.has(str(r.kind)):
+			continue
+		var wall_sum := 0.0
+		var wall_n := 0
+		var ceil_sum := 0.0
+		var ceil_n := 0
+		for y in range(int(r.y), int(r.y) + int(r.h)):
+			for x in range(int(r.x), int(r.x) + int(r.w)):
+				var c := lv.cell_center(0, x, y)
+				var t := lv.corruption(0, x, y)
+				ceil_sum += _lit_at(c + Vector3(0, LH - 0.001, 0), Vector3.DOWN, t)
+				ceil_n += 1
+				for o in steps:
+					var e: String
+					if o.y != 0:
+						e = hor[(y + maxi(o.y, 0)) * lv.W + x]
+					else:
+						e = vert[y * (lv.W + 1) + x + maxi(o.x, 0)]
+					if e != "wall":
+						continue
+					var nn := Vector3(-o.x, 0, -o.y)
+					for h: float in [1.5, 2.0, 2.5]:
+						wall_sum += _lit_at(c - nn * (S * 0.5 - WALL_T * 0.5) + Vector3(0, h, 0), nn, t)
+						wall_n += 1
+		var wall_lit := wall_sum / maxf(1.0, wall_n)
+		var wall_want := WALL_TARGET * (NARROW_SHARE if mini(int(r.w), int(r.h)) <= 2 else 1.0)
+		var ceil_lit := ceil_sum / maxf(1.0, ceil_n)
+		fill_rooms[int(r.id)] = wall_lit
+		for y in range(int(r.y), int(r.y) + int(r.h)):
+			for x in range(int(r.x), int(r.x) + int(r.w)):
+				var g := pow(grime(lv.corruption(0, x, y)), GRIME_POWER)
+				var fw := maxf(0.0, wall_want / g - wall_lit)
+				var fc := maxf(0.0, CEIL_TARGET / g - ceil_lit)
+				var v := Vector2(roundf(clampf(fw / FILL_REF, 0.0, 1.0) * 255.0), roundf(clampf(fc / FILL_REF, 0.0, 1.0) * 255.0)) / 255.0
+				img.set_pixel(x, y, Color(v.x, v.y, 0))
+				fill_cells[Vector2i(x, y)] = v
+	_fill_tex = ImageTexture.create_from_image(img)
+	var area := Vector2(lv.W * S, lv.H * S)
+	for m: ShaderMaterial in [mat_wall_c, mat_wall_g, mat_ceil]:
+		m.set_shader_parameter("fill_tex", _fill_tex)
+		m.set_shader_parameter("fill_area", area)
+		m.set_shader_parameter("fill_from", FILL_FROM)
+		m.set_shader_parameter("fill_to", FILL_TO)
+		m.set_shader_parameter("fill", 0.0)
+		_fill_mats.append([m, "fill", FILL_REF])
+	# The dressing's two materials (the landing props' and the station dressing's steel): only its own cells have any.
+	var props: Array[ShaderMaterial] = [mat_props]
+	if dresser != null and (dresser.get(&"_mats") as Dictionary).has("steel"):
+		props.append((dresser.get(&"_mats") as Dictionary)["steel"])
+	for m in props:
+		m.set_shader_parameter("rise_tex", _fill_tex)
+		m.set_shader_parameter("rise_area", area)
+		m.set_shader_parameter("rise_from", FILL_FROM)
+		m.set_shader_parameter("rise_to", FILL_TO)
+		m.set_shader_parameter("rise_storey", LH)
+		m.set_shader_parameter("rise", 0.0)
+		_fill_mats.append([m, "rise", FILL_PROPS * FILL_REF])
+
+## The fill a station surface of material m shows now at p facing n (what station_surface.gdshader and prop.gdshader add
+## to their own light, before the albedo): for checks and the measuring scripts.
+func fill_at(m: Material, n: Vector3, p: Vector3) -> float:
+	if p.y >= LH:
+		return 0.0
+	for e: Array in _fill_mats:
+		if e[0] != m:
+			continue
+		var is_prop: bool = e[1] == "rise"
+		if not is_prop and n.y >= 0.5:
+			return 0.0
+		var wall := absf(n.y) < 0.5
+		var q := p + n * 0.3 if wall and not is_prop else p
+		var v: Vector2 = fill_cells.get(Vector2i(floori(q.x / S), floori(q.z / S)), Vector2.ZERO)
+		var up := smoothstep(FILL_FROM, FILL_TO, fposmod(p.y + 0.001, LH)) if wall or is_prop else 1.0
+		return float(e[2]) * fill_k * (v.x if wall or is_prop else v.y) * up
+	return 0.0
+
 ## The power from the block: 0 the mains, 1 the cut, 2 restored.
 func set_power(p: int) -> void:
 	power = p
@@ -563,6 +733,13 @@ func _apply() -> void:
 		var l := lv.main_lights[i]
 		l.visible = on and level_k > 0.02
 		l.light_energy = lv._base_energy[i] * level_k if on else 0.0
+	# LA8: the side rooms' fill goes with the battens, frame by frame (the blink included).
+	fill_k = level_k if on and level_k > 0.02 and test_break != "fill" else 0.0
+	for e: Array in _fill_mats:
+		var want: float = float(e[2]) * fill_k
+		var m: ShaderMaterial = e[0]
+		if not is_equal_approx(float(m.get_shader_parameter(e[1])), want):
+			m.set_shader_parameter(e[1], want)
 	if _applied == power:
 		return
 	_applied = power

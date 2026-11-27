@@ -17,6 +17,16 @@ uniform float paint_tile_m = 2.0;
 // Height of the painted dado above each floor (0: plain concrete) and the storey height.
 uniform float dado = 0.0;
 uniform float storey = 3.2;
+// LA8: the side rooms' walls and ceilings topped up to what a lit room reads as, where the battens' downward cones
+// miss (client/station_view.gd _side_fill). fill_tex holds one texel per cell of the lower storey (red the walls' share,
+// green the ceiling's, 0 for none: only the side rooms have any); `fill` is how much of it shows now (0 with the power
+// cut, down with the lights in a blink). Walls take it from fill_from up to its full at fill_to, so the skirting, the
+// floor and whatever lies on it are as they were; down-facing faces (the ceiling) take all of it; floors none.
+uniform sampler2D fill_tex : filter_nearest, repeat_disable, hint_default_black;
+uniform vec2 fill_area = vec2(1.0);
+uniform float fill = 0.0;
+uniform float fill_from = 0.6;
+uniform float fill_to = 2.0;
 
 varying vec3 wpos;
 varying vec3 wnorm;
@@ -66,4 +76,12 @@ void fragment() {
 	ROUGHNESS = 0.88;
 	SPECULAR = 0.3;
 	EMISSION = c * self_light * (1.0 - dirt * 0.85);
+	if (fill > 0.0 && wpos.y < storey && n.y < 0.5) {
+		// The cell this face looks into: a wall's face sits a few centimetres inside its own cell.
+		vec2 q = level_face ? wpos.xz : wpos.xz + n.xz * 0.3;
+		vec2 mt = texture(fill_tex, q / fill_area).rg;
+		float m = level_face ? mt.y : mt.x;
+		float up = level_face ? 1.0 : smoothstep(fill_from, fill_to, mod(wpos.y + 0.001, storey));
+		EMISSION += c * fill * m * up;
+	}
 }

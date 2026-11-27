@@ -10,6 +10,16 @@ uniform float use_vcol = 0.0;
 uniform float scissor = 0.0;
 uniform float emit = 0.0;
 uniform float triplanar = 0.0;
+// LA8: the Reactor's side rooms only (client/station_view.gd _side_fill): the dressing's share of its room's wall fill,
+// from a texel per cell of the lower storey (0 everywhere else), times `rise` (0 on every other floor and with the
+// power cut), taken from rise_from up to its full at rise_to over the storey's floor, so what lies on the floor is as
+// it was.
+uniform sampler2D rise_tex : filter_nearest, repeat_disable, hint_default_black;
+uniform vec2 rise_area = vec2(1.0);
+uniform float rise = 0.0;
+uniform float rise_from = 0.6;
+uniform float rise_to = 2.0;
+uniform float rise_storey = 3.2;
 
 varying vec3 wpos;
 varying vec3 wnorm;
@@ -30,4 +40,7 @@ void fragment() {
 	vec3 c = t.rgb * mix(vec3(1.0), COLOR.rgb, use_vcol);
 	ALBEDO = c;
 	EMISSION = c * emit;
+	if (rise > 0.0 && wpos.y < rise_storey) {
+		EMISSION += c * rise * texture(rise_tex, wpos.xz / rise_area).r * smoothstep(rise_from, rise_to, wpos.y);
+	}
 }
