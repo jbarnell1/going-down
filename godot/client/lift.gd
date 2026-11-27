@@ -168,6 +168,25 @@ static func rate_sheets(rates: PackedStringArray) -> Array[PackedStringArray]:
 			out.append(rows)
 	return out.slice(0, 2)
 
+## HU2: the Tenant's lamp row (client/stairs_lamps.gd), over the indicator: its middle this far above the indicator's
+## plate.
+const StairsLamps = preload("res://client/stairs_lamps.gd")
+const STAIRS_RISE := 0.16
+var _stairs: Node3D
+
+## HU2: the lamp row for the newest snapshot (`latest`, null for none).
+func show_stairs(latest: Variant) -> void:
+	if _stairs != null:
+		_stairs.call(&"show_for", latest)
+
+## HU2: what the lamp row shows (tests, the state command).
+func stairs_state() -> Dictionary:
+	if _stairs == null:
+		return {}
+	var d: Dictionary = (_stairs.get(&"state") as Dictionary).duplicate()
+	d["visible"] = _stairs.visible
+	return d
+
 var notice_lines := PackedStringArray()
 ## HUD1c: the rate sheets as printed (tests, state).
 var rate_lines: Array = []
@@ -295,6 +314,10 @@ func build(car: Dictionary, left_wall := false) -> void:
 	ind.position = Vector3(0, DOOR_H + 0.38, LAND + 0.045)
 	add_child(ind)
 	_box(Vector3(0, DOOR_H + 0.38, LAND + 0.03), Vector3(0.62, 0.3, 0.02), dark)
+	# HU2: the Tenant's STAIRS lamp row over the indicator, landing side (client/stairs_lamps.gd).
+	_stairs = StairsLamps.new()
+	_stairs.position = Vector3(0, DOOR_H + 0.38 + 0.15 + STAIRS_RISE, LAND + 0.045)
+	add_child(_stairs)
 	# The same indicator inside, over the doors, for the ride.
 	var ind_in := MeshInstance3D.new()
 	ind_in.mesh = q

@@ -52,6 +52,10 @@ static func fingerprint(lift: Lift) -> String:
 	for m: Array in meshes(lift):
 		if _is_look(m[0]):
 			continue
+		# HU2: the Tenant's STAIRS lamp row (client/stairs_lamps.gd) is new since the record too, on the landing wall over
+		# the doors (tests/test_settings_tabs.gd places it); every mesh the old car had is still counted here.
+		if (m[0] as Node).get_parent() != null and String((m[0] as Node).get_parent().name) == "StairsLamps":
+			continue
 		var b: AABB = m[1]
 		rows.append("%d,%d,%d/%d,%d,%d" % [roundi(b.position.x * 1000), roundi(b.position.y * 1000), roundi(b.position.z * 1000),
 			roundi(b.size.x * 1000), roundi(b.size.y * 1000), roundi(b.size.z * 1000)])

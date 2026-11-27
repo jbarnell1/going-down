@@ -944,6 +944,12 @@ func _build_view() -> void:
 	esc_menu.name = "EscMenu"
 	menu_layer.add_child(esc_menu)
 	esc_menu.chose.connect(_esc_chose)
+	# HU2: the settings' tabs change the hints, the tape look and the brightness through the game's own calls.
+	esc_menu.tabs.hints_get = func() -> bool: return announcer.hints.enabled
+	esc_menu.tabs.hints_set = _set_hints
+	esc_menu.tabs.tape_get = func() -> bool: return float(tape_mat.get_shader_parameter("strength")) > 0.5
+	esc_menu.tabs.tape_set = func(on: bool) -> void: tape_mat.set_shader_parameter("strength", 1.0 if on else 0.0)
+	esc_menu.tabs.bright_apply = _apply_brightness
 	split_view = SplitViewScript.new()
 	split_view.name = "SplitView"
 	sub.add_child(split_view)
@@ -2650,6 +2656,7 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		_notice_minutes = roundi(float(((lc.latest as Dictionary)["tenant"] as Dictionary).get("len", 0.0)) / 60.0)
 	if lift != null and is_instance_valid(lift):
 		lift.show_notice(_notice_minutes, PackedStringArray([hud.anger_rates, hud.health_rates]))
+		lift.show_stairs(lc.latest if lc != null else null)   # HU2: the Tenant's lamp row over the doors
 	_deal_frame(s)
 	if reel != null and bool(s.get("playing", true)):
 		# The picture stays in the car. The subtitle remains legible through the camcorder
@@ -4129,7 +4136,8 @@ func _command(c: String) -> String:
 		"display":
 			# HUD1: "display 1" holds Tab (DISPLAY) for a scripted run, "display 0" lets go.
 			t_display = p.size() > 1 and p[1] == "1"
-			return JSON.stringify({"display": t_display, "lines": Array(hud.visible_lines(Time.get_ticks_msec()))})
+			return JSON.stringify({"display": t_display, "lines": Array(hud.visible_lines(Time.get_ticks_msec())),
+				"stairs": lift.stairs_state() if lift != null and is_instance_valid(lift) else {}})
 		"stopmove":
 			t_move = []
 		"look":
@@ -5055,8 +5063,17 @@ func _sync_esc_menu() -> void:
 	esc_menu.playtest = link != null and not link.local and link.rc.get("playtest_on") == true
 	esc_menu.hints_on = announcer.hints.enabled
 	esc_menu.caught_soft = caught_pref.soft
+	# HU2: the owners of the settings the tabs change; the key list for CONTROLS.
+	var tabs := esc_menu.tabs
+	tabs.volume = volume
+	tabs.caught_pref = caught_pref
+	tabs.voice_pref = voice_pref
+	tabs.mic = mic
+	tabs.brightness = brightness
+	if esc_menu.page == "settings":
+		tabs.key_rows = hud.menu_rows()
 	esc_menu.shown = EscMenuScript.drawn_over(hud.menu_on if mode == "game" else (menu_overlay and not start.screen in ["face", "tape", "lobby", "playtest"]),
-		settings_panel.is_open(), bright_card.is_open())
+		settings_panel.is_open(), bright_card.is_open() or (mic != null and mic.calib_open))
 	if not esc_menu.shown and esc_menu.page != "top" and not settings_panel.is_open() and not bright_card.is_open():
 		esc_menu.open_menu()
 	# LK1: the HUD's key list is not drawn under the host's panel or the brightness card either.
@@ -5118,9 +5135,16 @@ func _esc_chose(id: String) -> void:
 			_open_sound()
 			if id == "mic" and settings_panel.mic_row_index() >= 0:
 				settings_panel._sound_row = settings_panel.mic_row_index()
-		"brightness":
+		"brightness", "bright_card":
 			_overlay_back = mode != "game" and menu_overlay
 			_open_brightness()
+		"mic_calib":
+			# HU2: the MICROPHONE tab's CALIBRATE: the card runs over the game (the menu waits behind it).
+			if mic != null and mic.listening():
+				mic.open_calibration()
+			else:
+				hud.note = "TURN THE MICROPHONE ON FIRST"
+				_note_until = Time.get_ticks_msec() + 2000
 		"hints":
 			_set_hints(not announcer.hints.enabled)
 		"caught":

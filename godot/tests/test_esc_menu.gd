@@ -2,7 +2,8 @@
 #   1. the top level: RESUME first and chosen, SETTINGS, CONTROLS, HOST TOOLS for the host only, LEAVE RUN in a run
 #      only, QUIT GAME except on the web; on the start screen RESUME reads BACK;
 #   2. every setting that was behind a key before is reachable from the menu (sound and voice, microphone,
-#      brightness, hints, caught scenes, the key list, the host's panel) and does what that key did;
+#      brightness, hints, caught scenes, the key list, the host's panel) and does what that key did (HU2: on the
+#      settings page's tabs, tests/test_settings_tabs.gd changes each one);
 #   3. Esc backs out one level and at the top closes the menu (the game resumes); RESUME takes the mouse again
 #      exactly as a click on the old card did (never under automation);
 #   4. LEAVE RUN and QUIT GAME do nothing until confirmed, and the confirm starts on STAY;
@@ -61,11 +62,23 @@ func test_every_setting_is_reachable(t: T) -> void:
 	m.sel = _ids(m).find("settings")
 	m.activate()
 	t.eq(str(m.page), "settings", "SETTINGS opens its page")
-	for id: String in ["sound", "mic", "brightness", "hints", "caught"]:
-		var at := _ids(m).find(id)
-		t.check(at >= 0, "%s is on the settings page" % id)
-		m.sel = at
-		m.activate()
+	# HU2: the settings are rows of the tabs (with the owners the game gives them, tests/test_settings_tabs.gd); the
+	# brightness card and the microphone's calibration are the game's to open.
+	var Tabs := preload("res://tests/test_settings_tabs.gd")
+	Tabs.wire(m.tabs)
+	var found := {}
+	for i: int in 5:
+		m.set_tab(i)
+		for id: String in _ids(m):
+			found[id] = true
+	for id: String in ["master", "music", "effects", "voice", "mic_on", "mic_out", "mic_sens", "mic_calib", "brightness", "bright_card", "hints", "caught", "tape", "key"]:
+		t.check(found.has(id), "%s is on a settings tab" % id)
+	for id: String in ["bright_card", "mic_calib"]:
+		for i: int in 5:
+			m.set_tab(i)
+			if _ids(m).has(id):
+				m.sel = _ids(m).find(id)
+				m.activate()
 		t.eq(got.back() if not got.is_empty() else "", id, "choosing %s asks the game for it" % id)
 	m.back()
 	m.sel = _ids(m).find("host")
@@ -78,15 +91,16 @@ func test_every_setting_is_reachable(t: T) -> void:
 	# The game does each with the code the old key used: one home per setting.
 	var src := FileAccess.get_file_as_string("res://client/main.gd")
 	var body := src.substr(src.find("func _esc_chose("), 1400)
-	for want: String in ["settings_panel.open()", "_open_sound()", "mic_row_index()", "_open_brightness()", "_set_hints(not announcer.hints.enabled)", "settings_panel.caught_set(not caught_pref.soft)", "_back_to_title()", "get_tree().quit()"]:
+	for want: String in ["settings_panel.open()", "_open_sound()", "mic_row_index()", "_open_brightness()", "_set_hints(not announcer.hints.enabled)", "settings_panel.caught_set(not caught_pref.soft)", "_back_to_title()", "get_tree().quit()", "mic.open_calibration()"]:
 		t.check(body.contains(want), "the menu uses %s" % want)
-	# The labels follow the settings they show.
+	# The rows say each setting as it is.
 	m = _menu(true, false)
 	m.page = "settings"
-	m.hints_on = false
-	m.caught_soft = true
-	var labels: Array = m.rows().map(func(r: Dictionary) -> String: return str(r["label"]))
-	t.check(labels.has("HINTS: OFF") and labels.has("CAUGHT SCENES: SOFT"), "the rows say the setting as it is (%s)" % str(labels))
+	Tabs.wire(m.tabs)
+	m.tabs.caught_pref.set(&"soft", true)
+	m.tabs.hints_set.call(false)
+	var values: Array = m.describe()["values"]
+	t.check(values.has("HINTS=OFF") and values.has("CAUGHT SCENES=SOFT"), "the rows say the setting as it is (%s)" % str(values))
 	m.free()
 
 func test_esc_backs_out_one_level(t: T) -> void:
@@ -152,12 +166,20 @@ func test_leave_and_quit_need_a_confirm(t: T) -> void:
 	m2.free()
 
 func test_every_page_fits_at_every_size(t: T) -> void:
-	var cases := [[true, true, "top"], [false, false, "top"], [true, false, "settings"], [false, false, "settings"], [true, false, "leave"], [true, false, "quit"], [false, false, "quit"]]
+	var cases := [[true, true, "top"], [false, false, "top"], [true, false, "leave"], [true, false, "quit"], [false, false, "quit"]]
+	# HU2: every tab of the settings page, in a run and on the start screen (tests/test_settings_tabs.gd checks the tab
+	# bar and the value columns).
+	for tb in 5:
+		cases.append([true, false, "settings", tb])
+		cases.append([false, false, "settings", tb])
 	for c: Array in cases:
 		var m := _menu(c[0], c[1])
 		m.page = c[2]
+		if c[2] == "settings":
+			preload("res://tests/test_settings_tabs.gd").wire(m.tabs)
+			m.set_tab(int(c[3]))
 		for s: Vector2 in SIZES:
-			var tag := "%s %s %dx%d" % [c[2], "run" if c[0] else "start", int(s.x), int(s.y)]
+			var tag := "%s%s %s %dx%d" % [c[2], (" " + m.tab_id()) if c[2] == "settings" else "", "run" if c[0] else "start", int(s.x), int(s.y)]
 			var lay: Dictionary = m.layout(s)
 			var card: Rect2 = lay["rect"]
 			var sc: float = lay["sc"]
@@ -178,6 +200,8 @@ func test_every_page_fits_at_every_size(t: T) -> void:
 			t.check(PixelFont.width(m._heading()) * sc + 16 <= card.size.x, "%s: the heading fits across" % tag)
 			if s == Vector2(1280, 720):
 				t.check(sc >= 3.0, "%s: large at 1280x720 (scale %d)" % [tag, int(sc)])
+			if s == Vector2(1024, 600):
+				t.check(sc >= 2.0, "%s: readable at the small window (scale %d)" % [tag, int(sc)])
 		m.free()
 
 func test_old_keys_and_the_mouse(t: T) -> void:

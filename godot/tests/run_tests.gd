@@ -80,6 +80,7 @@ const FILES: Array[String] = [
 	"test_announcer_voice",
 	"test_esc_card",
 	"test_esc_menu",
+	"test_settings_tabs",
 	"prop_ward_layout",
 	"prop_ward_lift_clear",
 	"prop_ward_homes",
