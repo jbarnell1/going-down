@@ -28,6 +28,7 @@ const Marks = preload("res://client/reactor_marks.gd")
 const CrewFour = preload("res://client/station_crew_view.gd")
 const Point = preload("res://client/station_point.gd")
 const Dress = preload("res://client/station_dress.gd")
+const Rooms = preload("res://client/station_rooms.gd")
 
 const S := 2.0
 const LH := 3.2
@@ -197,6 +198,8 @@ func _dress(level: Level, source_plan: RefCounted) -> void:
 	dresser.prepare(lv, self, anchors)
 	_rotor()
 	dresser.build()
+	# LA7: the side rooms' own look, looks only (client/station_rooms.gd).
+	Rooms.dress(lv, self, dresser, anchors)
 	_landing()
 	_plinth_table()
 	_crawl_trays()
