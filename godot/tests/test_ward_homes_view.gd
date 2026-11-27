@@ -28,6 +28,7 @@ const HostRules = preload("res://net/host_rules.gd")
 const Move = preload("res://sim/move.gd")
 const Homes = preload("res://sim/ward/homes.gd")
 const Dress = preload("res://client/ward/dress.gd")
+const HomesDress = preload("res://client/ward/homes_dress.gd")
 const DT := 0.05
 
 static func _homes() -> Dictionary:
@@ -47,16 +48,34 @@ static func _one_of_each(seeds: Array) -> Dictionary:
 					out[kind] = [seed_value, i, k]
 	return out
 
-## The drawn parts of a hide's hollow shape (client/ward/view.gd hide_pieces), as boxes local to its house.
+## The drawn parts of a hide's hollow shape (client/ward/view.gd hide_pieces), as boxes local to its house. WH3: a
+## bed, table or bath is drawn by its model instead (_model_faces).
 static func _parts(view: View, house: int, hide: int) -> Array[AABB]:
 	var out: Array[AABB] = []
 	for row: Dictionary in view.hide_pieces:
 		if int(row.house) != house or int(row.hide) != hide:
 			continue
 		for anchor: Node in (row.node as Node3D).get_children():
+			if anchor.get_child_count() == 0 or not ((anchor as Node3D).get_child(0) is MeshInstance3D):
+				continue
 			var mesh := ((anchor as Node3D).get_child(0) as MeshInstance3D).mesh as BoxMesh
 			var at := (anchor as Node3D).position
 			out.append(AABB(at - mesh.size * 0.5, mesh.size))
+	return out
+
+## WH3: the triangles of a hide's model as drawn (client/ward/homes_dress.gd add_model), local to its house; empty for a
+## hide drawn in boxes.
+static func _model_faces(view: View, house: int, hide: int) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for row: Dictionary in view.hide_pieces:
+		if int(row.house) != house or int(row.hide) != hide:
+			continue
+		for child: Node in (row.node as Node3D).get_children():
+			if child is MeshInstance3D and (child as MeshInstance3D).mesh is ArrayMesh:
+				var mi := child as MeshInstance3D
+				var xf := (row.node as Node3D).transform * mi.transform
+				for p in mi.mesh.get_faces():
+					out.append(xf * p)
 	return out
 
 static func _view(seed_value: int, layout: Array) -> View:
@@ -182,11 +201,14 @@ func test_each_hide_kind_puts_the_camera_inside_looking_out(t: T) -> void:
 		# Nothing is drawn over the picture, and the furniture is no solid box round the eyes: the camera is inside none
 		# of the hollow shape's parts, and the way straight out of it is clear.
 		var parts := _parts(view, house, hide)
-		t.check(not parts.is_empty(), "%s: drawn as a hollow shape" % kind)
+		var faces := _model_faces(view, house, hide)
+		t.check(not parts.is_empty() or not faces.is_empty(), "%s: drawn as a hollow shape or its model" % kind)
 		var blocked: Array[String] = []
 		for part in parts:
 			if part.has_point(at) or part.intersects_segment(at, at + d * (float(HidesView.INSET[kind]) + 0.25)) != null:
 				blocked.append(str(part))
+		if HomesDress.segment_hits(faces, at, at + d * (float(HidesView.INSET[kind]) + 0.25)):
+			blocked.append("its model")
 		t.check(blocked.is_empty(), "%s: nothing round the eyes and a clear view out of the open side: %s" % [kind, str(blocked)])
 		for root_child: Node in (view.houses[house].root as Node3D).get_children():
 			if root_child is StaticBody3D:

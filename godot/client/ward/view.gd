@@ -15,6 +15,7 @@ const RIGGER_PATH := "res://assets/ward/rigger.glb"
 const HAND_PATH := "res://assets/ward/search-hand.glb"
 ## AW1: the Ward's surfaces and sky (CC0 photographs at one world scale, the lift's shaft, the cavern's roof, the mist).
 const WardSkin = preload("res://client/ward/skin.gd")
+const HomesDress = preload("res://client/ward/homes_dress.gd")
 ## AW1: the height fog under the decks (world y, density): the drop reads as haze, not a black void.
 const FOG_HEIGHT := -4.0
 const FOG_HEIGHT_DENSITY := 0.08
@@ -1078,9 +1079,10 @@ func _interior_ties(root: Node3D, fixture: House, shoe: Vector3, lift_house := f
 	return ties
 
 
-## WH1: a home drawn plainly from its rules (sim/ward/house.gd with the run flag ward_homes): every wall, slab and
-## partition with its windows cut, the lift's wall as today's, the stairs, a lintel and posts at each inner doorway,
-## each piece of furniture a plain box where the rules have it, one lamp in every room, and a roof. Stage 2 dresses it.
+## WH1: a home drawn from its rules (sim/ward/house.gd with the run flag ward_homes): every wall, slab and partition
+## with its windows cut, the lift's wall as today's, the stairs, a lintel and posts at each inner doorway, each piece of
+## furniture's solid box where the rules have it, one lamp in every room, and a roof. WH3: each piece is drawn as real
+## furniture inside its box, with pictures, rugs and a pram besides (client/ward/homes_dress.gd).
 func _build_home(root: Node3D, site: Dictionary, fixture: House) -> void:
 	var bounds := fixture.floor_bounds
 	var holes: Array[AABB] = []
@@ -1129,16 +1131,21 @@ func _build_home(root: Node3D, site: Dictionary, fixture: House) -> void:
 		_set_solid(leaf, false)
 		inner_leaves.append({"house": houses.size(), "door": k, "node": leaf})
 	var hide_index := 0
-	for piece: Dictionary in fixture.furniture:
+	# WH3: the dressing, from the house's plan and its own seeded stream; its first rows are the furniture, in order.
+	var dressing := HomesDress.plan(fixture, seed_value, int(site.id))
+	for i in fixture.furniture.size():
+		var piece: Dictionary = fixture.furniture[i]
 		var box: AABB = piece.box
 		var color := "iron" if [&"range", &"copper", &"stove", &"mangle"].has(piece.kind) else ("plaster" if [&"bath", &"sink", &"toilet"].has(piece.kind) else "wood")
 		var body := _box(root, box.get_center(), box.size, color, true)
-		# WH1d: a hide (sim/hides.gd WARD_SPEC, in furniture order) keeps its solid box for sight lines, but is drawn
-		# hollow, so the camera inside it sees out through its real opening.
+		# The solid box stays for sight lines; the piece seen is its dressing.
+		(body.get_child(0) as Node3D).visible = false
+		# WH1d: a hide (sim/hides.gd WARD_SPEC, in furniture order) is drawn under its own node, open on its room's side,
+		# so the camera inside it sees out through its real opening.
 		if Hides.WARD_SPEC.has(StringName(piece.get("hide", ""))):
-			(body.get_child(0) as Node3D).visible = false
-			_hide_piece(root, fixture, hide_index, color)
+			_hide_piece(root, fixture, hide_index, "panel" if piece.kind == &"wardrobe" else color, dressing[i])
 			hide_index += 1
+	HomesDress.build(root, dressing, colors, seed_value, int(site.id))
 	for level in fixture.rooms_by_level.size():
 		var probes: Dictionary = fixture.areas if level == 0 else fixture.upper_areas(level)
 		for room: StringName in probes:
@@ -1150,16 +1157,17 @@ func _build_home(root: Node3D, site: Dictionary, fixture: House) -> void:
 ## WH1c: the homes' inner door leaves ({house, door, node}); shown where the walk model has them shut.
 var inner_leaves: Array[Dictionary] = []
 
-## WH1d: a home's hide drawn hollow in plain boxes, the camera's frame from inside (client/ward/hides_view.gd): a bed on
-## legs with the gap beneath, a table on legs, a bath an open tub, a wardrobe a cabinet with a crack between its doors on
-## the side facing its room. Its pieces are kept under one node, {house, hide, kind, node}, in hide_pieces.
+## WH1d: a home's hide drawn hollow, the camera's frame from inside (client/ward/hides_view.gd): a bed on legs with the
+## gap beneath, a table on legs, a bath an open tub, a wardrobe a cabinet with a crack between its doors on the side
+## facing its room. Its pieces are kept under one node, {house, hide, kind, node}, in hide_pieces. WH3: a bed, table or
+## bath is its modelled piece (`dressed`, client/ward/homes_dress.gd plan) fitted to its box, open beneath or hollow as built.
 var hide_pieces: Array[Dictionary] = []
 const BED_GAP := 0.32
 const LEG := 0.07
 const TOP := 0.05
 const PANEL := 0.04
 
-func _hide_piece(root: Node3D, fixture: House, hide: int, color: String) -> void:
+func _hide_piece(root: Node3D, fixture: House, hide: int, color: String, dressed: Dictionary = {}) -> void:
 	var row: Dictionary = fixture.hides[hide]
 	var b: AABB = row.box
 	var kind := StringName(row.kind)
@@ -1167,6 +1175,9 @@ func _hide_piece(root: Node3D, fixture: House, hide: int, color: String) -> void
 	node.name = "Hide%d" % hide
 	root.add_child(node)
 	hide_pieces.append({"house": houses.size(), "hide": hide, "kind": kind, "node": node})
+	if dressed.get("what", &"") == &"model":
+		HomesDress.add_model(node, dressed)
+		return
 	var lo := b.position
 	var hi := b.end
 	var part := func(a: Vector3, z: Vector3) -> void:

@@ -4486,7 +4486,7 @@ func _command(c: String) -> String:
 					mine["status"] = str(row.get("status", ""))
 					mine["aboard"] = row.get("aboard", false)
 			return JSON.stringify(mine)
-		"wardhouse", "wardbring", "wardlook", "wardhide", "warddoor":
+		"wardhouse", "wardbring", "wardlook", "wardhide", "warddoor", "wardroom":
 			return _ward_test_command(p)
 		_:
 			return "unknown command"
@@ -4605,7 +4605,7 @@ func _ward_test_command(p: PackedStringArray) -> String:
 	if not link.local or not link.rc is LocalRoom:
 		return JSON.stringify({"ok": false, "error": "%s is for playing alone" % p[0]})
 	var room := link.rc as LocalRoom
-	if p[0] == "wardhide" or p[0] == "warddoor":
+	if p[0] == "wardhide" or p[0] == "warddoor" or p[0] == "wardroom":
 		return _ward_homes_test_command(p, model, room)
 	var house := -1
 	if p.size() > 1:
@@ -4645,9 +4645,14 @@ func _ward_test_command(p: PackedStringArray) -> String:
 ##     works it.
 ##   warddoor at <house> <k> [flip]: the same at house <house>'s inner door <k> (sim/ward/house.gd inner_doors, any
 ##     storey), on its first side that is clear (`flip`: the other side first).
+##   wardroom <house> <storey> <room> [corner]: WH3: the player stands in a corner of that room (the first clear one
+##     from `corner`, 0-3; by default from the one farthest from its furniture), looking across it to the far corner and a
+##     little down, for a picture of its furniture; with a fifth word look=<kind> (a corner first), at that piece.
 func _ward_homes_test_command(p: PackedStringArray, model: Variant, room: LocalRoom) -> String:
 	if not model.houses[0].homes():
 		return JSON.stringify({"ok": false, "error": "this Ward has no homes (start with ward_homes=1)"})
+	if p[0] == "wardroom":
+		return _ward_room_command(p, model, room)
 	var n := int(p[2]) if p.size() > 2 and p[0] == "wardhide" else (int(p[1]) if p.size() > 1 and p[0] == "warddoor" else 0)
 	# WH2: one named door of one house, on any storey.
 	var only_house := -1
@@ -4707,6 +4712,66 @@ func _ward_homes_test_command(p: PackedStringArray, model: Variant, room: LocalR
 					pitch = 0.0
 					return JSON.stringify({"ok": true, "house": i, "door": k, "feet": [feet.x, feet.y, feet.z], "at": [door_at.x, door_at.y, door_at.z]})
 	return JSON.stringify({"ok": false, "error": "no such place", "seen": seen})
+
+## WH3: wardroom <house> <storey> <room> [corner] (see _ward_homes_test_command).
+func _ward_room_command(p: PackedStringArray, model: Variant, room: LocalRoom) -> String:
+	if p.size() < 4:
+		return JSON.stringify({"ok": false, "error": "wardroom <house> <storey> <room> [corner]"})
+	var i := int(p[1])
+	var level := int(p[2])
+	if i < 0 or i >= model.houses.size() or level < 0 or level >= model.houses[i].rooms_by_level.size():
+		return JSON.stringify({"ok": false, "error": "no house %s storey %s" % [p[1], p[2]]})
+	var h: Variant = model.houses[i]
+	var rect := Rect2()
+	for r: Dictionary in h.rooms_by_level[level]:
+		if str(r.name) == p[3]:
+			rect = r.rect
+	if not rect.has_area():
+		return JSON.stringify({"ok": false, "error": "no room %s on storey %d of house %d" % [p[3], level, i]})
+	var base := float(h.storeys[level].height)
+	var inner := rect.grow(-0.35)
+	var corners := [inner.position, Vector2(inner.end.x, inner.position.y), inner.end, Vector2(inner.position.x, inner.end.y)]
+	# By default the corner farthest from the room's furniture first, so the picture looks at it.
+	var first := int(p[4]) if p.size() > 4 else -1
+	if first < 0:
+		var sum := Vector2.ZERO
+		var count := 0
+		for piece: Dictionary in h.furniture:
+			if int(piece.level) == level and str(piece.room) == p[3]:
+				sum += Vector2((piece.box as AABB).get_center().x, (piece.box as AABB).get_center().z)
+				count += 1
+		var mid: Vector2 = sum / count if count > 0 else rect.get_center()
+		first = 0
+		for k in 4:
+			if (corners[k] as Vector2).distance_to(mid) > (corners[first] as Vector2).distance_to(mid):
+				first = k
+	for n in 4:
+		var c: Vector2 = corners[(first + n) % 4]
+		# Try the corner, then a little further into the room, until a walker may stand there.
+		for step in 6:
+			var local := Vector3(lerpf(c.x, rect.get_center().x, step * 0.12), base, lerpf(c.y, rect.get_center().y, step * 0.12))
+			var feet: Vector3 = h.to_world(local)
+			var y: float = model.footing.walking_height(Vector2(feet.x, feet.z), feet.y + 0.02, model.bridge_lowered)
+			if not is_finite(y) or absf(y - feet.y) > 0.3:
+				continue
+			feet.y = y
+			if not model.walk_clear(feet, feet) or str(h.room_at(level, local)) != p[3]:
+				continue
+			var body := Move.Body.make(feet.x, feet.z, link.body.level, feet.y)
+			room.place(body)
+			link.body = body
+			var far: Vector2 = corners[(first + n + 2) % 4]
+			var target: Vector3 = h.to_world(Vector3(far.x, base + 0.6, far.y))
+			# look=<kind>: at that piece of the room's dressing instead (client/ward/homes_dress.gd plan).
+			if p.size() > 5 and p[5].begins_with("look=") and _ward_floor.view != null:
+				for row: Dictionary in WardFloor.View.HomesDress.plan(h, _ward_floor.view.seed_value, i):
+					if str(row.kind) == p[5].trim_prefix("look=") and int(row.level) == level and str(row.room) == p[3]:
+						target = h.to_world((row.box as AABB).get_center())
+			yaw = atan2(-(target.x - feet.x), -(target.z - feet.z))
+			pitch = clampf(atan2(target.y - (feet.y + 1.6), Vector2(target.x - feet.x, target.z - feet.z).length()), -0.9, 0.3)
+			return JSON.stringify({"ok": true, "house": i, "storey": level, "room": p[3], "corner": (first + n) % 4,
+				"type": str(h.plan.type), "feet": [feet.x, feet.y, feet.z], "target": [target.x, target.y, target.z]})
+	return JSON.stringify({"ok": false, "error": "nowhere clear to stand in %s" % p[3]})
 
 ## PL1: a value as plain JSON (vectors and rects as number arrays, a body by its numbers).
 static func _late_plain(v: Variant) -> Variant:

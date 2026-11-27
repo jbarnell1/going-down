@@ -891,3 +891,18 @@ Rule learned:
 
 46. **A model the owner likes goes where it can be seen whole.** A slide or tower backed against a long plain wall
     reads at once; the same piece in the middle of a room hides the room and invites hiding where the rules have none.
+
+## The Hanging Ward homes' furniture (WH3, 2026-11-27)
+
+Eight Meshy pieces (the owner's paid plan, 21 Nov; the homes design's eight credits): a kitchen range, a kitchen table,
+a dresser of plates, an iron bed, a claw-foot bath, a long-case clock, a pram, and a wash copper beside a mangle (cut
+in two). `assets_src/blender/ward/build_ward_meshy.py` decimates them to 4,000-6,000 triangles with 1024 px colour into
+`godot/assets/ward/homes/` (ledger in its `SOURCES.md`). `client/ward/homes_dress.gd` fits each to the rules box of the
+piece it draws, its back to the nearest wall; every other piece (hearth, armchair, coat hooks, sink, drawers, shelf,
+toilet, lockers, workbench...) is built from boxes in the Ward's own photographs. Pictures, a crockery shelf, rugs and
+a pram are added where nothing walks, hides or reaches. No new outside photographs.
+
+Rule learned:
+
+47. **A hide's model turns to keep its opening open.** A bath's tap or a bed's hanging sheet on the open side blinds
+    the camera inside; the piece is turned (within what its box allows) until the view out is clear.
