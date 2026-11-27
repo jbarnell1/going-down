@@ -87,14 +87,23 @@ static func doors_open_in(phase: Variant) -> bool:
 ## Moves the local player the way the run does (move_in_run: walls, stairs, the car's doorway while
 ## the doors are open). move_in_run takes a whole RunState but reads only the plan, the car, the phase and
 ## which furniture layout the host selected (the world's "solid" code, Protocol).
-static func move_local(plan: Floor.FloorPlan, phase: Variant, body: Move.Body, dx: float, dz: float, radius: float = PLAYER_RADIUS, solid: bool = false, furniture_layout: bool = false) -> Move.Body:
+## `dangers` (DG0): the world's "dangers" block, or null: its closed doors and solids are boxes in the walk, as on the host.
+static func move_local(plan: Floor.FloorPlan, phase: Variant, body: Move.Body, dx: float, dz: float, radius: float = PLAYER_RADIUS, solid: bool = false, furniture_layout: bool = false, dangers: Variant = null) -> Move.Body:
 	var view := Run.RunState.new()
 	view.plan = plan
 	view.car = car_for(plan)
 	view.phase = StringName(phase)
 	view.furniture = solid
 	view.furniture_layout = furniture_layout
+	if dangers is Dictionary:
+		if not is_same(dangers, _danger_block):
+			_danger_block = dangers
+			_danger_floor = Run.DangerFx.from_block(dangers)
+		view.dangers = _danger_floor
 	return Run.move_in_run(view, body, dx, dz, radius)
+
+static var _danger_block: Variant = null
+static var _danger_floor: RefCounted = null
 
 ## Whether a camera could be showing the Orderly drawn at `pose` (Pose.camera_sees with the plan's car).
 static func camera_sees(plan: Floor.FloorPlan, cam: Pose.Camera, pose: Dictionary, doors_open: bool) -> bool:

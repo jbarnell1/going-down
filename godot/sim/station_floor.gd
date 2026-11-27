@@ -297,7 +297,8 @@ static func passed_landing(plan: Floor.FloorPlan, b: Move.Body) -> bool:
 	return b.z < land.position.y and b.z >= hall.position.y and b.x >= hall.position.x - 12.0 and b.x <= hall.end.x + 12.0
 
 ## One tick. `crew`: everyone in the run. Returns the ids caught this tick (on their feet; the run puts them down).
-static func step(st: StationFloor, crew: Array[Crew], t: float, dt: float, tuning: Settings.Values, events: Array[Dictionary]) -> Array[String]:
+## `extra_noises` (DG0, sim/dangers.gd): a danger's noises of last tick, each [x, z, radius]; empty without dangers.
+static func step(st: StationFloor, crew: Array[Crew], t: float, dt: float, tuning: Settings.Values, events: Array[Dictionary], extra_noises: Array = []) -> Array[String]:
 	st.seq += 1
 	var plan := st.plan
 	var by_id := {}
@@ -392,7 +393,7 @@ static func step(st: StationFloor, crew: Array[Crew], t: float, dt: float, tunin
 			prey.append(c)
 	var senses := Settings.f(tuning, &"reactor.senses", SENSES) > 0.5
 	var search_speed := Settings.f(tuning, &"reactor.search_speed", SEARCH_SPEED)
-	var drawn := _noises_drawn(st, crew, t, tuning, events) if senses else {}
+	var drawn := _noises_drawn(st, crew, t, tuning, events, extra_noises) if senses else {}
 	for i in st.bodies.size():
 		var b := st.bodies[i]
 		var age := st.awake - wake_time(st, i, tuning)
@@ -486,8 +487,10 @@ static func step(st: StationFloor, crew: Array[Crew], t: float, dt: float, tunin
 ## (reactor.hear_socket). Then, for each noise, the reactor.noise_draws nearest of the four that hear it (inside its
 ## radius, awake, not feeding, standing off or hunting) go to it; a body that hears two goes to the nearer.
 ## Returns {body index: Vector2 where to go}.
-static func _noises_drawn(st: StationFloor, crew: Array[Crew], t: float, tuning: Settings.Values, events: Array[Dictionary]) -> Dictionary:
+static func _noises_drawn(st: StationFloor, crew: Array[Crew], t: float, tuning: Settings.Values, events: Array[Dictionary], extra_noises: Array = []) -> Dictionary:
 	var noises: Array = []
+	for xn: Array in extra_noises:
+		noises.append([float(xn[0]), float(xn[1]), float(xn[2])])
 	for c in crew:
 		if c.shout and c.status == &"ok" and c.active:
 			noises.append([c.body.x, c.body.z, Settings.f(tuning, &"noise.emote", NOISE_EMOTE)])

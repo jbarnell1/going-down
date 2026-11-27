@@ -127,6 +127,9 @@ const HostRules = preload("res://net/host_rules.gd")
 
 const Run = preload("res://sim/run.gd")
 const Split = preload("res://sim/split.gd")
+## DG0: the dangers (sim/dangers.gd) and their questions (sim/dangers/effects.gd).
+const Dangers = preload("res://sim/dangers.gd")
+const DangerFx = preload("res://sim/dangers/effects.gd")
 const Entity = preload("res://sim/entity.gd")
 const Floor = preload("res://sim/floor.gd")
 const Instr = preload("res://sim/instrument.gd")
@@ -746,6 +749,9 @@ func _on_input(p: HostPlayer, m: Dictionary, ht: float) -> void:
 	# WC1: caught in the web, carried and hung: the rules hold the body (placed where they hang, and where they are cut down).
 	if _ward_review != null and _ward_review.webbed.has(p.id):
 		return
+	# DG0: held, stumbling, hung or on a ledge by a danger: the rules hold the body (placed where they are held).
+	if state != null and state.dangers != null and DangerFx.held_body(state.dangers, p.id, state.t) != null:
+		return
 	if _ward_review != null and not _trusted.has(p.id):
 		var held := Vector3(p.body.x, p.body.y, p.body.z) if p.body != null else Vector3.INF
 		var to := Vector3(mb.x, mb.y, mb.z)
@@ -812,6 +818,13 @@ func _hush_check(s: Run.RunState, t: float, extra: Array[Dictionary]) -> void:
 	if talkers >= 2 or shouting:
 		_hush_sent = t
 		extra.append({"type": "crewNoisy", "t": t, "talkers": talkers, "shouting": shouting})
+
+## DG0: whether a danger hides the resident from player `p` now (its dark region, a closed door between them, or the
+## player blinded): their "I can see it" counts for nothing, as in a blink.
+func _danger_hides(s: Run.RunState, p: HostPlayer) -> bool:
+	if s.dangers == null or s.plan == null:
+		return false
+	return DangerFx.blinded(s.dangers, p.id, s.t) or DangerFx.hides_resident(s.dangers, s.orderly.body, p.body, s.t, float(s.plan.cell_size))
 
 func _ward_reach(from: Vector3, to: Vector3) -> bool:
 	var w := _ward_review
@@ -971,6 +984,17 @@ func _step_ward_review(s: Run.RunState, inputs: Array[Run.PlayerInput]) -> Run.R
 	if ward_native() and _ward_review.phase != &"departed":
 		_step_ward_kit(r, inputs, next_time)
 	_hear_test_noises(r, next_time)
+	# DG0: the dangers' noises of the last tick, heard by the Rigger as a loud noise of their reach; then their step.
+	if s.dangers != null:
+		for h: Array in Dangers.heard_on_ward(s):
+			for cue in _ward_review.hear_loud(h[0], next_time, float(h[1])):
+				var event := cue.duplicate()
+				event["type"] = "ward_" + str(event["kind"])
+				event["t"] = event["at"]
+				r.events.append(event)
+		var rules: Object = _step_fn.get_object() if _step_fn.is_valid() else null
+		if rules != null and rules.has_method("step_dangers"):
+			rules.call("step_dangers", r.state, inputs, TICK, r.events, _ward_review)
 	return r
 
 ## WC1: the Ward's phase for the run's lift: its gate shuts while the car is away or coming, and it is gone once the
@@ -1095,7 +1119,7 @@ func _step(now: float) -> void:
 	var seeing := false
 	var two := s.orderly.need >= 2
 	for p: HostPlayer in _players.values():
-		if still and _playing(p) and not Run.flare_blinded(s, p.id, s.t) and p.input["seeing"] == true and ht - p.input_at <= Session.SEEING_TIMEOUT and _before_armed(p.input["renderTime"], true):
+		if still and _playing(p) and not Run.flare_blinded(s, p.id, s.t) and not _danger_hides(s, p) and p.input["seeing"] == true and ht - p.input_at <= Session.SEEING_TIMEOUT and _before_armed(p.input["renderTime"], true):
 			seeing = true
 			if not two:
 				break
@@ -1308,6 +1332,11 @@ func _step(now: float) -> void:
 			if wp != null:
 				wp.body = wb
 			_place(wid, wb, st.depth, st)
+		elif ty == "dangerHold" or ty == "dangerStumble" or ty == "dangerPush" or ty == "dangerPinned" or ty == "dangerUnpinned":
+			# DG0: the rules hold or move the body (sim/dangers.gd); the player's own screen goes along with it.
+			var dp0 := _find_run_player(st, str(e["playerId"]))
+			if dp0 != null:
+				_place(dp0.id, dp0.body, st.depth, st)
 		elif ty == "tableFreed":
 			# The party table freed (T15h): everyone who was seated stands beside it, where the rules put them.
 			for fid: Variant in e["freed"]:
@@ -1929,6 +1958,10 @@ func world(full: bool = false) -> Dictionary:
 			out["wipe"] = s.stand.wipe
 		if s.stand.standee != "":
 			out["standee"] = s.stand.standee
+	# DG0 (sim/dangers.gd block; Protocol "dg"): the floor's dangers, only in a run with them and only while there are any.
+	var danger_block: Variant = Dangers.block(s)
+	if danger_block != null:
+		out["dangers"] = danger_block
 	# ED1 (Protocol "deal"): the ride's card, its answers and roll, and what holds on this floor; absent with it off.
 	if s.deal != null:
 		var deal_block: Variant = Run.Deal.block(s.deal)

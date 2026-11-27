@@ -254,6 +254,9 @@ class FloorInput:
 	## The car doors are open for boarding / the car is riding: no count can start. Health stops in a ride.
 	var boarding: bool = false
 	var riding: bool = false
+	## DG0 (sim/dangers.gd): noises a danger made last tick, each [x, z, level, loud (metres), by (player id or "")].
+	## Empty unless the run has dangers.
+	var noises: Array = []
 
 # ---------------------------------------------------------------------------------------------
 # The floor's lists, worked out once.
@@ -869,6 +872,25 @@ static func step_seek(prev: SeekState, inputs: Array[SeekInput], dt: float, fl: 
 	# The party table: the fetcher's hold, after everyone has moved (see the section at the end).
 	if s.party:
 		_fetch_step(s, input_of, t, dt, noisy, events)
+	# DG0: a danger's noise within its reach of the Minder is one lump, blamed on who set it off (else the nearest up).
+	for dn: Array in fl.noises:
+		var dn_at := Move.Body.make(float(dn[0]), float(dn[1]), int(dn[2]), m.body.y)
+		if int(dn[2]) != m.body.level or not _touching(m.body, dn_at, float(dn[3])):
+			continue
+		var dn_by := str(dn[4])
+		if player_of(s, dn_by) == null:
+			dn_by = ""
+			var dn_best := INF
+			for p in s.players:
+				var pin: SeekInput = input_of.get(p.id, null)
+				if pin == null or not pin.active or p.status != &"ok" or p.body == null:
+					continue
+				var dd := M.hypot2(p.body.x - dn_at.x, p.body.z - dn_at.z)
+				if dd < dn_best:
+					dn_best = dd
+					dn_by = p.id
+		if dn_by != "":
+			_note(noisy, dn_by, WHY_DANGER)
 	if not noisy.is_empty():
 		level = NOISE_FULL
 	s.noise = level
@@ -1438,7 +1460,9 @@ const TUNED_SEARCH := 30.0
 ## its lump (three of them fill it). Nobody provoking, it cools by ANGER_COOL a second (full to empty in
 ## 50 s). The bar is full through a count and drains to empty over the CALM_TIME after it.
 const ANGER_RATES := {&"sprint": 0.5, &"squeaker": 0.5, &"bump": 1.0, &"light": 0.5, &"voice": 0.5}
-const ANGER_LUMPS := {&"ballpit": 0.34, &"flap": 0.34, &"tape": 0.34, &"emote": 0.34, &"toy": 0.34}
+const ANGER_LUMPS := {&"ballpit": 0.34, &"flap": 0.34, &"tape": 0.34, &"emote": 0.34, &"toy": 0.34, &"danger": 0.34}
+## DG0 (sim/dangers.gd): a danger's noise within its reach of the Minder, one lump, as a dropped tape is.
+const WHY_DANGER := &"danger"
 const ANGER_COOL := 0.02
 ## Outside a count: within this of it (out of a hide, same level) it grabs you; holds you this long
 ## (its mask in your face), then drags you to the party table at DRAG_SPEED, DRAG_BEHIND behind it. A drag

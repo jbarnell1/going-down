@@ -126,6 +126,29 @@ const FILES: Array[String] = [
 	"test_clinic_walls",
 	"test_playroom_dress",
 	"test_station_rooms",
+	# DG0: the dangers. Kinds add their test file only between their own markers.
+	"test_dangers_base",
+	# DANGER badge_doors
+	# END badge_doors
+	# DANGER failing_lights
+	# END failing_lights
+	# DANGER grabber
+	# END grabber
+	# DANGER gusts
+	# END gusts
+	# DANGER roost
+	# END roost
+	# DANGER snare
+	# END snare
+	# DANGER steam
+	# END steam
+	# DANGER test_tile
+	"test_danger_test_tile",
+	# END test_tile
+	# DANGER trapdoor
+	# END trapdoor
+	# DANGER waking_toys
+	# END waking_toys
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).

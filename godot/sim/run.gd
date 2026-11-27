@@ -468,6 +468,8 @@ const Lamp = preload("res://sim/lamp.gd")
 const GardenCones = preload("res://sim/garden_cones.gd")
 const OrderlyFix = preload("res://sim/orderly_fix.gd")
 const LastStand = preload("res://sim/last_stand.gd")
+## DG0: the dangers' state and its questions (no stepping here; sim/dangers.gd steps them).
+const DangerFx = preload("res://sim/dangers/effects.gd")
 ## ED1, the elevator deal (with_deal; see "The elevator deal" below and sim/deal.gd).
 const Deal = preload("res://sim/deal.gd")
 
@@ -1208,6 +1210,9 @@ class RunState:
 	## net/host_rules.gd steps it, after the run's own step; nothing in this file reads it, so it can never move
 	## a resident, a catch, a reading or a tape. Replaced, never edited (the copy shares it).
 	var split: RefCounted = null
+	## DG0, the dangers (sim/dangers.gd, sim/dangers/effects.gd DangerFloor), or null with none enabled: then every
+	## hook below that reads it is skipped. Only sim/dangers.gd writes it, after the run's own step.
+	var dangers: RefCounted = null
 	var paced: bool = false
 	var car_waits: bool = false
 	## The car waits: who the car left on a floor today, {id: true}, until the crew gets home. Replaced, never edited.
@@ -1483,6 +1488,7 @@ class RunState:
 		s.shadow_quiet = shadow_quiet
 		s.shadow_shown = shadow_shown
 		s.split = split
+		s.dangers = dangers
 		s.paced = paced
 		s.car_waits = car_waits
 		s.left_out = left_out
@@ -2205,9 +2211,13 @@ static func with_garden_cones(s0: RunState) -> RunState:
 
 ## The floor's solid pieces for players in this run (Furniture.solids_of), or null when furniture is off.
 static func solids_in(state: RunState) -> Move.Solids:
-	if state == null or not state.furniture or state.plan == null:
+	if state == null or state.plan == null:
 		return null
-	return Furniture.solids_of(state.plan, state.furniture_layout)
+	var base: Move.Solids = Furniture.solids_of(state.plan, state.furniture_layout) if state.furniture else null
+	# DG0: closed door edges and a danger's own boxes, host and screens alike (unchanged without any).
+	if state.dangers != null:
+		return DangerFx.solids_with(state.dangers, state.plan, base)
+	return base
 
 ## Enables furniture routing for residents. The host applies this after enabling solid furniture.
 static func with_resident_navigation(s0: RunState) -> RunState:
@@ -2909,6 +2919,10 @@ static func _step_seek(s: RunState, players: Array[RunPlayer], input_of: Diction
 	fl.call_by = call_by
 	fl.boarding = s.phase == &"boarding"
 	fl.riding = s.phase == &"riding"
+	# DG0: a danger's noises of last tick (sim/seek.gd FloorInput.noises).
+	if s.dangers != null:
+		for dn: Array in (s.dangers as DangerFx.DangerFloor).heard:
+			fl.noises.append([float(dn[0]), float(dn[2]), int(dn[3]), float(dn[4]), str(dn[5])])
 	# The seek runs on the run's own clock: every time in its events and state is host time.
 	var base := ss.copy()
 	base.t = t_prev
@@ -3032,6 +3046,11 @@ static func _sync_garden(s: RunState) -> void:
 	g.keeper.t = s.t
 	s.garden = g
 
+## DG0: whether player `id` is pinned by a danger (hung or on a ledge): their cut down or pull up is the run's heal in
+## every way but one, it is never counted against a floor's limit on heals (the Arboretum's, the pressures').
+static func _danger_pinned(s: RunState, id: String) -> bool:
+	return s.dangers != null and (s.dangers as DangerFx.DangerFloor).pins.has(id)
+
 ## The heals a player still has on this Arboretum floor (0 off one).
 static func keeper_heals_left(s: RunState, id: String) -> int:
 	if s.garden == null:
@@ -3099,6 +3118,10 @@ static func _step_garden(s: RunState, players: Array[RunPlayer], input_of: Dicti
 		people.append(hp)
 	var heard_things := g.drops
 	heard_things.append_array(voices)
+	# DG0: a danger's noises of last tick, heard as any other noise of their reach.
+	if s.dangers != null:
+		for dn: Array in (s.dangers as DangerFx.DangerFloor).heard:
+			heard_things.append(Noises.Sound.make(str(dn[5]), float(dn[0]), float(dn[2]), int(dn[3]), float(dn[4]), &"danger"))
 	if s.flare:
 		for e in events:
 			if e.type == "flareUsed":
@@ -3210,7 +3233,9 @@ static func _garden_after(s: RunState, events: Array[Dictionary]) -> void:
 		if ty == "healed":
 			var helper := str(e.get("by", ""))
 			var key := str(s.wind_profiles.get(helper, helper))
-			if not e.get("salts", false) and has_field_dressing(s, helper) and not g.dressing_used.has(key):
+			if _danger_pinned(s, id):
+				pass  # DG0: a danger's cut down or pull up is not one of the floor's heals.
+			elif not e.get("salts", false) and has_field_dressing(s, helper) and not g.dressing_used.has(key):
 				g.dressing_used[key] = true
 				e["freeDressing"] = true
 			else:
@@ -3258,7 +3283,12 @@ static func _step_station(s: RunState, players: Array[RunPlayer], input_of: Dict
 		sc.voice_r = voice_reach(s, p, inp, &"reactor.voice")
 		crew.append(sc)
 	var from := events.size()
-	var caught := StationRules.step(st, crew, t, dt, s.tuning, events)
+	# DG0: a danger's noises of last tick, point noises of their reach.
+	var danger_noises: Array = []
+	if s.dangers != null:
+		for dn: Array in (s.dangers as DangerFx.DangerFloor).heard:
+			danger_noises.append([float(dn[0]), float(dn[2]), float(dn[4])])
+	var caught := StationRules.step(st, crew, t, dt, s.tuning, events, danger_noises)
 	s.station = st
 	s.lure = false
 	# The power back: the held car opens its doors at once (the old floor's lift was there the moment it was lit).
@@ -3886,7 +3916,7 @@ static func _step_downs(s: RunState, players: Array[RunPlayer], input_of: Dictio
 				if q.id == p.id or busy.has(q.id):
 					continue
 				# One heal per floor (DF1): with none left (and no free Field Dressing) a hold never starts.
-				if s.pressures and pressure_heal_refused(s, q.id):
+				if s.pressures and pressure_heal_refused(s, q.id) and not _danger_pinned(s, p.id):
 					continue
 				var r := _heal_reach(players, input_of, q.id, p.body)
 				if r >= 0.0 and r < best - EPS:
@@ -3906,7 +3936,7 @@ static func _step_downs(s: RunState, players: Array[RunPlayer], input_of: Dictio
 				if has_field_dressing(s, healer):
 					nd.heal_len *= 0.5
 				events.append({"type": "healStart", "t": t, "playerId": healer, "target": p.id, "from": nd.heal_from, "done": nd.heal_from + nd.heal_len})
-		if s.pressures and healer != "" and pressure_heal_refused(s, healer):
+		if s.pressures and healer != "" and pressure_heal_refused(s, healer) and not _danger_pinned(s, p.id):
 			# One heal per floor (DF1): the last heal went to another hold; one still going stops before it heals.
 			events.append({"type": "healStop", "t": t, "playerId": healer, "target": p.id})
 			busy.erase(healer)
@@ -3916,7 +3946,7 @@ static func _step_downs(s: RunState, players: Array[RunPlayer], input_of: Dictio
 			healer = ""
 		if healer != "" and t - nd.heal_from >= nd.heal_len - EPS:
 			# Healed: back on their feet where they lie.
-			if s.pressures:
+			if s.pressures and not _danger_pinned(s, p.id):
 				_pressure_count_heal(s, healer)
 			down.erase(p.id)
 			var np := p.copy()
@@ -4090,6 +4120,9 @@ static func _step_nerve(prev: RunState, s: RunState, input_of: Dictionary, dt: f
 static func _step_stillness(s: RunState, prev: RunState, players: Array[RunPlayer], input_of: Dictionary, who: Places.Resident, t: float, dt: float, events: Array[Dictionary], second: bool) -> Instr.EntityTick:
 	var car := s.car
 	var blind := blinking(s)
+	# DG0: a resident standing in a danger's dark region is unseen, exactly as in a blink.
+	if s.dangers != null and DangerFx.dark_at(s.dangers, s.orderly.body.level, s.orderly.body.x, s.orderly.body.z, t):
+		blind = true
 	var open := doors_open(s)
 	var views: Array[Entity.PlayerView] = []
 	for player_index in players.size():
@@ -4097,6 +4130,9 @@ static func _step_stillness(s: RunState, prev: RunState, players: Array[RunPlaye
 		var i := _inp(p, input_of)
 		# The host's catch wait blinds a player to one Orderly only (blind_first, blind_second).
 		var iblind := i.blind or (i.blind_second if second else i.blind_first)
+		# DG0: blinded by a danger, or a closed door between them and the resident.
+		if s.dangers != null and (DangerFx.blinded(s.dangers, p.id, t) or DangerFx.hides_resident(s.dangers, s.orderly.body, p.body, t, float(s.plan.cell_size))):
+			iblind = true
 		var flared := flare_blinded(s, p.id, t)
 		if not _is_active(p, input_of):
 			views.append(_view_of(i, false, false))
@@ -4539,6 +4575,9 @@ static func _step_once(prev: RunState, inputs: Array[PlayerInput], dt: float) ->
 		var given: PlayerInput = input_of.get(p.id)
 		if annex_dragging(prev, p.id):
 			np.body = p.body
+		elif prev.dangers != null and DangerFx.held_body(prev.dangers, p.id, prev.t) != null:
+			# DG0: held, stumbling, hung or on a ledge by a danger: the rules hold the body.
+			np.body = DangerFx.held_body(prev.dangers, p.id, prev.t)
 		elif given != null and p.status == &"down" and prev.down.has(p.id):
 			# Down: they crawl, no faster than CRAWL_SPEED toward where they say they are.
 			np.body = _crawl(prev, p.body, given.body, dt)
@@ -5742,9 +5781,18 @@ static func _step_lonely(s: RunState, players: Array[RunPlayer], input_of: Dicti
 	var views: Array[Entity.PlayerView] = []
 	for p in players:
 		var i := _inp(p, input_of)
-		views.append(_view_of(i, _is_active(p, input_of) and not p.aboard, blind or i.blind))
+		# DG0: blinded by a danger, or a danger's dark or closed door hides the resident from them.
+		var dblind := s.dangers != null and (DangerFx.blinded(s.dangers, p.id, t) or DangerFx.hides_resident(s.dangers, s.orderly.body, p.body, t, float(s.plan.cell_size)))
+		views.append(_view_of(i, _is_active(p, input_of) and not p.aboard, blind or i.blind or dblind))
 	var before := s.orderly
-	var er := Lonely.step(s.plan, before, lonely_people(s, players, input_of), views, dt, players.size() <= 1, s.relocation, _tuned_chase(s, players.size() <= 1), _resident_solids(s))
+	# DG0: a danger's closed door cuts the company line (sim/lonely.gd company).
+	var line_block := Callable()
+	if s.dangers != null and not (s.dangers as DangerFx.DangerFloor).doors.is_empty():
+		var dfl: DangerFx.DangerFloor = s.dangers
+		var cs := float(s.plan.cell_size)
+		line_block = func(a: Move.Body, b: Move.Body) -> bool:
+			return a.level == b.level and DangerFx.line_blocked(dfl, a.level, a.x, a.z, b.x, b.z, cs)
+	var er := Lonely.step(s.plan, before, lonely_people(s, players, input_of), views, dt, players.size() <= 1, s.relocation, _tuned_chase(s, players.size() <= 1), _resident_solids(s), line_block)
 	var next := er.state
 	# Belt and braces: it can never end a tick in (or overlapping) the car.
 	if rect_distance(car.rect, next.body.x, next.body.z) < Entity.ORDERLY_RADIUS - 1e-3 and next.body.level == car.level:

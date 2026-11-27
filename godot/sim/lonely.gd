@@ -113,27 +113,30 @@ class Person:
 
 ## Whether `a` has company in `b` (see the header): within COMPANY_NEAR on the same level, or a clear line eye
 ## to eye within COMPANY_LINE.
-static func company(plan: Floor.FloorPlan, a: Person, b: Person) -> bool:
+## `line_block` (DG0, sim/dangers.gd): (a body, b body) -> true when a danger's closed door cuts the line; none by default.
+static func company(plan: Floor.FloorPlan, a: Person, b: Person, line_block: Callable = Callable()) -> bool:
 	if a.body.level == b.body.level and M.hypot2(a.body.x - b.body.x, a.body.z - b.body.z) <= COMPANY_NEAR + EPS:
 		return true
 	var ea := Sight.eye_point(a.body, a.eye)
 	var eb := Sight.eye_point(b.body, b.eye)
 	if M.hypot3(ea.x - eb.x, ea.y - eb.y, ea.z - eb.z) > COMPANY_LINE + EPS:
 		return false
+	if line_block.is_valid() and line_block.call(a.body, b.body):
+		return false
 	return Sight.has_line_of_sight(plan, ea, eb)
 
 ## Whether person `p` is lonely among `people` (see the header).
-static func is_lonely(plan: Floor.FloorPlan, people: Array[Person], p: Person) -> bool:
+static func is_lonely(plan: Floor.FloorPlan, people: Array[Person], p: Person, line_block: Callable = Callable()) -> bool:
 	for q in people:
-		if q != p and company(plan, p, q):
+		if q != p and company(plan, p, q, line_block):
 			return false
 	return true
 
 ## The players it may go for who are lonely this tick, {id: true}.
-static func lonely_ids(plan: Floor.FloorPlan, people: Array[Person]) -> Dictionary:
+static func lonely_ids(plan: Floor.FloorPlan, people: Array[Person], line_block: Callable = Callable()) -> Dictionary:
 	var out := {}
 	for p in people:
-		if p.prey and is_lonely(plan, people, p):
+		if p.prey and is_lonely(plan, people, p, line_block):
 			out[p.id] = true
 	return out
 
@@ -185,7 +188,7 @@ static func _view(p: Person) -> Entity.PlayerView:
 ## seen: firstSeen and waking); `solo`: a crew of one; `relocating`: the run relocates it (a break-off then
 ## waits for that). `chase`: the chase speed the host set (live settings, sim/run.gd _tuned_chase), or -1 for
 ## CHASE_SPEED (SOLO_CHASE_SPEED solo). Never mutates `prev`.
-static func step(plan: Floor.FloorPlan, prev: Entity.OrderlyState, people: Array[Person], views: Array[Entity.PlayerView], dt: float, solo: bool, relocating: bool, chase: float = -1.0, solids: Move.Solids = null) -> Entity.StepResult:
+static func step(plan: Floor.FloorPlan, prev: Entity.OrderlyState, people: Array[Person], views: Array[Entity.PlayerView], dt: float, solo: bool, relocating: bool, chase: float = -1.0, solids: Move.Solids = null, line_block: Callable = Callable()) -> Entity.StepResult:
 	var k := Entity.kind_of(prev)
 	var t := prev.t + dt
 	var s := prev.copy()
@@ -213,7 +216,7 @@ static func step(plan: Floor.FloorPlan, prev: Entity.OrderlyState, people: Array
 	var standing := prev.stand_left > EPS
 	if standing:
 		s.stand_left = maxf(0.0, prev.stand_left - dt)
-	var lonely := lonely_ids(plan, people)
+	var lonely := lonely_ids(plan, people, line_block)
 	s.lonely_quiet = prev.lonely_quiet + dt if lonely.is_empty() else 0.0
 
 	match s.mode:

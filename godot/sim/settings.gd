@@ -69,6 +69,8 @@ const GROUPS: Array = [
 	# ED1: the elevator deal's cards (sim/deal.gd).
 	[&"deal", "THE DEAL"],
 	# The owner, 17 Nov: player speeds come last.
+	# DG0: the dangers (sim/dangers.gd), one section per kind.
+	[&"dangers", "DANGERS"],
 	[&"speeds", "PLAYER SPEEDS"],
 ]
 
@@ -95,6 +97,17 @@ const SECTIONS: Array = [
 	[&"hiding", &"hiding", "HIDING"],
 	[&"pressure", &"deeper", "FLOOR 8 AND DEEPER"],
 	[&"deal", &"deal", "THE DEAL"],
+	[&"danger", &"dangers", "EVERY DANGER"],
+	[&"danger_badge_doors", &"dangers", "BADGE DOORS (THE ANNEX)"],
+	[&"danger_failing_lights", &"dangers", "FAILING LIGHTS (THE CLINIC)"],
+	[&"danger_grabber", &"dangers", "THE CEILING GRABBER"],
+	[&"danger_gusts", &"dangers", "GUSTS (THE WARD)"],
+	[&"danger_roost", &"dangers", "ROOSTS (THE ARBORETUM)"],
+	[&"danger_snare", &"dangers", "SNARES (THE ARBORETUM)"],
+	[&"danger_steam", &"dangers", "STEAM (THE REACTOR)"],
+	[&"danger_test_tile", &"dangers", "TEST TILE (TESTS ONLY)"],
+	[&"danger_trapdoor", &"dangers", "TRAPDOORS"],
+	[&"danger_waking_toys", &"dangers", "TOYS THAT WAKE (THE PLAYROOM)"],
 	[&"moving", &"speeds", "MOVING"],
 ]
 
@@ -407,6 +420,35 @@ const ROWS: Array = [
 	[&"deal.squeak_loud", &"deal", "SQUEAKY SOLES CARRY", "the carrier's footsteps this many times as far to a resident that hears", "times", 1.6, 1.0, 3.0, 0.1, &"now", &"ED1", F],
 	[&"deal.torch_dim", &"deal", "NOVELTY TORCH STRENGTH", "the carrier's near light, in 100 of a normal one (it flickers too)", "in 100", 45.0, 10.0, 100.0, 5.0, &"now", &"ED1", W],
 	[&"deal.second_time", &"deal", "SECOND OPINION LASTS", "the look through a crewmate's eyes", "s", 10.0, 5.0, 30.0, 1.0, &"next", &"ED1", F],
+	# DG0: every danger (sim/dangers.gd). Kinds add their rows only between their own markers below.
+	[&"danger.per_floor", &"danger", "DANGERS PER FLOOR", "how many kinds of danger a floor gets (floors 1 to 7)", "", 1.0, 0.0, 3.0, 1.0, &"floor", &"DG", W],
+	[&"danger.per_floor_deep", &"danger", "DANGERS PER DEEP FLOOR", "how many kinds of danger a floor gets from the deep floor on", "", 2.0, 0.0, 3.0, 1.0, &"floor", &"DG", W],
+	[&"danger.deep_from", &"danger", "DEEP FROM FLOOR", "the first floor that gets the deep count", "", 8.0, 2.0, 30.0, 1.0, &"floor", &"DG", W],
+	[&"danger.door_max", &"danger", "A DOOR STAYS SHUT AT MOST", "the longest a danger may keep a door shut", "s", 30.0, 5.0, 60.0, 1.0, &"now", &"DG", F],
+	[&"danger.hold_max", &"danger", "HELD OR BLINDED AT MOST", "the longest a danger may hold or blind a player", "s", 3.0, 0.5, 6.0, 0.5, &"now", &"DG", F],
+	[&"danger.dark_max", &"danger", "DARK AT MOST", "the longest a danger may keep a stretch dark", "s", 10.0, 1.0, 20.0, 0.5, &"now", &"DG", F],
+	# DANGER badge_doors rows
+	# END badge_doors rows
+	# DANGER failing_lights rows
+	# END failing_lights rows
+	# DANGER grabber rows
+	# END grabber rows
+	# DANGER gusts rows
+	# END gusts rows
+	# DANGER roost rows
+	# END roost rows
+	# DANGER snare rows
+	# END snare rows
+	# DANGER steam rows
+	# END steam rows
+	# DANGER test_tile rows
+	[&"danger.test_tile.delay", &"danger_test_tile", "NOISE AFTER THE CLICK", "from the click to the noise", "s", 1.0, 0.5, 3.0, 0.1, &"now", &"DG", F],
+	[&"danger.test_tile.loud", &"danger_test_tile", "NOISE REACH", "how far its noise carries", "m", 10.0, 2.0, 30.0, 1.0, &"now", &"DG", F],
+	# END test_tile rows
+	# DANGER trapdoor rows
+	# END trapdoor rows
+	# DANGER waking_toys rows
+	# END waking_toys rows
 	# Player speeds, last (the owner: "player speeds come last").
 	[&"player.walk", &"moving", "WALK", "a player's walking speed", "m/s", 3.0, 2.0, 4.0, 0.1, &"floor", &"LS6", F],
 	[&"player.sprint", &"moving", "SPRINT", "a player's sprinting speed", "m/s", 5.0, 3.5, 7.0, 0.1, &"floor", &"LS6", F],
@@ -481,6 +523,29 @@ const WIRED_IDS: Array[StringName] = [
 	# VC1: the microphone.
 	&"groundskeeper.voice", &"minder.voice", &"reactor.voice", &"rigger.voice_reach",
 	&"noise.voice_whisper", &"noise.voice_talk", &"noise.voice_shout",
+	# DG0: the dangers. Kinds list their rows only between their own markers.
+	&"danger.per_floor", &"danger.per_floor_deep", &"danger.deep_from", &"danger.door_max", &"danger.hold_max", &"danger.dark_max",
+	# DANGER badge_doors wired
+	# END badge_doors wired
+	# DANGER failing_lights wired
+	# END failing_lights wired
+	# DANGER grabber wired
+	# END grabber wired
+	# DANGER gusts wired
+	# END gusts wired
+	# DANGER roost wired
+	# END roost wired
+	# DANGER snare wired
+	# END snare wired
+	# DANGER steam wired
+	# END steam wired
+	# DANGER test_tile wired
+	&"danger.test_tile.delay", &"danger.test_tile.loud",
+	# END test_tile wired
+	# DANGER trapdoor wired
+	# END trapdoor wired
+	# DANGER waking_toys wired
+	# END waking_toys wired
 ]
 
 ## The least wait of a call is its start delay plus the floors: sim/run.gd CALL_START_DELAY_MIN (this file

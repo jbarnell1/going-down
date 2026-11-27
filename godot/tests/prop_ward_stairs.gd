@@ -58,8 +58,11 @@ func test_the_flag_reaches_the_rules(t: T) -> void:
 		if str(m["name"]) == "_init":
 			for a: Dictionary in m["args"]:
 				names.append(str(a["name"]))
-	t.eq(names[-1], "ward_stairs_", "ward_stairs_ is the last parameter")
-	t.eq(names[-2], "ward_homes_", "right after WH1's ward_homes_")
+	# DG0 added `dangers_` after it (the agreed tail ..., ward_homes_, ward_stairs_, dangers_).
+	t.eq(names[-2], "ward_stairs_", "ward_stairs_ is the last parameter before DG0's dangers_")
+	t.eq(names[-1], "dangers_", "DG0's dangers_ comes right after it")
+	t.eq(names[-3], "ward_homes_", "right after WH1's ward_homes_")
+	var stairs := names.find("ward_stairs_")
 	t.check(not HostRules.new(true, 1).ward_stairs, "off by default")
 	var args: Array = [true, 1, []]
 	while args.size() < names.size():
@@ -68,7 +71,7 @@ func test_the_flag_reaches_the_rules(t: T) -> void:
 	var lay := names.find("ward_layout_")
 	args[late] = true
 	args[lay] = true
-	args[names.size() - 1] = true
+	args[stairs] = true
 	t.check((HostRules.new.callv(args) as HostRules).ward_stairs, "on with the late floors and the seeded layout")
 	args[lay] = false
 	t.check(not (HostRules.new.callv(args) as HostRules).ward_stairs, "never without the seeded layout")
@@ -76,13 +79,13 @@ func test_the_flag_reaches_the_rules(t: T) -> void:
 	args[late] = false
 	t.check(not (HostRules.new.callv(args) as HostRules).ward_stairs, "never without the late floors")
 	args[late] = true
-	args[names.size() - 1] = false
+	args[stairs] = false
 	t.check(not (HostRules.new.callv(args) as HostRules).ward_stairs, "off when not asked")
 	t.check(HostRules.ward_stairs_by_arg(), "no ward_stairs=0 on this command line: the rooms ask for it")
 	var room := FileAccess.get_file_as_string("res://server/room.gd")
-	t.check(room.contains("ward_layout and late_floors and not (ward_review or reactor_review or orientation_review) and HostRules.ward_stairs_by_arg())"), "server/room.gd passes it last, with the layout")
+	t.check(room.contains("ward_layout and late_floors and not (ward_review or reactor_review or orientation_review) and HostRules.ward_stairs_by_arg(),"), "server/room.gd passes it (before DG0's dangers), with the layout")
 	var local := FileAccess.get_file_as_string("res://net/local_room.gd")
-	t.check(local.contains("late_floors_on() and not _orientation_playtest and ward_layout and HostRules.ward_stairs_by_arg())"), "net/local_room.gd passes it last, with the layout")
+	t.check(local.contains("late_floors_on() and not _orientation_playtest and ward_layout and HostRules.ward_stairs_by_arg(),"), "net/local_room.gd passes it (before DG0's dangers), with the layout")
 	var host := FileAccess.get_file_as_string("res://net/host.gd")
 	t.eq(host.count("if ward_stairs():\n\t\toptions[\"stairs\"] = 1"), 2, "net/host.gd puts it in the options of both of its Wards")
 

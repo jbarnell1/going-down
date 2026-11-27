@@ -377,7 +377,9 @@ func start_run() -> void:
 		Session.deck == Places.FULL and not _orientation_playtest and HostRules.voice_by_arg(),
 		late_floors_on() and not _orientation_playtest and ward_layout and HostRules.ward_lift_clear_by_arg(),
 		late_floors_on() and not _orientation_playtest and ward_layout and (HostRules.ward_homes_on_by_arg() or TestSwitches.ward_homes),
-		late_floors_on() and not _orientation_playtest and ward_layout and HostRules.ward_stairs_by_arg())
+		late_floors_on() and not _orientation_playtest and ward_layout and HostRules.ward_stairs_by_arg(),
+		# DG0: the danger kinds (data/dangers.json "enabled", shipped empty, or the start argument dangers=).
+		HostRules.dangers_by_arg() if Session.deck == Places.FULL and not _orientation_playtest else [])
 	if _orientation_playtest:
 		rules.enable_orientation()
 	elif orientation_campaign and _playtest_depth < 0:
@@ -386,7 +388,8 @@ func start_run() -> void:
 	var roster: Array[String] = [ME]
 	var host_link: Transport.Transport
 	var human_link: Transport.Transport
-	if _bot_count > 0 and _playtest_depth < 0:
+	# DG0: a picked floor gets bots only when the room was opened with some (client/main.gd: the test channel only).
+	if _bot_count > 0 and (_playtest_depth < 0 or _playtest_depth > 0):
 		_bot_network = Transport.MemoryNetwork.new(run_seed)
 		_bot_network.now = _vt
 		host_link = _bot_network.connect_peer("host")
@@ -505,6 +508,33 @@ func place(body: Move.Body) -> void:
 ## network room has no such door. False with no Ward running.
 func test_ward_noise(at: Vector3) -> bool:
 	return host != null and host.test_ward_noise(at)
+
+## DG0, test hooks (client/main.gd `dangerstate`, `standin`, behind testport= only): force danger record `id` into
+## `state` at the next tick; stand the first crew bot still at `body` facing `yaw` (null: let it play again).
+func test_danger_state(id: int, state: StringName) -> bool:
+	return host != null and host.state != null and Host.Dangers.force_state(host.state, id, state)
+
+## `walk`: the bot walks there from where it is at a walk (it is not put there). The stand-in's id, or "" when the
+## room has no crew bot (start with bots=1).
+func test_standin(body: Move.Body, yaw: float, walk := false) -> String:
+	if _crew_bots.is_empty() or host == null:
+		return ""
+	var bot := _crew_bots[0]
+	bot.stand_at = body
+	bot.stand_yaw = yaw
+	bot.stand_walk = walk
+	if body == null:
+		bot.stand_use = false
+	elif not walk:
+		host.place_player(bot.id, body)
+	return bot.id
+
+## DG0, test hook (`standin use 0|1`): the stand-in holds F (or lets go). False with no stand-in.
+func test_standin_use(on: bool) -> bool:
+	if _crew_bots.is_empty() or _crew_bots[0].stand_at == null:
+		return false
+	_crew_bots[0].stand_use = on
+	return true
 
 # ---------------------------------------------------------------------------------------------
 # Live settings: the player is the host, and the desk is this room's.

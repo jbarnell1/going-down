@@ -17,6 +17,7 @@ const Upgrades = preload("res://sim/upgrades.gd")
 const Findables = preload("res://sim/findables.gd")
 const Inventory = preload("res://sim/inventory.gd")
 const Homes = preload("res://sim/ward/homes.gd")
+const Dangers = preload("res://sim/dangers.gd")
 
 ## Every data file the rules (sim/, net/, server/) read at run time.
 const FILES: Array[String] = [
@@ -26,6 +27,7 @@ const FILES: Array[String] = [
 	"res://data/poems.json",  # sim/findables.gd: the poem notes and lore pages found by searching
 	"res://data/items.json",  # sim/inventory.gd: the items a slot can hold
 	"res://data/ward_homes.json",  # sim/ward/homes.gd: the Hanging Ward's house types (WH1, ward_homes)
+	"res://data/dangers.json",  # sim/dangers.gd: the danger kinds' places and the enabled list (DG0, shipped empty)
 ]
 
 ## How much of `path` the rules' own loader read: the count of its entries (templates, awards, nodes);
@@ -47,6 +49,10 @@ static func read(path: String) -> int:
 			return (Inventory.data().get("items", []) as Array).size()
 		"res://data/ward_homes.json":
 			return Homes.types().size()
+		"res://data/dangers.json":
+			# The kinds' lines (the "~" end line excluded); "enabled" ships empty, so it is not what is counted.
+			var kinds: Dictionary = Dangers.data().get("kinds", {})
+			return kinds.size() - (1 if kinds.has("~") else 0) if Dangers.data().get("enabled") is Array else 0
 	return -1
 
 ## Reads every file in FILES. Returns {"ok": bool, "files": int (read), "missing": "<file name>" (the

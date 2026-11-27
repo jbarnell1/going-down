@@ -1,0 +1,16 @@
+{
+  "enabled": [],
+  "kinds": {
+    "badge_doors": {"places": ["annex"], "active": false, "test_only": false},
+    "failing_lights": {"places": ["clinic"], "active": false, "test_only": false},
+    "grabber": {"places": ["clinic", "annex", "playroom", "arboretum", "reactor"], "active": true, "test_only": false},
+    "gusts": {"places": ["ward"], "active": false, "test_only": false},
+    "roost": {"places": ["arboretum"], "active": false, "test_only": false},
+    "snare": {"places": ["arboretum"], "active": true, "test_only": false},
+    "steam":{"places": ["reactor"], "active": false, "test_only": false},
+    "test_tile": {"places": ["clinic", "annex", "playroom", "arboretum", "reactor", "ward"], "active": false, "test_only": true},
+    "trapdoor": {"places": ["clinic", "annex", "playroom", "arboretum", "reactor"], "active": true, "test_only": false},
+    "waking_toys": {"places": ["playroom"], "active": false, "test_only": false},
+    "~": {}
+  }
+}

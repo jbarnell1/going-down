@@ -838,6 +838,35 @@ func _is_dark(host_now: float, show: Array) -> Array:
 			dark = true
 	return [dark, dark and not real]
 
+## DG0: whether the resident drawn now stands in a danger dark region (the world's "dangers" block, sim/dangers.gd):
+## dark from `from` less the clock's error bound until the snapshots drawn are past `until`, as _is_dark does for a
+## blink, so this screen never says it sees a resident the host has in the dark. Half a metre of margin round each.
+func _danger_dark(host_now: float, show: Array) -> bool:
+	if not latest is Dictionary or not (latest as Dictionary).get("dangers") is Dictionary:
+		return false
+	var rows: Array = (latest["dangers"] as Dictionary).get("dark", [])
+	if rows.is_empty():
+		return false
+	var poses: Array = []
+	if not show.is_empty():
+		poses.append(show[0].get("orderly"))
+		poses.append(show[1].get("orderly"))
+	poses.append(latest.get("orderly"))
+	var guard := clock.error_bound() + 0.01
+	for r: Array in rows:
+		var lo := float(r[6]) - TICK
+		var hi := float(r[5]) + TICK
+		var live := host_now >= lo - guard and host_now <= hi + guard
+		if not show.is_empty() and float(show[0]["ht"]) <= hi and float(show[1]["ht"]) >= lo:
+			live = true
+		if not live:
+			continue
+		for o: Variant in poses:
+			if o is Dictionary and int(o["level"]) == int(r[0]) and float(o["x"]) >= float(r[1]) - 0.5 and float(o["x"]) <= float(r[3]) + 0.5 \
+					and float(o["z"]) >= float(r[2]) - 0.5 and float(o["z"]) <= float(r[4]) + 0.5:
+				return true
+	return false
+
 ## One rendered frame at local time `now`: what to draw, and (when due) the input to the host. Call
 ## receive() first. If the host placed the local player, `placed` says where: adopt it.
 func frame(now: float, local: LocalFrame) -> Frame:
@@ -902,7 +931,8 @@ func frame(now: float, local: LocalFrame) -> Frame:
 		latched_now = _update_latch(show2_latch, rt) or latched_now
 		_swap_second()
 	var taken := _latch != null or _latch2 != null
-	var blind: bool = dk[0] or taken or local.flare_blind
+	# DG0: a resident standing in a danger's dark region is as unseen as in a blink (sim/run.gd), with the same guard.
+	var blind: bool = dk[0] or taken or local.flare_blind or _danger_dark(host_now, show)
 	var blind_to_resident := blind
 
 	# The Orderly.

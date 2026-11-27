@@ -238,6 +238,9 @@ var hide_view: HideView
 var quota_view := QuotaView.new()
 ## Down first, then out on screen: your timer, the help prompt, the out screen, the red spots (client/down_view.gd).
 var down_view := DownView.new()
+## DG0: the floor's dangers on screen (client/dangers/dangers_view.gd), made under the level when a "dangers" block comes.
+const DangersView = preload("res://client/dangers/dangers_view.gd")
+var dangers_view: DangersView = null
 ## DV1: out, the camera looks through a crewmate's eyes (client/crew_watch.gd).
 var crew_watch := CrewWatch.new()
 ## LS1: the wipe's scene on this screen (client/wipe_scene.gd; made in the world when a wipe block plays), the host time
@@ -1115,7 +1118,9 @@ func _select_playtest(id: String) -> void:
 	var lr := LocalRoom.new()
 	var face := start.face_code
 	var player_name := start.player_name if not start.player_name.is_empty() else "YOU"
-	lr.open_local(seed, player_name, entity_on, face)
+	# DG0: with the test channel (testport=) a floor picked here gets the crew bots asked for (bots=N), so a look
+	# script can stand a friend (`standin`); a real game's floor picker stays alone.
+	lr.open_local(seed, player_name, entity_on, face, _solo_bots if _test_port > 0 and not practice else 0)
 	if not practice:
 		_configure_campaign_trades(lr)
 	# The host's changed settings go with the jump (in memory: the sandbox saves none).
@@ -2438,6 +2443,10 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	if hc.get("ward", false) == true:
 		held = true
 	cam.rotation = Vector3(pitch, yaw, 0)
+	# DG0: the floor's dangers (client/dangers/dangers_view.gd): their views, prompts, a blinded screen, a stumble.
+	_dangers_frame(s, me, dt)
+	if dangers_view != null:
+		cam.rotation.z = dangers_view.shake()
 	if not held:
 		_eye_check(me)
 	# DV1: out, the camera goes to a crewmate's eyes (before the crew is drawn, so their own figure is hidden).
@@ -2671,6 +2680,9 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	# Down first, then out (client/down_view.gd): your own timer or the out screen, or a crewmate to help.
 	var holding: bool = t_use if t_use != null else (mode == "game" and not kiosk.is_open() and not settings_panel.is_open() and Input.is_action_pressed("use"))
 	down_view.update(s, link.my_id(), link.names(), holding, announcer.place, _pressure())
+	# DG0: a crewmate pinned by a danger is cut down or pulled up by the heal's own hold; the words say which.
+	if dangers_view != null:
+		_danger_down_words()
 	var me_down := str(me["status"]) == "down" or str(me["status"]) == "out" or _left_out(s)
 	# The four-slot inventory (S1): the squares and what F would take or give here, from the host's block.
 	var lc0 := link.client()
@@ -2719,6 +2731,8 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		elif down_view.prompt != "":
 			prompt = down_view.prompt
 			hud.prompt_fill = down_view.fill
+		elif dangers_view != null and dangers_view.prompt != "":
+			prompt = dangers_view.prompt
 		elif cab_view.is_open() or shop_view.is_open() or skills_view.is_open():
 			prompt = ""
 		elif at_cab:
@@ -3234,6 +3248,42 @@ func _ride_rows(s: Dictionary, rows: PackedStringArray) -> PackedStringArray:
 ## Down first, then out (client/down_view.gd, already updated this frame): your timer and its lines (once
 ## the catch's noise has passed), the out screen, the red spots for everyone. Caught and down, the camera
 ## turns to the resident bent over you for the first moments (B6: it turns you round to face it).
+## DG0: the dangers' base on screen, every frame: made under the level the first time a "dangers" block comes on it
+## (freed with the level), told the block, the host time and the local feet.
+func _dangers_frame(s: Dictionary, me: Dictionary, dt: float) -> void:
+	var c := link.client()
+	var dg: Variant = (c.latest as Dictionary).get("dangers") if c != null and c.latest is Dictionary else null
+	if dangers_view != null and (not is_instance_valid(dangers_view) or dangers_view.get_parent() != level):
+		dangers_view = null
+	if dangers_view == null:
+		if not dg is Dictionary or level == null:
+			return
+		dangers_view = DangersView.new()
+		level.add_child(dangers_view)
+		dangers_view.setup({"plan": link.plan, "place": str(link.plan_dict.get("place", "")), "depth": int(s.get("depth", 0)),
+			"level": level, "floor_seed": str(link.plan_dict.get("seed", "")), "ward": _ward_floor.model if _ward_floor != null and is_instance_valid(_ward_floor) else null})
+	dangers_view.me = link.my_id()
+	dangers_view.blink_dark = bool(s.get("dark", false))
+	var feet: Variant = Vector3(float(me["x"]), float(me.get("y", 0.0)), float(me["z"])) if me.has("x") else null
+	dangers_view.update(dg, float(s.get("hostNow", 0.0)), feet, dt)
+
+## DG0: the down screen's words for a danger's pinned player (sim/dangers.gd pins): the helper's prompt says cut down
+## or pull up, and the pinned player's second line is the kind's hint (a prompt with a negative reach) or nothing.
+func _danger_down_words() -> void:
+	var my := link.my_id()
+	if down_view.prompt.begins_with("HOLD F TO HELP") and down_view.target != "":
+		var pin: Variant = dangers_view.pin_of(down_view.target)
+		if pin is Array:
+			down_view.prompt = down_view.prompt.replace("HOLD F TO HELP", "HOLD F TO CUT THEM DOWN" if str(pin[1]) == "hang" else "HOLD F TO PULL THEM UP")
+	var mine: Variant = dangers_view.pin_of(my)
+	if mine is Array and down_view.line2 != "":
+		down_view.line2 = ""
+		for p: Array in dangers_view.block.get("prompts", []):
+			if float(p[2]) < 0.0:
+				down_view.line2 = str(p[1])
+		if down_view.line.begins_with("A CREWMATE CAN HOLD F"):
+			down_view.line = "A CREWMATE CAN CUT YOU DOWN" if str(mine[1]) == "hang" else "A CREWMATE CAN PULL YOU UP"
+
 func _show_down(s: Dictionary, now: int, dt: float, noise: bool) -> void:
 	var shown := not noise and hud.end_lines.is_empty()
 	hud.down_head = down_view.head if shown else ""
@@ -3500,6 +3550,8 @@ func _present(events: Array, now: int) -> void:
 	announcer.tenant_latest = client.latest if client != null else {}
 	announcer.on_events(events, 1, client.quota() if client != null else null)
 	var my := link.my_id()
+	if dangers_view != null and is_instance_valid(dangers_view):
+		dangers_view.on_events(events)
 	quota_view.on_events(events, my, sfx, now)
 	if mic_hud != null:
 		mic_hud.own.on_events(events, my, Time.get_ticks_msec(), client.tuning if client != null else null)
@@ -4217,6 +4269,8 @@ func _command(c: String) -> String:
 			if not in_game:
 				return JSON.stringify({"ok": false, "error": "no run"})
 			return JSON.stringify(link.teleport(int(p[1]), int(p[2]), int(p[3])))
+		"dangers", "dangerto", "dangerstate", "standin", "dangerfx":
+			return _danger_test_command(p)
 		"walkto":
 			if not in_game:
 				return JSON.stringify({"ok": false, "error": "no run"})
@@ -4439,6 +4493,82 @@ func _command(c: String) -> String:
 		_:
 			return "unknown command"
 	return "ok"
+
+## DG0: the dangers' test commands (desktop testport= only; dangerstate and standin alone only):
+##   dangers: the floor's records {id, kind, x, y, z, level, cell, state, since, n} as this screen has them;
+##   dangerto <id> [dist]: stands the player dist m (default 3) from danger id, facing it;
+##   dangerstate <id> <state>: the host forces it into that state at its next tick;
+##   standin <level> <x> <z> [yaw] | standin off: the first crew bot (start with bots=1) stands still there;
+##   dangerfx: the "dangers" block as this screen has it now.
+func _danger_test_command(p: PackedStringArray) -> String:
+	if _test_port <= 0:
+		return "unknown command"
+	var c := link.client() if link != null else null
+	var block: Variant = (c.latest as Dictionary).get("dangers") if c != null and c.latest is Dictionary else null
+	var recs: Array = (block as Dictionary).get("r", []) if block is Dictionary else []
+	match p[0]:
+		"dangers":
+			var out: Array = []
+			for r: Dictionary in recs:
+				var row := r.duplicate()
+				if link.plan != null:
+					var cell := Move.cell_of(link.plan, Move.Body.make(float(r["x"]), float(r["z"]), int(r["level"]), float(r["y"])))
+					row["cell"] = [cell.level, cell.x, cell.y]
+				out.append(row)
+			return JSON.stringify(out)
+		"dangerfx":
+			return JSON.stringify(block)
+		"dangerto":
+			if p.size() < 2 or link.body == null:
+				return JSON.stringify({"ok": false, "error": "dangerto <id> [dist]"})
+			for r: Dictionary in recs:
+				if int(r["id"]) != int(p[1]):
+					continue
+				var dist := float(p[2]) if p.size() > 2 else 3.0
+				var at := Vector3(float(r["x"]), float(r["y"]), float(r["z"]))
+				var best: Move.Body = null
+				# The first clear spot round it at that distance (eight ways, then nearer), by the rules' own walk.
+				for k in 16:
+					var a := TAU * float(k % 8) / 8.0
+					var d := dist if k < 8 else dist * 0.5
+					var want := Move.Body.make(at.x + sin(a) * d, at.z + cos(a) * d, int(r["level"]), at.y)
+					if link.plan != null and Move.clear_at(link.plan, null, want.level, want.x, want.z, 0.3) and preload("res://sim/floor.gd").is_walkable(link.plan, want.level, int(floor(want.x / link.plan.cell_size)), int(floor(want.z / link.plan.cell_size))):
+						best = Move.Body.make(want.x, want.z, want.level, Move.feet_height(link.plan, want.level, want.x, want.z))
+						break
+				if best == null:
+					return JSON.stringify({"ok": false, "error": "no clear spot near danger %d" % int(r["id"])})
+				if link.local and link.rc is LocalRoom:
+					(link.rc as LocalRoom).place(best)
+				link.body = best
+				yaw = atan2(-(at.x - best.x), -(at.z - best.z))
+				pitch = -0.25
+				var cell := Move.cell_of(link.plan, best)
+				return JSON.stringify({"ok": true, "at": [best.x, best.y, best.z], "level": best.level, "cell": [cell.level, cell.x, cell.y], "yaw": yaw})
+			return JSON.stringify({"ok": false, "error": "no danger %s" % p[1]})
+		"dangerstate":
+			if p.size() < 3 or not (link.local and link.rc is LocalRoom):
+				return JSON.stringify({"ok": false, "error": "dangerstate <id> <state>, alone only"})
+			return JSON.stringify({"ok": (link.rc as LocalRoom).test_danger_state(int(p[1]), StringName(p[2]))})
+		"standin":
+			if not (link.local and link.rc is LocalRoom):
+				return JSON.stringify({"ok": false, "error": "standin is for playing alone (start with bots=1)"})
+			var lr := link.rc as LocalRoom
+			if p.size() > 1 and p[1] == "off":
+				return JSON.stringify({"ok": lr.test_standin(null, 0.0) != ""})
+			if p.size() > 2 and p[1] == "use":
+				return JSON.stringify({"ok": lr.test_standin_use(p[2] == "1")})
+			var walk := p.size() > 1 and p[1] == "walk"
+			var q := p.slice(1) if walk else p
+			if q.size() < 4 or link.plan == null:
+				return JSON.stringify({"ok": false, "error": "standin [walk] <level> <x> <z> [yaw] | standin use 0|1 | standin off"})
+			var lv := int(q[1])
+			var sx := float(q[2])
+			var sz := float(q[3])
+			var b := Move.Body.make(sx, sz, lv, Move.feet_height(link.plan, lv, sx, sz))
+			var sid := lr.test_standin(b, float(q[4]) if q.size() > 4 else 0.0, walk)
+			return JSON.stringify({"ok": sid != "", "id": sid, "walk": walk, "at": [b.x, b.y, b.z],
+				"error": "" if sid != "" else "no crew bot: start with bots=1 and testport="})
+	return "unknown command"
 
 ## RW1: the Hanging Ward's test commands, for looking at the Rigger (`state` reports him under "rigger"). Desktop,
 ## testport= only, and only on the Ward played as a normal level:

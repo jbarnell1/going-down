@@ -155,6 +155,10 @@
 #    a body. A walker cannot stand where a stair's underside is less than a standing player's eye height above their
 #    feet unless they stand on it (sim/ward/house.gd stair_depth, sim/ward/state.gd walk_clear). net/host.gd puts it in
 #    the layout's options ("stairs": 1), so the block carries it and every screen walks by the same rule.
+#  - DG0, `dangers`, the last parameter, after `ward_stairs`: the enabled danger kinds (sim/dangers.gd), empty by
+#    default, and then nothing changes anywhere. The game's rooms pass data/dangers.json's "enabled" (shipped empty)
+#    or the start argument dangers=<kind,kind|all|0> (dangers_by_arg). prepare() gives the run its DangerFloor; step()
+#    steps the base after the run's tick, before split reality; on the Hanging Ward net/host.gd calls step_dangers.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -165,6 +169,7 @@ const Move = preload("res://sim/move.gd")
 const Instr = preload("res://sim/instrument.gd")
 const Settings = preload("res://sim/settings.gd")
 const Split = preload("res://sim/split.gd")
+const Dangers = preload("res://sim/dangers.gd")
 
 ## Where a player stands alone in the car at the start: the middle, so the doorway is straight ahead.
 const START_U := Run.CAR_DEPTH / 2.0
@@ -292,6 +297,8 @@ var ward_lift_clear: bool
 var ward_homes: bool
 ## ST1, a stair's body on the Ward (the last parameter, after ward_homes_; see the header). Only with ward_layout.
 var ward_stairs: bool
+## DG0, the enabled danger kinds (the last parameter, after ward_stairs_; see the header). Empty: off.
+var dangers: Array[StringName] = []
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -322,7 +329,9 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		ward_web_: bool = false, rigger_roam_: bool = false, ward_layout_: bool = false, orderly_fix_: bool = false,
 		minder_calm_: bool = false, down_ring_: bool = false, pn_fixes_: bool = false, last_stand_: bool = false,
 		deal_: bool = false, split_: bool = false, economy_fix_: bool = false, voice_: bool = false,
-		ward_lift_clear_: bool = false, ward_homes_: bool = false, ward_stairs_: bool = false) -> void:
+		ward_lift_clear_: bool = false, ward_homes_: bool = false, ward_stairs_: bool = false, dangers_: Variant = []) -> void:
+	# DG0: a caller that fills every parameter with false (tests that build the list by name) means none.
+	dangers = Dangers.resolve(dangers_) if dangers_ is Array else ([] as Array[StringName])
 	voice = voice_
 	ward_lift_clear = ward_lift_clear_ and ward_layout_ and late_floors_
 	# WH1: only with the Ward laid out from the seed (the homes need its cells).
@@ -481,6 +490,9 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 	# WH1: the Ward's homes (net/host.gd reads this flag as the Ward starts).
 	if ward_homes and not s.ward_homes:
 		s = Run.with_ward_homes(s)
+	# DG0: the dangers (sim/dangers.gd); nothing at all with none enabled.
+	if not dangers.is_empty() and s.dangers == null:
+		s = Dangers.with_dangers(s, dangers)
 	if quota and _entity_on and not s.quota:
 		s = Run.with_quota(s)
 	if downs and not s.downs:
@@ -664,6 +676,27 @@ static func ward_homes_on_by_arg() -> bool:
 		if raw.trim_prefix("--") == "ward_homes=1":
 			return true
 	return false
+
+## DG0: the enabled danger kinds for the game's rooms: the start argument `dangers=<kind,kind|all|0>` (after `--`, or the
+## web page's ?dangers=) when given, else data/dangers.json "enabled" (shipped empty). Kept to kinds with a file.
+static func dangers_by_arg() -> Array[StringName]:
+	var asked: Variant = null
+	for raw in OS.get_cmdline_user_args():
+		var a := raw.trim_prefix("--")
+		if a.begins_with("dangers="):
+			asked = a.substr(8)
+	if asked == null and OS.has_feature("web"):
+		var q := str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('dangers') ?? ''", true))
+		if q != "":
+			asked = q
+	if asked == null:
+		return Dangers.data_enabled()
+	return Dangers.resolve(str(asked).split(",", false))
+
+## DG0 on the Hanging Ward (net/host.gd, after the Ward's tick): the dangers' step with the Ward's rules object.
+func step_dangers(state: Run.RunState, inputs: Array[Run.PlayerInput], dt: float, events: Array[Dictionary], ward: Variant) -> void:
+	if state.dangers != null:
+		Dangers.step(state, inputs, dt, events, ward)
 
 ## ST1: a stair has a body in the game's rooms unless started with `ward_stairs=0` (or `?ward_stairs=0` on the web page).
 static func ward_stairs_by_arg() -> bool:
@@ -875,6 +908,10 @@ func step(before: Run.RunState, raw: Array[Run.PlayerInput], dt: float) -> Run.R
 				state = state.copy()
 				state.orderly = parked_orderly(state)
 				break
+	# DG0: the dangers, on the tick's new state (sim/dangers.gd step).
+	if state.dangers != null:
+		state = state.copy() if state == before else state
+		Dangers.step(state, inputs, dt, events)
 	# SR1: last, on the tick's new state; it reads the run and writes only state.split.
 	if state.split != null:
 		Split.step(state, inputs, dt, events)

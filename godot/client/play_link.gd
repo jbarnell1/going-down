@@ -294,7 +294,7 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 			if walker.is_valid():
 				body = walker.call(body, (-sn * nf + cs * nr) * sp * dt, (-cs * nf - sn * nr) * sp * dt)
 			else:
-				body = Session.move_local(plan, phase, body, (-sn * nf + cs * nr) * sp * dt, (-cs * nf - sn * nr) * sp * dt, PLAYER_RADIUS, solid, furniture_layout)
+				body = Session.move_local(plan, phase, body, (-sn * nf + cs * nr) * sp * dt, (-cs * nf - sn * nr) * sp * dt, PLAYER_RADIUS, solid, furniture_layout, latest.get("dangers"))
 			# RN3: standing or sprinting, the crawl's mouth stops you (the host refuses the same step).
 			var from: Move.Body = before
 			if from != null and not Station.crawl_step_ok(plan, body.level, from.x, from.z, body.x, body.z, gait == &"creep"):
@@ -1039,7 +1039,7 @@ func nudge(dx: float, dz: float) -> Dictionary:
 	if not local and M.hypot2(dx, dz) > 0.7:
 		return {"ok": false, "error": "too far for the server"}
 	var furniture_code: Variant = (rc.client.latest as Dictionary).get("solid")
-	body = Session.move_local(plan, rc.client.latest["phase"], body, dx, dz, PLAYER_RADIUS, furniture_code != null, furniture_code == Protocol.SOLID_RESTORED)
+	body = Session.move_local(plan, rc.client.latest["phase"], body, dx, dz, PLAYER_RADIUS, furniture_code != null, furniture_code == Protocol.SOLID_RESTORED, (rc.client.latest as Dictionary).get("dangers"))
 	return {"ok": true, "body": _body_plain(body)}
 
 ## Walks along the rules' own path to a cell. With friends no faster than walking (the server checks),

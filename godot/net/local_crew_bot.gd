@@ -33,6 +33,13 @@ func _init(id_: String, number_: int, peer_: Client) -> void:
 	number = number_
 	peer = peer_
 
+## DG0, test only (client/main.gd `standin`): stand still here facing stand_yaw (null: the bot plays as usual).
+var stand_at: Move.Body = null
+var stand_yaw := 0.0
+## DG0, test only: walk to stand_at instead of being put there; hold F (a heal, a cut down, a pull up).
+var stand_walk := false
+var stand_use := false
+
 func poll(s: Run.RunState, now: float, dt: float, human_id: String) -> void:
 	var own: Run.RunPlayer
 	var human: Run.RunPlayer
@@ -54,7 +61,23 @@ func poll(s: Run.RunState, now: float, dt: float, human_id: String) -> void:
 	input.eye = Bot.BOT_EYE
 	input.h_fov_deg = Bot.BOT_HFOV_DEG
 	input.v_fov_deg = Bot.BOT_VFOV_DEG
-	if own.status == &"ok" and s.phase != &"riding":
+	if stand_at != null and (own.status == &"ok" or own.status == &"down"):
+		# DG0's test channel `standin`: a friend for pictures. Standing still at a spot (the host places it there), or
+		# walking straight to it at a walk (`standin walk`), holding F when asked (`standin use 1`). Down, it stays put.
+		if own.status == &"ok" and stand_walk:
+			var to := Vector2(stand_at.x - _walker.body.x, stand_at.z - _walker.body.z)
+			var step := to.limit_length(Stamina.WALK_SPEED * dt)
+			if step.length() > 1e-6:
+				_walker.body = Run.move_in_run(s, _walker.body, step.x, step.y, Bot.BOT_RADIUS)
+		elif own.status == &"ok":
+			_walker.body = stand_at
+		else:
+			_walker.body = own.body
+		_walker.yaw = stand_yaw
+		_walker.walk = null
+		input.use = stand_use
+		input.gait = "walk"
+	elif own.status == &"ok" and s.phase != &"riding":
 		_decide(s, dt, human, input)
 	input.body = _walker.body
 	input.yaw = _walker.yaw

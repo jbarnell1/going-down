@@ -421,7 +421,7 @@ func test_the_flag_reaches_the_rules(t: T) -> void:
 			for a: Dictionary in m.args:
 				names.append(str(a.name))
 	# The agreed tail (RL1 merged first): ..., voice_, ward_lift_clear_, ward_homes_, then ST1's ward_stairs_.
-	t.eq(names.slice(names.size() - 4), ["voice_", "ward_lift_clear_", "ward_homes_", "ward_stairs_"] as Array[String], "ward_homes_ comes after RL1's ward_lift_clear_, followed only by ST1's ward_stairs_")
+	t.eq(names.slice(names.size() - 5), ["voice_", "ward_lift_clear_", "ward_homes_", "ward_stairs_", "dangers_"] as Array[String], "ward_homes_ comes after RL1's ward_lift_clear_, followed only by ST1's ward_stairs_ and DG0's dangers_")
 	var args: Array = [true, 1, []]
 	while args.size() < count:
 		args.append(false)

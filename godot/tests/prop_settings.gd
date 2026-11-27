@@ -590,9 +590,46 @@ func test_catch_dance_setting(t: T) -> void:
 	t.eq(Settings.text(&"orderly.catch_dance", Settings.today(&"orderly.catch_dance")), "OFF", "fresh rooms show OFF")
 	t.eq(Settings.text(&"orderly.catch_dance", 1), "ON", "the enabled setting reads ON")
 
+## DG0: the rows outside the dangers' group (that group is test_danger_rows's).
+static func not_dangers(list: Array[Settings.Setting]) -> Array[Settings.Setting]:
+	var out: Array[Settings.Setting] = []
+	for s in list:
+		if s.group != &"dangers":
+			out.append(s)
+	return out
+
+## DG0: every dangers row: id danger.<name> (section danger) or danger.<kind>.<name> (section danger_<kind>), piece DG,
+## wired, sound (range, step, name), and proved by a method in its own test file: tests/test_dangers_base.gd
+## test_setting_<name> for the base's, tests/test_danger_<kind>.gd test_setting_<kind>_<name> for a kind's.
+func test_danger_rows(t: T) -> void:
+	var n := 0
+	for s in Settings.list():
+		if s.group != &"dangers":
+			continue
+		n += 1
+		var tag := String(s.id)
+		var parts := tag.split(".")
+		t.check(parts[0] == "danger" and (parts.size() == 2 or parts.size() == 3), "%s: named danger.<name> or danger.<kind>.<name>" % tag)
+		var kind := parts[1] if parts.size() == 3 else ""
+		t.check(s.section == (&"danger" if kind == "" else StringName("danger_" + kind)), "%s: in its own section (%s)" % [tag, s.section])
+		t.check(s.piece == &"DG" and s.wired, "%s: piece DG, wired" % tag)
+		t.check(s.lo <= s.today + EPS and s.today <= s.hi + EPS and s.lo < s.hi and s.step > 0.0 and Settings.snap(s.id, s.today) == s.today, "%s: today in range, on the step" % tag)
+		t.check(s.name.length() <= 32 and not s.name.is_empty(), "%s: a name of at most 32 characters" % tag)
+		var file := "res://tests/test_dangers_base.gd" if kind == "" else "res://tests/test_danger_%s.gd" % kind
+		var method := "test_setting_" + (parts[1] if kind == "" else kind + "_" + parts[2])
+		var script: Script = load(file) if ResourceLoader.exists(file) else null
+		var has := false
+		if script != null:
+			for m: Dictionary in script.get_script_method_list():
+				if str(m["name"]) == method:
+					has = true
+		t.check(has, "%s: proved by %s in %s" % [tag, method, file])
+	t.check(n >= 6, "the base's six rows are there (%d dangers rows)" % n)
+
 func test_registry_rows(t: T) -> void:
 	var game := game_values()
-	var rows := Settings.list()
+	# DG0: the dangers' rows (their own group) are checked by test_danger_rows below, each kind's by its own test file.
+	var rows := not_dangers(Settings.list())
 	# DF1 added the ten pressure rows (floor 8 and deeper, their own group before the player speeds).
 	# WC1 added five: the Rigger hears the call and the cut; the Ward's clock, carry and cut.
 	# OR2 added the Orderly fix's two (KEEPS COMING AS IT REACHES, STARTS IN THE DIRTY PART).
@@ -644,7 +681,7 @@ func test_registry_rows(t: T) -> void:
 	for id: StringName in game:
 		t.check(ids.has(id), "%s: in the test's table but not in the registry" % id)
 	var wired: Array[StringName] = []
-	for s in Settings.list(true):
+	for s in not_dangers(Settings.list(true)):
 		wired.append(s.id)
 	var want: Array[StringName] = []
 	for s in rows:
@@ -2457,7 +2494,7 @@ func test_groundskeeper_six(t: T) -> void:
 
 func test_every_wired_setting_has_a_proof(t: T) -> void:
 	var wired := {}
-	for s in Settings.list(true):
+	for s in not_dangers(Settings.list(true)):
 		wired[s.id] = true
 		t.check(PROOFS.has(s.id) and has_method(String(PROOFS.get(s.id, ""))), "%s is wired and has no proof in tests/prop_settings.gd" % s.id)
 	for id: StringName in PROOFS:

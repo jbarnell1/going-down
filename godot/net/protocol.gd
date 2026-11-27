@@ -303,6 +303,14 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##    player caught, or "")}): every screen plays the same scene from host time `at` (client/wipe_scene.gd);
 ##  - "standee": the id of the last player caught at the night's latest wipe (the prison's standee wears their face);
 ##  - events "lastStand" {playerId, mult} and "lastStandEnd" {playerId, why: healed, caught, left}.
+## The dangers (DG0; sim/dangers.gd block, net/host_rules.gd dangers). Only in a run with any kind enabled, and only on a
+## floor with dangers or a danger effect, so a run without them sends exactly what it did before:
+##  - the world's floor extensions gain "dg": [records, dark, doors, solids, fx, pins, prompts] (enc_dangers), decoded
+##    back to the block's shape {r: [{id, kind, x, y, z, level, yaw, state, since, n}], dark: [[level, x0, z0, x1, z1,
+##    until, from]], doors: [[level, ax, ay, bx, by, until]], solids: [[level, x0, z0, x1, z1]], fx: [[playerId, kind, until]],
+##    pins: [[playerId, style, x, y, z]], prompts: [[id, text, reach]]};
+##  - events "dangerNoise", "dangerCue", "dangerDoor", "dangerHold", "dangerStumble", "dangerBlind", "dangerPush",
+##    "dangerPinned", "dangerUnpinned", "dangerOut" (sim/dangers.gd), plain like every event.
 ## Nightly reels (T24). With a reel in progress, the day block can end in [day, started, crew, votes, skipped].
 ## An input with a skip vote extends its 27-element form by a host-clock timestamp (the reel's start).
 const INV_OPS: Array[String] = ["", "drop", "take", "give", "stash", "fetch", "buy", "use", "throw", "skill", "lamp"]
@@ -350,6 +358,82 @@ static func q3(x: float) -> float:
 
 static func q_body(b: Move.Body) -> Move.Body:
 	return Move.Body.make(q2(b.x), q2(b.z), b.level, q2(b.y))
+
+## DG0: the "dangers" block on the wire (see the header).
+static func enc_dangers(b: Dictionary) -> Array:
+	var recs := []
+	for r: Dictionary in b.get("r", []):
+		var n := []
+		for v: Variant in r.get("n", []):
+			n.append(q3(float(v)))
+		recs.append([int(r["id"]), str(r["kind"]), q3(r["x"]), q3(r["y"]), q3(r["z"]), int(r["level"]), q3(r["yaw"]), str(r["state"]), q3(r["since"]), n])
+	var q_rows := func(rows: Array, ints: int) -> Array:
+		var out := []
+		for row: Array in rows:
+			var e := []
+			for i in row.size():
+				e.append(int(row[i]) if i < ints else q3(float(row[i])))
+			out.append(e)
+		return out
+	var fx := []
+	for f: Array in b.get("fx", []):
+		fx.append([str(f[0]), str(f[1]), q3(float(f[2]))])
+	var pins := []
+	for p: Array in b.get("pins", []):
+		pins.append([str(p[0]), str(p[1]), q3(float(p[2])), q3(float(p[3])), q3(float(p[4]))])
+	var prompts := []
+	for p: Array in b.get("prompts", []):
+		prompts.append([int(p[0]), str(p[1]), q3(float(p[2]))])
+	return [recs, q_rows.call(b.get("dark", []), 1), q_rows.call(b.get("doors", []), 5), q_rows.call(b.get("solids", []), 1), fx, pins, prompts]
+
+static func dec_dangers(c: _V, v: Variant) -> Dictionary:
+	var a := _a(c, v, 7, 7)
+	if c.bad:
+		return {}
+	var recs: Array = []
+	for e: Variant in _a(c, a[0], 0, 256):
+		var r := _a(c, e, 10, 10)
+		if c.bad:
+			return {}
+		var n: Array = []
+		for x: Variant in _a(c, r[9], 0, 8):
+			n.append(_f(c, x, -MAX_CLOCK, MAX_CLOCK))
+		recs.append({"id": _i(c, r[0], 0, MAX_COUNT), "kind": _s(c, r[1]), "x": _f(c, r[2], -MAX_COORD, MAX_COORD),
+			"y": _f(c, r[3], -MAX_COORD, MAX_COORD), "z": _f(c, r[4], -MAX_COORD, MAX_COORD), "level": _i(c, r[5], 0, 1),
+			"yaw": _f(c, r[6], -100.0, 100.0), "state": _s(c, r[7]), "since": _f(c, r[8], -1.0, MAX_CLOCK), "n": n})
+	var rows := func(v2: Variant, size: int, ints: int, most: int) -> Array:
+		var out: Array = []
+		for e: Variant in _a(c, v2, 0, most):
+			var row := _a(c, e, size, size)
+			if c.bad:
+				return out
+			var d: Array = []
+			for i in size:
+				d.append(_i(c, row[i], -1, 100000) if i < ints else _f(c, row[i], -MAX_CLOCK, MAX_CLOCK))
+			out.append(d)
+		return out
+	var dark: Array = rows.call(a[1], 7, 1, 64)
+	var doors: Array = rows.call(a[2], 6, 5, 64)
+	var solids: Array = rows.call(a[3], 5, 1, 256)
+	var fx: Array = []
+	for e: Variant in _a(c, a[4], 0, 16):
+		var f := _a(c, e, 3, 3)
+		if c.bad:
+			return {}
+		fx.append([_s(c, f[0]), _s(c, f[1]), _f(c, f[2], -1.0, MAX_CLOCK)])
+	var pins: Array = []
+	for e: Variant in _a(c, a[5], 0, 16):
+		var p := _a(c, e, 5, 5)
+		if c.bad:
+			return {}
+		pins.append([_s(c, p[0]), _s(c, p[1]), _f(c, p[2], -MAX_COORD, MAX_COORD), _f(c, p[3], -MAX_COORD, MAX_COORD), _f(c, p[4], -MAX_COORD, MAX_COORD)])
+	var prompts: Array = []
+	for e: Variant in _a(c, a[6], 0, 64):
+		var p := _a(c, e, 3, 3)
+		if c.bad:
+			return {}
+		prompts.append([_i(c, p[0], 0, MAX_COUNT), _s(c, p[1], 80), _f(c, p[2], 0.0, 100.0)])
+	return {"r": recs, "dark": dark, "doors": doors, "solids": solids, "fx": fx, "pins": pins, "prompts": prompts}
 
 ## Math.floor(x * 1000) / 1000 (rounded down: a bound stays a bound).
 static func floor3(x: float) -> float:
@@ -534,8 +618,11 @@ static func enc_world(w: Dictionary) -> Array:
 		while out.size() < WORLD_SHOP_INDEX:
 			out.append(null)
 		out.append(enc_shop(w["shop"]))
-	if w.get("orderly2") != null or w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null or w.get("nerve") != null or w.get("tenant") != null or w.get("cycle") != null or w.get("pressure") != null or w.get("stand") != null or w.get("wipe") != null or w.get("standee") != null or w.get("deal") != null or w.get("split") != null or w.get("economy") != null or w.get("mic") != null:
+	if w.get("orderly2") != null or w.get("ward") != null or w.get("reactor") != null or w.get("orientationStandees") != null or w.get("skills") != null or w.get("wind") != null or w.get("shoes") != null or w.get("flares") != null or w.get("lamps") != null or w.get("porter") != null or w.get("longBurn") != null or w.get("medic") != null or w.get("steady") != null or w.get("listener") != null or w.get("nerve") != null or w.get("tenant") != null or w.get("cycle") != null or w.get("pressure") != null or w.get("stand") != null or w.get("wipe") != null or w.get("standee") != null or w.get("deal") != null or w.get("split") != null or w.get("economy") != null or w.get("mic") != null or w.get("dangers") != null:
 		var extensions := {}
+		# DG0 (sim/dangers.gd block): the floor's dangers, only in a run with them.
+		if w.get("dangers") != null:
+			extensions["dg"] = enc_dangers(w["dangers"])
 		# VC1: whose microphone is listening (the NO MIC marks).
 		if w.get("mic") != null:
 			extensions["mic"] = (w["mic"] as Array).duplicate()
@@ -1322,6 +1409,10 @@ static func dec_world(c: _V, w: Variant) -> Dictionary:
 			for v: Variant in ids:
 				mic_ids.append(_s(c, v))
 			out["mic"] = mic_ids
+		if extensions.has("dg"):
+			out["dangers"] = dec_dangers(c, extensions["dg"])
+			if c.bad:
+				return {}
 		if extensions.has("economy"):
 			out["economy"] = _i(c, extensions["economy"], 1, 1)
 		if extensions.has("pressure"):
