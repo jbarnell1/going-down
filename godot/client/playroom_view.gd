@@ -26,6 +26,8 @@ extends Node3D
 const Playroom = preload("res://sim/playroom.gd")
 const Floor = preload("res://sim/floor.gd")
 const AnnexView = preload("res://client/annex_view.gd")
+## LA6: the walls, the upper deck and the soft shapes dressed (looks only).
+const PlayroomDress = preload("res://client/playroom_dress.gd")
 
 const S := 2.0
 const LH := 3.2
@@ -147,6 +149,11 @@ var signs: Array[Dictionary] = []
 var words: Array[Dictionary] = []
 ## Junctions: {level, cell}.
 var junctions: Array[Dictionary] = []
+## The ceiling's glowing stars, where they are stuck (the dressing keeps clear of them).
+var stars: Array[Vector3] = []
+## LA6's dressing (client/playroom_dress.gd) and its material.
+var dressing: RefCounted
+var mat_dress: ShaderMaterial
 
 var _lit_mats: Array[ShaderMaterial] = []
 ## {mat, light (bool: a strip light, off in the dark), lit_col, dark_col, lit_e, dark_e}
@@ -215,6 +222,8 @@ func _dress(level: Level, source_plan: Floor.FloorPlan, source_hides: Array[Play
 	_exits()
 	if level.props_on:
 		_dress_rooms()
+		dressing = PlayroomDress.build(self)
+		mat_dress = PlayroomDress.material(self)
 	_commit()
 	level.props_placed = furniture.size() + words.size()
 	_apply(1.0, 0.0)
@@ -524,6 +533,7 @@ func _commit() -> void:
 			"pline": mi.material_override = mat_line
 			"pexit": mi.material_override = mat_exit
 			"pmural": mi.material_override = mat_mural
+			"pldress": mi.material_override = mat_dress
 		lv.add_child(mi)
 	lv._chunks.clear()
 
@@ -796,6 +806,7 @@ func _stars() -> void:
 				var count := rng.randi_range(0, 3) if k == "room" else rng.randi_range(0, 1)
 				for i in count:
 					var p := Vector3((x + rng.randf_range(0.1, 0.9)) * S, _ceiling_y(level, x, y) - 0.008, (y + rng.randf_range(0.1, 0.9)) * S)
+					stars.append(p)
 					_star(lv._st(level, p.x, p.z, "pstar"), p, rng.randf_range(0.12, 0.24), rng.randf() * TAU)
 
 static func _star(st: SurfaceTool, c: Vector3, r: float, turn: float) -> void:
@@ -1592,17 +1603,31 @@ func _party_sign(r: Dictionary) -> void:
 	AnnexView.picture(lv._st(level, at.x, at.z, "pdecal"), at, into, 1.4, 0.25, atlas_uv(A_PARTY), _tone(Color.WHITE, at))
 
 ## A soft-play shape: a foam cube, a cylinder or a wedge, in the palette.
+## The seed's draws are the same as before LA6, which draws the shape as a soft-play piece in the same box.
 func _soft_shape(level: int, at: Vector3, rng: RandomNumberGenerator) -> void:
 	var col := PAL[rng.randi_range(0, 3)]
-	match rng.randi_range(0, 2):
+	var kind := rng.randi_range(0, 2)
+	var s := 0.0
+	var turn := 0.0
+	var col2 := col
+	match kind:
 		0:
-			var s := rng.randf_range(0.4, 0.7)
-			_boxes(level, Transform3D(Basis(Vector3.UP, rng.randf() * TAU), at), [_b(s, s, s, 0, 0, 0, col)])
+			s = rng.randf_range(0.4, 0.7)
+			turn = rng.randf() * TAU
+		2:
+			turn = rng.randf() * TAU
+			col2 = PAL[(rng.randi() + 1) % 4]
+	if not PlayroomDress.off:
+		PlayroomDress.soft_shape(self, level, at, kind, s, turn, col, col2)
+		return
+	match kind:
+		0:
+			_boxes(level, Transform3D(Basis(Vector3.UP, turn), at), [_b(s, s, s, 0, 0, 0, col)])
 		1:
 			_prim(level, _cyl(0.3, 0.3, 0.5, 12), Transform3D(Basis.IDENTITY, at + Vector3(0, 0.25, 0)), col)
 		_:
-			var xf := Transform3D(Basis(Vector3.UP, rng.randf() * TAU), at)
-			_boxes(level, xf, [_b(0.8, 0.2, 0.6, 0, 0, 0, col), _b(0.8, 0.2, 0.4, 0, 0.2, -0.1, PAL[(rng.randi() + 1) % 4]), _b(0.8, 0.2, 0.2, 0, 0.4, -0.2, col)])
+			var xf := Transform3D(Basis(Vector3.UP, turn), at)
+			_boxes(level, xf, [_b(0.8, 0.2, 0.6, 0, 0, 0, col), _b(0.8, 0.2, 0.4, 0, 0.2, -0.1, col2), _b(0.8, 0.2, 0.2, 0, 0.4, -0.2, col)])
 
 # --- the check: what was drawn is what the rules say ---------------------------------------------
 
