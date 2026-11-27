@@ -821,10 +821,20 @@ func _hush_check(s: Run.RunState, t: float, extra: Array[Dictionary]) -> void:
 
 ## DG0: whether a danger hides the resident from player `p` now (its dark region, a closed door between them, or the
 ## player blinded): their "I can see it" counts for nothing, as in a blink.
+## DG0D: what sees in a blink sees in the dark region too (sim/run.gd _step_stillness): a player whose flash is lit, or
+## whose Steady Gaze the host counted on the last tick (their id twice among the watchers, as the screen's own), keeps
+## their "I can see it" there; a closed door still hides it from everyone.
 func _danger_hides(s: Run.RunState, p: HostPlayer) -> bool:
 	if s.dangers == null or s.plan == null:
 		return false
-	return DangerFx.blinded(s.dangers, p.id, s.t) or DangerFx.hides_resident(s.dangers, s.orderly.body, p.body, s.t, float(s.plan.cell_size))
+	if DangerFx.blinded(s.dangers, p.id, s.t):
+		return true
+	var o := s.orderly.body
+	if p.body != null and p.body.level == o.level and DangerFx.line_blocked(s.dangers, o.level, p.body.x, p.body.z, o.x, o.z, float(s.plan.cell_size)):
+		return true
+	if not DangerFx.dark_at(s.dangers, o.level, o.x, o.z, s.t):
+		return false
+	return not (s.shop and Shop.flashing(s.shop_state, p.id, s.t)) and s.orderly.watchers.count(p.id) <= 1
 
 func _ward_reach(from: Vector3, to: Vector3) -> bool:
 	var w := _ward_review
@@ -1472,7 +1482,8 @@ func _second_reports(s0: Run.RunState, q: Array, ht: float, t_next: float, extra
 	var seeing := false
 	var two := s.orderly.need >= 2
 	for p: HostPlayer in _players.values():
-		if _playing(p) and not Run.flare_blinded(s, p.id, s.t) and p.input.get("seeing2", false) == true and ht - p.input_at <= Session.SEEING_TIMEOUT and _before_armed(p.input["renderTime"], true):
+		# DG0D: as the first's, with the second swapped in (s.orderly is the second here).
+		if _playing(p) and not Run.flare_blinded(s, p.id, s.t) and not _danger_hides(s, p) and p.input.get("seeing2", false) == true and ht - p.input_at <= Session.SEEING_TIMEOUT and _before_armed(p.input["renderTime"], true):
 			seeing = true
 			if not two:
 				break

@@ -4136,8 +4136,9 @@ static func _step_stillness(s: RunState, prev: RunState, players: Array[RunPlaye
 		var i := _inp(p, input_of)
 		# The host's catch wait blinds a player to one Orderly only (blind_first, blind_second).
 		var iblind := i.blind or (i.blind_second if second else i.blind_first)
-		# DG0: blinded by a danger, or a closed door between them and the resident.
-		if s.dangers != null and (DangerFx.blinded(s.dangers, p.id, t) or DangerFx.hides_resident(s.dangers, s.orderly.body, p.body, t, float(s.plan.cell_size))):
+		# DG0: blinded by a danger, or a closed door between them and the resident. DG0D: the dark region is in `blind`
+		# above (a flash and a Steady Gaze see through it, as in a blink), so only the door's line is tested here.
+		if s.dangers != null and (DangerFx.blinded(s.dangers, p.id, t) or (p.body.level == s.orderly.body.level and DangerFx.line_blocked(s.dangers, p.body.level, p.body.x, p.body.z, s.orderly.body.x, s.orderly.body.z, float(s.plan.cell_size)))):
 			iblind = true
 		var flared := flare_blinded(s, p.id, t)
 		if not _is_active(p, input_of):

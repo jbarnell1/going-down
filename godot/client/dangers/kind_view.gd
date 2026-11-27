@@ -187,6 +187,20 @@ func lit(at: Vector3) -> bool:
 func my_id() -> String:
 	return base.my_id() if base != null else ""
 
+## DG0D: the player's near light (client/main.gd): its usual reach in metres (a Lamplighter's and the dead lamps'
+## change it; near_light_reach() says what it is now).
+const NEAR_LIGHT_REACH := 4.0
+
+## DG0D: how far the near light reaches now (m; 0 when it is off), and where it is (the camera): a view that turns its
+## room's light down inside its dark region eases that dim off within this reach of near_light_at(), so the near light
+## (and a carried lamp) is not crushed, e.g. `lerpf(1.0, dim, smoothstep(r * 0.5, r, at.distance_to(near_light_at())))`.
+## Last frame's figures (main.gd sets them after its light block).
+func near_light_reach() -> float:
+	return float(base.get("near_reach")) if base != null else 0.0
+
+func near_light_at() -> Vector3:
+	return base.get("near_at") if base != null else Vector3.ZERO
+
 ## A short tone made from arithmetic (a stand-in kinds may use): `hz`, `secs`, a decay, its peak in dBFS (never above
 ## PEAK_MAX_DB). Measure it with measure() and set `peak_db` so it lands in its category's band.
 static func tone(hz: float, secs: float, decay := 8.0, rate := 22050, peak_db := -6.0) -> AudioStreamWAV:

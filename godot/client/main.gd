@@ -194,6 +194,8 @@ var cam: Camera3D
 var near_light: OmniLight3D
 const NEAR_LIGHT_ENERGY := 1.1
 const NEAR_LIGHT_REACH := 4.0
+## DG0D: the near light in a danger's dark region: as strong as at the blink's first dark (1 - its 0.07 light).
+const DANGER_DARK_NEAR := 0.93
 ## DF1: the line on the first floor of cycle 2 (no recorded voice line fits; a HUD line only), and how long it shows.
 const PRESSURE_NOTICE := "CONTINUANCE: LOWER LEVELS ARE LESS STABLE."
 const PRESSURE_NOTICE_MS := 6000
@@ -2516,6 +2518,10 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 		env.fog_light_color = (level.get_meta(&"fog_color_dark") as Color).lerp(level.get_meta(&"fog_color") as Color, clampf(light, 0.0, 1.0))
 	# The near light: as much as it is dark (a place that is dark with its lamps on says how much: the Arboretum).
 	var near := clampf(maxf(1.0 - light, float(level.get_meta(&"near_light", 0.0))), 0.0, 1.0)
+	# DG0D: a danger's dark region at the camera, or within the near light's reach of it, brings the near light on as
+	# the blink's dark does (and nothing else of the blink: the floor's lamps, the hum and the name tags go by `dark`).
+	if dangers_view != null and is_instance_valid(dangers_view):
+		near = maxf(near, DANGER_DARK_NEAR * DangersView.near_dark(dangers_view.block, float(s.get("hostNow", 0.0)), int(me.get("level", 0)), cam.global_position, NEAR_LIGHT_REACH))
 	near_light.light_energy = NEAR_LIGHT_ENERGY * near * float(level.get_meta(&"near_light_gain", 1.0))
 	near_light.visible = near > 0.02
 	var steady: Dictionary = s.get("steady", {})
@@ -2533,6 +2539,10 @@ func _game_frame(s: Dictionary, dt: float) -> void:
 	if str(s["phase"]) != "riding" and DealViewScript.carrier_here(_deal_block(), &"torch", _deal_depth(), _deal_day()) == link.my_id():
 		near_light.light_energy *= _torch_factor(float(s.get("hostNow", 0.0)))
 	env.background_color = Color(0.02, 0.025, 0.025) * light
+	# DG0D: the near light as the danger views read it (kind_view.gd near_light_reach / near_light_at).
+	if dangers_view != null and is_instance_valid(dangers_view):
+		dangers_view.near_at = cam.global_position
+		dangers_view.near_reach = near_light.omni_range if near_light.visible else 0.0
 
 	# The lift: doors, indicator, votes, buttons.
 	var phase := str(s["phase"])

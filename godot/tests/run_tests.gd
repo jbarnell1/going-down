@@ -131,6 +131,7 @@ const FILES: Array[String] = [
 	# DG0: the dangers. Kinds add their test file only between their own markers.
 	"test_dangers_base",
 	"test_dangers_net",
+	"test_dangers_dark",  # DG0D
 	# DANGER badge_doors
 	# END badge_doors
 	# DANGER failing_lights

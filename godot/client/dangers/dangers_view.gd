@@ -174,6 +174,28 @@ func lit(at: Vector3) -> bool:
 func my_id() -> String:
 	return me
 
+# DG0D: the near light (client/main.gd near_light: things within its reach of the camera keep a little light on this
+# screen when it is dark, as in the blink). A danger's dark region brings it on round the camera, and nothing else of
+# the blink. main.gd sets these after its light block each frame, so a view's frame() reads the previous frame's.
+## Where the near light is (the camera, world) and how far it reaches now (0: off).
+var near_at := Vector3.ZERO
+var near_reach := 0.0
+
+## How much a danger dark region asks of the near light at `at` on `level` (0 to 1): 1 inside a live region or within
+## half of `reach` of one, easing to 0 at `reach`, so walking up to a dark stretch brings it on without a pop.
+static func near_dark(b: Dictionary, host_now: float, level: int, at: Vector3, reach: float) -> float:
+	var w := 0.0
+	if reach <= 0.0:
+		return 0.0
+	for r: Array in b.get("dark", []):
+		if int(r[0]) != level or host_now < float(r[6]) or host_now >= float(r[5]):
+			continue
+		var dx := maxf(0.0, maxf(float(r[1]) - at.x, at.x - float(r[3])))
+		var dz := maxf(0.0, maxf(float(r[2]) - at.z, at.z - float(r[4])))
+		var d := sqrt(dx * dx + dz * dz)
+		w = maxf(w, clampf((reach - d) / (0.5 * reach), 0.0, 1.0))
+	return w
+
 ## The test channel: the records as this screen has them.
 func describe() -> Array:
 	var out: Array = []

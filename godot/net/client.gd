@@ -841,6 +841,7 @@ func _is_dark(host_now: float, show: Array) -> Array:
 ## DG0: whether the resident drawn now stands in a danger dark region (the world's "dangers" block, sim/dangers.gd):
 ## dark from `from` less the clock's error bound until the snapshots drawn are past `until`, as _is_dark does for a
 ## blink, so this screen never says it sees a resident the host has in the dark. Half a metre of margin round each.
+## DG0D: the Orderly of `show` and `latest`: with the second swapped in (_swap_second), the second's.
 func _danger_dark(host_now: float, show: Array) -> bool:
 	if not latest is Dictionary or not (latest as Dictionary).get("dangers") is Dictionary:
 		return false
@@ -862,7 +863,8 @@ func _danger_dark(host_now: float, show: Array) -> bool:
 		if not live:
 			continue
 		for o: Variant in poses:
-			if o is Dictionary and int(o["level"]) == int(r[0]) and float(o["x"]) >= float(r[1]) - 0.5 and float(o["x"]) <= float(r[3]) + 0.5 \
+			# DG0D: an absent second ({"mode": "absent"}) has no pose to test.
+			if o is Dictionary and (o as Dictionary).has("level") and int(o["level"]) == int(r[0]) and float(o["x"]) >= float(r[1]) - 0.5 and float(o["x"]) <= float(r[3]) + 0.5 \
 					and float(o["z"]) >= float(r[2]) - 0.5 and float(o["z"]) <= float(r[4]) + 0.5:
 				return true
 	return false
@@ -931,12 +933,15 @@ func frame(now: float, local: LocalFrame) -> Frame:
 		latched_now = _update_latch(show2_latch, rt) or latched_now
 		_swap_second()
 	var taken := _latch != null or _latch2 != null
-	# DG0: a resident standing in a danger's dark region is as unseen as in a blink (sim/run.gd), with the same guard.
-	var blind: bool = dk[0] or taken or local.flare_blind or _danger_dark(host_now, show)
+	# DG0D: `blind` is the whole screen's dark (the blink, being taken, the flare): f.dark, which main.gd draws as the
+	# blink. A danger's dark region hides only the resident standing in it (sim/run.gd), each Orderly by its own poses
+	# with the blink's guard: it goes to that Orderly's drawing alone and never darkens the floor.
+	var blind: bool = dk[0] or taken or local.flare_blind
 	var blind_to_resident := blind
 
 	# The Orderly.
-	var r1 := _draw_orderly(show, cam, taken, blind, local)
+	var dd1 := _danger_dark(host_now, show)  # DG0D
+	var r1 := _draw_orderly(show, cam, taken, blind or dd1, local)  # DG0D
 	var seeing_now: bool = r1["seeing"]
 	var report: Variant = r1["report"]
 	var orderly: Variant = r1["orderly"]
@@ -947,7 +952,8 @@ func frame(now: float, local: LocalFrame) -> Frame:
 	var show2 := _second_show(show)
 	if not show2.is_empty() or _drawn2 != null:
 		_swap_second()
-		r2 = _draw_orderly(show2, cam, taken, blind, local)
+		# DG0D: swapped in, `latest` is the second's view, so its own poses are tested against the dark.
+		r2 = _draw_orderly(show2, cam, taken, blind or _danger_dark(host_now, show2), local)
 		_swap_second()
 		if r2["report"] != null:
 			report = r2["report"]
