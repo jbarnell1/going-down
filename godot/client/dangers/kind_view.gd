@@ -3,6 +3,10 @@
 # the next floor. It draws and plays what the host's record says; it decides nothing and has no collision.
 extends Node3D
 
+## DG0R3: named so no kind's own constants clash with them.
+const _WALL_SIGHT = preload("res://sim/sight.gd")
+const _WALL_MOVE = preload("res://sim/move.gd")
+
 ## Set by the base before build(): the base node (helpers), the record's id and kind.
 var base: Node = null
 var rec_id := -1
@@ -44,6 +48,15 @@ const BANDS := {
 }
 ## The most a sample may reach (dBFS).
 const PEAK_MAX_DB := -1.0
+## DG0R3: heard through a wall, as the game's other positional sounds are (client/temp_view.gd's stapler, Entity's
+## MUFFLED_GAIN): duller (a low-pass at this cutoff) and quieter (this gain). Loops are checked again WALL_CHECK s apart.
+const MUFFLED_GAIN := 0.45
+const MUFFLED_CUTOFF_HZ := 1300.0
+const CLEAR_CUTOFF_HZ := 20500.0
+const WALL_CHECK := 0.25
+## [player, its unmuffled volume_db] of every play_loop still playing.
+var _wall_loops: Array = []
+var _wall_next := 0.0
 
 ## A one-off sound at `at` (world), in `category`'s bus and distances, at Sfx.BASE_DB + trim_db (trim at most 0);
 ## `from`: seconds into the stream (start part way in, so every screen is at the same moment). (`category` may still be
@@ -57,6 +70,7 @@ func play_cue(stream: AudioStream, at: Vector3, category: Variant = &"effect", t
 ## A looping sound at `at` (the stream must loop): started now, `from` seconds in; stop it with queue_free().
 func play_loop(stream: AudioStream, at: Vector3, category: StringName = &"ambience", trim_db := 0.0, from := 0.0) -> AudioStreamPlayer3D:
 	var p := _player3d(stream, at, category, trim_db)
+	_wall_loops.append([p, p.volume_db - (linear_to_db(MUFFLED_GAIN) if bool(p.get_meta(&"muffled", false)) else 0.0)])
 	var len := stream.get_length() if stream != null else 0.0
 	p.play(fmod(maxf(0.0, from), len) if len > 0.0 else 0.0)
 	return p
@@ -79,7 +93,55 @@ func _player3d(stream: AudioStream, at: Vector3, category: Variant, trim_db: flo
 	p.top_level = true
 	add_child(p)
 	p.global_position = at
+	_wall_muffle(p, at, p.volume_db)
 	return p
+
+## DG0R3: whether a sound at `at` is heard through a wall from an ear at `ear` on `plan` (pure; the line of sight the
+## Temp's stapler uses). False with no plan (the Ward) or no ear.
+static func through_wall(plan: Object, ear: Vector3, at: Vector3) -> bool:
+	if plan == null or not ear.is_finite():
+		return false
+	var e := _WALL_SIGHT.Point3.make(ear.x, ear.y, ear.z, 1 if ear.y >= _WALL_MOVE.LEVEL_HEIGHT else 0)
+	var s := _WALL_SIGHT.Point3.make(at.x, at.y, at.z, 1 if at.y >= _WALL_MOVE.LEVEL_HEIGHT else 0)
+	return not _WALL_SIGHT.has_line_of_sight(plan, e, s)
+
+## The ear: this screen's camera (Vector3.INF headless or outside the tree).
+func _wall_ear() -> Vector3:
+	var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() and get_viewport() != null else null
+	return cam.global_position if cam != null else Vector3.INF
+
+func _wall_muffle(p: AudioStreamPlayer3D, at: Vector3, clear_db: float) -> void:
+	var plan: Variant = (base.get("_ctx") as Dictionary).get("plan") if base != null and base.get("_ctx") is Dictionary else null
+	var m := through_wall(plan, _wall_ear(), at)
+	p.set_meta(&"muffled", m)
+	p.attenuation_filter_cutoff_hz = MUFFLED_CUTOFF_HZ if m else CLEAR_CUTOFF_HZ
+	p.volume_db = clear_db + (linear_to_db(MUFFLED_GAIN) if m else 0.0)
+
+## Called by the base every frame: each loop's muffling again, WALL_CHECK s apart (the ear moves).
+func wall_check(now_s: float) -> void:
+	if now_s < _wall_next:
+		return
+	_wall_next = now_s + WALL_CHECK
+	var kept: Array = []
+	for row: Array in _wall_loops:
+		var p: Variant = row[0]
+		if not is_instance_valid(p):
+			continue
+		_wall_muffle(p as AudioStreamPlayer3D, (p as AudioStreamPlayer3D).global_position, float(row[1]))
+		kept.append(row)
+	_wall_loops = kept
+
+## DG0R3 (drawing from host time): the state to draw at host time `ht` for a record whose state `from` always ends in
+## `next` after `length` seconds by the host's rules (e.g. a build that always ends in its jet). Once ht reaches
+## since + length while the snapshot still says `from`, this gives `next`, so the screen draws it on time by its own
+## host clock instead of when the snapshot saying so arrives; a kind's grace then covers only the upload delay. Any
+## other state: the record's own. ht is the screen's estimate (error at most half the best round trip; early, never
+## later than the snapshot would be).
+static func scheduled(rec: Dictionary, ht: float, from: StringName, length: float, next: StringName) -> StringName:
+	var state := StringName(str(rec.get("state", "")))
+	if state == from and ht >= float(rec.get("since", INF)) + length - 1e-9:
+		return next
+	return state
 
 ## Headless measure of a stream made from arithmetic or loaded as WAV (8 or 16 bit): {peak_db (dBFS), loud_db (the
 ## RMS in dBFS of the samples above -50 dBFS, a simple loudness figure), clipped (samples at full scale)}.

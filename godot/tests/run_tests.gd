@@ -130,6 +130,7 @@ const FILES: Array[String] = [
 	"test_station_rooms",
 	# DG0: the dangers. Kinds add their test file only between their own markers.
 	"test_dangers_base",
+	"test_dangers_net",
 	# DANGER badge_doors
 	# END badge_doors
 	# DANGER failing_lights

@@ -1182,6 +1182,10 @@ func _step(now: float) -> void:
 			var di := Run.PlayerInput.make(p.id, p.body if p.body != null else rp.body, dm["eye"], dm["yaw"], dm["pitch"], dm["hFovDeg"], dm["vFovDeg"])
 			di.blind = true
 			di.gait = &"creep"
+			# DG0R3: a player pinned by a danger (hung, on a ledge) may still hold F for the kind (Api.Who.use: a kick); every
+			# other downed player's F still counts for nothing.
+			if s.dangers != null and (s.dangers as DangerFx.DangerFloor).pins.has(p.id):
+				di.use = dm.get("use", false) == true
 			inputs.append(di)
 			p.call_pending = false
 			p.pick_pending = false

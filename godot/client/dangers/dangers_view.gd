@@ -99,6 +99,9 @@ func update(b: Variant, host_now: float, my_feet: Variant, delta: float) -> void
 	for id: int in _views:
 		if seen.has(id):
 			(_views[id] as Node).call("frame", _recs[id], ht, delta)
+			# DG0R3: its looping sounds muffled again through walls as the ear moves.
+			if (_views[id] as Node).has_method("wall_check"):
+				(_views[id] as Node).call("wall_check", Time.get_ticks_msec() / 1000.0)
 	prompt = ""
 	if my_feet is Vector3:
 		for p: Array in block.get("prompts", []):

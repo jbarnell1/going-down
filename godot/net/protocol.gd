@@ -69,7 +69,8 @@ const NEEDLES: Array[String] = ["off", "idle", "dormant", "recording", "contamin
 ## at bit 5, the third at bit 9 ("out" is the first code that needs it), so the old codes are as they were.
 const STATUSES: Array[String] = ["ok", "caught", "leftBehind", "down", "out"]
 ## How a player went down (the downs block).
-const DOWN_BY: Array[String] = ["catch", "health"]
+## DG0R3: "danger" (sim/dangers.gd: hung or on a ledge) appended, so every older code keeps its number.
+const DOWN_BY: Array[String] = ["catch", "health", "danger"]
 const GAITS: Array[String] = ["walk", "creep", "sprint"]
 ## The emote wheel's emotes (client/crew_view.gd plays them). Not in protocol.ts: the emote messages
 ## ("E" client -> host, "M" host -> the other clients) are new in the Godot game. They change nothing
@@ -432,7 +433,8 @@ static func dec_dangers(c: _V, v: Variant) -> Dictionary:
 		var p := _a(c, e, 3, 3)
 		if c.bad:
 			return {}
-		prompts.append([_i(c, p[0], 0, MAX_COUNT), _s(c, p[1], 80), _f(c, p[2], 0.0, 100.0)])
+		# DG0R3: a negative reach is the pinned player's hint line (CONTRACT.md); it must cross the network.
+		prompts.append([_i(c, p[0], 0, MAX_COUNT), _s(c, p[1], 80), _f(c, p[2], -100.0, 100.0)])
 	return {"r": recs, "dark": dark, "doors": doors, "solids": solids, "fx": fx, "pins": pins, "prompts": prompts}
 
 ## Math.floor(x * 1000) / 1000 (rounded down: a bound stays a bound).

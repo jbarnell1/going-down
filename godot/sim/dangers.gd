@@ -490,6 +490,9 @@ static func _ask(c: Ctx, op: StringName, rec: Dictionary, a: Array) -> bool:
 			d.heard.append([at.x, at.y, at.z, at.level, loud, str(a[2])])
 			c.events.append({"type": "dangerNoise", "t": t, "id": rid, "kind": String(c.kind), "x": at.x, "y": at.y, "z": at.z,
 				"level": at.level, "loud": loud, "by": str(a[2])})
+			# DG0R3: the meter-only cause, on the event alone (never in `heard`), and only when given.
+			if a.size() > 3 and str(a[3]) != "":
+				c.events[c.events.size() - 1]["cause"] = str(a[3])
 			return true
 		&"dark":
 			# From `from` (now, or announced up to DARK_LEAD ahead, so every screen darkens on time), until `until`.
@@ -506,7 +509,7 @@ static func _ask(c: Ctx, op: StringName, rec: Dictionary, a: Array) -> bool:
 			d.dark = dark
 			return true
 		&"close_edge":
-			return _close_edge(c, rid, int(a[0]), int(a[1]), int(a[2]), int(a[3]), int(a[4]), float(a[5]))
+			return _close_edge(c, rid, int(a[0]), int(a[1]), int(a[2]), int(a[3]), int(a[4]), float(a[5]), a.size() > 6 and bool(a[6]))
 		&"open_edge":
 			var doors: Array = []
 			var found := false
@@ -661,7 +664,7 @@ static func _same_edge(e: Array, ax: int, ay: int, bx: int, by: int) -> bool:
 	return (int(e[1]) == ax and int(e[2]) == ay and int(e[3]) == bx and int(e[4]) == by) \
 		or (int(e[1]) == bx and int(e[2]) == by and int(e[3]) == ax and int(e[4]) == ay)
 
-static func _close_edge(c: Ctx, rid: int, level: int, ax: int, ay: int, bx: int, by: int, until0: float) -> bool:
+static func _close_edge(c: Ctx, rid: int, level: int, ax: int, ay: int, bx: int, by: int, until0: float, passes := false) -> bool:
 	var s := c.s
 	var d := c.d
 	var t := c.t
@@ -683,7 +686,10 @@ static func _close_edge(c: Ctx, rid: int, level: int, ax: int, ay: int, bx: int,
 		if not (int(e[0]) == level and _same_edge(e, ax, ay, bx, by)):
 			doors.append(e)
 	var was := doors.size() != d.doors.size()
-	doors.append([level, ax, ay, bx, by, until0, rid])
+	var row: Array = [level, ax, ay, bx, by, until0, rid]
+	if passes:
+		row.append(true)
+	doors.append(row)
 	d.doors = doors
 	d.dirty()
 	if not was:

@@ -79,7 +79,8 @@ const CATCH_FULL := 0.9
 ## What started a count, in words.
 const WHY := {"sprint": "SPRINTING", "squeaker": "A SQUEAKY TILE", "ballpit": "JUMPING IN THE BALL PIT", "flap": "LETTING A FLAP GO",
 	"tape": "A DROPPED TAPE", "emote": "A NOISE", "bump": "BUMPING INTO IT", "light": "A LIGHT ON IT", "voice": "A VOICE", "call": "CALLING THE LIFT",
-	"fetch": "FREEING THE PARTY TABLE", "hide": "GETTING INTO A HIDE", "open": "OPENING SOMETHING"}
+	"fetch": "FREEING THE PARTY TABLE", "hide": "GETTING INTO A HIDE", "open": "OPENING SOMETHING",
+	"danger": "A NOISE"}  # DG0R3: a danger's noise (sim/seek.gd WHY_DANGER) names nothing
 const KIND_NAMES := {"pit": "BALL PIT", "slide": "TUBE SLIDE", "den": "CRAWL DEN", "playhouse": "PLAYHOUSE", "table": "UNDER THE TABLE",
 	"chest": "TOY CHEST", "cubby": "COAT CUBBY", "bed": "UNDER THE BED", "cabinet": "IN THE CABINET", "desk": "UNDER THE DESK",
 	"shed": "IN THE SHED", "bench": "UNDER THE BENCH", "under": "UNDER THE BANDSTAND", "log": "IN THE HOLLOW LOG",

@@ -538,3 +538,119 @@ func test_snapshot_block_round_trips(t: T) -> void:
 	var back := Protocol.dec_dangers(c, JSON.parse_string(JSON.stringify(Protocol.enc_dangers(b))))
 	t.check(not c.bad, "the block decodes")
 	t.eq(JSON.stringify(back), JSON.stringify(b), "and comes back as it was sent")
+
+# ---------------------------------------------------------------------------------------------
+# DG0R3: a shut danger door its kind lets the resident through (close_edge's resident_passes) is left out of the
+# resident's walk model only (sim/run.gd _resident_solids, DangerFx.resident_solids_with).
+
+func test_resident_solids_unchanged_without_a_passable_door(t: T) -> void:
+	var s: Run.RunState = _game("dg0r3-rs", 3, ["a"] as Array[String])[1]
+	var base := Run.solids_in(s)
+	t.check(is_same(DangerFx.resident_solids_with(s.dangers, s.plan, base), DangerFx.solids_with(s.dangers, s.plan, base)), "no door: the resident's boxes are the players' boxes")
+	var found := _a_door(s)
+	var door: Floor.Door = found[0]
+	var shut: Run.RunState = _ask(s, &"test_tile", &"close_edge", [0, door.ax, door.ay, door.bx, door.by, s.t + 10.0])[1]
+	t.check(is_same(DangerFx.resident_solids_with(shut.dangers, shut.plan, base), DangerFx.solids_with(shut.dangers, shut.plan, base)), "a door the resident may not pass: the same boxes")
+	var passes: Run.RunState = _ask(s, &"test_tile", &"close_edge", [0, door.ax, door.ay, door.bx, door.by, s.t + 10.0, true])[1]
+	var rs := DangerFx.resident_solids_with(passes.dangers, passes.plan, base)
+	t.eq(rs.count(), (base.count() if base != null else 0), "a door it may pass is left out of the resident's boxes only")
+	t.eq(Dangers.block(passes)["doors"][0].size(), 6, "the screens' block is as before (the flag stays on the host)")
+
+# DG0R3: the screen's helpers for kinds: a state drawn from host time, the wall.
+const DangersView = preload("res://client/dangers/dangers_view.gd")
+const KindView = preload("res://client/dangers/kind_view.gd")
+
+func test_a_scheduled_state_is_drawn_by_host_time(t: T) -> void:
+	var rec := {"state": "build", "since": 10.0}
+	t.eq(KindView.scheduled(rec, 11.4, &"build", 1.5, &"jet"), &"build", "before its length: the record's own state")
+	t.eq(KindView.scheduled(rec, 11.5, &"build", 1.5, &"jet"), &"jet", "at since + length: the state it always ends in, before the snapshot says so")
+	t.eq(KindView.scheduled({"state": "purge", "since": 10.0}, 30.0, &"build", 1.5, &"jet"), &"purge", "another state: its own")
+
+func test_a_kinds_sound_is_muffled_through_a_wall(t: T) -> void:
+	var s: Run.RunState = _game("dg0r3-wall", 1, ["a"] as Array[String])[1]
+	var plan := s.plan
+	var cs := float(plan.cell_size)
+	var pair: Array = []
+	for y in plan.height:
+		for x in plan.width - 1:
+			if Floor.is_walkable(plan, 0, x, y) and Floor.is_walkable(plan, 0, x + 1, y) and not Floor.has_door(plan, 0, x, y, x + 1, y) \
+					and Floor.room_id_at(plan, 0, x, y) != Floor.room_id_at(plan, 0, x + 1, y):
+				pair = [Vector3((x + 0.5) * cs, 1.5, (y + 0.5) * cs), Vector3((x + 1.5) * cs, 1.5, (y + 0.5) * cs)]
+				break
+		if not pair.is_empty():
+			break
+	if not t.check(not pair.is_empty(), "a wall between two cells"):
+		return
+	var ear: Vector3 = pair[0]
+	t.check(KindView.through_wall(plan, ear, pair[1]), "across the wall: heard through it")
+	t.check(not KindView.through_wall(plan, ear, ear + Vector3(0.3, 0, 0.3)), "in the same room: clear")
+	t.check(not KindView.through_wall(null, ear, pair[1]), "no plan (the Ward): never muffled")
+	var root := Node3D.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(root)
+	var cam := Camera3D.new()
+	root.add_child(cam)
+	cam.global_position = ear
+	cam.current = true
+	var dv := DangersView.new()
+	root.add_child(dv)
+	dv.setup({"plan": plan})
+	var v: Node3D = KindView.new()
+	v.set("base", dv)
+	dv.add_child(v)
+	var stream := KindView.tone(400.0, 0.3)
+	var far: AudioStreamPlayer3D = v.call("play_cue", stream, pair[1], &"effect")
+	var near: AudioStreamPlayer3D = v.call("play_cue", stream, ear + Vector3(0.3, 0, 0.3), &"effect")
+	t.eq(far.attenuation_filter_cutoff_hz, KindView.MUFFLED_CUTOFF_HZ, "behind the wall: dull")
+	t.check(absf(far.volume_db - (near.volume_db + linear_to_db(KindView.MUFFLED_GAIN))) < 1e-4, "and quieter by the game's through-a-wall gain")
+	t.eq(near.attenuation_filter_cutoff_hz, KindView.CLEAR_CUTOFF_HZ, "in view: clear")
+	var loop: AudioStreamPlayer3D = v.call("play_loop", stream, ear + Vector3(0.3, 0, 0.3), &"ambience")
+	var loud := loop.volume_db
+	loop.global_position = pair[1]
+	v.call("wall_check", 1e9)
+	t.check(loop.attenuation_filter_cutoff_hz == KindView.MUFFLED_CUTOFF_HZ and absf(loop.volume_db - (loud + linear_to_db(KindView.MUFFLED_GAIN))) < 1e-4, "a loop is checked again as it goes behind a wall")
+	root.free()
+
+# DG0R3: a danger noise's meter-only cause, and the count caption's word for a danger.
+const OwnNoise = preload("res://client/own_noise.gd")
+const Seek = preload("res://sim/seek.gd")
+const HideView = preload("res://client/hide_view.gd")
+
+func test_a_noise_cause_is_for_the_meter_only(t: T) -> void:
+	var o := OwnNoise.new()
+	o.on_events([{"type": "dangerNoise", "id": 0, "loud": 10.0, "by": "", "cause": "me"}], "me", 1000)
+	t.eq(o.pulse_level(1000), OwnNoise.metres_to_level(10.0), "unblamed, but I set it off: my meter shows it at its reach")
+	o.on_events([{"type": "dangerNoise", "loud": 10.0, "by": "", "cause": "other"}], "me", 5000)
+	t.eq(o.pulse_level(5000), 0, "another player's cause: not mine")
+	# The rules: the same noise with and without a cause, next to each floor's resident, is the same run.
+	for depth: int in [1, 4, 5]:
+		var gs := _game("dg0r3-cause", depth, ["a", "b"] as Array[String], 30)
+		var rules: HostRules = gs[0]
+		var s: Run.RunState = gs[1]
+		for _k in 200:
+			s = rules.step(s, _still(s), DT).state
+		var res: Move.Body = s.orderly.body
+		if s.garden != null:
+			res = s.garden.keeper.body
+		if s.seek != null:
+			res = s.seek.minder.body
+		var at := Move.Body.make(res.x + 1.0, res.z, res.level, res.y)
+		var plain := _ask(s, &"test_tile", &"noise", [at, 30.0, ""])
+		var caused := _ask(s, &"test_tile", &"noise", [at, 30.0, "", "a"])
+		t.check(bool(caused[0]) and (caused[2] as Array)[0].get("cause") == "a" and not (plain[2] as Array)[0].has("cause"), "floor %d: the event carries the cause only when given" % depth)
+		t.eq(((caused[1] as Run.RunState).dangers as DangerFx.DangerFloor).heard, ((plain[1] as Run.RunState).dangers as DangerFx.DangerFloor).heard, "floor %d: what the residents hear is the same" % depth)
+		var a: Run.RunState = plain[1]
+		var b: Run.RunState = caused[1]
+		var same := true
+		for _k in 40:
+			a = rules.step(a, _still(a), DT).state
+			b = rules.step(b, _still(b), DT).state
+			if _line(a, []) != _line(b, []) or (a.seek != null and absf(a.seek.anger - b.seek.anger) > 1e-12) \
+					or (a.garden != null and (a.garden.keeper.mode != b.garden.keeper.mode or a.garden.keeper.body.x != b.garden.keeper.body.x)):
+				same = false
+				break
+		t.check(same, "floor %d: the run goes on the same with the cause as without" % depth)
+
+func test_the_count_caption_names_no_danger(t: T) -> void:
+	var why := str(HideView.WHY.get(String(Seek.WHY_DANGER), ""))
+	t.eq(why, "A NOISE", "a count a danger's noise started reads A NOISE")
+	t.check(not why.contains("DANGER"), "and never names a danger")

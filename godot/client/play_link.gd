@@ -244,6 +244,13 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	# Findables (FD10, client/search_view.gd): while the host has this player searching, the body is rooted.
 	var searching := SearchView.searching_in(latest.get("find"), str(c.id))
 	held_here = held_here or searching
+	# DG0R3 (dangers base): held, stumbling or pinned by a danger (the world's "dangers" block; sim/dangers/effects.gd
+	# block_holds), the body stays where the host holds it, from the snapshot that says so until the host's own until by
+	# this screen's host clock, as the host drops the body of every input meanwhile; a pinned player does not crawl.
+	var danger_held: bool = latest.get("dangers") != null and Run.DangerFx.block_holds(latest["dangers"], str(c.id), c.clock.host_time(rc._now))
+	if danger_held:
+		crawling = false
+	# END DG0R3
 
 	# 1. The player's own body (src/game/player.ts control), or the test's auto-walk.
 	tank = c.correct_stamina(tank)
@@ -252,7 +259,7 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	var before := body
 	if held_here:
 		_auto = null
-	if playing and _auto != null:
+	if playing and _auto != null and not danger_held:
 		var b0 := body
 		if Follow.path_done(plan, _auto, body):
 			_auto = null
@@ -275,7 +282,7 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 			gait = &"creep"   # RN3: a scripted walk through the crawl creeps there, as a player must
 		speed = M.hypot2(body.x - b0.x, body.z - b0.z) / dt if dt > 0.0 else 0.0
 	elif body != null:
-		var free := (playing and not in_bed and not held_here) or crawling
+		var free := ((playing and not in_bed and not held_here) or crawling) and not danger_held
 		var fw := clampf(float(inp.get("f", 0.0)), -1.0, 1.0) if free else 0.0
 		var rt := clampf(float(inp.get("r", 0.0)), -1.0, 1.0) if free else 0.0
 		var moving := fw != 0.0 or rt != 0.0
@@ -339,7 +346,7 @@ func step(now: float, inp: Dictionary) -> Dictionary:
 	_ward_was_in = not hide_cam.is_empty() and hide_cam.get("ward", false) == true
 	eye = _eye.update(BED_EYE if in_bed else want_eye, dt)
 	# F held (the bunk; beside a downed crewmate, the heal): only sent when the run has days or downs.
-	var use: bool = (day != null or downs_on) and playing and inp.get("use") == true
+	var use: bool = (day != null or downs_on) and (playing or danger_held) and inp.get("use") == true  # DG0R3: a pinned player's F (a kick) goes to the host
 	var at_bunk := day != null and int(latest["depth"]) == 0 and body != null and Run.at_bunk(plan, body)
 	if not use or in_bed:
 		_bed_hold = 0.0

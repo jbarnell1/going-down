@@ -26,7 +26,7 @@ class DangerFloor:
 	var opened_at := -1.0
 	## Dark regions: [level, x0, z0, x1, z1, until, record id, from] (dark from host time `from` until `until`).
 	var dark: Array = []
-	## Closed door edges: [level, ax, ay, bx, by, until, record id].
+	## Closed door edges: [level, ax, ay, bx, by, until, record id, resident passes (bool; DG0R3, may be absent)].
 	var doors: Array = []
 	## Kinds' own solid boxes: "<record id>:<key>" -> [level, x0, z0, x1, z1].
 	var solids: Dictionary = {}
@@ -168,6 +168,37 @@ static func solids_with(d: DangerFloor, plan: Floor.FloorPlan, base: Move.Solids
 	d._solid_cache = s
 	return s
 
+## DG0R3: the walk model's boxes for a resident's planning and walking (sim/run.gd _resident_solids): solids_with, less
+## the shut doors whose kind said the resident may pass (close_edge's resident_passes: the kind opens it as the resident
+## comes). Exactly solids_with when no such door is shut.
+static func resident_solids_with(d: DangerFloor, plan: Floor.FloorPlan, base: Move.Solids) -> Move.Solids:
+	var passes := false
+	if d != null:
+		for e: Array in d.doors:
+			if e.size() > 7 and bool(e[7]):
+				passes = true
+				break
+	if not passes:
+		return solids_with(d, plan, base)
+	var s := Move.Solids.new()
+	s.cell_size = float(plan.cell_size)
+	if base != null:
+		for level in 2:
+			var b: PackedFloat64Array = base.boxes[level]
+			for i in b.size() / 4:
+				s.add(level, b[i * 4], b[i * 4 + 1], b[i * 4 + 2], b[i * 4 + 3])
+	for e: Array in d.doors:
+		if e.size() > 7 and bool(e[7]):
+			continue
+		var box := edge_box(float(plan.cell_size), int(e[1]), int(e[2]), int(e[3]), int(e[4]))
+		s.add(int(e[0]), box[0], box[1], box[2], box[3])
+	var keys: Array = d.solids.keys()
+	keys.sort()
+	for key: String in keys:
+		var r: Array = d.solids[key]
+		s.add(int(r[0]), float(r[1]), float(r[2]), float(r[3]), float(r[4]))
+	return s
+
 static func _segment_hits_box(ax: float, az: float, bx: float, bz: float, box: PackedFloat64Array) -> bool:
 	# Liang-Barsky clip of the segment against the box.
 	var t0 := 0.0
@@ -192,6 +223,21 @@ static func _segment_hits_box(ax: float, az: float, bx: float, bz: float, box: P
 
 # ---------------------------------------------------------------------------------------------
 # The screens: a DangerFloor holding only what the walk model needs, from the world's "dangers" block.
+
+## DG0R3: whether the world's "dangers" block holds player `id`'s body at host time `t`, as held_body does on the host:
+## pinned (a "pins" row), or a "hold" or "stumble" row of theirs still running (`t` before its until). A screen (client/
+## play_link.gd) keeps its own body still while this is true, so it stands where the host holds it and goes on from
+## there at the host's own until, with no jump.
+static func block_holds(block: Variant, id: String, t: float) -> bool:
+	if not block is Dictionary:
+		return false
+	for p: Variant in (block as Dictionary).get("pins", []):
+		if p is Array and str(p[0]) == id:
+			return true
+	for f: Variant in (block as Dictionary).get("fx", []):
+		if f is Array and str(f[0]) == id and (str(f[1]) == "hold" or str(f[1]) == "stumble") and t < float(f[2]) - EPS:
+			return true
+	return false
 
 ## A DangerFloor for a screen's walk model (net/session.gd move_local): the closed doors and solids of the block.
 static func from_block(block: Variant) -> DangerFloor:

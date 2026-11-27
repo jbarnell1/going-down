@@ -2230,6 +2230,9 @@ static func with_resident_navigation(s0: RunState) -> RunState:
 
 static func _resident_solids(s: RunState) -> Move.Solids:
 	var solids := solids_in(s) if s.resident_navigation else null
+	# DG0R3: a shut danger door its kind lets the resident through is not in the resident's way (unchanged without one).
+	if s.resident_navigation and s.dangers != null and s.plan != null:
+		solids = DangerFx.resident_solids_with(s.dangers, s.plan, Furniture.solids_of(s.plan, s.furniture_layout) if s.furniture else null)
 	return solids if solids != null and solids.count() > 0 else null
 
 static func _settled_resident(s: RunState, o: Entity.OrderlyState) -> Entity.OrderlyState:

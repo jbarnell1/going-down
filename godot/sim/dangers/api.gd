@@ -115,15 +115,19 @@ class Asks:
 			rec["since"] = t
 		return true
 
-	func noise(rec: Dictionary, at: Move.Body, loud: float, by: String = "") -> bool:
-		return _do.call(&"noise", rec, [at, loud, by])
+	## `cause` (DG0R3): the player who set it off when `by` is left "" on purpose (heard as the place's own noise). Only
+	## that player's own noise meter reads it (client/own_noise.gd); the rules and the residents never do.
+	func noise(rec: Dictionary, at: Move.Body, loud: float, by: String = "", cause: String = "") -> bool:
+		return _do.call(&"noise", rec, [at, loud, by, cause])
 
 	## Dark from host time `from` (-1: now; at most 5 s ahead, so every screen darkens on time) until `until`.
 	func dark(rec: Dictionary, level: int, x0: float, z0: float, x1: float, z1: float, until: float, from: float = -1.0) -> bool:
 		return _do.call(&"dark", rec, [level, x0, z0, x1, z1, until, from])
 
-	func close_edge(rec: Dictionary, level: int, ax: int, ay: int, bx: int, by: int, until: float) -> bool:
-		return _do.call(&"close_edge", rec, [level, ax, ay, bx, by, until])
+	## `resident_passes` (DG0R3): the floor's resident plans and walks as if this door were open (the kind opens it as
+	## the resident comes, e.g. badge_doors); players, sight and screens still meet it shut.
+	func close_edge(rec: Dictionary, level: int, ax: int, ay: int, bx: int, by: int, until: float, resident_passes := false) -> bool:
+		return _do.call(&"close_edge", rec, [level, ax, ay, bx, by, until, resident_passes])
 
 	func open_edge(rec: Dictionary, level: int, ax: int, ay: int, bx: int, by: int) -> bool:
 		return _do.call(&"open_edge", rec, [level, ax, ay, bx, by])

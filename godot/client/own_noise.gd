@@ -83,7 +83,8 @@ func on_events(events: Array, my: String, now_ms: int, tuning: Settings.Values =
 	for e: Dictionary in events:
 		var ty := str(e.get("type", ""))
 		# DG0: a danger's noise blamed on this player (they set it off: sim/dangers.gd "dangerNoise" by), at its reach.
-		if ty == "dangerNoise" and str(e.get("by", "")) == my and my != "":
+		# DG0R3: or its meter-only "cause" (a noise the kind left unblamed on purpose, so the resident hears a thing).
+		if ty == "dangerNoise" and my != "" and (str(e.get("by", "")) == my or str(e.get("cause", "")) == my):
 			var dl := metres_to_level(float(e.get("loud", 0.0)))
 			if dl > 0:
 				pulse = dl if now_ms >= pulse_until else maxi(pulse, dl)
