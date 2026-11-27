@@ -76,6 +76,16 @@ func test_opening_is_the_rules_noise(t: T) -> void:
 	o.on_events([{"type": "hideStart", "playerId": "me", "fast": false}], "me", 12000)
 	t.eq(o.pulse_level(12000), OwnNoise.metres_to_level(Settings.f(null, &"noise.hide", Noises.HIDE)), "into a hide: the rules' hide noise")
 
+## DG0: a danger's noise this player set off (sim/dangers.gd "dangerNoise" by) shows at its reach, for PULSE_MS.
+func test_a_danger_noise_of_mine(t: T) -> void:
+	var o := OwnNoise.new()
+	o.on_events([{"type": "dangerNoise", "id": 0, "kind": "test_tile", "loud": 10.0, "by": "me"}], "me", 1000)
+	t.eq(o.pulse_level(1000), OwnNoise.metres_to_level(10.0), "a 10 m danger noise I set off: the level 10 m maps to")
+	t.check(o.pulse_level(1000) > 0, "and it shows")
+	t.eq(o.pulse_level(1000 + OwnNoise.PULSE_MS), 0, "held PULSE_MS, then gone")
+	o.on_events([{"type": "dangerNoise", "loud": 10.0, "by": "other"}, {"type": "dangerNoise", "loud": 10.0, "by": ""}], "me", 5000)
+	t.eq(o.pulse_level(5000), 0, "never one another player or the place itself set off")
+
 func test_the_playroom_walk_is_not_a_noise(t: T) -> void:
 	t.eq(OwnNoise.step_level("walk", Noises.NONE, true, Places.PLAYROOM), 0, "the Playroom: walking is not a noise")
 	t.eq(OwnNoise.step_level("creep", Noises.NONE, true, Places.PLAYROOM), 0, "the Playroom: creeping is not a noise")

@@ -52,6 +52,9 @@ class Who:
 	var cell: Floor.Pos = null
 	## &"still", &"creep", &"walk", &"sprint" (still: did not move this tick).
 	var speed: StringName = &"still"
+	## The input's gait this tick, moving or not (&"creep" crouched, &"walk", &"sprint"): a crouched player standing
+	## still reads &"creep" here and &"still" in `speed`.
+	var gait: StringName = &"walk"
 	## &"stand", or &"crawl" while down.
 	var stance: StringName = &"stand"
 	## On their feet with an input (status ok), out of nothing.

@@ -3966,6 +3966,9 @@ static func _step_downs(s: RunState, players: Array[RunPlayer], input_of: Dictio
 			var np := p.copy()
 			np.status = &"out"
 			np.side = null
+			# DG0: pinned by a danger, they fall first (a ledge's fall spot, a hang's stand spot): body, tape and spot there.
+			if _danger_pinned(s, p.id):
+				np.body = DangerFx.fall_body(s.dangers, p.id)
 			players[k] = np
 			outs.append(p.id)
 			var b := np.body

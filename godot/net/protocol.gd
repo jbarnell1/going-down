@@ -308,7 +308,7 @@ const EMOTES: Array[String] = ["wave", "look_behind", "pray", "dance_spin", "dan
 ##  - the world's floor extensions gain "dg": [records, dark, doors, solids, fx, pins, prompts] (enc_dangers), decoded
 ##    back to the block's shape {r: [{id, kind, x, y, z, level, yaw, state, since, n}], dark: [[level, x0, z0, x1, z1,
 ##    until, from]], doors: [[level, ax, ay, bx, by, until]], solids: [[level, x0, z0, x1, z1]], fx: [[playerId, kind, until]],
-##    pins: [[playerId, style, x, y, z]], prompts: [[id, text, reach]]};
+##    pins: [[playerId, style, x, y, z, record id]], prompts: [[id, text, reach]]};
 ##  - events "dangerNoise", "dangerCue", "dangerDoor", "dangerHold", "dangerStumble", "dangerBlind", "dangerPush",
 ##    "dangerPinned", "dangerUnpinned", "dangerOut" (sim/dangers.gd), plain like every event.
 ## Nightly reels (T24). With a reel in progress, the day block can end in [day, started, crew, votes, skipped].
@@ -380,7 +380,7 @@ static func enc_dangers(b: Dictionary) -> Array:
 		fx.append([str(f[0]), str(f[1]), q3(float(f[2]))])
 	var pins := []
 	for p: Array in b.get("pins", []):
-		pins.append([str(p[0]), str(p[1]), q3(float(p[2])), q3(float(p[3])), q3(float(p[4]))])
+		pins.append([str(p[0]), str(p[1]), q3(float(p[2])), q3(float(p[3])), q3(float(p[4])), int(p[5])])
 	var prompts := []
 	for p: Array in b.get("prompts", []):
 		prompts.append([int(p[0]), str(p[1]), q3(float(p[2]))])
@@ -423,10 +423,10 @@ static func dec_dangers(c: _V, v: Variant) -> Dictionary:
 		fx.append([_s(c, f[0]), _s(c, f[1]), _f(c, f[2], -1.0, MAX_CLOCK)])
 	var pins: Array = []
 	for e: Variant in _a(c, a[5], 0, 16):
-		var p := _a(c, e, 5, 5)
+		var p := _a(c, e, 6, 6)
 		if c.bad:
 			return {}
-		pins.append([_s(c, p[0]), _s(c, p[1]), _f(c, p[2], -MAX_COORD, MAX_COORD), _f(c, p[3], -MAX_COORD, MAX_COORD), _f(c, p[4], -MAX_COORD, MAX_COORD)])
+		pins.append([_s(c, p[0]), _s(c, p[1]), _f(c, p[2], -MAX_COORD, MAX_COORD), _f(c, p[3], -MAX_COORD, MAX_COORD), _f(c, p[4], -MAX_COORD, MAX_COORD), _i(c, p[5], 0, MAX_COUNT)])
 	var prompts: Array = []
 	for e: Variant in _a(c, a[6], 0, 64):
 		var p := _a(c, e, 3, 3)

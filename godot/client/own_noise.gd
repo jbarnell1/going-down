@@ -81,9 +81,16 @@ func feed_me(me: Dictionary, now_ms: int, surface: int, place: StringName, soft_
 ## This player's events from the host: opens and hides.
 func on_events(events: Array, my: String, now_ms: int, tuning: Settings.Values = null) -> void:
 	for e: Dictionary in events:
+		var ty := str(e.get("type", ""))
+		# DG0: a danger's noise blamed on this player (they set it off: sim/dangers.gd "dangerNoise" by), at its reach.
+		if ty == "dangerNoise" and str(e.get("by", "")) == my and my != "":
+			var dl := metres_to_level(float(e.get("loud", 0.0)))
+			if dl > 0:
+				pulse = dl if now_ms >= pulse_until else maxi(pulse, dl)
+				pulse_until = now_ms + PULSE_MS
+			continue
 		if str(e.get("playerId", "")) != my or e.get("silent", false):
 			continue
-		var ty := str(e.get("type", ""))
 		var lv := 0
 		if ty == "searchStart" and bool(e.get("fast", false)):
 			lv = open_level(true, tuning)

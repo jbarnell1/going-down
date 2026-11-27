@@ -146,14 +146,17 @@ static func _person(people: Array[Person], id: Variant) -> Person:
 			return p
 	return null
 
-## A clear line from its face to the player's eyes or chest.
-static func line_to(plan: Floor.FloorPlan, o: Entity.OrderlyState, p: Person) -> bool:
+## A clear line from its face to the player's eyes or chest. `line_block` (DG0): (its body, their body) -> true when a
+## danger's shut door is between them (none by default: nothing blocks).
+static func line_to(plan: Floor.FloorPlan, o: Entity.OrderlyState, p: Person, line_block: Callable = Callable()) -> bool:
+	if line_block.is_valid() and line_block.call(o.body, p.body):
+		return false
 	var face := Sight.Point3.make(o.body.x, o.body.y + FACE_HEIGHT, o.body.z, o.body.level)
 	return Sight.has_line_of_sight(plan, face, Sight.eye_point(p.body, p.eye)) \
 		or Sight.has_line_of_sight(plan, face, Sight.Point3.make(p.body.x, p.body.y + CHEST, p.body.z, p.body.level))
 
 ## It sees `p` well enough to start a chase: within CHASE_RANGE, inside CHASE_CONE of its face, a clear line.
-static func sees(plan: Floor.FloorPlan, o: Entity.OrderlyState, p: Person) -> bool:
+static func sees(plan: Floor.FloorPlan, o: Entity.OrderlyState, p: Person, line_block: Callable = Callable()) -> bool:
 	var dx := p.body.x - o.body.x
 	var dz := p.body.z - o.body.z
 	if M.hypot3(dx, p.body.y - o.body.y, dz) > CHASE_RANGE + EPS:
@@ -162,7 +165,7 @@ static func sees(plan: Floor.FloorPlan, o: Entity.OrderlyState, p: Person) -> bo
 		var off := absf(Entity._wrap_angle(Entity.yaw_toward(dx, dz) - o.yaw))
 		if off > deg_to_rad(CHASE_CONE) + EPS:
 			return false
-	return line_to(plan, o, p)
+	return line_to(plan, o, p, line_block)
 
 ## It is chasing this tick (the instrument's "acting"): in a chase, its wind-up included, or catching now.
 static func chasing(prev: Entity.OrderlyState, next: Entity.OrderlyState) -> bool:
@@ -271,7 +274,7 @@ static func step(plan: Floor.FloorPlan, prev: Entity.OrderlyState, people: Array
 			_finish(prev, res, dt, k)
 			return res
 		else:
-			s.lonely_lost = 0.0 if line_to(plan, s, target) else prev.lonely_lost + dt
+			s.lonely_lost = 0.0 if line_to(plan, s, target, line_block) else prev.lonely_lost + dt
 			if s.lonely_lost >= LOST_TIME - EPS:
 				_end_chase(s, events, "lost")
 				s.lonely_phase = &"approach"
@@ -280,7 +283,7 @@ static func step(plan: Floor.FloorPlan, prev: Entity.OrderlyState, people: Array
 		var best: Person = null
 		var best_d := INF
 		for p in people:
-			if lonely.has(p.id) and sees(plan, s, p):
+			if lonely.has(p.id) and sees(plan, s, p, line_block):
 				var d := M.hypot2(p.body.x - s.body.x, p.body.z - s.body.z)
 				if d < best_d - EPS:
 					best_d = d

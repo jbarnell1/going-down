@@ -30,7 +30,9 @@ class DangerFloor:
 	var doors: Array = []
 	## Kinds' own solid boxes: "<record id>:<key>" -> [level, x0, z0, x1, z1].
 	var solids: Dictionary = {}
-	## Player effects: id -> {"kind": &"hold" | &"stumble" | &"blind", "until": t, "body": Move.Body (held there, or null)}.
+	## Player effects, two slots a player: "<id>|move" (a hold or a stumble) and "<id>|blind", each
+	## {"kind": &"hold" | &"stumble" | &"blind", "until": t, "body": Move.Body (held there, or null)}: a hold and a blind
+	## run at once; a new hold or stumble replaces the one before.
 	var fx: Dictionary = {}
 	## Pinned players (hung or on a ledge): id -> {"style": &"hang" | &"ledge", "at": Move.Body, "stand": Move.Body, "rec": id}.
 	var pins: Dictionary = {}
@@ -83,16 +85,21 @@ static func held_body(d: DangerFloor, id: String, t: float) -> Move.Body:
 		return null
 	if d.pins.has(id):
 		return (d.pins[id] as Dictionary)["at"]
-	var f: Variant = d.fx.get(id)
+	var f: Variant = d.fx.get(id + "|move")
 	if f is Dictionary and (f["kind"] == &"hold" or f["kind"] == &"stumble") and t < float(f["until"]) - EPS and f["body"] != null:
 		return f["body"]
 	return null
+
+## Where a pinned player lands when they go out: the pin's fall spot (a ledge's), else its stand spot.
+static func fall_body(d: DangerFloor, id: String) -> Move.Body:
+	var pin: Dictionary = d.pins[id]
+	return pin.get("fall", pin["stand"])
 
 ## Whether player `id` is blinded by a danger at host time `t`.
 static func blinded(d: DangerFloor, id: String, t: float) -> bool:
 	if d == null:
 		return false
-	var f: Variant = d.fx.get(id)
+	var f: Variant = d.fx.get(id + "|blind")
 	return f is Dictionary and f["kind"] == &"blind" and t < float(f["until"]) - EPS
 
 ## Whether (level, x, z) is inside a danger dark region at host time `t`.

@@ -18,18 +18,52 @@ var prompt := ""
 var _ctx: Dictionary = {}
 var _views := {}
 var _recs := {}
-var _white: ColorRect = null
+## The blind white-out: the player's CAUGHT SCENES SOFT setting (set by client/main.gd) halves its peak; a kind's view
+## may set the tint (warm grey-white by default). It eases in over BLIND_IN and fades over the last BLIND_OUT.
+var soft := false
+var blind_tint := Color(0.93, 0.91, 0.86)
+const BLIND_PEAK := 0.85
+const BLIND_IN := 0.08
+const BLIND_OUT := 0.6
+var _white: TextureRect = null
+var _blind_from := -1.0
+var _blind_until := -1.0
 
 func setup(ctx: Dictionary) -> void:
 	_ctx = ctx
 	var layer := CanvasLayer.new()
 	layer.layer = 50
 	add_child(layer)
-	_white = ColorRect.new()
-	_white.color = Color(1, 1, 1, 0)
+	# A soft, uneven edge: a radial gradient, full in the middle, thinner towards the corners.
+	var g := Gradient.new()
+	g.set_color(0, Color(1, 1, 1, 1.0))
+	g.set_color(1, Color(1, 1, 1, 0.55))
+	g.add_point(0.62, Color(1, 1, 1, 0.92))
+	var tex := GradientTexture2D.new()
+	tex.gradient = g
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.05, 0.95)
+	tex.width = 128
+	tex.height = 128
+	_white = TextureRect.new()
+	_white.texture = tex
+	_white.stretch_mode = TextureRect.STRETCH_SCALE
+	_white.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_white.modulate = Color(blind_tint, 0.0)
 	_white.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_white.set_anchors_preset(Control.PRESET_FULL_RECT)
 	layer.add_child(_white)
+
+## The white-out's alpha at host time `now` for a blind that began at `from` and ends at `until` (pure, for tests):
+## eased in over BLIND_IN, held at the peak (half with `soft_on`), faded over the last BLIND_OUT.
+static func blind_alpha(now: float, from: float, until: float, soft_on: bool) -> float:
+	if from < 0.0 or now >= until:
+		return 0.0
+	var peak := BLIND_PEAK * (0.5 if soft_on else 1.0)
+	var rise := clampf((now - from) / BLIND_IN, 0.0, 1.0)
+	var fall := clampf((until - now) / BLIND_OUT, 0.0, 1.0)
+	return peak * smoothstep(0.0, 1.0, rise) * fall
 
 ## One frame: the newest block (or null), the host time now, the local player's feet (or null) and the frame's delta.
 func update(b: Variant, host_now: float, my_feet: Variant, delta: float) -> void:
@@ -73,11 +107,14 @@ func update(b: Variant, host_now: float, my_feet: Variant, delta: float) -> void
 				prompt = str(p[1])
 				break
 	if _white != null:
-		var f: Variant = fx_of(me)
-		var a := 0.0
-		if f is Array and str(f[1]) == "blind":
-			a = clampf((float(f[2]) - ht) / 0.6, 0.0, 0.92)
-		_white.color.a = a
+		var f: Variant = fx_of(me, "blind")
+		if f is Array:
+			if _blind_from < 0.0 or float(f[2]) > _blind_until + 0.05 and ht >= _blind_until:
+				_blind_from = ht
+			_blind_until = float(f[2])
+		elif ht >= _blind_until:
+			_blind_from = -1.0
+		_white.modulate = Color(blind_tint, blind_alpha(ht, _blind_from, _blind_until, soft))
 
 ## The host's events: each danger event goes to its record's view.
 func on_events(events: Array) -> void:
@@ -89,14 +126,24 @@ func on_events(events: Array) -> void:
 		if v != null:
 			v.call("event", e, ht)
 
-## A player's running effect [id, kind, until] or null.
-func fx_of(id: String) -> Variant:
+## A player's running effect [id, kind, until] or null; `kind` ("" any) picks one when several run (hold and blind).
+func fx_of(id: String, kind := "") -> Variant:
 	for f: Array in block.get("fx", []):
-		if str(f[0]) == id and float(f[2]) > ht:
+		if str(f[0]) == id and float(f[2]) > ht and (kind == "" or str(f[1]) == kind):
 			return f
 	return null
 
-## A player's pin [id, style, x, y, z] or null.
+## The hint line on a pinned player's down screen: the text of a negative-reach prompt of the record that pinned them
+## (pin [id, style, x, y, z, record id]); "" when that record asks none. Never another record's hint.
+static func hint_for(b: Dictionary, pin: Array) -> String:
+	if pin.size() < 6:
+		return ""
+	for p: Array in b.get("prompts", []):
+		if float(p[2]) < 0.0 and int(p[0]) == int(pin[5]):
+			return str(p[1])
+	return ""
+
+## A player's pin [id, style, x, y, z, record id] or null.
 func pin_of(id: String) -> Variant:
 	for p: Array in block.get("pins", []):
 		if str(p[0]) == id:
@@ -105,8 +152,8 @@ func pin_of(id: String) -> Variant:
 
 ## The camera's stagger (radians of roll) for the local player's stumble, 0 otherwise.
 func shake() -> float:
-	var f: Variant = fx_of(me)
-	if not f is Array or str(f[1]) != "stumble":
+	var f: Variant = fx_of(me, "stumble")
+	if not f is Array:
 		return 0.0
 	var left := float(f[2]) - ht
 	return sin(left * 18.0) * 0.06 * clampf(left, 0.0, 1.0)

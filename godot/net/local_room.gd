@@ -529,6 +529,31 @@ func test_standin(body: Move.Body, yaw: float, walk := false) -> String:
 		host.place_player(bot.id, body)
 	return bot.id
 
+## DG0, test hook (`residentto`): stand the floor's resident at `body` (the Orderly or the Temp; on the Playroom the
+## Minder, on the Arboretum the Groundskeeper). Its own rules carry on from there. False with no run.
+func test_resident_to(body: Move.Body) -> bool:
+	if host == null or host.state == null:
+		return false
+	var s: Run.RunState = host.state
+	if s.seek != null:
+		var ss: Run.Seek.SeekState = (s.seek as Run.Seek.SeekState).copy()
+		ss.minder = ss.minder.copy()
+		ss.minder.body = body
+		var ns := s.copy()
+		ns.seek = ss
+		host.state = ns
+	elif s.garden != null:
+		var g: Run.GardenFloor = (s.garden as Run.GardenFloor).copy()
+		g.keeper = g.keeper.copy()
+		g.keeper.body = body
+		var ng := s.copy()
+		ng.garden = g
+		host.state = ng
+	var o := host.state.orderly.copy()
+	o.body = body
+	host.replace_orderly(o)
+	return true
+
 ## DG0, test hook (`standin use 0|1`): the stand-in holds F (or lets go). False with no stand-in.
 func test_standin_use(on: bool) -> bool:
 	if _crew_bots.is_empty() or _crew_bots[0].stand_at == null:

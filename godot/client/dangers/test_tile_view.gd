@@ -20,8 +20,8 @@ func build(rec: Dictionary, _ctx: Dictionary) -> void:
 	_mat.emission_enabled = true
 	add_child(mesh)
 	mesh.material_override = _mat
-	_click = tone(2400.0, 0.05, 60.0)
-	_thud = tone(90.0, 0.4, 9.0)
+	_click = click_stream()
+	_thud = thud_stream()
 	_show(rec)
 
 func changed(rec: Dictionary, _before: Dictionary, _ht: float) -> void:
@@ -35,9 +35,16 @@ func event(e: Dictionary, _ht: float) -> void:
 	var at := Vector3(float(e.get("x", global_position.x)), float(e.get("y", global_position.y)), float(e.get("z", global_position.z)))
 	match str(e["type"]):
 		"dangerCue":
-			play_cue(_click, at, -6.0, 3.0)
+			play_cue(_click, at, &"item")
 		"dangerNoise":
-			play_cue(_thud, at, 0.0, 8.0)
+			play_cue(_thud, at, &"effect")
+
+## The click and the thud, made from arithmetic at the effects' level (tests/test_danger_test_tile.gd measures them).
+static func click_stream() -> AudioStreamWAV:
+	return tone(2400.0, 0.05, 60.0, 22050, -12.0)
+
+static func thud_stream() -> AudioStreamWAV:
+	return tone(90.0, 0.4, 9.0, 22050, -12.0)
 
 func _show(rec: Dictionary) -> void:
 	match str(rec["state"]):

@@ -52,8 +52,9 @@ const KINDS := {
 	&"trapdoor": "res://sim/dangers/trapdoor.gd",
 	&"waking_toys": "res://sim/dangers/waking_toys.gd",
 }
-## Kinds allowed to read the resident's feet (Api.Tick.resident()). None yet.
-const RESIDENT_READERS: Array[StringName] = []
+## Kinds allowed to read the resident's feet (Api.Tick.resident(): its level, x and z). badge_doors: a door never shuts
+## on the Temp, and the lead ruled it may see where the Temp stands to time its doors.
+const RESIDENT_READERS: Array[StringName] = [&"badge_doors"]
 const DATA_PATH := "res://data/dangers.json"
 
 ## Base live settings' game values (sim/settings.gd rows danger.*).
@@ -415,7 +416,8 @@ static func _tick(c: Ctx, inputs: Array[Run.PlayerInput], dt: float) -> Api.Tick
 	k.tuning = s.tuning
 	k.floor_t = c.t - d.opened_at if d.opened_at >= 0.0 else -1.0
 	k.events = c.events
-	k._resident = s.orderly.body if s.orderly != null else null
+	# Its feet only (level, x, z; y kept so the body is whole), never its mode, target or anything else.
+	k._resident = Move.Body.make(s.orderly.body.x, s.orderly.body.z, s.orderly.body.level, s.orderly.body.y) if s.orderly != null and s.orderly.body != null else null
 	var blink := Run.blinking(s)
 	k._lit = func(level: int, x: float, z: float) -> bool:
 		return not blink and not Effects.dark_at(d, level, x, z, c.t)
@@ -434,7 +436,8 @@ static func _tick(c: Ctx, inputs: Array[Run.PlayerInput], dt: float) -> Api.Tick
 			w.cell = Move.cell_of(k.plan, p.body)
 		var before: Move.Body = last.get(p.id)
 		var moved := before != null and p.body != null and (before.level != p.body.level or absf(before.x - p.body.x) > 1e-6 or absf(before.z - p.body.z) > 1e-6)
-		w.speed = (inp.gait if inp != null else &"walk") if moved else &"still"
+		w.gait = inp.gait if inp != null else &"walk"
+		w.speed = w.gait if moved else &"still"
 		w.down = p.status == &"down"
 		w.stance = &"crawl" if w.down else &"stand"
 		w.out = p.status == &"out" or p.status == &"caught" or p.status == &"leftBehind"
@@ -442,12 +445,12 @@ static func _tick(c: Ctx, inputs: Array[Run.PlayerInput], dt: float) -> Api.Tick
 		w.aboard = p.aboard
 		w.up = p.status == &"ok" and inp != null and not w.pinned
 		w.hidden = _hidden(s, p.id)
-		var f: Variant = d.fx.get(p.id)
-		if f is Dictionary:
-			if f["kind"] == &"blind":
-				w.blind_until = float(f["until"])
-			else:
-				w.held_until = float(f["until"])
+		var fm: Variant = d.fx.get(p.id + "|move")
+		if fm is Dictionary:
+			w.held_until = float(fm["until"])
+		var fb: Variant = d.fx.get(p.id + "|blind")
+		if fb is Dictionary:
+			w.blind_until = float(fb["until"])
 		k.players.append(w)
 	return k
 
@@ -546,7 +549,7 @@ static func _ask(c: Ctx, op: StringName, rec: Dictionary, a: Array) -> bool:
 				return false
 			var body := c.players[k].body
 			var fx := d.fx.duplicate()
-			fx[id] = {"kind": op, "until": t + secs, "body": body}
+			fx[id + "|move"] = {"kind": op, "until": t + secs, "body": body}
 			d.fx = fx
 			c.events.append({"type": "dangerStumble" if op == &"stumble" else "dangerHold", "t": t, "id": rid, "playerId": id,
 				"until": t + secs, "at": body})
@@ -562,7 +565,7 @@ static func _ask(c: Ctx, op: StringName, rec: Dictionary, a: Array) -> bool:
 			if secs <= 0.0:
 				return false
 			var fx := d.fx.duplicate()
-			fx[id] = {"kind": &"blind", "until": t + secs, "body": null}
+			fx[id + "|blind"] = {"kind": &"blind", "until": t + secs, "body": null}
 			d.fx = fx
 			c.events.append({"type": "dangerBlind", "t": t, "id": rid, "playerId": id, "until": t + secs})
 			return true
@@ -602,7 +605,8 @@ static func _ask(c: Ctx, op: StringName, rec: Dictionary, a: Array) -> bool:
 			pins[id] = {"style": StringName(a[1]), "at": at, "stand": stand, "fall": fall, "rec": rid}
 			d.pins = pins
 			var fx := d.fx.duplicate()
-			fx.erase(id)
+			fx.erase(id + "|move")
+			fx.erase(id + "|blind")
 			d.fx = fx
 			c.events.append({"type": "dangerPinned", "t": t, "id": rid, "playerId": id, "style": String(a[1]), "at": at, "stand": stand,
 				"fall": fall, "until": t + secs if ledge else t + Run.down_time(s)})
@@ -728,13 +732,13 @@ static func block(s: Run.RunState) -> Variant:
 	var ids: Array = d.fx.keys()
 	ids.sort()
 	for id: String in ids:
-		fx.append([id, String(d.fx[id]["kind"]), float(d.fx[id]["until"])])
+		fx.append([id.get_slice("|", 0), String(d.fx[id]["kind"]), float(d.fx[id]["until"])])
 	var pins: Array = []
 	ids = d.pins.keys()
 	ids.sort()
 	for id: String in ids:
 		var at: Move.Body = d.pins[id]["at"]
-		pins.append([id, String(d.pins[id]["style"]), at.x, at.y, at.z])
+		pins.append([id, String(d.pins[id]["style"]), at.x, at.y, at.z, int(d.pins[id]["rec"])])
 	return {"r": r, "dark": dark, "doors": doors, "solids": solids, "fx": fx, "pins": pins, "prompts": d.prompts.duplicate(true)}
 
 ## Test channel: force record `id` into `state` at the next step. False when there is no such record or state.

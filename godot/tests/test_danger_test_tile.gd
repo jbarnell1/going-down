@@ -102,6 +102,13 @@ func test_never_in_all(t: T) -> void:
 	t.check(not Dangers.all_kinds().has(&"test_tile"), "all never turns the template on")
 	t.eq(Dangers.resolve(["test_tile"]), [&"test_tile"] as Array[StringName], "asked by name it is on")
 
+func test_its_sounds_sit_in_the_mix(t: T) -> void:
+	var View: Script = load("res://client/dangers/test_tile_view.gd")
+	var KV: Script = load("res://client/dangers/kind_view.gd")
+	for pair: Array in [["click", View.click_stream(), &"item"], ["thud", View.thud_stream(), &"effect"]]:
+		var m: Dictionary = KV.measure(pair[1])
+		t.check(KV.in_band(m, pair[2]), "the %s: no clipping, peak %.1f dBFS (at most -1), loudness %.1f in the %s band %s" % [pair[0], m["peak_db"], m["loud_db"], pair[2], str(KV.BANDS[pair[2]])])
+
 func test_setting_test_tile_delay(t: T) -> void:
 	var out := _walk_on("dg0-tile", &"walk", 3.0, {&"danger.test_tile.delay": 2.0})
 	var click := -1.0

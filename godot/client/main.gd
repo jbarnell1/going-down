@@ -3264,6 +3264,7 @@ func _dangers_frame(s: Dictionary, me: Dictionary, dt: float) -> void:
 			"level": level, "floor_seed": str(link.plan_dict.get("seed", "")), "ward": _ward_floor.model if _ward_floor != null and is_instance_valid(_ward_floor) else null})
 	dangers_view.me = link.my_id()
 	dangers_view.blink_dark = bool(s.get("dark", false))
+	dangers_view.soft = caught_pref.soft
 	var feet: Variant = Vector3(float(me["x"]), float(me.get("y", 0.0)), float(me["z"])) if me.has("x") else null
 	dangers_view.update(dg, float(s.get("hostNow", 0.0)), feet, dt)
 
@@ -3278,9 +3279,7 @@ func _danger_down_words() -> void:
 	var mine: Variant = dangers_view.pin_of(my)
 	if mine is Array and down_view.line2 != "":
 		down_view.line2 = ""
-		for p: Array in dangers_view.block.get("prompts", []):
-			if float(p[2]) < 0.0:
-				down_view.line2 = str(p[1])
+		down_view.line2 = DangersView.hint_for(dangers_view.block, mine)
 		if down_view.line.begins_with("A CREWMATE CAN HOLD F"):
 			down_view.line = "A CREWMATE CAN CUT YOU DOWN" if str(mine[1]) == "hang" else "A CREWMATE CAN PULL YOU UP"
 
@@ -4269,7 +4268,7 @@ func _command(c: String) -> String:
 			if not in_game:
 				return JSON.stringify({"ok": false, "error": "no run"})
 			return JSON.stringify(link.teleport(int(p[1]), int(p[2]), int(p[3])))
-		"dangers", "dangerto", "dangerstate", "standin", "dangerfx":
+		"dangers", "dangerto", "dangerstate", "standin", "dangerfx", "residentto":
 			return _danger_test_command(p)
 		"walkto":
 			if not in_game:
@@ -4518,6 +4517,14 @@ func _danger_test_command(p: PackedStringArray) -> String:
 			return JSON.stringify(out)
 		"dangerfx":
 			return JSON.stringify(block)
+		"residentto":
+			if p.size() < 4 or link.plan == null or not (link.local and link.rc is LocalRoom):
+				return JSON.stringify({"ok": false, "error": "residentto <level> <x> <z>, alone only"})
+			var rl := int(p[1])
+			var rx := float(p[2])
+			var rz := float(p[3])
+			var rb := Move.Body.make(rx, rz, rl, Move.feet_height(link.plan, rl, rx, rz))
+			return JSON.stringify({"ok": (link.rc as LocalRoom).test_resident_to(rb), "at": [rb.x, rb.y, rb.z]})
 		"dangerto":
 			if p.size() < 2 or link.body == null:
 				return JSON.stringify({"ok": false, "error": "dangerto <id> [dist]"})

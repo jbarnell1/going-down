@@ -17,6 +17,10 @@ const Dangers = preload("res://sim/dangers.gd")
 const DangerFx = preload("res://sim/dangers/effects.gd")
 const Api = preload("res://sim/dangers/api.gd")
 const Station = preload("res://sim/station_floor.gd")
+const Instr = preload("res://sim/instrument.gd")
+const Lonely = preload("res://sim/lonely.gd")
+const Entity = preload("res://sim/entity.gd")
+const TapeLib = preload("res://sim/tape.gd")
 
 const DT := 0.05
 
@@ -59,9 +63,9 @@ static func _line(s: Run.RunState, events: Array[Dictionary]) -> String:
 		parts.append("o %.4f,%.4f %s" % [s.orderly.body.x, s.orderly.body.z, str(s.orderly.mode)])
 	return " | ".join(parts)
 
-static func _bot_run(seed: String, kinds: Array, secs: float) -> PackedStringArray:
+static func _bot_run(seed: String, kinds: Array, secs: float, depth := 1) -> PackedStringArray:
 	var ids: Array[String] = ["a", "b"]
-	var rules := HostRules.new(true, 1, Places.FULL, false, false, true)
+	var rules := HostRules.new(true, depth, Places.FULL, false, false, true)
 	rules.dangers = Dangers.resolve(kinds)
 	var s := rules.prepare(Run.create_run(seed, ids, Places.FULL))
 	var bots: Array = []
@@ -95,6 +99,10 @@ func test_a_quiet_kind_changes_nothing(t: T) -> void:
 				first = k
 				break
 		t.check(first < 0, "%s: identical with a quiet danger on (first difference at tick %d)" % [seed, first])
+	# The Annex: the Temp's company and sight with dangers on and no door shut are exactly as without.
+	var off3 := _bot_run("dg0-quiet-annex", [], secs, 3)
+	var on3 := _bot_run("dg0-quiet-annex", ["test_tile"], secs, 3)
+	t.check(off3 == on3, "the Annex: identical with a quiet danger on")
 
 # ---------------------------------------------------------------------------------------------
 # The asks, each against the system it plugs into. A test drives them through the base's own executor (Dangers._ask)
@@ -287,7 +295,7 @@ func test_hold_keeps_the_body(t: T) -> void:
 	t.check(absf(_player(s, "a").body.x - (start.x + 0.5)) < 1e-6, "after it, the input's body is taken again")
 	t.check(not bool(_ask(s, &"test_tile", &"hold", ["a", 0.0])[0]), "a hold of no time is refused")
 	var long := _ask(s, &"test_tile", &"hold", ["a", 60.0])
-	t.check(float(((long[1] as Run.RunState).dangers as DangerFx.DangerFloor).fx["a"]["until"]) <= s.t + Dangers.HOLD_MAX + 1e-9, "never longer than danger.hold_max")
+	t.check(float(((long[1] as Run.RunState).dangers as DangerFx.DangerFloor).fx["a|move"]["until"]) <= s.t + Dangers.HOLD_MAX + 1e-9, "never longer than danger.hold_max")
 
 func test_hang_cut_down_and_out_behave_as_the_heal(t: T) -> void:
 	var gs := _game("dg0-hang", 1, ["a", "b"] as Array[String])
@@ -328,13 +336,40 @@ func test_ledge_has_its_own_timer_and_fall(t: T) -> void:
 	var s0: Run.RunState = gs[1]
 	var spot := _player(s0, "a").body
 	var fall := Move.Body.make(spot.x + 1.0, spot.z, 0, spot.y)
-	var r := _ask(s0, &"trapdoor", &"pin", ["a", &"ledge", spot, spot, 2.0, fall])
+	# A reading on a's tape, so it drops when they go out (an empty tape never drops).
+	s0 = s0.copy()
+	var crew: Instr.CrewState = s0.crew.copy()
+	var members: Array[Instr.CrewMember] = []
+	for m in crew.members:
+		var nm := m.copy()
+		if nm.id == "a":
+			var rd := TapeLib.Reading.new()
+			rd.id = "r1"
+			rd.player_id = "a"
+			rd.value = 5.0
+			var tp := nm.tape.copy()
+			tp.readings.append(rd)
+			tp.total = 5.0
+			nm.tape = tp
+		members.append(nm)
+	crew.members = members
+	s0.crew = crew
+	# Hanging by the hands 1.3 m under the floor's edge; the fall spot is a metre off on the floor.
+	var edge := Move.Body.make(spot.x, spot.z, spot.level, spot.y - 1.3)
+	var r := _ask(s0, &"trapdoor", &"pin", ["a", &"ledge", edge, spot, 2.0, fall])
 	t.check(bool(r[0]), "a ledge is accepted")
 	var s: Run.RunState = r[1]
 	for _k in roundi(2.3 / DT):
 		s = rules.step(s, _still(s), DT).state
 	t.eq(_player(s, "a").status, &"out", "not pulled up within its own 2 s: out (not the down timer)")
 	t.eq(_player(s, "a").body.x, fall.x, "at the fall spot")
+	t.check(s.spots.size() == 1 and absf(float(s.spots[0]["x"]) - fall.x) < 0.01, "the red spot is at the fall spot, not the edge")
+	var tapes := 0
+	for f in s.crew.floor:
+		# Only player a went out, so every tape on the floor is theirs.
+		tapes += 1
+		t.check(absf(f.at.x - fall.x) < 0.01 and absf(f.at.y - fall.y) < 0.01, "the dropped tape lies at the fall spot (%.2f, %.2f)" % [f.at.x, f.at.y])
+	t.check(tapes >= 1, "their tape dropped (%d on the floor)" % tapes)
 
 func test_send_out_and_the_last_one_up(t: T) -> void:
 	var solo: Run.RunState = _game("dg0-out", 1, ["a"] as Array[String])[1]
@@ -346,6 +381,110 @@ func test_send_out_and_the_last_one_up(t: T) -> void:
 	var s: Run.RunState = rules.step(r[1], _still(r[1]), DT).state
 	t.eq(_player(s, "a").status, &"out", "out by the run's own rule on the next tick")
 	t.check(not bool(_ask(s, &"trapdoor", &"send_out", ["b"])[0]), "the last one up is never taken")
+
+func test_who_reads_gait_and_speed(t: T) -> void:
+	var s: Run.RunState = _game("dg0-gait", 1, ["a", "b"] as Array[String])[1]
+	var c := Dangers.Ctx.new()
+	c.s = s
+	c.d = (s.dangers as DangerFx.DangerFloor).copy()
+	c.players = s.players.duplicate()
+	c.events = []
+	c.t = s.t
+	var ins := _still(s)
+	ins[0].gait = &"creep"
+	var k := Dangers._tick(c, ins, DT)
+	t.eq([k.who("a").gait, k.who("a").speed], [&"creep", &"still"], "crouched in place: gait creep, speed still")
+	t.eq([k.who("b").gait, k.who("b").speed], [&"walk", &"still"], "standing in place: gait walk, speed still")
+	ins[0].gait = &"sprint"
+	t.eq(Dangers._tick(c, ins, DT).who("a").gait, &"sprint", "the input's gait as it is")
+
+func test_cues_obey_the_mix(t: T) -> void:
+	var KV: Script = load("res://client/dangers/kind_view.gd")
+	var loud: AudioStreamWAV = KV.tone(440.0, 0.5, 0.0, 22050, 0.0)
+	var m: Dictionary = KV.measure(loud)
+	t.check(float(m["peak_db"]) <= KV.PEAK_MAX_DB, "tone() never goes over -1 dBFS whatever is asked (%.2f)" % m["peak_db"])
+	var full := AudioStreamWAV.new()
+	full.format = AudioStreamWAV.FORMAT_16_BITS
+	var data := PackedByteArray()
+	data.resize(2000)
+	for i in 1000:
+		data.encode_s16(i * 2, 32767 if i % 2 == 0 else -32767)
+	full.data = data
+	var fm: Dictionary = KV.measure(full)
+	t.check(int(fm["clipped"]) > 0 and not KV.in_band(fm, &"effect"), "a clipped stream is caught and is in no band")
+	var v: Node3D = KV.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(v)
+	var p: AudioStreamPlayer3D = v.play_cue(KV.tone(300.0, 0.2), Vector3.ZERO, &"scare", 6.0)
+	t.eq([p.volume_db, p.max_db, p.bus], [Sfx.BASE_DB, 0.0, &"Scare"], "a cue plays at the voice's level, never louder than its stream, on its category's bus; a trim can only lower it")
+	var old: AudioStreamPlayer3D = v.play_cue(KV.tone(300.0, 0.2), Vector3.ZERO, -4.0)
+	t.eq([old.volume_db, old.bus], [Sfx.BASE_DB - 4.0, &"Effects"], "the first contract's number is a trim on the effects")
+	v.free()
+
+func test_blind_white_out_eases_and_softens(t: T) -> void:
+	var DV: Script = load("res://client/dangers/dangers_view.gd")
+	t.check(DV.blind_alpha(10.0, 10.0, 12.0, false) < 0.01, "no jump: nothing on its first frame")
+	t.check(DV.blind_alpha(10.04, 10.0, 12.0, false) < DV.BLIND_PEAK * 0.75, "still rising 40 ms in")
+	t.eq(DV.blind_alpha(10.1, 10.0, 12.0, false), DV.BLIND_PEAK, "at the peak after its 80 ms")
+	t.eq(DV.blind_alpha(10.5, 10.0, 12.0, true), DV.BLIND_PEAK * 0.5, "CAUGHT SCENES SOFT halves it")
+	t.check(DV.BLIND_PEAK < 0.9, "never flat full white")
+	t.eq(DV.blind_alpha(12.0, 10.0, 12.0, false), 0.0, "gone at its end")
+
+func test_the_hint_is_only_for_who_that_record_pinned(t: T) -> void:
+	var DV: Script = load("res://client/dangers/dangers_view.gd")
+	var b := {"prompts": [[3, "KICK: HOLD F", -1.0], [5, "SWING: HOLD F", -1.0], [3, "HOLD F TO CUT", 1.5]]}
+	t.eq(DV.hint_for(b, ["a", "hang", 0.0, 0.0, 0.0, 3]), "KICK: HOLD F", "pinned by record 3: record 3's hint")
+	t.eq(DV.hint_for(b, ["b", "hang", 0.0, 0.0, 0.0, 5]), "SWING: HOLD F", "pinned by record 5: record 5's")
+	t.eq(DV.hint_for(b, ["c", "ledge", 0.0, 0.0, 0.0, 9]), "", "pinned by a record with no hint: none")
+	var s: Run.RunState = _game("dg0-hint", 1, ["a", "b"] as Array[String])[1]
+	var spot := _player(s, "a").body
+	var pinned: Run.RunState = _ask(s, &"grabber", &"pin", ["a", &"hang", spot, spot])[1]
+	var pins: Array = (Dangers.block(pinned) as Dictionary)["pins"]
+	t.eq(int(pins[0][5]), 99, "the pins block carries the record that pinned them")
+
+func test_the_temp_and_a_shut_door(t: T) -> void:
+	t.check(Dangers.RESIDENT_READERS.has(&"badge_doors"), "badge_doors may read the resident's feet")
+	var s: Run.RunState = _game("dg0-temp", 3, ["a", "b"] as Array[String])[1]
+	t.eq(s.plan.place, &"annex", "floor 3 is the Annex")
+	var c := Dangers.Ctx.new()
+	c.s = s
+	c.d = (s.dangers as DangerFx.DangerFloor).copy()
+	c.players = s.players.duplicate()
+	c.events = []
+	c.t = s.t
+	var k := Dangers._tick(c, _still(s), DT)
+	t.check(k.resident() == null, "a kind not in the list reads nothing of the resident")
+	k._reader = true
+	var feet := k.resident()
+	t.check(feet != null and feet.x == s.orderly.body.x and feet.z == s.orderly.body.z and feet.level == s.orderly.body.level, "a reader gets its feet")
+	t.check(feet != s.orderly.body, "a copy, never the resident's own body")
+	# The Temp's sight through a doorway, then with the door shut (sim/lonely.gd sees and line_to with the run's block).
+	var found := _a_door(s)
+	var door: Floor.Door = found[0]
+	var a: Move.Body = found[1]
+	var b: Move.Body = found[2]
+	var o := s.orderly.copy()
+	o.body = b
+	o.yaw = Entity.yaw_toward(a.x - b.x, a.z - b.z)
+	var who := Lonely.Person.make("a", a, 1.65, true)
+	var open_sees := Lonely.sees(s.plan, o, who)
+	t.check(Lonely.sees(s.plan, o, who, Callable()) == open_sees and Lonely.line_to(s.plan, o, who, Callable()) == Lonely.line_to(s.plan, o, who), "no door shut (no block): exactly as before")
+	var shut: Run.RunState = _ask(s, &"test_tile", &"close_edge", [0, door.ax, door.ay, door.bx, door.by, s.t + 10.0])[1]
+	var dfl: DangerFx.DangerFloor = shut.dangers
+	var cs := float(s.plan.cell_size)
+	var block := func(x: Move.Body, y: Move.Body) -> bool:
+		return x.level == y.level and DangerFx.line_blocked(dfl, x.level, x.x, x.z, y.x, y.z, cs)
+	t.check(open_sees, "through the open doorway it sees them (the setup)")
+	t.check(not Lonely.sees(s.plan, o, who, block) and not Lonely.line_to(s.plan, o, who, block), "the door shut: it cannot see them to start a chase")
+	var src := FileAccess.get_file_as_string("res://sim/run.gd")
+	t.check(src.contains("if s.dangers != null and not (s.dangers as DangerFx.DangerFloor).doors.is_empty():"), "the run builds the block only with dangers on and a door shut")
+	t.check(FileAccess.get_file_as_string("res://sim/lonely.gd").contains("if lonely.has(p.id) and sees(plan, s, p, line_block):"), "the Temp's chase start uses it")
+
+func test_a_hold_and_a_blind_at_once(t: T) -> void:
+	var s: Run.RunState = _game("dg0-both", 1, ["a", "b"] as Array[String])[1]
+	var held: Run.RunState = _ask(s, &"test_tile", &"hold", ["a", 2.0])[1]
+	var both: Run.RunState = _ask(held, &"test_tile", &"blind", ["a", 2.0])[1]
+	t.check(DangerFx.held_body(both.dangers, "a", both.t) != null and DangerFx.blinded(both.dangers, "a", both.t), "held and blinded at once: neither replaces the other")
+	t.eq(((Dangers.block(both) as Dictionary)["fx"] as Array).size(), 2, "the block carries both")
 
 func test_block_only_when_enabled(t: T) -> void:
 	var on: Run.RunState = _game("dg0-block", 1, ["a"] as Array[String])[1]
@@ -384,7 +523,7 @@ func test_setting_door_max(t: T) -> void:
 func test_setting_hold_max(t: T) -> void:
 	var s := Run.with_tuning(_game("dg0-hm", 1, ["a", "b"] as Array[String])[1], {&"danger.hold_max": 1.0})
 	var r := _ask(s, &"test_tile", &"hold", ["a", 3.0])
-	t.check(absf(float(((r[1] as Run.RunState).dangers as DangerFx.DangerFloor).fx["a"]["until"]) - (s.t + 1.0)) < 1e-9, "danger.hold_max 1 s: a 3 s hold lasts 1 s")
+	t.check(absf(float(((r[1] as Run.RunState).dangers as DangerFx.DangerFloor).fx["a|move"]["until"]) - (s.t + 1.0)) < 1e-9, "danger.hold_max 1 s: a 3 s hold lasts 1 s")
 
 func test_setting_dark_max(t: T) -> void:
 	var s := Run.with_tuning(_game("dg0-dm", 1, ["a"] as Array[String])[1], {&"danger.dark_max": 2.0})
@@ -394,7 +533,7 @@ func test_setting_dark_max(t: T) -> void:
 func test_snapshot_block_round_trips(t: T) -> void:
 	var b := {"r": [{"id": 0, "kind": "test_tile", "x": 1.25, "y": 0.0, "z": 3.5, "level": 0, "yaw": 0.5, "state": "armed", "since": 12.5, "n": [1.0, 2.5]}],
 		"dark": [[0, 1.0, 2.0, 3.0, 4.0, 20.0, 15.0]], "doors": [[0, 1, 2, 2, 2, 30.0]], "solids": [[1, 0.5, 0.5, 1.0, 1.0]],
-		"fx": [["a", "blind", 14.0]], "pins": [["b", "hang", 1.0, 2.0, 3.0]], "prompts": [[0, "HOLD F", 1.5]]}
+		"fx": [["a", "blind", 14.0]], "pins": [["b", "hang", 1.0, 2.0, 3.0, 0]], "prompts": [[0, "HOLD F", 1.5]]}
 	var c := Protocol._V.new()
 	var back := Protocol.dec_dangers(c, JSON.parse_string(JSON.stringify(Protocol.enc_dangers(b))))
 	t.check(not c.bad, "the block decodes")
