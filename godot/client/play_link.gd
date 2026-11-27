@@ -56,6 +56,7 @@ const Hides = preload("res://sim/hides.gd")
 const Furniture = preload("res://sim/furniture.gd")
 const SearchView = preload("res://client/search_view.gd")
 const WardHides = preload("res://client/ward/hides_view.gd")
+const CallReach = preload("res://client/call_reach.gd")
 
 const PLAYER_RADIUS := 0.3
 ## The eyes of a player lying on their bunk (whole centimetres: it goes to the host as the frame's eye).
@@ -1080,7 +1081,6 @@ func debug_info() -> Dictionary:
 func _can_call(phase: String, vb: Move.Body, in_car_now: bool) -> bool:
 	if phase != "away" or body == null:
 		return false
-	if call_spot is Vector3:
-		var at: Vector3 = call_spot
-		return M.hypot2(vb.x - at.x, vb.z - at.z) <= Run.CALL_REACH - 0.05 and absf(vb.y - at.y) <= Run.WARD_CALL_RISE
-	return vb.level == car.level and not in_car_now and M.hypot2(vb.x - car.door_x, vb.z - car.door_z) <= Run.CALL_REACH - 0.05
+	if in_car_now and not (call_spot is Vector3):
+		return false
+	return CallReach.at_call(vb, car, call_spot, -CallReach.CLIENT_MARGIN)   # OD1: the HUD's odds ask the same

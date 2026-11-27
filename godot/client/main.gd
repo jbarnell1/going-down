@@ -97,6 +97,7 @@ const LastStandView = preload("res://client/last_stand_view.gd")
 const WipeScene = preload("res://client/wipe_scene.gd")
 const HintCues = preload("res://client/hint_cues.gd")
 const DayView = preload("res://client/day_view.gd")
+const CallReach = preload("res://client/call_reach.gd")
 # Findables on screen (FD10): client/search_view.gd (the prompt, the bar, what is open) and client/note_reader.gd.
 const SearchView = preload("res://client/search_view.gd")
 const NoteReaderScript = preload("res://client/note_reader.gd")
@@ -3119,11 +3120,9 @@ func _show_day_lock(s: Dictionary) -> void:
 		var day: Variant = s.get("day")
 		if day is Dictionary and day.has("lossOdds"):
 			loss_rows = DayView.loss_rows(day, link.names())
-		var me: Dictionary = s.get("me", {})
-		if link.car != null and not me.is_empty() and bool(s.get("playing", false)) and str(me["status"]) == "ok":
-			var near := int(me["level"]) == link.car.level and Vector2(float(me["x"]), float(me["z"])).distance_to(Vector2(link.car.door_x, link.car.door_z)) <= Run.CALL_REACH
-			if bool(me["aboard"]) or near:
-				hud.loss_rows = loss_rows
+		# OD1: aboard (the host's word too) or at the call, wherever the call is (the Ward's station): client/call_reach.gd.
+		if CallReach.odds_on_hud(s, dc.latest if dc != null else null, link.car, link.call_spot):
+			hud.loss_rows = loss_rows
 	if lift != null:
 		lift.show_loss_odds(loss_rows)
 		# Findables (FD10): riding down, the next floor's sheet is the day view's third row too.
@@ -3498,7 +3497,7 @@ func _emergency_level(seconds: float) -> float:
 func _tape_in_reach(me: Dictionary) -> bool:
 	for ft: Dictionary in snap.get("floorTapes", []):
 		var at: Dictionary = ft["at"]
-		if int(at["level"]) == int(me["level"]) and Vector3(float(at["x"]) - float(me["x"]), float(at["y"]) - float(me["y"]), float(at["z"]) - float(me["z"])).length() <= 1.3:
+		if int(at["level"]) == int(me["level"]) and Vector3(float(at["x"]) - float(me["x"]), float(at["y"]) - float(me["y"]), float(at["z"]) - float(me["z"])).length() <= preload("res://sim/instrument.gd").PICKUP_REACH:
 			return true
 	return false
 
