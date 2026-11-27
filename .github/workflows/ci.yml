@@ -49,8 +49,9 @@ jobs:
   # Separate from the browser game above, and nothing waits on it.
   godot:
     runs-on: ubuntu-latest
-    # The quick set passed 15 minutes when the furniture tests joined it (18 Nov 2026).
-    timeout-minutes: 45
+    # The quick set passed 15 minutes when the furniture tests joined it (18 Nov 2026), and 40 minutes on
+    # this runner when the Playroom and Reactor dressing tests joined it (27 Nov 2026).
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
@@ -75,8 +76,9 @@ jobs:
       - name: Import the Godot project
         run: timeout 300 ./Godot_v4.7.2-stable_linux.x86_64 --headless --path godot --import
       - name: Run the Godot tests
-        # Four engines at once (godot/tools/test_shards.mjs): one engine alone passed the 40 minute limit on 21 Nov 2026.
-        run: GODOT="$PWD/Godot_v4.7.2-stable_linux.x86_64" timeout 2400 node godot/tools/godot.mjs test --quick --shards=4
+        # Four engines at once (godot/tools/test_shards.mjs): one engine alone passed the 40 minute limit on 21 Nov 2026,
+        # and four passed it on 27 Nov 2026 with every test green, so the limit is 80 minutes.
+        run: GODOT="$PWD/Godot_v4.7.2-stable_linux.x86_64" timeout 4800 node godot/tools/godot.mjs test --quick --shards=4
 
   # The public play link. Runs only after every check above passed, and only for main,
   # so the link never holds a build that failed a test.
