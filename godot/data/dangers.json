@@ -1,5 +1,5 @@
 {
-  "enabled": [],
+  "enabled": ["failing_lights", "roost", "steam"],
   "kinds": {
     "badge_doors": {"places": ["annex"], "active": false, "test_only": false},
     "failing_lights": {"places": ["clinic"], "active": false, "test_only": false},

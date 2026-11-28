@@ -33,8 +33,8 @@ func test_off_unless_asked(t: T) -> void:
 	t.eq(names[-1], "dangers_", "dangers_ is the last parameter of HostRules._init")
 	t.eq(names[-2], "ward_stairs_", "right after ST1's ward_stairs_")
 	t.check(HostRules.new(true, 1).dangers.is_empty(), "off by default")
-	t.check(Dangers.data_enabled().is_empty(), "data/dangers.json ships with nothing enabled")
-	t.check(HostRules.dangers_by_arg().is_empty(), "no dangers= on this command line: the rooms enable nothing")
+	t.check(_sorted_names(Dangers.data_enabled()) == _sorted_names([&"failing_lights", &"roost", &"steam"]), "data/dangers.json switches on exactly the kinds whose judges passed them: failing_lights,roost,steam")
+	t.check(_sorted_names(HostRules.dangers_by_arg()) == _sorted_names(Dangers.data_enabled()), "no dangers= on this command line: the rooms switch on exactly what the data file lists")
 	var s := HostRules.new(true, 1, [], false, false, true).prepare(Run.create_run("dg0", ["a"] as Array[String]))
 	t.check(s.dangers == null, "a run prepared without it has no dangers")
 	t.check(Dangers.block(s) == null, "and no snapshot block")
@@ -654,3 +654,11 @@ func test_the_count_caption_names_no_danger(t: T) -> void:
 	var why := str(HideView.WHY.get(String(Seek.WHY_DANGER), ""))
 	t.eq(why, "A NOISE", "a count a danger's noise started reads A NOISE")
 	t.check(not why.contains("DANGER"), "and never names a danger")
+
+## The lead's check on the enabled list: names, sorted, as plain strings.
+static func _sorted_names(a: Array) -> Array:
+	var out: Array = []
+	for k: Variant in a:
+		out.append(String(k))
+	out.sort()
+	return out
