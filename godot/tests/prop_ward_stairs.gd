@@ -58,10 +58,11 @@ func test_the_flag_reaches_the_rules(t: T) -> void:
 		if str(m["name"]) == "_init":
 			for a: Dictionary in m["args"]:
 				names.append(str(a["name"]))
-	# DG0 added `dangers_` after it (the agreed tail ..., ward_homes_, ward_stairs_, dangers_).
-	t.eq(names[-2], "ward_stairs_", "ward_stairs_ is the last parameter before DG0's dangers_")
-	t.eq(names[-1], "dangers_", "DG0's dangers_ comes right after it")
-	t.eq(names[-3], "ward_homes_", "right after WH1's ward_homes_")
+	# DG0 added `dangers_` after it, then RX3 `reactor_seek_` (the tail ..., ward_homes_, ward_stairs_, dangers_, reactor_seek_).
+	t.eq(names[-3], "ward_stairs_", "ward_stairs_ is the parameter before DG0's dangers_")
+	t.eq(names[-2], "dangers_", "DG0's dangers_ comes right after it")
+	t.eq(names[-1], "reactor_seek_", "then RX3's reactor_seek_, the last")
+	t.eq(names[-4], "ward_homes_", "right after WH1's ward_homes_")
 	var stairs := names.find("ward_stairs_")
 	t.check(not HostRules.new(true, 1).ward_stairs, "off by default")
 	var args: Array = [true, 1, []]

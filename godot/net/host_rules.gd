@@ -159,6 +159,10 @@
 #    default, and then nothing changes anywhere. The game's rooms pass data/dangers.json's "enabled" (shipped empty)
 #    or the start argument dangers=<kind,kind|all|0> (dangers_by_arg). prepare() gives the run its DangerFloor; step()
 #    steps the base after the run's tick, before split reality; on the Hanging Ward net/host.gd calls step_dangers.
+#  - RX3, `reactor_seek`, the last parameter, after `dangers`: off unless asked, and only with `reactor_place`. The
+#    Reactor's four go only where they can walk (a noise or a lost player inside the crawl draws them to its mouth)
+#    and give up a seek after reactor.seek_time (sim/station_floor.gd seek_fix). The game's rooms ask for it unless
+#    started with `reactor_seek=0` (reactor_seek_by_arg). Off: today's seek, nothing changes.
 # Typed and immutable like godot/sim: a step never edits the state it was given.
 extends RefCounted
 
@@ -299,6 +303,8 @@ var ward_homes: bool
 var ward_stairs: bool
 ## DG0, the enabled danger kinds (the last parameter, after ward_stairs_; see the header). Empty: off.
 var dangers: Array[StringName] = []
+## RX3, the Reactor's seek fix (the last parameter, after dangers_; see the header). Off: today's seek.
+var reactor_seek: bool
 var nightly_reels: bool
 var orientation := false
 var orientation_prelude := false
@@ -329,7 +335,8 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 		ward_web_: bool = false, rigger_roam_: bool = false, ward_layout_: bool = false, orderly_fix_: bool = false,
 		minder_calm_: bool = false, down_ring_: bool = false, pn_fixes_: bool = false, last_stand_: bool = false,
 		deal_: bool = false, split_: bool = false, economy_fix_: bool = false, voice_: bool = false,
-		ward_lift_clear_: bool = false, ward_homes_: bool = false, ward_stairs_: bool = false, dangers_: Variant = []) -> void:
+		ward_lift_clear_: bool = false, ward_homes_: bool = false, ward_stairs_: bool = false, dangers_: Variant = [],
+		reactor_seek_: bool = false) -> void:
 	# DG0: a caller that fills every parameter with false (tests that build the list by name) means none.
 	dangers = Dangers.resolve(dangers_) if dangers_ is Array else ([] as Array[StringName])
 	voice = voice_
@@ -355,6 +362,8 @@ func _init(entity_on: bool, depth: int, deck_: Array = [], days_: bool = false, 
 	pressures = pressures_ and cycles_ and late_floors_
 	tenant_timer = tenant_timer_
 	reactor_place = reactor_place_ and late_floors_
+	# RX3: only with the Reactor as a place (the four it fixes live there).
+	reactor_seek = reactor_seek_ and reactor_place
 	minder_hunt = minder_hunt_
 	late_floors = late_floors_
 	party_table = party_table_
@@ -490,6 +499,9 @@ func prepare(s0: Run.RunState) -> Run.RunState:
 	# WH1: the Ward's homes (net/host.gd reads this flag as the Ward starts).
 	if ward_homes and not s.ward_homes:
 		s = Run.with_ward_homes(s)
+	# RX3: the Reactor's seek fix (sim/station_floor.gd seek_fix).
+	if reactor_seek and not s.reactor_seek:
+		s = Run.with_reactor_seek(s)
 	# DG0: the dangers (sim/dangers.gd); nothing at all with none enabled.
 	if not dangers.is_empty() and s.dangers == null:
 		s = Dangers.with_dangers(s, dangers)
@@ -664,6 +676,10 @@ static func economy_fix_by_arg() -> bool:
 ## VC1: the microphone counts in the game's rooms unless started with `voice=0` (or `?voice=0` on the web page).
 static func voice_by_arg() -> bool:
 	return not _arg_off("voice")
+
+## RX3: the Reactor's seek fix in the game's rooms unless started with `reactor_seek=0` (or `?reactor_seek=0` on the web page).
+static func reactor_seek_by_arg() -> bool:
+	return not _arg_off("reactor_seek")
 
 ## RL1: the lift's house is never the lowest in the game's rooms unless started with `ward_lift_clear=0` (or
 ## `?ward_lift_clear=0` on the web page).

@@ -235,6 +235,7 @@ const ROWS: Array = [
 	[&"reactor.hear_sprint", &"reactor", "HEAR A SPRINT", "how far they hear a sprinting player, through walls", "m", 10.0, 0.0, 30.0, 0.5, &"now", &"RX3", F],
 	[&"reactor.hear_socket", &"reactor", "HEAR THE SOCKET", "how far they hear the fuse going into the cabinet", "m", 0.0, 0.0, 60.0, 1.0, &"now", &"RX3", F],
 	[&"reactor.search_time", &"reactor", "SEARCH FOR", "seconds they search where they lost someone before drifting back to the hall", "s", 8.0, 0.0, 60.0, 1.0, &"now", &"RX3", F],
+	[&"reactor.seek_time", &"reactor", "GO TO A SOUND FOR", "seconds they head for a noise or where they lost someone before searching there anyway", "s", 8.0, 1.0, 60.0, 1.0, &"now", &"RX3", F],
 	[&"reactor.search_speed", &"reactor", "SEARCH PACE", "how fast they walk while searching", "m/s", 1.2, 0.5, 4.0, 0.1, &"now", &"RX3", F],
 	[&"reactor.noise_draws", &"reactor", "ONE NOISE DRAWS", "how many of the four one noise (a whistle, a flare, a dropped fuse) pulls to it", "", 2.0, 0.0, 4.0, 1.0, &"now", &"RX3", W],
 	[&"reactor.hear_wall", &"reactor", "HEAR A WALK THROUGH A WALL", "how near they hear a walk with no clear line (further, only in sight)", "m", 3.0, 0.0, 20.0, 0.5, &"now", &"RX3", F],
@@ -529,7 +530,7 @@ const WIRED_IDS: Array[StringName] = [
 	&"reactor.power_hold", &"reactor.wake_after", &"reactor.wake_gap", &"reactor.crawl_time", &"reactor.crawl_speed",
 	&"reactor.run_speed", &"reactor.alone_scale", &"reactor.pair_scale", &"reactor.crawl_keep", &"reactor.feed", &"reactor.stand_off",
 	&"reactor.senses", &"reactor.sight_dark", &"reactor.sight_lit", &"reactor.sight_glow", &"reactor.sight_creep", &"reactor.lamp_glow",
-	&"reactor.hear_walk", &"reactor.hear_sprint", &"reactor.hear_socket", &"reactor.search_time", &"reactor.search_speed", &"reactor.noise_draws",
+	&"reactor.hear_walk", &"reactor.hear_sprint", &"reactor.hear_socket", &"reactor.search_time", &"reactor.seek_time", &"reactor.search_speed", &"reactor.noise_draws",
 	&"reactor.hear_wall", &"reactor.lunge_range", &"reactor.lunge_speed", &"reactor.wake_alone", &"reactor.wake_pair", &"reactor.wake_late", &"reactor.flinch", &"reactor.board",
 	# T22b: the second Orderly's first floor, the flare and the lamp (already read by the rules), recording, the
 	# quota's growth and the Annex's pad.

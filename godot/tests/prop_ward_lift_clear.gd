@@ -300,7 +300,7 @@ func test_the_wire_and_the_rooms(t: T) -> void:
 		if m["name"] == "_init":
 			for a: Dictionary in m["args"]:
 				names.append(str(a["name"]))
-	t.eq(names.slice(names.size() - 5), ["voice_", "ward_lift_clear_", "ward_homes_", "ward_stairs_", "dangers_"] as Array[String], "ward_lift_clear_ comes after voice_, then only WH1's ward_homes_, ST1's ward_stairs_ and DG0's dangers_")
+	t.eq(names.slice(names.size() - 6), ["voice_", "ward_lift_clear_", "ward_homes_", "ward_stairs_", "dangers_", "reactor_seek_"] as Array[String], "ward_lift_clear_ comes after voice_, then only WH1's ward_homes_, ST1's ward_stairs_, DG0's dangers_ and RX3's reactor_seek_")
 	var args: Array = WardLayoutProps.rules_args(true, true)
 	t.eq(names[args.size() - 1], "ward_layout_", "rules_args gives every parameter up to ward_layout_")
 	while args.size() < names.size():

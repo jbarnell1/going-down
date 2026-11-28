@@ -229,6 +229,7 @@ const PROOFS := {
 	&"reactor.hear_sprint": "test_reactor_senses_numbers",
 	&"reactor.hear_socket": "test_reactor_senses_numbers",
 	&"reactor.search_time": "test_reactor_senses_numbers",
+	&"reactor.seek_time": "test_reactor_senses_numbers",
 	&"reactor.search_speed": "test_reactor_senses_numbers",
 	&"reactor.noise_draws": "test_reactor_senses_numbers",
 	&"reactor.hear_wall": "test_reactor_senses_numbers",
@@ -339,7 +340,7 @@ const MORE: Array[StringName] = [
 	&"rigger.steps_reach", &"rigger.click_reach", &"rigger.open_heard", &"rigger.door_heard", &"rigger.move_on", &"rigger.record_inside", &"rigger.room_warn", &"rigger.probe", &"rigger.arm_speed", &"rigger.alone_arm_speed", &"rigger.arm_back",
 	&"rigger.climb_speed", &"rigger.crawl_speed", &"rigger.lair_speed", &"rigger.linger", &"rigger.opening_time", &"rigger.feel", &"rigger.openings", &"rigger.loud", &"rigger.chase_time", &"rigger.chase_gap", &"rigger.chase_gain", &"rigger.chase_top", &"rigger.reach_pause",
 	&"reactor.alone_scale", &"reactor.pair_scale", &"reactor.crawl_keep", &"reactor.feed", &"reactor.stand_off",
-	&"reactor.senses", &"reactor.sight_dark", &"reactor.sight_lit", &"reactor.sight_glow", &"reactor.sight_creep", &"reactor.lamp_glow", &"reactor.hear_walk", &"reactor.hear_sprint", &"reactor.hear_socket", &"reactor.search_time", &"reactor.search_speed", &"reactor.noise_draws",
+	&"reactor.senses", &"reactor.sight_dark", &"reactor.sight_lit", &"reactor.sight_glow", &"reactor.sight_creep", &"reactor.lamp_glow", &"reactor.hear_walk", &"reactor.hear_sprint", &"reactor.hear_socket", &"reactor.search_time", &"reactor.seek_time", &"reactor.search_speed", &"reactor.noise_draws",
 	&"reactor.hear_wall", &"reactor.lunge_range", &"reactor.lunge_speed", &"reactor.wake_alone", &"reactor.wake_pair", &"reactor.wake_late", &"reactor.flinch", &"reactor.board",
 	&"orderly2.first_floor", &"flare.throw", &"flare.reach", &"flare.stun", &"flare.blind", &"flare.noise", &"lamp.seconds", &"lamp.range",
 	&"quota.step", &"record.reach", &"record.rate", &"marks.pad",
@@ -497,6 +498,7 @@ static func game_values() -> Dictionary:
 		&"reactor.hear_sprint": StationRules.HEAR_SPRINT,
 		&"reactor.hear_socket": StationRules.HEAR_SOCKET,
 		&"reactor.search_time": StationRules.SEARCH_TIME,
+		&"reactor.seek_time": StationRules.SEEK_TIME,
 		&"reactor.search_speed": StationRules.SEARCH_SPEED,
 		&"reactor.noise_draws": float(StationRules.NOISE_DRAWS),
 		&"reactor.hear_wall": StationRules.HEAR_WALL,
@@ -640,7 +642,7 @@ func test_registry_rows(t: T) -> void:
 	# ED1 added the deal's nineteen (THE DEAL, its own group before the player speeds).
 	# SR1 added split reality's ten (players).
 	# PY1 added the three cycle rows of pay and quota (earning).
-	t.eq(rows.size(), 234, "rows in the registry (VC1 added seven)")
+	t.eq(rows.size(), 235, "rows in the registry (VC1 added seven, RX3 the seek time)")
 	var ids := {}
 	var names := {}
 	var by_group := {}
@@ -688,7 +690,7 @@ func test_registry_rows(t: T) -> void:
 		if TEN.has(s.id) or MORE.has(s.id) or KEEPER_SIX.has(s.id):
 			want.append(s.id)
 	t.check(wired == want and want.size() == TEN.size() + MORE.size() + KEEPER_SIX.size(), "the wired rows are exactly those of LS1 and the groups wired since, in order: %s" % str(wired))
-	t.eq(by_group.get(&"residents", 0), 122, "residents (WC1 added two Rigger rows, OR2 two Orderly rows, MA1 four Minder rows, RR1 thirteen Rigger rows, VC1 four voice rows)")
+	t.eq(by_group.get(&"residents", 0), 123, "residents (WC1 added two Rigger rows, OR2 two Orderly rows, MA1 four Minder rows, RR1 thirteen Rigger rows, VC1 four voice rows, RX3 the seek time)")
 	t.eq(by_group.get(&"lift", 0), 18, "the lift and the dark (and the Ward's lift, PL2, its call and web, WC1, and its layout, WG1)")
 	t.eq(by_group.get(&"players", 0), 44, "players (DR1 added the ring's down time, SR1 split reality's ten, VC1 the microphone's three)")
 	t.eq(by_group.get(&"earning", 0), 14, "earning (LS1 added the sole survivor's bonus, PY1 the three cycle rows)")
@@ -1962,6 +1964,12 @@ func test_reactor_senses_numbers(t: T) -> void:
 		bb.body = Move.Body.make(0.0, 0.0, 0, 0.0)
 		StationRules._start_search(bb, Settings.make({&"reactor.search_time": v}))
 		t.eq(bb.left, v, "search_time %s" % v)
+	# RX3 seek fix: a seek lasts reactor.seek_time (then the body searches where it is).
+	for v: float in [1.0, StationRules.SEEK_TIME, 60.0]:
+		var sk := StationRules.make(plan)
+		var bk := sk.bodies[0]
+		StationRules._begin_seek(sk, bk, Vector2(bk.body.x, bk.body.z), Settings.make({&"reactor.seek_time": v}))
+		t.eq(bk.seek_left, v, "seek_time %s" % v)
 	for v: float in [0.5, StationRules.SEARCH_SPEED, 4.0]:
 		var st2 := StationRules.make(plan)
 		st2.power = StationRules.Power.EMERGENCY

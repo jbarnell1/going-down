@@ -30,8 +30,10 @@ func test_off_unless_asked(t: T) -> void:
 		if str(m["name"]) == "_init":
 			for a: Dictionary in m["args"]:
 				names.append(str(a["name"]))
-	t.eq(names[-1], "dangers_", "dangers_ is the last parameter of HostRules._init")
-	t.eq(names[-2], "ward_stairs_", "right after ST1's ward_stairs_")
+	# RX3 added reactor_seek_ after it, now the last.
+	t.eq(names[-2], "dangers_", "dangers_ is the parameter before RX3's reactor_seek_ in HostRules._init")
+	t.eq(names[-1], "reactor_seek_", "RX3's reactor_seek_ is the last")
+	t.eq(names[-3], "ward_stairs_", "right after ST1's ward_stairs_")
 	t.check(HostRules.new(true, 1).dangers.is_empty(), "off by default")
 	t.check(_sorted_names(Dangers.data_enabled()) == _sorted_names([&"failing_lights", &"roost", &"steam"]), "data/dangers.json switches on exactly the kinds whose judges passed them: failing_lights,roost,steam")
 	t.check(_sorted_names(HostRules.dangers_by_arg()) == _sorted_names(Dangers.data_enabled()), "no dangers= on this command line: the rooms switch on exactly what the data file lists")
@@ -43,9 +45,11 @@ func test_off_unless_asked(t: T) -> void:
 		false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false,
 		false, false, false).dangers.is_empty(), "a caller filling every parameter with false means none")
 	var room := FileAccess.get_file_as_string("res://server/room.gd")
-	t.check(room.contains("HostRules.dangers_by_arg() if not (ward_review or reactor_review or orientation_review) else [])"), "server/room.gd passes it last")
+	t.check(room.contains("HostRules.dangers_by_arg() if not (ward_review or reactor_review or orientation_review) else [],"), "server/room.gd passes it before the seek fix")
+	t.check(room.contains("and HostRules.reactor_seek_by_arg())"), "server/room.gd passes RX3's seek fix last")
 	var local := FileAccess.get_file_as_string("res://net/local_room.gd")
-	t.check(local.contains("HostRules.dangers_by_arg() if Session.deck == Places.FULL and not _orientation_playtest else [])"), "net/local_room.gd passes it last, with the full deck")
+	t.check(local.contains("HostRules.dangers_by_arg() if Session.deck == Places.FULL and not _orientation_playtest else [],"), "net/local_room.gd passes it before the seek fix, with the full deck")
+	t.check(local.contains("and HostRules.reactor_seek_by_arg())"), "net/local_room.gd passes RX3's seek fix last")
 	t.eq(Dangers.resolve(["all"]), Dangers.all_kinds(), "all is every kind with a file, not test_only")
 	t.eq(Dangers.resolve(["0"]), [] as Array[StringName], "0 is none")
 	t.eq(Dangers.resolve(["nonsense", "test_tile"]), [&"test_tile"] as Array[StringName], "unknown names are dropped")

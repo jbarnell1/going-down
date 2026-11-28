@@ -501,7 +501,9 @@ func _start(now: float) -> void:
 		ward_layout and late_floors and not (ward_review or reactor_review or orientation_review) and HostRules.ward_homes_on_by_arg(),
 		ward_layout and late_floors and not (ward_review or reactor_review or orientation_review) and HostRules.ward_stairs_by_arg(),
 		# DG0: the danger kinds (data/dangers.json "enabled", shipped empty, or the start argument dangers=).
-		HostRules.dangers_by_arg() if not (ward_review or reactor_review or orientation_review) else [])
+		HostRules.dangers_by_arg() if not (ward_review or reactor_review or orientation_review) else [],
+		# RX3: the Reactor's seek fix, with the Reactor as a place (reactor_seek=0 switches it off).
+		reactor_place and late_floors and not (ward_review or reactor_review or orientation_review) and HostRules.reactor_seek_by_arg())
 	if orientation_review:
 		rules.enable_orientation()
 	elif orientation_campaign and not playtest_run:

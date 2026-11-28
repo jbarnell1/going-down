@@ -26,6 +26,10 @@
 #    host banks it in the archive (sim/reactor_archive.gd).
 #  - The lift needs power to return: the run refuses the call until the power is restored (sim/run.gd), and the
 #    floor asks no quota (nothing here gives a reading). The car leaving always goes up (the Reactor's return).
+#  - RX3 seek fix (StationFloor.seek_fix, the run's reactor_seek; net/host_rules.gd reactor_seek): a body that goes to
+#    a place (a noise, or where it lost someone) goes to the nearest cell it can walk to (never the crawl), and gives
+#    up after reactor.seek_time seconds: then it searches there as if it had arrived. Off: a goal inside the crawl
+#    is never reached and the body seeks it for ever (running on the spot at the crawl's mouth).
 # Nothing here draws a random number after the floor is made; the four's moves depend on the crew only.
 extends RefCounted
 
@@ -73,6 +77,8 @@ const HEAR_SOCKET := 0.0
 const FLINCH := 3.5
 const BOARD := 60.0
 const SEARCH_TIME := 8.0
+## RX3 seek fix: the seconds a body goes to a place before it searches there anyway (reactor.seek_time).
+const SEEK_TIME := 8.0
 const SEARCH_SPEED := 1.2
 const NOISE_DRAWS := 2
 ## The game's own noise radii (sim/noise.gd), read through the same settings (noise.emote, noise.drop).
@@ -130,6 +136,8 @@ class Body4:
 	var wander: int = 0
 	var wander_to: Vector2 = Vector2.INF
 	var wander_left: float = 0.0
+	## RX3 seek fix: seconds left of this seek before it searches where it is (only with StationFloor.seek_fix).
+	var seek_left: float = 0.0
 
 	func copy() -> Body4:
 		var b := Body4.new()
@@ -152,6 +160,7 @@ class Body4:
 		b.wander = wander
 		b.wander_to = wander_to
 		b.wander_left = wander_left
+		b.seek_left = seek_left
 		return b
 
 class StationFloor:
@@ -187,6 +196,8 @@ class StationFloor:
 	var crew_n: int = 4
 	var restored_at: float = -INF
 	var seq_t: float = 0.0
+	## RX3 seek fix (see the header): set by the run from its reactor_seek. Off: today's seek.
+	var seek_fix: bool = false
 
 	func copy() -> StationFloor:
 		var c := StationFloor.new()
@@ -216,6 +227,7 @@ class StationFloor:
 		c.crew_n = crew_n
 		c.restored_at = restored_at
 		c.seq_t = seq_t
+		c.seek_fix = seek_fix
 		return c
 
 ## One player as the rules see them this tick.
@@ -598,14 +610,20 @@ static func _sense(st: StationFloor, b: Body4, crawl: bool, prey: Array[Crew], m
 		b.mode = "seek"
 		b.target = ""
 		b.replan_in = 0.0
+		if st.seek_fix:
+			_begin_seek(st, b, b.goal, tuning)
 	if noise != Vector2.INF:
 		b.mode = "seek"
 		b.goal = noise
 		b.replan_in = 0.0
+		if st.seek_fix:
+			_begin_seek(st, b, noise, tuning)
 	var here := Vector2(b.body.x, b.body.z)
 	match b.mode:
 		"seek":
-			if b.goal == Vector2.INF or here.distance_to(b.goal) <= ARRIVE:
+			if st.seek_fix:
+				b.seek_left -= dt
+			if b.goal == Vector2.INF or here.distance_to(b.goal) <= ARRIVE or (st.seek_fix and b.seek_left <= 1e-9):
 				_start_search(b, tuning)
 		"drift":
 			var hall: Rect2 = st.plan.station["hall"]
@@ -625,6 +643,54 @@ static func _sense(st: StationFloor, b: Body4, crawl: bool, prey: Array[Crew], m
 				b.wander_left = WANDER_HOLD
 				b.replan_in = 0.0
 	return found
+
+## RX3 seek fix: a seek to `goal` starts: to the nearest place it can walk to (seek_goal), for reactor.seek_time.
+static func _begin_seek(st: StationFloor, b: Body4, goal: Vector2, tuning: Settings.Values) -> void:
+	if goal != Vector2.INF:
+		b.goal = seek_goal(st.plan, b.body, goal)
+	b.seek_left = Settings.f(tuning, &"reactor.seek_time", SEEK_TIME)
+
+## RX3 seek fix: `goal` if a body at `from` can walk to its cell (never through or into the crawl); else the centre
+## of the cell it can walk to nearest `goal` (the first found, walking outwards, on a tie). `goal` when it stands
+## nowhere walkable.
+static func seek_goal(plan: Floor.FloorPlan, from: Move.Body, goal: Vector2) -> Vector2:
+	var start := Move.cell_of(plan, from)
+	if not Floor.is_walkable(plan, 0, start.x, start.y):
+		return goal
+	var gc := Station.cell_of(goal.x, goal.y)
+	var n := plan.width * plan.height
+	var crawl := {}
+	for c: Vector2i in plan.station["crawl"]:
+		crawl[c.y * plan.width + c.x] = true
+	var adj := Floor.adjacency_of(plan)
+	var seen := PackedByteArray()
+	seen.resize(n)
+	var s0 := start.y * plan.width + start.x
+	seen[s0] = 1
+	var queue := PackedInt32Array([s0])
+	var head := 0
+	var best := -1
+	var best_d := INF
+	while head < queue.size():
+		var at := queue[head]
+		head += 1
+		var cx := at % plan.width
+		var cy := at / plan.width
+		if cx == gc.x and cy == gc.y:
+			return goal
+		var d := Vector2(Station.wc(cx), Station.wc(cy)).distance_to(goal)
+		if d < best_d - 1e-9:
+			best_d = d
+			best = at
+		for k in range(adj.start[at], adj.start[at + 1]):
+			var to := adj.list[k]
+			if to >= n or seen[to] != 0 or crawl.has(to):
+				continue
+			seen[to] = 1
+			queue.append(to)
+	if best < 0:
+		return goal
+	return Vector2(Station.wc(best % plan.width), Station.wc(best / plan.width))
 
 static func _start_search(b: Body4, tuning: Settings.Values) -> void:
 	b.mode = "search"

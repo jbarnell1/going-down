@@ -379,7 +379,9 @@ func start_run() -> void:
 		late_floors_on() and not _orientation_playtest and ward_layout and (HostRules.ward_homes_on_by_arg() or TestSwitches.ward_homes),
 		late_floors_on() and not _orientation_playtest and ward_layout and HostRules.ward_stairs_by_arg(),
 		# DG0: the danger kinds (data/dangers.json "enabled", shipped empty, or the start argument dangers=).
-		HostRules.dangers_by_arg() if Session.deck == Places.FULL and not _orientation_playtest else [])
+		HostRules.dangers_by_arg() if Session.deck == Places.FULL and not _orientation_playtest else [],
+		# RX3: the Reactor's seek fix, with the Reactor as a place (reactor_seek=0 switches it off).
+		reactor_place and late_floors_on() and not _orientation_playtest and HostRules.reactor_seek_by_arg())
 	if _orientation_playtest:
 		rules.enable_orientation()
 	elif orientation_campaign and _playtest_depth < 0:

@@ -3,7 +3,7 @@
 # (power restored and at least one rides up), tape carried out, players lost, cut to restore, chased, and where and
 # when the catches come. Headless, no window:
 #   "$GODOT" --headless --path godot --script res://tools/station_crews.gd -- seeds=200 [sizes=1,2,4,6]
-#       [skills=careless,sensible,expert] [first=0] [set=reactor.run_speed:3.0,...] [trace=seed:size:skill]
+#       [skills=careless,sensible,expert] [first=0] [set=reactor.run_speed:3.0,...] [trace=seed:size:skill] [seek=0]
 extends SceneTree
 
 const C = preload("res://tests/prop_station_crews.gd")
@@ -15,6 +15,8 @@ func _init() -> void:
 	var skills: Array[StringName] = [&"careless", &"sensible", &"expert"]
 	var given := {}
 	var trace := ""
+	# RX3: seek=0 runs without the seek fix (the game's rooms run with it).
+	var seek := true
 	for raw in OS.get_cmdline_user_args():
 		var a := raw.trim_prefix("--")
 		var key := a.get_slice("=", 0)
@@ -34,6 +36,7 @@ func _init() -> void:
 				for kv in val.split(","):
 					given[kv.get_slice(":", 0)] = float(kv.get_slice(":", 1))
 			"trace": trace = val
+			"seek": seek = val != "0"
 			"still":
 				# still=gap: a player standing still that many metres' walk from seat 1, over 30 seeds.
 				for i in 30:
@@ -43,15 +46,15 @@ func _init() -> void:
 	if not trace.is_empty():
 		var p := trace.split(":")
 		C.trace = true
-		print(C.measure(p[0], int(p[1]), StringName(p[2]), given))
+		print(C.measure(p[0], int(p[1]), StringName(p[2]), given, seek))
 		quit(0)
 		return
-	print("seeds %d from %d, settings %s" % [seeds, first, given])
+	print("seeds %d from %d, settings %s, seek fix %s" % [seeds, first, given, seek])
 	print("size skill     finish  tape(of finished)  lost/run chased  catch-or-within-2m  finished-with-a-catch(of finished)  finished-leaving-someone  never-chased  shortest-tell  cut->restore  lead(stir->stand)  stir->first-reach  catches: n, after-cut median, lift-dist median, by phase")
 	for size in sizes:
 		for skill in skills:
 			var t0 := Time.get_ticks_msec()
-			var c: Dictionary = C.cell(size, skill, seeds, given, first)
+			var c: Dictionary = C.cell(size, skill, seeds, given, first, seek)
 			var after: Array = []
 			var lift: Array = []
 			var phases := {}

@@ -23,6 +23,7 @@ const Move = preload("res://sim/move.gd")
 const M = preload("res://sim/jsmath.gd")
 const Settings = preload("res://sim/settings.gd")
 const Sight = preload("res://sim/sight.gd")
+const HostRules = preload("res://net/host_rules.gd")
 
 const DT := 0.05
 ## A run longer than this (host seconds) is a stall: counted as not finished.
@@ -36,9 +37,18 @@ static func _ids(n: int) -> Array[String]:
 		out.append("p%d" % i)
 	return out
 
-## One run of a bot crew on floor 7. `given`: live settings for the run ({} = the game's numbers).
-static func measure(seed: String, size: int, skill: StringName, given: Dictionary = {}) -> Dictionary:
+## The rules for a crew run: floor 7 with the Reactor, and RX3's seek fix as the game's rooms run it (`seek`).
+static func crew_rules(seek: bool) -> HostRules:
 	var r := PS.rules(7, true)
+	# The rooms pass reactor_seek_ as HostRules' last parameter; PS.rules stops before it, so it is set here as
+	# _init would (only with the Reactor as a place).
+	r.reactor_seek = seek and r.reactor_place
+	return r
+
+## One run of a bot crew on floor 7. `given`: live settings for the run ({} = the game's numbers). `seek`: RX3's
+## seek fix (on in the game's rooms).
+static func measure(seed: String, size: int, skill: StringName, given: Dictionary = {}, seek := true) -> Dictionary:
+	var r := crew_rules(seek)
 	var s := r.prepare(Run.create_run(seed, _ids(size), r.deck, true, true, true))
 	if not given.is_empty():
 		s = Run.with_tuning(s, given)
@@ -155,13 +165,18 @@ static func measure(seed: String, size: int, skill: StringName, given: Dictionar
 	return out
 
 ## The two-client report's case (item 2 of RX2): the four's rules alone (StationFloor.step), the power just cut, one
-## player standing still `gap` metres (by the plan's walk) from seat 1's body, the others far off, with the
-## tuning `given`. Returns when seat 1 stood, how far it was from the player then, and when it caught them (-1 never).
-static func standing_still(seed: String, gap: float, given: Dictionary, seconds := 60.0) -> Dictionary:
+## player standing still `gap` metres (by the plan's walk) from seat 1's body, with the tuning `given`. The other
+## three are where the plan puts them, which on some seeds is nearer the player than seat 1 (RX3: keep-6 and keep-28,
+## where seat 2 stands 3 m off and makes the catch). Returns, for every body, when it stood, how far it was from the
+## player then and how far it started ("stands": [[stood, gap, start], ...]); "stood" / "gap_at_stand" / "start_gap"
+## of seat 1 as before; when they were caught ("caught", -1 never), by which body ("by", -1 never), and when that
+## body stood and how far off ("by_stood", "by_gap").
+static func standing_still(seed: String, gap: float, given: Dictionary, seconds := 60.0, seek := true) -> Dictionary:
 	const Station = preload("res://sim/station.gd")
 	const Floor = preload("res://sim/floor.gd")
 	var plan := Station.generate_station(seed, 7)
 	var st := SR.make(plan)
+	st.seek_fix = seek
 	var tuning := Settings.make(given)
 	st.power = SR.Power.EMERGENCY
 	st.hold_left = 0.0
@@ -181,20 +196,40 @@ static func standing_still(seed: String, gap: float, given: Dictionary, seconds 
 				best = e
 				pick = Vector2i(cx, cy)
 	var me := Move.Body.make(Station.wc(pick.x), Station.wc(pick.y), 0, 0.0)
-	var out := {"stood": -1.0, "gap_at_stand": -1.0, "caught": -1.0, "start_gap": M.hypot2(me.x - b0.x, me.z - b0.z)}
+	var stands: Array = []
+	for b in st.bodies:
+		stands.append([-1.0, -1.0, M.hypot2(me.x - b.body.x, me.z - b.body.z)])
+	var out := {"stood": -1.0, "gap_at_stand": -1.0, "caught": -1.0, "start_gap": float(stands[0][2]), "by": -1, "stands": stands}
 	var t := 0.0
 	var events: Array[Dictionary] = []
 	while t < seconds:
 		t += DT
 		var crew: Array[SR.Crew] = [SR.Crew.make("p0", me, &"ok", &"walk", false, true)]
 		var caught := SR.step(st, crew, t, DT, tuning, events)
-		var b := st.bodies[0]
-		if (b.phase == "zombie_run" or b.phase == "zombie_walk") and float(out["stood"]) < 0.0:
-			out["stood"] = st.awake
-			out["gap_at_stand"] = M.hypot2(me.x - b.body.x, me.z - b.body.z)
+		for j in st.bodies.size():
+			var b := st.bodies[j]
+			if (b.phase == "zombie_run" or b.phase == "zombie_walk") and float(stands[j][0]) < 0.0:
+				stands[j][0] = st.awake
+				stands[j][1] = M.hypot2(me.x - b.body.x, me.z - b.body.z)
 		if not caught.is_empty():
 			out["caught"] = st.awake
+			# The catcher: the body now feeding on p0 (reactor.feed on), else the nearest standing one in reach.
+			var near := INF
+			for j in st.bodies.size():
+				var b := st.bodies[j]
+				var d := M.hypot2(me.x - b.body.x, me.z - b.body.z)
+				if b.feeding == "p0":
+					out["by"] = j
+					break
+				if float(stands[j][0]) >= 0.0 and d <= SR.REACH + 1e-6 and d < near:
+					near = d
+					out["by"] = j
 			break
+	out["stood"] = float(stands[0][0])
+	out["gap_at_stand"] = float(stands[0][1])
+	if int(out["by"]) >= 0:
+		out["by_stood"] = float(stands[int(out["by"])][0])
+		out["by_gap"] = float(stands[int(out["by"])][1])
 	return out
 
 ## The heal beside a catch, with the four's rules alone: seat 1 (the others removed) stands and catches p0, who
@@ -205,6 +240,7 @@ static func feeding_case(seed: String, given: Dictionary) -> Dictionary:
 	const Floor = preload("res://sim/floor.gd")
 	var plan := Station.generate_station(seed, 7)
 	var st := SR.make(plan)
+	st.seek_fix = true
 	st.bodies = [st.bodies[0]]
 	# RX3: the body must see its catch to make it (this case is about the feeding, not the senses).
 	var g := given.duplicate()
@@ -273,12 +309,21 @@ func test_crawlers_keep_off(t: T) -> void:
 	var slow := {&"reactor.crawl_time": 30.0, &"reactor.run_speed": 1.5}
 	for i in seeds:
 		var r := standing_still("keep-%d" % i, 10.0, slow, 40.0)
-		var gap := float(r["gap_at_stand"])
-		t.check(gap >= minf(SR.CRAWL_KEEP, float(r["start_gap"])) - SR.RUN_SPEED * DT - 1e-6, "keep-%d: seat 1 stood %.2f m off (start %.2f)" % [i, gap, float(r["start_gap"])])
-		# From the stand it must still cover the gap to the reach at its speed and wind up.
+		# Every body that stood kept off (not only seat 1: on some seeds another of the four lies nearer the player).
+		for j in (r["stands"] as Array).size():
+			var sj: Array = r["stands"][j]
+			if float(sj[0]) >= 0.0:
+				t.check(float(sj[1]) >= minf(SR.CRAWL_KEEP, float(sj[2])) - SR.RUN_SPEED * DT - 1e-6, "keep-%d: seat %d stood %.2f m off (start %.2f)" % [i, j + 1, float(sj[1]), float(sj[2])])
+		if float(r["caught"]) < 0.0:
+			continue
+		t.check(int(r["by"]) >= 0, "keep-%d: the catcher is known" % i)
+		if int(r["by"]) < 0:
+			continue
+		var gap := float(r["by_gap"])
+		# From the catcher's stand it must still cover the gap to the reach at its speed and wind up.
 		# The pursuit to the lunge's range, the lunge to the reach, then the wind-up.
 		var least := maxf(0.0, gap - SR.LUNGE_RANGE) / 1.5 + (minf(gap, SR.LUNGE_RANGE) - SR.REACH) / SR.LUNGE_SPEED + SR.WIND - DT
-		t.check(float(r["caught"]) < 0.0 or float(r["caught"]) - float(r["stood"]) >= least, "keep-%d: caught %.2f s after standing (least %.2f)" % [i, float(r["caught"]) - float(r["stood"]), least])
+		t.check(float(r["caught"]) - float(r["by_stood"]) >= least, "keep-%d: caught by seat %d %.2f s after it stood %.2f m off (least %.2f)" % [i, int(r["by"]) + 1, float(r["caught"]) - float(r["by_stood"]), gap, least])
 	var game := standing_still("keep-game", 10.0, {}, 30.0)
 	t.note("game numbers, a player standing still 10 m off: stood %.2f m away at %.2f s, caught %.2f s later" % [float(game["gap_at_stand"]), float(game["stood"]), float(game["caught"]) - float(game["stood"])])
 
@@ -383,13 +428,171 @@ func test_noise_draws(t: T) -> void:
 		var r := _corner_case("draw-0", {&"reactor.noise_draws": float(n), &"noise.emote": 60.0}, true)
 		t.eq(int(r["drawn"]), n, "noise_draws %d: drawn by the whistle" % n)
 
-## The corner case: the power out, the four standing (crawl 0), p0 creeping still in the landing's corner for 40 s;
-## with `shout`, p0 whistles once at 4 s (all four awake). Returns whether any body hunted or caught p0, and how many sought the
-## whistle on its tick.
-static func _corner_case(seed: String, given: Dictionary, shout: bool) -> Dictionary:
+# ---------------------------------------------------------------------------------------------
+# RX3, the seek fix (net/host_rules.gd reactor_seek, sim/station_floor.gd seek_fix).
+
+## The senses-on runs that stalled before the fix (rx2-1000..1023, a sensible four: the power never restored in
+## LIMIT, with two to four of the four running on the spot at the crawl's mouth, seeking a goal inside it).
+const STALLED: Array[String] = ["rx2-1003", "rx2-1004", "rx2-1005", "rx2-1009", "rx2-1011", "rx2-1013", "rx2-1016",
+	"rx2-1017", "rx2-1021", "rx2-1023"]
+## The longest a body may stand in a seek without moving with the fix: the seek's time, plus the flinch at the
+## lights (it holds still, its seek paused), plus a margin.
+const SEEK_STILL_MOST := SR.SEEK_TIME + SR.FLINCH + 1.0
+
+## One bot crew run (as measure, the sensible bots) for `seconds`: the longest any of the four stood in "seek"
+## without moving ("still", and where: "at"), and a digest of the whole run (every tick: the players, the four,
+## the events) to compare runs by.
+static func seek_watch(seed: String, size: int, seconds: float, seek: bool) -> Dictionary:
+	var r := crew_rules(seek)
+	var s := r.prepare(Run.create_run(seed, _ids(size), r.deck, true, true, true))
+	var mind := Bot.station_mind(&"sensible")
+	var still := [0.0, 0.0, 0.0, 0.0]
+	var worst := 0.0
+	var at := ""
+	var ctx := HashingContext.new()
+	ctx.start(HashingContext.HASH_MD5)
+	for k in int(seconds / DT):
+		var before: Array = []
+		var st0: SR.StationFloor = s.station
+		if st0 != null:
+			for b in st0.bodies:
+				before.append(Vector2(b.body.x, b.body.z))
+		var inputs := Bot.station_inputs(s, mind, DT)
+		var step := r.step(s, inputs, DT)
+		s = step.state
+		var line := "%d" % k
+		for p in s.players:
+			line += "|%s %.3f %.3f %s" % [p.id, p.body.x, p.body.z, p.status]
+		var st: SR.StationFloor = s.station
+		if st != null:
+			for j in st.bodies.size():
+				var b := st.bodies[j]
+				line += "|%s %s %.3f %.3f" % [b.phase, b.mode, b.body.x, b.body.z]
+				var moved := j >= before.size() or Vector2(b.body.x, b.body.z).distance_to(before[j]) > 1e-4
+				if st.power != SR.Power.NORMAL and b.mode == "seek" and b.phase != "zombie_crawl" and b.phase != "still" and not moved:
+					still[j] = float(still[j]) + DT
+					if float(still[j]) > worst:
+						worst = float(still[j])
+						at = "seat %d at %.1f s (%.1f, %.1f) seeking (%.1f, %.1f)" % [b.seat, s.t, b.body.x, b.body.z, b.goal.x, b.goal.y]
+				else:
+					still[j] = 0.0
+		for e in step.events:
+			line += "|%s %.3f" % [str(e["type"]), float(e.get("t", 0.0))]
+		ctx.update(line.to_utf8_buffer())
+	return {"still": worst, "at": at, "digest": ctx.finish().hex_encode(), "t": s.t}
+
+## With the fix, on the runs that stalled, no body stands in a seek without moving for longer than its seek's time
+## (and the flinch) plus a margin. Without it, the first of them shows the old fault (a body still for minutes).
+func test_seek_never_freezes(t: T) -> void:
+	var seeds: Array[String] = STALLED.slice(0, 1) if t.quick else STALLED
+	var worst := 0.0
+	for seed in seeds:
+		var on := seek_watch(seed, 4, LIMIT, true)
+		worst = maxf(worst, float(on["still"]))
+		t.check(float(on["still"]) <= SEEK_STILL_MOST, "%s: a body stood %.2f s in a seek (most %.2f): %s" % [seed, float(on["still"]), SEEK_STILL_MOST, on["at"]])
+	var off := seek_watch(STALLED[0], 4, 200.0, false)
+	t.check(float(off["still"]) > 60.0, "%s without the fix: the old freeze (%.2f s still: %s)" % [STALLED[0], float(off["still"]), off["at"]])
+	t.note("the longest still seek with the fix: %.2f s over %d stalled runs; without it %.1f s on %s" % [worst, seeds.size(), float(off["still"]), STALLED[0]])
+
+## A whistle from inside the crawl, the four standing (crawl 0, all awake): with the fix the ones it draws go to the
+## nearest place they can walk to (the crawl's mouth, never into it), and then search; none freezes. Returns how
+## many it drew, how many of those then searched, how many reached their goal, whether any entered the crawl or
+## had a goal in it, and the longest still seek.
+static func crawl_whistle(seed: String, seek: bool) -> Dictionary:
 	const Station = preload("res://sim/station.gd")
 	var plan := Station.generate_station(seed, 7)
 	var st := SR.make(plan)
+	st.seek_fix = seek
+	var tuning := Settings.make({&"reactor.crawl_time": 0.0, &"reactor.wake_alone": 4.0, &"noise.emote": 60.0, &"reactor.noise_draws": 4.0})
+	st.power = SR.Power.EMERGENCY
+	st.hold_left = 0.0
+	var crawl: Array = plan.station["crawl"]
+	var cr: Vector2i = crawl[crawl.size() / 2]
+	var me := Move.Body.make(Station.wc(cr.x), Station.wc(cr.y), 0, 0.0)
+	var out := {"drawn": 0, "searched": 0, "arrived": 0, "entered": false, "goal_in_crawl": false, "still": 0.0, "seeking_at_end": 0}
+	var drawn := [false, false, false, false]
+	var goal := [Vector2.INF, Vector2.INF, Vector2.INF, Vector2.INF]
+	var searched := [false, false, false, false]
+	var arrived := [false, false, false, false]
+	var still := [0.0, 0.0, 0.0, 0.0]
+	var tt := 0.0
+	var events: Array[Dictionary] = []
+	while tt < 40.0:
+		tt += DT
+		var c := SR.Crew.make("p0", me, &"ok", &"creep", false, true)
+		c.shout = absf(tt - 4.0) < DT / 2.0
+		var before: Array = []
+		for b in st.bodies:
+			before.append(Vector2(b.body.x, b.body.z))
+		SR.step(st, [c] as Array[SR.Crew], tt, DT, tuning, events)
+		for j in st.bodies.size():
+			var b := st.bodies[j]
+			var here := Vector2(b.body.x, b.body.z)
+			var cell := Station.cell_of(b.body.x, b.body.z)
+			if Station.creep_only(plan, cell.x, cell.y):
+				out["entered"] = true
+			if c.shout and b.mode == "seek":
+				drawn[j] = true
+				goal[j] = b.goal
+				var gc := Station.cell_of(b.goal.x, b.goal.y)
+				if Station.creep_only(plan, gc.x, gc.y):
+					out["goal_in_crawl"] = true
+			if bool(drawn[j]) and not bool(searched[j]):
+				if here.distance_to(goal[j]) <= SR.ARRIVE + 1e-6:
+					arrived[j] = true
+				if b.mode == "search":
+					searched[j] = true
+			if b.mode == "seek" and here.distance_to(before[j]) <= 1e-4:
+				still[j] = float(still[j]) + DT
+				out["still"] = maxf(float(out["still"]), float(still[j]))
+			else:
+				still[j] = 0.0
+	for j in 4:
+		out["drawn"] = int(out["drawn"]) + (1 if drawn[j] else 0)
+		out["searched"] = int(out["searched"]) + (1 if drawn[j] and searched[j] else 0)
+		out["arrived"] = int(out["arrived"]) + (1 if drawn[j] and arrived[j] else 0)
+		out["seeking_at_end"] = int(out["seeking_at_end"]) + (1 if st.bodies[j].mode == "seek" else 0)
+	return out
+
+func test_crawl_whistle(t: T) -> void:
+	for i in (2 if t.quick else 6):
+		var seed := "whistle-%d" % i
+		var on := crawl_whistle(seed, true)
+		t.check(int(on["drawn"]) > 0, "%s: the whistle draws some of the four (%s)" % [seed, on])
+		t.check(not bool(on["goal_in_crawl"]) and not bool(on["entered"]), "%s: drawn to the crawl's mouth, never into it (%s)" % [seed, on])
+		t.check(int(on["arrived"]) > 0, "%s: a drawn body reaches the mouth (%s)" % [seed, on])
+		t.check(int(on["searched"]) == int(on["drawn"]), "%s: every drawn body then searches (%s)" % [seed, on])
+		t.check(float(on["still"]) <= SR.SEEK_TIME + 1.0, "%s: none stands in a seek longer than its time (%s)" % [seed, on])
+		if i == 0:
+			var off := crawl_whistle(seed, false)
+			t.check(not bool(off["entered"]), "%s without the fix: none enters the crawl either (%s)" % [seed, off])
+			t.note("%s: with the fix %s; without %s" % [seed, on, off])
+
+## Flag off, nothing changes: these bot runs (no seek fix) give the digests recorded from the rules before RX3's
+## seek fix (aab3fd7, the same harness); with the fix the stalled run differs (the flag reaches the rules).
+const OFF_DIGESTS := [
+	["rx2-1003", 4, 200.0, "a4d2d7db59a541c9ad064be3737fd3c9"],
+	["rx2-1000", 2, 200.0, "c46caa207635210f4104528d61c23909"],
+	["rx2-1001", 1, 150.0, "76c3290247f067f5e9fe278ae62b0925"],
+]
+
+func test_seek_off_unchanged(t: T) -> void:
+	for row: Array in (OFF_DIGESTS.slice(0, 1) if t.quick else OFF_DIGESTS):
+		var off := seek_watch(str(row[0]), int(row[1]), float(row[2]), false)
+		t.eq(str(off["digest"]), str(row[3]), "%s, %d players, %.0f s, no seek fix: as before" % [row[0], int(row[1]), float(row[2])])
+	var on := seek_watch(str(OFF_DIGESTS[0][0]), int(OFF_DIGESTS[0][1]), float(OFF_DIGESTS[0][2]), true)
+	t.check(str(on["digest"]) != str(OFF_DIGESTS[0][3]), "%s with the seek fix differs" % OFF_DIGESTS[0][0])
+	var r := HostRules.new(true, 7)
+	t.check(not r.reactor_seek, "HostRules: the seek fix is off by default")
+
+## The corner case: the power out, the four standing (crawl 0), p0 creeping still in the landing's corner for 40 s;
+## with `shout`, p0 whistles once at 4 s (all four awake). Returns whether any body hunted or caught p0, and how many sought the
+## whistle on its tick.
+static func _corner_case(seed: String, given: Dictionary, shout: bool, seek := true) -> Dictionary:
+	const Station = preload("res://sim/station.gd")
+	var plan := Station.generate_station(seed, 7)
+	var st := SR.make(plan)
+	st.seek_fix = seek
 	var g := given.duplicate()
 	g[&"reactor.crawl_time"] = 0.0
 	if not g.has(&"reactor.wake_alone"):
@@ -446,7 +649,7 @@ func test_crew_bands(t: T) -> void:
 	t.note("careless 4: %d of %d finished, %.2f lost a run" % [int(careless["finished"]), seeds, float(careless["lost"]) / seeds])
 
 ## A cell of the table: `seeds` runs; finish rate, tape out, players lost, cut to restore, chased, catches.
-static func cell(size: int, skill: StringName, seeds: int, given: Dictionary = {}, first := 0) -> Dictionary:
+static func cell(size: int, skill: StringName, seeds: int, given: Dictionary = {}, first := 0, seek := true) -> Dictionary:
 	var fin := 0
 	var tape := 0
 	var lost := 0
@@ -463,7 +666,7 @@ static func cell(size: int, skill: StringName, seeds: int, given: Dictionary = {
 	var left_fin := 0
 	var calm := 0
 	for i in range(first, first + seeds):
-		var res := measure("rx2-%d" % i, size, skill, given)
+		var res := measure("rx2-%d" % i, size, skill, given, seek)
 		if bool(res["finished"]):
 			fin += 1
 		if bool(res["tape"]):

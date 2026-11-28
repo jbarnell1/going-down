@@ -1348,6 +1348,9 @@ class RunState:
 	var voice := false
 	## WH1, the Ward's real homes (with_ward_homes; net/host_rules.gd ward_homes). Off: today's houses.
 	var ward_homes := false
+	## RX3, the Reactor's seek fix (with_reactor_seek; net/host_rules.gd reactor_seek; sim/station_floor.gd seek_fix).
+	## Off: today's seek, which never ends on a goal inside the crawl.
+	var reactor_seek := false
 
 	func copy() -> RunState:
 		var s := RunState.new()
@@ -1358,6 +1361,7 @@ class RunState:
 		s.economy_fix = economy_fix
 		s.voice = voice
 		s.ward_homes = ward_homes
+		s.reactor_seek = reactor_seek
 		s.pressures = pressures
 		s.pressure_heals_key = pressure_heals_key
 		s.pressure_heals_used = pressure_heals_used
@@ -1833,6 +1837,13 @@ static func with_economy_fix(s0: RunState) -> RunState:
 	s.economy_fix = true
 	if s.quota and not s.orientation and s.floor_needed > 0 and not at_home(s):
 		s.floor_needed = 0 if s.station != null else floor_quota(s.depth, quota_crew(s.players), s.quota_tuning, pressure_quota_mult(s, s.quota_tuning), true)
+	return s
+
+## Turns RX3's seek fix on: the Reactor's four go only where they can walk and give up a seek after
+## reactor.seek_time (sim/station_floor.gd seek_fix; net/host_rules.gd reactor_seek).
+static func with_reactor_seek(s0: RunState) -> RunState:
+	var s := s0.copy()
+	s.reactor_seek = true
 	return s
 
 ## Turns WH1 on: the Hanging Ward's houses are built from the homes' plans (net/host_rules.gd ward_homes).
@@ -3272,6 +3283,8 @@ static func _sync_station(s: RunState) -> void:
 ## One tick of the station's rules. Updates `s` (station) and `players` (statuses), appends the events.
 static func _step_station(s: RunState, players: Array[RunPlayer], input_of: Dictionary, t: float, dt: float, events: Array[Dictionary]) -> void:
 	var st := (s.station as StationRules.StationFloor).copy()
+	# RX3 seek fix: the run's flag, read by the four's senses (off: today's seek).
+	st.seek_fix = s.reactor_seek
 	var crew: Array[StationRules.Crew] = []
 	for p in players:
 		var inp: PlayerInput = input_of.get(p.id)
