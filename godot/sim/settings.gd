@@ -430,16 +430,49 @@ const ROWS: Array = [
 	# DANGER badge_doors rows
 	# END badge_doors rows
 	# DANGER failing_lights rows
+	[&"danger.failing_lights.lit", &"danger_failing_lights", "LIT BEAT", "how long a failing run stays lit each time round, its warning included", "s", 9.0, 4.0, 30.0, 0.5, &"next", &"DG", F],
+	[&"danger.failing_lights.warn", &"danger_failing_lights", "WIND-DOWN", "how long the ballast is heard winding down before the run goes dark", "s", 1.5, 1.0, 3.0, 0.1, &"next", &"DG", F],
+	[&"danger.failing_lights.dark", &"danger_failing_lights", "DARK GAP", "how long a failing run stays dark", "s", 2.5, 1.0, 5.0, 0.1, &"next", &"DG", F],
+	[&"danger.failing_lights.length", &"danger_failing_lights", "RUN LENGTH", "how many cells of corridor a failing run covers", "cells", 5.0, 3.0, 8.0, 1.0, &"floor", &"DG", F],
+	[&"danger.failing_lights.count", &"danger_failing_lights", "RUNS PER FLOOR", "how many failing runs a Clinic floor gets", "runs", 2.0, 0.0, 4.0, 1.0, &"floor", &"DG", F],
+	[&"danger.failing_lights.first_count", &"danger_failing_lights", "RUNS ON THE FIRST FLOOR", "how many failing runs the day's first floor gets", "runs", 1.0, 0.0, 4.0, 1.0, &"floor", &"DG", F],
+	[&"danger.failing_lights.apart", &"danger_failing_lights", "RUNS APART", "the least walk between two failing runs", "m", 16.0, 8.0, 40.0, 1.0, &"floor", &"DG", F],
+	[&"danger.failing_lights.from", &"danger_failing_lights", "HOW FAR IN", "how far from the lift a failing run starts: in 100 of the walk to the far end", "in 100", 60.0, 30.0, 90.0, 5.0, &"floor", &"DG", F],
 	# END failing_lights rows
 	# DANGER grabber rows
 	# END grabber rows
 	# DANGER gusts rows
 	# END gusts rows
 	# DANGER roost rows
+	[&"danger.roost.count", &"danger_roost", "ROOSTS A FLOOR", "trees with a roost of birds on an Arboretum floor (fewer when fewer fit)", "", 4.0, 0.0, 8.0, 1.0, &"floor", &"DG", W],
+	[&"danger.roost.trigger", &"danger_roost", "SETS IT OFF WITHIN", "walking or sprinting this near the tree sends the roost up (the pale ground under it)", "m", 2.5, 1.5, 4.0, 0.1, &"floor", &"DG", F],
+	[&"danger.roost.stir", &"danger_roost", "RESTLESS WITHIN", "the birds turn restless when someone walks this near (never less than 5.6 m past the trigger)", "m", 8.1, 5.0, 12.0, 0.1, &"now", &"DG", F],
+	[&"danger.roost.walk_floor", &"danger_roost", "SLOWER THAN THIS PASSES", "a walker moving slower than this under the tree does not send it up (a creep never does)", "m/s", 1.7, 1.3, 2.5, 0.1, &"now", &"DG", F],
+	[&"danger.roost.loud", &"danger_roost", "NOISE REACH", "how far the roost going up is heard (by the Groundskeeper too)", "m", 22.0, 12.0, 40.0, 1.0, &"now", &"DG", F],
+	[&"danger.roost.cone", &"danger_roost", "A PINECONE WITHIN", "a pinecone landing this near the tree sends the roost up", "m", 2.5, 1.0, 4.0, 0.1, &"floor", &"DG", F],
+	[&"danger.roost.burst", &"danger_roost", "GOING UP LASTS", "the birds going up, before they are away", "s", 3.0, 1.0, 6.0, 0.5, &"now", &"DG", F],
+	[&"danger.roost.away", &"danger_roost", "AWAY FOR", "how long the tree stays empty after the birds go up", "s", 60.0, 20.0, 180.0, 5.0, &"now", &"DG", F],
+	[&"danger.roost.settle", &"danger_roost", "SETTLING BACK TAKES", "the birds dropping back in; then the roost is live again", "s", 3.0, 1.0, 6.0, 0.5, &"now", &"DG", F],
+	[&"danger.roost.calm", &"danger_roost", "CALMS AFTER", "restless birds settle this long after nobody walks near", "s", 1.5, 0.5, 5.0, 0.5, &"now", &"DG", F],
+	[&"danger.roost.lift_clear", &"danger_roost", "NO ROOST NEARER THE LIFT THAN", "steps' walk from the landing", "cells", 6.0, 3.0, 10.0, 1.0, &"floor", &"DG", W],
+	[&"danger.roost.spacing", &"danger_roost", "ROOSTS APART BY", "least cells between two roosts", "cells", 6.0, 3.0, 10.0, 1.0, &"floor", &"DG", W],
 	# END roost rows
 	# DANGER snare rows
 	# END snare rows
 	# DANGER steam rows
+	[&"danger.steam.build", &"danger_steam", "THE KNOCKS COME BEFORE", "seconds of knocks, rising hiss and the amber lamp before the steam vents", "s", 1.5, 1.0, 3.0, 0.1, &"now", &"DG", F],
+	[&"danger.steam.jet", &"danger_steam", "STEAM VENTS FOR", "seconds the jet crosses the way", "s", 2.0, 1.0, 4.0, 0.1, &"now", &"DG", F],
+	[&"danger.steam.rest_lit", &"danger_steam", "QUIET WITH THE POWER ON", "seconds between jets while the station has power", "s", 6.5, 3.0, 20.0, 0.5, &"now", &"DG", F],
+	[&"danger.steam.rest_dark", &"danger_steam", "QUIET IN THE CUT", "seconds between jets in the emergency light", "s", 10.5, 3.0, 30.0, 0.5, &"now", &"DG", F],
+	[&"danger.steam.purge", &"danger_steam", "PURGE VENTS FOR", "seconds every jet vents together at the cut and the restore", "s", 2.5, 0.0, 5.0, 0.1, &"now", &"DG", F],
+	[&"danger.steam.purge_cut", &"danger_steam", "PURGE AT THE CUT", "1: every jet purges when the power cuts; 0: no purge", "", 1.0, 0.0, 1.0, 1.0, &"now", &"DG", F],
+	[&"danger.steam.purge_restore", &"danger_steam", "PURGE AT THE RESTORE", "1: every jet purges when the power comes back; 0: no purge", "", 1.0, 0.0, 1.0, 1.0, &"now", &"DG", F],
+	[&"danger.steam.grace", &"danger_steam", "SCALDS AFTER IT SHOWS BY", "seconds into a jet before it scalds (covers a screen drawing it late)", "s", 0.25, 0.0, 0.5, 0.05, &"now", &"DG", F],
+	[&"danger.steam.cry", &"danger_steam", "A SCALDED CRY CARRIES", "how far the four hear the cry of someone scalded", "m", 10.0, 0.0, 18.0, 1.0, &"now", &"DG", F],
+	[&"danger.steam.blind", &"danger_steam", "SCALD BLINDS FOR", "seconds a scalded player is blind", "s", 1.0, 0.3, 2.0, 0.1, &"now", &"DG", F],
+	[&"danger.steam.flinch_hold", &"danger_steam", "SCALD HOLDS YOU FOR", "seconds a scalded player is held where the steam threw them (always under the four's catch wind-up)", "s", 0.4, 0.0, 0.4, 0.05, &"now", &"DG", F],
+	[&"danger.steam.hall", &"danger_steam", "JETS ACROSS THE HALL", "how many hall rows carry a jet", "", 1.0, 0.0, 2.0, 1.0, &"floor", &"DG", W],
+	[&"danger.steam.crawl", &"danger_steam", "JETS IN THE CRAWL", "how many crawl cells carry a jet", "", 1.0, 0.0, 2.0, 1.0, &"floor", &"DG", W],
 	# END steam rows
 	# DANGER test_tile rows
 	[&"danger.test_tile.delay", &"danger_test_tile", "NOISE AFTER THE CLICK", "from the click to the noise", "s", 1.0, 0.5, 3.0, 0.1, &"now", &"DG", F],
@@ -528,16 +561,20 @@ const WIRED_IDS: Array[StringName] = [
 	# DANGER badge_doors wired
 	# END badge_doors wired
 	# DANGER failing_lights wired
+	&"danger.failing_lights.lit", &"danger.failing_lights.warn", &"danger.failing_lights.dark", &"danger.failing_lights.length",
+	&"danger.failing_lights.count", &"danger.failing_lights.first_count", &"danger.failing_lights.apart", &"danger.failing_lights.from",
 	# END failing_lights wired
 	# DANGER grabber wired
 	# END grabber wired
 	# DANGER gusts wired
 	# END gusts wired
 	# DANGER roost wired
+	&"danger.roost.count", &"danger.roost.trigger", &"danger.roost.stir", &"danger.roost.walk_floor", &"danger.roost.loud", &"danger.roost.cone", &"danger.roost.burst", &"danger.roost.away", &"danger.roost.settle", &"danger.roost.calm", &"danger.roost.lift_clear", &"danger.roost.spacing",
 	# END roost wired
 	# DANGER snare wired
 	# END snare wired
 	# DANGER steam wired
+	&"danger.steam.build", &"danger.steam.jet", &"danger.steam.rest_lit", &"danger.steam.rest_dark", &"danger.steam.purge", &"danger.steam.purge_cut", &"danger.steam.purge_restore", &"danger.steam.grace", &"danger.steam.cry", &"danger.steam.blind", &"danger.steam.flinch_hold", &"danger.steam.hall", &"danger.steam.crawl",
 	# END steam wired
 	# DANGER test_tile wired
 	&"danger.test_tile.delay", &"danger.test_tile.loud",

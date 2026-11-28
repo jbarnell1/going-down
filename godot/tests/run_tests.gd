@@ -135,16 +135,19 @@ const FILES: Array[String] = [
 	# DANGER badge_doors
 	# END badge_doors
 	# DANGER failing_lights
+	"test_danger_failing_lights",
 	# END failing_lights
 	# DANGER grabber
 	# END grabber
 	# DANGER gusts
 	# END gusts
 	# DANGER roost
+	"test_danger_roost",
 	# END roost
 	# DANGER snare
 	# END snare
 	# DANGER steam
+	"test_danger_steam",
 	# END steam
 	# DANGER test_tile
 	"test_danger_test_tile",
