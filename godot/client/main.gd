@@ -92,6 +92,9 @@ const HideView = preload("res://client/hide_view.gd")
 const QuotaView = preload("res://client/quota_view.gd")
 const DownView = preload("res://client/down_view.gd")
 const CrewWatch = preload("res://client/crew_watch.gd")
+## CAM1 (North Star F3): out, the building's security cameras (sim/cameras.gd where they hang, client/cam_feed.gd).
+const CamFeed = preload("res://client/cam_feed.gd")
+const Cameras = preload("res://sim/cameras.gd")
 ## LS1 (North Star B7): the last one standing's words and switches, and the wipe's scene.
 const LastStandView = preload("res://client/last_stand_view.gd")
 const WipeScene = preload("res://client/wipe_scene.gd")
@@ -246,6 +249,10 @@ const DangersView = preload("res://client/dangers/dangers_view.gd")
 var dangers_view: DangersView = null
 ## DV1: out, the camera looks through a crewmate's eyes (client/crew_watch.gd).
 var crew_watch := CrewWatch.new()
+var cam_feed := CamFeed.new()
+## CAM1: this screen's ms when the feed last drew a frame (-1: no feed up), and the camera it drew.
+var _feed_frame_ms := -1
+var _feed_cam := -1
 ## LS1: the wipe's scene on this screen (client/wipe_scene.gd; made in the world when a wipe block plays), the host time
 ## of the wipe it plays, and whether it is on this frame.
 var wipe_scene: WipeScene = null
@@ -1393,6 +1400,7 @@ func _clear_world() -> void:
 	hide_view.reset()
 	down_view.reset()
 	crew_watch.clear()
+	cam_feed.reset()
 	_ward_caught_ms = -1
 	_stop_caught_scene()
 	search_view.reset()
@@ -1430,6 +1438,7 @@ func _on_new_run() -> void:
 	quota_view.reset()
 	down_view.reset()
 	crew_watch.clear()
+	cam_feed.reset()
 	_ward_caught_ms = -1
 	search_view.reset()
 	note_reader.close()
@@ -1459,6 +1468,11 @@ func _build_floor(plan: Dictionary) -> void:
 	level.props_on = props_on
 	world.add_child(level)
 	level.build(plan, str(snap.get("seed", seed)), link.plan, link.hides)
+	# CAM1: the floor's security cameras, drawn for everyone (under the level: hidden where it is, as on the Ward).
+	var cams: Array[Dictionary] = []
+	if link.plan != null and str(link.plan.place) == str(plan.get("place", "")):
+		cams = Cameras.for_plan(link.plan)
+	cam_feed.use_plan(level, cams, int(plan["depth"]))
 	if level.has_meta(&"station"):
 		level.get_meta(&"station").call(&"follow", link, sfx)
 	marks_view = null
@@ -1608,8 +1622,16 @@ func _input(event: InputEvent) -> void:
 	if _card_input(event):
 		return
 	if crew_watch.watching and not wheel_open and watch_next_input(event, Input.mouse_mode == Input.MOUSE_MODE_CAPTURED):
-		# DV1: out and watching, LEFT CLICK or E is the next crewmate (and nothing else).
-		crew_watch.next()
+		# DV1: out and watching, LEFT CLICK or E is the next crewmate (and nothing else); CAM1: the next feed.
+		if cam_feed.active():
+			cam_feed.step(1)
+		else:
+			crew_watch.next()
+		get_viewport().set_input_as_handled()
+		return
+	if cam_feed.active() and not wheel_open and watch_back_input(event, Input.mouse_mode == Input.MOUSE_MODE_CAPTURED):
+		# CAM1: Q or RIGHT CLICK, the feed before.
+		cam_feed.step(-1)
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton:
@@ -1802,6 +1824,16 @@ func _deal_frame(s: Dictionary) -> void:
 
 ## DV1: whether an input is the watching view's "next crewmate": E pressed, or a left click with the mouse already
 ## held by the game (the first click, with the mouse free, still only takes the mouse).
+## CAM1: Q or RIGHT CLICK (captured) while watching the cameras: the feed before.
+static func watch_back_input(event: InputEvent, captured: bool) -> bool:
+	if event is InputEventKey:
+		var k := event as InputEventKey
+		return k.pressed and not k.echo and k.physical_keycode == KEY_Q
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		return mb.pressed and mb.button_index == MOUSE_BUTTON_RIGHT and captured
+	return false
+
 static func watch_next_input(event: InputEvent, captured: bool) -> bool:
 	if event is InputEventKey:
 		var k := event as InputEventKey
@@ -2862,8 +2894,35 @@ func _update_watch(s: Dictionary, held: bool) -> void:
 		_ward_caught_ms = -1
 	var words: Array = LEFT_OUT_LINES if _left_out(s) else ([] if ward_held.has(me) else DownView.OUT_LINES)
 	# LS1: a spotlight locks the view on the last one up.
-	crew_watch.update(s, me, link.names(), watch_allowed(s, held, _noise_on(), hud.end_lines.is_empty()), words, ward_out, ward_held, LastStandView.lock_for(s, me))
+	var allowed := watch_allowed(s, held, _noise_on(), hud.end_lines.is_empty())
+	var lock := LastStandView.lock_for(s, me)
+	# CAM1: out, the building's security cameras (client/cam_feed.gd); a crewmate's eyes are one more feed.
+	_feed_cameras()
+	var out_now := allowed and not crew_watch.deferred and not crew_watch.asked and (ward_out or CrewWatch.is_out(s))
+	cam_feed.update(out_now, s, me, lock, _now(), _cam_shows)
+	if cam_feed.eyes_id != "":
+		crew_watch.choose(cam_feed.eyes_id)
+	crew_watch.update(s, me, link.names(), allowed, words, ward_out, ward_held, lock)
+	if cam_feed.on_cam:
+		crew_watch.show_camera(cam_feed.eye, cam_feed.yaw, cam_feed.pitch, cam_feed.caption, int(cam_feed.cams[cam_feed.index]["n"]), words, cam_feed.locked)
 	_apply_watch()
+
+## CAM1: the Hanging Ward played here has its own cameras (sim/cameras.gd for_ward, from its walk model); elsewhere the
+## floor plan's.
+func _feed_cameras() -> void:
+	var c: Variant = link.client() if link != null else null
+	if _ward_floor != null and is_instance_valid(_ward_floor) and c != null and ward_native_on(c.latest):
+		if cam_feed.ward_seed() != _ward_floor.seed_value:
+			cam_feed.use_ward(_ward_floor, Cameras.for_ward(_ward_floor.model, _ward_floor.seed_value), _ward_floor.seed_value)
+	elif cam_feed.ward_seed() >= 0:
+		cam_feed.leave_ward()
+
+## CAM1: whether camera `c` shows feet `at` on `lv`: past the plan's walls (the rules' line of sight), or on the Ward past
+## its walls as the screen has them.
+func _cam_shows(c: Dictionary, at: Vector3, lv: int) -> bool:
+	if cam_feed.ward_seed() >= 0 and _ward_floor != null and is_instance_valid(_ward_floor):
+		return Cameras.shows(null, c, at, lv, Callable(_ward_floor, &"sees"))
+	return link != null and link.plan != null and Cameras.shows(link.plan, c, at, lv)
 
 ## DV1, for other code (WC1's web cocoon on the Ward): look through a crewmate's eyes now, whatever the run's status;
 ## back to your own view; or not yet (your floor's own camera sequence plays). See client/crew_watch.gd.
@@ -2887,6 +2946,25 @@ func _apply_watch() -> void:
 	if crew_watch.watching:
 		cam.position = crew_watch.eye
 		cam.rotation = Vector3(crew_watch.pitch, crew_watch.yaw, 0.0)
+	# CAM1: a security camera's picture: a little wider, coarse, grey and grainy (client/tape.gdshader cctv).
+	var on_cam := crew_watch.watching and crew_watch.cam >= 0
+	cam.fov = CamFeed.FOV if on_cam else VFOV
+	if tape_mat != null:
+		tape_mat.set_shader_parameter("cctv", 1.0 if on_cam and not cam_feed.raw else 0.0)
+	# The feed is the one picture, drawn smaller and slower (CamFeed.SCALE, CamFeed.RATE_MS): a camera's own frame rate.
+	if sub != null:
+		if on_cam:
+			sub.scaling_3d_scale = CamFeed.SCALE
+			var now := _now()
+			if now - _feed_frame_ms >= CamFeed.RATE_MS or _feed_frame_ms < 0 or crew_watch.cam != _feed_cam:
+				_feed_frame_ms = now
+				_feed_cam = crew_watch.cam
+				sub.render_target_update_mode = SubViewport.UPDATE_ONCE
+		elif _feed_frame_ms >= 0:
+			_feed_frame_ms = -1
+			_feed_cam = -1
+			sub.scaling_3d_scale = 1.0
+			sub.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 
 ## LS1: the caught player's own catch scene keeps the first moments after a catch (another piece's); the wipe's scene
 ## waits this long after this screen's catch before it takes the picture.
@@ -3446,7 +3524,8 @@ func _name_tags(s: Dictionary, dark: bool) -> void:
 			if mics is Array and not (mics as Array).has(str(o.get("id", ""))):
 				tag["text"] = str(tag["text"]) + " - NO MIC"
 			tags.append(tag)
-	hud.tags = tags
+	# CAM1: a camera's feed names nobody (North Star F3: "too grainy to read a sign or a face").
+	hud.tags = [] if crew_watch.watching and crew_watch.cam >= 0 else tags
 
 ## VC4: the noise meter's steps (client/own_noise.gd) from the host's row for this player, on a floor of a run (not
 ## the prison, not riding): the gait's loudness on the ground under them, Soft Shoes as the rules apply them.
@@ -4506,6 +4585,17 @@ func _command(c: String) -> String:
 			return JSON.stringify(mine)
 		"wardhouse", "wardbring", "wardlook", "wardhide", "warddoor", "wardroom":
 			return _ward_test_command(p)
+		"cams":
+			# CAM1: cams [next | back | <index>]: the camera feeds (client/cam_feed.gd), stepped or set; what they show.
+			if p.size() > 1:
+				if p[1] == "raw":
+					# Tests and pictures: the feed without its grain (raw 1) or with it (raw 0).
+					cam_feed.raw = p.size() > 2 and p[2] == "1"
+				elif p[1] == "next" or p[1] == "back":
+					cam_feed.step(1 if p[1] == "next" else -1)
+				else:
+					cam_feed.jump(int(p[1]), _now())
+			return JSON.stringify(cam_feed.describe())
 		_:
 			return "unknown command"
 	return "ok"
@@ -4960,6 +5050,7 @@ func _test_state() -> Dictionary:
 			"monitorAt": [lift.day_point().x, lift.day_point().y, lift.day_point().z], "subtitle": announcer.shown(link.client().quota() if link.client() != null else null),
 			"said": announcer.history.filter(func(h: Dictionary) -> bool: return str(h.moment) in ["bank_refused", "day_met", "ride", "hint_day", "hint_bank_locked", "hint_floor_not_day", "hint_stakes"])},
 		"watch": crew_watch.describe(),
+		"cams": cam_feed.describe(),
 		"lastStand": {"host": s.get("stand"), "wipe": s.get("wipe"), "standee": s.get("standee"), "line": hud.stand_line, "self": hud.stand_self,
 			"scene": wipe_scene.describe() if wipe_on and wipe_scene != null else {}, "sceneOn": wipe_on, "letterbox": hud.letterbox,
 			"music": music.describe() if music != null else {}, "standeeShown": _standee_shown()},

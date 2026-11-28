@@ -20,8 +20,8 @@
 // Ann's out screen, the red spot from Bob's view, and the resident bent over her from a step away. Prints `N passed, M failed`; exit code 1 on any failure.
 //   node godot/tools/play_down.mjs [--port=4466] [--seed=down-1] [--headless=1]
 //   --headless=1  a dry run with no windows (no pictures)
-// Ports 4460-4479 only: the server on port, the windows' test channels on port+1 and port+2, the server's
-// control line on port+3. Start .local/guard-mouse.ps1 beside it. Every process it starts is stopped.
+// Ports 4460-4479 (or 7260-7279, CAM1's own block) only: the server on port, the windows' test channels on port+1 and
+// port+2, the server's control line on port+3. Start .local/guard-mouse.ps1 beside it. Every process it starts is stopped.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
@@ -39,7 +39,7 @@ const godot = process.env.GODOT || join(root, 'tools', 'godot', 'Godot_v4.7.2-st
 if (!existsSync(godot)) throw new Error(`no engine at ${godot}: set GODOT`);
 const testPorts = [port + 1, port + 2];
 const ctlPort = port + 3;
-for (const p of [port, ...testPorts, ctlPort]) if (!(p >= 4460 && p <= 4479)) throw new Error(`port ${p} is outside 4460-4479`);
+for (const p of [port, ...testPorts, ctlPort]) if (!((p >= 4460 && p <= 4479) || (p >= 7260 && p <= 7279))) throw new Error(`port ${p} is outside 4460-4479 and 7260-7279`);
 const shots = resolve(project, 'export', 'shots', 'down');
 mkdirSync(shots, { recursive: true });
 const SECRET = 'test-passphrase';
@@ -376,13 +376,21 @@ try {
   check('Bob walks out of reach holding F: the bar empties, the prompt goes', tries.f2 >= 0.15 && tries.away.prompt !== 'HOLD F TO HELP' && (tries.away.healer ?? '') === '',
     `bar ${r2(tries.f2)}, then ${r2(tries.away.dist)} m away: prompt "${tries.away.prompt}", host healer "${tries.away.healer}"`);
   a = await until(A.state, (s) => s.me.status === 'out', (DOWN_S + 2) * 1000, 50);
+  // CAM1 (North Star F3, "A downed player has something to do within seconds"): the first feed is up within 2 s.
+  const outSeen = Date.now();
+  const fed = await until(A.state, (s) => s.watch?.watching === true, 4000, 50);
+  const feedMs = Date.now() - outSeen;
+  check('CAM1: out, Ann\'s first feed is up within 2 s', fed.watch?.watching === true && feedMs <= 2000,
+    `${feedMs} ms; camera ${fed.watch?.cam}, ${fed.cams?.count} cameras on the floor, caption "${fed.watch?.caption}"`);
   await sleep(500);
   a = await A.state();
   check('2. not healed: Ann is out', a.me.status === 'out' && (a.events.out ?? 0) === 1, `status ${a.me.status}, out events ${a.events.out}`);
   check('Ann\'s screen goes dark: OUT, YOU REJOIN WHEN THE CAR NEXT MOVES', (a.downs.hud.out === true || a.watch?.watching === true) && a.downs.hud.outLines[0] === 'OUT' && a.downs.hud.outLines.includes('YOU REJOIN WHEN THE CAR NEXT MOVES') && a.downs.hud.head === '',
     `out ${a.downs.hud.out}, lines ${JSON.stringify(a.downs.hud.outLines)}`);
-  check('LS1: out, Ann\'s view is locked on Bob, the last one up', a.watch?.watching === true && a.watch?.id === idB && a.watch?.locked === true && /THE LAST ONE UP/.test(a.watch?.caption ?? ''),
-    `watch ${JSON.stringify({ watching: a.watch?.watching, id: a.watch?.id, locked: a.watch?.locked, caption: a.watch?.caption })}`);
+  // CAM1: locked on Bob through a camera that shows him, or through his eyes when none does.
+  check('LS1: out, Ann\'s view is locked on Bob, the last one up', a.watch?.watching === true && a.watch?.locked === true && /THE LAST ONE UP/.test(a.watch?.caption ?? '')
+    && (a.watch?.id === idB || (a.cams?.onCam === true && a.cams?.lockOn === idB)),
+    `watch ${JSON.stringify({ watching: a.watch?.watching, id: a.watch?.id, locked: a.watch?.locked, caption: a.watch?.caption, cam: a.cams?.n, lockOn: a.cams?.lockOn })}`);
   await A.shot('3-out-screen.png');
   const info = await host('info');
   const spot = (info.spots ?? [])[0];

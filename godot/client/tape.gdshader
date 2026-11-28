@@ -15,6 +15,11 @@ uniform float snow = 0.0;
 // The player's brightness (client/brightness.gd): black level and gamma, the very last step.
 uniform float bright_lift = 0.0;
 uniform float bright_gamma = 1.0;
+// CAM1 (client/cam_feed.gd): a security camera's feed. The picture is read at CCTV_SIZE (coarse blocks: no sign or face
+// can be read, a walking figure still can), grey with a little green, washed out, with heavy grain and a slow roll bar.
+// 0 leaves the tape exactly as it was.
+uniform float cctv = 0.0;
+const vec2 CCTV_SIZE = vec2(144.0, 81.0);
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 vec3 to_yiq(vec3 c) { return vec3(dot(c, vec3(0.299, 0.587, 0.114)), dot(c, vec3(0.596, -0.274, -0.322)), dot(c, vec3(0.211, -0.523, 0.312))); }
@@ -35,6 +40,7 @@ void fragment() {
 	float tear = step(1.0 - glitch * 0.6, hash(vec2(block, gtf)));
 	wob += tear * (hash(vec2(block, gtf + 7.0)) - 0.5) * 60.0 * glitch;
 	uv.x += wob * strength / src_size.x;
+	uv = mix(uv, (floor(uv * CCTV_SIZE) + 0.5) / CCTV_SIZE, step(0.5, cctv));
 	vec2 px = vec2(1.0 / src_size.x, 0.0);
 	// Luma: three soft horizontal taps; vertical stays crisp.
 	vec3 a = texture(TEXTURE, uv - px * 0.75).rgb;
@@ -68,6 +74,12 @@ void fragment() {
 	// Snow: the whole picture is noise (being taken).
 	float sn = hash(floor(UV * src_size * vec2(0.5, 1.0)) + fract(TIME * 7.0) * 113.0);
 	col = mix(col, vec3(sn * 0.85 + 0.05 * sin(line * 0.5 + TIME * 40.0)), snow);
+	// CAM1: the camera's feed: grey-green, washed, grainy in coarse cells, a slow roll bar.
+	float cl = dot(col, vec3(0.3, 0.59, 0.11));
+	vec3 cc_col = vec3(cl) * vec3(0.84, 1.0, 0.88) * 0.9 + vec3(0.035, 0.045, 0.04);
+	cc_col += (hash(floor(UV * CCTV_SIZE * 1.5) + fract(TIME * 13.0) * 57.0) - 0.5) * 0.1;
+	cc_col *= 1.0 - 0.1 * smoothstep(0.0, 0.08, 0.08 - abs(fract(UV.y - TIME * 0.06) - 0.5));
+	col = mix(col, cc_col, cctv);
 	if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) col = vec3(0.02);
 	// Last, after everything: the player's brightness (client/brightness.gd apply, the same sum; clamped
 	// there). 0 and 1 leave the picture as it is, also with the tape look off (T).

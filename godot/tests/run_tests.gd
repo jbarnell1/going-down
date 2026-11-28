@@ -158,6 +158,7 @@ const FILES: Array[String] = [
 	# END waking_toys
 	"test_station_walls",
 	"prop_eye", "prop_call_odds",
+	"test_cameras",
 ]
 
 ## Counts every error the engine reports (GDScript has no exceptions to catch).

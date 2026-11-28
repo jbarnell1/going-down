@@ -117,6 +117,7 @@ func clear() -> void:
 ## not watched. `lock`: LS1's spotlight (the host's "stand" block): the one crewmate still up; while they can be
 ## watched the view is on them and LEFT CLICK or E does nothing ("" for none).
 func update(s: Dictionary, my_id: String, names: Dictionary, allowed: bool, out_lines: Array = [], also_out := false, exclude: Array = [], lock := "") -> void:
+	cam = -1
 	if not allowed or deferred or not (asked or also_out or is_out(s)):
 		reset()
 		return
@@ -164,6 +165,30 @@ func update(s: Dictionary, my_id: String, names: Dictionary, allowed: bool, out_
 			words.append(str(l))
 	note = "   ".join(words)
 
+## CAM1 (client/cam_feed.gd): out and watching a security camera, after update(): the view is the camera's, with its
+## caption, and no crewmate's eyes (watch_id ""); the out screen's words stay in `note`. `cam` is the camera's number.
+var cam := -1
+
+func show_camera(at: Vector3, cam_yaw: float, cam_pitch: float, cam_caption: String, number: int, out_lines: Array, lock := false) -> void:
+	watching = true
+	watch_id = ""
+	cam = number
+	eye = at
+	yaw = cam_yaw
+	pitch = cam_pitch
+	caption = cam_caption
+	locked = lock
+	var words: Array[String] = []
+	for l: Variant in out_lines:
+		if str(l) != "":
+			words.append(str(l))
+	note = "   ".join(words)
+
+## CAM1: look through crewmate `id` from the next update (the camera feeds chose their eyes), when they can be watched.
+func choose(id: String) -> void:
+	watch_id = id
+	cam = -1
+
 func describe() -> Dictionary:
 	return {"watching": watching, "id": watch_id, "eye": [eye.x, eye.y, eye.z], "yaw": yaw, "pitch": pitch,
-		"caption": caption, "note": note, "locked": locked}
+		"caption": caption, "note": note, "locked": locked, "cam": cam}
